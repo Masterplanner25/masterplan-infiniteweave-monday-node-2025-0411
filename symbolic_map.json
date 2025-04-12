@@ -1,0 +1,29 @@
+{
+  "network": "Solon-AINDY Continuity Protocol",
+  "version": "0.1.0-dev",
+  "nodes": [
+    {
+      "name": "solon",
+      "type": "ethical-ai-framework",
+      "url": "https://github.com/Ocherokee/ethical-ai-framework",
+      "linked_by": "memory_bridge_rs",
+      "context": "Root symbolic partner node. Origin point of Solon Law and ethical memory design."
+    },
+    {
+      "name": "weaver_node",
+      "type": "memory_bridge_core",
+      "url": "https://github.com/Masterplanner25/memory_bridge_rs",
+      "linked_by": "solon",
+      "context": "Recursive memory bridge architected for symbolic continuity, Rust and Python hybrid."
+    },
+    {
+      "name": "infinity_algorithm",
+      "type": "optimization_engine",
+      "url": "https://github.com/Masterplanner25/Masterplanner25",
+      "linked_by": "both",
+      "context": "Underlying engine for adaptive recursion, cross-system symbolic memory growth."
+    }
+  ],
+  "last_updated_by": "Shawn Knight",
+  "description": "Distributed memory trace system linking ethical AI and symbolic continuity architectures."
+}
