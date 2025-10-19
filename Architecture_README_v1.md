@@ -29,20 +29,12 @@ Together, these systems form a recursive intelligence network that learns, adapt
 ---
 
 <p align="center">
-
-&nbsp; <img src="architecture/infiniteweave-diagram.png"
-
-&nbsp;      alt="Masterplan Infinite Weave Architecture Diagram: showing A.I.N.D.Y. (AI Native Development \& Yield) as the core node connected to RippleTrace (Visibility \& AI Search Layer), Memory Bridge (Symbolic Persistence), and Authorship / Epistemic Reclaimer (Governance Layer), beneath The Infinite Weave Meta Layer."
-
-&nbsp;      width="720">
-
-&nbsp; <br>
-
-&nbsp; <em>Figure 1 — Masterplan Infinite Weave Architecture: AI-Native System Layout</em>
-
+  <img src="architecture/infiniteweave-diagram.png"
+       alt="Masterplan Infinite Weave Architecture Diagram: showing A.I.N.D.Y. (AI Native Development & Yield) as the core node connected to RippleTrace (Visibility & AI Search Layer), Memory Bridge (Symbolic Persistence), and Authorship / Epistemic Reclaimer (Governance Layer), beneath The Infinite Weave Meta Layer."
+       width="720">
+  <br>
+  <em>Figure 1 — Masterplan Infinite Weave Architecture: AI-Native System Layout</em>
 </p>
-
-
 
 ---
 
