@@ -13,7 +13,7 @@ from base import Base
 from memory_persistence import MemoryNodeDAO, MemoryNodeModel
 
 # NOTE: set DATABASE_URL here or via the env var DATABASE_URL
-DATABASE_URL = "postgresql+psycopg2://postgres:140671aA%40@localhost:5433/base"
+DATABASE_URL = "postgresql+psycopg2://postgres:Yourpasswordhere@localhost:5433/base"
 
 engine = create_engine(DATABASE_URL, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)

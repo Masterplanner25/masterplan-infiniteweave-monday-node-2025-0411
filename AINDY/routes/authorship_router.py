@@ -14,7 +14,7 @@ from services.authorship_services import reclaim_authorship
 router = APIRouter(prefix="/authorship", tags=["Authorship"])
 
 @router.post("/reclaim")
-def reclaim_authorship_endpoint(content: str, author: str = "Knight, Shawn", motto: str = "Quicker, Better, Smarter, Faster"):
+def reclaim_authorship_endpoint(content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):
     """
     Reclaim authorship for provided text.
     Returns semantically watermarked text and fingerprint metadata.
