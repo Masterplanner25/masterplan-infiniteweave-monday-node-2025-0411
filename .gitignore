@@ -1,2 +1,19 @@
 "node_modules/" 
 "node_modules/" 
+
+# Backend
+venv/
+__pycache__/
+*.pyc
+
+# Frontend
+node_modules/
+dist/
+build/
+
+# Misc
+code_analysis.db
+.env
+.DS_Store
+Thumbs.db
+
