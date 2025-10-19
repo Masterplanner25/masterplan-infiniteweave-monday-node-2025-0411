@@ -1,9 +1,0 @@
-rippletrace/
-├── app/
-│   └── main.py
-├── README.md
-├── requirements.txt
-├── .gitignore
-├── LICENSE
-└── docs/
-    └── design-notes.md (optional)
