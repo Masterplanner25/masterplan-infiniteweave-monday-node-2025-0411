@@ -1,4 +1,4 @@
-from batch import BatchInput
+from db.batch import BatchInput
 from services.calculation_services import (  
     calculate_twr,
     calculate_effort,

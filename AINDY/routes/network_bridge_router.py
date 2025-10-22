@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from config import get_db
+from db.config import get_db
 from services.calculation_services import save_calculation
 from datetime import datetime
 import uuid

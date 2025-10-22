@@ -1,7 +1,7 @@
 # routes/db_verify_router.py
 from fastapi import APIRouter
 from sqlalchemy import inspect
-from config import engine
+from db.database import engine
 
 router = APIRouter(prefix="/db", tags=["Database Verification"])
 

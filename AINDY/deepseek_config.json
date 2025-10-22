@@ -1,0 +1,5 @@
+{
+  "temperature": 0.3,
+  "max_chunk_tokens": 2000,
+  "retry_limit": 3
+}

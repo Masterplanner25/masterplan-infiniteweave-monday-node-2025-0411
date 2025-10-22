@@ -57,6 +57,31 @@ def _recursive_find(node, tag):
         matches.extend(_recursive_find(child, tag))
     return matches
 
+def create_memory_node(title: str, content: str, tags: list[str] = None):
+    """
+    Creates a symbolic memory node that stores research context or insights.
+    """
+    from datetime import datetime
+    from db.database import SessionLocal
+    from db.models.models import CalculationResult  # or your MemoryNode model if exists
+
+    if tags is None:
+        tags = []
+
+    db = SessionLocal()
+    node = CalculationResult(
+        metric_name=title,
+        result_value=0.0,  # placeholder
+        created_at=datetime.utcnow(),
+    )
+    db.add(node)
+    db.commit()
+    db.refresh(node)
+
+    print(f"[Bridge] Memory node created: {title}")
+    return {"title": title, "content": content, "tags": tags, "id": node.id}
+
+
 
 # --- CONTINUITY MARKER ---
 # Expansion hooks:

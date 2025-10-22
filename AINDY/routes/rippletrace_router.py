@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
-from config import get_db
+from db.config import get_db
 from services import rippletrace_services
 
 router = APIRouter(prefix="/rippletrace", tags=["RippleTrace"])

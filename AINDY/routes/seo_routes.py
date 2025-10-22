@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from seo import SEOInput, MetaInput
+from services.seo import SEOInput, MetaInput
 from services.seo_services import seo_analysis, generate_meta_description
 from services.calculation_services import save_calculation
-from base import Base
-from config import get_db    # <- import the dependency from config
+from db.database import Base
+from db.config import get_db    # <- import the dependency from config
 
 router = APIRouter()
 

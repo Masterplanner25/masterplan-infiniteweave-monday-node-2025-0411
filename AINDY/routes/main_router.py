@@ -1,12 +1,12 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from config import SessionLocal
+from db.config import SessionLocal
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 
 
-from config import SessionLocal
-from models import (
+from db.config import SessionLocal
+from db.models import (
     TaskInput,
     EngagementInput,
     AIEfficiencyInput,
@@ -23,8 +23,8 @@ from models import (
     DecisionEfficiencyInput,
     CalculationResult
 )
-from batch import BatchInput
-from calculations import process_batch
+from db.batch import BatchInput
+from services.calculations import process_batch
 from services.calculation_services import (
     calculate_twr,
     calculate_effort,
