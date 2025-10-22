@@ -1,0 +1,40 @@
+# ─────────────────────────────
+# Core Web Framework & Server
+# ─────────────────────────────
+fastapi==0.115.0           # Primary API framework for A.I.N.D.Y.
+uvicorn==0.32.0            # ASGI server for running FastAPI
+
+# ─────────────────────────────
+# Database Layer
+# ─────────────────────────────
+SQLAlchemy==2.0.32          # ORM used for models and queries
+alembic==1.13.2             # Database migrations manager
+psycopg2==2.9.9             # PostgreSQL driver
+
+# ─────────────────────────────
+# Data Models / Validation
+# ─────────────────────────────
+pydantic==2.8.2             # BaseModel support for FastAPI + internal schemas
+
+# ─────────────────────────────
+# Text & NLP Utilities
+# ─────────────────────────────
+textstat==0.7.4             # Readability and linguistic metrics
+nltk==3.9.1                 # Tokenization, stemming, and corpus tools
+
+# ─────────────────────────────
+# Environment & Config
+# ─────────────────────────────
+python-dotenv==1.0.1        # Load .env configuration files for A.I.N.D.Y.
+requests==2.32.3            # HTTP client for external API and research calls
+
+# ─────────────────────────────
+# Optional but Recommended Dev Tools
+# ─────────────────────────────
+black==24.8.0               # Code formatter
+flake8==7.1.0               # Static analysis / linting
+pytest==8.3.3               # Unit testing framework
+
+alembic
+fastapi-cache2
+

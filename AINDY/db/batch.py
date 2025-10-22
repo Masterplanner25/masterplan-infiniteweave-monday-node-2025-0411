@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import List 
-from models import (
+from db.models import (
     AIProductivityBoostInput,
     LostPotentialInput,
     DecisionEfficiencyInput,

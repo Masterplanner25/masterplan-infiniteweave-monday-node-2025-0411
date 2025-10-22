@@ -1,9 +1,9 @@
 # /routers/task_router.py
 from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
-from config import get_db
+from db.config import get_db
 from services import task_services
-from models.task_schemas import TaskCreate, TaskAction
+from db.models.task_schemas import TaskCreate, TaskAction
 from services.task_services import handle_recurrence
 
 

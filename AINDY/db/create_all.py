@@ -1,5 +1,5 @@
 from config import engine
-from base import Base
+from db.database import Base
 import main
 import models
 

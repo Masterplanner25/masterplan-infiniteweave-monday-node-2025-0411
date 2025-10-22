@@ -5,11 +5,11 @@ from fastapi_cache import FastAPICache
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from config import Base  # Import the Base from your config.py
+from db.config import Base  # Import the Base from your config.py
 from fastapi_cache.backends.inmemory import InMemoryBackend  
 from fastapi import FastAPI
 from services import task_services
-from config import SessionLocal
+from db.config import SessionLocal
 import threading
 from routes.seo_routes import router as seo_router
 from routes.task_router import router as task_router
@@ -19,6 +19,12 @@ from routes.rippletrace_router import router as rippletrace_router
 from routes.network_bridge_router import router as network_bridge_router
 from routes.db_verify_router import router as db_verify_router
 from routes.task_router import router as task_router
+from routes.research_results_router import router as research_results_router
+from routes.main_router import router as main_router
+from routes.research_results_router import router as research_router
+from routes.freelance_router import router as freelance_router
+from routes.arm_router import router as arm_router
+from routes.leadgen_router import router as leadgen_router
 
 # For in-memory caching
 # If you want to use Redis (uncomment and configure):
@@ -40,6 +46,12 @@ app.include_router(rippletrace_router)
 app.include_router(db_verify_router)
 app.include_router(task_router)
 app.include_router(network_bridge_router)
+app.include_router(main_router)
+app.include_router(research_results_router)
+app.include_router(research_router)
+app.include_router(freelance_router, prefix="/freelance", tags=["Freelance"])
+app.include_router(arm_router)
+app.include_router(leadgen_router)
 
 # CORS (Cross-Origin Resource Sharing) for frontend integration
 app.add_middleware(
