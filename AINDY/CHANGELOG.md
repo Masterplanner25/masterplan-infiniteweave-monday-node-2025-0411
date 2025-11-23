@@ -1,3 +1,35 @@
+# 🧠 A.I.N.D.Y. v1.0 — The "Anti-LinkedIn" Social Layer Build
+
+**Date:** November 23, 2025
+**Branch:** main (merged from feature/social-layer)
+**Status:** ✅ Release | Full Stack Active
+
+### 🔧 Summary
+This update transforms A.I.N.D.Y. from a backend engine into a **Full-Stack Social Operating System**.
+We have activated the **Social Layer** (MongoDB), the **Velocity Engine** (Task-to-Profile sync), and the **Memory Scribe** (Auto-Documentation).
+
+### 🚀 New Modules & Integrations
+* **`social_router.py`**: New API endpoints for Profiles, Feeds, and Trust Tiers.
+* **`mongo_setup.py`**: Added MongoDB connection to handle flexible social data alongside SQL metrics.
+* **`social_models.py`**: Pydantic schemas for `SocialProfile`, `SocialPost`, and `TrustTier`.
+* **`task_services.py`**: Upgraded to trigger **Real-Time Profile Updates** upon task completion.
+
+### 💻 Frontend Evolution (React Client)
+* **`ProfileView.jsx`**: Live "Identity Node" displaying real-time TWR and Velocity scores.
+* **`Feed.jsx`**: The "Trust Feed" allowing filtered viewing by Inner Circle / Public tiers.
+* **`PostComposer.jsx`**: Input mechanism with Trust Tier selection.
+* **`TaskDashboard.jsx`**: Execution interface to create/complete tasks and drive velocity metrics.
+
+### 🧬 Systemic Synthesis
+* **The Loop is Closed:** Work (Tasks) $\to$ Velocity (Metrics) $\to$ Identity (Profile) $\to$ Memory (Bridge).
+* **Memory Scribe Activated:** Every social post is now auto-logged to the symbolic `bridge.py` for long-term AI recall.
+* **Legacy Repair:** Fixed Rust/Python import conflicts and updated OpenAI API syntax to v1.0+.
+
+### ⚙️ Developer Notes
+* **Requires MongoDB:** Ensure `mongod` is running locally or `MONGO_URL` is set in `.env`.
+* **Launch:** Run `uvicorn main:app --reload` (Backend) and `npm run dev` (Frontend).
+
+
 # 🧠 A.I.N.D.Y. v0.9 — Research Engine Integration Build  
 **Date:** October 21, 2025  
 **Branch:** `main` (merged from `feature/research-engine`)  
