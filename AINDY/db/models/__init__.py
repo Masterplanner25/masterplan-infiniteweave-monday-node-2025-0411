@@ -49,4 +49,7 @@ __all__.extend(["DropPointDB", "PingDB"])
 from .freelance_models import FreelanceOrder, ClientFeedback, RevenueMetrics
 from db.models.arm_models import ARMRun, ARMLog, ARMConfig
 from .leadgen_model import LeadGenResult
+from .author_model import AuthorDB
 
+from .system_health_log import SystemHealthLog
+__all__.append("SystemHealthLog")

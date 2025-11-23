@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, Float, DateTime, func
-from db.config import Base  
+from db.database import Base  
 from services.seo import SEOInput, MetaInput
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey
 
@@ -229,10 +229,3 @@ class Task(Base):
     # user_id = Column(Integer, ForeignKey("users.id"))
     # user = relationship("User", back_populates="tasks")
     
-class ResearchResult(Base):
-    __tablename__ = "research_results"
-    id = Column(Integer, primary_key=True, index=True)
-    query = Column(String(255))
-    summary = Column(Text)
-    source = Column(Text)
-    created_at = Column(DateTime, default=func.now())

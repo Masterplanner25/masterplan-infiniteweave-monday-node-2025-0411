@@ -6,12 +6,23 @@ from db.models import (
     LostPotentialInput, DecisionEfficiencyInput, CalculationResult
 )
 
-def save_calculation(db: Session, metric_name: str, result_value: float):
-    db_result = CalculationResult(metric_name=metric_name, result_value=result_value)
-    db.add(db_result)
-    db.commit()
-    db.refresh(db_result)
-    return db_result
+def save_calculation(db: Session, metric_name: str, value: float):
+    from datetime import datetime
+    try:
+        result = CalculationResult(
+            metric_name=metric_name,
+            result_value=value,
+            created_at=datetime.utcnow(),
+        )
+        db.add(result)
+        db.commit()
+        db.refresh(result)
+        print(f"✅ [save_calculation] Saved metric: {metric_name} (ID: {result.id})")
+        return result
+    except Exception as e:
+        db.rollback()
+        print(f"⚠️ [save_calculation] FAILED for {metric_name}: {e}")
+        return None
 
 def calculate_twr(task: TaskInput):
     LHI = (task.time_spent * task.task_complexity * task.skill_level)

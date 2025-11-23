@@ -14,12 +14,13 @@ app.post("/api/users", async (req, res) => {
 
   try {
     // Send the event to A.I.N.D.Y.
-    await axios.post("http://localhost:8000/bridge/user_event", {
-      name: user.name,
-      tagline: user.tagline,
-      platform: "InfiniteNetwork",
-      action: "create_profile"
-    });
+    await axios.post("http://localhost:8000/network_bridge/connect", {
+  author_name: user.name,           // ✅ expected by FastAPI
+  platform: "InfiniteNetwork",      // ✅ expected by FastAPI
+  connection_type: "BridgeHandshake",
+  notes: user.tagline || null       // ✅ optional
+});
+
     console.log(`✅ Synced ${user.name} to A.I.N.D.Y.`);
   } catch (err) {
     console.error("⚠️ Failed to sync with A.I.N.D.Y.:", err.message);

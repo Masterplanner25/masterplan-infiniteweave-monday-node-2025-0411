@@ -16,4 +16,5 @@ code_analysis.db
 .env
 .DS_Store
 Thumbs.db
-
+.env.dev
+.env.prod

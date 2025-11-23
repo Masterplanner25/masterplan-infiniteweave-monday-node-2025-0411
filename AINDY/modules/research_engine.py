@@ -1,3 +1,6 @@
+from openai import OpenAI
+import os
+client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 import requests, openai
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -12,11 +15,11 @@ def web_search(query: str) -> str:
 def ai_analyze(content: str) -> str:
     """Summarize and extract next actions."""
     prompt = f"Summarize and extract 3 recommended actions:\n\n{content}"
-    completion = openai.ChatCompletion.create(
+    completion = client.chat.completions.create(
         model="gpt-4o",
         messages=[{"role":"user","content":prompt}]
     )
-    return completion.choices[0].message["content"]
+    return completion.choices[0].message.content
 
 def save_result(db: Session, query, summary, source):
     record = models.ResearchResult(

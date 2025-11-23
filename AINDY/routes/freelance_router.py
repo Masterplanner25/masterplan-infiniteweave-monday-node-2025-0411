@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from db.config import get_db
+from db.database import get_db
 from services import freelance_service
 from db.models.freelance_models import (
     FreelanceOrderCreate,

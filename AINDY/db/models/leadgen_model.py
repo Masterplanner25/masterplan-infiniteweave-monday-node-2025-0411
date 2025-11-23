@@ -6,7 +6,7 @@ Purpose: Store results from the B2B Lead Generation via AI Search Optimization m
 """
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, func
-from db.config import Base
+from db.database import Base
 
 
 class LeadGenResult(Base):

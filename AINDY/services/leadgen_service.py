@@ -11,7 +11,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from openai import OpenAI
 
-from bridge import create_memory_node
+from bridge.bridge import create_memory_node
 from db.models.leadgen_model import LeadGenResult
 from dotenv import load_dotenv
 import os
@@ -69,16 +69,16 @@ Each score must be a number between 0 and 100.
     print(f"[LeadGen] Scoring lead: {lead_data['company']}")
 
     try:
-        completion = client.responses.create(
+        completion = client.chat.completions.create(
             model="gpt-4o-mini",
             input=f"{system_prompt}\n\n{lead_summary}"
         )
 
         # Depending on SDK version, output may differ:
         text_output = (
-            completion.output[0].content[0].text
+            completion.choices[0].message.content
             if hasattr(completion, "output") and completion.output
-            else completion.output_text
+            else completion.choices[0].message.content
         ).strip()
 
         # Extract JSON from messy output if needed
@@ -106,13 +106,13 @@ Each score must be a number between 0 and 100.
     print(f"[LeadGen] Scoring lead: {lead_data['company']}")
 
     try:
-        completion = client.responses.create(
+        completion = client.chat.completions.create(
             model="gpt-4o",
             input=f"{system_prompt}\n\n{lead_summary}"
         )
 
         # The model should return a JSON block
-        response_text = completion.output_text.strip()
+        response_text = completion.choices[0].message.content.strip()
         result = json.loads(response_text)
         return result
 

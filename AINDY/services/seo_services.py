@@ -1,7 +1,7 @@
 from collections import Counter
 import nltk
 import textstat
-from utils.text_constraints import enforce_word_limit
+from utils import enforce_word_limit, prepare_input_text
 
 # Ensure required tokenizer is available
 nltk.download("punkt", quiet=True)
@@ -34,3 +34,6 @@ def seo_analysis(text: str, top_n=10):
         "keyword_densities": densities,
     }
 
+def generate_meta_description(text: str, limit: int = 160):
+    cleaned = prepare_input_text(text, limit=limit, sentence_safe=True, mode="soft")
+    return cleaned

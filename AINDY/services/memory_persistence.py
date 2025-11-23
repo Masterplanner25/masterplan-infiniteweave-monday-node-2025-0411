@@ -8,10 +8,19 @@ from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, 
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from utils import prepare_input_text
 
 # import your project's Base (must exist)
 from db.database import Base
 
+def save_memory_node(self, memory_node: 'MemoryNode'):
+    cleaned_content = prepare_input_text(memory_node.content, limit=300)
+    db_node = MemoryNodeModel(
+        content=cleaned_content,
+        tags=memory_node.tags,
+        node_type=memory_node.node_type,
+        metadata=getattr(memory_node, 'metadata', {})
+    )
 
 class MemoryNodeModel(Base):
     __tablename__ = "memory_nodes"

@@ -1,7 +1,7 @@
 # routes/arm_router.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from db.config import get_db
+from db.database import get_db
 from services.deepseek_arm_service import (
     run_analysis,
     generate_code,

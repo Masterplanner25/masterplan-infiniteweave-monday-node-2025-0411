@@ -17,6 +17,8 @@ import logging
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool, create_engine
+from db.models import metrics_models  # ensures Alembic sees new models
+
 
 # -------------------------
 # Project root and sys.path
@@ -63,7 +65,10 @@ from db.database import Base     # declarative_base() lives here
 import db.models  # imports all models inside db/models.py
 import services.memory_persistence
 
-target_metadata = Base.metadata
+# Combine all known metadata objects
+from sqlalchemy import MetaData
+target_metadata = MetaData()
+target_metadata = Base.metadata  # unified declarative Base includes all models
 
 # -------------------------
 # Debug / verification (optional)

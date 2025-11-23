@@ -1,11 +1,11 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from db.config import SessionLocal
+from db.database import SessionLocal
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
 
 
-from db.config import SessionLocal
+from db.database import SessionLocal
 from db.models import (
     TaskInput,
     EngagementInput,
