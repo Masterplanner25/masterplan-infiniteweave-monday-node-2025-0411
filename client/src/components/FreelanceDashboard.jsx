@@ -1,10 +1,4 @@
 import React, { useEffect, useState } from "react";
-// Tailwind-based React component designed to be dropped into your Vite/React app
-// Uses shadcn/ui components style (available) and recharts for lightweight visuals
-
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Tooltip } from "@/components/ui/tooltip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer } from "recharts";
 
 export default function FreelanceDashboard() {
@@ -14,20 +8,23 @@ export default function FreelanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // --- API FIX: Added full paths ---
+  const API_BASE = "http://localhost:8000";
+
   async function fetchOrders() {
-    const res = await fetch('/freelance/orders');
+    const res = await fetch(`${API_BASE}/freelance/orders`);
     if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   }
 
   async function fetchFeedback() {
-    const res = await fetch('/freelance/feedback');
+    const res = await fetch(`${API_BASE}/freelance/feedback`);
     if (!res.ok) throw new Error('Failed to fetch feedback');
     return res.json();
   }
 
   async function fetchMetrics() {
-    const res = await fetch('/freelance/metrics/latest');
+    const res = await fetch(`${API_BASE}/freelance/metrics/latest`);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error('Failed to fetch metrics');
     return res.json();
@@ -45,13 +42,13 @@ export default function FreelanceDashboard() {
       })
       .catch((err) => {
         console.error(err);
-        if (!mounted) return;
-        setError(err.message);
+        if (mounted) setError(err.message);
       })
       .finally(() => mounted && setLoading(false));
     return () => (mounted = false);
   }, []);
 
+  // --- Data Processing ---
   const ratingsDistribution = (() => {
     const map = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
     feedback.forEach((f) => {
@@ -63,128 +60,127 @@ export default function FreelanceDashboard() {
 
   const topOrders = orders.slice(0, 8);
 
+  // --- Common Styles for Cards ---
+  const cardClass = "bg-zinc-900 border border-zinc-800 rounded-xl p-5 shadow-lg";
+
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Freelance Dashboard</h1>
-        <div className="flex gap-2 items-center">
-          <Button onClick={() => window.location.reload()}>Refresh</Button>
-          <Tooltip content="Open the Freelancing Automation brief">
-            <a href={'/mnt/data/Freelancing Automation Plan .docx'} className="text-sm underline">Source Doc</a>
-          </Tooltip>
+    <div className="p-6 max-w-7xl mx-auto bg-black text-zinc-100 min-h-screen">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Freelance Hub</h1>
+          <p className="text-zinc-500 text-sm">Automated delivery & feedback stream</p>
         </div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="bg-zinc-100 text-black px-4 py-2 rounded-lg font-bold hover:bg-zinc-300 transition"
+        >
+          Refresh Data
+        </button>
       </div>
 
       {error && (
-        <div className="mb-4 text-sm text-red-600">Error: {error}</div>
+        <div className="mb-6 p-4 bg-red-900/20 border border-red-500 text-red-400 rounded-lg">
+          ⚠️ {error}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardContent>
-            <div className="text-sm uppercase text-muted-foreground">Total Orders</div>
-            <div className="text-2xl font-bold">{orders.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <div className="text-sm uppercase text-muted-foreground">Delivered</div>
-            <div className="text-2xl font-bold">{orders.filter(o=>o.status==='delivered').length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <div className="text-sm uppercase text-muted-foreground">Avg Rating</div>
-            <div className="text-2xl font-bold">
-              {feedback.length ? ( (feedback.reduce((s,f)=>s+(f.rating||0),0)/feedback.length).toFixed(2) ) : '—'}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <div className="text-sm uppercase text-muted-foreground">Total Revenue</div>
-            <div className="text-2xl font-bold">{metrics ? `$${metrics.total_revenue.toFixed(2)}` : '—'}</div>
-            <div className="text-xs text-muted-foreground">Last updated: {metrics ? new Date(metrics.date).toLocaleString() : '—'}</div>
-          </CardContent>
-        </Card>
+      {/* STATS GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className={cardClass}>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Total Orders</div>
+          <div className="text-3xl font-bold">{orders.length}</div>
+        </div>
+        <div className={cardClass}>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Delivered</div>
+          <div className="text-3xl font-bold text-green-500">
+            {orders.filter(o => o.status === 'delivered').length}
+          </div>
+        </div>
+        <div className={cardClass}>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Avg Rating</div>
+          <div className="text-3xl font-bold text-yellow-500">
+            {feedback.length ? ((feedback.reduce((s, f) => s + (f.rating || 0), 0) / feedback.length).toFixed(2)) : '—'}
+          </div>
+        </div>
+        <div className={cardClass}>
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Revenue</div>
+          <div className="text-3xl font-bold text-blue-400">
+            {metrics ? `$${metrics.total_revenue.toLocaleString()}` : '—'}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* RECENT ORDERS TABLE */}
         <section className="lg:col-span-2">
-          <Card>
-            <CardContent>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-medium">Recent Orders</h2>
-                <div className="text-sm text-muted-foreground">Showing latest {topOrders.length}</div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full table-auto border-collapse">
-                  <thead>
-                    <tr className="text-left text-sm text-muted-foreground">
-                      <th className="pb-2">#</th>
-                      <th className="pb-2">Client</th>
-                      <th className="pb-2">Service</th>
-                      <th className="pb-2">Price</th>
-                      <th className="pb-2">Status</th>
-                      <th className="pb-2">Created</th>
+          <div className={cardClass}>
+            <h2 className="text-lg font-semibold mb-4 border-b border-zinc-800 pb-2">Recent Stream</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-zinc-500 text-xs uppercase border-b border-zinc-800">
+                    <th className="pb-3 font-medium">Client</th>
+                    <th className="pb-3 font-medium">Service</th>
+                    <th className="pb-3 font-medium">Price</th>
+                    <th className="pb-3 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800">
+                  {topOrders.map((o) => (
+                    <tr key={o.id} className="hover:bg-zinc-800/50 transition">
+                      <td className="py-3 text-sm font-medium">{o.client_name}</td>
+                      <td className="py-3 text-sm text-zinc-400">{o.service_type}</td>
+                      <td className="py-3 text-sm text-blue-400">${o.price?.toFixed(2)}</td>
+                      <td className="py-3">
+                        <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                          o.status === 'delivered' ? 'bg-green-500/10 text-green-500' : 'bg-zinc-800 text-zinc-400'
+                        }`}>
+                          {o.status}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {topOrders.map((o) => (
-                      <tr key={o.id} className="border-t">
-                        <td className="py-2 text-sm">{o.id}</td>
-                        <td className="py-2 text-sm">{o.client_name}</td>
-                        <td className="py-2 text-sm">{o.service_type}</td>
-                        <td className="py-2 text-sm">${o.price?.toFixed(2)}</td>
-                        <td className="py-2 text-sm">{o.status}</td>
-                        <td className="py-2 text-sm">{new Date(o.created_at).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
-        <aside>
-          <Card className="mb-4">
-            <CardContent>
-              <h3 className="text-md font-medium mb-2">Ratings Distribution</h3>
-              <div style={{ width: '100%', height: 180 }}>
-                <ResponsiveContainer>
-                  <BarChart data={ratingsDistribution}>
-                    <XAxis dataKey="rating" />
-                    <YAxis allowDecimals={false} />
-                    <ReTooltip />
-                    <Bar dataKey="count" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+        {/* CHARTS & FEEDBACK */}
+        <aside className="space-y-6">
+          <div className={cardClass}>
+            <h3 className="text-sm font-bold text-zinc-400 mb-4 uppercase">Ratings Mix</h3>
+            <div style={{ width: '100%', height: 180 }}>
+              <ResponsiveContainer>
+                <BarChart data={ratingsDistribution}>
+                  <XAxis dataKey="rating" stroke="#52525b" fontSize={12} />
+                  <YAxis hide />
+                  <ReTooltip 
+                    contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
 
-          <Card>
-            <CardContent>
-              <h3 className="text-md font-medium mb-2">Latest Feedback</h3>
-              <div className="space-y-3">
-                {feedback.slice(0,5).map((f) => (
-                  <div key={f.id} className="p-2 border rounded">
-                    <div className="text-sm font-medium">Order #{f.order_id} — {f.rating || '—'}/5</div>
-                    <div className="text-xs text-muted-foreground">{f.feedback_text ? f.feedback_text : 'No text feedback.'}</div>
+          <div className={cardClass}>
+            <h3 className="text-sm font-bold text-zinc-400 mb-4 uppercase">Latest Feedback</h3>
+            <div className="space-y-3">
+              {feedback.slice(0, 4).map((f) => (
+                <div key={f.id} className="p-3 bg-zinc-800/40 rounded-lg border border-zinc-700/50">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-yellow-500">{f.rating}/5 Stars</span>
+                    <span className="text-[10px] text-zinc-500">#{f.order_id}</span>
                   </div>
-                ))}
-                {!feedback.length && <div className="text-sm text-muted-foreground">No feedback yet.</div>}
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="text-xs text-zinc-300 italic">"{f.feedback_text || 'No text provided.'}"</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </aside>
       </div>
-
     </div>
   );
 }

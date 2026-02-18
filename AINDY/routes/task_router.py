@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import task_services
-from db.models.task_schemas import TaskCreate, TaskAction
+from schemas.task_schemas import TaskCreate, TaskAction
 from services.task_services import handle_recurrence
 
 

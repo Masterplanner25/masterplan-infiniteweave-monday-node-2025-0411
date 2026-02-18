@@ -3,7 +3,7 @@ import time
 from sqlalchemy.orm import Session
 from datetime import datetime
 from db.database import SessionLocal
-from db.models.models import Task
+from db.models.task import Task
 from services.calculation_services import save_calculation, calculate_twr, TaskInput
 from db.mongo_setup import get_mongo_client
 

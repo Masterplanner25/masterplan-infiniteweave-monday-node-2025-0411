@@ -4,13 +4,19 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from db.models.freelance_models import (
+# ORM models (database layer)
+from db.models.freelance import (
     FreelanceOrder,
     ClientFeedback,
     RevenueMetrics,
+)
+
+# Pydantic schemas (validation layer)
+from schemas.freelance import (
     FreelanceOrderCreate,
     FeedbackCreate,
 )
+
 from services.memory_persistence import MemoryNodeDAO
 
 

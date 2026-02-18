@@ -4,13 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import freelance_service
-from db.models.freelance_models import (
+from schemas.freelance import (
     FreelanceOrderCreate,
     FreelanceOrderResponse,
     FeedbackCreate,
     FeedbackResponse,
     RevenueMetricsResponse,
 )
+
 
 router = APIRouter(prefix="/freelance", tags=["Freelance"])
 

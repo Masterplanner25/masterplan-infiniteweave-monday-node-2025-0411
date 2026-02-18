@@ -2,7 +2,7 @@
 from sqlalchemy.orm import Session
 from bridge.bridge import create_memory_node, MemoryNode, MemoryTrace
 from db.models.research_results import ResearchResult
-from db.models.research_results_schema import ResearchResultCreate
+from schemas.research_results_schema import ResearchResultCreate
 
 # Singleton memory trace for runtime continuity
 _memory_trace = None

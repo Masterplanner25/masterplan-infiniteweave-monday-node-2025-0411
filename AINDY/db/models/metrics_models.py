@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, Float
+from sqlalchemy import Column, Integer, Float, String, Date, DateTime, ForeignKey, UniqueConstraint
 from db.database import Base
+from datetime import datetime
 
 
 class Engagement(Base):
@@ -121,3 +122,54 @@ class DecisionEfficiency(Base):
     manual_decisions = Column(Float)
     processing_time = Column(Float)
     # Add other decision efficiency columns
+
+class CanonicalMetricDB(Base):
+    __tablename__ = "canonical_metrics"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "masterplan_id",
+            "platform",
+            "scope_type",
+            "scope_id",
+            "period_type",
+            "period_start",
+            name="uq_canonical_period_scope"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # --- RELATIONSHIPS ---
+    masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=False)
+    user_id = Column(Integer, nullable=True)
+
+    # --- CONTEXT ---
+    platform = Column(String)
+    scope_type = Column(String)
+    scope_id = Column(String, nullable=True)
+
+    period_type = Column(String)
+    period_start = Column(Date)
+    period_end = Column(Date)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # --- RAW TOTALS ---
+    passive_visibility = Column(Float)
+    active_discovery = Column(Float)
+    unique_reach = Column(Float)
+    interaction_volume = Column(Float)
+    deep_attention_units = Column(Float)
+    intent_signals = Column(Float)
+    conversion_events = Column(Float)
+    growth_velocity = Column(Float)
+    audience_quality_score = Column(Float)
+
+    # --- DERIVED RATES ---
+    interaction_rate = Column(Float)
+    attention_rate = Column(Float)
+    intent_rate = Column(Float)
+    conversion_rate = Column(Float)
+    discovery_ratio = Column(Float)
+    growth_rate = Column(Float)

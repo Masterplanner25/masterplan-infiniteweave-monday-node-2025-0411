@@ -14,6 +14,9 @@ from .dashboard_router import router as dashboard_router
 from .health_router import router as health_router
 from .health_dashboard_router import router as health_dashboard_router
 from .social_router import router as social_router
+from .analytics_router import router as analytics_router
+from routes.genesis_router import router as genesis_router
+
 
 ROUTERS = [
     seo_router,
@@ -31,7 +34,9 @@ ROUTERS = [
     dashboard_router,
     health_router,
     health_dashboard_router,
-    social_router
+    social_router,
+    analytics_router,
+    genesis_router
     
 ]
 

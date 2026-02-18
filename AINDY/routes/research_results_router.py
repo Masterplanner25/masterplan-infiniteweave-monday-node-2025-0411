@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from db.database import get_db
-from db.models.research_results_schema import ResearchResultCreate, ResearchResultResponse
+from schemas.research_results_schema import ResearchResultCreate, ResearchResultResponse
 from services import research_results_service
 
 router = APIRouter(prefix="/research", tags=["Research"])

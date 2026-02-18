@@ -1,0 +1,1 @@
+C:\dev\masterplan-infiniteweave-monday-node-2025-0411\AINDY\bridge\memory_bridge_rs\target\debug\memory_bridge_rs.dll: C:\dev\masterplan-infiniteweave-monday-node-2025-0411\AINDY\bridge\memory_bridge_rs\src\lib.rs

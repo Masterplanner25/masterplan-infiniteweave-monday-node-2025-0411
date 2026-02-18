@@ -1,10 +1,24 @@
 from sqlalchemy.orm import Session
-from db.models import (
-    TaskInput, EngagementInput, AIEfficiencyInput, ImpactInput, EfficiencyInput,
-    RevenueScalingInput, ExecutionSpeedInput, AttentionValueInput, EngagementRateInput,
-    BusinessGrowthInput, MonetizationEfficiencyInput, AIProductivityBoostInput,
-    LostPotentialInput, DecisionEfficiencyInput, CalculationResult
+from db.models import CalculationResult
+# Pydantic schemas
+from schemas.analytics_inputs import (
+    TaskInput,
+    EngagementInput,
+    AIEfficiencyInput,
+    ImpactInput,
+    EfficiencyInput,
+    RevenueScalingInput,
+    ExecutionSpeedInput,
+    AttentionValueInput,
+    EngagementRateInput,
+    BusinessGrowthInput,
+    MonetizationEfficiencyInput,
+    AIProductivityBoostInput,
+    LostPotentialInput,
+    DecisionEfficiencyInput,
 )
+
+
 
 def save_calculation(db: Session, metric_name: str, value: float):
     from datetime import datetime

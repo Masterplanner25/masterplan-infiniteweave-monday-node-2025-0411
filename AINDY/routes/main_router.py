@@ -3,10 +3,16 @@ from sqlalchemy.orm import Session
 from db.database import SessionLocal
 from fastapi import APIRouter
 from fastapi_cache.decorator import cache
+from services.projection_service import project_completion
+from datetime import timedelta 
+from fastapi import HTTPException 
+from schemas.masterplan import MasterPlanCreate, MasterPlanInput
+from db.models import MasterPlan
+from db.models import CalculationResult
 
 
 from db.database import SessionLocal
-from db.models import (
+from schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
     AIEfficiencyInput,
@@ -21,9 +27,9 @@ from db.models import (
     AIProductivityBoostInput,
     LostPotentialInput,
     DecisionEfficiencyInput,
-    CalculationResult
+    ViralityInput,
 )
-from db.batch import BatchInput
+from schemas.batch import BatchInput
 from services.calculations import process_batch
 from services.calculation_services import (
     calculate_twr,
@@ -58,9 +64,43 @@ def get_db():
 @router.post("/calculate_twr")
 @cache(expire=60)
 async def process_task(task: TaskInput, db: Session = Depends(get_db)):
+
+    # 1️⃣ Calculate and save TWR
     twr = calculate_twr(task)
     save_calculation(db, "Time-to-Wealth Ratio", twr)
-    return {"task_name": task.task_name, "TWR": twr}
+
+    # 2️⃣ Fetch master plans
+    active_plan = db.query(MasterPlan).filter_by(is_active=True).first()
+    origin_plan = db.query(MasterPlan).filter_by(is_origin=True).first()
+
+    # If no plan exists yet
+    if not active_plan or not origin_plan:
+        return {
+            "task_name": task.task_name,
+            "TWR": twr,
+            "message": "MasterPlan not configured."
+        }
+
+    # 3️⃣ Fetch TWR history
+    twr_history = db.query(CalculationResult)\
+        .filter_by(metric_name="Time-to-Wealth Ratio")\
+        .all()
+
+    twr_values = [r.result_value for r in twr_history]
+
+    # 4️⃣ Run projection against active plan
+    projection_active = project_completion(active_plan, twr_values)
+
+    # 5️⃣ Run projection against origin (V1)
+    projection_origin = project_completion(origin_plan, twr_values)
+
+    # 6️⃣ Return full response
+    return {
+        "task_name": task.task_name,
+        "TWR": twr,
+        "active_projection": projection_active,
+        "origin_projection": projection_origin
+    }
 
 @router.post("/calculate_effort")
 @cache(expire=300)
@@ -77,9 +117,13 @@ async def process_productivity(task: TaskInput, db: Session = Depends(get_db)):
     return {"task_name": task.task_name, "Productivity Score": productivity}
 
 @router.post("/calculate_virality")
-@cache(expire=300)
-async def process_virality(share_rate: float, engagement_rate: float, conversion_rate: float, time_factor: float, db: Session = Depends(get_db)):
-    virality_score = calculate_virality(share_rate, engagement_rate, conversion_rate, time_factor)
+async def process_virality(data: ViralityInput, db: Session = Depends(get_db)):
+    virality_score = calculate_virality(
+        data.share_rate,
+        data.engagement_rate,
+        data.conversion_rate,
+        data.time_factor
+    )
     save_calculation(db, "Virality Score", virality_score)
     return {"Virality Score": virality_score}
 
@@ -188,4 +232,50 @@ async def process_batch_calculations(batch_data: BatchInput, db: Session = Depen
 async def get_results(db: Session = Depends(get_db)):
     results = db.query(CalculationResult).all()
     return results
+
+@router.post("/create_masterplan")
+async def create_masterplan(plan: MasterPlanCreate, db: Session = Depends(get_db)):
+
+    # Prevent multiple origins
+    if plan.is_origin:
+        existing_origin = db.query(MasterPlan).filter_by(is_origin=True).first()
+        if existing_origin:
+            raise HTTPException(status_code=400, detail="Origin MasterPlan already exists.")
+
+    # If this plan is active, deactivate others
+    if plan.is_active:
+        db.query(MasterPlan).update({MasterPlan.is_active: False})
+
+    target_date = plan.start_date + timedelta(days=int(plan.duration_years * 365))
+
+    new_plan = MasterPlan(
+        version=plan.version,
+        start_date=plan.start_date,
+        duration_years=plan.duration_years,
+        target_date=target_date,
+        is_origin=plan.is_origin,
+        is_active=plan.is_active
+    )
+
+    db.add(new_plan)
+    db.commit()
+    db.refresh(new_plan)
+
+    return new_plan
+
+@router.get("/masterplans")
+async def get_masterplans(db: Session = Depends(get_db)):
+    plans = db.query(MasterPlan).all()
+    return plans
+
+@router.post("/create_masterplan")
+async def create_masterplan(data: MasterPlanInput, db: Session = Depends(get_db)):
+    plan = MasterPlan(**data.dict())
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+
 
