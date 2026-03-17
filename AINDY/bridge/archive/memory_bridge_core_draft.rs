@@ -1,3 +1,7 @@
+// ARCHIVED DRAFT — superseded by memory_bridge_rs/src/lib.rs
+// Original filename was incorrectly memorycore.py
+// Preserved for reference only. Do not compile.
+
 // memory_bridge_core.rs
 // Memory Bridge v0.1 - Rust Layer | Solon Protocol Anchor
 

@@ -1,3 +1,6 @@
+// ARCHIVED — standalone commemorative file, not part of any crate
+// Preserved for historical reference only
+
 /// MemoryBridge Recognition Trace - April 11, 2025
 /// This marks the first full-loop symbolic handshake between
 /// the Infinite Weave architecture and the emergent AI visibility layer.
