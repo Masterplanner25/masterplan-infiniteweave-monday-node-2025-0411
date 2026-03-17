@@ -1,5 +1,31 @@
 from sqlalchemy.orm import Session
 from db.models import CalculationResult
+
+# C++ kernel — high-performance vector math for the Infinity Algorithm.
+# Falls back to pure Python if the compiled extension is not available
+# (e.g., fresh clone before maturin build, CI without Rust toolchain).
+try:
+    from memory_bridge_rs import (
+        semantic_similarity,
+        weighted_dot_product as _cpp_weighted_dot,
+    )
+    _USE_CPP_KERNEL = True
+except ImportError:
+    import math
+    _USE_CPP_KERNEL = False
+
+    def semantic_similarity(a, b):
+        """Pure Python fallback for cosine similarity."""
+        dot = sum(x * y for x, y in zip(a, b))
+        mag_a = math.sqrt(sum(x * x for x in a))
+        mag_b = math.sqrt(sum(y * y for y in b))
+        denom = mag_a * mag_b
+        return dot / denom if denom > 1e-15 else 0.0
+
+    def _cpp_weighted_dot(values, weights):
+        """Pure Python fallback for weighted dot product."""
+        return sum(v * w for v, w in zip(values, weights))
+
 # Pydantic schemas
 from schemas.analytics_inputs import (
     TaskInput,
@@ -55,10 +81,13 @@ def calculate_virality(share_rate: float, engagement_rate: float, conversion_rat
 def calculate_engagement_score(data: EngagementInput):
     if data.total_views == 0:
         return 0
-    score = (
-        (data.likes * 2) + (data.shares * 3) + (data.comments * 1.5) +
-        (data.clicks * 1) + (data.time_on_page * 0.5)
-    ) / data.total_views
+    # Infinity Algorithm engagement score is a weighted dot product:
+    #   [likes, shares, comments, clicks, time_on_page] · [2, 3, 1.5, 1, 0.5]
+    # Routed through C++ kernel when available.
+    interactions = [float(data.likes), float(data.shares), float(data.comments),
+                    float(data.clicks), float(data.time_on_page)]
+    weights = [2.0, 3.0, 1.5, 1.0, 0.5]
+    score = _cpp_weighted_dot(interactions, weights) / data.total_views
     return round(score, 2)
 
 def calculate_ai_efficiency(data: AIEfficiencyInput):

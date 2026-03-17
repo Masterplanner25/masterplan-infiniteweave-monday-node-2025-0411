@@ -233,6 +233,7 @@ dependencies = [
 name = "memory_bridge_rs"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "chrono",
  "pyo3",
  "serde",
