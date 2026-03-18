@@ -51,13 +51,48 @@
   endpoint contracts.
 - Total test suite: **208 passing, 0 failing** (up from 162).
 
-### Deferred to Phase 2 (ARM)
+### Added (2026-03-17 — ARM Phase 2)
+- `services/arm_metrics_service.py` — `ARMMetricsService` calculates all five
+  Infinity Algorithm Thinking KPI metrics from `analysis_results` and
+  `code_generations` DB history: Execution Speed (tokens/sec), Decision Efficiency
+  (% success), AI Productivity Boost (output/input token ratio), Lost Potential
+  (% wasted tokens on failed sessions), Learning Efficiency (speed trend first-half
+  vs second-half). Handles empty history without crashing.
+- `services/arm_metrics_service.py` — `ARMConfigSuggestionEngine` analyzes metrics
+  against 5 configurable thresholds and produces prioritized, risk-labelled config
+  suggestions. Categorises as auto_apply_safe (low-risk) or requires_approval
+  (medium/high). Returns `combined_suggested_config` for one-shot apply.
+  Suggestions are advisory only — never auto-applies.
+- `routes/arm_router.py` — two new endpoints:
+  - `GET /arm/metrics?window=30` — full Thinking KPI report
+  - `GET /arm/config/suggest?window=30` — config suggestions with metrics snapshot
+- Frontend: `client/src/components/ARMMetrics.jsx` — 5-card KPI dashboard with
+  window selector (7/30/90 days), colour-coded efficiency/waste indicators,
+  trend arrows for learning efficiency.
+- Frontend: `client/src/components/ARMConfigSuggest.jsx` — suggestion panel grouped
+  by priority (critical/warning/info), per-suggestion Apply button calls
+  PUT /arm/config, "Apply All Low-Risk" button for batch apply.
+- `client/src/api.js` — `getARMMetrics(window)` and `getARMConfigSuggestions(window)`
+  added.
+- Tests: 16 new tests in `tests/test_arm.py`: `TestARMMetrics` (4 route-level),
+  `TestARMMetricsService` (7 unit), `TestARMConfigSuggestions` (4 unit). No DB
+  required for service unit tests.
+- Total test suite: **224 passing, 0 failing** (up from 208).
+
+### Deferred to Phase 3 (ARM)
 - Memory Bridge feedback loop: after each analysis/generation, persist a `MemoryNode`
   via `MemoryNodeDAO` with ARM results as structured content and tags.
-- Self-tuning config: `ConfigManager.update()` to be called by an Infinity Algorithm
-  feedback loop that adjusts temperature/model based on execution speed trends.
-- Infinity metric crosswalk: Decision Efficiency and Execution Speed metric
-  integration into ARM response payloads.
+  (Deferred: bridge design in progress.)
+- Auto-approve low-risk config changes without user confirmation.
+  Phase 2 returns auto_apply_safe list; Phase 3 will apply them automatically.
+
+### Deferred to Phase 2 (ARM) — NOW COMPLETE
+- ~~Self-tuning config: `ConfigManager.update()` to be called by an Infinity Algorithm
+  feedback loop that adjusts temperature/model based on execution speed trends.~~
+  **DONE (ARM Phase 2):** `ARMConfigSuggestionEngine` + GET /arm/config/suggest.
+- ~~Infinity metric crosswalk: Decision Efficiency and Execution Speed metric
+  integration into ARM response payloads.~~
+  **DONE (ARM Phase 2):** All 5 metrics exposed via GET /arm/metrics.
 
 ### Added (C++ semantic engine — earlier in this branch)
 - C++ semantic similarity engine (`memory_cpp/semantic.h` +

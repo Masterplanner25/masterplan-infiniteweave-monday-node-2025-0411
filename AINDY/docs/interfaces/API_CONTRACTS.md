@@ -697,6 +697,82 @@ Note: Changes persist to `deepseek_config.json`. Analyzer singleton is reset aft
   update so the next request picks up the new configuration.
 Errors: Not explicitly defined.
 
+`GET /arm/metrics` — Phase 2 (2026-03-17)
+Method: GET
+Request Body: None
+Query Params: `window` (int, default 30) — lookback period in days
+Response (200):
+  ```json
+  {
+    "window_days": 30,
+    "total_sessions": int,
+    "execution_speed": {
+      "current": float, "average": float, "peak": float,
+      "unit": "tokens/sec", "total_tokens": int, "total_seconds": float
+    },
+    "decision_efficiency": {
+      "score": float, "successful": int, "failed": int, "total": int, "unit": "%"
+    },
+    "ai_productivity_boost": {
+      "ratio": float, "input_tokens": int, "output_tokens": int,
+      "rating": "excellent|good|moderate|low — prompts may be too verbose"
+    },
+    "lost_potential": {
+      "failed_sessions": int, "wasted_tokens": int, "wasted_seconds": float,
+      "waste_percentage": float, "rating": str
+    },
+    "learning_efficiency": {
+      "trend": "improving|stable|declining|insufficient data",
+      "delta_tokens_per_sec": float, "delta_percentage": float,
+      "early_avg_speed": float, "recent_avg_speed": float
+    },
+    "summary": str
+  }
+  ```
+Status Codes: 200, 401.
+Note: Returns empty metrics structure (not 404) when user has no ARM sessions.
+  Decision Efficiency and Lost Potential use analysis_results only (CodeGeneration
+  has no status column). Execution Speed and AI Productivity Boost include both tables.
+
+`GET /arm/config/suggest` — Phase 2 (2026-03-17)
+Method: GET
+Request Body: None
+Query Params: `window` (int, default 30) — lookback period in days
+Response (200):
+  ```json
+  {
+    "suggestions": [
+      {
+        "priority": "critical|warning|info",
+        "metric": str,
+        "current_value": str,
+        "threshold": str,
+        "issue": str,
+        "suggestion": str,
+        "config_change": { ...key/value pairs... },
+        "expected_impact": str,
+        "risk": "low|medium|high|none"
+      }
+    ],
+    "auto_apply_safe": [ ...low-risk suggestions with config_change... ],
+    "requires_approval": [ ...medium/high-risk suggestions... ],
+    "combined_suggested_config": { ...merged config_change from all suggestions... },
+    "apply_instruction": str,
+    "metrics_snapshot": {
+      "decision_efficiency": float,
+      "execution_speed_avg": float,
+      "ai_productivity_ratio": float,
+      "waste_percentage": float,
+      "learning_trend": str,
+      "total_sessions": int
+    }
+  }
+  ```
+Status Codes: 200, 401.
+Note: Advisory only — never auto-applies. User must call PUT /arm/config with
+  combined_suggested_config or individual changes to apply. config_change keys are
+  validated against DEFAULT_CONFIG allowlist in ConfigManager.update().
+
 ### Leadgen Routes (`AINDY/routes/leadgen_router.py`, prefix `/leadgen`)
 `POST /leadgen/`
 Method: POST

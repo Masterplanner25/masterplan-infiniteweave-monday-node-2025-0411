@@ -22,6 +22,7 @@ from services.auth_service import get_current_user
 from services.rate_limiter import limiter
 from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 from modules.deepseek.config_manager_deepseek import ConfigManager
+from services.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
 from db.models.arm_models import AnalysisResult, CodeGeneration
 from db.models.user import User
 
@@ -221,3 +222,83 @@ async def update_config(
     global _analyzer
     _analyzer = None
     return {"status": "updated", "config": updated}
+
+
+@router.get("/metrics")
+async def get_arm_metrics(
+    window: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get the full Thinking KPI report for this user's ARM sessions.
+
+    Returns Infinity Algorithm metrics:
+    - Execution Speed (tokens/sec)
+    - Decision Efficiency (% successful sessions)
+    - AI Productivity Boost (output/input token ratio)
+    - Lost Potential (% wasted on failed sessions)
+    - Learning Efficiency (speed trend over time)
+
+    window: lookback period in days (default 30)
+    """
+    metrics_service = ARMMetricsService(db=db, user_id=str(current_user.id))
+    return metrics_service.get_all_metrics(window=window)
+
+
+@router.get("/config/suggest")
+async def get_config_suggestions(
+    window: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Analyze ARM performance metrics and suggest configuration
+    improvements. Suggestions are advisory — apply via PUT /arm/config.
+
+    Each suggestion includes:
+    - The metric that triggered it
+    - Current value vs threshold
+    - Recommended config change
+    - Expected impact
+    - Risk level (low/medium/high)
+
+    Low-risk suggestions can be auto-applied.
+    Medium/high-risk suggestions require explicit approval.
+    """
+    # Get current metrics
+    metrics_service = ARMMetricsService(db=db, user_id=str(current_user.id))
+    metrics = metrics_service.get_all_metrics(window=window)
+
+    # Get current config
+    config_manager = ConfigManager()
+    current_config = config_manager.get_all()
+
+    # Generate suggestions
+    suggestion_engine = ARMConfigSuggestionEngine(
+        current_config=current_config,
+        metrics=metrics,
+    )
+    suggestions = suggestion_engine.generate_suggestions()
+
+    # Include current metrics summary for context
+    suggestions["metrics_snapshot"] = {
+        "decision_efficiency": metrics.get("decision_efficiency", {}).get(
+            "score", 0
+        ),
+        "execution_speed_avg": metrics.get("execution_speed", {}).get(
+            "average", 0
+        ),
+        "ai_productivity_ratio": metrics.get("ai_productivity_boost", {}).get(
+            "ratio", 0
+        ),
+        "waste_percentage": metrics.get("lost_potential", {}).get(
+            "waste_percentage", 0
+        ),
+        "learning_trend": metrics.get("learning_efficiency", {}).get(
+            "trend", "insufficient data"
+        ),
+        "total_sessions": metrics.get("total_sessions", 0),
+    }
+
+    return suggestions

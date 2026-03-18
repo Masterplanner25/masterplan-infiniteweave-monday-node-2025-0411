@@ -67,6 +67,14 @@ export function updateARMConfig(updates) {
   });
 }
 
+export function getARMMetrics(window = 30) {
+  return request(`/arm/metrics?window=${window}`, { method: "GET" });
+}
+
+export function getARMConfigSuggestions(window = 30) {
+  return request(`/arm/config/suggest?window=${window}`, { method: "GET" });
+}
+
 export async function runLeadGen(query) {
   const response = await fetch(`${API_BASE}/leadgen/?query=${encodeURIComponent(query)}`, {
     method: "POST"

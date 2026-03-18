@@ -197,25 +197,31 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Status: Open. Deferred to ARM Phase 2.
 
 ### §11.2 Self-tuning config via Infinity Algorithm feedback
-- **`ConfigManager.update()` should be callable by an Infinity Algorithm feedback loop**
-  that adjusts temperature, model, and token limits based on observed execution speed,
-  task priority trends, and output quality signals.
-  Currently: PUT /arm/config is manual-only (user-driven).
-  - Location: `AINDY/modules/deepseek/config_manager_deepseek.py`
-  - Fix: add `ConfigManager.self_tune(metrics: dict)` method that reads Infinity
-    Algorithm output (execution_speed, avg_task_priority) and applies parameter
-    adjustments within safe bounds.
-  - Status: Open. Deferred to ARM Phase 2.
+- ✅ **FIXED (2026-03-17 ARM Phase 2):** `ARMConfigSuggestionEngine` in
+  `services/arm_metrics_service.py` analyzes the 5 Thinking KPI metrics and
+  produces prioritized, risk-labelled config suggestions via `GET /arm/config/suggest`.
+  Suggestions are advisory only — user applies via `PUT /arm/config`. Low-risk
+  suggestions are surfaced in `auto_apply_safe` list for quick application.
 
 ### §11.3 Infinity metric crosswalk (Decision Efficiency, Execution Speed)
-- **ARM response payloads do not yet include Decision Efficiency or the full
-  Infinity Algorithm metric set.** Only Task Priority (TP) and Execution Speed
-  (tokens/second) are currently returned.
-  - Location: `AINDY/routes/arm_router.py` (response construction),
-    `AINDY/services/calculation_services.py` (metric formulas available)
-  - Fix: wire `decision_efficiency()` and `execution_speed()` from
-    `calculation_services.py` into ARM response enrichment using token/latency data.
-  - Status: Open. Deferred to ARM Phase 2.
+- ✅ **FIXED (2026-03-17 ARM Phase 2):** All 5 Infinity Algorithm Thinking KPI
+  metrics exposed via `GET /arm/metrics`: Execution Speed, Decision Efficiency,
+  AI Productivity Boost, Lost Potential, Learning Efficiency. Calculated by
+  `ARMMetricsService` from `analysis_results` + `code_generations` history.
+
+### §11.5 ARM Phase 3 — Memory Bridge feedback loop (deferred pending bridge design)
+- **After each ARM analysis/generation, a `MemoryNode` should be persisted via
+  `MemoryNodeDAO`** with ARM results as structured content and semantic tags.
+  Phase 2 writes to `analysis_results` / `code_generations` only.
+  - Location: `AINDY/modules/deepseek/deepseek_code_analyzer.py`
+  - Status: Open. Deferred to ARM Phase 3 pending Memory Bridge design.
+
+### §11.6 ARM Phase 3 — Auto-approve low-risk config changes
+- **ARM Phase 2 returns `auto_apply_safe` list** of low-risk suggestions but
+  requires user to call `PUT /arm/config` manually. Phase 3 should optionally
+  auto-apply low-risk suggestions after each session without user confirmation.
+  - Location: `AINDY/services/arm_metrics_service.py`, `AINDY/routes/arm_router.py`
+  - Status: Open. Deferred to ARM Phase 3.
 
 ### §11.4 deepseek_arm_service.py is now a dead code path
 - **`services/deepseek_arm_service.py` is no longer called by `arm_router.py`.**
