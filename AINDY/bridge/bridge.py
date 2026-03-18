@@ -63,7 +63,9 @@ def create_memory_node(title: str, content: str, tags: list[str] = None):
     """
     from datetime import datetime
     from db.database import SessionLocal
-    from db.models.models import CalculationResult  # or your MemoryNode model if exists
+    # TODO: Replace with MemoryNodeDAO — writing to calculation_results is a known bug.
+    # See TECH_DEBT.md §2. Import path corrected from db.models.models (file doesn't exist).
+    from db.models.calculation import CalculationResult
 
     if tags is None:
         tags = []

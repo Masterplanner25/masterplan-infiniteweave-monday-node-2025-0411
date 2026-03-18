@@ -65,6 +65,11 @@ def save_calculation(db: Session, metric_name: str, value: float):
         return None
 
 def calculate_twr(task: TaskInput):
+    # Guard: task_difficulty=0 causes ZeroDivisionError.
+    # Raise ValueError so the route can return 422 instead of 500.
+    # See TECH_DEBT.md §9.
+    if task.task_difficulty == 0:
+        raise ValueError("task_difficulty must be greater than zero")
     LHI = (task.time_spent * task.task_complexity * task.skill_level)
     TWR = (LHI * task.ai_utilization * task.time_spent) / task.task_difficulty
     return TWR

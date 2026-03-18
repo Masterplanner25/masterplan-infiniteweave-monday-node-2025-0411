@@ -2,7 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import GenesisSessionDB
-from services.genesis_ai import call_genesis_llm
+from services.genesis_ai import call_genesis_llm, call_genesis_synthesis_llm
+from services.masterplan_factory import create_masterplan_from_genesis
+from db.models import MasterPlan
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])

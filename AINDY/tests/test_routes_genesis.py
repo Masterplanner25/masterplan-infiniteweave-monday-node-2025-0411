@@ -102,22 +102,19 @@ def _read_genesis_router_source():
 class TestGenesisSynthesizeEndpoint:
     def test_post_genesis_synthesize_has_name_error_bug(self):
         """
-        DIAGNOSTIC — INTENTIONAL FAILING TEST.
+        BUG FIXED: call_genesis_synthesis_llm is now imported in genesis_router.py.
 
-        POST /genesis/synthesize calls call_genesis_synthesis_llm(current_state)
-        but this function is NOT imported in genesis_router.py.
-
-        When called with a valid session_id (requires DB), this will raise NameError.
-        This test documents the import bug by reading the source file directly.
+        POST /genesis/synthesize previously called call_genesis_synthesis_llm(current_state)
+        without importing it — raising NameError at runtime. Import has been added.
         """
         source = _read_genesis_router_source()
 
-        # The bug: synthesize endpoint calls undefined name
+        # The function is referenced in the synthesize endpoint
         assert "call_genesis_synthesis_llm" in source, (
             "call_genesis_synthesis_llm not referenced in genesis_router.py"
         )
 
-        # Check whether it is imported
+        # Check that it IS now imported (fix verified)
         has_any_import = (
             "import call_genesis_synthesis_llm" in source or
             (
@@ -126,12 +123,12 @@ class TestGenesisSynthesizeEndpoint:
             )
         )
 
-        assert not has_any_import, (
-            "BUG FIXED: call_genesis_synthesis_llm is now imported in genesis_router.py. "
-            "Remove this test."
+        assert has_any_import, (
+            "REGRESSION: call_genesis_synthesis_llm is no longer imported in genesis_router.py. "
+            "This will cause NameError at runtime on POST /genesis/synthesize."
         )
 
-        # Verify the function exists in genesis_ai — the bug is only in the router
+        # Verify the function exists in genesis_ai
         from services.genesis_ai import call_genesis_synthesis_llm
         assert callable(call_genesis_synthesis_llm), (
             "call_genesis_synthesis_llm does not exist in genesis_ai.py — it should"
@@ -146,8 +143,10 @@ class TestGenesisLockEndpoint:
 
     def test_post_genesis_lock_has_undefined_name_bug(self):
         """
-        DIAGNOSTIC: POST /genesis/lock calls create_masterplan_from_genesis()
-        which is NOT imported in genesis_router.py — will raise NameError.
+        BUG FIXED: create_masterplan_from_genesis is now imported in genesis_router.py.
+
+        POST /genesis/lock previously called create_masterplan_from_genesis() without
+        importing it — raising NameError at runtime. Import has been added.
         """
         source = _read_genesis_router_source()
 
@@ -155,7 +154,7 @@ class TestGenesisLockEndpoint:
             "create_masterplan_from_genesis not referenced in genesis_router"
         )
 
-        # Check that it's not imported
+        # Check that it IS now imported (fix verified)
         imported = False
         for line in source.split("\n"):
             if "import" in line and "create_masterplan_from_genesis" in line:
@@ -165,6 +164,7 @@ class TestGenesisLockEndpoint:
                 imported = True
                 break
 
-        assert not imported, (
-            "BUG FIXED: create_masterplan_from_genesis is now imported. Remove this test."
+        assert imported, (
+            "REGRESSION: create_masterplan_from_genesis is no longer imported in genesis_router.py. "
+            "This will cause NameError at runtime on POST /genesis/lock."
         )

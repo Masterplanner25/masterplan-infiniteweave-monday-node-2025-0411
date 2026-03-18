@@ -65,11 +65,13 @@ class TestTWR:
 
     def test_twr_zero_difficulty_raises(self):
         """
-        DIAGNOSTIC: task_difficulty=0 causes ZeroDivisionError.
-        This test documents the known bug: no guard against division by zero.
+        BUG FIXED: task_difficulty=0 now raises ValueError (service guard) or
+        pydantic.ValidationError (schema-level validator) instead of ZeroDivisionError.
+        See TECH_DEBT.md §9.
         """
-        task = make_task(task_difficulty=0)
-        with pytest.raises(ZeroDivisionError):
+        from pydantic import ValidationError
+        with pytest.raises((ValueError, ValidationError)):
+            task = make_task(task_difficulty=0)
             calculation_services.calculate_twr(task)
 
 
