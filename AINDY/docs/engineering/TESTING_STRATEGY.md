@@ -6,7 +6,7 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-17)
 
-**Diagnostic suite** (`AINDY/tests/`) — 162 tests across 10 files. Final result: **162 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 224 tests across 11 files. Final result: **224 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -21,6 +21,7 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
 | `tests/test_routes_genesis.py` | 13 | Route auth enforcement, import regression guards |
 | `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
+| `tests/test_arm.py` | 62 | ARM Phase 1 (46): SecurityValidator, ConfigManager, FileProcessor, ARM routes with mocked OpenAI. ARM Phase 2 (16): TestARMMetrics route-level (4), TestARMMetricsService unit (7), TestARMConfigSuggestions unit (4), TestARMRoutes new endpoints (1). No DB required for service unit tests. |
 
 Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery configured in `pytest.ini`.
 
@@ -113,3 +114,4 @@ A change cannot be merged if:
   - `test_get_results` (`test_calculations.py`, `test_routes.py`) — also appears 3 times within `test_routes.py`
   - `test_post_ai_productivity_boost`, `test_post_batch_calculations`, `test_post_decision_efficiency`, `test_post_engagement_rate`, `test_post_execution_speed`, `test_post_income_efficiency`, `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
 - ✅ **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/roadmap/TECH_DEBT.md` §6.
+- ✅ **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit — no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit — no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
