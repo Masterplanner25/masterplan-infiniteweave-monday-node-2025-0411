@@ -7,12 +7,9 @@ import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session
 from services.memory_persistence import MemoryNodeDAO
 from config import settings
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from services import rippletrace_services
 
 # --- Environment / Config -------------------------------------------------
@@ -52,7 +49,7 @@ def verify_permission_or_403(permission: TracePermission):
 class NodeCreateRequest(BaseModel):
     content: str
     tags: Optional[List[str]] = Field(default_factory=list)
-    node_type: Optional[str] = "generic"
+    node_type: Optional[str] = None
     extra: Optional[dict] = Field(default_factory=dict)
     permission: TracePermission
 
@@ -61,7 +58,7 @@ class NodeResponse(BaseModel):
     id: str
     content: str
     tags: List[str]
-    node_type: str
+    node_type: Optional[str]
     extra: dict
 
 
@@ -98,7 +95,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db)):
             self.id = None
             self.content = content
             self.tags = tags or []
-            self.node_type = node_type or "generic"
+            self.node_type = node_type
             self.extra = extra or {}
 
     saved = dao.save_memory_node(_NodeLike(payload.content, payload.tags, payload.node_type, payload.extra))
@@ -128,7 +125,7 @@ def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", li
         "id": str(getattr(n, "id", n.get("id"))),
         "content": getattr(n, "content", n.get("content", "")),
         "tags": getattr(n, "tags", n.get("tags", [])),
-        "node_type": getattr(n, "node_type", n.get("node_type", "generic")),
+        "node_type": getattr(n, "node_type", n.get("node_type")),
         "extra": getattr(n, "extra", n.get("extra", {})) or {},
     }) for n in nodes]
     return NodeSearchResponse(nodes=result)

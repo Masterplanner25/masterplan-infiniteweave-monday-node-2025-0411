@@ -4,7 +4,7 @@ const API_BASE = "http://127.0.0.1:8000"; // your FastAPI backend
 // ✅ Helper function to handle all requests consistently
 async function request(path, opts = {}) {
   const url = `${API_BASE}${path}`; // FIXED: Changed BASE_URL to API_BASE
-  
+
   const res = await fetch(url, {
     ...opts,
     headers: {
@@ -28,10 +28,21 @@ async function request(path, opts = {}) {
   }
 }
 
+/* --- Auth helper (injects Bearer token from localStorage) --- */
+function authRequest(path, opts = {}) {
+  const token = localStorage.getItem("aindy_token");
+  return request(path, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 /* --- Research Endpoints --- */
 export function runResearch(query, summary) {
-  // Refactored to use the shared 'request' helper
-  return request(`/research/query`, {
+  return authRequest(`/research/query`, {
     method: "POST",
     body: JSON.stringify({ query, summary }),
   });
@@ -39,50 +50,46 @@ export function runResearch(query, summary) {
 
 /* --- ARM Endpoints --- */
 export function runARMAnalysis(file_path, { complexity, urgency, context } = {}) {
-  return request(`/arm/analyze`, {
+  return authRequest(`/arm/analyze`, {
     method: "POST",
     body: JSON.stringify({ file_path, complexity, urgency, context }),
   });
 }
 
 export function runARMGenerate(prompt, { original_code, language, generation_type, analysis_id, complexity, urgency } = {}) {
-  return request(`/arm/generate`, {
+  return authRequest(`/arm/generate`, {
     method: "POST",
     body: JSON.stringify({ prompt, original_code, language, generation_type, analysis_id, complexity, urgency }),
   });
 }
 
 export function getARMLogs(limit = 20) {
-  return request(`/arm/logs?limit=${limit}`, { method: "GET" });
+  return authRequest(`/arm/logs?limit=${limit}`, { method: "GET" });
 }
 
 export function getARMConfig() {
-  return request(`/arm/config`, { method: "GET" });
+  return authRequest(`/arm/config`, { method: "GET" });
 }
 
 export function updateARMConfig(updates) {
-  return request(`/arm/config`, {
+  return authRequest(`/arm/config`, {
     method: "PUT",
     body: JSON.stringify({ updates }),
   });
 }
 
 export function getARMMetrics(window = 30) {
-  return request(`/arm/metrics?window=${window}`, { method: "GET" });
+  return authRequest(`/arm/metrics?window=${window}`, { method: "GET" });
 }
 
 export function getARMConfigSuggestions(window = 30) {
-  return request(`/arm/config/suggest?window=${window}`, { method: "GET" });
+  return authRequest(`/arm/config/suggest?window=${window}`, { method: "GET" });
 }
 
-export async function runLeadGen(query) {
-  const response = await fetch(`${API_BASE}/leadgen/?query=${encodeURIComponent(query)}`, {
-    method: "POST"
+export function runLeadGen(query) {
+  return authRequest(`/leadgen/?query=${encodeURIComponent(query)}`, {
+    method: "POST",
   });
-
-  if (!response.ok) throw new Error("LeadGen API error");
-
-  return response.json();
 }
 
 /* --- Social / Network Layer Endpoints --- */
@@ -91,7 +98,7 @@ export async function runLeadGen(query) {
  * Fetch a public profile by username
  */
 export function getProfile(username) {
-  return request(`/social/profile/${username}`, { method: "GET" });
+  return authRequest(`/social/profile/${username}`, { method: "GET" });
 }
 
 /**
@@ -99,7 +106,7 @@ export function getProfile(username) {
  * @param {Object} profileData - { username, tagline, bio, tags, etc. }
  */
 export function upsertProfile(profileData) {
-  return request(`/social/profile`, {
+  return authRequest(`/social/profile`, {
     method: "POST",
     body: JSON.stringify(profileData),
   });
@@ -115,7 +122,7 @@ export function getFeed(limit = 20, trustFilter = null) {
   if (trustFilter) {
     path += `&trust_filter=${trustFilter}`;
   }
-  return request(path, { method: "GET" });
+  return authRequest(path, { method: "GET" });
 }
 
 /**
@@ -123,7 +130,7 @@ export function getFeed(limit = 20, trustFilter = null) {
  * @param {Object} postData - { author_id, author_username, content, trust_tier_required, tags }
  */
 export function createPost(postData) {
-  return request(`/social/post`, {
+  return authRequest(`/social/post`, {
     method: "POST",
     body: JSON.stringify(postData),
   });
@@ -132,40 +139,28 @@ export function createPost(postData) {
 /* --- Execution Engine / Task Endpoints --- */
 
 export function getTasks() {
-  return request(`/tasks/list`, { method: "GET" });
+  return authRequest(`/tasks/list`, { method: "GET" });
 }
 
 export function createTask(taskData) {
   // taskData = { name, category, priority }
-  return request(`/tasks/create`, {
+  return authRequest(`/tasks/create`, {
     method: "POST",
     body: JSON.stringify(taskData),
   });
 }
 
 export function completeTask(taskName) {
-  return request(`/tasks/complete`, {
+  return authRequest(`/tasks/complete`, {
     method: "POST",
     body: JSON.stringify({ name: taskName }),
   });
 }
 
 export function startTask(taskName) {
-  return request(`/tasks/start`, {
+  return authRequest(`/tasks/start`, {
     method: "POST",
     body: JSON.stringify({ name: taskName }),
-  });
-}
-
-/* --- Auth helper (injects Bearer token from localStorage) --- */
-function authRequest(path, opts = {}) {
-  const token = localStorage.getItem("aindy_token");
-  return request(path, {
-    ...opts,
-    headers: {
-      ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
   });
 }
 

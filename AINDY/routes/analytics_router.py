@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from db.database import SessionLocal
+from db.database import get_db
 from db.models import MasterPlan
 from db.models.metrics_models import CanonicalMetricDB
 from schemas.analytics import LinkedInRawInput
@@ -10,13 +10,6 @@ from sqlalchemy import func
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.post("/linkedin/manual")

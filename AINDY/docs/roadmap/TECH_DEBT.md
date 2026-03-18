@@ -7,6 +7,14 @@ This document inventories current technical debt based strictly on the existing 
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
+- ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` deprecated `@app.on_event("startup")` handlers replaced with a single `@asynccontextmanager lifespan` function. Both startup handlers (cache init + system identity seeder) merged into one lifespan. Deprecation warnings eliminated (11 → 7 warnings in test suite).
+- ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` startup DB session leak resolved. The unused `db = SessionLocal()` at startup has been removed. The system identity seeder now uses a proper `try/finally` block with `db.close()`.
+- ✅ **FIXED (2026-03-18 Sprint 4):** Duplicate `get_db()` definitions removed from `main_router.py` and `analytics_router.py`. Both now import `get_db` from `db.database`. Single canonical definition.
+- **OPEN (2026-03-18 Audit):** `health_router.py` imports `seo_services` and `memory_persistence` without the `services.` package prefix (`import seo_services`, `import memory_persistence` — lines 43, 51). These will raise `ModuleNotFoundError` in any deployment where `PYTHONPATH` does not include `AINDY/services/` directly. Correct paths: `from services import seo_services`, `from services import memory_persistence`.
+- ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` duplicate `create_engine`/`sessionmaker` imports removed.
+- **OPEN (2026-03-18 Audit):** `services/master_index_service.py2.py` has an invalid Python filename (`.py2.py`). Python cannot import a file with this name. Either rename it or remove it.
+- ✅ **FIXED (2026-03-18 Sprint 4):** `task_router.py POST /tasks/complete` now passes `user_id=current_user["sub"]` to `complete_task()`. Memory Bridge Phase 3 task completion hook now fires from the API.
+- **OPEN (2026-03-18 Audit):** `social_router.py POST /social/post` calls `create_memory_node()` without a `db` session argument. `bridge.create_memory_node()` requires a DB session to persist via `MemoryNodeDAO`. Without it the function creates a transient `MemoryNode` and returns without writing to the database. The memory write for social posts silently does nothing (`AINDY/routes/social_router.py`).
 - Implicit coupling exists between:
 - `AINDY/routes/social_router.py` and `AINDY/bridge/bridge.py` (social post logging invokes memory bridge creation).
 - `AINDY/routes/health_router.py` and `AINDY/routes/seo_routes.py` via hardcoded endpoint paths.
@@ -20,6 +28,14 @@ This document inventories current technical debt based strictly on the existing 
 - Some application-level constraints are not enforced at DB level (e.g., session locking is application logic in `AINDY/services/masterplan_factory.py`).
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).
+- **OPEN (2026-03-18 Audit):** `Task.user_id` is commented out in `AINDY/db/models/task.py:38-39`. Tasks have no user ownership. Task CRUD (create/list/complete) is not user-scoped. Any authenticated user can list or complete any task by name. Requires uncommenting, adding FK to `users.id`, and a migration.
+- **OPEN (2026-03-18 Audit):** `LeadGenResult` has no `user_id` column (`AINDY/db/models/leadgen_model.py`). All lead gen results are globally shared. Requires adding `user_id` column and migration before user-scoped query filters can be applied.
+- **OPEN (2026-03-18 Audit):** `MasterPlan` has both `version` (String) and `version_label` (String) — redundant columns with overlapping semantics (`AINDY/db/models/masterplan.py`). Requires a clean-up migration.
+- **OPEN (2026-03-18 Audit):** `GenesisSessionDB` has both `user_id` (Integer, legacy) and `user_id_str` (String, new) — dual ownership columns in the same row (`AINDY/db/models/masterplan.py`). Requires deprecating `user_id` Integer and migrating all FK references to `user_id_str`.
+- **OPEN (2026-03-18 Audit):** `CanonicalMetricDB.user_id` is `Integer, nullable, no FK` — not referencing `users.id`. Any user_id stored here is unverifiable and non-relational (`AINDY/db/models/metrics_models.py:145`).
+- ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` `node_type="generic"` defaults changed to `None` in `NodeCreateRequest` schema and `_NodeLike` inner class. `NodeResponse.node_type` updated to `Optional[str]`. ORM event validator crash eliminated.
+- ✅ **FIXED (2026-03-18 Sprint 4):** `services/memory_persistence.py::MemoryNodeDAO.save_memory_node()` fallback changed from `"generic"` to `None`. ORM event violation path removed.
+- **OPEN (2026-03-18 Audit):** `AINDY/version.json` and `AINDY/system_manifest.json` still report version `0.9.0-pre`. Current release is post-v1.0.0. These are stale and not auto-updated.
 - ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
 - Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
 - `AINDY/version.json` and `AINDY/system_manifest.json` report version `0.9.0-pre`; current release is `1.0.0` (Social Layer). These are not updated automatically and are stale.
@@ -55,6 +71,15 @@ This document inventories current technical debt based strictly on the existing 
 - No documented secret rotation policy (`AINDY/routes/bridge_router.py` uses env secret without rotation).
 - HMAC protection exists for Memory Bridge writes but no replay protection beyond TTL (`AINDY/routes/bridge_router.py`).
 - `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
+- ✅ **FIXED (2026-03-18 Sprint 4):** `GET /dashboard/health` now requires JWT auth. `dependencies=[Depends(get_current_user)]` added to `health_dashboard_router.py` router level.
+- **OPEN (2026-03-18 Audit):** `GET /bridge/nodes` is unauthenticated — returns all memory nodes matching a tag filter with no auth. `POST /bridge/user_event` is also unauthenticated. Both are public despite all adjacent routes requiring HMAC (`AINDY/routes/bridge_router.py:123,159`). Add auth.
+- **OPEN (2026-03-18 Audit):** `POST /tasks/recurrence/check` is unauthenticated — public background trigger endpoint with no JWT or API key (`AINDY/routes/task_router.py`). Add `Depends(get_current_user)`.
+- **OPEN (2026-03-18 Audit):** All calculation endpoints in `main_router.py` are unauthenticated (`/calculate_twr`, `/calculate_effort`, and all Infinity Algorithm endpoints). Also `POST /masterplans/` and `POST /create_masterplan` in main_router.py have no auth (`AINDY/routes/main_router.py`). These are rate-limit bypass vectors.
+- **OPEN (2026-03-18 Audit):** Cross-user data exposure on 6 routes — authenticated users can read any other user's data: `GET /analytics/masterplan/{id}` (no user_id filter), `GET /leadgen/` (no user_id column on model), `GET /freelance/orders`, `GET /freelance/feedback`, `GET /research/`, `GET /rippletrace/pings`, `GET /rippletrace/drop_points`. Each requires a `user_id` filter; `leadgen_results` requires a migration first.
+- **OPEN (2026-03-18 Audit):** `GET /memory/nodes/{node_id}` has no ownership check — any authenticated user can retrieve any memory node by UUID (`AINDY/routes/memory_router.py:70`). Add a `user_id` ownership check after fetch.
+- ✅ **FIXED (2026-03-18 Sprint 4):** `.env` orphan bare Google API key on line 7 removed. `.env` now parses cleanly with no floating values.
+- **OPEN (2026-03-18 Audit):** `task_services.complete_task()` updates MongoDB with hardcoded `username: "me"` regardless of which user completed the task. Social velocity metrics are not user-scoped (`AINDY/services/task_services.py:121`).
+- ✅ **FIXED (2026-03-18 Sprint 4):** `client/src/api.js` — all protected endpoints now use `authRequest()`. ARM (analyze/generate/logs/config/metrics/suggest), Tasks (create/list/start/complete), Social (profile/feed/post), Research (query), and LeadGen now all send the JWT Bearer token. `runLeadGen` refactored from raw `fetch()` to `authRequest()`. `authRequest` definition moved before first use.
 
 ## 7. Observability Debt
 - Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).

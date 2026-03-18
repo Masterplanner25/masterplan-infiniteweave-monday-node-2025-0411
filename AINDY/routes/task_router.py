@@ -51,7 +51,7 @@ def complete_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return task_services.complete_task(db, task.name)
+    return task_services.complete_task(db, task.name, user_id=current_user["sub"])
 
 @router.get("/list")
 def list_tasks(

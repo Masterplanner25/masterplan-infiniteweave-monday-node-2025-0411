@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-18 (Memory Bridge Phase 3 — workflow hooks wired: ARM, Task, Genesis write/recall)
+Last updated: 2026-03-18 (Sprint 4 quick wins — api.js auth, node_type crash, task user_id, health-dash auth, .env cleanup, lifespan migration, single get_db)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.

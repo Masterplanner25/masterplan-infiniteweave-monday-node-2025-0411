@@ -82,7 +82,7 @@ class MemoryNodeDAO:
                 id=node_id,
                 content=str(getattr(memory_node, "content", "")),
                 tags=list(getattr(memory_node, "tags", [])),
-                node_type=getattr(memory_node, "node_type", "generic"),
+                node_type=getattr(memory_node, "node_type", None),
                 source=getattr(memory_node, "source", None),
                 user_id=getattr(memory_node, "user_id", None),
                 extra=getattr(memory_node, "extra", {}),

@@ -1,17 +1,12 @@
-from fastapi import Depends
+from fastapi import Depends, APIRouter, HTTPException
 from sqlalchemy.orm import Session
-from db.database import SessionLocal
-from fastapi import APIRouter
+from db.database import get_db
 from fastapi_cache.decorator import cache
 from services.projection_service import project_completion
-from datetime import timedelta 
-from fastapi import HTTPException 
+from datetime import timedelta
 from schemas.masterplan import MasterPlanCreate, MasterPlanInput
 from db.models import MasterPlan
 from db.models import CalculationResult
-
-
-from db.database import SessionLocal
 from schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
@@ -53,13 +48,6 @@ from services.calculation_services import (
 )
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @router.post("/calculate_twr")
 @cache(expire=60)
