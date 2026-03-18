@@ -1,3 +1,45 @@
+## [Unreleased] — feature/cpp-semantic-engine
+
+### Added
+- C++ semantic similarity engine (`memory_cpp/semantic.h` +
+  `semantic.cpp`) providing high-performance vector math
+- `cosine_similarity(a, b, len)` — foundation for semantic
+  memory node search; ready for when embeddings are added
+  to MemoryNode
+- `weighted_dot_product(values, weights, len)` — directly
+  powers `calculate_engagement_score()` in the Infinity Algorithm
+- Rust extern "C" FFI bridge (`src/cpp_bridge.rs`) safely wrapping
+  C++ operations for Python consumption
+- `semantic_similarity()` and `weighted_dot_product()` exposed
+  to Python via PyO3 in `memory_bridge_rs`
+- Python fallback implementations in `calculation_services.py`
+  (app works without compiled extension)
+- `bridge/benchmark_similarity.py` for performance verification
+
+### Changed
+- `calculate_engagement_score()` in `calculation_services.py`
+  now calls C++ `weighted_dot_product` kernel (with fallback)
+- `Cargo.toml` updated: `cc` build-dependency added
+- `build.rs` added for C++ compilation configuration
+
+### Fixed
+- `memorycore.py` (misnamed Rust source) archived to
+  `bridge/archive/memory_bridge_core_draft.rs`
+- `Memorybridgerecognitiontrace.rs` (orphan file) archived
+  to `bridge/archive/`
+
+### Technical Notes
+- Build toolchain: MSVC VS 2022 Community (x64) via registry
+- Build mode: debug (release blocked by Windows AppControl
+  policy in `target/` directories)
+- Benchmark (debug, dim=1536, 10k iters): Python 2.753s vs
+  C++ 3.844s — debug FFI overhead dominates; release build
+  expected to show 10–50x improvement
+- Branch: `feature/cpp-semantic-engine`
+- Commits: `6a14d64` (cleanup) + `2054914` (implementation)
+
+---
+
 # 🧠 A.I.N.D.Y. v1.0 — The "Anti-LinkedIn" Social Layer Build
 
 **Date:** November 23, 2025
