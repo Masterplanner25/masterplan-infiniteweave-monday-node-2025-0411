@@ -18,3 +18,4 @@ code_analysis.db
 Thumbs.db
 .env.dev
 .env.prod
+.env.pg18

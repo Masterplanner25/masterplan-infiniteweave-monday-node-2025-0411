@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: aindy-pgvector
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-140671a}
+      POSTGRES_DB: base
+    ports:
+      - "5433:5432"
+    volumes:
+      - aindy_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d base"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  aindy_pgdata:
+    driver: local
