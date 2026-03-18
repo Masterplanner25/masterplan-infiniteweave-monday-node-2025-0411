@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import GenesisSessionDB
@@ -7,6 +7,7 @@ from services.masterplan_factory import create_masterplan_from_genesis
 from db.models import MasterPlan
 from datetime import datetime, timedelta
 from services.auth_service import get_current_user
+from services.rate_limiter import limiter
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
@@ -36,7 +37,9 @@ def create_genesis_session(
 
 
 @router.post("/message")
+@limiter.limit("20/minute")
 def genesis_message(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -89,7 +92,9 @@ def genesis_message(
     }
 
 @router.post("/synthesize")
+@limiter.limit("5/minute")
 def synthesize_genesis(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

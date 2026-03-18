@@ -8,10 +8,11 @@ reclaimed, watermarked version with a visible + invisible authorship signature.
 """
 
 # /routes/authorship_router.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from services.authorship_services import reclaim_authorship
+from services.auth_service import get_current_user
 
-router = APIRouter(prefix="/authorship", tags=["Authorship"])
+router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depends(get_current_user)])
 
 @router.post("/reclaim")
 def reclaim_authorship_endpoint(content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):

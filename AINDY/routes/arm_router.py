@@ -1,5 +1,5 @@
 # routes/arm_router.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services.deepseek_arm_service import (
@@ -9,10 +9,12 @@ from services.deepseek_arm_service import (
     get_config,
     update_config,
 )
+from services.auth_service import get_current_user
+from services.rate_limiter import limiter
 from pydantic import BaseModel
 
 
-router = APIRouter(prefix="/arm", tags=["Autonomous Reasoning Module"])
+router = APIRouter(prefix="/arm", tags=["Autonomous Reasoning Module"], dependencies=[Depends(get_current_user)])
 
 
 # -----------------------------
@@ -38,7 +40,8 @@ class ConfigUpdate(BaseModel):
 # -----------------------------
 
 @router.post("/analyze")
-async def analyze_file(data: AnalyzeInput, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def analyze_file(request: Request, data: AnalyzeInput, db: Session = Depends(get_db)):
     """
     Run DeepSeek reasoning analysis on a codebase or logic file.
     """
@@ -50,7 +53,8 @@ async def analyze_file(data: AnalyzeInput, db: Session = Depends(get_db)):
 
 
 @router.post("/generate")
-async def generate_logic(data: GenerateInput, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def generate_logic(request: Request, data: GenerateInput, db: Session = Depends(get_db)):
     """
     Generate or refactor code using DeepSeek logic synthesis.
     """

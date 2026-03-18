@@ -1,11 +1,14 @@
 """
 test_security.py
 ─────────────────
-Security tests — Phase 2 implementation complete.
+Security tests — Phase 2 + Phase 3 implementation complete.
 
 All 7 previously-failing security tests now pass.
 Each test verifies both the rejection path (no auth → 401/error)
 and the acceptance path (valid credentials → expected behavior).
+
+Phase 3 additions: SEO, Authorship, ARM, RippleTrace, Freelance,
+Research, Dashboard, Social route protection tests.
 """
 import pytest
 import os
@@ -213,6 +216,104 @@ class TestHardcodedSecrets:
         assert len(found_in) == 0, (
             f"SECURITY: Potential hardcoded API keys found in source: {found_in}"
         )
+
+
+class TestPhase3RouteProtection:
+    """Phase 3: verify newly protected routers reject unauthenticated requests."""
+
+    def test_seo_analyze_requires_auth(self, client):
+        """POST /seo/analyze must return 401 without a token."""
+        response = client.post("/seo/analyze", json={"text": "test", "top_n": 3})
+        assert response.status_code == 401, (
+            f"POST /seo/analyze returned {response.status_code}. Expected 401."
+        )
+
+    def test_authorship_reclaim_requires_auth(self, client):
+        """POST /authorship/reclaim must return 401 without a token."""
+        response = client.post("/authorship/reclaim?content=test&author=Me")
+        assert response.status_code == 401, (
+            f"POST /authorship/reclaim returned {response.status_code}. Expected 401."
+        )
+
+    def test_arm_analyze_requires_auth(self, client):
+        """POST /arm/analyze must return 401 without a token (DeepSeek AI endpoint)."""
+        response = client.post("/arm/analyze", json={"file_path": "test.py"})
+        assert response.status_code == 401, (
+            f"POST /arm/analyze returned {response.status_code}. Expected 401."
+        )
+
+    def test_rippletrace_requires_auth(self, client):
+        """RippleTrace write endpoints must return 401 without a token."""
+        response = client.get("/rippletrace/recent")
+        assert response.status_code == 401, (
+            f"GET /rippletrace/recent returned {response.status_code}. Expected 401."
+        )
+
+    def test_freelance_requires_auth(self, client):
+        """Freelance endpoints must return 401 without a token."""
+        response = client.get("/freelance/orders")
+        assert response.status_code == 401, (
+            f"GET /freelance/orders returned {response.status_code}. Expected 401."
+        )
+
+    def test_research_requires_auth(self, client):
+        """Research endpoints must return 401 without a token."""
+        response = client.get("/research/")
+        assert response.status_code == 401, (
+            f"GET /research/ returned {response.status_code}. Expected 401."
+        )
+
+    def test_dashboard_requires_auth(self, client):
+        """Dashboard overview must return 401 without a token."""
+        response = client.get("/dashboard/overview")
+        assert response.status_code == 401, (
+            f"GET /dashboard/overview returned {response.status_code}. Expected 401."
+        )
+
+    def test_social_requires_auth(self, client):
+        """Social endpoints must return 401 without a token."""
+        response = client.get("/social/feed")
+        assert response.status_code == 401, (
+            f"GET /social/feed returned {response.status_code}. Expected 401."
+        )
+
+    def test_db_verify_requires_api_key(self, client):
+        """GET /db/verify must return 401 without an API key (admin endpoint)."""
+        response = client.get("/db/verify")
+        assert response.status_code == 401, (
+            f"GET /db/verify returned {response.status_code}. Expected 401."
+        )
+
+    def test_db_verify_accepts_valid_api_key(self, client, api_key_headers):
+        """GET /db/verify must not return 401 with a valid API key."""
+        response = client.get("/db/verify", headers=api_key_headers)
+        assert response.status_code != 401, (
+            f"GET /db/verify returned 401 with valid API key — API key auth is broken."
+        )
+
+    def test_network_bridge_requires_api_key(self, client):
+        """POST /network_bridge/connect must return 401 without an API key."""
+        response = client.post("/network_bridge/connect", json={
+            "author_name": "Test", "platform": "TestPlatform"
+        })
+        assert response.status_code == 401, (
+            f"POST /network_bridge/connect returned {response.status_code}. Expected 401."
+        )
+
+    def test_phase3_routes_accept_valid_token(self, client, auth_headers):
+        """Phase 3 JWT-protected routes accept a valid token (not 401)."""
+        for method, path, body in [
+            ("GET", "/rippletrace/recent", None),
+            ("GET", "/freelance/orders", None),
+            ("GET", "/research/", None),
+        ]:
+            if method == "GET":
+                r = client.get(path, headers=auth_headers)
+            else:
+                r = client.post(path, json=body, headers=auth_headers)
+            assert r.status_code != 401, (
+                f"{method} {path} returned 401 with valid token — auth is broken."
+            )
 
 
 class TestRateLimit:

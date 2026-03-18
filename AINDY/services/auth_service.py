@@ -8,7 +8,7 @@ Provides:
 """
 import os
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -18,6 +18,7 @@ from fastapi.security import (
     HTTPAuthorizationCredentials,
     APIKeyHeader,
 )
+from sqlalchemy.orm import Session
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -101,6 +102,36 @@ def get_optional_user(
         return decode_access_token(credentials.credentials)
     except HTTPException:
         return None
+
+
+# ── DB-backed user operations ────────────────────────────────────────────────
+
+def register_user(email: str, password: str, username: str, db: Session):
+    """Create a new user in the database. Raises 409 if email already exists."""
+    from db.models.user import User
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(email=email, username=username, hashed_password=hash_password(password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def authenticate_user(email: str, password: str, db: Session):
+    """Verify credentials and return user. Raises 401 on invalid credentials."""
+    from db.models.user import User
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is disabled")
+    return user
 
 
 def verify_api_key(

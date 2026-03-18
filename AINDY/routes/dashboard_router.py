@@ -6,8 +6,9 @@ from datetime import datetime
 from db.database import get_db
 from db.models.author_model import AuthorDB
 from db.models import PingDB  # from your existing rippletrace models
+from services.auth_service import get_current_user
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"])
+router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/overview")

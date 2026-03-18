@@ -6,11 +6,12 @@ from db.database import get_db
 from datetime import datetime
 import uuid
 from services.calculation_services import save_calculation
+from services.auth_service import verify_api_key
 
 # Internal service imports
 from services import rippletrace_services, network_bridge_services
 
-router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"])
+router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
 
 
 # ---------------------------------------------------------------------------
