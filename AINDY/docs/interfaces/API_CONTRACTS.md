@@ -293,8 +293,8 @@ Method: POST
 Request Body: `TaskInput` (`AINDY/schemas/analytics_inputs.py`)
 Query Params: None
 Response: Dict with `task_name`, `TWR`, and optionally `active_projection` and `origin_projection` if masterplans exist.
-Status Codes: 200
-Errors: 200 with message if no masterplans; no explicit error codes.
+Status Codes: 200, 422
+Errors: 200 with message if no masterplans; 422 if `task_difficulty <= 0` (rejected at Pydantic validator in `TaskInput` and guarded in `calculate_twr()`).
 
 `POST /calculate_effort`
 Method: POST
@@ -679,7 +679,6 @@ Request Body: `dict` with `session_id`
 Query Params: None
 Response: `{ "draft": <object> }` (shape from `call_genesis_synthesis_llm`)
 Status Codes: 200, 400 on missing session_id, 404 if session not found.
-Note: `call_genesis_synthesis_llm` is referenced but not imported in `AINDY/routes/genesis_router.py`; runtime error risk.
 
 `POST /genesis/lock`
 Method: POST

@@ -23,6 +23,50 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — crash fixes] — 2026-03-17
+
+## Fixed
+
+* **`bridge/bridge.py` ImportError** — `from db.models.models import CalculationResult` corrected to `from db.models.calculation import CalculationResult`. `db/models/models.py` does not exist; every call to `create_memory_node()` (social posts, leadgen) was crashing with `ImportError` before reaching any DB logic. Wrong-table architectural issue (`calculation_results` vs `memory_nodes`) remains tracked in `docs/roadmap/TECH_DEBT.md` §2.
+* **`routes/genesis_router.py` NameError crashes** — Three missing imports added: `call_genesis_synthesis_llm` (from `services.genesis_ai`), `create_masterplan_from_genesis` (from `services.masterplan_factory`), `MasterPlan` (from `db.models`). A cascading `ModuleNotFoundError` was also resolved by creating `services/posture.py` stub (`determine_posture()`). `POST /genesis/synthesize` and `POST /genesis/lock` no longer crash with `NameError` before reaching business logic.
+* **`calculate_twr()` ZeroDivisionError → HTTP 500** — Three-layer fix: (1) Pydantic `@validator("task_difficulty")` on `TaskInput` rejects `<= 0` at schema level with automatic 422; (2) `ValueError` guard added inside `calculate_twr()` as second line of defense; (3) `try/except ValueError/ZeroDivisionError` in `routes/main_router.py` maps both to HTTP 422 with a clear message. Route previously returned HTTP 500 on zero-difficulty input.
+
+## Added
+
+* `services/posture.py` — minimal stub for `determine_posture()`, required by `masterplan_factory.py` import chain.
+
+## Documentation
+
+* `docs/roadmap/TECH_DEBT.md` — §9 status updated for all three crash bugs; import path fix noted as resolved; genesis NameError crashes noted as resolved; TWR ValueError guard noted as resolved.
+
+---
+
+# [feature/cpp-semantic-engine — test suite] — 2026-03-17
+
+## Added
+
+* Comprehensive diagnostic test suite (`AINDY/tests/`) — 143 tests across 8 files:
+  * `tests/conftest.py` — shared fixtures (TestClient, mock_db, mock_openai)
+  * `tests/test_calculation_services.py` — 26 tests: all Infinity Algorithm formulas, C++ kernel flag, Python/C++ parity
+  * `tests/test_memory_bridge.py` — 40 tests: Python bridge layer, MemoryNodeDAO, Rust/C++ kernel (cosine similarity, weighted dot product, dim=1536)
+  * `tests/test_models.py` — 15 tests: SQLAlchemy model structure, orphan function documentation
+  * `tests/test_routes_health.py` — 6 tests: health endpoint structure and response time
+  * `tests/test_routes_tasks.py` — 11 tests: task route registration, schema validation
+  * `tests/test_routes_bridge.py` — 8 tests: HMAC validation, TTL enforcement, read path
+  * `tests/test_routes_analytics.py` — 10 tests: analytics route registration, zero-view guard, zero-difficulty 500
+  * `tests/test_routes_leadgen.py` — 8 tests: route registration, dead code documentation
+  * `tests/test_routes_genesis.py` — 9 tests: route registration, NameError bug documentation
+  * `tests/test_security.py` — 10 tests: auth gaps (intentional failures), CORS, rate limiting
+* Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0` added to `requirements.txt`
+* `pytest.ini` — test discovery configuration
+
+## Notes
+
+* Final result after test suite + crash fixes: **136 passing, 7 failing**
+* All 7 remaining failures are intentional `_WILL_FAIL` security gap tests (no auth, wildcard CORS, no rate limiting) — tracked in `docs/roadmap/TECH_DEBT.md` §6 for Phase 2.
+
+---
+
 # [feature/cpp-semantic-engine] — 2026-03-17
 
 ## Added

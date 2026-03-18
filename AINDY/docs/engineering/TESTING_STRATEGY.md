@@ -4,47 +4,35 @@ This document distinguishes current testing reality from required policy going f
 
 ## 1. Current Testing Landscape
 
-### Current State
-- Root test files:
-- `test_calculations.py` (FastAPI TestClient calls for calculation endpoints)
-- `test_routes.py` (FastAPI TestClient calls for calculation endpoints)
-- `test_import.py` (simple import check)
-- `AINDY/tests/`:
-- `AINDY/tests/example.py` (minimal placeholder)
-- Scope:
-- Tests focus primarily on calculation endpoints in `AINDY/routes/main_router.py`.
-- Coverage is minimal and does not include most services, background loops, or other routes.
-- Coverage tooling is not configured in the repository (no coverage config files observed).
-- Endpoints exercised by current tests (exact paths):
-- `POST /ai_productivity_boost`
-- `test_calculations.py::test_post_ai_productivity_boost`
-- `test_routes.py::test_post_ai_productivity_boost`
-- `POST /income_efficiency`
-- `test_calculations.py::test_post_income_efficiency`
-- `test_routes.py::test_post_income_efficiency`
-- `POST /execution_speed`
-- `test_calculations.py::test_post_execution_speed`
-- `test_routes.py::test_post_execution_speed`
-- `POST /engagement_rate`
-- `test_calculations.py::test_post_engagement_rate`
-- `test_routes.py::test_post_engagement_rate`
-- `POST /lost_potential`
-- `test_calculations.py::test_post_lost_potential`
-- `test_routes.py::test_post_lost_potential`
-- `POST /decision_efficiency`
-- `test_calculations.py::test_post_decision_efficiency`
-- `test_routes.py::test_post_decision_efficiency`
-- `POST /batch_calculations`
-- `test_calculations.py::test_post_batch_calculations`
-- `test_routes.py::test_post_batch_calculations`
-- `GET /results`
-- `test_calculations.py::test_get_results`
-- `test_routes.py::test_get_results`
-- Known gaps (current state):
-- No tests for Memory Bridge, Genesis, RippleTrace, Network Bridge, Social Layer, or DB verification routes.
-- No explicit tests for background task loops (`AINDY/services/task_services.py`).
-- No migration validation tests.
-- No error handling contract tests.
+### Current State (as of 2026-03-17)
+
+**Diagnostic suite** (`AINDY/tests/`) — 143 tests across 8 files. Final result: **136 passing, 7 failing** (all failures are intentional `_WILL_FAIL` security gap tests — do not suppress).
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `tests/conftest.py` | — | Shared fixtures: TestClient, mock_db, mock_openai |
+| `tests/test_calculation_services.py` | 26 | All Infinity Algorithm formulas, C++ kernel flag, Python/C++ parity |
+| `tests/test_memory_bridge.py` | 40 | Python bridge layer, MemoryNodeDAO, Rust/C++ kernel (cosine similarity, weighted dot product, dim=1536) |
+| `tests/test_models.py` | 15 | SQLAlchemy model structure, orphan function documentation |
+| `tests/test_routes_health.py` | 6 | Health endpoint structure and response time |
+| `tests/test_routes_tasks.py` | 11 | Task route registration, schema validation |
+| `tests/test_routes_bridge.py` | 8 | HMAC validation, TTL enforcement, read path |
+| `tests/test_routes_analytics.py` | 10 | Analytics route registration, zero-view guard, zero-difficulty 422 |
+| `tests/test_routes_leadgen.py` | 8 | Route registration, dead code documentation |
+| `tests/test_routes_genesis.py` | 9 | Route registration, import regression guards |
+| `tests/test_security.py` | 10 | Auth gaps (7 intentional failures), CORS, rate limiting |
+
+Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0` in `requirements.txt`. Discovery configured in `pytest.ini`.
+
+**Root test files** (legacy, minimal scope):
+- `test_calculations.py` — FastAPI TestClient calls for calculation endpoints
+- `test_routes.py` — FastAPI TestClient calls for calculation endpoints (duplicate test names — see §8)
+- `test_import.py` — simple import check
+
+**Intentional failing tests (`_WILL_FAIL`)** — these 7 tests document known security gaps. They must remain failing until the corresponding Phase 2 security work is completed. Never suppress or skip them.
+- `test_security.py::TestAuthenticationMissing::*` (4 tests) — no auth on any route
+- `test_security.py::TestCORSConfiguration::test_cors_is_not_wildcard_WILL_FAIL` — wildcard CORS + credentials
+- `test_security.py::TestRateLimit::test_rate_limiting_exists_WILL_FAIL` — no rate limiting middleware
 
 ## 2. Required Coverage Areas (Policy)
 
@@ -117,19 +105,12 @@ A change cannot be merged if:
 - The `Last updated` date in `docs/GOVERNANCE_INDEX.md` is not refreshed after doc changes.
 
 ## 8. Known Gaps
-- Minimal route coverage limited to calculation endpoints.
-- No coverage metrics are configured in the repository.
-- No CI enforcement is defined in the repository.
-- Missing tests for services, background loops, migrations, and error-handling contracts.
-- Duplicate test names exist (`test_get_results` appears multiple times in `test_routes.py`), which can lead to test collection conflicts or overwritten results depending on the test runner.
-- Duplicate test function names across files (potential conflicts): 
-- `test_get_results` (`test_calculations.py`, `test_routes.py`)
-- `test_post_ai_productivity_boost` (`test_calculations.py`, `test_routes.py`)
-- `test_post_batch_calculations` (`test_calculations.py`, `test_routes.py`)
-- `test_post_decision_efficiency` (`test_calculations.py`, `test_routes.py`)
-- `test_post_engagement_rate` (`test_calculations.py`, `test_routes.py`)
-- `test_post_execution_speed` (`test_calculations.py`, `test_routes.py`)
-- `test_post_income_efficiency` (`test_calculations.py`, `test_routes.py`)
-- `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
-- Duplicate test function names within the same file (higher risk of overwriting in collection):
-- `test_get_results` appears 3 times in `test_routes.py`
+- No coverage metrics tooling configured in the repository (no coverage config files).
+- No CI enforcement defined in the repository.
+- No migration validation tests (`AINDY/alembic/` has no test harness).
+- No tests for background task loops (`AINDY/services/task_services.py`).
+- No error handling contract tests validating JSON error structure per `docs/governance/ERROR_HANDLING_POLICY.md`.
+- Duplicate test function names in legacy root test files (potential collection conflicts):
+  - `test_get_results` (`test_calculations.py`, `test_routes.py`) — also appears 3 times within `test_routes.py`
+  - `test_post_ai_productivity_boost`, `test_post_batch_calculations`, `test_post_decision_efficiency`, `test_post_engagement_rate`, `test_post_execution_speed`, `test_post_income_efficiency`, `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
+- Security gaps documented as intentional `_WILL_FAIL` tests (Phase 2): authentication, CORS misconfiguration, rate limiting. See `docs/roadmap/TECH_DEBT.md` §6.

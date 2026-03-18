@@ -229,9 +229,10 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - `AINDY/server.js` gateway uses an in-memory user list and lacks persistence and auth.
 - Background tasks in `AINDY/main.py` are stubs and not using a formal scheduler/queue.
 - `AINDY/services/memory_persistence.py` includes an orphan `save_memory_node(self, memory_node)` at module level (takes `self` but is not a class method; dead code that raises `TypeError` if called).
-- There is no standardized test suite coverage across routers/services; most tests are minimal.
-- `AINDY/bridge/bridge.py::create_memory_node()` writes to `calculation_results` (wrong table); content and tags are silently discarded. See `docs/roadmap/TECH_DEBT.md` §2 for fix path.
-- No authentication or authorization middleware on any FastAPI route. HMAC protection covers only `POST /bridge/nodes` and `POST /bridge/link`.
+- ✅ **Resolved (2026-03-17)**: `AINDY/bridge/bridge.py` had a broken import path (`db.models.models` does not exist); fixed to `db.models.calculation`. Wrong-table architectural bug (`create_memory_node()` writes to `calculation_results` instead of `memory_nodes`) remains open — see `docs/roadmap/TECH_DEBT.md` §2.
+- ✅ **Resolved (2026-03-17)**: `AINDY/routes/genesis_router.py` had three undefined name references (`call_genesis_synthesis_llm`, `create_masterplan_from_genesis`, `MasterPlan`) causing NameError crashes. All three imports added; `services/posture.py` stub created to resolve cascading ModuleNotFoundError.
+- ✅ **Resolved (2026-03-17)**: `AINDY/tests/` comprehensive diagnostic suite added — 143 tests across 8 files (136 passing, 7 intentional `_WILL_FAIL` security gap tests). Coverage now spans services, memory bridge, Rust/C++ kernel, all route groups, models, and security.
+- No authentication or authorization middleware on any FastAPI route. HMAC protection covers only `POST /bridge/nodes` and `POST /bridge/link`. Confirmed by test suite — Phase 2 target.
 - C++ semantic kernel (`bridge/memory_bridge_rs/`) is built in debug mode only; `MemoryNode` has no vector embeddings, making semantic search inoperable. See `docs/roadmap/TECH_DEBT.md` §8.
 
 Full inventory: `docs/roadmap/TECH_DEBT.md`.
