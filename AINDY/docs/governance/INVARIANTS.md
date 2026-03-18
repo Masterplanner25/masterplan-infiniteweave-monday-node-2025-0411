@@ -174,6 +174,14 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Ping insertion could fail due to foreign key constraints if DB enforces them.
 - Enforcement Type: Application-enforced.
 
+## 21. JWT Authentication on Protected Route Groups
+- Invariant Name: Protected route groups require valid JWT Bearer token
+- Description: Routes in `task_router`, `leadgen_router`, `genesis_router`, and `analytics_router` require a valid JWT Bearer token. Requests without credentials or with an invalid/expired token are rejected with HTTP 401 before any route body executes.
+- Enforcement Location: `AINDY/services/auth_service.py: get_current_user` (injected via `Depends(get_current_user)` on each route)
+- Enforcement Mechanism: `HTTPBearer` extracts the `Authorization: Bearer <token>` header. `decode_access_token()` verifies the HS256 signature and expiry using `SECRET_KEY`. Raises `HTTPException(401)` if no credentials are present or if verification fails.
+- What Would Break If Violated: Unauthenticated users could access task management, lead generation, AI genesis, and analytics endpoints.
+- Enforcement Type: Application-enforced. Auth routes (`POST /auth/login`, `POST /auth/register`), health routes, and bridge routes remain public.
+
 ## 20. Documented but Not Enforced at Code Level
 - Session isolation beyond routes (e.g., across background threads) is documented in various docs but not enforced beyond usage patterns. Documented but not enforced at code level.
 - Any architectural invariants stated in `README.md` or `Architecture_README_v1.md` are not enforced in code. Documented but not enforced at code level.

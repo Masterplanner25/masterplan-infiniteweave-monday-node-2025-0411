@@ -6,33 +6,30 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-17)
 
-**Diagnostic suite** (`AINDY/tests/`) — 143 tests across 8 files. Final result: **136 passing, 7 failing** (all failures are intentional `_WILL_FAIL` security gap tests — do not suppress).
+**Diagnostic suite** (`AINDY/tests/`) — 150 tests across 10 files. Final result: **150 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `tests/conftest.py` | — | Shared fixtures: TestClient, mock_db, mock_openai |
+| `tests/conftest.py` | — | Shared fixtures: TestClient, mock_db, mock_openai, auth_headers, api_key_headers |
 | `tests/test_calculation_services.py` | 26 | All Infinity Algorithm formulas, C++ kernel flag, Python/C++ parity |
 | `tests/test_memory_bridge.py` | 40 | Python bridge layer, MemoryNodeDAO, Rust/C++ kernel (cosine similarity, weighted dot product, dim=1536) |
 | `tests/test_models.py` | 15 | SQLAlchemy model structure, orphan function documentation |
 | `tests/test_routes_health.py` | 6 | Health endpoint structure and response time |
-| `tests/test_routes_tasks.py` | 11 | Task route registration, schema validation |
+| `tests/test_routes_tasks.py` | 14 | Task route auth enforcement (401 without token), acceptance with valid JWT, schema validation |
 | `tests/test_routes_bridge.py` | 8 | HMAC validation, TTL enforcement, read path |
-| `tests/test_routes_analytics.py` | 10 | Analytics route registration, zero-view guard, zero-difficulty 422 |
-| `tests/test_routes_leadgen.py` | 8 | Route registration, dead code documentation |
-| `tests/test_routes_genesis.py` | 9 | Route registration, import regression guards |
-| `tests/test_security.py` | 10 | Auth gaps (7 intentional failures), CORS, rate limiting |
+| `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
+| `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
+| `tests/test_routes_genesis.py` | 13 | Route auth enforcement, import regression guards |
+| `tests/test_security.py` | 13 | JWT auth (401 rejection + valid token acceptance), CORS explicit origins, rate limiting middleware, hardcoded key scan, permission secret |
 
-Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0` in `requirements.txt`. Discovery configured in `pytest.ini`.
+Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery configured in `pytest.ini`.
 
 **Root test files** (legacy, minimal scope):
 - `test_calculations.py` — FastAPI TestClient calls for calculation endpoints
 - `test_routes.py` — FastAPI TestClient calls for calculation endpoints (duplicate test names — see §8)
 - `test_import.py` — simple import check
 
-**Intentional failing tests (`_WILL_FAIL`)** — these 7 tests document known security gaps. They must remain failing until the corresponding Phase 2 security work is completed. Never suppress or skip them.
-- `test_security.py::TestAuthenticationMissing::*` (4 tests) — no auth on any route
-- `test_security.py::TestCORSConfiguration::test_cors_is_not_wildcard_WILL_FAIL` — wildcard CORS + credentials
-- `test_security.py::TestRateLimit::test_rate_limiting_exists_WILL_FAIL` — no rate limiting middleware
+**Phase 2 security tests** — all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth → 401) and the acceptance path (valid JWT → expected status). No intentional failures remain in the test suite.
 
 ## 2. Required Coverage Areas (Policy)
 
@@ -113,4 +110,4 @@ A change cannot be merged if:
 - Duplicate test function names in legacy root test files (potential collection conflicts):
   - `test_get_results` (`test_calculations.py`, `test_routes.py`) — also appears 3 times within `test_routes.py`
   - `test_post_ai_productivity_boost`, `test_post_batch_calculations`, `test_post_decision_efficiency`, `test_post_engagement_rate`, `test_post_execution_speed`, `test_post_income_efficiency`, `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
-- Security gaps documented as intentional `_WILL_FAIL` tests (Phase 2): authentication, CORS misconfiguration, rate limiting. See `docs/roadmap/TECH_DEBT.md` §6.
+- ✅ **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/roadmap/TECH_DEBT.md` §6.
