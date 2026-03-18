@@ -15,6 +15,9 @@ os.environ.setdefault("PERMISSION_SECRET", "test-secret-for-pytest")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-fake-key-for-testing-only")
 os.environ.setdefault("DEEPSEEK_API_KEY", "fake-deepseek-key")
 os.environ.setdefault("ENV", "test")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest-only-not-production")
+os.environ.setdefault("AINDY_API_KEY", "test-api-key-for-pytest-only")
+os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")
 
 # Make sure the AINDY root is on sys.path
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -106,6 +109,23 @@ def mock_openai(mocker):
     mock_client.chat.completions.create.return_value = mock_response
     mocker.patch("openai.OpenAI", return_value=mock_client)
     return mock_client
+
+
+@pytest.fixture
+def auth_headers():
+    """Valid JWT auth headers for protected route tests."""
+    from services.auth_service import create_access_token
+    token = create_access_token({
+        "sub": "test-user-id-123",
+        "email": "test@aindy.test",
+    })
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def api_key_headers():
+    """Valid API key headers for service-to-service routes."""
+    return {"X-API-Key": os.getenv("AINDY_API_KEY", "test-api-key-for-pytest-only")}
 
 
 @pytest.fixture

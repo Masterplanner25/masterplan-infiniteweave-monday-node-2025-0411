@@ -1,107 +1,99 @@
 """
 test_security.py
 ─────────────────
-Security diagnostic tests.
+Security tests — Phase 2 implementation complete.
 
-THESE TESTS ARE INTENTIONALLY WRITTEN TO FAIL.
-Each failing test documents a known security vulnerability.
-Do not "fix" these tests by changing assertions — fix the underlying code.
-
-Known security issues documented here:
-1. No authentication on any route
-2. CORS wildcard with credentials
-3. PERMISSION_SECRET is a non-production default
-4. No API key hardcoded checks
-5. No rate limiting
+All 7 previously-failing security tests now pass.
+Each test verifies both the rejection path (no auth → 401/error)
+and the acceptance path (valid credentials → expected behavior).
 """
 import pytest
 import os
 
 
 class TestAuthenticationMissing:
-    def test_get_tasks_list_returns_401_WILL_FAIL(self, client):
+    def test_get_tasks_list_returns_401(self, client):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        GET /tasks/list has no authentication middleware.
-        A secure API would return 401 Unauthorized for unauthenticated requests.
-        Currently returns 200 (or 500 from DB), confirming no auth is enforced.
-
-        Fix: Add authentication middleware or dependency to task routes.
+        SECURITY: GET /tasks/list requires JWT authentication.
+        Without credentials, must return 401.
         """
         response = client.get("/tasks/list")
         assert response.status_code == 401, (
-            f"SECURITY BUG: GET /tasks/list returned {response.status_code} without auth. "
-            "Expected 401. No authentication middleware is configured on this route."
+            f"GET /tasks/list returned {response.status_code} without auth. "
+            "Expected 401. JWT auth dependency is configured on this route."
         )
 
-    def test_post_create_task_requires_auth_WILL_FAIL(self, client):
+    def test_post_create_task_requires_auth(self, client):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        POST /tasks/create allows writes without any authentication.
+        SECURITY: POST /tasks/create requires JWT authentication.
+        Without credentials, must return 401.
         """
         response = client.post("/tasks/create", json={
             "name": "security_test_task",
             "category": "test"
         })
         assert response.status_code == 401, (
-            f"SECURITY BUG: POST /tasks/create returned {response.status_code}. "
-            "Expected 401. Route accepts writes without authentication."
+            f"POST /tasks/create returned {response.status_code}. "
+            "Expected 401. Route requires authentication."
         )
 
-    def test_leadgen_requires_auth_WILL_FAIL(self, client):
+    def test_leadgen_requires_auth(self, client):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        POST /leadgen/ makes OpenAI API calls and creates DB records.
-        It should require authentication before executing.
+        SECURITY: POST /leadgen/ requires JWT authentication.
+        Without credentials, must return 401.
         """
         response = client.post("/leadgen/?query=test")
         assert response.status_code == 401, (
-            f"SECURITY BUG: POST /leadgen/ returned {response.status_code}. "
-            "Expected 401. Endpoint triggers AI calls without authentication."
+            f"POST /leadgen/ returned {response.status_code}. "
+            "Expected 401. AI endpoint requires authentication."
         )
 
-    def test_genesis_session_requires_auth_WILL_FAIL(self, client):
+    def test_genesis_session_requires_auth(self, client):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        POST /genesis/session creates DB records without authentication.
+        SECURITY: POST /genesis/session requires JWT authentication.
+        Without credentials, must return 401.
         """
         response = client.post("/genesis/session")
         assert response.status_code == 401, (
-            f"SECURITY BUG: POST /genesis/session returned {response.status_code}. "
+            f"POST /genesis/session returned {response.status_code}. "
             "Expected 401."
         )
 
-    def test_analytics_requires_auth_WILL_FAIL(self, client):
+    def test_analytics_requires_auth(self, client):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        POST /analytics/linkedin/manual writes business metrics without authentication.
+        SECURITY: POST /analytics/linkedin/manual requires JWT authentication.
+        Without credentials, must return 401 before field validation.
         """
         response = client.post("/analytics/linkedin/manual", json={})
-        # 422 is expected from missing fields — but first it should check auth
-        # Without auth middleware, it goes directly to validation
         assert response.status_code == 401, (
-            f"SECURITY BUG: POST /analytics/linkedin/manual returned {response.status_code}. "
+            f"POST /analytics/linkedin/manual returned {response.status_code}. "
             "Expected 401 before field validation."
+        )
+
+    def test_protected_routes_accept_valid_token(self, client, auth_headers):
+        """
+        SECURITY: Protected routes accept a valid JWT token.
+        With valid credentials, routes must not return 401.
+        """
+        # GET /tasks/list — returns 200 or 500 (no DB), not 401
+        response = client.get("/tasks/list", headers=auth_headers)
+        assert response.status_code != 401, (
+            f"GET /tasks/list returned 401 with a valid token — auth is broken."
+        )
+
+        # POST /genesis/session — returns 200, 201, or 500 (no DB), not 401
+        response = client.post("/genesis/session", headers=auth_headers)
+        assert response.status_code != 401, (
+            f"POST /genesis/session returned 401 with a valid token — auth is broken."
         )
 
 
 class TestCORSConfiguration:
-    def test_cors_is_not_wildcard_WILL_FAIL(self, app):
+    def test_cors_is_not_wildcard(self, app):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        main.py configures CORS with allow_origins=["*"] AND allow_credentials=True.
-        This combination is a security violation — browsers reject this configuration
-        and it exposes the API to cross-origin credential theft.
-
-        Fix: Set allow_origins to specific trusted domains, not wildcard.
+        SECURITY: CORS must not use wildcard allow_origins with allow_credentials=True.
+        main.py now reads ALLOWED_ORIGINS from environment and uses explicit origins.
         """
-        # Find the CORSMiddleware configuration
         cors_middleware = None
         for middleware in app.user_middleware:
             cls_name = getattr(middleware.cls, "__name__", "")
@@ -115,10 +107,24 @@ class TestCORSConfiguration:
         allow_origins = kwargs.get("allow_origins", [])
 
         assert "*" not in allow_origins, (
-            f"SECURITY BUG: CORS allow_origins contains wildcard '*'. "
+            f"SECURITY: CORS allow_origins still contains wildcard '*'. "
             f"Current value: {allow_origins}. "
-            "With allow_credentials=True, this is a security misconfiguration. "
-            "Fix: Replace '*' with specific trusted origin domains."
+            "Set ALLOWED_ORIGINS in .env with explicit trusted origins."
+        )
+
+    def test_cors_has_explicit_origins(self, app):
+        """CORS allow_origins must contain at least one explicit origin."""
+        cors_middleware = None
+        for middleware in app.user_middleware:
+            if "CORS" in getattr(middleware.cls, "__name__", ""):
+                cors_middleware = middleware
+                break
+
+        assert cors_middleware is not None
+        allow_origins = cors_middleware.kwargs.get("allow_origins", [])
+        assert len(allow_origins) > 0, "No allowed origins configured"
+        assert all(o.startswith("http") for o in allow_origins), (
+            f"Expected all origins to be http/https URLs. Got: {allow_origins}"
         )
 
 
@@ -187,7 +193,6 @@ class TestHardcodedSecrets:
         )
 
         found_in = []
-        # DeepSeek keys look like: sk-[hex string]
         import re
         pattern = re.compile(r'sk-[0-9a-f]{32,}')
 
@@ -197,7 +202,6 @@ class TestHardcodedSecrets:
             try:
                 with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
-                # Skip lines that just do os.getenv
                 for line in content.split("\n"):
                     if "os.getenv" in line or "os.environ" in line:
                         continue
@@ -212,14 +216,10 @@ class TestHardcodedSecrets:
 
 
 class TestRateLimit:
-    def test_rate_limiting_exists_WILL_FAIL(self, app):
+    def test_rate_limiting_exists(self, app):
         """
-        SECURITY BUG — INTENTIONAL FAIL.
-
-        No rate limiting middleware is configured on any route.
-        This leaves the API vulnerable to abuse and DoS attacks.
-
-        Fix: Add rate limiting middleware (e.g., slowapi, fastapi-limiter).
+        SECURITY: Rate limiting middleware is configured on the application.
+        SlowAPIMiddleware is registered via app.add_middleware(SlowAPIMiddleware).
         """
         middleware_names = [
             getattr(m.cls, "__name__", str(m.cls))
@@ -231,7 +231,14 @@ class TestRateLimit:
             for name in middleware_names
         )
         assert has_rate_limit, (
-            f"SECURITY BUG: No rate limiting middleware found. "
+            f"No rate limiting middleware found. "
             f"Active middleware: {middleware_names}. "
-            "Add rate limiting to protect against API abuse."
+            "SlowAPIMiddleware must be registered via app.add_middleware()."
+        )
+
+    def test_limiter_attached_to_app_state(self, app):
+        """app.state.limiter must be set for SlowAPIMiddleware to function."""
+        assert hasattr(app.state, "limiter"), (
+            "app.state.limiter is not set. "
+            "Rate limiting middleware will fail on every request without it."
         )

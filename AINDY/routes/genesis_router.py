@@ -6,12 +6,16 @@ from services.genesis_ai import call_genesis_llm, call_genesis_synthesis_llm
 from services.masterplan_factory import create_masterplan_from_genesis
 from db.models import MasterPlan
 from datetime import datetime, timedelta
+from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
 
 @router.post("/session")
-def create_genesis_session(db: Session = Depends(get_db)):
+def create_genesis_session(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     session = GenesisSessionDB(
         summarized_state={
             "vision_summary": None,
@@ -32,7 +36,11 @@ def create_genesis_session(db: Session = Depends(get_db)):
 
 
 @router.post("/message")
-def genesis_message(payload: dict, db: Session = Depends(get_db)):
+def genesis_message(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
 
     session_id = payload.get("session_id")
     user_message = payload.get("message")
@@ -81,7 +89,11 @@ def genesis_message(payload: dict, db: Session = Depends(get_db)):
     }
 
 @router.post("/synthesize")
-def synthesize_genesis(payload: dict, db: Session = Depends(get_db)):
+def synthesize_genesis(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
 
     session_id = payload.get("session_id")
 
@@ -102,7 +114,11 @@ def synthesize_genesis(payload: dict, db: Session = Depends(get_db)):
     }
 
 @router.post("/lock")
-def lock_masterplan(payload: dict, db: Session = Depends(get_db)):
+def lock_masterplan(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
 
     session_id = payload.get("session_id")
     draft = payload.get("draft")
@@ -126,7 +142,11 @@ def lock_masterplan(payload: dict, db: Session = Depends(get_db)):
     }
 
 @router.post("/{plan_id}/activate")
-def activate_masterplan(plan_id: int, db: Session = Depends(get_db)):
+def activate_masterplan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
 
     plan = db.query(MasterPlan).filter_by(id=plan_id).first()
 

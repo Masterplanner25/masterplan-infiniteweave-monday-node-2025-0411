@@ -38,55 +38,59 @@ class TestTaskRouteRegistration:
 
 
 class TestTaskRouteResponses:
-    def test_get_tasks_list_without_auth_returns_200_not_401(self, client):
+    def test_get_tasks_list_requires_auth(self, client):
         """
-        DIAGNOSTIC — SECURITY BUG.
-        GET /tasks/list has NO authentication.
-        This test will PASS (200 or 500 due to no DB), documenting the absence of auth.
-        A secure system would return 401 here.
-
-        Related test in test_security.py asserts 401 — that test WILL FAIL.
+        SECURITY: GET /tasks/list requires authentication.
+        Without a valid JWT token, must return 401.
         """
         response = client.get("/tasks/list")
-        # No auth middleware → route is reached (200 or 500 from DB, never 401)
-        assert response.status_code != 401, (
-            "Unexpected: /tasks/list returned 401. "
-            "Auth middleware has been added — update test_security.py."
+        assert response.status_code == 401, (
+            f"GET /tasks/list returned {response.status_code} without auth. "
+            "Expected 401 — JWT auth is required on this route."
         )
 
-    def test_create_task_missing_required_fields_returns_422(self, client):
+    def test_get_tasks_list_with_auth_not_404(self, client, auth_headers):
+        """GET /tasks/list with valid JWT must not return 404."""
+        response = client.get("/tasks/list", headers=auth_headers)
+        assert response.status_code != 404, (
+            f"GET /tasks/list returned 404 with valid auth — route missing"
+        )
+
+    def test_create_task_missing_required_fields_returns_422(self, client, auth_headers):
         """POST /tasks/create with no body must return 422 Unprocessable Entity."""
-        response = client.post("/tasks/create", json={})
+        response = client.post("/tasks/create", json={}, headers=auth_headers)
         assert response.status_code == 422, (
             f"Expected 422 for missing fields, got {response.status_code}: {response.text[:300]}"
         )
 
-    def test_create_task_invalid_json_returns_422(self, client):
-        """POST /tasks/create with completely wrong types must return 422."""
-        response = client.post("/tasks/create", json={"name": 123, "category": None})
-        # 'name' must be a string — pydantic should accept it (int is coercible)
-        # but missing required fields should still produce 422
+    def test_create_task_invalid_json_returns_expected(self, client, auth_headers):
+        """POST /tasks/create with partially valid types must reach the handler."""
+        response = client.post(
+            "/tasks/create",
+            json={"name": 123, "category": None},
+            headers=auth_headers,
+        )
         assert response.status_code in (200, 201, 422, 500)
 
-    def test_create_task_with_valid_body_not_401(self, client):
+    def test_create_task_requires_auth(self, client):
         """
-        DIAGNOSTIC — SECURITY BUG.
-        POST /tasks/create is publicly accessible (no auth).
+        SECURITY: POST /tasks/create requires authentication.
+        Without a JWT token, must return 401.
         """
         payload = {
-            "name": "diagnostic_test_task",
+            "name": "security_test_task",
             "category": "test",
             "priority": "low",
         }
         response = client.post("/tasks/create", json=payload)
-        # Will be 500 (no DB) or 200 — but not 401 (no auth)
-        assert response.status_code != 401, (
-            "POST /tasks/create returned 401 — auth has been added (update security tests)"
+        assert response.status_code == 401, (
+            f"POST /tasks/create returned {response.status_code} without auth. "
+            "Expected 401 — route must require authentication."
         )
 
-    def test_complete_task_missing_body_returns_422(self, client):
+    def test_complete_task_missing_body_returns_422(self, client, auth_headers):
         """POST /tasks/complete with no body must return 422."""
-        response = client.post("/tasks/complete", json={})
+        response = client.post("/tasks/complete", json={}, headers=auth_headers)
         assert response.status_code == 422
 
 

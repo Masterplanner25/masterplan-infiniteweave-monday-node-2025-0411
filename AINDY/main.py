@@ -4,6 +4,10 @@ from fastapi import FastAPI
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from services import task_services
 from db.database import SessionLocal
 from routes import ROUTERS
@@ -28,15 +32,30 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge")
 
+# Rate limiting — protects AI/expensive endpoints from abuse
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 for route in ROUTERS:
     app.include_router(route)
 
-# CORS (Cross-Origin Resource Sharing) for frontend integration
+# CORS — explicit origins only (wildcard + credentials is a security violation)
+import os as _os
+_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in _os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:3000,http://localhost:5000",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

@@ -23,6 +23,38 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — Phase 2 security] — 2026-03-17
+
+## Added
+
+* `services/auth_service.py` — JWT token creation/verification, API key validation, password hashing (`python-jose`, `passlib/bcrypt==4.0.1`)
+* `schemas/auth_schemas.py` — `LoginRequest`, `RegisterRequest`, `TokenResponse` Pydantic models
+* `routes/auth_router.py` — `POST /auth/login`, `POST /auth/register` (public endpoints, in-memory user store MVP)
+* `slowapi==0.1.9` — rate limiting package; `SlowAPIMiddleware` registered on FastAPI app
+* `config.py` — `SECRET_KEY` and `AINDY_API_KEY` settings fields
+* `tests/conftest.py` — `auth_headers` and `api_key_headers` fixtures; `SECRET_KEY`, `AINDY_API_KEY`, `ALLOWED_ORIGINS` env defaults
+
+## Fixed
+
+* **CORS wildcard** — `allow_origins=["*"]` replaced with `ALLOWED_ORIGINS` env var (default: localhost origins). `allow_credentials=True` + wildcard is a CORS spec violation; now uses explicit origin list (`AINDY/main.py`).
+* **No authentication on API routes** — `Depends(get_current_user)` (JWT Bearer) added to all routes in `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. Unauthenticated requests now return 401. Health, bridge, and auth routes remain public.
+* **No rate limiting** — `SlowAPIMiddleware` added via `app.add_middleware()`; limiter attached to `app.state.limiter`. Rate limits can be applied per-route with `@limiter.limit()`.
+
+## Test Results
+
+* **7 intentional `_WILL_FAIL` security tests → 0 failures** (all 7 now pass)
+* Total: **150 passing, 0 failing** (up from 136 passing, 7 failing)
+* `test_security.py` tests renamed (removed `_WILL_FAIL` suffix); positive assertion paths added
+* Affected diagnostic test files updated: `test_routes_tasks.py`, `test_routes_genesis.py`, `test_routes_leadgen.py`, `test_routes_analytics.py`
+
+## Known Gaps (Phase 3)
+
+* No User ORM model — auth router uses in-memory store; replace with `db.models.user.UserDB`
+* Node gateway (`server.js`) still lacks auth headers when forwarding to FastAPI
+* `SECRET_KEY` default is insecure placeholder — must be set in production `.env`
+
+---
+
 # [feature/cpp-semantic-engine — crash fixes] — 2026-03-17
 
 ## Fixed

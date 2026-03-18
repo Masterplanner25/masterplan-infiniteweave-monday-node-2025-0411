@@ -45,10 +45,14 @@ This document inventories current technical debt based strictly on the existing 
 - No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
 
 ## 6. Security Debt
-- No rate limiting on API routes (`AINDY/routes/*`).
-- No authentication or authorization on gateway or backend routes (`AINDY/server.js`, `AINDY/routes/*`).
+- ✅ **FIXED (2026-03-17 Phase 2):** Rate limiting added — `SlowAPIMiddleware` registered in `main.py` with per-IP limiting via `slowapi`. AI endpoints (genesis, leadgen) can be rate-limited with `@limiter.limit()` decorator.
+- ✅ **FIXED (2026-03-17 Phase 2):** JWT authentication added to user-facing route groups: `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. Dependency: `Depends(get_current_user)` from `services/auth_service.py`. Auth routes at `POST /auth/login`, `POST /auth/register` are public.
+- ✅ **FIXED (2026-03-17 Phase 2):** CORS wildcard replaced — `allow_origins=["*"]` replaced with `ALLOWED_ORIGINS` read from `.env` environment variable. Default: localhost origins. No longer uses wildcard + credentials combination.
+- No authentication or authorization on gateway (`AINDY/server.js`). Node gateway still uses in-memory user list and no auth headers on FastAPI forwarding. Phase 3 target.
 - No documented secret rotation policy (`AINDY/routes/bridge_router.py` uses env secret without rotation).
 - HMAC protection exists for Memory Bridge writes but no replay protection beyond TTL (`AINDY/routes/bridge_router.py`).
+- No User ORM model — `routes/auth_router.py` uses an in-memory user store for MVP. Replace with `db.models.user.UserDB` model with DB-backed persistence. Phase 3 target.
+- `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
 
 ## 7. Observability Debt
 - Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).
@@ -77,10 +81,10 @@ The following bugs were revealed by the comprehensive diagnostic test suite adde
 - **`routes/dashboard_router.py` and `routes/health_dashboard_router.py` both use prefix `/dashboard`.** This creates a route collision on `/dashboard/health`. FastAPI registers both but the last-registered takes precedence. The `dashboard_router.py` (overview) path is `/dashboard/overview` and is not directly conflicting, but the shared prefix means any future additions risk silent overrides (`AINDY/routes/__init__.py`).
 - **`main.py` uses deprecated `@app.on_event("startup")` twice.** FastAPI 0.119.0 deprecates `on_event` in favor of lifespan context managers. Two startup handlers are registered (`startup` and `ensure_system_identity`), both using the deprecated API. This generates deprecation warnings on every test run (`AINDY/main.py:50,83`).
 
-### §6 Security (additions)
-- **No authentication or authorization on any API route confirmed by test suite.** Tests confirm: `GET /tasks/list` returns 200, `POST /tasks/create` returns 200 (creates records), `POST /genesis/session` returns 200, `POST /leadgen/` reaches the handler and makes API calls — all without any credentials. This confirms the existing §6 entry with test evidence (`AINDY/routes/*`). Revealed by: `test_security.py::TestAuthenticationMissing::*`.
-- **CORS wildcard with credentials confirmed.** `allow_origins=["*"]` with `allow_credentials=True` is confirmed active in `main.py`. Browsers reject this configuration per the CORS spec; it is a security misconfiguration. Revealed by: `test_security.py::TestCORSConfiguration::test_cors_is_not_wildcard_WILL_FAIL`.
-- **No rate limiting middleware confirmed.** Only `BaseHTTPMiddleware` and `CORSMiddleware` are active. No `SlowAPI`, `fastapi-limiter`, or equivalent present. Revealed by: `test_security.py::TestRateLimit::test_rate_limiting_exists_WILL_FAIL`.
+### §6 Security (additions — all resolved 2026-03-17 Phase 2)
+- ~~**No authentication or authorization on any API route confirmed by test suite.**~~ **FIXED (2026-03-17):** JWT auth (`Depends(get_current_user)`) added to `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. All five security-tested endpoints now return 401 without credentials. `services/auth_service.py` created with JWT creation/verification and password hashing (`python-jose`, `passlib/bcrypt`). Auth routes at `POST /auth/login`, `POST /auth/register`.
+- ~~**CORS wildcard with credentials confirmed.**~~ **FIXED (2026-03-17):** `allow_origins` reads from `ALLOWED_ORIGINS` env var (default: localhost origins). Wildcard removed.
+- ~~**No rate limiting middleware confirmed.**~~ **FIXED (2026-03-17):** `SlowAPIMiddleware` added via `app.add_middleware(SlowAPIMiddleware)`. Limiter instance attached to `app.state.limiter`. `slowapi==0.1.9` added to requirements.
 
 ### §4 Error Handling (additions)
 - **`services/calculation_services.py::calculate_twr()` ZeroDivisionError.** **FIXED (2026-03-17):** `task_difficulty=0` previously caused an unhandled `ZeroDivisionError` that propagated as HTTP 500. Fixed by: (1) adding a `ValueError` guard at the top of `calculate_twr()` when `task_difficulty == 0`; (2) adding a Pydantic `@validator` on `TaskInput.task_difficulty` that rejects values `<= 0` with a 422 response before the function is reached; (3) wrapping the `calculate_twr()` call in `routes/main_router.py` with `try/except ValueError` and `except ZeroDivisionError` both raising `HTTPException(422)`. Route now returns 422 with a clear error message instead of 500. Revealed by: `test_calculation_services.py::TestTWR::test_twr_zero_difficulty_raises`, `test_routes_analytics.py::TestCalculateTWREndpoint::test_twr_zero_difficulty_causes_500`.
@@ -96,9 +100,9 @@ The following bugs were revealed by the comprehensive diagnostic test suite adde
 | Genesis Router (undefined names) | High | 3 of 5 genesis endpoints raise NameError at runtime | Phase 1 |
 | Error Handling | High | Inconsistent client behavior and poor fault isolation | Phase 1 |
 | C++ Kernel (wrong-table + import bug) | High | Memory nodes created via services are silently lost + ImportError | Phase 1 |
-| Security (auth missing) | High | All routes publicly writable — confirmed by test suite | Phase 1 |
+| Security (auth missing) | ✅ Resolved | JWT auth on task/leadgen/genesis/analytics routers (2026-03-17) | Phase 2 ✅ |
 | Concurrency | Medium | Duplicated background work and unbounded loops | Phase 2 |
-| Security (CORS + rate limiting) | Medium | CORS misconfiguration; no rate limiting | Phase 2 |
+| Security (CORS + rate limiting) | ✅ Resolved | CORS locked to explicit origins; SlowAPIMiddleware added (2026-03-17) | Phase 2 ✅ |
 | Testing | Low | Test suite now added; coverage gaps remain | Phase 2 |
 | C++ Kernel (embeddings/release build) | Medium | Semantic search inoperable; performance gains unrealized | Phase 2 |
 | Observability | Medium | Limited visibility into failures | Phase 3 |

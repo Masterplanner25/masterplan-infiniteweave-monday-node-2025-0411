@@ -5,6 +5,7 @@ from db.models import MasterPlan
 from db.models.metrics_models import CanonicalMetricDB
 from schemas.analytics import LinkedInRawInput
 from services.analytics.linkedin_adapter import linkedin_adapter
+from services.auth_service import get_current_user
 from sqlalchemy import func
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -19,7 +20,11 @@ def get_db():
 
 
 @router.post("/linkedin/manual")
-def ingest_linkedin_manual(data: LinkedInRawInput, db: Session = Depends(get_db)):
+def ingest_linkedin_manual(
+    data: LinkedInRawInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
 
     plan = db.query(MasterPlan).filter_by(id=data.masterplan_id).first()
     if not plan:
@@ -55,7 +60,8 @@ def get_masterplan_analytics(
     period_type: str | None = None,
     platform: str | None = None,
     scope_type: str | None = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
 
     query = db.query(CanonicalMetricDB).filter(
@@ -79,7 +85,8 @@ def get_masterplan_analytics(
 def get_masterplan_summary(
     masterplan_id: int,
     group_by: str | None = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
 
     query = db.query(CanonicalMetricDB).filter(

@@ -40,34 +40,49 @@ class TestGenesisRouteRegistration:
 
 
 class TestGenesisSessionEndpoint:
-    def test_post_genesis_session_not_404(self, client):
-        """POST /genesis/session must reach the handler (not return 404)."""
+    def test_post_genesis_session_requires_auth(self, client):
+        """POST /genesis/session must return 401 without a valid JWT token."""
         response = client.post("/genesis/session")
+        assert response.status_code == 401, (
+            f"POST /genesis/session returned {response.status_code} without auth. "
+            "Expected 401 — JWT auth is required."
+        )
+
+    def test_post_genesis_session_with_auth_not_404(self, client, auth_headers):
+        """POST /genesis/session with valid auth must reach the handler (not 404)."""
+        response = client.post("/genesis/session", headers=auth_headers)
         assert response.status_code != 404, (
             f"POST /genesis/session returned 404 — route not registered"
         )
 
-    def test_post_genesis_session_without_db_returns_non_200(self, client):
-        """Without DB, POST /genesis/session will fail with 500 or similar."""
-        response = client.post("/genesis/session")
-        # 500 expected when DB not available — but not 404
+    def test_post_genesis_session_with_auth_returns_expected_status(self, client, auth_headers):
+        """With valid auth, POST /genesis/session returns 200, 201, or 500 (no DB)."""
+        response = client.post("/genesis/session", headers=auth_headers)
         assert response.status_code in (200, 201, 500), (
             f"Unexpected status: {response.status_code}"
         )
 
 
 class TestGenesisMessageEndpoint:
-    def test_post_genesis_message_missing_session_id_returns_400(self, client):
+    def test_post_genesis_message_missing_session_id_returns_400(self, client, auth_headers):
         """POST /genesis/message without session_id must return 400."""
         # The route checks `if not session_id: raise HTTPException(400, ...)`
-        response = client.post("/genesis/message", json={"message": "hello"})
+        response = client.post(
+            "/genesis/message",
+            json={"message": "hello"},
+            headers=auth_headers,
+        )
         assert response.status_code == 400, (
             f"Expected 400 for missing session_id, got {response.status_code}: {response.text}"
         )
 
-    def test_post_genesis_message_missing_message_returns_400(self, client):
+    def test_post_genesis_message_missing_message_returns_400(self, client, auth_headers):
         """POST /genesis/message without message must return 400."""
-        response = client.post("/genesis/message", json={"session_id": "fake-id"})
+        response = client.post(
+            "/genesis/message",
+            json={"session_id": "fake-id"},
+            headers=auth_headers,
+        )
         assert response.status_code == 400
 
     def test_genesis_message_calls_real_openai(self):
@@ -136,9 +151,9 @@ class TestGenesisSynthesizeEndpoint:
 
 
 class TestGenesisLockEndpoint:
-    def test_post_genesis_lock_missing_fields_returns_400(self, client):
+    def test_post_genesis_lock_missing_fields_returns_400(self, client, auth_headers):
         """POST /genesis/lock without session_id or draft must return 400."""
-        response = client.post("/genesis/lock", json={})
+        response = client.post("/genesis/lock", json={}, headers=auth_headers)
         assert response.status_code == 400
 
     def test_post_genesis_lock_has_undefined_name_bug(self):

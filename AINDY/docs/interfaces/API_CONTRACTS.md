@@ -6,8 +6,8 @@ This document formalizes the current FastAPI HTTP interface based strictly on im
 
 Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/seo_routes.py` (no router prefix)
-- `AINDY/routes/task_router.py` (prefix `/tasks`)
-- `AINDY/routes/bridge_router.py` (prefix `/bridge`)
+- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]**
+- `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[HMAC auth required for writes]**
 - `AINDY/routes/authorship_router.py` (prefix `/authorship`)
 - `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`)
 - `AINDY/routes/network_bridge_router.py` (prefix `/network_bridge`)
@@ -16,18 +16,43 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/main_router.py` (no router prefix)
 - `AINDY/routes/freelance_router.py` (prefix `/freelance`)
 - `AINDY/routes/arm_router.py` (prefix `/arm`)
-- `AINDY/routes/leadgen_router.py` (prefix `/leadgen`)
+- `AINDY/routes/leadgen_router.py` (prefix `/leadgen`) **[JWT auth required]**
 - `AINDY/routes/dashboard_router.py` (prefix `/dashboard`)
-- `AINDY/routes/health_router.py` (prefix `/health`)
+- `AINDY/routes/health_router.py` (prefix `/health`) **[public]**
 - `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`)
 - `AINDY/routes/social_router.py` (prefix `/social`)
-- `AINDY/routes/analytics_router.py` (prefix `/analytics`)
-- `AINDY/routes/genesis_router.py` (prefix `/genesis`)
+- `AINDY/routes/analytics_router.py` (prefix `/analytics`) **[JWT auth required]**
+- `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
+- `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
+
+**Authentication model (Phase 2):**
+- JWT Bearer token — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`
+- Routes without auth annotation are currently unprotected (Phase 3 target)
+- Bridge writes use HMAC permission model (separate from JWT)
 
 Root route registered directly in `AINDY/main.py`:
 - `GET /`
 
 ## 2. Per-Route Contract Definition (Current Implementation)
+
+### Auth Routes (`AINDY/routes/auth_router.py`) — PUBLIC
+`POST /auth/login`
+Method: POST
+Request Body: `{ "email": str, "password": str }`
+Query Params: None
+Response: `{ "access_token": str, "token_type": "bearer" }`
+Status Codes: 200, 401
+Errors: 401 if credentials invalid.
+Auth: None (public endpoint — use this to obtain a token)
+
+`POST /auth/register`
+Method: POST
+Request Body: `{ "email": str, "password": str, "username": str }`
+Query Params: None
+Response: `{ "access_token": str, "token_type": "bearer" }`
+Status Codes: 201, 409
+Errors: 409 if email already registered.
+Auth: None (public endpoint)
 
 ### Root Route (`AINDY/main.py`)
 `GET /`

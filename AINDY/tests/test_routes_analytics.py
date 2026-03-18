@@ -119,15 +119,27 @@ class TestCalculateEngagementEndpoint:
 
 
 class TestAnalyticsLinkedInManual:
-    def test_linkedin_manual_missing_fields_returns_422(self, client):
-        """POST /analytics/linkedin/manual with empty body must return 422."""
+    def test_linkedin_manual_requires_auth(self, client):
+        """POST /analytics/linkedin/manual without auth must return 401."""
         response = client.post("/analytics/linkedin/manual", json={})
+        assert response.status_code == 401, (
+            f"POST /analytics/linkedin/manual returned {response.status_code} without auth. "
+            "Expected 401."
+        )
+
+    def test_linkedin_manual_missing_fields_returns_422(self, client, auth_headers):
+        """POST /analytics/linkedin/manual with auth but empty body must return 422."""
+        response = client.post(
+            "/analytics/linkedin/manual",
+            json={},
+            headers=auth_headers,
+        )
         assert response.status_code == 422
 
-    def test_linkedin_manual_missing_masterplan_returns_404(self, client):
+    def test_linkedin_manual_missing_masterplan_returns_404(self, client, auth_headers):
         """
-        POST /analytics/linkedin/manual with valid structure but nonexistent masterplan
-        should return 404 from the handler (requires DB — will return 500 if no DB).
+        POST /analytics/linkedin/manual with auth and valid structure but nonexistent
+        masterplan should return 404 from the handler (requires DB — will return 500 if no DB).
         """
         from datetime import date
         payload = {
@@ -147,7 +159,11 @@ class TestAnalyticsLinkedInManual:
             "conversion_events": 2,
             "growth_velocity": 5,
         }
-        response = client.post("/analytics/linkedin/manual", json=payload)
+        response = client.post(
+            "/analytics/linkedin/manual",
+            json=payload,
+            headers=auth_headers,
+        )
         # 404 if DB is up and plan doesn't exist, 500 if DB is down
         assert response.status_code in (404, 422, 500), (
             f"Unexpected status {response.status_code}"

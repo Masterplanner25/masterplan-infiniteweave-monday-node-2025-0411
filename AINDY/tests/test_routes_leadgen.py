@@ -28,47 +28,54 @@ class TestLeadGenRouteRegistration:
 
 
 class TestLeadGenEndpoints:
-    def test_get_leadgen_without_db_returns_non_404(self, client):
-        """GET /leadgen/ must reach the handler (not return 404)."""
+    def test_get_leadgen_requires_auth(self, client):
+        """GET /leadgen/ without auth must return 401."""
         response = client.get("/leadgen/")
-        assert response.status_code != 404, (
-            f"GET /leadgen/ returned 404 — route not registered"
+        assert response.status_code == 401, (
+            f"GET /leadgen/ returned {response.status_code} without auth. Expected 401."
         )
 
-    def test_post_leadgen_without_query_returns_422(self, client):
+    def test_post_leadgen_without_query_returns_422(self, client, auth_headers):
         """POST /leadgen/ without required 'query' param must return 422."""
-        response = client.post("/leadgen/")
+        response = client.post("/leadgen/", headers=auth_headers)
         assert response.status_code == 422, (
             f"Expected 422 for missing 'query' param, got {response.status_code}"
         )
 
-    def test_post_leadgen_with_query_param_not_404(self, client):
-        """POST /leadgen/?query=test must reach the handler (not 404)."""
-        response = client.post("/leadgen/?query=test+companies")
+    def test_post_leadgen_without_auth_returns_401(self, client):
+        """POST /leadgen/ without auth must return 401."""
+        response = client.post("/leadgen/?query=test")
+        assert response.status_code == 401, (
+            f"POST /leadgen/ returned {response.status_code} without auth. Expected 401."
+        )
+
+    def test_post_leadgen_with_auth_not_404(self, client, auth_headers):
+        """POST /leadgen/?query=test with valid auth must reach handler (not 404)."""
+        response = client.post("/leadgen/?query=test+companies", headers=auth_headers)
         assert response.status_code != 404
 
 
 class TestLeadGenResponseStructure:
-    def test_get_leadgen_response_key_is_list(self, client):
+    def test_get_leadgen_response_key_is_list(self, client, auth_headers):
         """
-        DIAGNOSTIC: GET /leadgen/ returns a list directly.
+        DIAGNOSTIC: GET /leadgen/ returns a list directly (when status is 200).
         Documents that the GET endpoint returns a plain list (not {"results": [...]}).
         The POST endpoint wraps in {"query":..., "count":..., "results":[...]}.
         Inconsistent response shapes between GET and POST.
         """
-        response = client.get("/leadgen/")
+        response = client.get("/leadgen/", headers=auth_headers)
         if response.status_code == 200:
             data = response.json()
             assert isinstance(data, list), (
                 f"GET /leadgen/ returns {type(data)} not a list: {str(data)[:200]}"
             )
 
-    def test_post_leadgen_response_has_results_key(self, client):
+    def test_post_leadgen_response_has_results_key(self, client, auth_headers):
         """
         POST /leadgen/?query=test returns {"query":..., "count":..., "results":[...]}.
         Note: POST response uses 'results' key, not 'leads'.
         """
-        response = client.post("/leadgen/?query=test")
+        response = client.post("/leadgen/?query=test", headers=auth_headers)
         if response.status_code == 200:
             data = response.json()
             assert "results" in data, (
