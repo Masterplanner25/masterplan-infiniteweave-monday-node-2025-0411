@@ -61,6 +61,13 @@ Closes all remaining cross-user data exposure gaps identified in the Sprint 4 au
 * `rippletrace.log_ripple_event()` called by bridge system hooks passes `user_id=None` — system-generated pings remain unowned and will not appear in any user's scoped views.
 * Existing rows with `user_id = NULL` are treated as legacy unowned data — not visible to any user in scoped queries.
 
+## Docs Updated (Sprint 5 governance protocol)
+
+* **`docs/architecture/DATA_MODEL_MAP.md`** — added `user_id` column entries for all 5 tables; added Sprint 5 migration entry in Section 3; added migration reminder callout.
+* **`docs/engineering/MIGRATION_POLICY.md`** — added explicit rule in Section 2: always run `alembic upgrade head` immediately after any SQLAlchemy model change.
+* **`docs/engineering/DEPLOYMENT_MODEL.md`** — added development reminder in Section 4: run migrations before starting the server or tests.
+* **`docs/interfaces/API_CONTRACTS.md`** — updated route inventory auth annotations for `main_router` (JWT, not public) and `bridge_router` (JWT + API key per route); updated authentication model to reflect Sprint 4 hardening and Sprint 5 user scoping behavior.
+
 ---
 
 # [main — Sprint 4 Auth Hardening] — 2026-03-18

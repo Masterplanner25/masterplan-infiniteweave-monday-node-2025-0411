@@ -7,13 +7,13 @@ This document formalizes the current FastAPI HTTP interface based strictly on im
 Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/seo_routes.py` (no router prefix) **[JWT auth required]**
 - `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]** · `/tasks/recurrence/check` public
-- `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[HMAC auth required for writes]**
+- `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[JWT auth required for /nodes and /link; API key required for /user_event]**
 - `AINDY/routes/authorship_router.py` (prefix `/authorship`) **[JWT auth required]**
 - `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`) **[JWT auth required]**
 - `AINDY/routes/network_bridge_router.py` (prefix `/network_bridge`) **[API key required]**
 - `AINDY/routes/db_verify_router.py` (prefix `/db`) **[API key required]**
 - `AINDY/routes/research_results_router.py` (prefix `/research`) **[JWT auth required]**
-- `AINDY/routes/main_router.py` (no router prefix) **[public — calculation math API]**
+- `AINDY/routes/main_router.py` (no router prefix) **[JWT auth required]** — calculation math API, secured Sprint 4
 - `AINDY/routes/freelance_router.py` (prefix `/freelance`) **[JWT auth required]**
 - `AINDY/routes/arm_router.py` (prefix `/arm`) **[JWT auth required]**
 - `AINDY/routes/leadgen_router.py` (prefix `/leadgen`) **[JWT auth required]**
@@ -27,12 +27,21 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
 - `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
 
-**Authentication model (Phase 2 + Phase 3 — complete):**
-- **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social.
-- **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection). Key value from `AINDY_API_KEY` env var.
-- **HMAC permission** — required on Memory Bridge write routes (`/bridge/nodes`, `/bridge/link`). Separate from JWT; provides scope tagging and TTL.
-- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`, calculation math routes (`/calculate_twr` etc.), `/tasks/recurrence/check`.
-- Zero unprotected non-public routes as of Phase 3 (2026-03-17).
+**Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
+- **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
+- **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection), `/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
+- **HMAC permission** — no longer used as the sole write guard on `/bridge`. JWT is the primary auth on bridge write routes.
+- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`, `/tasks/recurrence/check`.
+- Zero unprotected non-public routes as of Sprint 4 (2026-03-18).
+
+**Sprint 5 User Isolation (2026-03-18):**
+- Freelance, research, and rippletrace routes now scope all reads and writes to the authenticated user's `user_id` (extracted from JWT `sub` claim).
+- `GET /freelance/orders`, `GET /freelance/feedback` — return only records belonging to the current user.
+- `POST /freelance/order`, `POST /freelance/feedback` — set `user_id` from JWT on creation.
+- `POST /freelance/deliver/{id}` — returns 404 if order does not belong to current user.
+- `GET /research/`, `POST /research/` — scoped to current user.
+- All `/rippletrace/*` routes — scoped to current user.
+- Cross-user data is never returned; wrong-owner requests return 404 (not 403 — existence must not be revealed).
 
 **Rate limits (Phase 3):**
 - `POST /leadgen/` — 10 requests/minute per IP

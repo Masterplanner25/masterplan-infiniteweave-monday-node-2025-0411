@@ -32,10 +32,13 @@ alembic upgrade head     # apply all pending migrations
    - No existing columns are dropped unless intentional.
    - Index and constraint names are explicit (avoid auto-generated names that may differ between environments).
 4. **Add a test** confirming the new table/column exists (column presence tests use `Model.__table__.columns`).
-5. **Apply the migration** in the target environment:
+5. **Apply the migration immediately** in the target environment — do not start the application or run the test suite against the live DB until this is done:
    ```bash
    alembic upgrade head
    ```
+
+> **Rule: Always run `alembic upgrade head` immediately after any SQLAlchemy model change.**
+> SQLAlchemy model edits do not alter the live database. Forgetting to apply the migration causes schema drift: the application code expects columns that don't exist in the DB, producing runtime errors or silent data corruption. This applies in development, CI, and production — every environment, every time.
 
 ### Additive-Only Policy
 - Columns are added, never removed, during active development unless explicitly agreed.

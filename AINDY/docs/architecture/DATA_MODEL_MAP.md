@@ -91,9 +91,10 @@ This document maps the current data model strictly as implemented in the reposit
 - `core_themes`: Text, nullable: not explicitly set, default: not defined
 - `tagged_entities`: Text, nullable: not explicitly set, default: not defined
 - `intent`: String, nullable: not explicitly set, default: not defined
+- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_drop_points_user_id`)
 - Foreign keys: None
 - Relationships: None
 
@@ -107,9 +108,10 @@ This document maps the current data model strictly as implemented in the reposit
 - `connection_summary`: Text, nullable=True, default: not defined
 - `external_url`: String, nullable=True, default: not defined
 - `reaction_notes`: Text, nullable=True, default: not defined
+- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_pings_user_id`)
 - Foreign keys: `drop_point_id -> drop_points.id`
 - Relationships: None
 
@@ -127,9 +129,10 @@ This document maps the current data model strictly as implemented in the reposit
 - `status`: String, nullable: not explicitly set, default="pending"
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
 - `updated_at`: DateTime, nullable: not explicitly set, default=func.now(), onupdate=func.now()
+- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_freelance_orders_user_id`)
 - Foreign keys: None
 - Relationships: Not explicitly defined in current implementation.
 
@@ -141,9 +144,10 @@ This document maps the current data model strictly as implemented in the reposit
 - `feedback_text`: Text, nullable=True, default: not defined
 - `ai_summary`: Text, nullable=True, default: not defined
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation (denormalized; no join needed for ownership checks)
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_client_feedback_user_id`)
 - Foreign keys: `order_id -> freelance_orders.id` (ondelete="CASCADE")
 - Relationships:
 - `order = relationship("FreelanceOrder", backref="feedback")`
@@ -432,9 +436,10 @@ This document maps the current data model strictly as implemented in the reposit
 - `source`: String, nullable=True
 - `data`: JSON (postgresql JSON), nullable=True
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_research_results_user_id`)
 - Foreign keys: None
 - Relationships: None
 
@@ -516,6 +521,11 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Phase 2 migration (2026-03-18):**
 - `mb2embed0001` — `memory_bridge_phase2_embedding_column`: adds `embedding VECTOR(1536)` to `memory_nodes`, enables pgvector extension. Applied at `alembic upgrade head`. Current head: `mb2embed0001`.
+
+**Sprint 5 migration (2026-03-18):**
+- `d37ae6ebc319` — `sprint5_user_id_freelance_research_rippletrace`: adds `user_id` (String, nullable, indexed) to 5 tables: `freelance_orders`, `client_feedback`, `research_results`, `drop_points`, `pings`. Applied at `alembic upgrade head`.
+
+> **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
 

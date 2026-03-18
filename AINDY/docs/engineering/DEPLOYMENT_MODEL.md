@@ -50,6 +50,10 @@ This document distinguishes current deployment reality from required policy rule
 - Deployment must ensure DB revision matches Alembic head.
 - Schema mismatch must block deployment.
 
+### Development Reminder
+> **After any change to `AINDY/db/models/`, run `alembic upgrade head` before starting the server or running the test suite.**
+> SQLAlchemy model changes do not modify the database automatically. Schema drift is a silent failure mode: the app may start without error but write or query columns that don't exist yet. Always apply pending migrations immediately after editing a model file — this rule applies in every environment (local dev, CI, staging, production).
+
 ## 5. Runtime Safeguards
 
 ### Policy
