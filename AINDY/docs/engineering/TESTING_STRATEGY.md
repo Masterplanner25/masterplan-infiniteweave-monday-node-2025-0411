@@ -4,9 +4,9 @@ This document distinguishes current testing reality from required policy going f
 
 ## 1. Current Testing Landscape
 
-### Current State (as of 2026-03-17)
+### Current State (as of 2026-03-18)
 
-**Diagnostic suite** (`AINDY/tests/`) — 338 tests across 13 files. Final result: **338 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 384 tests across 15 files. Final result: **384 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -24,6 +24,8 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
 | `tests/test_arm.py` | 62 | ARM Phase 1 (46): SecurityValidator, ConfigManager, FileProcessor, ARM routes with mocked OpenAI. ARM Phase 2 (16): TestARMMetrics route-level (4), TestARMMetricsService unit (7), TestARMConfigSuggestions unit (4), TestARMRoutes new endpoints (1). No DB required for service unit tests. |
 | `tests/test_memory_bridge_phase1.py` | 36 | Memory Bridge Phase 1 (2026-03-18): TestWritePathFix (8) — create_memory_node() regression, transient fallback, MemoryTrace docstring, create_memory_link export; TestMemoryNodeDAOUnit (11) — save/get_by_id/get_by_tags/get_linked_nodes/create_link, source+user_id in _node_to_dict; TestMemoryRouterEndpoints (12) — router registration, 5 auth guards, create/get/search/link with mocked DAO; TestCreateMemoryLinkUnit (5) — DAO delegation, default link_type, source+user_id model columns. |
+| `tests/test_memory_bridge_phase2.py` | 24 | Memory Bridge Phase 2 (2026-03-18): TestEmbeddingService (7) — OpenAI call, retry, zero-vector fallback, C++ kernel path, cosine_similarity_python correctness; TestMemoryNodeEmbeddingColumn (2) — column presence in model + DB; TestResonanceScoring (4) — formula correctness (semantic/tag/recency weights); TestMemoryTypeEnforcement (4) — Literal validation at API boundary, ORM event listener; TestMemoryRoutePhase2 (7) — POST /memory/nodes/search, POST /memory/recall (auth, 400 on no query/tags, scoring metadata). |
+| `tests/test_memory_bridge_phase3.py` | 22 | Memory Bridge Phase 3 (2026-03-18): TestRecallMemoriesBridge (4) — no-db returns [], DAO delegation, failure returns [], node_type filter; TestCreateMemoryNodeBridge (3) — no-db transient, new DAO used, default node_type=None; TestARMAnalysisMemoryHook (4) — write fires on success, recall fires before prompt, skipped when no user_id, failure does not raise; TestARMCodegenMemoryHook (3) — write fires, failure silenced, skipped when no user_id; TestTaskCompletionMemoryHook (4) — write fires, skipped when no user_id, failure silenced, user_id kwarg accepted; TestGenesisMemoryHooks (4) — lock writes decision node, lock memory failure safe, activate writes decision node, activate memory failure safe. |
 
 Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery configured in `pytest.ini`.
 
@@ -119,3 +121,5 @@ A change cannot be merged if:
 - ✅ **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit — no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit — no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
 - ✅ **Resolved (2026-03-17 Genesis Blocks 4-6):** `test_genesis_flow.py` added with 55 tests covering: `validate_draft_integrity()` with mocked OpenAI (including retry and fail-safe paths), `POST /genesis/audit` route registration + auth, factory hardening (`synthesis_ready` gate, `db.rollback()` path), `POST /masterplans/lock` endpoint, `GET /masterplans/` response shape, duplicate route removal, synthesis prompt schema, posture description helper. Total: 301 passing.
 - ✅ **Resolved (2026-03-18 Memory Bridge Phase 1):** `test_memory_bridge_phase1.py` added with 36 tests. Bug-documenting tests in `test_memory_bridge.py` and `test_routes_leadgen.py` flipped to regression guards. Total: 338 passing.
+- ✅ **Resolved (2026-03-18 Memory Bridge Phase 2):** `test_memory_bridge_phase2.py` added with 24 tests covering embedding service, resonance scoring, type enforcement (Pydantic Literal + ORM event), and Phase 2 API endpoints (`/memory/nodes/search`, `/memory/recall`). All OpenAI calls mocked. `test_models.py::test_memory_node_has_no_embedding_column` renamed and inverted to confirm column presence. Total: 362 passing.
+- ✅ **Resolved (2026-03-18 Memory Bridge Phase 3):** `test_memory_bridge_phase3.py` added with 22 tests verifying workflow hooks across 5 integration surfaces: `bridge.recall_memories()`, updated `bridge.create_memory_node()`, ARM analysis/codegen hooks, task completion hook, Genesis lock/activate hooks. All hooks verified as fire-and-forget. Patch target: `db.dao.memory_node_dao.MemoryNodeDAO` (lazy import). Genesis tests use FastAPI `dependency_overrides`. Total: 384 passing.

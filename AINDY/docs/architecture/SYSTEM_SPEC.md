@@ -140,14 +140,15 @@ Primary backend entry point: `AINDY/main.py`.
 
 ### Detailed Flow Paths
 
-**Task → Velocity → Profile loop (Social Layer)**
+**Task → Velocity → Profile loop + Memory (Social Layer — Phase 3)**
 ```
-POST /tasks/complete
-  └─► task_services.py: mark task complete → PostgreSQL tasks
-        └─► MongoDB profiles: $inc execution_velocity, $inc twr_score, $set updated_at
-              └─► bridge.py: create_memory_node()
-                    └─► MemoryNodeDAO.save() → INSERT INTO memory_nodes
-                          └─► embedding_service.generate_embedding() → OpenAI ada-002
+task_services.complete_task(db, name, user_id)
+  └─► mark task complete → PostgreSQL tasks [db.commit()]
+  └─► MongoDB profiles: $inc execution_velocity, $inc twr_score (fire-and-forget)
+  └─► bridge.create_memory_node(node_type="outcome", tags=["task","completion"])
+        └─► MemoryNodeDAO.save() → embedding_service.generate_embedding() → OpenAI ada-002
+              └─► INSERT INTO memory_nodes (content, node_type, user_id, embedding)
+        (fire-and-forget: exception silenced, task completion unaffected)
 ```
 
 **Memory Node creation via bridge_router (HMAC path)**
@@ -176,6 +177,56 @@ POST /memory/recall
               └─► get_by_tags(): tag-based candidates
               └─► resonance scoring: (semantic*0.6) + (tag*0.2) + (recency*0.2)
               └─► sorted results with resonance_score, tag_score, recency_score
+```
+
+**ARM analysis with memory recall + write (Phase 3)**
+```
+POST /arm/analyze
+  └─► arm_router.py: Depends(get_current_user)
+        └─► DeepSeekCodeAnalyzer.run_analysis(file_path, db, user_id)
+              └─► [Step 2] chunk_content()
+              └─► [Step 2b] bridge.recall_memories(query=filename, tags=["arm","analysis"], limit=3)
+                    └─► MemoryNodeDAO.recall() → resonance-scored prior context
+                    └─► inject as "Prior analysis memory" section in user_prompt
+              └─► [Step 4] OpenAI GPT-4o analysis
+              └─► [Step 6] INSERT INTO analysis_results [db.commit()]
+              └─► [Step 6b] bridge.create_memory_node(node_type="outcome", tags=["arm","analysis",ext])
+                    └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
+                    (fire-and-forget)
+```
+
+**ARM code generation with memory write (Phase 3)**
+```
+POST /arm/generate
+  └─► DeepSeekCodeAnalyzer.generate_code(prompt, language, db, user_id)
+        └─► OpenAI GPT-4o generation
+        └─► INSERT INTO code_generations [db.commit()]
+        └─► bridge.create_memory_node(node_type="outcome", tags=["arm","codegen",language])
+              └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
+              (fire-and-forget)
+```
+
+**Genesis lock with memory write (Phase 3)**
+```
+POST /genesis/lock
+  └─► genesis_router.py: Depends(get_current_user)
+        └─► create_masterplan_from_genesis() → INSERT INTO master_plans [db.commit()]
+        └─► bridge.create_memory_node(node_type="decision", tags=["genesis","masterplan","decision"])
+              └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
+              (fire-and-forget)
+```
+
+**Programmatic memory bridge (internal services — Phase 3)**
+```
+from bridge import create_memory_node, recall_memories
+
+recall_memories(query, tags, limit, user_id, db)
+  └─► MemoryNodeDAO.recall() → resonance scoring
+  └─► returns [] on failure (never raises)
+
+create_memory_node(content, source, tags, user_id, db, node_type)
+  └─► MemoryNodeDAO.save() → embedding generation → INSERT INTO memory_nodes
+  └─► returns transient MemoryNode if db=None (not persisted)
 ```
 
 **Engagement Score calculation (C++ kernel path)**
