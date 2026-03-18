@@ -23,6 +23,31 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — ARM Phase 1] — 2026-03-17
+
+## Added
+
+* **ARM Phase 1 — Autonomous Reasoning Module (GPT-4o engine)**
+  * `SecurityValidator` — full HTTPException-based input validation: path traversal
+    blocking, extension allowlist, regex sensitive content detection (API keys,
+    private keys, AWS keys, .env refs), configurable size limit.
+  * `ConfigManager` — 16-key DEFAULT_CONFIG, runtime update with key allowlist,
+    `deepseek_config.json` persistence, Infinity Algorithm Task Priority formula
+    `TP = (C × U) / R` with zero-division guard.
+  * `FileProcessor` — line-boundary chunking, UUID session IDs, session log dicts
+    with Execution Speed metric (tokens/second).
+  * `DeepSeekCodeAnalyzer` — GPT-4o powered analysis (`run_analysis`) and code
+    generation (`generate_code`) with retry logic, `json_object` response format,
+    full success/failure DB logging.
+  * `AnalysisResult` + `CodeGeneration` SQLAlchemy models (UUID PKs, PostgreSQL).
+  * ARM router fully rewritten — singleton analyzer, config-reset on PUT,
+    structured response shapes with Infinity metrics.
+  * 46 ARM tests (208 total, 0 failing).
+  * Frontend ARM components updated: structured analysis display, prompt-based
+    generation, aligned log/config shapes.
+
+---
+
 # [feature/cpp-semantic-engine — Phase 3 security] — 2026-03-17
 
 ## Added

@@ -36,7 +36,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 4. Error Handling Debt
 - Error classification is inconsistent across routes (`AINDY/routes/*`).
 - Structured JSON error format is not enforced (`AINDY/routes/*`).
-- Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`, `AINDY/services/deepseek_arm_service.py`).
+- Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`). ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; no structured logging (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
@@ -180,7 +180,55 @@ The following items were identified during a structured architectural review of 
 
 ---
 
-## 11. Prioritization Table
+## 11. ARM Phase 2 Debt (Deferred from Phase 1 — 2026-03-17)
+
+The following items were explicitly deferred from ARM Phase 1 (commit `f1cd3b5`).
+ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router, tests).
+
+### §11.1 Memory Bridge feedback loop
+- **After each ARM analysis/generation, a `MemoryNode` should be persisted via
+  `MemoryNodeDAO`** with ARM results as structured content and semantic tags.
+  Currently: DB records written to `analysis_results` / `code_generations` only.
+  Memory Bridge (`memory_nodes` table) is not updated.
+  - Location: `AINDY/modules/deepseek/deepseek_code_analyzer.py` (run_analysis, generate_code)
+  - Fix: after `db.commit()` in each method, call `MemoryNodeDAO(db).save_memory_node()`
+    with `node_type="arm_analysis"` or `"arm_generation"`, content=summary/explanation,
+    tags=["deepseek", file_type, analysis_type].
+  - Status: Open. Deferred to ARM Phase 2.
+
+### §11.2 Self-tuning config via Infinity Algorithm feedback
+- **`ConfigManager.update()` should be callable by an Infinity Algorithm feedback loop**
+  that adjusts temperature, model, and token limits based on observed execution speed,
+  task priority trends, and output quality signals.
+  Currently: PUT /arm/config is manual-only (user-driven).
+  - Location: `AINDY/modules/deepseek/config_manager_deepseek.py`
+  - Fix: add `ConfigManager.self_tune(metrics: dict)` method that reads Infinity
+    Algorithm output (execution_speed, avg_task_priority) and applies parameter
+    adjustments within safe bounds.
+  - Status: Open. Deferred to ARM Phase 2.
+
+### §11.3 Infinity metric crosswalk (Decision Efficiency, Execution Speed)
+- **ARM response payloads do not yet include Decision Efficiency or the full
+  Infinity Algorithm metric set.** Only Task Priority (TP) and Execution Speed
+  (tokens/second) are currently returned.
+  - Location: `AINDY/routes/arm_router.py` (response construction),
+    `AINDY/services/calculation_services.py` (metric formulas available)
+  - Fix: wire `decision_efficiency()` and `execution_speed()` from
+    `calculation_services.py` into ARM response enrichment using token/latency data.
+  - Status: Open. Deferred to ARM Phase 2.
+
+### §11.4 deepseek_arm_service.py is now a dead code path
+- **`services/deepseek_arm_service.py` is no longer called by `arm_router.py`.**
+  The ARM router was rewritten in Phase 1 to use `DeepSeekCodeAnalyzer` directly.
+  The service file remains in place for backward compat but its functions
+  (`run_analysis`, `generate_code`, `get_reasoning_logs`, `get_config`,
+  `update_config`) are dead code.
+  - Location: `AINDY/services/deepseek_arm_service.py`
+  - Fix: either delete the file or repurpose it as a thin orchestration layer
+    that wraps `DeepSeekCodeAnalyzer` (for callers outside the router).
+  - Status: Open. Low priority — no runtime impact.
+
+## 12. Prioritization Table
 
 | Area | Risk Level (Low/Medium/High) | Impact | Recommended Phase |
 |------|------------------------------|--------|-------------------|

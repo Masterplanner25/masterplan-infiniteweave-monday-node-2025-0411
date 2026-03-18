@@ -553,43 +553,148 @@ Query Params: None
 Response: `RevenueMetricsResponse`
 Status Codes: 200, 500 on errors.
 
-### ARM Routes (`AINDY/routes/arm_router.py`, prefix `/arm`)
+### ARM Routes (`AINDY/routes/arm_router.py`, prefix `/arm`) — Phase 1 (2026-03-17)
+Auth: JWT Bearer required on all endpoints (router-level dependency).
+Rate limits: POST /arm/analyze and POST /arm/generate — 10 requests/minute per IP.
+
 `POST /arm/analyze`
 Method: POST
-Request Body: `AnalyzeInput` (file_path, analysis_type)
+Request Body: `AnalyzeRequest`
+  - `file_path`: str (required) — absolute or relative path to file to analyze
+  - `complexity`: float | null — Infinity Algorithm input (default: config value)
+  - `urgency`: float | null — Infinity Algorithm input (default: config value)
+  - `context`: str | null — additional context sent to GPT-4o
 Query Params: None
-Response: `{ "status": "success", "analysis": str }`
-Status Codes: 200, 500 on errors.
+Response (200):
+  ```json
+  {
+    "summary": "executive summary string",
+    "architecture_score": 1-10,
+    "performance_score": 1-10,
+    "integrity_score": 1-10,
+    "findings": [
+      {
+        "category": "architecture|performance|integrity|improvement",
+        "severity": "critical|high|medium|low",
+        "title": "string",
+        "description": "string",
+        "recommendation": "string"
+      }
+    ],
+    "overall_recommendation": "string",
+    "session_id": "uuid",
+    "analysis_id": "uuid",
+    "file": "filename",
+    "execution_seconds": float,
+    "input_tokens": int,
+    "output_tokens": int,
+    "task_priority": float,
+    "execution_speed": float
+  }
+  ```
+Status Codes: 200 (success), 401 (no auth), 403 (blocked path or sensitive content),
+  404 (file not found), 422 (unsupported extension or file too large), 429 (rate limit),
+  500 (OpenAI error after retries exhausted).
+Security: SecurityValidator runs before OpenAI call. Path traversal blocked. .env,
+  venv, .git, secrets directories blocked. API keys, private keys, AWS keys detected
+  in content → 403.
 
 `POST /arm/generate`
 Method: POST
-Request Body: `GenerateInput` (file_path, instructions)
+Request Body: `GenerateRequest`
+  - `prompt`: str (required) — natural-language generation or refactor instructions
+  - `original_code`: str | null — existing code to refactor (optional)
+  - `language`: str (default "python")
+  - `generation_type`: str (default "generate") — "generate" | "refactor" | "explain"
+  - `analysis_id`: str | null — UUID linking to a prior analysis session (optional)
+  - `complexity`: float | null
+  - `urgency`: float | null
 Query Params: None
-Response: `{ "status": "success", "generated_code": str }`
-Status Codes: 200, 500 on errors.
+Response (200):
+  ```json
+  {
+    "generated_code": "string",
+    "language": "string",
+    "explanation": "string",
+    "quality_notes": "string",
+    "confidence": 1-10,
+    "session_id": "uuid",
+    "generation_id": "uuid",
+    "execution_seconds": float,
+    "input_tokens": int,
+    "output_tokens": int,
+    "task_priority": float
+  }
+  ```
+Status Codes: 200, 401, 403 (sensitive content in original_code), 422, 429, 500.
+Security: `original_code` validated via `SecurityValidator.validate_code_input()`
+  before being sent to OpenAI.
 
 `GET /arm/logs`
 Method: GET
-Request Body: None
-Query Params: None
-Response: List of dicts `{ timestamp, message, level }`.
-Status Codes: 200
-Errors: Not explicitly defined.
+Query Params: `limit` (int, default 20) — max records per category
+Response (200):
+  ```json
+  {
+    "analyses": [
+      {
+        "session_id": "uuid",
+        "file": "filename",
+        "status": "success|failed|blocked",
+        "execution_seconds": float,
+        "input_tokens": int,
+        "output_tokens": int,
+        "task_priority": float,
+        "execution_speed": float,
+        "summary": "string",
+        "created_at": "ISO datetime"
+      }
+    ],
+    "generations": [
+      {
+        "session_id": "uuid",
+        "language": "string",
+        "generation_type": "string",
+        "execution_seconds": float,
+        "input_tokens": int,
+        "output_tokens": int,
+        "created_at": "ISO datetime"
+      }
+    ],
+    "summary": {
+      "total_analyses": int,
+      "total_generations": int,
+      "total_tokens_used": int
+    }
+  }
+  ```
+Status Codes: 200, 401.
+Note: Returns only records for the authenticated user (filtered by user_id).
 
 `GET /arm/config`
 Method: GET
 Request Body: None
 Query Params: None
-Response: `{ "runtime_config": <dict>, "last_saved": <datetime|None> }`
-Status Codes: 200
-Errors: Not explicitly defined.
+Response (200): Flat dict — current ARM configuration (all 16 DEFAULT_CONFIG keys
+  merged with any persisted overrides from `deepseek_config.json`).
+  Example keys: `model`, `analysis_model`, `generation_model`, `temperature`,
+  `generation_temperature`, `max_chunk_tokens`, `max_output_tokens`, `retry_limit`,
+  `retry_delay_seconds`, `max_file_size_bytes`, `task_complexity_default`,
+  `task_urgency_default`, `resource_cost_default`.
+Status Codes: 200, 401.
 
 `PUT /arm/config`
 Method: PUT
-Request Body: `ConfigUpdate` (parameter, value)
+Request Body: `ConfigUpdateRequest`
+  - `updates`: dict — key/value pairs to update. Unknown keys silently ignored.
 Query Params: None
-Response: `{ "status": "updated", "parameter": str, "value": <any> }`
-Status Codes: 200
+Response (200):
+  ```json
+  { "status": "updated", "config": { ...full updated config dict... } }
+  ```
+Status Codes: 200, 401, 422 (Pydantic validation error).
+Note: Changes persist to `deepseek_config.json`. Analyzer singleton is reset after
+  update so the next request picks up the new configuration.
 Errors: Not explicitly defined.
 
 ### Leadgen Routes (`AINDY/routes/leadgen_router.py`, prefix `/leadgen`)
@@ -751,7 +856,10 @@ Status Codes: 200, 404 if plan not found.
 - No explicit validation beyond Pydantic schema.
 
 ## 6. ARM / DeepSeek / Research Routes (Current Implementation)
-- ARM endpoints are synchronous from the HTTP caller perspective; underlying analysis/generation functions are synchronous and may be long-running.
+- ARM endpoints are synchronous from the HTTP caller perspective; underlying analysis/generation functions call the OpenAI API synchronously and may be long-running (typically 5–30s depending on file size and model load).
+- ARM `POST /arm/analyze` and `POST /arm/generate` are rate-limited to 10/min per IP to prevent cost runaway.
+- ARM responses include Infinity Algorithm metrics: `task_priority` (TP = C×U/R) and `execution_speed` (tokens/second).
+- ARM DB persistence: `analysis_results` table records every call (including failures) for audit trail; `code_generations` table records every generation. Both use UUID PKs.
 - Research endpoints are synchronous and persist results; they do not implement async or background execution.
 
 ## 7. Error Response Shape (Current Implementation)
@@ -777,7 +885,7 @@ Status Codes: 200, 404 if plan not found.
 This appendix lists request schemas where they are explicitly defined.
 
 - `AINDY/routes/analytics_router.py` → `AINDY/schemas/analytics.py` (`LinkedInRawInput`)
-- `AINDY/routes/arm_router.py` → inline Pydantic models in `AINDY/routes/arm_router.py` (`AnalyzeInput`, `GenerateInput`, `ConfigUpdate`)
+- `AINDY/routes/arm_router.py` → inline Pydantic models in `AINDY/routes/arm_router.py` (`AnalyzeRequest`, `GenerateRequest`, `ConfigUpdateRequest`) — updated Phase 1 (2026-03-17)
 - `AINDY/routes/bridge_router.py` → inline Pydantic models in `AINDY/routes/bridge_router.py` (`NodeCreateRequest`, `LinkCreateRequest`, `TracePermission`)
 - `AINDY/routes/freelance_router.py` → `AINDY/schemas/freelance.py` (`FreelanceOrderCreate`, `FeedbackCreate`)
 - `AINDY/routes/genesis_router.py` → untyped `dict` payloads (no Pydantic models defined)
@@ -820,5 +928,5 @@ Serialization note (current behavior):
 - `MasterPlan` (`AINDY/db/models/masterplan.py`) includes `canonical_metrics` relationship; endpoints returning `MasterPlan` or lists of `MasterPlan` may trigger lazy-load or serialization issues.
 - Other ORM relationships present (lower risk based on current route returns):
 - `MasterPlan.parent` (self-referential) in `AINDY/db/models/masterplan.py`; same risk surface as above.
-- `ARMRun.logs` and `ARMLog.run` in `AINDY/db/models/arm_models.py`; current `/arm/*` routes return dicts, not ORM objects.
+- `ARMRun.logs` and `ARMLog.run` in `AINDY/db/models/arm_models.py` (legacy models, no longer used by ARM router); `AnalysisResult.generations` and `CodeGeneration.analysis` (Phase 1 models); ARM routes return dicts, not ORM objects.
 - `ClientFeedback.order` in `AINDY/db/models/freelance.py`; freelance routes use `response_model` schemas that do not expose the relationship.

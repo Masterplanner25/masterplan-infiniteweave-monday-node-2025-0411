@@ -1,6 +1,65 @@
 ## [Unreleased] — feature/cpp-semantic-engine
 
-### Added
+### Added (2026-03-17 — ARM Phase 1)
+- `modules/deepseek/security_deepseek.py` — `SecurityValidator` fully implemented.
+  Replaces stub. Raises `HTTPException` (FastAPI-native). Validation layers: path
+  traversal blocking (BLOCKED_PATH_SEGMENTS), extension allowlist, regex-based
+  sensitive content detection (OpenAI sk- keys, AWS AKIA keys, PEM private key
+  blocks, generic `api_key=...` assignments, `.env` references), configurable size
+  limit. Previously: basic keyword scan with `PermissionError`.
+- `modules/deepseek/config_manager_deepseek.py` — `ConfigManager` fully implemented.
+  16-key `DEFAULT_CONFIG` (model, temperatures, token limits, retry settings,
+  Infinity Algorithm defaults). Runtime updates via `update(dict)` with key
+  allowlist (unknown keys silently dropped). `_persist()` writes to
+  `deepseek_config.json`. `calculate_task_priority()` implements Infinity Algorithm
+  `TP = (Complexity × Urgency) / Resource Cost` with zero-division guard.
+  Previously: 3-key minimal implementation.
+- `modules/deepseek/file_processor_deepseek.py` — `FileProcessor` fully implemented.
+  Line-boundary chunking (`chunk_content()`), UUID v4 session IDs
+  (`create_session_id()`), structured session log dicts with Infinity Algorithm
+  Execution Speed metric (tokens/second). Previously: activity log writer only.
+- `modules/deepseek/deepseek_code_analyzer.py` — `DeepSeekCodeAnalyzer` fully
+  implemented with OpenAI GPT-4o integration. `_call_openai()` uses
+  `response_format={"type": "json_object"}`, configurable retry with delay,
+  returns (text, input_tokens, output_tokens). `run_analysis()` full pipeline:
+  security validation → chunking → prompt construction → GPT-4o → DB persist
+  (`AnalysisResult`) → enriched result. `generate_code()` same pipeline for code
+  generation (`CodeGeneration` DB record). Both persist failure records on error.
+  Previously: keyword-counting stub returning summary string + template code.
+- `db/models/arm_models.py` — `AnalysisResult` and `CodeGeneration` SQLAlchemy
+  models added (UUID PKs, PostgreSQL dialect). `AnalysisResult`: session_id,
+  user_id, file_path, file_type, analysis_type, prompt_used, model_used,
+  input_tokens, output_tokens, execution_seconds, result_summary, result_full,
+  task_priority, status, error_message, created_at. `CodeGeneration`: links to
+  `AnalysisResult` via FK, generation_type, original_code, generated_code,
+  language, quality_notes. Existing `ARMRun`, `ARMLog`, `ARMConfig` models retained.
+- `routes/arm_router.py` — fully rewritten. Uses `DeepSeekCodeAnalyzer` directly
+  (bypasses `deepseek_arm_service.py`). Singleton analyzer with config-reset on
+  PUT /arm/config. New request schemas: `AnalyzeRequest` (file_path, complexity,
+  urgency, context), `GenerateRequest` (prompt, original_code, language,
+  generation_type, analysis_id), `ConfigUpdateRequest` (updates dict).
+  GET /arm/logs returns `{analyses, generations, summary}` with Infinity metrics.
+- `tests/test_arm.py` — 46 ARM-specific tests: `TestSecurityValidator` (16),
+  `TestConfigManager` (10), `TestFileProcessor` (8), `TestARMRoutes` (12).
+  OpenAI calls mocked; no real API calls. All 46 pass.
+- Frontend ARM components updated to match new API contracts:
+  `ARMAnalyze.jsx` — structured display with score badges, severity-tagged findings,
+  Infinity metrics row. `ARMGenerate.jsx` — prompt-based interface with language
+  selector, optional existing code, explanation + quality notes.
+  `ARMLogs.jsx` — aligned to `{analyses, generations, summary}` response shape with
+  metrics pills. `ARMConfig.jsx` + `api.js` — signatures updated to match new
+  endpoint contracts.
+- Total test suite: **208 passing, 0 failing** (up from 162).
+
+### Deferred to Phase 2 (ARM)
+- Memory Bridge feedback loop: after each analysis/generation, persist a `MemoryNode`
+  via `MemoryNodeDAO` with ARM results as structured content and tags.
+- Self-tuning config: `ConfigManager.update()` to be called by an Infinity Algorithm
+  feedback loop that adjusts temperature/model based on execution speed trends.
+- Infinity metric crosswalk: Decision Efficiency and Execution Speed metric
+  integration into ARM response payloads.
+
+### Added (C++ semantic engine — earlier in this branch)
 - C++ semantic similarity engine (`memory_cpp/semantic.h` +
   `semantic.cpp`) providing high-performance vector math
 - `cosine_similarity(a, b, len)` — foundation for semantic
