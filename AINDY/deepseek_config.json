@@ -1,5 +1,27 @@
 {
+  "model": "gpt-4o",
+  "analysis_model": "gpt-4o",
+  "generation_model": "gpt-4o",
   "temperature": 0.3,
+  "generation_temperature": 0.4,
   "max_chunk_tokens": 2000,
-  "retry_limit": 3
+  "max_output_tokens": 2000,
+  "retry_limit": 3,
+  "retry_delay_seconds": 2,
+  "max_file_size_bytes": 100000,
+  "allowed_extensions": [
+    ".py",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".json",
+    ".md",
+    ".txt",
+    ".yaml",
+    ".yml"
+  ],
+  "task_complexity_default": 3,
+  "task_urgency_default": 5,
+  "resource_cost_default": 2
 }
