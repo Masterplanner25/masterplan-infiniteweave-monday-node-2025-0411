@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-18 (Sprint 5 User Isolation — user_id to freelance/research/rippletrace, 5 tables, 429 tests)
+Last updated: 2026-03-18 (CI/CD Pipeline Sprint — GitHub Actions lint+test+coverage, 453 tests, 69% baseline, 64% threshold)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.

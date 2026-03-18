@@ -1,6 +1,8 @@
 ﻿# Deployment Model
 
-This document distinguishes current deployment reality from required policy rules. It does not assume CI/CD or containerization unless present.
+This document distinguishes current deployment reality from required policy rules.
+
+**CI/CD status (2026-03-18):** GitHub Actions pipeline is live. See `.github/workflows/ci.yml`. Two jobs run on every push/PR to `main`: `lint` (ruff) and `test` (pytest + coverage). Required secrets documented in `.github/SECRETS.md`.
 
 ## 1. Current Deployment Structure
 
@@ -16,10 +18,12 @@ This document distinguishes current deployment reality from required policy rule
 - PostgreSQL is required; SQLite is not accepted by `DATABASE_URL` validation (`AINDY/config.py`).
 - MongoDB is used via `AINDY/db/mongo_setup.py` and social routes in `AINDY/routes/social_router.py`.
 - No orchestration framework is present in the repository.
+- CI/CD pipeline: GitHub Actions (`.github/workflows/ci.yml`). Runs lint + tests on every push/PR to `main`. pgvector service container used for `alembic upgrade head` step. Coverage enforced at 64% floor.
 
 ## 2. Environment Configuration
 
 ### A. Required Environment Variables
+> See `AINDY/.env.example` for a template with all variable names. Never commit the real `.env` file.
 - `DATABASE_URL` (required; must be PostgreSQL URI).
 - `PERMISSION_SECRET` (HMAC secret for Memory Bridge; defaults to `dev-secret-must-change` if not set).
 - `OPENAI_API_KEY` (required by `AINDY/config.py` and used in `AINDY/services/genesis_ai.py`).
@@ -98,6 +102,25 @@ This document distinguishes current deployment reality from required policy rule
 - No schema change without updated `docs/architecture/DATA_MODEL_MAP.md`.
 - No change to invariants without updating `docs/governance/INVARIANTS.md`.
 - No external provider integration without explicit fallback handling.
+- No merge without passing CI (`lint` + `test` jobs in `.github/workflows/ci.yml`). See `.github/SECRETS.md` for required Actions secrets.
+
+## 10. CI/CD Environment (GitHub Actions)
+
+### Job: `lint`
+- Runner: `ubuntu-latest`
+- Tool: `ruff==0.15.6` (config: `AINDY/ruff.toml`)
+- Excludes: `legacy/`, `bridge/memory_bridge_rs/`, `alembic/`
+
+### Job: `test`
+- Runner: `ubuntu-latest`
+- Service: `pgvector/pgvector:pg16` (DB `base`, port 5433)
+- Steps: install deps → `alembic upgrade head` → `pytest --cov-fail-under=64`
+- Coverage artifact: `coverage.xml` (uploaded to Codecov)
+- `tests/validate_memory_loop.py` excluded (requires live OpenAI + real DB)
+- All API/DB calls are mocked via `tests/conftest.py` — no real secrets needed for test execution
+
+### Required Actions Secrets
+See `.github/SECRETS.md`. The CI `test` job supplies `DATABASE_URL` via the service container config and uses placeholder values for API keys during mocked test runs.
 
 ## Appendix: `/health/` Ping Targets
 Defined in `AINDY/routes/health_router.py`:

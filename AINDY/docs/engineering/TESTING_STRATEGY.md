@@ -6,7 +6,7 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-18)
 
-**Diagnostic suite** (`AINDY/tests/`) — 384 tests across 15 files. Final result: **384 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 453 tests across 17 files. Final result: **453 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -27,7 +27,15 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_memory_bridge_phase2.py` | 24 | Memory Bridge Phase 2 (2026-03-18): TestEmbeddingService (7) — OpenAI call, retry, zero-vector fallback, C++ kernel path, cosine_similarity_python correctness; TestMemoryNodeEmbeddingColumn (2) — column presence in model + DB; TestResonanceScoring (4) — formula correctness (semantic/tag/recency weights); TestMemoryTypeEnforcement (4) — Literal validation at API boundary, ORM event listener; TestMemoryRoutePhase2 (7) — POST /memory/nodes/search, POST /memory/recall (auth, 400 on no query/tags, scoring metadata). |
 | `tests/test_memory_bridge_phase3.py` | 22 | Memory Bridge Phase 3 (2026-03-18): TestRecallMemoriesBridge (4) — no-db returns [], DAO delegation, failure returns [], node_type filter; TestCreateMemoryNodeBridge (3) — no-db transient, new DAO used, default node_type=None; TestARMAnalysisMemoryHook (4) — write fires on success, recall fires before prompt, skipped when no user_id, failure does not raise; TestARMCodegenMemoryHook (3) — write fires, failure silenced, skipped when no user_id; TestTaskCompletionMemoryHook (4) — write fires, skipped when no user_id, failure silenced, user_id kwarg accepted; TestGenesisMemoryHooks (4) — lock writes decision node, lock memory failure safe, activate writes decision node, activate memory failure safe. |
 
-Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery configured in `pytest.ini`.
+Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `pytest-cov==7.0.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery and coverage configured in `pytest.ini` and `AINDY/.coveragerc`.
+
+**New test files (Sprint 6+7 / CI Sprint):**
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `tests/test_sprint6_sprint7.py` | 24 | SQLAlchemy 2.0 import path (4), Genesis memory hook signature/behavior (9), LeadGen memory hook signature/behavior (11) |
+
+**CI enforcement (2026-03-18):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage enforced at `--cov-fail-under=64` (baseline: 69%). Ruff lint enforced in a separate job. `tests/validate_memory_loop.py` excluded from CI (requires live OpenAI + real DB).
 
 **Root test files** (legacy, minimal scope):
 - `test_calculations.py` — FastAPI TestClient calls for calculation endpoints
@@ -107,10 +115,11 @@ A change cannot be merged if:
 - It alters invariants without validation tests.
 - It changes API contract without route-level test updates.
 - The `Last updated` date in `docs/GOVERNANCE_INDEX.md` is not refreshed after doc changes.
+- **CI checks fail** — every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 64%.
 
 ## 8. Known Gaps
-- No coverage metrics tooling configured in the repository (no coverage config files).
-- No CI enforcement defined in the repository.
+- ✅ **Resolved (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured — `pytest-cov`, `.coveragerc`, and `--cov-fail-under=64` in `pytest.ini`. Baseline: 69%.
+- ✅ **Resolved (2026-03-18 CI/CD Sprint):** CI enforcement live — GitHub Actions `ci.yml` enforces lint + test + coverage on every push/PR.
 - No migration validation tests (`AINDY/alembic/` has no test harness).
 - No tests for background task loops (`AINDY/services/task_services.py`).
 - No error handling contract tests validating JSON error structure per `docs/governance/ERROR_HANDLING_POLICY.md`.
