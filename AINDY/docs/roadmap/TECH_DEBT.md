@@ -36,7 +36,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 4. Error Handling Debt
 - Error classification is inconsistent across routes (`AINDY/routes/*`).
 - Structured JSON error format is not enforced (`AINDY/routes/*`).
-- Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`). ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
+- ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; no structured logging (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt

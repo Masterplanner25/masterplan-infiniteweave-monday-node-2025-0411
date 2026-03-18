@@ -23,6 +23,47 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — Genesis Blocks 4-6] — 2026-03-17
+
+## Added
+
+* **Block 4 — Strategic Integrity Audit**
+  * `AUDIT_SYSTEM_PROMPT` in `services/genesis_ai.py` — GPT-4o audit schema with finding
+    types (`mechanism_gap | contradiction | timeline_risk | asset_gap | confidence_concern`),
+    severity levels (`critical | warning | advisory`), and structured output fields.
+  * `validate_draft_integrity(draft: dict) -> dict` — GPT-4o integrity audit with 3-attempt
+    retry logic, `response_format=json_object`, and fail-safe fallback on exception.
+  * `POST /genesis/audit` — JWT-protected endpoint; loads `session.draft_json`, calls
+    `validate_draft_integrity()`, returns audit result. 422 if no draft yet.
+  * `auditGenesisDraft(sessionId)` added to `client/src/api.js`.
+  * `GenesisDraftPreview.jsx` — full audit panel: AUDIT DRAFT button, severity-colored
+    finding cards, `audit_passed` / `overall_confidence` / `audit_summary` display.
+
+## Changed
+
+* **Block 5 — Lock Pipeline Hardening**
+  * `create_masterplan_from_genesis()` — `synthesis_ready` gate raises `ValueError` if
+    session not ready; loads draft from `session.draft_json` (falls back to caller draft);
+    wraps all DB ops in `try/except` with `db.rollback()` on failure.
+  * `POST /masterplans/lock` — new static endpoint in `masterplan_router.py`; drives
+    genesis→lock pipeline; maps `ValueError` → 422; includes `posture_description` in response.
+  * `GET /masterplans/` — response shape changed from plain list to `{"plans": [...]}`.
+  * `MasterPlanDashboard.jsx` — updated to consume `data.plans || []`.
+  * `SYNTHESIS_SYSTEM_PROMPT` — `synthesis_notes` field and corresponding rule added.
+
+## Fixed
+
+* **Block 6 — Duplicate Route Removal**
+  * Removed duplicate `POST /create_masterplan` from `routes/main_router.py` (the variant
+    using `MasterPlanCreate` schema). Retained the `MasterPlanInput` variant with legacy comment.
+
+## Tests
+
+* Added `tests/test_genesis_flow.py` — 55 tests covering all Block 4-6 behaviors.
+* **Total test count: 301 (was 246).**
+
+---
+
 # [feature/cpp-semantic-engine — ARM Phase 1] — 2026-03-17
 
 ## Added

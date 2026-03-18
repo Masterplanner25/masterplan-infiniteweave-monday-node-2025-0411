@@ -204,6 +204,13 @@ export function lockMasterPlan(sessionId, draft) {
   });
 }
 
+export function auditGenesisDraft(sessionId) {
+  return authRequest("/genesis/audit", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
 /* --- MasterPlan Endpoints --- */
 
 export function listMasterPlans() {

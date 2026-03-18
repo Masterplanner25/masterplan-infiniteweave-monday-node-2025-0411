@@ -238,38 +238,9 @@ async def get_results(db: Session = Depends(get_db)):
     results = db.query(CalculationResult).all()
     return results
 
-@router.post("/create_masterplan")
-async def create_masterplan(plan: MasterPlanCreate, db: Session = Depends(get_db)):
-
-    # Prevent multiple origins
-    if plan.is_origin:
-        existing_origin = db.query(MasterPlan).filter_by(is_origin=True).first()
-        if existing_origin:
-            raise HTTPException(status_code=400, detail="Origin MasterPlan already exists.")
-
-    # If this plan is active, deactivate others
-    if plan.is_active:
-        db.query(MasterPlan).update({MasterPlan.is_active: False})
-
-    target_date = plan.start_date + timedelta(days=int(plan.duration_years * 365))
-
-    new_plan = MasterPlan(
-        version=plan.version,
-        start_date=plan.start_date,
-        duration_years=plan.duration_years,
-        target_date=target_date,
-        is_origin=plan.is_origin,
-        is_active=plan.is_active
-    )
-
-    db.add(new_plan)
-    db.commit()
-    db.refresh(new_plan)
-
-    return new_plan
-
 @router.get("/masterplans")
 async def get_masterplans(db: Session = Depends(get_db)):
+    # Legacy unauthenticated endpoint — kept for backward compatibility
     plans = db.query(MasterPlan).all()
     return plans
 

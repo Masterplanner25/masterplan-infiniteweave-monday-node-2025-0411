@@ -37,9 +37,19 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `POST /leadgen/` — 10 requests/minute per IP
 - `POST /genesis/message` — 20 requests/minute per IP
 - `POST /genesis/synthesize` — 5 requests/minute per IP
+- `POST /genesis/audit` — 5 requests/minute per IP
 - `POST /arm/analyze` — 10 requests/minute per IP
 - `POST /arm/generate` — 10 requests/minute per IP
 - Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
+
+**Genesis Block 4-6 additions (2026-03-17):**
+- `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,
+  runs GPT-4o strategic integrity audit. Returns: `{audit_passed, findings, overall_confidence, audit_summary}`.
+  422 if no draft available.
+- `POST /masterplans/lock` — JWT required. Body: `{"session_id": int, "draft": {}}`. Creates and
+  locks a MasterPlan from a completed Genesis session. Returns: `{masterplan_id, version, posture,
+  posture_description, status}`. 400 if session not found/already locked. 422 if synthesis_ready=False.
+- `GET /masterplans/` — response shape updated to `{"plans": [...]}` (was plain array).
 
 Root route registered directly in `AINDY/main.py`:
 - `GET /`

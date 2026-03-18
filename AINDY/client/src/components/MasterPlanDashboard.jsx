@@ -35,7 +35,7 @@ export default function MasterPlanDashboard() {
     setLoading(true);
     try {
       const data = await listMasterPlans();
-      setPlans(Array.isArray(data) ? data : []);
+      setPlans(data.plans || []);
     } catch (err) {
       console.error("Error fetching plans:", err);
     } finally {

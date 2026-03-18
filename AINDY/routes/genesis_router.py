@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import GenesisSessionDB, MasterPlan
-from services.genesis_ai import call_genesis_llm, call_genesis_synthesis_llm
+from pydantic import BaseModel
+from services.genesis_ai import call_genesis_llm, call_genesis_synthesis_llm, validate_draft_integrity
 from services.masterplan_factory import create_masterplan_from_genesis
 from datetime import datetime
 from services.auth_service import get_current_user
@@ -171,6 +172,32 @@ def synthesize_genesis(
     db.commit()
 
     return {"draft": draft}
+
+
+class AuditRequest(BaseModel):
+    session_id: int
+
+
+@router.post("/audit")
+@limiter.limit("5/minute")
+def audit_genesis_draft(
+    request: Request,
+    body: AuditRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Run a strategic integrity audit on the persisted draft for a genesis session."""
+    user_id_str = str(current_user["sub"])
+    session = _get_user_session(body.session_id, user_id_str, db)
+
+    if not session.draft_json:
+        raise HTTPException(
+            status_code=422,
+            detail="No draft available — run /genesis/synthesize first"
+        )
+
+    audit_result = validate_draft_integrity(session.draft_json)
+    return audit_result
 
 
 @router.post("/lock")

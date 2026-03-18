@@ -3,9 +3,46 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import MasterPlan
 from services.auth_service import get_current_user
+from services.masterplan_factory import create_masterplan_from_genesis
+from services.posture import posture_description
 from datetime import datetime
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
+
+
+@router.post("/lock")
+def lock_from_genesis(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Create and lock a MasterPlan from a completed Genesis session."""
+    user_id_str = str(current_user["sub"])
+    session_id = payload.get("session_id")
+    draft = payload.get("draft", {})
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    try:
+        masterplan = create_masterplan_from_genesis(
+            session_id=session_id,
+            draft=draft,
+            db=db,
+            user_id=user_id_str,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "masterplan_id": masterplan.id,
+        "version": masterplan.version_label,
+        "posture": masterplan.posture,
+        "posture_description": posture_description(masterplan.posture),
+        "status": masterplan.status,
+    }
 
 
 @router.post("/{plan_id}/lock")
@@ -46,19 +83,21 @@ def list_masterplans(
         .order_by(MasterPlan.id.desc())
         .all()
     )
-    return [
-        {
-            "id": p.id,
-            "version_label": p.version_label,
-            "posture": p.posture,
-            "status": p.status,
-            "is_active": p.is_active,
-            "created_at": p.created_at,
-            "locked_at": p.locked_at,
-            "activated_at": p.activated_at,
-        }
-        for p in plans
-    ]
+    return {
+        "plans": [
+            {
+                "id": p.id,
+                "version_label": p.version_label,
+                "posture": p.posture,
+                "status": p.status,
+                "is_active": p.is_active,
+                "created_at": p.created_at,
+                "locked_at": p.locked_at,
+                "activated_at": p.activated_at,
+            }
+            for p in plans
+        ]
+    }
 
 
 @router.get("/{plan_id}")

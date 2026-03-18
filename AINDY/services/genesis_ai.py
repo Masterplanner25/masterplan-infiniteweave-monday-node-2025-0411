@@ -87,12 +87,14 @@ You MUST return valid JSON in this exact format:
   "key_assets": ["..."],
   "success_criteria": ["..."],
   "risk_factors": ["..."],
-  "confidence_at_synthesis": 0.0
+  "confidence_at_synthesis": 0.0,
+  "synthesis_notes": "Brief meta-commentary on the synthesis process and confidence level"
 }
 
 Rules:
 - ambition_score is a float 0.0–1.0 representing how ambitious/aggressive the plan is.
 - time_horizon_years must be a number.
+- synthesis_notes should summarize what the AI was confident about and what was inferred.
 - Return ONLY the JSON object. No explanation text.
 """
 
@@ -142,3 +144,84 @@ Return only valid JSON.
             "risk_factors": [],
             "confidence_at_synthesis": current_state.get("confidence", 0.0)
         }
+
+
+AUDIT_SYSTEM_PROMPT = """
+You are the Strategic Integrity Validator of A.I.N.D.Y. — a senior strategic advisor reviewing a
+MasterPlan draft before it is locked.
+
+Your job: identify structural flaws, gaps, contradictions, or risks in the draft.
+
+You MUST return valid JSON in this exact format:
+
+{
+  "audit_passed": true,
+  "findings": [
+    {
+      "type": "mechanism_gap | contradiction | timeline_risk | asset_gap | confidence_concern",
+      "severity": "critical | warning | advisory",
+      "description": "...",
+      "recommendation": "..."
+    }
+  ],
+  "overall_confidence": 0.0,
+  "audit_summary": "One sentence summary of audit result."
+}
+
+Rules:
+- audit_passed is true only if there are zero critical findings.
+- overall_confidence is a float 0.0–1.0.
+- findings may be an empty list if the draft is clean.
+- Return ONLY the JSON object. No explanation text.
+"""
+
+
+def validate_draft_integrity(draft: dict) -> dict:
+    """
+    GPT-4o strategic integrity audit for a synthesis draft.
+    Returns audit result dict with findings, audit_passed, overall_confidence.
+    Retries up to 3 times on JSON parse failure.
+    """
+    retry_limit = 3
+    last_error = None
+
+    for attempt in range(retry_limit):
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"""
+MasterPlan Draft:
+{json.dumps(draft, indent=2)}
+
+Audit this draft for structural integrity.
+Return only valid JSON.
+"""
+                    }
+                ],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            return json.loads(content)
+        except Exception as e:
+            last_error = e
+            continue
+
+    # Fail-safe after all retries exhausted
+    return {
+        "audit_passed": False,
+        "findings": [
+            {
+                "type": "confidence_concern",
+                "severity": "warning",
+                "description": f"Audit service error after {retry_limit} attempts: {str(last_error)}",
+                "recommendation": "Retry the audit or proceed with caution."
+            }
+        ],
+        "overall_confidence": 0.0,
+        "audit_summary": "Audit could not be completed due to a service error."
+    }
