@@ -1,5 +1,23 @@
 ## [Unreleased] — feature/cpp-semantic-engine
 
+### Added (2026-03-18 - Memory Bridge v3: Structured Continuity)
+- `alembic/versions/dc59c589ab1e_memory_bridge_v3_history_table.py` - Migration: `memory_node_history` table (append-only change log) + index on (`node_id`, `changed_at`).
+- `alembic/versions/edc8c8d84cbb_repair_memory_nodes_tsv_trigger_drift.py` - Repair migration: removes stale `content_tsv` trigger/function/index drift from `memory_nodes` on upgraded databases.
+- `db/models/memory_node_history.py` - ORM model for history snapshots (previous values only).
+- `db/dao/memory_node_dao.py::update()` — explicit node updates now record prior state in history; optional embedding regeneration on content change.
+- `db/dao/memory_node_dao.py::get_history()` — returns history entries (reverse chronological).
+- `db/dao/memory_node_dao.py::traverse()` — DFS multi-hop traversal with cycle prevention + narrative summary.
+- `db/dao/memory_node_dao.py::expand()` — related node expansion (linked + semantic neighbors).
+- `db/dao/memory_node_dao.py::recall(expand_results=True)` — optional expanded context return.
+- `routes/memory_router.py` — v3 endpoints:
+  - `PUT /memory/nodes/{node_id}`
+  - `GET /memory/nodes/{node_id}/history`
+  - `GET /memory/nodes/{node_id}/traverse`
+  - `POST /memory/nodes/expand`
+  - `POST /memory/recall/v3`
+- `tests/test_memory_bridge_v3.py` — v3 unit + route coverage (history, traversal, expansion, recall v3).
+- `tests/validate_memory_v3.py` — live validation script for v3 success condition.
+
 ### Added (2026-03-18 — Memory Bridge Phase 2: Make It Intelligent)
 - `alembic/versions/mb2embed0001` — Migration: `embedding VECTOR(1536)` column on `memory_nodes`. `CREATE EXTENSION IF NOT EXISTS vector` included. Idempotent (checks column existence before adding).
 - `services/embedding_service.py` — OpenAI `text-embedding-ada-002` embedding generation (1536 dims). Zero-vector fallback on failure (never crashes). 3-attempt retry with exponential backoff. `cosine_similarity()` uses C++ kernel (`memory_bridge_rs.semantic_similarity` via `bridge/memory_bridge_rs/target/debug`) with pure Python fallback. `cosine_similarity_python()` available as standalone fallback.

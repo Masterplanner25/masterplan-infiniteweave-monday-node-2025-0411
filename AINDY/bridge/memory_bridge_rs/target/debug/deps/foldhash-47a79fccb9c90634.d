@@ -1,0 +1,11 @@
+C:\dev\masterplan-infiniteweave-monday-node-2025-0411\AINDY\bridge\memory_bridge_rs\target\debug\deps\foldhash-47a79fccb9c90634.d: C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\lib.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\fast.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\quality.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\seed.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\convenience.rs
+
+C:\dev\masterplan-infiniteweave-monday-node-2025-0411\AINDY\bridge\memory_bridge_rs\target\debug\deps\libfoldhash-47a79fccb9c90634.rlib: C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\lib.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\fast.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\quality.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\seed.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\convenience.rs
+
+C:\dev\masterplan-infiniteweave-monday-node-2025-0411\AINDY\bridge\memory_bridge_rs\target\debug\deps\libfoldhash-47a79fccb9c90634.rmeta: C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\lib.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\fast.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\quality.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\seed.rs C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\convenience.rs
+
+C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\lib.rs:
+C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\fast.rs:
+C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\quality.rs:
+C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\seed.rs:
+C:\Users\shawn\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\foldhash-0.2.0\src\convenience.rs:

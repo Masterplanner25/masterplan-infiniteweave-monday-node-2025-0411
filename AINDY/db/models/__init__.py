@@ -13,6 +13,7 @@ from .leadgen_model import LeadGenResult
 from .author_model import AuthorDB
 from .system_health_log import SystemHealthLog
 from .user import User
+from .memory_node_history import MemoryNodeHistory
 
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "SystemHealthLog",
     "GenesisSessionDB",
     "User",
+    "MemoryNodeHistory",
 ]

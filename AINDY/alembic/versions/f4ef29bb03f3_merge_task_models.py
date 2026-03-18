@@ -46,43 +46,43 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_pings_id'), 'pings', ['id'], unique=False)
-    op.drop_index(op.f('ix_monetization_efficiencies_id'), table_name='monetization_efficiencies')
-    op.drop_table('monetization_efficiencies')
-    op.drop_index(op.f('ix_attention_values_id'), table_name='attention_values')
-    op.drop_table('attention_values')
-    op.drop_index(op.f('ix_impacts_id'), table_name='impacts')
-    op.drop_table('impacts')
-    op.drop_index(op.f('ix_revenue_scalings_id'), table_name='revenue_scalings')
-    op.drop_table('revenue_scalings')
-    op.drop_index(op.f('ix_engagements_id'), table_name='engagements')
-    op.drop_table('engagements')
-    op.drop_index(op.f('ix_efficiencies_id'), table_name='efficiencies')
-    op.drop_table('efficiencies')
-    op.drop_index(op.f('ix_lost_potentials_id'), table_name='lost_potentials')
-    op.drop_table('lost_potentials')
-    op.drop_index(op.f('ix_business_growths_id'), table_name='business_growths')
-    op.drop_table('business_growths')
-    op.drop_index(op.f('ix_ai_efficiencies_id'), table_name='ai_efficiencies')
-    op.drop_table('ai_efficiencies')
-    op.drop_index(op.f('ix_decision_efficiencies_id'), table_name='decision_efficiencies')
-    op.drop_table('decision_efficiencies')
-    op.drop_index(op.f('ix_execution_speeds_id'), table_name='execution_speeds')
-    op.drop_table('execution_speeds')
-    op.drop_index(op.f('ix_engagement_rates_id'), table_name='engagement_rates')
-    op.drop_table('engagement_rates')
-    op.drop_index(op.f('ix_ai_productivity_boosts_id'), table_name='ai_productivity_boosts')
-    op.drop_table('ai_productivity_boosts')
+
+    # Drop legacy metrics tables — use IF EXISTS because on a fresh DB these
+    # tables may not yet exist (they are created later in the migration chain
+    # by 94bcd9284285). On an existing DB they existed before this migration.
+    _legacy_tables = [
+        ('monetization_efficiencies', 'ix_monetization_efficiencies_id'),
+        ('attention_values',          'ix_attention_values_id'),
+        ('impacts',                   'ix_impacts_id'),
+        ('revenue_scalings',          'ix_revenue_scalings_id'),
+        ('engagements',               'ix_engagements_id'),
+        ('efficiencies',              'ix_efficiencies_id'),
+        ('lost_potentials',           'ix_lost_potentials_id'),
+        ('business_growths',          'ix_business_growths_id'),
+        ('ai_efficiencies',           'ix_ai_efficiencies_id'),
+        ('decision_efficiencies',     'ix_decision_efficiencies_id'),
+        ('execution_speeds',          'ix_execution_speeds_id'),
+        ('engagement_rates',          'ix_engagement_rates_id'),
+        ('ai_productivity_boosts',    'ix_ai_productivity_boosts_id'),
+    ]
+    for tbl, idx in _legacy_tables:
+        op.execute(sa.text(f"DROP INDEX IF EXISTS {idx}"))
+        op.execute(sa.text(f"DROP TABLE IF EXISTS {tbl}"))
+
     op.alter_column('memory_links', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                nullable=False,
                existing_server_default=sa.text('now()'))
-    op.drop_index(op.f('ux_memory_links_src_tgt_type'), table_name='memory_links')
+    # The unique index may be named 'ux_memory_links_src_tgt_type' (old DB) or
+    # 'uq_memory_links_unique' (fresh DB from bff24d352475). Drop both safely.
+    op.execute(sa.text("DROP INDEX IF EXISTS ux_memory_links_src_tgt_type"))
+    op.execute(sa.text("DROP INDEX IF EXISTS uq_memory_links_unique"))
     op.drop_constraint(op.f('memory_links_source_node_id_fkey'), 'memory_links', type_='foreignkey')
     op.drop_constraint(op.f('memory_links_target_node_id_fkey'), 'memory_links', type_='foreignkey')
     op.create_foreign_key(None, 'memory_links', 'memory_nodes', ['target_node_id'], ['id'], ondelete='CASCADE')
     op.create_foreign_key(None, 'memory_links', 'memory_nodes', ['source_node_id'], ['id'], ondelete='CASCADE')
     op.add_column('memory_nodes', sa.Column('extra', postgresql.JSONB(astext_type=sa.Text()), nullable=False))
-   
+
     # Safely convert existing ARRAY → JSONB
     op.execute("""
         ALTER TABLE memory_nodes
@@ -93,31 +93,33 @@ def upgrade() -> None:
                existing_type=postgresql.TIMESTAMP(),
                nullable=False,
                existing_server_default=sa.text('now()'))
-  
-    # Safely convert existing ARRAY → JSONB
-    op.execute("""
-        ALTER TABLE memory_nodes
-        ALTER COLUMN tags TYPE JSONB
-        USING to_jsonb(tags);
-    """)
-    op.drop_index(op.f('ix_memory_nodes_content_tsv'), table_name='memory_nodes', postgresql_using='gin')
-    op.drop_index(op.f('ix_memory_nodes_created_at'), table_name='memory_nodes')
-    op.drop_index(op.f('ix_memory_nodes_node_type'), table_name='memory_nodes')
-    op.drop_column('memory_nodes', 'content_tsv')
-    op.add_column('tasks', sa.Column('name', sa.String(), nullable=False))
-    op.add_column('tasks', sa.Column('category', sa.String(), nullable=True))
-    op.add_column('tasks', sa.Column('priority', sa.String(), nullable=True))
-    op.add_column('tasks', sa.Column('status', sa.String(), nullable=True))
-    op.add_column('tasks', sa.Column('due_date', sa.DateTime(), nullable=True))
-    op.add_column('tasks', sa.Column('start_time', sa.DateTime(), nullable=True))
-    op.add_column('tasks', sa.Column('end_time', sa.DateTime(), nullable=True))
-    op.add_column('tasks', sa.Column('duration', sa.Float(), nullable=True))
-    op.add_column('tasks', sa.Column('scheduled_time', sa.DateTime(), nullable=True))
-    op.add_column('tasks', sa.Column('reminder_time', sa.DateTime(), nullable=True))
-    op.add_column('tasks', sa.Column('recurrence', sa.String(), nullable=True))
-    op.drop_index(op.f('ix_tasks_task_name'), table_name='tasks')
-    op.create_index(op.f('ix_tasks_name'), 'tasks', ['name'], unique=False)
-    op.drop_column('tasks', 'task_name')
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_memory_nodes_content_tsv"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_memory_nodes_created_at"))
+    op.execute(sa.text("DROP INDEX IF EXISTS ix_memory_nodes_node_type"))
+    op.execute(sa.text("ALTER TABLE memory_nodes DROP COLUMN IF EXISTS content_tsv"))
+
+    # Tasks table migration — only apply if the tasks table already exists
+    # (it was pre-created on existing DBs; on a fresh DB it will be created
+    # with the correct schema by a later migration or create_all).
+    conn = op.get_bind()
+    tasks_exists = conn.execute(sa.text(
+        "SELECT to_regclass('public.tasks')"
+    )).scalar()
+    if tasks_exists is not None:
+        op.add_column('tasks', sa.Column('name', sa.String(), nullable=False))
+        op.add_column('tasks', sa.Column('category', sa.String(), nullable=True))
+        op.add_column('tasks', sa.Column('priority', sa.String(), nullable=True))
+        op.add_column('tasks', sa.Column('status', sa.String(), nullable=True))
+        op.add_column('tasks', sa.Column('due_date', sa.DateTime(), nullable=True))
+        op.add_column('tasks', sa.Column('start_time', sa.DateTime(), nullable=True))
+        op.add_column('tasks', sa.Column('end_time', sa.DateTime(), nullable=True))
+        op.add_column('tasks', sa.Column('duration', sa.Float(), nullable=True))
+        op.add_column('tasks', sa.Column('scheduled_time', sa.DateTime(), nullable=True))
+        op.add_column('tasks', sa.Column('reminder_time', sa.DateTime(), nullable=True))
+        op.add_column('tasks', sa.Column('recurrence', sa.String(), nullable=True))
+        op.execute(sa.text("DROP INDEX IF EXISTS ix_tasks_task_name"))
+        op.create_index(op.f('ix_tasks_name'), 'tasks', ['name'], unique=False)
+        op.drop_column('tasks', 'task_name')
     # ### end Alembic commands ###
 
 

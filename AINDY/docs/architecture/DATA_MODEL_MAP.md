@@ -525,6 +525,10 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 **Sprint 5 migration (2026-03-18):**
 - `d37ae6ebc319` — `sprint5_user_id_freelance_research_rippletrace`: adds `user_id` (String, nullable, indexed) to 5 tables: `freelance_orders`, `client_feedback`, `research_results`, `drop_points`, `pings`. Applied at `alembic upgrade head`.
 
+**Memory Bridge v3 migration (2026-03-18):**
+- `dc59c589ab1e` - `memory_bridge_v3_history_table`: adds `memory_node_history` table (append-only change log) with index on (`node_id`, `changed_at`).
+- `edc8c8d84cbb` - `repair_memory_nodes_tsv_trigger_drift`: removes stale `content_tsv` trigger/function/index drift from `memory_nodes` on upgraded databases.
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -612,6 +616,23 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `ix_memory_links_target` on `target_node_id`
 - `uq_memory_links_unique` unique index on (`source_node_id`, `target_node_id`, `link_type`)
 - Link-type constraints: Not explicitly defined in current implementation.
+
+### `memory_node_history`
+- Model: `MemoryNodeHistory` (`AINDY/db/models/memory_node_history.py`)
+- Columns
+  - `id`: String, primary key, default `uuid.uuid4()`
+  - `node_id`: UUID, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+  - `changed_at`: DateTime(timezone=True), server_default=func.now(), nullable=False
+  - `changed_by`: String, nullable=True
+  - `previous_content`: Text, nullable=True
+  - `previous_tags`: JSON, nullable=True
+  - `previous_node_type`: String, nullable=True
+  - `previous_source`: String, nullable=True
+  - `change_type`: String, nullable=False
+  - `change_summary`: Text, nullable=True
+- Indexes
+  - `ix_memory_node_history_node_changed` on (`node_id`, `changed_at`)
+- Purpose: Append-only change history for MemoryNode updates (stores previous values only).
 
 ## 6. Cross-Database Boundaries
 

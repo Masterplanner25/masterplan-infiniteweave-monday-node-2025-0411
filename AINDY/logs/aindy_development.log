@@ -3068,3 +3068,594 @@
 2026-02-17 20:36:47,937 - INFO - Response: 200
 2026-02-17 20:55:42,644 - INFO - Request: POST http://localhost:8000/genesis/session
 2026-02-17 20:55:42,801 - INFO - Response: 200
+2026-02-28 17:27:30,244 - INFO - Loaded development environment from .env
+2026-02-28 17:27:44,788 - INFO - [Recurrence] Checking completed tasks for recurrence...
+2026-02-28 17:27:44,788 - INFO - [Recurrence] Cycle complete.
+2026-02-28 17:27:44,788 - INFO - [Reminders] Checking pending reminders...
+2026-02-28 17:27:44,788 - INFO - Background tasks initialized (ok).
+2026-02-28 17:27:44,788 - INFO - [Reminders] Check complete.
+2026-02-28 17:28:35,811 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 17:28:35,910 - INFO - Response: 200
+2026-02-28 17:28:35,918 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 17:28:35,926 - INFO - Response: 200
+2026-02-28 17:29:58,420 - INFO - Request: OPTIONS http://127.0.0.1:8000/social/feed?limit=20
+2026-02-28 17:29:58,421 - INFO - Response: 200
+2026-02-28 17:29:58,426 - INFO - Request: OPTIONS http://127.0.0.1:8000/social/feed?limit=20
+2026-02-28 17:29:58,426 - INFO - Request: GET http://127.0.0.1:8000/social/feed?limit=20
+2026-02-28 17:29:58,426 - INFO - Response: 200
+2026-02-28 17:29:59,958 - INFO - Response: 200
+2026-02-28 17:29:59,958 - INFO - Request: GET http://127.0.0.1:8000/social/feed?limit=20
+2026-02-28 17:30:00,048 - INFO - Response: 200
+2026-02-28 17:30:00,197 - INFO - Request: OPTIONS http://127.0.0.1:8000/social/profile/me
+2026-02-28 17:30:00,198 - INFO - Response: 200
+2026-02-28 17:30:00,202 - INFO - Request: GET http://127.0.0.1:8000/social/profile/me
+2026-02-28 17:30:00,274 - INFO - Response: 200
+2026-02-28 17:30:00,279 - INFO - Request: GET http://127.0.0.1:8000/social/profile/me
+2026-02-28 17:30:00,354 - INFO - Response: 200
+2026-02-28 17:42:34,132 - INFO - Request: POST http://localhost:8000/genesis/session
+2026-02-28 17:42:34,307 - INFO - Response: 200
+2026-02-28 17:42:38,263 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 17:42:38,300 - INFO - Response: 200
+2026-02-28 17:42:38,305 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 17:42:38,311 - INFO - Response: 200
+2026-02-28 18:00:01,232 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:00:01,636 - INFO - Response: 200
+2026-02-28 18:00:01,649 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:00:01,694 - INFO - Response: 200
+2026-02-28 18:15:17,075 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:15:17,491 - INFO - Response: 200
+2026-02-28 18:15:17,524 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:15:17,561 - INFO - Response: 200
+2026-02-28 18:33:07,580 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:33:07,749 - INFO - Response: 200
+2026-02-28 18:33:07,761 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 18:33:07,778 - INFO - Response: 200
+2026-02-28 23:30:18,921 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 23:30:19,287 - INFO - Response: 200
+2026-02-28 23:30:19,305 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-02-28 23:30:19,374 - INFO - Response: 200
+2026-03-01 03:05:33,242 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 03:05:33,541 - INFO - Response: 200
+2026-03-01 03:05:33,570 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 03:05:33,576 - INFO - Response: 200
+2026-03-01 14:34:37,501 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 14:34:38,132 - INFO - Response: 200
+2026-03-01 14:34:38,144 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 14:34:38,158 - INFO - Response: 200
+2026-03-01 14:46:20,163 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 14:46:23,112 - INFO - Response: 200
+2026-03-01 14:46:23,382 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 14:46:23,767 - INFO - Response: 200
+2026-03-01 15:11:08,382 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 15:11:08,823 - INFO - Response: 200
+2026-03-01 15:11:08,836 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-01 15:11:08,855 - INFO - Response: 200
+2026-03-03 20:00:27,162 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 20:00:27,366 - INFO - Response: 200
+2026-03-03 20:00:27,381 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 20:00:27,390 - INFO - Response: 200
+2026-03-03 21:20:05,295 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:20:05,533 - INFO - Response: 200
+2026-03-03 21:20:05,544 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:20:05,556 - INFO - Response: 200
+2026-03-03 21:24:54,520 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:24:54,586 - INFO - Response: 200
+2026-03-03 21:24:54,599 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:24:54,608 - INFO - Response: 200
+2026-03-03 21:37:30,673 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:37:30,684 - INFO - Response: 200
+2026-03-03 21:37:30,693 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:37:30,702 - INFO - Response: 200
+2026-03-03 21:49:01,551 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:49:01,765 - INFO - Response: 200
+2026-03-03 21:49:01,776 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 21:49:01,790 - INFO - Response: 200
+2026-03-03 22:10:27,296 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 22:10:27,495 - INFO - Response: 200
+2026-03-03 22:10:27,506 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 22:10:27,515 - INFO - Response: 200
+2026-03-03 23:16:14,538 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 23:16:14,900 - INFO - Response: 200
+2026-03-03 23:16:14,914 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-03 23:16:14,929 - INFO - Response: 200
+2026-03-04 03:25:48,282 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 03:25:48,587 - INFO - Response: 200
+2026-03-04 03:25:48,598 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 03:25:48,613 - INFO - Response: 200
+2026-03-04 03:26:04,382 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 03:26:04,463 - INFO - Response: 200
+2026-03-04 03:26:04,471 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 03:26:04,526 - INFO - Response: 200
+2026-03-04 07:26:50,220 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 07:26:50,615 - INFO - Response: 200
+2026-03-04 07:26:50,630 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 07:26:50,655 - INFO - Response: 200
+2026-03-04 07:55:20,758 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 07:55:20,979 - INFO - Response: 200
+2026-03-04 07:55:20,990 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 07:55:21,000 - INFO - Response: 200
+2026-03-04 09:07:47,890 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 09:07:48,164 - INFO - Response: 200
+2026-03-04 09:07:48,190 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 09:07:48,204 - INFO - Response: 200
+2026-03-04 13:17:06,785 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 13:17:07,268 - INFO - Response: 200
+2026-03-04 13:17:07,293 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 13:17:07,516 - INFO - Response: 200
+2026-03-04 14:51:35,901 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 14:51:36,225 - INFO - Response: 200
+2026-03-04 14:51:36,258 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 14:51:36,271 - INFO - Response: 200
+2026-03-04 14:52:35,186 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 14:52:35,197 - INFO - Response: 200
+2026-03-04 14:52:35,214 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 14:52:35,221 - INFO - Response: 200
+2026-03-04 15:22:22,904 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 15:22:22,921 - INFO - Response: 200
+2026-03-04 15:22:22,939 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 15:22:22,951 - INFO - Response: 200
+2026-03-04 20:27:17,464 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 20:27:17,674 - INFO - Response: 200
+2026-03-04 20:27:17,685 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 20:27:17,693 - INFO - Response: 200
+2026-03-04 21:43:19,547 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 21:43:19,850 - INFO - Response: 200
+2026-03-04 21:43:19,862 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 21:43:19,880 - INFO - Response: 200
+2026-03-04 21:51:58,466 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 21:51:58,665 - INFO - Response: 200
+2026-03-04 21:51:58,678 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-04 21:51:58,688 - INFO - Response: 200
+2026-03-05 03:10:22,431 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 03:10:22,837 - INFO - Response: 200
+2026-03-05 03:10:22,889 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 03:10:22,911 - INFO - Response: 200
+2026-03-05 07:07:50,522 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 07:07:50,978 - INFO - Response: 200
+2026-03-05 07:07:51,005 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 07:07:51,021 - INFO - Response: 200
+2026-03-05 19:56:32,533 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 19:56:32,926 - INFO - Response: 200
+2026-03-05 19:56:33,023 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 19:56:33,077 - INFO - Response: 200
+2026-03-05 21:32:44,076 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 21:32:44,345 - INFO - Response: 200
+2026-03-05 21:32:44,361 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 21:32:44,362 - INFO - Response: 200
+2026-03-05 22:55:34,432 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 22:55:34,770 - INFO - Response: 200
+2026-03-05 22:55:34,790 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 22:55:34,795 - INFO - Response: 200
+2026-03-05 23:03:20,806 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 23:03:21,624 - INFO - Response: 200
+2026-03-05 23:03:21,990 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-05 23:03:22,068 - INFO - Response: 200
+2026-03-06 06:42:58,468 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 06:42:58,980 - INFO - Response: 200
+2026-03-06 06:42:59,001 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 06:42:59,042 - INFO - Response: 200
+2026-03-06 12:03:48,344 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 12:03:49,055 - INFO - Response: 200
+2026-03-06 12:03:49,096 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 12:03:49,113 - INFO - Response: 200
+2026-03-06 20:02:46,114 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:02:46,600 - INFO - Response: 200
+2026-03-06 20:02:46,629 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:02:46,644 - INFO - Response: 200
+2026-03-06 20:05:22,786 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:05:23,031 - INFO - Response: 200
+2026-03-06 20:05:23,063 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:05:23,094 - INFO - Response: 200
+2026-03-06 20:09:34,549 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:09:34,563 - INFO - Response: 200
+2026-03-06 20:09:34,571 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 20:09:34,580 - INFO - Response: 200
+2026-03-06 21:22:48,776 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:22:49,124 - INFO - Response: 200
+2026-03-06 21:22:49,144 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:22:49,188 - INFO - Response: 200
+2026-03-06 21:25:01,288 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:25:01,733 - INFO - Response: 200
+2026-03-06 21:25:01,770 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:25:01,805 - INFO - Response: 200
+2026-03-06 21:34:40,930 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:34:41,278 - INFO - Response: 200
+2026-03-06 21:34:41,293 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:34:41,320 - INFO - Response: 200
+2026-03-06 21:53:20,490 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:53:20,823 - INFO - Response: 200
+2026-03-06 21:53:20,840 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-06 21:53:20,851 - INFO - Response: 200
+2026-03-07 08:18:20,080 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 08:18:20,902 - INFO - Response: 200
+2026-03-07 08:18:20,932 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 08:18:20,951 - INFO - Response: 200
+2026-03-07 11:36:48,938 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 11:36:49,175 - INFO - Response: 200
+2026-03-07 11:36:49,192 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 11:36:49,200 - INFO - Response: 200
+2026-03-07 12:07:03,019 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 12:07:03,392 - INFO - Response: 200
+2026-03-07 12:07:03,408 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 12:07:03,415 - INFO - Response: 200
+2026-03-07 12:41:41,645 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 12:41:42,111 - INFO - Response: 200
+2026-03-07 12:41:42,184 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 12:41:42,199 - INFO - Response: 200
+2026-03-07 13:48:45,443 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 13:48:46,041 - INFO - Response: 200
+2026-03-07 13:48:46,103 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 13:48:46,113 - INFO - Response: 200
+2026-03-07 16:15:22,924 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 16:15:23,334 - INFO - Response: 200
+2026-03-07 16:15:23,353 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 16:15:23,371 - INFO - Response: 200
+2026-03-07 16:57:27,525 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 16:57:27,826 - INFO - Response: 200
+2026-03-07 16:57:27,852 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 16:57:27,865 - INFO - Response: 200
+2026-03-07 20:10:37,976 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 20:10:39,545 - INFO - Response: 200
+2026-03-07 20:10:39,574 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 20:10:39,583 - INFO - Response: 200
+2026-03-07 20:10:39,606 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 20:10:39,613 - INFO - Response: 200
+2026-03-07 20:21:39,398 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 20:21:39,731 - INFO - Response: 200
+2026-03-07 20:21:39,750 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 20:21:39,767 - INFO - Response: 200
+2026-03-07 21:49:10,135 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 21:49:10,788 - INFO - Response: 200
+2026-03-07 21:49:10,831 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-07 21:49:10,861 - INFO - Response: 200
+2026-03-08 03:26:24,356 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 03:26:24,907 - INFO - Response: 200
+2026-03-08 03:26:25,225 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 03:26:25,285 - INFO - Response: 200
+2026-03-08 09:06:51,458 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 09:06:51,937 - INFO - Response: 200
+2026-03-08 09:06:51,977 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 09:06:52,003 - INFO - Response: 200
+2026-03-08 09:30:35,938 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 09:30:36,693 - INFO - Response: 200
+2026-03-08 09:30:36,786 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 09:30:36,848 - INFO - Response: 200
+2026-03-08 10:07:05,955 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 10:07:06,467 - INFO - Response: 200
+2026-03-08 10:07:06,503 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 10:07:06,519 - INFO - Response: 200
+2026-03-08 10:18:26,376 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 10:18:26,659 - INFO - Response: 200
+2026-03-08 10:18:26,673 - INFO - Request: GET http://127.0.0.1:8000/dashboard/overview
+2026-03-08 10:18:26,689 - INFO - Response: 200
+2026-03-17 16:10:54,175 - INFO - Loaded development environment from .env
+2026-03-17 18:10:57,154 - INFO - Loaded development environment from .env
+2026-03-17 18:11:25,259 - INFO - Loaded development environment from .env
+2026-03-17 18:12:01,172 - INFO - Loaded development environment from .env
+2026-03-17 18:16:16,015 - INFO - Loaded development environment from .env
+2026-03-17 18:56:51,815 - INFO - Loaded development environment from .env
+2026-03-17 18:56:56,122 - INFO - Request: GET http://testserver/health/
+2026-03-17 18:57:02,287 - INFO - Response: 200
+2026-03-17 18:57:02,287 - INFO - HTTP Request: GET http://testserver/health/ "HTTP/1.1 200 OK"
+2026-03-17 18:57:02,302 - INFO - Request: GET http://testserver/tasks/list
+2026-03-17 18:57:02,302 - INFO - Response: 401
+2026-03-17 18:57:02,302 - INFO - HTTP Request: GET http://testserver/tasks/list "HTTP/1.1 401 Unauthorized"
+2026-03-17 18:57:02,302 - INFO - Request: POST http://testserver/auth/login
+2026-03-17 18:57:02,302 - INFO - Response: 401
+2026-03-17 18:57:02,317 - INFO - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 401 Unauthorized"
+2026-03-17 18:57:02,318 - INFO - Request: GET http://testserver/tasks/list
+2026-03-17 18:57:02,318 - INFO - Response: 200
+2026-03-17 18:57:02,318 - INFO - HTTP Request: GET http://testserver/tasks/list "HTTP/1.1 200 OK"
+2026-03-17 20:11:26,870 - INFO - Loaded development environment from .env
+2026-03-17 20:12:06,418 - INFO - Loaded development environment from .env
+2026-03-17 20:12:09,394 - INFO - Request: GET http://testserver/tasks/list
+2026-03-17 20:12:09,409 - INFO - Response: 401
+2026-03-17 20:12:09,409 - INFO - HTTP Request: GET http://testserver/tasks/list "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,409 - INFO - Request: POST http://testserver/tasks/create
+2026-03-17 20:12:09,409 - INFO - Response: 401
+2026-03-17 20:12:09,409 - INFO - HTTP Request: POST http://testserver/tasks/create "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,409 - INFO - Request: POST http://testserver/leadgen/
+2026-03-17 20:12:09,425 - INFO - Response: 401
+2026-03-17 20:12:09,425 - INFO - HTTP Request: POST http://testserver/leadgen/ "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,425 - INFO - Request: GET http://testserver/leadgen/
+2026-03-17 20:12:09,425 - INFO - Response: 401
+2026-03-17 20:12:09,425 - INFO - HTTP Request: GET http://testserver/leadgen/ "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,425 - INFO - Request: POST http://testserver/genesis/session
+2026-03-17 20:12:09,425 - INFO - Response: 401
+2026-03-17 20:12:09,441 - INFO - HTTP Request: POST http://testserver/genesis/session "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,441 - INFO - Request: POST http://testserver/analytics/linkedin/manual
+2026-03-17 20:12:09,441 - INFO - Response: 401
+2026-03-17 20:12:09,441 - INFO - HTTP Request: POST http://testserver/analytics/linkedin/manual "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:12:09,441 - INFO - Request: POST http://testserver/analyze_seo/
+2026-03-17 20:12:09,441 - INFO - Response: 422
+2026-03-17 20:12:09,456 - INFO - HTTP Request: POST http://testserver/analyze_seo/ "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:09,460 - INFO - Request: POST http://testserver/authorship/reclaim
+2026-03-17 20:12:09,465 - INFO - Response: 422
+2026-03-17 20:12:09,466 - INFO - HTTP Request: POST http://testserver/authorship/reclaim "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:09,468 - INFO - Request: POST http://testserver/arm/analyze
+2026-03-17 20:12:09,472 - INFO - Response: 422
+2026-03-17 20:12:09,472 - INFO - HTTP Request: POST http://testserver/arm/analyze "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:09,474 - INFO - Request: POST http://testserver/rippletrace/drop_point
+2026-03-17 20:12:09,474 - INFO - Response: 422
+2026-03-17 20:12:09,474 - INFO - HTTP Request: POST http://testserver/rippletrace/drop_point "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:09,474 - INFO - Request: POST http://testserver/freelance/order
+2026-03-17 20:12:09,474 - INFO - Response: 422
+2026-03-17 20:12:09,474 - INFO - HTTP Request: POST http://testserver/freelance/order "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:09,488 - INFO - Request: GET http://testserver/freelance/orders
+2026-03-17 20:12:09,494 - INFO - Response: 200
+2026-03-17 20:12:09,494 - INFO - HTTP Request: GET http://testserver/freelance/orders "HTTP/1.1 200 OK"
+2026-03-17 20:12:09,494 - INFO - Request: POST http://testserver/social/post
+2026-03-17 20:12:11,244 - INFO - HTTP Request: POST http://testserver/social/post "HTTP/1.1 500 Internal Server Error"
+2026-03-17 20:12:11,244 - INFO - Request: POST http://testserver/network_bridge/connect
+2026-03-17 20:12:11,244 - INFO - Response: 422
+2026-03-17 20:12:11,244 - INFO - HTTP Request: POST http://testserver/network_bridge/connect "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:12:11,256 - INFO - Request: GET http://testserver/dashboard/overview
+2026-03-17 20:12:11,261 - INFO - Response: 200
+2026-03-17 20:12:11,261 - INFO - HTTP Request: GET http://testserver/dashboard/overview "HTTP/1.1 200 OK"
+2026-03-17 20:12:11,268 - INFO - Request: GET http://testserver/db/verify
+2026-03-17 20:12:11,270 - INFO - Response: 200
+2026-03-17 20:12:11,272 - INFO - HTTP Request: GET http://testserver/db/verify "HTTP/1.1 200 OK"
+2026-03-17 20:12:11,272 - INFO - Request: POST http://testserver/research/
+2026-03-17 20:12:11,278 - INFO - Response: 422
+2026-03-17 20:12:11,278 - INFO - HTTP Request: POST http://testserver/research/ "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:14:11,125 - INFO - Loaded development environment from .env
+2026-03-17 20:14:58,163 - INFO - Loaded development environment from .env
+2026-03-17 20:16:58,202 - INFO - Loaded development environment from .env
+2026-03-17 20:17:44,021 - INFO - Loaded development environment from .env
+2026-03-17 20:19:22,314 - INFO - Loaded development environment from .env
+2026-03-17 20:34:11,843 - INFO - Loaded development environment from .env
+2026-03-17 20:34:15,563 - INFO - Request: GET http://testserver/tasks/list
+2026-03-17 20:34:15,567 - INFO - Response: 401
+2026-03-17 20:34:15,569 - INFO - HTTP Request: GET http://testserver/tasks/list "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:34,037 - INFO - Loaded development environment from .env
+2026-03-17 20:34:37,123 - INFO - Request: GET http://testserver/tasks/list
+2026-03-17 20:34:37,123 - INFO - Response: 401
+2026-03-17 20:34:37,123 - INFO - HTTP Request: GET http://testserver/tasks/list "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,131 - INFO - Request: POST http://testserver/genesis/session
+2026-03-17 20:34:37,133 - INFO - Response: 401
+2026-03-17 20:34:37,133 - INFO - HTTP Request: POST http://testserver/genesis/session "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,133 - INFO - Request: POST http://testserver/leadgen/
+2026-03-17 20:34:37,141 - INFO - Response: 401
+2026-03-17 20:34:37,141 - INFO - HTTP Request: POST http://testserver/leadgen/ "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,141 - INFO - Request: POST http://testserver/seo/analyze
+2026-03-17 20:34:37,141 - INFO - Response: 401
+2026-03-17 20:34:37,149 - INFO - HTTP Request: POST http://testserver/seo/analyze "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,151 - INFO - Request: POST http://testserver/authorship/reclaim
+2026-03-17 20:34:37,151 - INFO - Response: 401
+2026-03-17 20:34:37,151 - INFO - HTTP Request: POST http://testserver/authorship/reclaim "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,151 - INFO - Request: POST http://testserver/arm/analyze
+2026-03-17 20:34:37,151 - INFO - Response: 401
+2026-03-17 20:34:37,151 - INFO - HTTP Request: POST http://testserver/arm/analyze "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,164 - INFO - Request: GET http://testserver/rippletrace/recent
+2026-03-17 20:34:37,165 - INFO - Response: 401
+2026-03-17 20:34:37,167 - INFO - HTTP Request: GET http://testserver/rippletrace/recent "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,167 - INFO - Request: GET http://testserver/freelance/orders
+2026-03-17 20:34:37,167 - INFO - Response: 401
+2026-03-17 20:34:37,167 - INFO - HTTP Request: GET http://testserver/freelance/orders "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,174 - INFO - Request: GET http://testserver/research/
+2026-03-17 20:34:37,174 - INFO - Response: 401
+2026-03-17 20:34:37,174 - INFO - HTTP Request: GET http://testserver/research/ "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,174 - INFO - Request: GET http://testserver/dashboard/overview
+2026-03-17 20:34:37,181 - INFO - Response: 401
+2026-03-17 20:34:37,181 - INFO - HTTP Request: GET http://testserver/dashboard/overview "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,181 - INFO - Request: GET http://testserver/db/verify
+2026-03-17 20:34:37,181 - INFO - Response: 401
+2026-03-17 20:34:37,181 - INFO - HTTP Request: GET http://testserver/db/verify "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,181 - INFO - Request: POST http://testserver/network_bridge/connect
+2026-03-17 20:34:37,192 - INFO - Response: 401
+2026-03-17 20:34:37,194 - INFO - HTTP Request: POST http://testserver/network_bridge/connect "HTTP/1.1 401 Unauthorized"
+2026-03-17 20:34:37,197 - INFO - Request: GET http://testserver/health/
+2026-03-17 20:34:43,563 - INFO - Response: 200
+2026-03-17 20:34:43,573 - INFO - HTTP Request: GET http://testserver/health/ "HTTP/1.1 200 OK"
+2026-03-17 20:34:43,577 - INFO - Request: POST http://testserver/auth/login
+2026-03-17 20:34:43,579 - INFO - Response: 422
+2026-03-17 20:34:43,579 - INFO - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 422 Unprocessable Entity"
+2026-03-17 20:34:43,579 - INFO - Request: POST http://testserver/tasks/recurrence/check
+2026-03-17 20:34:43,579 - INFO - Response: 200
+2026-03-17 21:16:38,632 - INFO - Loaded development environment from .env
+2026-03-17 21:36:39,079 - INFO - Loaded development environment from .env
+2026-03-17 21:36:42,747 - INFO - [Recurrence] Checking completed tasks for recurrence...
+2026-03-17 21:36:42,747 - INFO - [Recurrence] Cycle complete.
+2026-03-17 21:36:42,747 - INFO - [Reminders] Checking pending reminders...
+2026-03-17 21:36:42,747 - INFO - Background tasks initialized (ok).
+2026-03-17 21:36:42,747 - INFO - [Reminders] Check complete.
+2026-03-17 21:47:52,335 - INFO - Loaded development environment from .env
+2026-03-17 21:48:06,631 - INFO - Loaded development environment from .env
+2026-03-17 21:48:17,457 - INFO - Loaded development environment from .env
+2026-03-17 22:40:42,948 - INFO - Loaded development environment from .env
+2026-03-18 00:00:00,821 - INFO - Loaded development environment from .env
+2026-03-18 00:00:29,517 - INFO - Loaded development environment from .env
+2026-03-18 00:00:43,634 - INFO - Loaded development environment from .env
+2026-03-18 00:00:59,517 - INFO - Loaded development environment from .env
+2026-03-18 00:04:38,228 - INFO - Loaded development environment from .env
+2026-03-18 00:27:30,193 - INFO - Loaded development environment from .env
+2026-03-18 00:27:38,611 - INFO - Loaded development environment from .env
+2026-03-18 01:21:45,461 - INFO - Loaded development environment from .env
+2026-03-18 01:21:50,375 - INFO - Loaded development environment from .env
+2026-03-18 01:29:10,122 - INFO - Loaded development environment from .env
+2026-03-18 01:30:19,035 - INFO - Loaded development environment from .env
+2026-03-18 01:32:59,201 - INFO - Loaded development environment from .env
+2026-03-18 01:33:04,359 - INFO - Loaded development environment from .env
+2026-03-18 01:33:11,158 - INFO - Loaded development environment from .env
+2026-03-18 01:34:03,862 - INFO - Loaded development environment from .env
+2026-03-18 01:34:05,236 - INFO - Loaded development environment from .env
+2026-03-18 01:34:12,498 - INFO - Loaded development environment from .env
+2026-03-18 01:35:07,180 - INFO - Loaded development environment from .env
+2026-03-18 01:35:12,799 - INFO - Loaded development environment from .env
+2026-03-18 01:41:07,270 - INFO - Loaded development environment from .env
+2026-03-18 08:33:42,081 - INFO - Loaded development environment from .env
+2026-03-18 08:34:43,642 - INFO - Loaded development environment from .env
+2026-03-18 08:35:14,793 - INFO - Loaded development environment from .env
+2026-03-18 08:35:21,183 - INFO - Loaded development environment from .env
+2026-03-18 08:35:26,683 - INFO - Loaded development environment from .env
+2026-03-18 08:44:36,544 - INFO - Loaded development environment from .env
+2026-03-18 10:35:41,057 - INFO - Loaded development environment from .env
+2026-03-18 10:36:00,425 - INFO - Loaded development environment from .env
+2026-03-18 11:16:10,460 - INFO - Loaded development environment from .env
+2026-03-18 11:16:20,626 - INFO - Loaded development environment from .env
+2026-03-18 11:16:26,775 - INFO - Loaded development environment from .env
+2026-03-18 11:17:42,783 - INFO - Loaded development environment from .env
+2026-03-18 11:26:59,481 - INFO - Loaded development environment from .env
+2026-03-18 11:27:09,720 - INFO - Loaded development environment from .env
+2026-03-18 11:27:16,477 - INFO - Loaded development environment from .env
+2026-03-18 11:37:29,151 - INFO - Loaded development environment from .env
+2026-03-18 12:08:28,155 - INFO - Loaded development environment from .env
+2026-03-18 14:05:57,747 - INFO - Loaded development environment from .env
+2026-03-18 14:06:12,133 - INFO - Loaded development environment from .env
+2026-03-18 14:19:41,440 - INFO - Loaded development environment from .env
+2026-03-18 14:20:10,680 - INFO - Loaded development environment from .env
+2026-03-18 14:20:12,303 - INFO - Retrying request to /embeddings in 0.483378 seconds
+2026-03-18 14:20:12,815 - INFO - Retrying request to /embeddings in 0.834514 seconds
+2026-03-18 14:20:14,707 - INFO - Retrying request to /embeddings in 0.375135 seconds
+2026-03-18 14:20:15,123 - INFO - Retrying request to /embeddings in 0.844141 seconds
+2026-03-18 14:20:18,011 - INFO - Retrying request to /embeddings in 0.491602 seconds
+2026-03-18 14:20:18,518 - INFO - Retrying request to /embeddings in 0.804440 seconds
+2026-03-18 14:20:19,364 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:27:16,019 - INFO - Loaded development environment from .env
+2026-03-18 14:27:35,917 - INFO - Loaded development environment from .env
+2026-03-18 14:39:13,378 - INFO - Loaded development environment from .env
+2026-03-18 14:39:57,924 - INFO - Loaded development environment from .env
+2026-03-18 14:40:06,699 - INFO - Loaded development environment from .env
+2026-03-18 14:40:08,925 - INFO - Retrying request to /embeddings in 0.479831 seconds
+2026-03-18 14:40:09,439 - INFO - Retrying request to /embeddings in 0.995850 seconds
+2026-03-18 14:40:11,518 - INFO - Retrying request to /embeddings in 0.409102 seconds
+2026-03-18 14:40:11,970 - INFO - Retrying request to /embeddings in 0.787223 seconds
+2026-03-18 14:40:14,815 - INFO - Retrying request to /embeddings in 0.475476 seconds
+2026-03-18 14:40:15,326 - INFO - Retrying request to /embeddings in 0.988325 seconds
+2026-03-18 14:40:16,347 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:40:16,465 - INFO - Retrying request to /embeddings in 0.499551 seconds
+2026-03-18 14:40:17,003 - INFO - Retrying request to /embeddings in 0.962141 seconds
+2026-03-18 14:40:19,043 - INFO - Retrying request to /embeddings in 0.432908 seconds
+2026-03-18 14:40:19,518 - INFO - Retrying request to /embeddings in 0.950780 seconds
+2026-03-18 14:40:22,534 - INFO - Retrying request to /embeddings in 0.451269 seconds
+2026-03-18 14:40:23,002 - INFO - Retrying request to /embeddings in 0.807378 seconds
+2026-03-18 14:40:23,832 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:40:23,877 - INFO - Retrying request to /embeddings in 0.497140 seconds
+2026-03-18 14:40:24,409 - INFO - Retrying request to /embeddings in 0.996432 seconds
+2026-03-18 14:40:26,487 - INFO - Retrying request to /embeddings in 0.403949 seconds
+2026-03-18 14:40:26,924 - INFO - Retrying request to /embeddings in 0.853548 seconds
+2026-03-18 14:40:29,853 - INFO - Retrying request to /embeddings in 0.495802 seconds
+2026-03-18 14:40:30,382 - INFO - Retrying request to /embeddings in 0.914205 seconds
+2026-03-18 14:40:31,331 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:40:31,429 - INFO - Retrying request to /embeddings in 0.419517 seconds
+2026-03-18 14:40:31,863 - INFO - Retrying request to /embeddings in 0.862283 seconds
+2026-03-18 14:40:33,770 - INFO - Retrying request to /embeddings in 0.454788 seconds
+2026-03-18 14:40:34,268 - INFO - Retrying request to /embeddings in 0.926246 seconds
+2026-03-18 14:40:37,262 - INFO - Retrying request to /embeddings in 0.493057 seconds
+2026-03-18 14:40:37,769 - INFO - Retrying request to /embeddings in 0.888492 seconds
+2026-03-18 14:40:38,705 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:41:14,064 - INFO - Loaded development environment from .env
+2026-03-18 14:41:15,738 - INFO - Retrying request to /embeddings in 0.391599 seconds
+2026-03-18 14:41:16,160 - INFO - Retrying request to /embeddings in 0.811480 seconds
+2026-03-18 14:41:18,002 - INFO - Retrying request to /embeddings in 0.499690 seconds
+2026-03-18 14:41:18,534 - INFO - Retrying request to /embeddings in 0.943397 seconds
+2026-03-18 14:41:21,596 - INFO - Retrying request to /embeddings in 0.484405 seconds
+2026-03-18 14:41:22,127 - INFO - Retrying request to /embeddings in 0.925321 seconds
+2026-03-18 14:41:23,096 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:41:23,192 - INFO - Retrying request to /embeddings in 0.489689 seconds
+2026-03-18 14:41:23,723 - INFO - Retrying request to /embeddings in 0.805597 seconds
+2026-03-18 14:41:25,584 - INFO - Retrying request to /embeddings in 0.398332 seconds
+2026-03-18 14:41:26,066 - INFO - Retrying request to /embeddings in 0.819022 seconds
+2026-03-18 14:41:28,956 - INFO - Retrying request to /embeddings in 0.478249 seconds
+2026-03-18 14:41:29,457 - INFO - Retrying request to /embeddings in 0.816889 seconds
+2026-03-18 14:41:30,306 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:41:30,363 - INFO - Retrying request to /embeddings in 0.434424 seconds
+2026-03-18 14:41:30,849 - INFO - Retrying request to /embeddings in 0.768882 seconds
+2026-03-18 14:41:32,646 - INFO - Retrying request to /embeddings in 0.426539 seconds
+2026-03-18 14:41:33,112 - INFO - Retrying request to /embeddings in 0.891452 seconds
+2026-03-18 14:41:36,049 - INFO - Retrying request to /embeddings in 0.461252 seconds
+2026-03-18 14:41:36,536 - INFO - Retrying request to /embeddings in 0.917565 seconds
+2026-03-18 14:41:37,472 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:41:37,568 - INFO - Retrying request to /embeddings in 0.423678 seconds
+2026-03-18 14:41:38,034 - INFO - Retrying request to /embeddings in 0.934378 seconds
+2026-03-18 14:41:40,034 - INFO - Retrying request to /embeddings in 0.488109 seconds
+2026-03-18 14:41:40,535 - INFO - Retrying request to /embeddings in 0.917814 seconds
+2026-03-18 14:41:43,536 - INFO - Retrying request to /embeddings in 0.424284 seconds
+2026-03-18 14:41:43,987 - INFO - Retrying request to /embeddings in 0.791907 seconds
+2026-03-18 14:41:44,800 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:41:58,210 - INFO - Loaded development environment from .env
+2026-03-18 14:42:00,144 - INFO - Retrying request to /embeddings in 0.426135 seconds
+2026-03-18 14:42:00,605 - INFO - Retrying request to /embeddings in 0.781878 seconds
+2026-03-18 14:42:02,471 - INFO - Retrying request to /embeddings in 0.456588 seconds
+2026-03-18 14:42:02,956 - INFO - Retrying request to /embeddings in 0.763561 seconds
+2026-03-18 14:42:05,832 - INFO - Retrying request to /embeddings in 0.403186 seconds
+2026-03-18 14:42:06,269 - INFO - Retrying request to /embeddings in 0.782576 seconds
+2026-03-18 14:42:07,096 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:07,190 - INFO - Retrying request to /embeddings in 0.398921 seconds
+2026-03-18 14:42:07,626 - INFO - Retrying request to /embeddings in 0.800598 seconds
+2026-03-18 14:42:09,521 - INFO - Retrying request to /embeddings in 0.498768 seconds
+2026-03-18 14:42:10,049 - INFO - Retrying request to /embeddings in 0.978829 seconds
+2026-03-18 14:42:13,097 - INFO - Retrying request to /embeddings in 0.474714 seconds
+2026-03-18 14:42:13,629 - INFO - Retrying request to /embeddings in 0.973279 seconds
+2026-03-18 14:42:14,606 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:14,622 - INFO - Retrying request to /embeddings in 0.430433 seconds
+2026-03-18 14:42:15,096 - INFO - Retrying request to /embeddings in 0.951369 seconds
+2026-03-18 14:42:17,117 - INFO - Retrying request to /embeddings in 0.439172 seconds
+2026-03-18 14:42:17,581 - INFO - Retrying request to /embeddings in 0.987140 seconds
+2026-03-18 14:42:20,602 - INFO - Retrying request to /embeddings in 0.383898 seconds
+2026-03-18 14:42:21,036 - INFO - Retrying request to /embeddings in 0.811608 seconds
+2026-03-18 14:42:21,878 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:21,972 - INFO - Retrying request to /embeddings in 0.380522 seconds
+2026-03-18 14:42:22,354 - INFO - Retrying request to /embeddings in 0.787592 seconds
+2026-03-18 14:42:24,211 - INFO - Retrying request to /embeddings in 0.393568 seconds
+2026-03-18 14:42:24,628 - INFO - Retrying request to /embeddings in 0.906490 seconds
+2026-03-18 14:42:27,614 - INFO - Retrying request to /embeddings in 0.457655 seconds
+2026-03-18 14:42:28,112 - INFO - Retrying request to /embeddings in 0.871456 seconds
+2026-03-18 14:42:29,018 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:29,093 - INFO - Retrying request to /embeddings in 0.434116 seconds
+2026-03-18 14:42:29,563 - INFO - Retrying request to /embeddings in 0.768306 seconds
+2026-03-18 14:42:31,394 - INFO - Retrying request to /embeddings in 0.475793 seconds
+2026-03-18 14:42:31,939 - INFO - Retrying request to /embeddings in 0.966383 seconds
+2026-03-18 14:42:34,955 - INFO - Retrying request to /embeddings in 0.429957 seconds
+2026-03-18 14:42:35,425 - INFO - Retrying request to /embeddings in 0.951229 seconds
+2026-03-18 14:42:36,393 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:36,457 - INFO - Retrying request to /embeddings in 0.453671 seconds
+2026-03-18 14:42:37,004 - INFO - Retrying request to /embeddings in 0.911399 seconds
+2026-03-18 14:42:38,973 - INFO - Retrying request to /embeddings in 0.421477 seconds
+2026-03-18 14:42:39,440 - INFO - Retrying request to /embeddings in 0.924049 seconds
+2026-03-18 14:42:42,503 - INFO - Retrying request to /embeddings in 0.391443 seconds
+2026-03-18 14:42:42,912 - INFO - Retrying request to /embeddings in 0.840652 seconds
+2026-03-18 14:42:43,785 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:42:57,191 - INFO - Loaded development environment from .env
+2026-03-18 14:42:58,906 - INFO - Retrying request to /embeddings in 0.449099 seconds
+2026-03-18 14:42:59,377 - INFO - Retrying request to /embeddings in 0.963941 seconds
+2026-03-18 14:43:01,404 - INFO - Retrying request to /embeddings in 0.395711 seconds
+2026-03-18 14:43:01,830 - INFO - Retrying request to /embeddings in 0.875683 seconds
+2026-03-18 14:43:04,800 - INFO - Retrying request to /embeddings in 0.440595 seconds
+2026-03-18 14:43:05,278 - INFO - Retrying request to /embeddings in 0.802620 seconds
+2026-03-18 14:43:06,112 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:43:06,192 - INFO - Retrying request to /embeddings in 0.418597 seconds
+2026-03-18 14:43:06,630 - INFO - Retrying request to /embeddings in 0.958200 seconds
+2026-03-18 14:43:08,643 - INFO - Retrying request to /embeddings in 0.484492 seconds
+2026-03-18 14:43:09,145 - INFO - Retrying request to /embeddings in 0.935455 seconds
+2026-03-18 14:43:12,159 - INFO - Retrying request to /embeddings in 0.403178 seconds
+2026-03-18 14:43:12,596 - INFO - Retrying request to /embeddings in 0.825831 seconds
+2026-03-18 14:43:13,471 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:43:13,503 - INFO - Retrying request to /embeddings in 0.468579 seconds
+2026-03-18 14:43:14,002 - INFO - Retrying request to /embeddings in 0.819885 seconds
+2026-03-18 14:43:15,910 - INFO - Retrying request to /embeddings in 0.462057 seconds
+2026-03-18 14:43:16,409 - INFO - Retrying request to /embeddings in 0.903246 seconds
+2026-03-18 14:43:19,378 - INFO - Retrying request to /embeddings in 0.455188 seconds
+2026-03-18 14:43:19,893 - INFO - Retrying request to /embeddings in 0.833360 seconds
+2026-03-18 14:43:20,767 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:43:20,837 - INFO - Retrying request to /embeddings in 0.409169 seconds
+2026-03-18 14:43:21,285 - INFO - Retrying request to /embeddings in 0.797392 seconds
+2026-03-18 14:43:23,164 - INFO - Retrying request to /embeddings in 0.444507 seconds
+2026-03-18 14:43:23,627 - INFO - Retrying request to /embeddings in 0.750102 seconds
+2026-03-18 14:43:26,472 - INFO - Retrying request to /embeddings in 0.424566 seconds
+2026-03-18 14:43:26,941 - INFO - Retrying request to /embeddings in 0.764866 seconds
+2026-03-18 14:43:27,712 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:43:27,830 - INFO - Retrying request to /embeddings in 0.459042 seconds
+2026-03-18 14:43:28,331 - INFO - Retrying request to /embeddings in 0.776458 seconds
+2026-03-18 14:43:30,145 - INFO - Retrying request to /embeddings in 0.472033 seconds
+2026-03-18 14:43:30,660 - INFO - Retrying request to /embeddings in 0.752529 seconds
+2026-03-18 14:43:33,521 - INFO - Retrying request to /embeddings in 0.389474 seconds
+2026-03-18 14:43:33,942 - INFO - Retrying request to /embeddings in 0.771238 seconds
+2026-03-18 14:43:34,768 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 14:43:34,816 - INFO - Retrying request to /embeddings in 0.388875 seconds
+2026-03-18 14:43:35,238 - INFO - Retrying request to /embeddings in 0.978042 seconds
+2026-03-18 14:43:37,300 - INFO - Retrying request to /embeddings in 0.451665 seconds
+2026-03-18 14:43:37,767 - INFO - Retrying request to /embeddings in 0.939690 seconds
+2026-03-18 14:43:40,786 - INFO - Retrying request to /embeddings in 0.446825 seconds
+2026-03-18 14:43:41,257 - INFO - Retrying request to /embeddings in 0.981062 seconds
+2026-03-18 14:43:42,254 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.

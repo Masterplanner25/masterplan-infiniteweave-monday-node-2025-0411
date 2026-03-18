@@ -152,7 +152,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO), `AINDY/routes/bridge_router.py` (no traversal endpoint)
   - Mechanism: `POST /bridge/link` inserts rows. No endpoint or DAO method queries `memory_links` for neighbors, reachability, or subgraph expansion.
   - Impact: The relational structure between memory nodes is unqueryable. Graph-based recall — the architectural basis for associative memory — does not function.
-  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 1):** `MemoryNodeDAO.get_linked_nodes(node_id, direction)` added in `db/dao/memory_node_dao.py`; supports `in`, `out`, and `both` directions. Exposed at `GET /memory/nodes/{id}/links`.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge v3):** Multi-hop DFS traversal added in `db/dao/memory_node_dao.py::traverse()` with cycle prevention. Exposed at `GET /memory/nodes/{id}/traverse`. Single-hop `get_linked_nodes()` remains for neighbor lookup.
 
 ### §10.4 Graph Layer — memory_links.strength is a VARCHAR, not a numeric value
 
@@ -192,7 +192,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeModel — no history table), `AINDY/alembic/versions/` (no history migration)
   - Mechanism: UPDATE on `memory_nodes` replaces content in-place. No trigger, no shadow table, no log of prior values.
   - Impact: Temporal reconstruction — replaying what the system knew at time T — is not possible. Audit trail for node evolution does not exist.
-  - Status: Open. Deferred to Phase 3. Fix: add `memory_node_history` table with `node_id`, `content`, `tags`, `changed_at`, populated by a BEFORE UPDATE trigger.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge v3):** `memory_node_history` table added with append-only snapshots. `MemoryNodeDAO.update()` records previous values on explicit updates and `GET /memory/nodes/{id}/history` exposes history.
 
 ### §10.9 Infrastructure — Rust/C++ FFI chain is 3 layers deep for 2 math functions
 
@@ -291,7 +291,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 | Error Handling | High | Inconsistent client behavior and poor fault isolation | Phase 1 |
 | C++ Kernel (wrong-table + import bug) | High | Memory nodes created via services are silently lost + ImportError | Phase 1 |
 | **MB §10.1 — children not persisted** | **High** | Every recursive memory trace is silently lost on process exit | **Phase 1** |
-| **MB §10.3 — graph traversal absent** | **High** | memory_links table is write-only; associative recall does not function | **Phase 1** |
+| **MB §10.3 — graph traversal absent** | ✅ Resolved | Multi-hop traversal + traverse endpoint added (Memory Bridge v3) | Phase 1 ✅ |
 | Security (auth missing) | ✅ Resolved | JWT auth on task/leadgen/genesis/analytics routers (2026-03-17) | Phase 2 ✅ |
 | Concurrency | Medium | Duplicated background work and unbounded loops | Phase 2 |
 | Security (CORS + rate limiting) | ✅ Resolved | CORS locked to explicit origins; SlowAPIMiddleware added (2026-03-17) | Phase 2 ✅ |
@@ -305,7 +305,13 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 | **MB §10.10 — redundant HMAC + JWT auth** | **Low** | Callers must implement two auth schemes; maintenance surface doubled | **Phase 3** |
 | Observability | Medium | Limited visibility into failures | Phase 3 |
 | Structural | Low | Known coupling and in-memory state | Phase 3 |
-| **MB §10.8 — no versioning / history table** | **Low** | State reconstruction impossible; node mutation history lost permanently | **Phase 3** |
+| **MB §10.8 — no versioning / history table** | ✅ Resolved | Append-only history table + update logging (Memory Bridge v3) | Phase 3 ✅ |
+
+## 14. Memory Bridge Phase 4 — Open Items
+
+- **Outcome feedback loop.** Persist outcome-to-decision feedback signals to strengthen future traversal relevance.
+- **Resonance v2.** Introduce multi-hop resonance scoring that weights chain relevance in addition to single-node semantic/tag/recency.
+- **Pattern detection.** Detect recurring memory motifs across time windows (e.g., repeated decision→outcome→insight sequences).
 | **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)

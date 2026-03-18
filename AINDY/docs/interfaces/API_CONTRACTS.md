@@ -59,6 +59,17 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/nodes` — JWT required. Query params: `tags` (comma-separated), `mode` (`AND`|`OR`, default `AND`), `limit` (default 50). Returns `{"nodes": [...]}`.
 - `POST /memory/links` — JWT required. Body: `CreateLinkRequest {source_id, target_id, link_type?}`. Returns link dict. Status 201. 422 if nodes don't exist or same ID.
 
+**Memory Bridge Phase 2 additions (2026-03-18):**
+- `POST /memory/nodes/search` — JWT required. Body: `SimilaritySearchRequest {query, limit?, node_type?, min_similarity?}`. Returns `{"query", "results", "count"}` with semantic `similarity` and `distance`.
+- `POST /memory/recall` — JWT required. Body: `RecallRequest {query?, tags?, limit?, node_type?}`. Returns resonance-scored results and scoring metadata. 400 if neither `query` nor `tags` provided.
+
+**Memory Bridge v3 additions (2026-03-18):**
+- `PUT /memory/nodes/{node_id}` — JWT required. Body: `UpdateNodeRequest {content?, tags?, node_type?, source?}`. Updates a memory node and records history (previous values).
+- `GET /memory/nodes/{node_id}/history` — JWT required. Query: `limit` (default 20). Returns `{node_id, history, count}` ordered by `changed_at DESC`.
+- `GET /memory/nodes/{node_id}/traverse` — JWT required. Query: `max_depth` (default 3, capped at 5), `link_type` (optional), `min_strength` (default 0.0). Returns DFS chain plus narrative.
+- `POST /memory/nodes/expand` — JWT required. Body: `ExpandRequest {node_ids, include_linked?, include_similar?, limit_per_node?}`. Returns expanded context graph; max 10 input nodes.
+- `POST /memory/recall/v3` — JWT required. Body: `RecallV3Request {query?, tags?, limit?, node_type?, expand_results?}`. Returns standard recall or expanded context when `expand_results=true`.
+
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,
   runs GPT-4o strategic integrity audit. Returns: `{audit_passed, findings, overall_confidence, audit_summary}`.
