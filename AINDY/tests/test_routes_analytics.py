@@ -47,9 +47,9 @@ class TestAnalyticsRouteRegistration:
 
 
 class TestCalculateTWREndpoint:
-    def test_twr_missing_fields_returns_422(self, client):
+    def test_twr_missing_fields_returns_422(self, client, auth_headers):
         """POST /calculate_twr with empty body must return 422."""
-        response = client.post("/calculate_twr", json={})
+        response = client.post("/calculate_twr", json={}, headers=auth_headers)
         assert response.status_code == 422
 
     def test_twr_with_valid_payload_not_404(self, client):
@@ -68,7 +68,7 @@ class TestCalculateTWREndpoint:
             f"POST /calculate_twr returned 404 — route missing"
         )
 
-    def test_twr_zero_difficulty_causes_500(self, client):
+    def test_twr_zero_difficulty_causes_500(self, client, auth_headers):
         """
         DIAGNOSTIC BUG: task_difficulty=0 causes ZeroDivisionError in calculate_twr().
         The endpoint has no guard, so it returns 500.
@@ -82,7 +82,7 @@ class TestCalculateTWREndpoint:
             "ai_utilization": 3,
             "task_difficulty": 0,  # BUG: causes ZeroDivisionError
         }
-        response = client.post("/calculate_twr", json=payload)
+        response = client.post("/calculate_twr", json=payload, headers=auth_headers)
         # Pydantic may reject 0 or route may hit the ZeroDivisionError
         # Either way: should never return 200 with task_difficulty=0
         # If 422 → Pydantic caught it (acceptable)
@@ -93,9 +93,9 @@ class TestCalculateTWREndpoint:
 
 
 class TestCalculateEngagementEndpoint:
-    def test_engagement_missing_fields_returns_422(self, client):
+    def test_engagement_missing_fields_returns_422(self, client, auth_headers):
         """POST /calculate_engagement with empty body must return 422."""
-        response = client.post("/calculate_engagement", json={})
+        response = client.post("/calculate_engagement", json={}, headers=auth_headers)
         assert response.status_code == 422
 
     def test_engagement_zero_views_not_500(self, client):

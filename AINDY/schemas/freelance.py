@@ -1,5 +1,5 @@
 # schemas/freelance.py
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 from datetime import datetime
 
@@ -12,6 +12,8 @@ class FreelanceOrderCreate(BaseModel):
 
 
 class FreelanceOrderResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     client_name: str
     client_email: str
@@ -22,9 +24,6 @@ class FreelanceOrderResponse(BaseModel):
     status: str
     created_at: datetime
 
-    class Config:
-        orm_mode = True
-
 
 class FeedbackCreate(BaseModel):
     order_id: int
@@ -33,6 +32,8 @@ class FeedbackCreate(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     order_id: int
     rating: Optional[int]
@@ -40,17 +41,13 @@ class FeedbackResponse(BaseModel):
     ai_summary: Optional[str]
     created_at: datetime
 
-    class Config:
-        orm_mode = True
-
 
 class RevenueMetricsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     date: datetime
     total_revenue: float
     avg_execution_time: Optional[float]
     income_efficiency: Optional[float]
     ai_productivity_boost: Optional[float]
-
-    class Config:
-        orm_mode = True

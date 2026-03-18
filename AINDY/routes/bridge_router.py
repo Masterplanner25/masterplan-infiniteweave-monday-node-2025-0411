@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from services.memory_persistence import MemoryNodeDAO
 from config import settings
 from services import rippletrace_services
+from services.auth_service import get_current_user, verify_api_key
 
 # --- Environment / Config -------------------------------------------------
 if not settings.DATABASE_URL:
@@ -86,7 +87,7 @@ class LinkResponse(BaseModel):
 router = APIRouter(prefix="/bridge", tags=["Bridge"])
 
 @router.post("/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
-def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db)):
+def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     verify_permission_or_403(payload.permission)
     dao = MemoryNodeDAO(db)
 
@@ -118,7 +119,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/nodes", response_model=NodeSearchResponse)
-def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", limit: int = 100, db: Session = Depends(get_db)):
+def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", limit: int = 100, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     dao = MemoryNodeDAO(db)
     nodes = dao.find_by_tags(tag or [], limit=limit, mode=mode)
     result = [NodeResponse(**{
@@ -132,7 +133,7 @@ def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", li
 
 
 @router.post("/link", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
-def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db)):
+def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     verify_permission_or_403(payload.permission)
     dao = MemoryNodeDAO(db)
     link = dao.create_link(payload.source_id, payload.target_id, link_type=payload.link_type)
@@ -154,7 +155,7 @@ class UserEvent(BaseModel):
 
 
 @router.post("/user_event")
-def bridge_user_event(event: UserEvent):
+def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key)):
     """Accept symbolic user join or runtime events."""
     timestamp = event.timestamp or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
     print(f"🔗 {event.user} joined from {event.origin} at {timestamp}")

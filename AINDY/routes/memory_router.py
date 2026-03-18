@@ -73,10 +73,10 @@ def get_node(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Retrieve a memory node by UUID."""
+    """Retrieve a memory node by UUID owned by the current user."""
     dao = MemoryNodeDAO(db)
     node = dao.get_by_id(node_id)
-    if not node:
+    if not node or node.get("user_id") != str(current_user["sub"]):
         raise HTTPException(status_code=404, detail="Memory node not found")
     return node
 

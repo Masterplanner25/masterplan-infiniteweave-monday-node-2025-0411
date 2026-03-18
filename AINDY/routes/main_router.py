@@ -1,6 +1,7 @@
 from fastapi import Depends, APIRouter, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
+from services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
 from services.projection_service import project_completion
 from datetime import timedelta
@@ -47,7 +48,7 @@ from services.calculation_services import (
     save_calculation
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 @router.post("/calculate_twr")
 @cache(expire=60)

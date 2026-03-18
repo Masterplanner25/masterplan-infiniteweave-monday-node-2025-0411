@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-18 (Sprint 4 quick wins — api.js auth, node_type crash, task user_id, health-dash auth, .env cleanup, lifespan migration, single get_db)
+Last updated: 2026-03-18 (Sprint 4 Auth Hardening — bridge/main_router JWT, analytics/memory ownership, Pydantic v2 migration, 402 tests)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.

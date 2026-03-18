@@ -316,6 +316,119 @@ class TestPhase3RouteProtection:
             )
 
 
+class TestSprintFourAuthHardening:
+    """Sprint 4: verify newly-protected routes and ownership enforcement."""
+
+    # --- Calc endpoints (main_router) now require JWT ---
+    def test_calculate_twr_requires_auth(self, client):
+        """POST /calculate_twr must return 401 without JWT."""
+        response = client.post("/calculate_twr", json={})
+        assert response.status_code == 401, (
+            f"POST /calculate_twr returned {response.status_code}. Expected 401."
+        )
+
+    def test_calculate_engagement_requires_auth(self, client):
+        """POST /calculate_engagement must return 401 without JWT."""
+        response = client.post("/calculate_engagement", json={})
+        assert response.status_code == 401, (
+            f"POST /calculate_engagement returned {response.status_code}. Expected 401."
+        )
+
+    def test_get_results_requires_auth(self, client):
+        """GET /results must return 401 without JWT."""
+        response = client.get("/results")
+        assert response.status_code == 401, (
+            f"GET /results returned {response.status_code}. Expected 401."
+        )
+
+    def test_get_masterplans_requires_auth(self, client):
+        """GET /masterplans must return 401 without JWT."""
+        response = client.get("/masterplans")
+        assert response.status_code == 401, (
+            f"GET /masterplans returned {response.status_code}. Expected 401."
+        )
+
+    def test_create_masterplan_requires_auth(self, client):
+        """POST /create_masterplan must return 401 without JWT."""
+        response = client.post("/create_masterplan", json={})
+        assert response.status_code == 401, (
+            f"POST /create_masterplan returned {response.status_code}. Expected 401."
+        )
+
+    def test_calc_endpoints_accept_valid_token(self, client, auth_headers):
+        """Calc endpoints accept a valid JWT (not 401)."""
+        response = client.get("/results", headers=auth_headers)
+        assert response.status_code != 401, (
+            f"GET /results returned 401 with valid token — auth is broken."
+        )
+
+    # --- Bridge nodes now require JWT ---
+    def test_bridge_get_nodes_requires_auth(self, client):
+        """GET /bridge/nodes must return 401 without JWT."""
+        response = client.get("/bridge/nodes")
+        assert response.status_code == 401, (
+            f"GET /bridge/nodes returned {response.status_code}. Expected 401."
+        )
+
+    def test_bridge_post_nodes_requires_auth(self, client):
+        """POST /bridge/nodes must return 401 without JWT."""
+        response = client.post("/bridge/nodes", json={"content": "test", "permission": {}})
+        assert response.status_code == 401, (
+            f"POST /bridge/nodes returned {response.status_code}. Expected 401."
+        )
+
+    def test_bridge_post_link_requires_auth(self, client):
+        """POST /bridge/link must return 401 without JWT."""
+        response = client.post("/bridge/link", json={
+            "source_id": "00000000-0000-0000-0000-000000000001",
+            "target_id": "00000000-0000-0000-0000-000000000002",
+        })
+        assert response.status_code == 401, (
+            f"POST /bridge/link returned {response.status_code}. Expected 401."
+        )
+
+    # --- Bridge user_event requires API key ---
+    def test_bridge_user_event_requires_api_key(self, client):
+        """POST /bridge/user_event must return 401 without API key."""
+        response = client.post("/bridge/user_event", json={"user": "x", "origin": "y"})
+        assert response.status_code == 401, (
+            f"POST /bridge/user_event returned {response.status_code}. Expected 401."
+        )
+
+    def test_bridge_user_event_accepts_api_key(self, client, api_key_headers):
+        """POST /bridge/user_event must accept a valid API key."""
+        response = client.post("/bridge/user_event", json={
+            "user": "security_test_user",
+            "origin": "pytest",
+        }, headers=api_key_headers)
+        assert response.status_code == 200, (
+            f"POST /bridge/user_event returned {response.status_code} with valid API key."
+        )
+
+    # --- Analytics masterplan ownership ---
+    def test_analytics_masterplan_requires_auth(self, client):
+        """GET /analytics/masterplan/{id} must return 401 without JWT."""
+        response = client.get("/analytics/masterplan/1")
+        assert response.status_code == 401, (
+            f"GET /analytics/masterplan/1 returned {response.status_code}. Expected 401."
+        )
+
+    def test_analytics_masterplan_accepts_valid_token(self, client, auth_headers):
+        """GET /analytics/masterplan/{id} must not return 401 with valid JWT."""
+        response = client.get("/analytics/masterplan/1", headers=auth_headers)
+        assert response.status_code != 401, (
+            f"GET /analytics/masterplan/1 returned 401 with valid token — auth is broken."
+        )
+
+    # --- Memory node ownership ---
+    def test_memory_node_get_requires_auth(self, client):
+        """GET /memory/nodes/{id} must return 401 without JWT."""
+        response = client.get("/memory/nodes/00000000-0000-0000-0000-000000000001")
+        assert response.status_code == 401, (
+            f"GET /memory/nodes/{id} returned {response.status_code}. Expected 401."
+        )
+
+
 class TestRateLimit:
     def test_rate_limiting_exists(self, app):
         """

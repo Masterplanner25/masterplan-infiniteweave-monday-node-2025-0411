@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 
 
@@ -14,8 +14,7 @@ class ResearchResultCreate(ResearchResultBase):
 
 class ResearchResultResponse(ResearchResultBase):
     """Schema used when returning a research result to the frontend."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     created_at: datetime = Field(default_factory=datetime.utcnow)
-
-    class Config:
-        from_attributes = True  # ✅ Pydantic v2 replacement for orm_mode

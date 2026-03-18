@@ -1,4 +1,4 @@
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 
 class TaskInput(BaseModel):
@@ -10,7 +10,8 @@ class TaskInput(BaseModel):
     ai_utilization: int  # 1-5 scale
     task_difficulty: int  # 1-5 scale
 
-    @validator("task_difficulty")
+    @field_validator("task_difficulty")
+    @classmethod
     def task_difficulty_must_be_positive(cls, v):
         if v <= 0:
             raise ValueError("task_difficulty must be greater than zero")

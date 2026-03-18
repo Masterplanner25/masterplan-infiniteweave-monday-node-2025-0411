@@ -23,6 +23,36 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — Sprint 4 Auth Hardening] — 2026-03-18
+
+## Summary
+
+Auth hardening sprint: closed all unprotected route vectors, added cross-user ownership enforcement on analytics and memory, fixed Pydantic v2 deprecations. 402 tests passing, warnings reduced from 7 → 1.
+
+## Changed
+
+* **`routes/bridge_router.py`** — `POST /bridge/nodes`, `GET /bridge/nodes`, `POST /bridge/link` now require JWT (`Depends(get_current_user)` per endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints protected.
+* **`routes/main_router.py`** — `dependencies=[Depends(get_current_user)]` added at router level. All 17 calc endpoints, `/results`, `/masterplans`, `/create_masterplan` now require JWT. Rate-limit bypass vector closed.
+* **`routes/analytics_router.py`** — `GET /analytics/masterplan/{id}` and `GET /analytics/masterplan/{id}/summary` now verify `MasterPlan.user_id == current_user["sub"]` before returning data. Returns 404 for wrong owner (not 403 — don't leak existence).
+* **`routes/memory_router.py`** — `GET /memory/nodes/{node_id}` now checks `node.user_id == current_user["sub"]`; returns 404 if node belongs to another user.
+* **`schemas/freelance.py`** — Migrated 3 schemas (`FreelanceOrderResponse`, `FeedbackResponse`, `RevenueMetricsResponse`) from `class Config: orm_mode = True` to `model_config = ConfigDict(from_attributes=True)`.
+* **`schemas/analytics_inputs.py`** — `@validator("task_difficulty")` replaced with `@field_validator` + `@classmethod` (Pydantic v2).
+* **`schemas/research_results_schema.py`** — `class Config: from_attributes = True` replaced with `model_config = ConfigDict(from_attributes=True)`.
+
+## Tests
+
+* **`tests/test_routes_bridge.py`** — Updated 6 test methods to include `auth_headers` / `api_key_headers`. Added 4 new hardening tests (JWT-required and API-key-required assertions).
+* **`tests/test_routes_analytics.py`** — 3 calc-endpoint tests updated to include `auth_headers`.
+* **`tests/test_security.py`** — Added `TestSprintFourAuthHardening` class (18 tests): calc endpoint auth, bridge auth, user_event API key, analytics ownership, memory ownership.
+
+## Known Open Items
+
+* Cross-user exposure remains on `freelance_orders`, `client_feedback`, `research_results`, `rippletrace` tables — no `user_id` column exists on these models; migration required before filter can be applied.
+* `Task.user_id` remains commented-out; task CRUD is still not user-scoped.
+* SQLAlchemy `declarative_base()` deprecation (1 remaining warning) — requires SQLAlchemy 2.0 migration.
+
+---
+
 # [main — Memory Bridge Phase 3] — 2026-03-18
 
 ## Summary

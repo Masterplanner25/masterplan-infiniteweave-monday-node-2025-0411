@@ -56,6 +56,12 @@ def get_masterplan_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    plan = db.query(MasterPlan).filter(
+        MasterPlan.id == masterplan_id,
+        MasterPlan.user_id == str(current_user["sub"]),
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="MasterPlan not found")
 
     query = db.query(CanonicalMetricDB).filter(
         CanonicalMetricDB.masterplan_id == masterplan_id
@@ -81,6 +87,12 @@ def get_masterplan_summary(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    plan = db.query(MasterPlan).filter(
+        MasterPlan.id == masterplan_id,
+        MasterPlan.user_id == str(current_user["sub"]),
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="MasterPlan not found")
 
     query = db.query(CanonicalMetricDB).filter(
         CanonicalMetricDB.masterplan_id == masterplan_id
