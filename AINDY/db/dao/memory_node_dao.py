@@ -52,8 +52,11 @@ class MemoryNodeDAO:
         user_id: str = None,
         node_type: str = "generic",
         extra: dict = None,
+        generate_embedding: bool = True,
     ) -> dict:
         """Insert a new memory node and return its dict representation."""
+        from services.embedding_service import generate_embedding as gen_emb
+
         db_node = MemoryNodeModel(
             content=content,
             tags=tags or [],
@@ -62,6 +65,10 @@ class MemoryNodeDAO:
             user_id=user_id,
             extra=extra or {},
         )
+
+        if generate_embedding:
+            db_node.embedding = gen_emb(content)
+
         try:
             self.db.add(db_node)
             self.db.commit()
@@ -99,6 +106,56 @@ class MemoryNodeDAO:
                 for t in clean_tags:
                     query = query.filter(MemoryNodeModel.tags.contains([t]))
         return [self._node_to_dict(n) for n in query.limit(limit).all()]
+
+    # ------------------------------------------------------------------
+    # Semantic similarity retrieval
+    # ------------------------------------------------------------------
+
+    def find_similar(
+        self,
+        query_embedding: list,
+        limit: int = 5,
+        user_id: str = None,
+        node_type: str = None,
+        min_similarity: float = 0.0,
+    ) -> list:
+        """
+        Find nodes similar to query_embedding using pgvector.
+        Uses <=> cosine distance operator.
+        Distance 0 = identical, 2 = opposite.
+        Similarity = 1 - (distance / 2).
+        """
+        from pgvector.sqlalchemy import Vector
+        from sqlalchemy import cast
+
+        distance_expr = MemoryNodeModel.embedding.op("<=>")(
+            cast(query_embedding, Vector(1536))
+        )
+
+        query = self.db.query(
+            MemoryNodeModel,
+            distance_expr.label("distance")
+        ).filter(
+            MemoryNodeModel.embedding.isnot(None)
+        )
+
+        if user_id:
+            query = query.filter(MemoryNodeModel.user_id == user_id)
+        if node_type:
+            query = query.filter(MemoryNodeModel.node_type == node_type)
+
+        results = query.order_by(distance_expr.asc()).limit(limit).all()
+
+        output = []
+        for node, distance in results:
+            similarity = max(0.0, 1.0 - (distance / 2.0))
+            if similarity >= min_similarity:
+                node_dict = self._node_to_dict(node)
+                node_dict["similarity"] = round(similarity, 4)
+                node_dict["distance"] = round(float(distance), 4)
+                output.append(node_dict)
+
+        return output
 
     # ------------------------------------------------------------------
     # Graph query: get nodes linked to a given node
@@ -154,6 +211,129 @@ class MemoryNodeDAO:
                 )
 
         return linked
+
+    # ------------------------------------------------------------------
+    # Resonance recall
+    # ------------------------------------------------------------------
+
+    def recall(
+        self,
+        query: str = None,
+        tags: list = None,
+        limit: int = 5,
+        user_id: str = None,
+        node_type: str = None,
+    ) -> list:
+        """
+        Retrieve most relevant memories using resonance scoring.
+
+        score = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)
+        recency = exp(-age_days / 30.0)  # half-life 30 days
+
+        At least one of query or tags required.
+        """
+        from services.embedding_service import generate_query_embedding
+        from datetime import datetime
+        import math
+
+        candidates = []
+
+        # Semantic path
+        if query:
+            query_embedding = generate_query_embedding(query)
+            similar = self.find_similar(
+                query_embedding=query_embedding,
+                limit=limit * 3,
+                user_id=user_id,
+                node_type=node_type,
+            )
+            for item in similar:
+                item["semantic_score"] = item.get("similarity", 0.0)
+                candidates.append(item)
+
+        # Tag path
+        if tags:
+            tag_nodes = self.get_by_tags(tags=tags, limit=limit * 3)
+            existing_ids = {c["id"] for c in candidates}
+            for node_dict in tag_nodes:
+                if node_dict["id"] not in existing_ids:
+                    if user_id and node_dict.get("user_id") != user_id:
+                        continue
+                    if node_type and node_dict.get("node_type") != node_type:
+                        continue
+                    node_dict["semantic_score"] = 0.0
+                    candidates.append(node_dict)
+
+        now = datetime.utcnow()
+        scored = []
+
+        for c in candidates:
+            semantic = c.get("semantic_score", 0.0)
+
+            tag_score = 0.0
+            if tags:
+                node_tags = set(c.get("tags") or [])
+                query_tags = set(tags)
+                if query_tags:
+                    tag_score = len(node_tags & query_tags) / len(query_tags)
+
+            recency_score = 0.5
+            created_str = c.get("created_at")
+            if created_str:
+                try:
+                    if isinstance(created_str, str):
+                        created = datetime.fromisoformat(
+                            created_str.replace("Z", "+00:00")
+                        ).replace(tzinfo=None)
+                    else:
+                        created = created_str
+                    age_days = (now - created).days
+                    recency_score = math.exp(-age_days / 30.0)
+                except Exception:
+                    recency_score = 0.5
+
+            resonance = (
+                (semantic * 0.6)
+                + (tag_score * 0.2)
+                + (recency_score * 0.2)
+            )
+            c["tag_score"] = round(tag_score, 4)
+            c["recency_score"] = round(recency_score, 4)
+            c["resonance_score"] = round(resonance, 4)
+            scored.append(c)
+
+        scored.sort(key=lambda x: x["resonance_score"], reverse=True)
+
+        seen = set()
+        results = []
+        for item in scored:
+            if item["id"] not in seen:
+                seen.add(item["id"])
+                results.append(item)
+            if len(results) >= limit:
+                break
+
+        return results
+
+    def recall_by_type(
+        self,
+        node_type: str,
+        query: str = None,
+        limit: int = 5,
+        user_id: str = None,
+    ) -> list:
+        """Retrieve memories of a specific type."""
+        from services.memory_persistence import VALID_NODE_TYPES
+        if node_type not in VALID_NODE_TYPES:
+            raise ValueError(
+                f"Invalid node_type. Must be one of: {VALID_NODE_TYPES}"
+            )
+        return self.recall(
+            query=query,
+            node_type=node_type,
+            limit=limit,
+            user_id=user_id,
+        )
 
     # ------------------------------------------------------------------
     # Link operations

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel
 
 from db.database import get_db
@@ -8,6 +8,8 @@ from db.dao.memory_node_dao import MemoryNodeDAO
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
+
+NodeType = Literal["decision", "outcome", "insight", "relationship"]
 
 
 # ------------------------------------------------------------------
@@ -18,8 +20,22 @@ class CreateNodeRequest(BaseModel):
     content: str
     source: Optional[str] = None
     tags: Optional[List[str]] = []
-    node_type: Optional[str] = "generic"
+    node_type: Optional[NodeType] = None
     extra: Optional[dict] = {}
+
+
+class SimilaritySearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = 5
+    node_type: Optional[NodeType] = None
+    min_similarity: Optional[float] = 0.0
+
+
+class RecallRequest(BaseModel):
+    query: Optional[str] = None
+    tags: Optional[List[str]] = None
+    limit: Optional[int] = 5
+    node_type: Optional[NodeType] = None
 
 
 class CreateLinkRequest(BaseModel):
@@ -117,3 +133,62 @@ def create_link(
         return dao.create_link(body.source_id, body.target_id, body.link_type)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/nodes/search")
+def search_similar_nodes(
+    body: SimilaritySearchRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Semantic similarity search via pgvector."""
+    from services.embedding_service import generate_query_embedding
+    query_embedding = generate_query_embedding(body.query)
+    dao = MemoryNodeDAO(db)
+    results = dao.find_similar(
+        query_embedding=query_embedding,
+        limit=body.limit,
+        user_id=str(current_user["sub"]),
+        node_type=body.node_type,
+        min_similarity=body.min_similarity,
+    )
+    return {
+        "query": body.query,
+        "results": results,
+        "count": len(results),
+    }
+
+
+@router.post("/recall")
+def recall_memories(
+    body: RecallRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Retrieve memories using resonance scoring.
+    score = (semantic*0.6) + (tag*0.2) + (recency*0.2)
+    Primary retrieval API for all Phase 3 hooks.
+    """
+    if not body.query and not body.tags:
+        raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
+
+    dao = MemoryNodeDAO(db)
+    results = dao.recall(
+        query=body.query,
+        tags=body.tags,
+        limit=body.limit,
+        user_id=str(current_user["sub"]),
+        node_type=body.node_type,
+    )
+    return {
+        "query": body.query,
+        "tags": body.tags,
+        "results": results,
+        "count": len(results),
+        "scoring": {
+            "semantic_weight": 0.6,
+            "tag_weight": 0.2,
+            "recency_weight": 0.2,
+        },
+    }

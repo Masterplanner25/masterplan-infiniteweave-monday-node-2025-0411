@@ -4,14 +4,17 @@ from datetime import datetime
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_, event
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from pgvector.sqlalchemy import Vector
 from utils import prepare_input_text
 
 # import your project's Base (must exist)
 from db.database import Base
+
+VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}
 
 def save_memory_node(self, memory_node: 'MemoryNode'):
     cleaned_content = prepare_input_text(memory_node.content, limit=300)
@@ -33,9 +36,20 @@ class MemoryNodeModel(Base):
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
+    embedding = Column(Vector(1536), nullable=True)
 
 
 Index("ix_memory_nodes_tags_gin", MemoryNodeModel.tags, postgresql_using="gin")
+
+
+@event.listens_for(MemoryNodeModel, "before_insert")
+@event.listens_for(MemoryNodeModel, "before_update")
+def validate_node_type(mapper, connection, target):
+    if target.node_type is not None and target.node_type not in VALID_NODE_TYPES:
+        raise ValueError(
+            f"Invalid node_type '{target.node_type}'. "
+            f"Must be one of: {', '.join(sorted(VALID_NODE_TYPES))}"
+        )
 
 
 class MemoryLinkModel(Base):

@@ -1,5 +1,21 @@
 ## [Unreleased] — feature/cpp-semantic-engine
 
+### Added (2026-03-18 — Memory Bridge Phase 2: Make It Intelligent)
+- `alembic/versions/mb2embed0001` — Migration: `embedding VECTOR(1536)` column on `memory_nodes`. `CREATE EXTENSION IF NOT EXISTS vector` included. Idempotent (checks column existence before adding).
+- `services/embedding_service.py` — OpenAI `text-embedding-ada-002` embedding generation (1536 dims). Zero-vector fallback on failure (never crashes). 3-attempt retry with exponential backoff. `cosine_similarity()` uses C++ kernel (`memory_bridge_rs.semantic_similarity` via `bridge/memory_bridge_rs/target/debug`) with pure Python fallback. `cosine_similarity_python()` available as standalone fallback.
+- `services/memory_persistence.py` — `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}`. SQLAlchemy `before_insert`/`before_update` event listener enforces type at ORM layer. `embedding = Column(Vector(1536), nullable=True)` added to `MemoryNodeModel`.
+- `db/dao/memory_node_dao.py::find_similar()` — Semantic similarity retrieval via pgvector `<=>` cosine distance operator. Filters by `user_id`, `node_type`, `min_similarity`. Returns nodes with `similarity` and `distance` fields. NULL embeddings excluded.
+- `db/dao/memory_node_dao.py::recall()` — Resonance-scored retrieval: `score = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)`. Recency decay: `exp(-age_days / 30.0)`. Deduplicates across semantic + tag paths. Primary retrieval method for Phase 3 workflow hooks.
+- `db/dao/memory_node_dao.py::recall_by_type()` — Type-filtered resonance recall. Validates against `VALID_NODE_TYPES`. Calls `recall()` internally.
+- `db/dao/memory_node_dao.py::save()` — Now accepts `generate_embedding: bool = True`. Generates and stores embedding via `embedding_service` before DB insert.
+- `routes/memory_router.py::POST /memory/nodes/search` — Semantic similarity search. Accepts `query`, `limit`, `node_type`, `min_similarity`. Generates query embedding, calls `find_similar()`.
+- `routes/memory_router.py::POST /memory/recall` — Primary retrieval API. Accepts `query`, `tags`, `limit`, `node_type`. Returns resonance-ranked results with scoring metadata (`semantic_weight`, `tag_weight`, `recency_weight`). Returns 400 if neither `query` nor `tags` provided.
+- `routes/memory_router.py` — `CreateNodeRequest.node_type` upgraded from `str` to `Literal["decision", "outcome", "insight", "relationship"]`. Pydantic validates at API boundary.
+- `tests/test_memory_bridge_phase2.py` — 24 tests covering: embedding service importability, 1536-dim output, zero-vector on empty input, cosine similarity (identical/orthogonal/zero vectors), C++ kernel confirmed working, embedding failure fallback, ORM column presence, DB column presence, resonance formula weights, recency decay, tag score calculation, type enforcement (VALID_NODE_TYPES, Literal schema), all 4 new route behaviors (auth required, 400 on missing params, recall with query, search with auth).
+
+### Changed (2026-03-18 — Memory Bridge Phase 2)
+- `tests/test_models.py::test_memory_node_has_no_embedding_column` renamed to `test_memory_node_has_embedding_column`; assertion inverted. Previously a diagnostic test tracking a known gap; now a regression guard confirming the column exists.
+
 ### Added (2026-03-17 — ARM Phase 1)
 - `modules/deepseek/security_deepseek.py` — `SecurityValidator` fully implemented.
   Replaces stub. Raises `HTTPException` (FastAPI-native). Validation layers: path

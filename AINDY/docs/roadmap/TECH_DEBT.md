@@ -66,8 +66,7 @@ This document inventories current technical debt based strictly on the existing 
 The C++ semantic similarity kernel (`bridge/memory_bridge_rs/`) was added in `feature/cpp-semantic-engine`. The following items must be resolved before the kernel is production-ready.
 
 - **Release build blocked by Windows AppControl.** The kernel was built in debug mode because AppControl policy blocks writes to `target/release/`. Debug benchmark (dim=1536, 10k iters): Python 2.753s vs C++ 3.844s — FFI overhead dominates in debug. Release build is expected to show 10–50x improvement. Action: run `maturin develop --release` in an environment without AppControl restrictions (deployment server or CI) and record results (`AINDY/bridge/benchmark_similarity.py`, `AINDY/bridge/memory_bridge_rs/Cargo.toml`).
-- **No vector embeddings on `MemoryNode`.** The C++ `cosine_similarity` kernel is implemented and wired but has no data to operate on. `MemoryNode` stores text only; no embedding field, no embedding generation, no pgvector storage. Semantic memory search is inoperable until embeddings are added. Steps required: add `embedding` field to `MemoryNodeModel`, generate embeddings via OpenAI `text-embedding-ada-002` (dim=1536) on node creation, store in JSONB or pgvector, wire `cosine_similarity` to a `/bridge/nodes/search/semantic` endpoint (`AINDY/bridge/memory_bridge_rs/src/lib.rs`, `AINDY/services/memory_persistence.py`).
-  - **pgvector prerequisite status (2026-03-18):** Python package `pgvector==0.4.2` installed and `Vector(1536)` SQLAlchemy type confirmed working. Docker container (`pgvector/pgvector:pg16`) defined in `docker-compose.yml`; PostgreSQL vector extension will be available once Docker Desktop is installed and container is started. `alembic upgrade head` and the Phase 2 embedding migration are deferred until then. See `AINDY/docs/DOCKER_SETUP.md`.
+- ~~**No vector embeddings on `MemoryNode`.**~~ ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` (`services/memory_persistence.py`) and DB via migration `mb2embed0001`. `services/embedding_service.py` generates OpenAI `text-embedding-ada-002` embeddings on every `MemoryNodeDAO.save()` call. C++ kernel (`memory_bridge_rs.semantic_similarity`) wired for cosine similarity with Python fallback. `find_similar()` uses pgvector `<=>` operator. Endpoints: `POST /memory/nodes/search`, `POST /memory/recall`.
 - **`PERMISSION_SECRET` defaults to `"dev-secret-must-change"`.** If `PERMISSION_SECRET` is not set in `.env`, HMAC signing uses this default. Any party who knows the default can forge valid permissions. This is a deployment configuration risk, not a code defect, but no rotation policy or validation on startup enforces that the secret has been changed (`AINDY/routes/bridge_router.py:21`).
 
 ## 9. Newly Revealed Bugs (Diagnostic Test Suite — 2026-03-17)
@@ -137,7 +136,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeModel — no embedding field), `AINDY/bridge/memory_bridge_rs/src/lib.rs` (cosine_similarity callable but unused in retrieval)
   - Mechanism: Write path: content stored as TEXT only. Read path: tag OR/AND query or tsvector FTS. No vector path exists.
   - Impact: Semantic recall — retrieving memories by meaning rather than exact tags — does not function. The primary differentiation of this memory system over a text log is absent.
-  - Status: Open (tracked in §8; requires pgvector extension, `embedding VECTOR(1536)` column, embedding generation on write, HNSW index, and a semantic search endpoint).
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` and DB (migration `mb2embed0001`). `services/embedding_service.py` generates embeddings via OpenAI `text-embedding-ada-002` on every `MemoryNodeDAO.save()` call. `find_similar()` retrieves via pgvector `<=>` cosine distance. Semantic search available at `POST /memory/nodes/search`. Open item: HNSW index not yet created; full-table scan acceptable until node count exceeds ~50k.
 
 ### §10.6 Retrieval — no temporal decay or recency weighting
 
@@ -145,7 +144,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO.find_by_tags — ORDER BY clause absent or arbitrary)
   - Mechanism: `find_by_tags()` returns matching nodes without a relevance score. No timestamp-based ranking is applied.
   - Impact: As node count grows, older or irrelevant memories contaminate recall. Retrieval quality degrades with scale.
-  - Status: Open. Minimum viable fix: add `ORDER BY created_at DESC` to `find_by_tags()`; defer decay weighting to v1.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `MemoryNodeDAO.recall()` implements resonance scoring: `score = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)` where `recency = exp(-age_days / 30.0)`. All recall results are ranked by resonance score. `POST /memory/recall` is the primary retrieval API.
 
 ### §10.7 Retrieval — tag query returns unranked flat lists with no relevance signal
 
@@ -153,7 +152,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO.find_by_tags), `AINDY/routes/bridge_router.py` (GET /bridge/nodes response)
   - Mechanism: SQL query returns rows; no rank, score, or tag-overlap count is computed or returned.
   - Impact: High-cardinality tag queries return noisy results with no signal for the caller. Useful for exact lookups; breaks for fuzzy or exploratory recall.
-  - Status: Open. Fix: return a `match_score` field (count of matched tags / total query tags) alongside each node result.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `recall()` computes `tag_score = overlap / query_tag_count` and incorporates it into the resonance formula. Each returned node carries `tag_score`, `semantic_score`, `recency_score`, and `resonance_score` fields. `get_by_tags()` direct call still returns flat lists for backward compat; callers needing ranked results should use `recall()` or `POST /memory/recall`.
 
 ### §10.8 Persistence — no versioning or history table, state reconstruction is impossible
 
@@ -235,7 +234,29 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
     that wraps `DeepSeekCodeAnalyzer` (for callers outside the router).
   - Status: Open. Low priority — no runtime impact.
 
-## 12. Prioritization Table
+## 12. Memory Bridge Phase 3 — Open Items (Deferred from Phase 2)
+
+### §12.1 HNSW index for pgvector performance
+- **No HNSW or IVFFlat index on `memory_nodes.embedding`.** Currently pgvector uses sequential scan for similarity queries. Acceptable at current node count; will degrade past ~50k rows.
+  - Fix: `CREATE INDEX ON memory_nodes USING hnsw (embedding vector_cosine_ops);`
+  - Status: Open. Deferred to Phase 3. Add migration when node count becomes a concern.
+
+### §12.2 VALID_NODE_TYPES backward compatibility
+- **Existing nodes may have `node_type="generic"` or other legacy values** that the new `validate_node_type` event listener would reject on UPDATE. The listener only fires on `before_insert` / `before_update`; existing rows are safe unless touched.
+  - Fix: run a one-time migration to map `"generic"` → `NULL` or `"insight"` before enabling strict enforcement on updates.
+  - Status: Open. Low risk until UPDATE operations are performed on legacy nodes.
+
+### §12.3 Embedding generation is synchronous and blocks the write path
+- **`MemoryNodeDAO.save()` calls OpenAI synchronously** before the DB insert. A slow or failed OpenAI API call delays the HTTP response. Failure falls back to zero vector (safe), but latency is not bounded.
+  - Fix: generate embeddings async via a task queue (Celery / ARQ) and backfill after insert; return node immediately without embedding then update when ready.
+  - Status: Open. Deferred to Phase 3. Current behavior: 3-attempt retry then zero vector.
+
+### §12.4 Phase 3 Workflow hooks — recall() integration
+- **`recall()` is implemented but not yet wired into workflow hooks** (ARM analysis, genesis session, leadgen). Phase 3 should inject relevant memory context before each AI call.
+  - Fix: add `MemoryNodeDAO.recall()` calls in `deepseek_code_analyzer.py`, `genesis_ai.py`, and `leadgen_service.py` to inject top-k relevant memories into prompt context.
+  - Status: Open. Deferred to Phase 3.
+
+## 13. Prioritization Table
 
 | Area | Risk Level (Low/Medium/High) | Impact | Recommended Phase |
 |------|------------------------------|--------|-------------------|

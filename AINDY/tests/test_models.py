@@ -131,19 +131,18 @@ class TestMemoryPersistenceModels:
         for col in ["id", "content", "tags", "node_type", "created_at", "updated_at", "extra"]:
             assert col in col_names, f"MemoryNodeModel missing column: {col}"
 
-    def test_memory_node_has_no_embedding_column(self):
+    def test_memory_node_has_embedding_column(self):
         """
-        DIAGNOSTIC: MemoryNodeModel has NO 'embedding' column.
-        This means the C++ semantic similarity kernel has no vector data to work with.
-        Semantic memory search is inoperable. Documented in TECH_DEBT.md §8.
+        Memory Bridge Phase 2: MemoryNodeModel has an 'embedding' VECTOR(1536) column.
+        Semantic memory search is now operational.
         """
         from services.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
-        assert "embedding" not in col_names, (
-            "BUG FIXED: MemoryNodeModel now has 'embedding' column. "
-            "Semantic search may now be functional — update TECH_DEBT.md §8."
+        assert "embedding" in col_names, (
+            "MemoryNodeModel missing 'embedding' column. "
+            "Run: alembic upgrade head"
         )
 
     def test_memory_link_model_importable(self):
