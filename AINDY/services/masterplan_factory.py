@@ -4,7 +4,7 @@ from db.models import MasterPlan, GenesisSessionDB
 from services.posture import determine_posture  # adjust import if needed
 
 
-def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session):
+def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, user_id: str = None):
 
     session = db.query(GenesisSessionDB).filter_by(id=session_id).first()
 
@@ -14,16 +14,20 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session):
     if session.status == "locked":
         raise Exception("Session already locked")
 
-    existing_plans = db.query(MasterPlan).order_by(MasterPlan.id).all()
+    # Version label scoped per-user to avoid global numbering pollution
+    if user_id:
+        user_plans = db.query(MasterPlan).filter(MasterPlan.user_id == user_id).order_by(MasterPlan.id).all()
+    else:
+        user_plans = db.query(MasterPlan).order_by(MasterPlan.id).all()
 
-    if not existing_plans:
+    if not user_plans:
         version_label = "V1"
         is_origin = True
         parent_id = None
     else:
-        version_label = f"V{len(existing_plans) + 1}"
+        version_label = f"V{len(user_plans) + 1}"
         is_origin = False
-        parent_id = existing_plans[-1].id
+        parent_id = user_plans[-1].id
 
     # Timeline
     horizon = draft.get("time_horizon_years", 5)
@@ -37,6 +41,8 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session):
         version_label=version_label,
         is_origin=is_origin,
         is_active=False,
+        user_id=user_id,
+        status="locked",
         structure_json=draft,
         posture=posture,
         locked_at=start_date,
@@ -51,6 +57,7 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session):
 
     # Freeze Genesis
     session.status = "locked"
+    session.locked_at = start_date
 
     db.commit()
     db.refresh(masterplan)

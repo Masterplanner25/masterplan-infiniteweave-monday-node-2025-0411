@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import freelance_service
+from services.auth_service import get_current_user
 from schemas.freelance import (
     FreelanceOrderCreate,
     FreelanceOrderResponse,
@@ -13,7 +14,7 @@ from schemas.freelance import (
 )
 
 
-router = APIRouter(prefix="/freelance", tags=["Freelance"])
+router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depends(get_current_user)])
 
 # -----------------------------------------------------
 # 1️⃣  Create a New Order

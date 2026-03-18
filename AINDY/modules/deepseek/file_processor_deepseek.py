@@ -1,27 +1,110 @@
-# modules/deepseek/file_processor_deepseek.py
-import os
+"""
+ARM File Processor
+
+Handles file reading, chunking, and session metadata creation.
+Splits large files into token-safe chunks to stay within OpenAI context limits.
+"""
+import uuid
+import time
+from pathlib import Path
 from datetime import datetime
+
 
 class FileProcessor:
     """
-    Handles file reading/writing and lightweight auditing for DeepSeek runs.
+    Reads files and prepares their content for ARM reasoning operations.
+
+    Core responsibilities:
+    - Read files with encoding fallback
+    - Chunk content by line boundaries (preserves code structure)
+    - Generate UUID session IDs for grouping related operations
+    - Build structured session log dictionaries for DB persistence
     """
 
-    LOG_DIR = "logs/deepseek/"
+    def __init__(self, config: dict = None):
+        config = config or {}
+        self.max_chunk_tokens = config.get("max_chunk_tokens", 4000)
+        # Rough approximation: 4 characters ≈ 1 token
+        self.chars_per_chunk = self.max_chunk_tokens * 4
 
-    def __init__(self):
-        os.makedirs(self.LOG_DIR, exist_ok=True)
+    # ── File reading ─────────────────────────────────────────────────────────
 
-    def save_log(self, message: str):
-        timestamp = datetime.utcnow().isoformat()
-        log_path = os.path.join(self.LOG_DIR, "arm_activity.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] {message}\n")
+    def read_file(self, path: Path) -> str:
+        """Read file content with UTF-8 encoding and replacement fallback."""
+        return path.read_text(encoding="utf-8", errors="replace")
 
-    def get_recent_logs(self, limit: int = 50):
-        log_path = os.path.join(self.LOG_DIR, "arm_activity.log")
-        if not os.path.exists(log_path):
-            return []
-        with open(log_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        return lines[-limit:]
+    # ── Chunking ─────────────────────────────────────────────────────────────
+
+    def chunk_content(self, content: str) -> list:
+        """
+        Split file content into chunks that fit within the token limit.
+
+        Splits on newline boundaries to preserve code structure — a line
+        is never split across two chunks.
+
+        Returns a list of string chunks. Single-chunk files return a
+        one-element list.
+        """
+        if len(content) <= self.chars_per_chunk:
+            return [content]
+
+        chunks = []
+        lines = content.split("\n")
+        current_chunk = []
+        current_size = 0
+
+        for line in lines:
+            line_size = len(line) + 1  # +1 for the newline character
+            if current_size + line_size > self.chars_per_chunk and current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = [line]
+                current_size = line_size
+            else:
+                current_chunk.append(line)
+                current_size += line_size
+
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
+
+        return chunks
+
+    # ── Session utilities ────────────────────────────────────────────────────
+
+    def create_session_id(self) -> str:
+        """Generate a UUID v4 session ID for grouping related ARM operations."""
+        return str(uuid.uuid4())
+
+    def create_session_log(
+        self,
+        session_id: str,
+        file_path: str,
+        operation: str,
+        start_time: float,
+        input_tokens: int,
+        output_tokens: int,
+        status: str,
+        error: str = None,
+    ) -> dict:
+        """
+        Build a structured session log entry for DB persistence.
+
+        Includes Infinity Algorithm Execution Speed metric
+        (tokens processed per second).
+        """
+        elapsed = time.time() - start_time
+        total_tokens = input_tokens + output_tokens
+        return {
+            "session_id": session_id,
+            "file_path": file_path,
+            "operation": operation,
+            "timestamp": datetime.utcnow().isoformat(),
+            "execution_seconds": round(elapsed, 3),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "status": status,
+            "error": error,
+            # Infinity Algorithm metric: Execution Speed (tokens/second)
+            "execution_speed": round(
+                total_tokens / max(elapsed, 0.001), 1
+            ),
+        }

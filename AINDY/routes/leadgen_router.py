@@ -6,17 +6,22 @@ Purpose: Exposes API routes to trigger A.I.N.D.Y.’s autonomous
 lead discovery and scoring engine.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import leadgen_service
+from services.auth_service import get_current_user
+from services.rate_limiter import limiter
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 
 @router.post("/")
+@limiter.limit("10/minute")
 def generate_b2b_leads(
+    request: Request,
     query: str = Query(..., description="Search intent or keyword for AI lead discovery"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Executes the A.I.N.D.Y. Lead Generation module.
@@ -40,7 +45,10 @@ def generate_b2b_leads(
 
 
 @router.get("/")
-def list_all_leads(db: Session = Depends(get_db)):
+def list_all_leads(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Retrieve all stored lead generation results.
     """

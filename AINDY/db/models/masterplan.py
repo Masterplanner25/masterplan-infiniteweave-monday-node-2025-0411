@@ -13,7 +13,12 @@ class MasterPlan(Base):
     start_date = Column(DateTime, nullable=False)
     duration_years = Column(Float, nullable=False)
     target_date = Column(DateTime, nullable=False)
-    
+
+    # User ownership (UUID string from User.id)
+    user_id = Column(String, nullable=True, index=True)
+    # Lifecycle status: draft | locked | active | archived
+    status = Column(String, nullable=True, default="draft")
+
     is_active = Column(Boolean, default=False)
     is_origin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=func.now())
@@ -66,13 +71,17 @@ class GenesisSessionDB(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=True)
+    # UUID string from User.id — additive; user_id (Integer) left in place
+    user_id_str = Column(String, nullable=True, index=True)
 
     status = Column(String, default="active")  # active | paused | synthesized | locked | abandoned
 
     summarized_state = Column(JSON, nullable=True)
 
+    # Block 1 additions
+    synthesis_ready = Column(Boolean, nullable=False, default=False)
+    draft_json = Column(JSON, nullable=True)
+    locked_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # optional relationship if you have User model
-       

@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate, ResearchResultResponse
 from services import research_results_service
+from services.auth_service import get_current_user
 
-router = APIRouter(prefix="/research", tags=["Research"])
+router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
 
 @router.post("/", response_model=ResearchResultResponse)
 def create_result(result: ResearchResultCreate, db: Session = Depends(get_db)):

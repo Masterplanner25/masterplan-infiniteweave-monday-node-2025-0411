@@ -11,8 +11,9 @@ from db.models.social_models import SocialProfile, SocialPost, FeedItem, TrustTi
 # ✅ NEW: Import the Memory Scribe Bridge
 # This allows us to "teleport" data from the Social Layer (Mongo) to the Memory Layer (SQL/Symbolic)
 from bridge.bridge import create_memory_node
+from services.auth_service import get_current_user
 
-router = APIRouter(prefix="/social", tags=["Social Layer"])
+router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depends(get_current_user)])
 
 # --- 1. IDENTITY ENDPOINTS (The "Anti-Resume") ------------------------------
 

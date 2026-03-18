@@ -66,7 +66,12 @@ def get_db():
 async def process_task(task: TaskInput, db: Session = Depends(get_db)):
 
     # 1️⃣ Calculate and save TWR
-    twr = calculate_twr(task)
+    try:
+        twr = calculate_twr(task)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except ZeroDivisionError:
+        raise HTTPException(status_code=422, detail="task_difficulty cannot be zero")
     save_calculation(db, "Time-to-Wealth Ratio", twr)
 
     # 2️⃣ Fetch master plans

@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from services.seo import SEOInput, MetaInput
 from services.seo_services import seo_analysis, generate_meta_description
 from services.calculation_services import save_calculation
+from services.auth_service import get_current_user
 from db.database import Base
 from db.database import get_db    # <- import the dependency from config
 from pydantic import BaseModel
 import re
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 class ContentInput(BaseModel):
     content: str

@@ -12,6 +12,7 @@ from .arm_models import ARMRun, ARMLog, ARMConfig
 from .leadgen_model import LeadGenResult
 from .author_model import AuthorDB
 from .system_health_log import SystemHealthLog
+from .user import User
 
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "AuthorDB",
     "SystemHealthLog",
     "GenesisSessionDB",
+    "User",
 ]

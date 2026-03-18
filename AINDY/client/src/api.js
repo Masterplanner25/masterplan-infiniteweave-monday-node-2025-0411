@@ -38,33 +38,41 @@ export function runResearch(query, summary) {
 }
 
 /* --- ARM Endpoints --- */
-export function runARMAnalysis(file_path) {
+export function runARMAnalysis(file_path, { complexity, urgency, context } = {}) {
   return request(`/arm/analyze`, {
     method: "POST",
-    body: JSON.stringify({ file_path }),
+    body: JSON.stringify({ file_path, complexity, urgency, context }),
   });
 }
 
-export function runARMGenerate(file_path, instructions) {
+export function runARMGenerate(prompt, { original_code, language, generation_type, analysis_id, complexity, urgency } = {}) {
   return request(`/arm/generate`, {
     method: "POST",
-    body: JSON.stringify({ file_path, instructions }),
+    body: JSON.stringify({ prompt, original_code, language, generation_type, analysis_id, complexity, urgency }),
   });
 }
 
-export function getARMLogs() {
-  return request(`/arm/logs`, { method: "GET" });
+export function getARMLogs(limit = 20) {
+  return request(`/arm/logs?limit=${limit}`, { method: "GET" });
 }
 
 export function getARMConfig() {
   return request(`/arm/config`, { method: "GET" });
 }
 
-export function updateARMConfig(parameter, value) {
+export function updateARMConfig(updates) {
   return request(`/arm/config`, {
     method: "PUT",
-    body: JSON.stringify({ parameter, value }),
+    body: JSON.stringify({ updates }),
   });
+}
+
+export function getARMMetrics(window = 30) {
+  return request(`/arm/metrics?window=${window}`, { method: "GET" });
+}
+
+export function getARMConfigSuggestions(window = 30) {
+  return request(`/arm/config/suggest?window=${window}`, { method: "GET" });
 }
 
 export async function runLeadGen(query) {
@@ -147,4 +155,65 @@ export function startTask(taskName) {
     method: "POST",
     body: JSON.stringify({ name: taskName }),
   });
+}
+
+/* --- Auth helper (injects Bearer token from localStorage) --- */
+function authRequest(path, opts = {}) {
+  const token = localStorage.getItem("aindy_token");
+  return request(path, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
+/* --- Genesis Endpoints --- */
+
+export function startGenesisSession() {
+  return authRequest("/genesis/session", { method: "POST" });
+}
+
+export function sendGenesisMessage(sessionId, message) {
+  return authRequest("/genesis/message", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, message }),
+  });
+}
+
+export function getGenesisSession(sessionId) {
+  return authRequest(`/genesis/session/${sessionId}`, { method: "GET" });
+}
+
+export function synthesizeGenesisDraft(sessionId) {
+  return authRequest("/genesis/synthesize", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
+export function getGenesisDraft(sessionId) {
+  return authRequest(`/genesis/draft/${sessionId}`, { method: "GET" });
+}
+
+export function lockMasterPlan(sessionId, draft) {
+  return authRequest("/genesis/lock", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, draft }),
+  });
+}
+
+/* --- MasterPlan Endpoints --- */
+
+export function listMasterPlans() {
+  return authRequest("/masterplans/", { method: "GET" });
+}
+
+export function getMasterPlan(planId) {
+  return authRequest(`/masterplans/${planId}`, { method: "GET" });
+}
+
+export function activateMasterPlan(planId) {
+  return authRequest(`/masterplans/${planId}/activate`, { method: "POST" });
 }

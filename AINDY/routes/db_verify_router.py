@@ -1,9 +1,10 @@
 # routes/db_verify_router.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy import inspect
 from db.database import engine
+from services.auth_service import verify_api_key
 
-router = APIRouter(prefix="/db", tags=["Database Verification"])
+router = APIRouter(prefix="/db", tags=["Database Verification"], dependencies=[Depends(verify_api_key)])
 
 @router.get("/verify")
 def verify_database_schema():

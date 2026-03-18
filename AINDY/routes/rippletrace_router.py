@@ -8,7 +8,9 @@ from db.database import get_db
 from services import rippletrace_services
 from typing import Optional
 
-router = APIRouter(prefix="/rippletrace", tags=["RippleTrace"])
+from services.auth_service import get_current_user
+
+router = APIRouter(prefix="/rippletrace", tags=["RippleTrace"], dependencies=[Depends(get_current_user)])
 
 # === Pydantic Schemas ===
 class DropPoint(BaseModel):

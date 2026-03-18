@@ -22,7 +22,7 @@ export default function ARMConfig() {
     (async () => {
       try {
         const res = await getARMConfig();
-        setConfig(res.runtime_config ?? res);
+        setConfig(res.config ?? res.runtime_config ?? res);
       } catch (e) {
         setConfig({});
       }
@@ -32,9 +32,11 @@ export default function ARMConfig() {
   const save = async () => {
     if (!param) return alert("Please enter a parameter name");
     try {
-      await updateARMConfig(param, value);
+      // Parse numeric values; leave strings as strings
+      const parsedValue = value === "" ? value : isNaN(Number(value)) ? value : Number(value);
+      await updateARMConfig({ [param]: parsedValue });
       const res = await getARMConfig();
-      setConfig(res.runtime_config ?? res);
+      setConfig(res.config ?? res.runtime_config ?? res);
       setParam("");
       setValue("");
       alert("Config updated successfully");

@@ -1,3 +1,5 @@
+mod cpp_bridge;
+
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde::{Deserialize, Serialize};
@@ -107,9 +109,48 @@ impl MemoryTrace {
     }
 }
 
+/// Compute cosine similarity between two equal-length float vectors.
+/// Calls the C++ kernel via Rust FFI for maximum performance.
+/// Used by the Infinity Algorithm for semantic memory node scoring.
+///
+/// Returns a value in [-1.0, 1.0]:
+///   1.0 = identical direction, 0.0 = orthogonal, -1.0 = opposite
+#[pyfunction]
+fn semantic_similarity(a: Vec<f64>, b: Vec<f64>) -> PyResult<f64> {
+    if a.len() != b.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "Vectors must be same length: {} != {}",
+            a.len(),
+            b.len()
+        )));
+    }
+    Ok(cpp_bridge::compute_similarity(&a, &b))
+}
+
+/// Compute weighted dot product of two equal-length float vectors.
+/// Calls the C++ kernel via Rust FFI.
+///
+/// Maps directly to the Infinity Algorithm engagement score numerator:
+///   values  = [likes, shares, comments, clicks, time_on_page]
+///   weights = [2.0,   3.0,    1.5,     1.0,    0.5]
+///   result  = weighted_dot_product(values, weights) / total_views
+#[pyfunction]
+fn weighted_dot_product(values: Vec<f64>, weights: Vec<f64>) -> PyResult<f64> {
+    if values.len() != weights.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "Vectors must be same length: {} != {}",
+            values.len(),
+            weights.len()
+        )));
+    }
+    Ok(cpp_bridge::compute_weighted_dot(&values, &weights))
+}
+
 #[pymodule]
 fn memory_bridge_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<MemoryNode>()?;
     m.add_class::<MemoryTrace>()?;
+    m.add_function(wrap_pyfunction!(semantic_similarity, m)?)?;
+    m.add_function(wrap_pyfunction!(weighted_dot_product, m)?)?;
     Ok(())
 }
