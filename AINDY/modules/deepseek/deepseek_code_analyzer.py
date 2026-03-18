@@ -15,10 +15,13 @@ Every operation is:
 - Fully traceable and auditable
 """
 import json
+import logging
 import time
 import uuid
 
 from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 
 from modules.deepseek.security_deepseek import SecurityValidator
@@ -176,6 +179,21 @@ class DeepSeekCodeAnalyzer:
             # Step 2 — Chunk if needed
             chunks = self.file_processor.chunk_content(content)
 
+            # Step 2b — Recall prior memory context for this file/user
+            prior_memories = []
+            if user_id:
+                try:
+                    from bridge import recall_memories
+                    prior_memories = recall_memories(
+                        query=path.name,
+                        tags=["arm", "analysis"],
+                        limit=3,
+                        user_id=user_id,
+                        db=db,
+                    )
+                except Exception as _mem_exc:
+                    logger.debug("[ARM] Memory recall skipped: %s", _mem_exc)
+
             # Step 3 — Build prompt
             context_section = (
                 f"\nAdditional context: {additional_context}\n"
@@ -185,10 +203,18 @@ class DeepSeekCodeAnalyzer:
                 f"\n(File truncated — showing chunk 1 of {len(chunks)})"
                 if len(chunks) > 1 else ""
             )
+            prior_context_section = ""
+            if prior_memories:
+                snippets = "\n".join(
+                    f"- [{m.get('node_type') or 'memory'}] {m.get('content', '')[:200]}"
+                    for m in prior_memories
+                )
+                prior_context_section = f"\nPrior analysis memory:\n{snippets}\n"
             user_prompt = (
                 f"Analyze this {path.suffix} file:\n\n"
                 f"File: {path.name}\n"
                 f"{context_section}"
+                f"{prior_context_section}"
                 f"```{path.suffix.lstrip('.')}\n"
                 f"{chunks[0]}\n"
                 f"```"
@@ -231,6 +257,22 @@ class DeepSeekCodeAnalyzer:
             )
             db.add(db_record)
             db.commit()
+
+            # Step 6b — Write analysis outcome to memory (fire-and-forget)
+            if user_id:
+                try:
+                    from bridge import create_memory_node
+                    _summary = result.get("summary", "")[:300]
+                    create_memory_node(
+                        content=f"ARM analysis of {path.name}: {_summary}",
+                        source="arm_analysis",
+                        tags=["arm", "analysis", path.suffix.lstrip(".")],
+                        user_id=user_id,
+                        db=db,
+                        node_type="outcome",
+                    )
+                except Exception as _mem_exc:
+                    logger.debug("[ARM] Memory write skipped: %s", _mem_exc)
 
             # Step 7 — Return enriched result
             result["session_id"] = str(session_id)
@@ -364,6 +406,22 @@ class DeepSeekCodeAnalyzer:
             )
             db.add(db_record)
             db.commit()
+
+            # Persist codegen outcome to memory (fire-and-forget)
+            if user_id:
+                try:
+                    from bridge import create_memory_node
+                    _task_summary = prompt[:100]
+                    create_memory_node(
+                        content=f"ARM generated {language} code for: {_task_summary}",
+                        source="arm_codegen",
+                        tags=["arm", "codegen", language],
+                        user_id=user_id,
+                        db=db,
+                        node_type="outcome",
+                    )
+                except Exception as _mem_exc:
+                    logger.debug("[ARM] Memory write skipped: %s", _mem_exc)
 
             result["session_id"] = str(session_id)
             result["generation_id"] = str(db_record.id)

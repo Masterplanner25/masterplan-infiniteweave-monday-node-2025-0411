@@ -186,15 +186,7 @@ The following items were explicitly deferred from ARM Phase 1 (commit `f1cd3b5`)
 ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router, tests).
 
 ### §11.1 Memory Bridge feedback loop
-- **After each ARM analysis/generation, a `MemoryNode` should be persisted via
-  `MemoryNodeDAO`** with ARM results as structured content and semantic tags.
-  Currently: DB records written to `analysis_results` / `code_generations` only.
-  Memory Bridge (`memory_nodes` table) is not updated.
-  - Location: `AINDY/modules/deepseek/deepseek_code_analyzer.py` (run_analysis, generate_code)
-  - Fix: after `db.commit()` in each method, call `MemoryNodeDAO(db).save_memory_node()`
-    with `node_type="arm_analysis"` or `"arm_generation"`, content=summary/explanation,
-    tags=["deepseek", file_type, analysis_type].
-  - Status: Open. Deferred to ARM Phase 2.
+- ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 3):** `run_analysis()` writes an `"outcome"` node after `db.commit()` (tags: `["arm", "analysis", ext]`). `generate_code()` writes an `"outcome"` node after `db.commit()` (tags: `["arm", "codegen", language]`). `run_analysis()` also recalls prior memory context before prompt build via `recall_memories(query=filename, tags=["arm", "analysis"])`. Both hooks are fire-and-forget (exceptions silenced, main call unaffected).
 
 ### §11.2 Self-tuning config via Infinity Algorithm feedback
 - ✅ **FIXED (2026-03-17 ARM Phase 2):** `ARMConfigSuggestionEngine` in
@@ -209,12 +201,8 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   AI Productivity Boost, Lost Potential, Learning Efficiency. Calculated by
   `ARMMetricsService` from `analysis_results` + `code_generations` history.
 
-### §11.5 ARM Phase 3 — Memory Bridge feedback loop (deferred pending bridge design)
-- **After each ARM analysis/generation, a `MemoryNode` should be persisted via
-  `MemoryNodeDAO`** with ARM results as structured content and semantic tags.
-  Phase 2 writes to `analysis_results` / `code_generations` only.
-  - Location: `AINDY/modules/deepseek/deepseek_code_analyzer.py`
-  - Status: Open. Deferred to ARM Phase 3 pending Memory Bridge design.
+### §11.5 ARM Phase 3 — Memory Bridge feedback loop
+- ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 3).** See §11.1.
 
 ### §11.6 ARM Phase 3 — Auto-approve low-risk config changes
 - **ARM Phase 2 returns `auto_apply_safe` list** of low-risk suggestions but
@@ -252,9 +240,12 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Status: Open. Deferred to Phase 3. Current behavior: 3-attempt retry then zero vector.
 
 ### §12.4 Phase 3 Workflow hooks — recall() integration
-- **`recall()` is implemented but not yet wired into workflow hooks** (ARM analysis, genesis session, leadgen). Phase 3 should inject relevant memory context before each AI call.
-  - Fix: add `MemoryNodeDAO.recall()` calls in `deepseek_code_analyzer.py`, `genesis_ai.py`, and `leadgen_service.py` to inject top-k relevant memories into prompt context.
-  - Status: Open. Deferred to Phase 3.
+- ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 3):** `recall()` is now wired:
+  - ARM analysis: retrieval hook before prompt build (top-3 prior results injected as "Prior analysis memory" section).
+  - ARM codegen / Task completion / Genesis lock / Masterplan activate: write hooks persist structured outcome and decision nodes.
+  - `bridge.recall_memories()` added as a programmatic bridge function for internal service use (no HTTP round-trip).
+  - `bridge.create_memory_node()` upgraded to use `MemoryNodeDAO.save()` (with embedding) from `db.dao.memory_node_dao`.
+  - Remaining open: `genesis_ai.py` and `leadgen_service.py` prompt injection (deferred to Phase 4).
 
 ## 13. Prioritization Table
 

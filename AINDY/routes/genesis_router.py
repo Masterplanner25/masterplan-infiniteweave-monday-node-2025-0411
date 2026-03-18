@@ -226,6 +226,25 @@ def lock_masterplan(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Write lock event to memory (fire-and-forget)
+    try:
+        from bridge import create_memory_node
+        _vision = draft.get("vision_summary", "") if isinstance(draft, dict) else ""
+        create_memory_node(
+            content=(
+                f"Masterplan locked: {masterplan.version_label} "
+                f"(posture: {masterplan.posture}, session: {session_id}). "
+                f"Vision: {str(_vision)[:200]}"
+            ),
+            source="genesis_lock",
+            tags=["genesis", "masterplan", "decision"],
+            user_id=user_id_str,
+            db=db,
+            node_type="decision",
+        )
+    except Exception:
+        pass
+
     return {
         "masterplan_id": masterplan.id,
         "version": masterplan.version_label,
@@ -259,5 +278,19 @@ def activate_masterplan(
     plan.activated_at = datetime.utcnow()
 
     db.commit()
+
+    # Write activation event to memory (fire-and-forget)
+    try:
+        from bridge import create_memory_node
+        create_memory_node(
+            content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",
+            source="genesis_activate",
+            tags=["genesis", "masterplan", "activation"],
+            user_id=user_id_str,
+            db=db,
+            node_type="decision",
+        )
+    except Exception:
+        pass
 
     return {"status": "activated"}

@@ -66,7 +66,7 @@ def pause_task(db: Session, name: str):
     return f"⚠️ Task '{name}' is not in progress."
 
 
-def complete_task(db: Session, name: str):
+def complete_task(db: Session, name: str, user_id: str = None):
     """
     Mark task complete, log duration, AND update Social Velocity.
     """
@@ -77,10 +77,25 @@ def complete_task(db: Session, name: str):
     now = datetime.now()
     if getattr(task, "start_time", None):
         task.time_spent += (now - task.start_time).total_seconds()
-    
+
     task.status = "completed"
     task.end_time = now
     db.commit()
+
+    # Write task completion to memory (fire-and-forget)
+    if user_id:
+        try:
+            from bridge import create_memory_node
+            create_memory_node(
+                content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",
+                source="task_service",
+                tags=["task", "completion"],
+                user_id=user_id,
+                db=db,
+                node_type="outcome",
+            )
+        except Exception:
+            pass
 
     # Calculate TWR
     task_input = TaskInput(

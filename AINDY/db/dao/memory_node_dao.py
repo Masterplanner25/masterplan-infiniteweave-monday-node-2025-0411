@@ -50,7 +50,7 @@ class MemoryNodeDAO:
         source: str = None,
         tags: List[str] = None,
         user_id: str = None,
-        node_type: str = "generic",
+        node_type: str = None,
         extra: dict = None,
         generate_embedding: bool = True,
     ) -> dict:

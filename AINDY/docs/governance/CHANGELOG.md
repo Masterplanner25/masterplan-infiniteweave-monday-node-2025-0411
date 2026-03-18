@@ -23,6 +23,46 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — Memory Bridge Phase 3] — 2026-03-18
+
+## Summary
+
+Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM analysis, ARM code generation, Task completion, and Genesis lock/activate workflows. Run 1 writes; Run 2 recalls.
+
+## Added
+
+* **`bridge/bridge.py::recall_memories()`** — programmatic bridge function for internal service use. Calls `MemoryNodeDAO.recall()` with resonance scoring. Returns `[]` on failure (fire-and-forget). Exported from `bridge/__init__.py`.
+* **`tests/test_memory_bridge_phase3.py`** — 22 new tests across 5 classes: `TestRecallMemoriesBridge`, `TestCreateMemoryNodeBridge`, `TestARMAnalysisMemoryHook`, `TestARMCodegenMemoryHook`, `TestTaskCompletionMemoryHook`, `TestGenesisMemoryHooks`.
+* **`tests/validate_memory_loop.py`** — live two-run loop validation script. Run 1 writes a node; Run 2 recalls it by resonance score. Requires Docker pgvector on port 5433.
+
+## Changed
+
+* **`bridge/bridge.py::create_memory_node()`** — upgraded to use `db.dao.memory_node_dao.MemoryNodeDAO.save()` (with embedding generation). Default `node_type` changed from `"generic"` to `None` to pass ORM `VALID_NODE_TYPES` validation.
+* **`db/dao/memory_node_dao.MemoryNodeDAO.save()`** — default `node_type` changed from `"generic"` to `None` (was causing `ValueError` from ORM event listener on every call with default).
+* **`modules/deepseek/deepseek_code_analyzer.py`** — three memory hooks added:
+  - Retrieval hook in `run_analysis()`: calls `recall_memories(query=filename, tags=["arm", "analysis"])` before prompt build; injects prior context into `user_prompt` as "Prior analysis memory" section.
+  - Write hook in `run_analysis()`: after `db.commit()`, writes `"outcome"` node tagged `["arm", "analysis", ext]`.
+  - Write hook in `generate_code()`: after `db.commit()`, writes `"outcome"` node tagged `["arm", "codegen", language]`.
+* **`services/task_services.py::complete_task()`** — added `user_id: str = None` optional param (backward compatible). After `db.commit()`, writes `"outcome"` node tagged `["task", "completion"]` when `user_id` is provided.
+* **`routes/genesis_router.py::lock_masterplan()`** — after `create_masterplan_from_genesis()` succeeds, writes `"decision"` node tagged `["genesis", "masterplan", "decision"]` with vision summary excerpt.
+* **`routes/genesis_router.py::activate_masterplan()`** — after `db.commit()`, writes `"decision"` node tagged `["genesis", "masterplan", "activation"]`.
+
+## Node Type Assignments
+
+| Workflow | node_type | tags |
+|---|---|---|
+| ARM analysis | `outcome` | `["arm", "analysis", ext]` |
+| ARM codegen | `outcome` | `["arm", "codegen", language]` |
+| Task completion | `outcome` | `["task", "completion"]` |
+| Genesis lock | `decision` | `["genesis", "masterplan", "decision"]` |
+| Masterplan activate | `decision` | `["genesis", "masterplan", "activation"]` |
+
+## Test Result
+
+384 passing, 0 failing (was 362 before Phase 3).
+
+---
+
 # [feature/cpp-semantic-engine — Memory Bridge Phase 2] — 2026-03-18
 
 ## Added

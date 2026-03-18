@@ -70,20 +70,20 @@ def create_memory_node(
     tags: list = None,
     user_id: str = None,
     db=None,
-    node_type: str = "generic",
+    node_type: str = None,
 ):
     """
-    Persists a memory node to memory_nodes via MemoryNodeDAO.
+    Persists a memory node to memory_nodes via MemoryNodeDAO (with embedding).
 
     Parameters
     ----------
     content   : text payload for this node
-    source    : origin label (e.g. service name, route, 'leadgen')
+    source    : origin label (e.g. service name, route, 'arm_analysis')
     tags      : list of string tags for retrieval
     user_id   : owning user's sub (string)
     db        : SQLAlchemy Session; if None a warning is logged and an
                 unpersisted MemoryNode is returned instead
-    node_type : node classification (default 'generic')
+    node_type : one of decision, outcome, insight, relationship (or None)
 
     Returns
     -------
@@ -91,7 +91,7 @@ def create_memory_node(
     unpersisted MemoryNode when db is not provided.
     """
     import logging
-    from services.memory_persistence import MemoryNodeDAO
+    from db.dao.memory_node_dao import MemoryNodeDAO
 
     logger = logging.getLogger(__name__)
 
@@ -105,22 +105,57 @@ def create_memory_node(
         )
         return MemoryNode(content=content, source=source, tags=tags)
 
-    node = MemoryNode(content=content, source=source, tags=tags)
-    node.node_type = node_type
-    node.user_id = user_id
-
     dao = MemoryNodeDAO(db)
-    db_node = dao.save_memory_node(node)
-    logger.info("[Bridge] Memory node persisted: id=%s source=%s", db_node.id, source)
-    return {
-        "id": str(db_node.id),
-        "content": db_node.content,
-        "source": db_node.source,
-        "tags": db_node.tags,
-        "user_id": db_node.user_id,
-        "node_type": db_node.node_type,
-        "created_at": db_node.created_at.isoformat() if db_node.created_at else None,
-    }
+    result = dao.save(
+        content=content,
+        source=source,
+        tags=tags,
+        user_id=user_id,
+        node_type=node_type,
+    )
+    logger.info("[Bridge] Memory node persisted: id=%s source=%s", result.get("id"), source)
+    return result
+
+
+def recall_memories(
+    query: str = None,
+    tags: list = None,
+    limit: int = 5,
+    user_id: str = None,
+    node_type: str = None,
+    db=None,
+) -> list:
+    """
+    Retrieve memory nodes using resonance scoring (semantic + tag + recency).
+
+    Parameters
+    ----------
+    query     : natural language query for semantic recall
+    tags      : list of string tags to match
+    limit     : max results to return
+    user_id   : filter to this user's nodes
+    node_type : optional filter (decision, outcome, insight, relationship)
+    db        : SQLAlchemy Session (required — returns [] if None)
+
+    Returns
+    -------
+    list of node dicts ordered by resonance_score, or [] on failure
+    """
+    import logging
+    from db.dao.memory_node_dao import MemoryNodeDAO
+
+    logger = logging.getLogger(__name__)
+
+    if db is None:
+        logger.warning("[Bridge] recall_memories called without a DB session — returning []")
+        return []
+
+    try:
+        dao = MemoryNodeDAO(db)
+        return dao.recall(query=query, tags=tags, limit=limit, user_id=user_id, node_type=node_type)
+    except Exception as exc:
+        logger.warning("[Bridge] recall_memories failed: %s", exc)
+        return []
 
 
 
