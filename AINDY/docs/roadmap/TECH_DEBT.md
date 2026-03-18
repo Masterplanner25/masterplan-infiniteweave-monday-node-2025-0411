@@ -63,16 +63,40 @@ The C++ semantic similarity kernel (`bridge/memory_bridge_rs/`) was added in `fe
 - **No vector embeddings on `MemoryNode`.** The C++ `cosine_similarity` kernel is implemented and wired but has no data to operate on. `MemoryNode` stores text only; no embedding field, no embedding generation, no pgvector storage. Semantic memory search is inoperable until embeddings are added. Steps required: add `embedding` field to `MemoryNodeModel`, generate embeddings via OpenAI `text-embedding-ada-002` (dim=1536) on node creation, store in JSONB or pgvector, wire `cosine_similarity` to a `/bridge/nodes/search/semantic` endpoint (`AINDY/bridge/memory_bridge_rs/src/lib.rs`, `AINDY/services/memory_persistence.py`).
 - **`PERMISSION_SECRET` defaults to `"dev-secret-must-change"`.** If `PERMISSION_SECRET` is not set in `.env`, HMAC signing uses this default. Any party who knows the default can forge valid permissions. This is a deployment configuration risk, not a code defect, but no rotation policy or validation on startup enforces that the secret has been changed (`AINDY/routes/bridge_router.py:21`).
 
-## 9. Prioritization Table
+## 9. Newly Revealed Bugs (Diagnostic Test Suite — 2026-03-17)
+
+The following bugs were revealed by the comprehensive diagnostic test suite added in `feature/cpp-semantic-engine`. All items below were confirmed by failing tests in `AINDY/tests/`.
+
+### §2 Schema / Migration (additions)
+- **`bridge/bridge.py::create_memory_node()` also has a broken import path.** In addition to writing to the wrong table, `create_memory_node()` imports via `from db.models.models import CalculationResult` — but `db/models/models.py` does not exist. This causes an `ImportError` at runtime whenever the function is called (including every `POST /social/post` and every `POST /leadgen/` call that reaches `create_memory_node()`). Two bugs stacked: wrong import module + wrong table. Fix requires both correcting the import to `db.models.calculation` AND rewriting to use `MemoryNodeDAO` (`AINDY/bridge/bridge.py:66`). Revealed by: `test_memory_bridge.py::TestCreateMemoryNodeWrongTable::test_create_memory_node_uses_wrong_table`.
+
+### §1 Structural (additions)
+- **`routes/genesis_router.py` has three undefined name references.** (1) `POST /genesis/synthesize` calls `call_genesis_synthesis_llm()` which is defined in `services/genesis_ai.py` but is never imported into the router — raises `NameError` at runtime. (2) `POST /genesis/lock` calls `create_masterplan_from_genesis()` which is defined in `services/masterplan_factory.py` but not imported — raises `NameError`. (3) `POST /genesis/{plan_id}/activate` references `MasterPlan` which is never imported into the router — raises `NameError`. All three endpoints are effectively broken without any DB access being required to trigger the failure. Fix: add missing imports to `genesis_router.py` (`AINDY/routes/genesis_router.py`). Revealed by: `test_routes_genesis.py::TestGenesisSynthesizeEndpoint::test_post_genesis_synthesize_has_name_error_bug`, `test_routes_genesis.py::TestGenesisLockEndpoint::test_post_genesis_lock_has_undefined_name_bug`.
+- **`services/leadgen_service.py::score_lead()` contains dead/unreachable code.** The function has two `try:` blocks, but the second is entirely unreachable because the first block always returns (or raises). The dead block calls `client.chat.completions.create(model="gpt-4o", ...)` — a different model than the live block — which is neither tested nor executed. Fix: remove the dead block (`AINDY/services/leadgen_service.py:104-127`). Revealed by: `test_routes_leadgen.py::TestLeadGenServiceBugs::test_score_lead_has_dead_code_after_return`.
+- **`routes/seo_routes.py` defines `analyze_seo()` twice.** The function is defined at line 17 and again at line 39. Python silently uses the second definition, making the first (basic) implementation unreachable. The duplicate also appears in the router — both map to `POST /analyze_seo/`. The second definition (`POST /seo/analyze`) works but shares a name with the dead first one (`AINDY/routes/seo_routes.py:17,39`).
+- **`routes/dashboard_router.py` and `routes/health_dashboard_router.py` both use prefix `/dashboard`.** This creates a route collision on `/dashboard/health`. FastAPI registers both but the last-registered takes precedence. The `dashboard_router.py` (overview) path is `/dashboard/overview` and is not directly conflicting, but the shared prefix means any future additions risk silent overrides (`AINDY/routes/__init__.py`).
+- **`main.py` uses deprecated `@app.on_event("startup")` twice.** FastAPI 0.119.0 deprecates `on_event` in favor of lifespan context managers. Two startup handlers are registered (`startup` and `ensure_system_identity`), both using the deprecated API. This generates deprecation warnings on every test run (`AINDY/main.py:50,83`).
+
+### §6 Security (additions)
+- **No authentication or authorization on any API route confirmed by test suite.** Tests confirm: `GET /tasks/list` returns 200, `POST /tasks/create` returns 200 (creates records), `POST /genesis/session` returns 200, `POST /leadgen/` reaches the handler and makes API calls — all without any credentials. This confirms the existing §6 entry with test evidence (`AINDY/routes/*`). Revealed by: `test_security.py::TestAuthenticationMissing::*`.
+- **CORS wildcard with credentials confirmed.** `allow_origins=["*"]` with `allow_credentials=True` is confirmed active in `main.py`. Browsers reject this configuration per the CORS spec; it is a security misconfiguration. Revealed by: `test_security.py::TestCORSConfiguration::test_cors_is_not_wildcard_WILL_FAIL`.
+- **No rate limiting middleware confirmed.** Only `BaseHTTPMiddleware` and `CORSMiddleware` are active. No `SlowAPI`, `fastapi-limiter`, or equivalent present. Revealed by: `test_security.py::TestRateLimit::test_rate_limiting_exists_WILL_FAIL`.
+
+### §3 Testing (additions — resolved)
+- Comprehensive diagnostic test suite added: `AINDY/tests/` with 143 tests across 8 files covering services, memory bridge, Rust/C++ kernel, all route groups, models, and security. Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0` added to `requirements.txt`. Final result: **135 passing, 8 failing** (all failures are intentional diagnostic tests for known bugs).
+
+## 10. Prioritization Table
 
 | Area | Risk Level (Low/Medium/High) | Impact | Recommended Phase |
 |------|------------------------------|--------|-------------------|
-| Schema / Migration | High | Risk of runtime failures due to drift or missing constraints | Phase 1 |
+| Schema / Migration | High | Runtime failures — `create_memory_node()` ImportError on every call | Phase 1 |
+| Genesis Router (undefined names) | High | 3 of 5 genesis endpoints raise NameError at runtime | Phase 1 |
 | Error Handling | High | Inconsistent client behavior and poor fault isolation | Phase 1 |
-| C++ Kernel (wrong-table bug) | High | Memory nodes created via services are silently lost | Phase 1 |
+| C++ Kernel (wrong-table + import bug) | High | Memory nodes created via services are silently lost + ImportError | Phase 1 |
+| Security (auth missing) | High | All routes publicly writable — confirmed by test suite | Phase 1 |
 | Concurrency | Medium | Duplicated background work and unbounded loops | Phase 2 |
-| Security | Medium | Increased exposure due to lack of auth and rate limiting | Phase 2 |
-| Testing | Medium | Undetected regressions and poor change safety | Phase 2 |
+| Security (CORS + rate limiting) | Medium | CORS misconfiguration; no rate limiting | Phase 2 |
+| Testing | Low | Test suite now added; coverage gaps remain | Phase 2 |
 | C++ Kernel (embeddings/release build) | Medium | Semantic search inoperable; performance gains unrealized | Phase 2 |
 | Observability | Medium | Limited visibility into failures | Phase 3 |
 | Structural | Low | Known coupling and in-memory state | Phase 3 |
