@@ -35,16 +35,14 @@ This document distinguishes current behavior from required policy rules. It does
 
 ### A. Current Implementation
 - `AINDY/services/genesis_ai.py`:
-- Expects JSON from `response.choices[0].message.content` and uses `json.loads`.
-- On JSON parsing failure, returns a fixed fallback dict:
-- `{"reply": "I need a bit more clarity. Can you elaborate?", "state_update": {}, "synthesis_ready": False}`
-- No retry logic is implemented.
-- No explicit timeout handling is implemented.
+  - `call_genesis_llm()`: Expects JSON from `response.choices[0].message.content` and uses `json.loads`. On JSON parsing failure, returns a fixed fallback dict: `{"reply": "I need a bit more clarity. Can you elaborate?", "state_update": {}, "synthesis_ready": False}`. No retry logic. No explicit timeout.
+  - `call_genesis_synthesis_llm()`: Uses `response_format={"type": "json_object"}`. On JSON parse failure, returns a minimal valid structure. No retry logic. No explicit timeout.
+  - ✅ **`validate_draft_integrity()` (added 2026-03-17 Genesis Block 4):** Implements 3-attempt retry loop with `for attempt in range(retry_limit)`. On all-retry failure, returns a structured fail-safe dict with `audit_passed=False` and a `confidence_concern` finding. Uses `response_format={"type": "json_object"}`.
 - `AINDY/services/deepseek_arm_service.py`:
-- Calls DeepSeek analyzer functions without wrapping exceptions.
-- Exceptions are handled at the route level in `AINDY/routes/arm_router.py`, which returns HTTP 500.
-- No retry logic is implemented.
-- No explicit timeout handling is implemented.
+  - Calls DeepSeek analyzer functions without wrapping exceptions.
+  - Exceptions are handled at the route level in `AINDY/routes/arm_router.py`, which returns HTTP 500.
+  - No retry logic. No explicit timeout.
+  - ✅ **`DeepSeekCodeAnalyzer._call_openai()` (ARM Phase 1, 2026-03-17):** Implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 
 ### B. Policy Rules
 - Model failures must not crash the application process.
@@ -58,6 +56,7 @@ This document distinguishes current behavior from required policy rules. It does
 - Many services explicitly `commit()` after writes.
 - `AINDY/services/memory_persistence.py` performs `rollback()` on SQLAlchemy errors before re-raising.
 - Many routes and services do not explicitly rollback on exceptions.
+- ✅ **`AINDY/services/masterplan_factory.py: create_masterplan_from_genesis()` (Genesis Block 5, 2026-03-17):** All DB mutations (masterplan insert + session status freeze + commit) wrapped in try/except with `db.rollback()` in the except clause before re-raise. Atomic unit.
 - Background loops in `AINDY/services/task_services.py` create a new `SessionLocal()` per iteration and close it in `finally`.
 - DB session created in `AINDY/main.py` startup event is not explicitly closed.
 
@@ -101,9 +100,10 @@ Policy requirement for API errors (even if not fully implemented):
 
 ## 6. Known Gaps
 - Inconsistent error handling across routes (`AINDY/routes/*`).
-- Missing retry logic for model provider calls (`AINDY/services/genesis_ai.py`, `AINDY/services/deepseek_arm_service.py`).
-- No explicit timeout handling for external model calls.
+- ✅ **PARTIALLY RESOLVED (2026-03-17):** Retry logic added to `validate_draft_integrity()` (3-attempt) and `DeepSeekCodeAnalyzer._call_openai()` (configurable). Still missing in `call_genesis_llm()`, `call_genesis_synthesis_llm()`.
+- No explicit timeout handling for external model calls (all three OpenAI service functions).
 - Mixed use of `print(...)` and logging; no structured logging.
 - No centralized error response formatter; default FastAPI error handling is used.
 - DB session created in `AINDY/main.py` startup is not explicitly closed.
+- ✅ **PARTIALLY RESOLVED (2026-03-17):** `create_masterplan_from_genesis()` now has atomic rollback. Most other services/routes still lack explicit rollback.
 - Health check uses `/tools/seo/*` endpoints in `AINDY/routes/health_router.py`, which are not defined in `AINDY/routes/seo_routes.py`. This can produce failing endpoint checks and degraded health classification unrelated to actual service health.

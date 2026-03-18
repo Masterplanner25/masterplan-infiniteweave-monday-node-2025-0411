@@ -6,7 +6,7 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-17)
 
-**Diagnostic suite** (`AINDY/tests/`) — 246 tests across 11 files. Final result: **246 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 301 tests across 12 files. Final result: **301 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -20,6 +20,7 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
 | `tests/test_routes_genesis.py` | 35 | Route auth enforcement, import regression guards. Genesis Blocks 1-3 (22 new): TestGenesisBlock1 (10) — model column presence, factory signature, masterplan_router registration/auth; TestGenesisBlock2 (5) — new route registration, auth guards, one-way flag guard; TestGenesisBlock3 (7) — real LLM assertion, synthesis gate (422), posture logic, posture_description. |
+| `tests/test_genesis_flow.py` | 55 | Genesis Blocks 4-6: TestValidateDraftIntegrity (13) — AUDIT_SYSTEM_PROMPT schema, retry logic, fail-safe, happy/failed path with mocked OpenAI; TestGenesisAuditRoute (6) — route registration, auth, handler reachability; TestMasterplanFactoryHardening (10) — synthesis_ready gate, draft_from_session, rollback-on-failure, posture from draft; TestMasterplanRouterLock (8) — new static /lock endpoint, ValueError→422, posture_description in response; TestMasterplanListResponseShape (4) — {"plans": [...]} shape; TestDuplicateRouteRemoval (4) — single handler in main_router, no duplicate paths; TestSynthesisPromptSchema (2) — synthesis_notes field; TestPostureDescriptionHelper (4) — all posture labels; TestGenesisFlowRouteRegistration (2) — all genesis + masterplan routes present. |
 | `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
 | `tests/test_arm.py` | 62 | ARM Phase 1 (46): SecurityValidator, ConfigManager, FileProcessor, ARM routes with mocked OpenAI. ARM Phase 2 (16): TestARMMetrics route-level (4), TestARMMetricsService unit (7), TestARMConfigSuggestions unit (4), TestARMRoutes new endpoints (1). No DB required for service unit tests. |
 
@@ -115,3 +116,4 @@ A change cannot be merged if:
   - `test_post_ai_productivity_boost`, `test_post_batch_calculations`, `test_post_decision_efficiency`, `test_post_engagement_rate`, `test_post_execution_speed`, `test_post_income_efficiency`, `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
 - ✅ **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/roadmap/TECH_DEBT.md` §6.
 - ✅ **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit — no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit — no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
+- ✅ **Resolved (2026-03-17 Genesis Blocks 4-6):** `test_genesis_flow.py` added with 55 tests covering: `validate_draft_integrity()` with mocked OpenAI (including retry and fail-safe paths), `POST /genesis/audit` route registration + auth, factory hardening (`synthesis_ready` gate, `db.rollback()` path), `POST /masterplans/lock` endpoint, `GET /masterplans/` response shape, duplicate route removal, synthesis prompt schema, posture description helper. Total: 301 passing.

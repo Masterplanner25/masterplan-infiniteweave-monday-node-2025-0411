@@ -68,8 +68,10 @@ This document lists invariants enforced by the current implementation. Each inva
 ## 8. Single Active MasterPlan on Activation
 - Invariant Name: Only one active masterplan
 - Description: Activating a masterplan deactivates all other plans.
-- Enforcement Location: `AINDY/routes/genesis_router.py: activate_masterplan`
-- Enforcement Mechanism: `db.query(MasterPlan).update({"is_active": False})` before setting selected plan active.
+- Enforcement Location:
+  - `AINDY/routes/genesis_router.py: activate_masterplan`
+  - `AINDY/routes/masterplan_router.py: activate_masterplan`
+- Enforcement Mechanism: `db.query(MasterPlan).update({"is_active": False})` before setting selected plan active. Both activation routes enforce this.
 - What Would Break If Violated: Multiple masterplans marked active simultaneously.
 - Enforcement Type: Application-enforced.
 
@@ -192,10 +194,34 @@ This document lists invariants enforced by the current implementation. Each inva
 
 ## 23. Rate Limiting on AI/Expensive Endpoints
 - Invariant Name: AI-backed endpoints have per-IP rate limits
-- Description: Endpoints that invoke external AI providers or perform expensive operations are rate-limited per remote IP using SlowAPI. Limits: `POST /leadgen/` (10/min), `POST /genesis/message` (20/min), `POST /genesis/synthesize` (5/min), `POST /arm/analyze` (10/min), `POST /arm/generate` (10/min).
+- Description: Endpoints that invoke external AI providers or perform expensive operations are rate-limited per remote IP using SlowAPI. Limits: `POST /leadgen/` (10/min), `POST /genesis/message` (20/min), `POST /genesis/synthesize` (5/min), `POST /genesis/audit` (5/min), `POST /arm/analyze` (10/min), `POST /arm/generate` (10/min).
 - Enforcement Location: `@limiter.limit(...)` decorator on each route function; shared `Limiter` instance in `AINDY/services/rate_limiter.py`; `SlowAPIMiddleware` registered on the FastAPI app in `AINDY/main.py`.
 - Enforcement Mechanism: SlowAPI intercepts requests before route body; returns HTTP 429 with `Retry-After` header when limit is exceeded.
-- What Would Break If Violated: Unconstrained callers could exhaust OpenAI/Perplexity/DeepSeek API quotas and incur unbounded cost.
+- What Would Break If Violated: Unconstrained callers could exhaust OpenAI API quotas and incur unbounded cost.
+- Enforcement Type: Application-enforced.
+
+## 24. Genesis Session synthesis_ready Gate Before Lock
+- Invariant Name: Only synthesis-ready sessions can produce a MasterPlan
+- Description: `create_masterplan_from_genesis()` refuses to lock a genesis session unless `session.synthesis_ready` is `True`. This ensures a MasterPlan is only created from a session that has successfully completed synthesis.
+- Enforcement Location: `AINDY/services/masterplan_factory.py: create_masterplan_from_genesis`
+- Enforcement Mechanism: Raises `ValueError("Session is not synthesis-ready — run /genesis/synthesize first")` if `session.synthesis_ready` is `False`. Callers (`POST /genesis/lock`, `POST /masterplans/lock`) catch `ValueError` and return HTTP 422.
+- What Would Break If Violated: MasterPlans could be created from incomplete or un-synthesized sessions, producing plans without a proper GPT-4o draft.
+- Enforcement Type: Application-enforced.
+
+## 25. Audit Endpoint Requires Persisted Draft
+- Invariant Name: Strategic integrity audit requires a persisted draft
+- Description: `POST /genesis/audit` can only run when the genesis session has a non-null `draft_json`. Sessions without a draft (i.e., synthesis has not been run yet) are rejected.
+- Enforcement Location: `AINDY/routes/genesis_router.py: audit_genesis_draft`
+- Enforcement Mechanism: Checks `if not session.draft_json` and raises `HTTPException(status_code=422, ...)` before calling `validate_draft_integrity()`.
+- What Would Break If Violated: Audit would be called with a null/empty draft, causing either an empty OpenAI request or a MagicMock serialization error.
+- Enforcement Type: Application-enforced.
+
+## 26. Atomic MasterPlan Creation — Rollback on Failure
+- Invariant Name: Factory database mutations are atomic with rollback
+- Description: All DB write operations inside `create_masterplan_from_genesis()` are wrapped in a try/except. Any exception during `db.add()`, `db.commit()`, or `db.refresh()` triggers `db.rollback()` before the exception is re-raised, preserving DB consistency.
+- Enforcement Location: `AINDY/services/masterplan_factory.py: create_masterplan_from_genesis` (try/except block around masterplan add + session freeze + commit)
+- Enforcement Mechanism: Explicit `db.rollback()` in the except clause before re-raising.
+- What Would Break If Violated: Partial DB state — e.g., a MasterPlan row inserted but session status not updated, or vice versa — could leave data in an inconsistent mid-lock state.
 - Enforcement Type: Application-enforced.
 
 ## 20. Documented but Not Enforced at Code Level
