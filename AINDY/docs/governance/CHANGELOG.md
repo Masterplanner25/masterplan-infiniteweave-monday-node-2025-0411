@@ -23,6 +23,30 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — Docker pgvector Setup] — 2026-03-18
+
+## Added
+
+* **`docker-compose.yml`** (repo root) — `pgvector/pgvector:pg16` container on port `5433`
+  with named volume `aindy_pgdata` for data persistence and `unless-stopped` restart policy.
+* **`AINDY/docs/DOCKER_SETUP.md`** — full operational guide: quick start, connection details,
+  common commands, data persistence, rollback to PG18 instructions.
+* **`AINDY/.env.pg18`** — backup of original PG18 connection string (gitignored); allows
+  one-file rollback to local PostgreSQL 18 if needed.
+* **`pgvector==0.4.2`** added to `requirements.txt` (Python package; installed in venv).
+* **`.env.pg18`** added to root `.gitignore`.
+
+## Notes
+
+* Docker Desktop is not yet installed on the development machine. Container is not running.
+  `.env` and `alembic.ini` still point to `localhost:5432` (PG18). Port update (`5432→5433`),
+  `CREATE EXTENSION IF NOT EXISTS vector`, and `alembic upgrade head` are deferred until
+  Docker Desktop is installed. See `AINDY/docs/DOCKER_SETUP.md` for the complete runbook.
+* pgvector Python package (`pgvector.sqlalchemy.Vector`) is fully functional; `Vector(1536)`
+  type confirmed working. SQLAlchemy integration is ready for Phase 2 migration authoring.
+
+---
+
 # [feature/cpp-semantic-engine — Memory Bridge Phase 1] — 2026-03-18
 
 ## Added

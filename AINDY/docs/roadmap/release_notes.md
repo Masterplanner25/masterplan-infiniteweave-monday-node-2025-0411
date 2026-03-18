@@ -4,7 +4,7 @@
 
 ## Release: Memory Bridge Phase 1 — Make It Real
 
-- **Version/Tag:** `feature/cpp-semantic-engine` (commit pending)
+- **Version/Tag:** `main` (commit `7887cbd`)
 - **Date:** 2026-03-18
 - **Owner:** Shawn Knight
 - **Designated maintainer:** Shawn Knight
