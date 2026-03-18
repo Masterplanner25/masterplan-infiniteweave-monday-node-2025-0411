@@ -20,7 +20,7 @@ This document inventories current technical debt based strictly on the existing 
 - Some application-level constraints are not enforced at DB level (e.g., session locking is application logic in `AINDY/services/masterplan_factory.py`).
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).
-- **`bridge/bridge.py::create_memory_node()` writes to the wrong table.** It persists via `CalculationResult` to `calculation_results`, storing only `title` as `metric_name` and `0.0` as `result_value`. Content and tags are silently discarded. The correct path uses `MemoryNodeDAO` writing to `memory_nodes`. Split state results: memory nodes created via `leadgen_service.py` produce phantom `CalculationResult` rows. Fix: rewrite `create_memory_node()` to use `MemoryNodeDAO` (`AINDY/bridge/bridge.py:60`).
+- ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
 - Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
 - `AINDY/version.json` and `AINDY/system_manifest.json` report version `0.9.0-pre`; current release is `1.0.0` (Social Layer). These are not updated automatically and are stale.
 
@@ -74,7 +74,7 @@ The C++ semantic similarity kernel (`bridge/memory_bridge_rs/`) was added in `fe
 The following bugs were revealed by the comprehensive diagnostic test suite added in `feature/cpp-semantic-engine`. All items below were confirmed by failing tests in `AINDY/tests/`.
 
 ### §2 Schema / Migration (additions)
-- **`bridge/bridge.py::create_memory_node()` also has a broken import path.** ~~In addition to writing to the wrong table, `create_memory_node()` imports via `from db.models.models import CalculationResult` — but `db/models/models.py` does not exist. This causes an `ImportError` at runtime whenever the function is called.~~ **IMPORT PATH FIXED (2026-03-17):** Import corrected from `db.models.models` to `db.models.calculation`. The `ImportError` crash is resolved. The wrong-table architectural issue remains open: `create_memory_node()` still writes to `CalculationResult` (table: `calculation_results`) instead of `MemoryNodeDAO` (table: `memory_nodes`). Content and tags are still discarded. Full fix requires rewriting to use `MemoryNodeDAO` (`AINDY/bridge/bridge.py:66`). Revealed by: `test_memory_bridge.py::TestCreateMemoryNodeWrongTable::test_create_memory_node_uses_wrong_table`.
+- ~~**`bridge/bridge.py::create_memory_node()` also has a broken import path.**~~ ~~**IMPORT PATH FIXED (2026-03-17):** Import corrected.~~ ✅ **FULLY FIXED (2026-03-18 Memory Bridge Phase 1):** `CalculationResult` no longer referenced at all. `create_memory_node()` fully rewritten to use `MemoryNodeDAO`. Both the import bug and the wrong-table bug are resolved. Revealed by: `test_memory_bridge.py::TestCreateMemoryNodeWrongTable` (now a regression guard).
 
 ### §1 Structural (additions)
 - **`routes/genesis_router.py` has three undefined name references.** ~~(1) `POST /genesis/synthesize` calls `call_genesis_synthesis_llm()` — NameError. (2) `POST /genesis/lock` calls `create_masterplan_from_genesis()` — NameError. (3) `POST /genesis/{plan_id}/activate` references `MasterPlan` — NameError.~~ ~~**CRASHES FIXED (2026-03-17):** All three missing imports added. LLM synthesis remains a stub.~~ ✅ **FULLY RESOLVED (2026-03-17 Genesis Blocks 1-3):** `call_genesis_synthesis_llm()` replaced with real GPT-4o call. `determine_posture()` implemented with real Stable/Accelerated/Aggressive/Reduced logic. All routes user-scoped. Two new GET endpoints added. `masterplan_router.py` created. Migration `a1b2c3d4e5f6` applied. 22 new tests pass.
@@ -112,7 +112,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/bridge/bridge.py` (MemoryTrace class)
   - Mechanism: `MemoryTrace.add_node()` appends to `self.nodes` in-memory. `MemoryNodeDAO.save_memory_node()` writes to PostgreSQL. There is no path between them.
   - Impact: Queries against the DB do not reflect in-memory state; in-memory state does not survive restart. Two consumers reading the same "memory" will see different results depending on which layer they use.
-  - Status: Open. Recommendation: eliminate `MemoryTrace` as an application-managed state container; treat PostgreSQL as the single source of truth. Retain the Rust `MemoryTrace` struct for wire serialization only.
+  - Status: ✅ **PARTIALLY RESOLVED (2026-03-18 Memory Bridge Phase 1):** `MemoryTrace` now has a docstring explicitly marking it as transient and not a source of truth. PostgreSQL (via `MemoryNodeDAO`) is the authoritative read path. `MemoryTrace` still exists for in-process scratchpad use; full elimination remains open for a future phase.
 
 ### §10.3 Graph Layer — memory_links has no traversal query
 
@@ -120,7 +120,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO), `AINDY/routes/bridge_router.py` (no traversal endpoint)
   - Mechanism: `POST /bridge/link` inserts rows. No endpoint or DAO method queries `memory_links` for neighbors, reachability, or subgraph expansion.
   - Impact: The relational structure between memory nodes is unqueryable. Graph-based recall — the architectural basis for associative memory — does not function.
-  - Status: Open. Minimum viable fix: add `MemoryNodeDAO.get_linked_nodes(node_id, link_type=None, limit=50)` querying `memory_links` by `source_node_id`, and expose it at `GET /bridge/nodes/{id}/links`.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 1):** `MemoryNodeDAO.get_linked_nodes(node_id, direction)` added in `db/dao/memory_node_dao.py`; supports `in`, `out`, and `both` directions. Exposed at `GET /memory/nodes/{id}/links`.
 
 ### §10.4 Graph Layer — memory_links.strength is a VARCHAR, not a numeric value
 

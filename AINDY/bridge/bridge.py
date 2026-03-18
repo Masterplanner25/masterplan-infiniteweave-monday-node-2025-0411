@@ -31,6 +31,13 @@ class MemoryNode:
 
 # --- Trace layer: Chain of memory nodes ---
 class MemoryTrace:
+    """
+    Transient in-memory container for a chain of MemoryNode objects.
+    NOT a source of truth — nodes held here are not persisted to the database.
+    Use MemoryNodeDAO.save_memory_node() to persist, and the memory_router
+    endpoints to retrieve. MemoryTrace is a local scratchpad only.
+    """
+
     def __init__(self):
         self.root_nodes = []  # Entry points of the memory trace
 
@@ -57,32 +64,92 @@ def _recursive_find(node, tag):
         matches.extend(_recursive_find(child, tag))
     return matches
 
-def create_memory_node(title: str, content: str, tags: list[str] = None):
+def create_memory_node(
+    content: str,
+    source: str = None,
+    tags: list = None,
+    user_id: str = None,
+    db=None,
+    node_type: str = "generic",
+):
     """
-    Creates a symbolic memory node that stores research context or insights.
+    Persists a memory node to memory_nodes via MemoryNodeDAO.
+
+    Parameters
+    ----------
+    content   : text payload for this node
+    source    : origin label (e.g. service name, route, 'leadgen')
+    tags      : list of string tags for retrieval
+    user_id   : owning user's sub (string)
+    db        : SQLAlchemy Session; if None a warning is logged and an
+                unpersisted MemoryNode is returned instead
+    node_type : node classification (default 'generic')
+
+    Returns
+    -------
+    dict with id, content, source, tags, user_id, node_type, or an
+    unpersisted MemoryNode when db is not provided.
     """
-    from datetime import datetime
-    from db.database import SessionLocal
-    # TODO: Replace with MemoryNodeDAO — writing to calculation_results is a known bug.
-    # See TECH_DEBT.md §2. Import path corrected from db.models.models (file doesn't exist).
-    from db.models.calculation import CalculationResult
+    import logging
+    from services.memory_persistence import MemoryNodeDAO
+
+    logger = logging.getLogger(__name__)
 
     if tags is None:
         tags = []
 
-    db = SessionLocal()
-    node = CalculationResult(
-        metric_name=title,
-        result_value=0.0,  # placeholder
-        created_at=datetime.utcnow(),
-    )
-    db.add(node)
-    db.commit()
-    db.refresh(node)
+    if db is None:
+        logger.warning(
+            "[Bridge] create_memory_node called without a DB session — "
+            "returning transient MemoryNode (not persisted)"
+        )
+        return MemoryNode(content=content, source=source, tags=tags)
 
-    print(f"[Bridge] Memory node created: {title}")
-    return {"title": title, "content": content, "tags": tags, "id": node.id}
+    node = MemoryNode(content=content, source=source, tags=tags)
+    node.node_type = node_type
+    node.user_id = user_id
 
+    dao = MemoryNodeDAO(db)
+    db_node = dao.save_memory_node(node)
+    logger.info("[Bridge] Memory node persisted: id=%s source=%s", db_node.id, source)
+    return {
+        "id": str(db_node.id),
+        "content": db_node.content,
+        "source": db_node.source,
+        "tags": db_node.tags,
+        "user_id": db_node.user_id,
+        "node_type": db_node.node_type,
+        "created_at": db_node.created_at.isoformat() if db_node.created_at else None,
+    }
+
+
+
+def create_memory_link(
+    source_id: str,
+    target_id: str,
+    link_type: str = "related",
+    db=None,
+):
+    """
+    Persists a directed link between two existing memory nodes.
+
+    Parameters
+    ----------
+    source_id : UUID string of the source memory node
+    target_id : UUID string of the target memory node
+    link_type : relationship label (e.g. 'related', 'derived_from', 'supports')
+    db        : SQLAlchemy Session (required — raises ValueError if None)
+
+    Returns
+    -------
+    dict with id, source_node_id, target_node_id, link_type, strength, created_at
+    """
+    if db is None:
+        raise ValueError("create_memory_link requires a DB session")
+
+    from services.memory_persistence import MemoryNodeDAO
+    dao = MemoryNodeDAO(db)
+    return dao.create_link(source_id, target_id, link_type)
 
 
 # --- CONTINUITY MARKER ---

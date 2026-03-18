@@ -77,34 +77,21 @@ class TestPythonBridgeLayer:
 
 class TestCreateMemoryNodeWrongTable:
     """
-    DIAGNOSTIC — INTENTIONAL FAILING TEST.
+    REGRESSION — bug was fixed in Memory Bridge Phase 1 (2026-03-18).
 
-    create_memory_node() in bridge/bridge.py writes to CalculationResult
-    (table: calculation_results) instead of MemoryNodeModel (table: memory_nodes).
-    Content and tags are silently discarded.
-
-    This test verifies the bug is present so it shows up in the failure report.
+    create_memory_node() now writes to MemoryNodeModel (table: memory_nodes)
+    via MemoryNodeDAO. CalculationResult is no longer used.
     """
 
-    def test_create_memory_node_uses_wrong_table(self):
+    def test_create_memory_node_uses_correct_table(self):
         """
-        BUG: create_memory_node() stores data in CalculationResult (wrong table).
-        It should use MemoryNodeDAO writing to memory_nodes.
-
-        NOTE: bridge.py imports from db.models.models which does NOT EXIST.
-        This is an additional import bug layered on top of the wrong-table bug.
-        The function will raise ImportError when called.
-
-        This test WILL FAIL when the bug is fixed.
-        It documents the bug while it exists.
+        FIXED: create_memory_node() now writes a MemoryNodeModel row via MemoryNodeDAO.
+        Regression guard — ensures CalculationResult is never reintroduced.
         """
         from bridge.bridge import create_memory_node
-        # The CalculationResult is in db.models.calculation, NOT db.models.models
-        # bridge.py tries: from db.models.models import CalculationResult  ← ImportError
-        from db.models.calculation import CalculationResult
+        from services.memory_persistence import MemoryNodeModel
 
         saved_instances = []
-
         mock_db = MagicMock()
 
         def fake_add(obj):
@@ -112,37 +99,46 @@ class TestCreateMemoryNodeWrongTable:
 
         mock_db.add.side_effect = fake_add
         mock_db.commit.return_value = None
-        mock_db.refresh.return_value = None
 
-        # bridge.py does: from db.models.models import CalculationResult
-        # but db/models/models.py does NOT EXIST — so this raises ImportError
-        # Two bugs stacked:
-        # 1. Wrong table (CalculationResult instead of MemoryNodeModel)
-        # 2. Wrong import path (db.models.models doesn't exist)
-        # bridge.py imports SessionLocal inside the function body (lazy import)
-        # We need to patch it where it's looked up inside the function
-        with patch("db.database.SessionLocal", return_value=mock_db):
-            try:
-                result = create_memory_node(
-                    title="Test Memory",
-                    content="Some content that should be saved",
-                    tags=["tag1", "tag2"]
-                )
-                # If we get here, check the wrong-table bug
-                if saved_instances:
-                    saved = saved_instances[0]
-                    assert isinstance(saved, CalculationResult), (
-                        "BUG CONFIRMED: create_memory_node() writes a CalculationResult row, "
-                        "not a MemoryNodeModel. Content and tags are discarded."
-                    )
-            except (ImportError, ModuleNotFoundError) as e:
-                # This is the secondary bug: wrong import path
-                pytest.fail(
-                    f"BUG CONFIRMED: create_memory_node() fails with ImportError: {e}. "
-                    "bridge.py imports from db.models.models which does not exist. "
-                    "Correct path is db.models.calculation. "
-                    "Additionally, even if the import were fixed, it writes to the wrong table."
-                )
+        refreshed = MagicMock(spec=MemoryNodeModel)
+        refreshed.id = "test-uuid"
+        refreshed.content = "Some content"
+        refreshed.source = "pytest"
+        refreshed.tags = ["tag1", "tag2"]
+        refreshed.user_id = None
+        refreshed.node_type = "generic"
+        refreshed.created_at = None
+
+        mock_db.refresh.side_effect = lambda obj: None
+
+        with patch("services.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=refreshed):
+            result = create_memory_node(
+                content="Some content",
+                source="pytest",
+                tags=["tag1", "tag2"],
+                db=mock_db,
+            )
+
+        # Result should be a dict (persisted path), not a CalculationResult
+        assert isinstance(result, dict), (
+            "create_memory_node() must return a dict when db is provided"
+        )
+        # Ensure CalculationResult is not referenced in the function source
+        import inspect
+        from bridge import bridge
+        source = inspect.getsource(bridge.create_memory_node)
+        assert "CalculationResult" not in source, (
+            "REGRESSION: create_memory_node() must not reference CalculationResult"
+        )
+
+    def test_create_memory_node_without_db_returns_memory_node(self):
+        """When db=None, create_memory_node returns a transient MemoryNode (not persisted)."""
+        from bridge.bridge import create_memory_node, MemoryNode
+        result = create_memory_node(content="transient", source="test", tags=["a"])
+        assert isinstance(result, MemoryNode), (
+            "create_memory_node() without db must return a MemoryNode instance"
+        )
+        assert result.content == "transient"
 
 
 # ── MemoryNodeDAO (correct path) ───────────────────────────────────────────────

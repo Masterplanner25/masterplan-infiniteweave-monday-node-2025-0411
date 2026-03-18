@@ -25,6 +25,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
 - `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
 - `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
+- `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
 
 **Authentication model (Phase 2 + Phase 3 — complete):**
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social.
@@ -41,6 +42,13 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `POST /arm/analyze` — 10 requests/minute per IP
 - `POST /arm/generate` — 10 requests/minute per IP
 - Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
+
+**Memory Bridge Phase 1 additions (2026-03-18):**
+- `POST /memory/nodes` — JWT required. Body: `CreateNodeRequest {content, source?, tags?, node_type?, extra?}`. Persists a memory node. Returns node dict. Status 201.
+- `GET /memory/nodes/{node_id}` — JWT required. Returns node dict or 404.
+- `GET /memory/nodes/{node_id}/links` — JWT required. Query param: `direction` (`in`|`out`|`both`, default `both`). Returns `{"nodes": [...]}`. 404 if node not found, 422 if direction invalid.
+- `GET /memory/nodes` — JWT required. Query params: `tags` (comma-separated), `mode` (`AND`|`OR`, default `AND`), `limit` (default 50). Returns `{"nodes": [...]}`.
+- `POST /memory/links` — JWT required. Body: `CreateLinkRequest {source_id, target_id, link_type?}`. Returns link dict. Status 201. 422 if nodes don't exist or same ID.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,

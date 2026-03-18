@@ -108,11 +108,11 @@ class TestLeadGenServiceBugs:
             f"Found: {try_count}"
         )
 
-    def test_create_memory_node_called_with_wrong_table(self):
+    def test_create_memory_node_no_longer_uses_wrong_table(self):
         """
-        DIAGNOSTIC: leadgen_service.create_lead_results() calls create_memory_node()
-        which writes to calculation_results (wrong table).
-        This test documents the phantom row creation side-effect.
+        REGRESSION (Memory Bridge Phase 1, 2026-03-18):
+        create_memory_node() was fixed — it now uses MemoryNodeDAO, not CalculationResult.
+        Regression guard: ensures CalculationResult is never reintroduced.
         """
         import inspect
         from services import leadgen_service
@@ -124,7 +124,10 @@ class TestLeadGenServiceBugs:
         )
 
         bridge_source = inspect.getsource(bridge.create_memory_node)
-        assert "CalculationResult" in bridge_source, (
-            "BUG FIXED: create_memory_node() no longer uses CalculationResult. "
-            "This test can now be removed."
+        assert "CalculationResult" not in bridge_source, (
+            "REGRESSION: create_memory_node() must not reference CalculationResult. "
+            "Bug was fixed in Memory Bridge Phase 1 (2026-03-18)."
+        )
+        assert "MemoryNodeDAO" in bridge_source, (
+            "create_memory_node() must use MemoryNodeDAO for persistence"
         )

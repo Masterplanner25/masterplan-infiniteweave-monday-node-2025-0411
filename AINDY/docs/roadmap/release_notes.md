@@ -2,6 +2,68 @@
 
 ---
 
+## Release: Memory Bridge Phase 1 — Make It Real
+
+- **Version/Tag:** `feature/cpp-semantic-engine` (commit pending)
+- **Date:** 2026-03-18
+- **Owner:** Shawn Knight
+- **Designated maintainer:** Shawn Knight
+
+### Summary
+
+Fixed the write-path bug (`create_memory_node()` wrote to `CalculationResult`/`calculation_results` — content and tags silently discarded). Full Memory Bridge write and read infrastructure now live:
+
+- **Write path fixed:** `create_memory_node(content, source, tags, user_id, db, node_type)` now persists to `memory_nodes` via `MemoryNodeDAO`. Graceful fallback returns a transient `MemoryNode` when `db=None`.
+- **`create_memory_link()`** added to `bridge/bridge.py` and exported from `bridge/__init__.py`.
+- **`MemoryTrace`** docstring added: explicitly transient, not a source of truth.
+- **`db/dao/memory_node_dao.py`** — canonical DAO: `save()`, `get_by_id()`, `get_by_tags()`, `get_linked_nodes()`, `create_link()`.
+- **`routes/memory_router.py`** — 5 JWT-protected endpoints: `POST /memory/nodes`, `GET /memory/nodes/{id}`, `GET /memory/nodes/{id}/links`, `GET /memory/nodes`, `POST /memory/links`.
+- **Migration `492fc82e3e2b`** — adds `source VARCHAR(255)` and `user_id VARCHAR(255)` to `memory_nodes`.
+- **Callers updated:** `leadgen_service.py`, `research_results_service.py`, `social_router.py` — all use new signature.
+
+### Evidence Checklist
+
+- Tests executed: `python -m pytest tests/ -q` → **338 passed, 0 failed**
+- `alembic current`: `492fc82e3e2b` (head)
+- `alembic heads`: `492fc82e3e2b`
+- Schema vs. migration verification: `source` and `user_id` columns confirmed in `memory_nodes` via DB introspection
+
+### Invariants Verified
+
+- No new invariants added. Existing invariants unaffected.
+
+### API Contract Updates
+
+New endpoints documented in `docs/interfaces/API_CONTRACTS.md`:
+- `POST /memory/nodes` — JWT required, 201
+- `GET /memory/nodes/{node_id}` — JWT required, 404 if not found
+- `GET /memory/nodes/{node_id}/links` — JWT required, `direction` param, 422 if invalid
+- `GET /memory/nodes` — JWT required, tag search with `mode`/`limit`
+- `POST /memory/links` — JWT required, 422 on ValueError
+
+### Deployment Notes
+
+- **Environment:** No new environment variables required
+- **Migration steps:** `alembic upgrade head` — adds `source` and `user_id` columns to `memory_nodes`
+- **Frontend:** No frontend changes in this release
+- **Known issues:** `MemoryNode.children` still not persisted (see TECH_DEBT.md §10.1); `memory_links.strength` still VARCHAR (§10.4)
+
+### Sign-Off
+
+- **Approved by:** Shawn Knight
+- **Maintainer sign-off (Shawn Knight):** Pending
+- **Approval date:** 2026-03-18
+- **Verification performed by:** Automated pytest suite
+- **Verification date:** 2026-03-18
+- **Verification scope:** Full test suite (338 tests)
+
+### Verification Artifacts
+
+- Test run: `python -m pytest tests/ -q` — 338 passed, 11 warnings in ~39s
+- Migration: `492fc82e3e2b` on `feature/cpp-semantic-engine`
+
+---
+
 ## Release: Genesis Blocks 4-6 — Strategic Integrity Audit + Lock Pipeline
 
 - **Version/Tag:** `feature/cpp-semantic-engine` → `main` (commit `3739b01`)

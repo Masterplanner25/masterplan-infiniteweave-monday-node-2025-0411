@@ -23,6 +23,52 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — Memory Bridge Phase 1] — 2026-03-18
+
+## Added
+
+* **Write path fix** — `create_memory_node()` in `bridge/bridge.py` rewritten to write
+  to `MemoryNodeModel` via `MemoryNodeDAO` (table: `memory_nodes`). Previous behavior
+  silently wrote to `CalculationResult` (table: `calculation_results`) and discarded
+  content and tags. Bug confirmed and documented since `feature/cpp-semantic-engine`.
+* **New signature** — `create_memory_node(content, source, tags, user_id, db, node_type)`.
+  Callers updated: `leadgen_service.py`, `research_results_service.py`, `social_router.py`.
+  When `db=None`, returns a transient `MemoryNode` (logs a warning; does not crash).
+* **`create_memory_link(source_id, target_id, link_type, db)`** — new bridge function;
+  persists a directed link via `MemoryNodeDAO.create_link()`. Raises `ValueError` if `db=None`.
+  Exported from `bridge/__init__.py`.
+* **`MemoryTrace` docstring** — clarifies transient-only status; not a source of truth.
+* **`db/dao/memory_node_dao.py`** — canonical DAO for memory operations:
+  `save()`, `get_by_id()`, `get_by_tags()`, `get_linked_nodes()`, `create_link()`, `_node_to_dict()`.
+* **`routes/memory_router.py`** — 5 JWT-protected endpoints:
+  `POST /memory/nodes` (201), `GET /memory/nodes/{id}` (404 if not found),
+  `GET /memory/nodes/{id}/links` (with `direction` param), `GET /memory/nodes` (tag search),
+  `POST /memory/links` (201, 422 on ValueError).
+* **Alembic migration `492fc82e3e2b`** — adds `source VARCHAR(255)` and `user_id VARCHAR(255)`
+  to `memory_nodes`. (`extra JSONB` column was already present.)
+* **`source` and `user_id` columns** added to `MemoryNodeModel` ORM and exposed in all DAO return dicts.
+* `tests/test_memory_bridge_phase1.py` — 36 tests across 4 classes:
+  `TestWritePathFix` (8), `TestMemoryNodeDAOUnit` (11), `TestMemoryRouterEndpoints` (12),
+  `TestCreateMemoryLinkUnit` (5). 0 failing.
+
+## Fixed
+
+* ~~`create_memory_node()` writes to wrong table (`CalculationResult` / `calculation_results`).~~
+  **FIXED:** Now writes to `MemoryNodeModel` / `memory_nodes` via `MemoryNodeDAO`.
+* ~~Broken import path in `bridge.py`: `from db.models.models import CalculationResult`.~~
+  **FIXED:** `CalculationResult` no longer referenced.
+
+## Tests
+
+* Flipped `TestCreateMemoryNodeWrongTable.test_create_memory_node_uses_wrong_table` →
+  `test_create_memory_node_uses_correct_table` + `test_create_memory_node_without_db_returns_memory_node`
+  (1→2 tests; was a bug-documenting test, now a regression guard).
+* Flipped `test_routes_leadgen.py::test_create_memory_node_called_with_wrong_table` →
+  `test_create_memory_node_no_longer_uses_wrong_table` (asserts `"CalculationResult" not in source`).
+* **Total test count: 338 (was 301).**
+
+---
+
 # [feature/cpp-semantic-engine — Genesis Blocks 4-6] — 2026-03-17
 
 ## Added

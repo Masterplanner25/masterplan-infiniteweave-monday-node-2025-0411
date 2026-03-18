@@ -28,6 +28,8 @@ class MemoryNodeModel(Base):
     content = Column(Text, nullable=False)
     tags = Column(JSONB, nullable=False, default=list)
     node_type = Column(String(50), nullable=False)
+    source = Column(String(255), nullable=True)
+    user_id = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
@@ -67,6 +69,8 @@ class MemoryNodeDAO:
                 content=str(getattr(memory_node, "content", "")),
                 tags=list(getattr(memory_node, "tags", [])),
                 node_type=getattr(memory_node, "node_type", "generic"),
+                source=getattr(memory_node, "source", None),
+                user_id=getattr(memory_node, "user_id", None),
                 extra=getattr(memory_node, "extra", {}),
             )
             self.db.add(db_node)
@@ -90,6 +94,8 @@ class MemoryNodeDAO:
             "content": db_node.content,
             "tags": db_node.tags,
             "node_type": db_node.node_type,
+            "source": db_node.source,
+            "user_id": db_node.user_id,
             "extra": db_node.extra,
             "created_at": db_node.created_at,
             "updated_at": db_node.updated_at,
@@ -111,6 +117,8 @@ class MemoryNodeDAO:
                 "content": n.content,
                 "tags": n.tags,
                 "node_type": n.node_type,
+                "source": n.source,
+                "user_id": n.user_id,
                 "extra": n.extra,
                 "created_at": n.created_at,
                 "updated_at": n.updated_at,

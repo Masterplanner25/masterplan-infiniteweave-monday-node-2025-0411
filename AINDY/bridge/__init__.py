@@ -1,2 +1,2 @@
-from .bridge import create_memory_node
+from .bridge import create_memory_node, create_memory_link
 

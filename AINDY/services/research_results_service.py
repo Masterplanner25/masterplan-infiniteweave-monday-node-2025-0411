@@ -32,8 +32,8 @@ def log_to_memory_bridge(query: str, summary: str):
 
         # Persist lightweight DB representation
         create_memory_node(
-            title=f"Research: {query}",
-            content=summary,
+            content=f"Research: {query} | {summary}",
+            source="research_engine",
             tags=["research", "insight"],
         )
 

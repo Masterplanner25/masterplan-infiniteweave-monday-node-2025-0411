@@ -161,9 +161,10 @@ def create_lead_results(db: Session, query: str):
 
         # 🧠 Log symbolic memory node
         create_memory_node(
-            title=f"Lead Discovered: {lead['company']}",
-            content=f"{lead['context']} | Score: {score['overall_score']}",
-            tags=["leadgen", "aindy", "infinity", "ai-search"]
+            content=f"Lead Discovered: {lead['company']} | {lead['context']} | Score: {score['overall_score']}",
+            source="leadgen",
+            tags=["leadgen", "aindy", "infinity", "ai-search"],
+            db=db,
         )
 
         print(f"[LeadGen] Logged {lead['company']} ({score['overall_score']})")

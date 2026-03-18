@@ -67,9 +67,9 @@ def create_post(post: SocialPost, db: Database = Depends(get_mongo_db)):
     try:
         # We create a symbolic node representing this thought/update
         create_memory_node(
-            title=f"Social Broadcast: @{post.author_username}",
-            content=post.content,
-            tags=["social", "broadcast", post.trust_tier_required] + post.tags
+            content=f"Social Broadcast: @{post.author_username} | {post.content}",
+            source="social_router",
+            tags=["social", "broadcast", post.trust_tier_required] + post.tags,
         )
         print(f"✅ [Scribe] Logged post by {post.author_username} to Memory Bridge.")
     except Exception as e:
