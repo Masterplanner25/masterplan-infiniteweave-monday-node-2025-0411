@@ -1,0 +1,597 @@
+﻿# Data Model Map
+
+This document maps the current data model strictly as implemented in the repository. If a property cannot be confirmed, it is marked as not explicitly defined in the current implementation.
+
+## 1. PostgreSQL / SQLAlchemy Models
+
+### `AINDY/db/models/arm_models.py`
+
+#### ARMRun (`arm_runs`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `file_path`: String, nullable=False, default: not defined
+- `operation`: String, nullable: not explicitly set, default="analysis"
+- `result_summary`: Text, nullable: not explicitly set, default: not defined
+- `runtime`: Float, nullable: not explicitly set, default: not defined
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships:
+- `logs = relationship("ARMLog", back_populates="run", cascade="all, delete-orphan")`
+- Cascade rules: `all, delete-orphan` on `ARMRun.logs`
+
+#### ARMLog (`arm_logs`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `run_id`: Integer, ForeignKey("arm_runs.id"), nullable: not explicitly set, default: not defined
+- `timestamp`: DateTime, nullable: not explicitly set, default=func.now()
+- `level`: String, nullable: not explicitly set, default="INFO"
+- `message`: Text, nullable: not explicitly set, default: not defined
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: `run_id -> arm_runs.id`
+- Relationships:
+- `run = relationship("ARMRun", back_populates="logs")`
+- Cascade rules: Not explicitly defined in current implementation.
+
+#### ARMConfig (`arm_configs`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `parameter`: String, nullable=False, default: not defined
+- `value`: String, nullable=False, default: not defined
+- `updated_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/author_model.py`
+
+#### AuthorDB (`authors`)
+- Columns
+- `id`: String, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `name`: String, nullable=False, default: not defined
+- `platform`: String, nullable=False, default: not defined
+- `notes`: Text, nullable=True, default: not defined
+- `joined_at`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- `last_seen`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/calculation.py`
+
+#### CalculationResult (`calculation_results`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `metric_name`: String, index=True, nullable: not explicitly set, default: not defined
+- `result_value`: Float, nullable: not explicitly set, default: not defined
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`, `metric_name` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/drop.py`
+
+#### DropPointDB (`drop_points`)
+- Columns
+- `id`: String, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `title`: String, nullable: not explicitly set, default: not defined
+- `platform`: String, nullable: not explicitly set, default: not defined
+- `url`: String, nullable=True, default: not defined
+- `date_dropped`: DateTime, nullable: not explicitly set, default: not defined
+- `core_themes`: Text, nullable: not explicitly set, default: not defined
+- `tagged_entities`: Text, nullable: not explicitly set, default: not defined
+- `intent`: String, nullable: not explicitly set, default: not defined
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+#### PingDB (`pings`)
+- Columns
+- `id`: String, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `drop_point_id`: String, ForeignKey("drop_points.id"), nullable: not explicitly set, default: not defined
+- `ping_type`: String, nullable: not explicitly set, default: not defined
+- `source_platform`: String, nullable: not explicitly set, default: not defined
+- `date_detected`: DateTime, nullable: not explicitly set, default: not defined
+- `connection_summary`: Text, nullable=True, default: not defined
+- `external_url`: String, nullable=True, default: not defined
+- `reaction_notes`: Text, nullable=True, default: not defined
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: `drop_point_id -> drop_points.id`
+- Relationships: None
+
+### `AINDY/db/models/freelance.py`
+
+#### FreelanceOrder (`freelance_orders`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `client_name`: String, nullable=False, default: not defined
+- `client_email`: String, nullable=False, default: not defined
+- `service_type`: String, nullable=False, default: not defined
+- `project_details`: Text, nullable=True, default: not defined
+- `ai_output`: Text, nullable=True, default: not defined
+- `price`: Float, nullable=False, default=0.0
+- `status`: String, nullable: not explicitly set, default="pending"
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- `updated_at`: DateTime, nullable: not explicitly set, default=func.now(), onupdate=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: Not explicitly defined in current implementation.
+
+#### ClientFeedback (`client_feedback`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `order_id`: Integer, ForeignKey("freelance_orders.id", ondelete="CASCADE"), nullable: not explicitly set, default: not defined
+- `rating`: Integer, nullable=True, default: not defined
+- `feedback_text`: Text, nullable=True, default: not defined
+- `ai_summary`: Text, nullable=True, default: not defined
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: `order_id -> freelance_orders.id` (ondelete="CASCADE")
+- Relationships:
+- `order = relationship("FreelanceOrder", backref="feedback")`
+- Cascade rules: Not explicitly defined in current implementation.
+
+#### RevenueMetrics (`revenue_metrics`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `date`: DateTime, nullable: not explicitly set, default=func.now()
+- `total_revenue`: Float, nullable=False, default=0.0
+- `avg_execution_time`: Float, nullable=True, default: not defined
+- `income_efficiency`: Float, nullable=True, default: not defined
+- `ai_productivity_boost`: Float, nullable=True, default: not defined
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/leadgen_model.py`
+
+#### LeadGenResult (`leadgen_results`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `query`: String, index=True, nullable: not explicitly set, default: not defined
+- `company`: String, index=True, nullable: not explicitly set, default: not defined
+- `url`: String, nullable: not explicitly set, default: not defined
+- `context`: String, nullable: not explicitly set, default: not defined
+- `fit_score`: Float, nullable: not explicitly set, default: not defined
+- `intent_score`: Float, nullable: not explicitly set, default: not defined
+- `data_quality_score`: Float, nullable: not explicitly set, default: not defined
+- `overall_score`: Float, nullable: not explicitly set, default: not defined
+- `reasoning`: String, nullable: not explicitly set, default: not defined
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`, `query`, `company` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/masterplan.py`
+
+#### MasterPlan (`master_plans`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `version`: String, index=True, nullable: not explicitly set, default: not defined
+- `start_date`: DateTime, nullable=False, default: not defined
+- `duration_years`: Float, nullable=False, default: not defined
+- `target_date`: DateTime, nullable=False, default: not defined
+- `is_active`: Boolean, nullable: not explicitly set, default=False
+- `is_origin`: Boolean, nullable: not explicitly set, default=False
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- `activated_at`: DateTime, nullable=True, default: not defined
+- `structure_json`: JSON, nullable=True, default: not defined
+- `posture`: String, nullable=True, default: not defined
+- `version_label`: String, nullable=True, default: not defined
+- `locked_at`: DateTime, nullable=True, default: not defined
+- `parent_id`: Integer, ForeignKey("master_plans.id"), nullable=True, default: not defined
+- `linked_genesis_session_id`: Integer, ForeignKey("genesis_sessions.id"), nullable=True, default: not defined
+- `wcu_target`: Float, nullable: not explicitly set, default=3000
+- `revenue_target`: Float, nullable: not explicitly set, default=100000
+- `books_required`: Integer, nullable: not explicitly set, default=3
+- `platform_required`: Boolean, nullable: not explicitly set, default=True
+- `studio_required`: Boolean, nullable: not explicitly set, default=True
+- `playbooks_required`: Integer, nullable: not explicitly set, default=2
+- `total_wcu`: Float, nullable: not explicitly set, default=0
+- `gross_revenue`: Float, nullable: not explicitly set, default=0
+- `books_published`: Integer, nullable: not explicitly set, default=0
+- `platform_live`: Boolean, nullable: not explicitly set, default=False
+- `studio_ready`: Boolean, nullable: not explicitly set, default=False
+- `active_playbooks`: Integer, nullable: not explicitly set, default=0
+- `phase`: Integer, nullable: not explicitly set, default=1
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`, `version` (index=True)
+- Foreign keys: `parent_id -> master_plans.id`, `linked_genesis_session_id -> genesis_sessions.id`
+- Relationships:
+- `parent = relationship("MasterPlan", remote_side=[id])`
+- `canonical_metrics = relationship("CanonicalMetricDB", backref="masterplan", cascade="all, delete-orphan")`
+- Cascade rules: `all, delete-orphan` on `MasterPlan.canonical_metrics`
+
+#### GenesisSessionDB (`genesis_sessions`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `user_id`: Integer, nullable=True, default: not defined
+- `status`: String, nullable: not explicitly set, default="active"
+- `summarized_state`: JSON, nullable=True, default: not defined
+- `created_at`: DateTime(timezone=True), nullable: not explicitly set, server_default=func.now()
+- `updated_at`: DateTime(timezone=True), nullable: not explicitly set, onupdate=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: Not explicitly defined in current implementation.
+
+### `AINDY/db/models/metrics_models.py`
+
+#### Engagement (`engagements`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `likes`: Integer, nullable: not explicitly set
+- `shares`: Integer, nullable: not explicitly set
+- `comments`: Integer, nullable: not explicitly set
+- `clicks`: Integer, nullable: not explicitly set
+- `time_on_page`: Float, nullable: not explicitly set
+- `total_views`: Integer, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+#### AIEfficiency (`ai_efficiencies`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `ai_contributions`: Integer, nullable: not explicitly set
+- `human_contributions`: Integer, nullable: not explicitly set
+- `total_tasks`: Integer, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### Impact (`impacts`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `reach`: Integer, nullable: not explicitly set
+- `engagement`: Integer, nullable: not explicitly set
+- `conversion`: Integer, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### Efficiency (`efficiencies`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `focused_effort`: Float, nullable: not explicitly set
+- `ai_utilization`: Float, nullable: not explicitly set
+- `time`: Float, nullable: not explicitly set
+- `capital`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### RevenueScaling (`revenue_scalings`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `ai_leverage`: Float, nullable: not explicitly set
+- `content_distribution`: Float, nullable: not explicitly set
+- `time`: Float, nullable: not explicitly set
+- `audience_engagement`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### ExecutionSpeed (`execution_speeds`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `ai_automations`: Float, nullable: not explicitly set
+- `systemized_workflows`: Float, nullable: not explicitly set
+- `decision_lag`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### AttentionValue (`attention_values`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `content_output`: Float, nullable: not explicitly set
+- `platform_presence`: Float, nullable: not explicitly set
+- `time`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### EngagementRate (`engagement_rates`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `total_interactions`: Float, nullable: not explicitly set
+- `total_views`: Integer, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### BusinessGrowth (`business_growths`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `revenue`: Float, nullable: not explicitly set
+- `expenses`: Float, nullable: not explicitly set
+- `scaling_friction`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### MonetizationEfficiency (`monetization_efficiencies`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `total_revenue`: Float, nullable: not explicitly set
+- `audience_size`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### AIProductivityBoost (`ai_productivity_boosts`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `tasks_with_ai`: Float, nullable: not explicitly set
+- `tasks_without_ai`: Float, nullable: not explicitly set
+- `time_saved`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### LostPotential (`lost_potentials`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `missed_opportunities`: Float, nullable: not explicitly set
+- `time_delayed`: Float, nullable: not explicitly set
+- `gains_from_action`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### DecisionEfficiency (`decision_efficiencies`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `automated_decisions`: Float, nullable: not explicitly set
+- `manual_decisions`: Float, nullable: not explicitly set
+- `processing_time`: Float, nullable: not explicitly set
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`
+- Foreign keys: None
+- Relationships: None
+
+#### CanonicalMetricDB (`canonical_metrics`)
+- Table args
+- `UniqueConstraint` on (`masterplan_id`, `platform`, `scope_type`, `scope_id`, `period_type`, `period_start`) named `uq_canonical_period_scope`
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `masterplan_id`: Integer, ForeignKey("master_plans.id"), nullable=False
+- `user_id`: Integer, nullable=True
+- `platform`: String, nullable: not explicitly set
+- `scope_type`: String, nullable: not explicitly set
+- `scope_id`: String, nullable=True
+- `period_type`: String, nullable: not explicitly set
+- `period_start`: Date, nullable: not explicitly set
+- `period_end`: Date, nullable: not explicitly set
+- `created_at`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- `passive_visibility`: Float, nullable: not explicitly set
+- `active_discovery`: Float, nullable: not explicitly set
+- `unique_reach`: Float, nullable: not explicitly set
+- `interaction_volume`: Float, nullable: not explicitly set
+- `deep_attention_units`: Float, nullable: not explicitly set
+- `intent_signals`: Float, nullable: not explicitly set
+- `conversion_events`: Float, nullable: not explicitly set
+- `growth_velocity`: Float, nullable: not explicitly set
+- `audience_quality_score`: Float, nullable: not explicitly set
+- `interaction_rate`: Float, nullable: not explicitly set
+- `attention_rate`: Float, nullable: not explicitly set
+- `intent_rate`: Float, nullable: not explicitly set
+- `conversion_rate`: Float, nullable: not explicitly set
+- `discovery_ratio`: Float, nullable: not explicitly set
+- `growth_rate`: Float, nullable: not explicitly set
+- Primary key: `id`
+- Unique constraints: `uq_canonical_period_scope`
+- Indexes: `id` (index=True)
+- Foreign keys: `masterplan_id -> master_plans.id`
+- Relationships: Not explicitly defined in current implementation.
+
+### `AINDY/db/models/research_results.py`
+
+#### ResearchResult (`research_results`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `query`: String, nullable=False
+- `summary`: Text, nullable=True
+- `source`: String, nullable=True
+- `data`: JSON (postgresql JSON), nullable=True
+- `created_at`: DateTime, nullable: not explicitly set, default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/system_health_log.py`
+
+#### SystemHealthLog (`system_health_logs`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `timestamp`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- `status`: String(50), nullable: not explicitly set
+- `components`: JSON, nullable: not explicitly set
+- `api_endpoints`: JSON, nullable: not explicitly set
+- `avg_latency_ms`: Float, nullable: not explicitly set
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/task.py`
+
+#### Task (`tasks`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `name`: String, nullable=False, index=True
+- `category`: String, nullable: not explicitly set, default="general"
+- `priority`: String, nullable: not explicitly set, default="medium"
+- `status`: String, nullable: not explicitly set, default="pending"
+- `due_date`: DateTime, nullable=True
+- `start_time`: DateTime, nullable=True
+- `end_time`: DateTime, nullable=True
+- `duration`: Float, nullable: not explicitly set, default=0.0
+- `scheduled_time`: DateTime, nullable=True
+- `reminder_time`: DateTime, nullable=True
+- `recurrence`: String, nullable=True
+- `time_spent`: Float, nullable: not explicitly set, default=0.0
+- `task_complexity`: Integer, nullable: not explicitly set, default=1
+- `skill_level`: Integer, nullable: not explicitly set, default=1
+- `ai_utilization`: Integer, nullable: not explicitly set, default=0
+- `task_difficulty`: Integer, nullable: not explicitly set, default=1
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id`, `name` (index=True)
+- Foreign keys: None
+- Relationships: Not explicitly defined in current implementation.
+
+### `AINDY/db/models/social_models.py`
+- Not an ORM module. Defines Pydantic models only (`SocialProfile`, `SocialPost`, `Connection`, `FeedItem`).
+- No SQLAlchemy tables are declared in this file.
+
+## 2. Relationship Mapping
+
+Only relationships declared via SQLAlchemy `relationship()` are listed.
+
+- ARMRun (`arm_runs`) 1-to-many ARMLog (`arm_logs`) via `ARMRun.logs` / `ARMLog.run`.
+- FreelanceOrder (`freelance_orders`) 1-to-many ClientFeedback (`client_feedback`) via `ClientFeedback.order` with `backref="feedback"`.
+- MasterPlan (`master_plans`) self-referential many-to-one via `MasterPlan.parent` (child points to parent via `parent_id`).
+- MasterPlan (`master_plans`) 1-to-many CanonicalMetricDB (`canonical_metrics`) via `MasterPlan.canonical_metrics` with `backref="masterplan"`.
+- No many-to-many relationships are explicitly defined.
+
+## 3. Alembic Migration Alignment
+
+Migration filenames exist in `AINDY/alembic/versions/`, but alignment requires a migration diff check. The following filename matches suggest possible related migrations:
+
+- `arm_runs`, `arm_logs`, `arm_configs`: `0cea8869744b_add_arm_models.py`, `8e2909eee86c_add_arm_models.py`, `8addbdf88330_add_deepseek_arm_tables.py`, `bad4f7003aa5_register_arm_tables_properly.py`
+- `authors`: `51b6f9f455d1_add_authors_table.py`, `72724b428ba5_add_authors_table.py`, `7abafedb7e1e_register_authordb_properly.py`
+- `calculation_results`: Not explicitly identified by filename. Verification requires migration diff check.
+- `drop_points`, `pings`: Not explicitly identified by filename. Verification requires migration diff check.
+- `freelance_orders`, `client_feedback`, `revenue_metrics`: `717f7034ec27_add_freelance_automation_tables.py`, `825fc6015dda_add_freelance_automation_tables.py`, `05502a7f9fe8_regenerate_freelance_automation_tables.py`
+- `leadgen_results`: `4cc6abbb35cb_add_leadgen_results_table.py`
+- `master_plans`: `1a085e32efd4_add_master_plans_table.py`, `ae693412325e_add_master_plans_table.py`, `b72d3989ae01_masterplan.py`, `af746d976e73_add_activated_at.py`, `390e474b9ff0_extend_masterplan_for_genesis_lock.py`
+- `genesis_sessions`: `0ffe8ba14fb8_add_genesis_session_model.py`
+- `canonical_metrics`: `4021f10066c3_add_canonical_metrics_telemetry_table.py`
+- `metrics_models` (engagement, etc.): `94bcd9284285_move_metrics_models_to_db_models.py` appears related by filename only
+- `research_results`: `4e392d916569_add_research_results_table.py`, `64872a402355_add_research_results_table.py`, `8b57835a640c_add_research_results_table.py`, `ec0e78e6e306_align_researchresult_schema_with_.py`
+- `system_health_logs`: `03adbb4b957b_add_system_health_logs_table.py`, `e52a1f667323_add_system_health_logs_table.py`
+
+Alignment for each model cannot be confirmed from static inspection alone; verification requires a migration diff check against the current ORM metadata.
+
+## 4. MongoDB Collections
+
+MongoDB usage is implemented in `AINDY/db/mongo_setup.py`, `AINDY/routes/social_router.py`, and `AINDY/services/task_services.py`.
+
+### Collections and Observed Document Structure
+
+- `profiles` collection
+- Inserted/updated in `AINDY/routes/social_router.py`.
+- Document structure from `SocialProfile` (`AINDY/db/models/social_models.py`):
+- `id` (string UUID)
+- `username` (string)
+- `tagline` (string, optional)
+- `bio` (string, optional)
+- `metrics_snapshot` (object with `twr_score`, `trust_score`, `execution_velocity`)
+- `tags` (array of strings)
+- `joined_at` (datetime)
+- `updated_at` (datetime)
+- Updated in `AINDY/services/task_services.py`:
+- `$inc` on `metrics_snapshot.execution_velocity` and `metrics_snapshot.twr_score`
+- `$set` `updated_at`
+
+- `posts` collection
+- Inserted in `AINDY/routes/social_router.py`.
+- Document structure from `SocialPost` (`AINDY/db/models/social_models.py`):
+- `id`, `author_id`, `author_username`, `content`, `media_url`, `tags`, `trust_tier_required`, `likes`, `boosts`, `comments_count`, `created_at`, `ai_context`
+
+No schema validation is defined in current implementation.
+
+## 5. Memory Bridge Schema
+
+Defined in `AINDY/services/memory_persistence.py`.
+
+### `memory_nodes`
+- Model: `MemoryNodeModel`
+- Columns
+- `id`: UUID (postgresql UUID), primary key, default=uuid.uuid4
+- `content`: Text, nullable=False
+- `tags`: JSONB, nullable=False, default=list
+- `node_type`: String(50), nullable=False
+- `created_at`: DateTime, nullable=False, server_default=func.now()
+- `updated_at`: DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
+- `extra`: JSONB, nullable=False, default=dict
+- Indexes
+- `ix_memory_nodes_tags_gin` on `tags` using GIN
+- Unique constraints: Not explicitly defined in current implementation.
+
+### `memory_links`
+- Model: `MemoryLinkModel`
+- Columns
+- `id`: UUID (postgresql UUID), primary key, default=uuid.uuid4
+- `source_node_id`: UUID, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False
+- `target_node_id`: UUID, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False
+- `link_type`: String(50), nullable=False
+- `strength`: String(20), nullable=False, default="medium"
+- `created_at`: DateTime, nullable=False, server_default=func.now()
+- Indexes
+- `ix_memory_links_source` on `source_node_id`
+- `ix_memory_links_target` on `target_node_id`
+- `uq_memory_links_unique` unique index on (`source_node_id`, `target_node_id`, `link_type`)
+- Link-type constraints: Not explicitly defined in current implementation.
+
+## 6. Cross-Database Boundaries
+
+- PostgreSQL is used by all SQLAlchemy ORM models in `AINDY/db/models/` and by Memory Bridge models in `AINDY/services/memory_persistence.py`.
+- MongoDB is used by the Social Layer in `AINDY/routes/social_router.py` and by task completion logic in `AINDY/services/task_services.py`.
+- Cross-database coordination occurs in:
+- `AINDY/routes/social_router.py`: writes to MongoDB (`posts`) and calls `bridge.bridge.create_memory_node(...)`, which writes to PostgreSQL via SQLAlchemy (behavior depends on `AINDY/bridge/bridge.py`).
+- `AINDY/services/task_services.py`: writes to PostgreSQL `tasks` and updates MongoDB `profiles` metrics snapshot.
+
+## 7. Known Structural Risks
+
+- Missing foreign keys:
+- Many models have no foreign keys and rely on application logic only (e.g., `calculation_results`, `tasks`, most metrics tables).
+- Lack of cascades:
+- Cascades are defined only for `ARMRun.logs` and `MasterPlan.canonical_metrics`. Other related data (e.g., `DropPointDB` -> `PingDB`) has no cascade configuration at ORM level.
+- Unindexed lookup fields:
+- No explicit indexes beyond `index=True` on select columns; GIN index exists only on `memory_nodes.tags`.
+- Potential migration drift:
+- Multiple overlapping migration filenames suggest possible historical drift; alignment requires migration diff checks.
+- Implicit constraints enforced only in application logic:
+- Examples include permission validation for Memory Bridge (`AINDY/routes/bridge_router.py`) and genesis session locking (`AINDY/services/masterplan_factory.py`).
