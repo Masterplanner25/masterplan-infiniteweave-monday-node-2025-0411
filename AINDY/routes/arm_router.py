@@ -1,89 +1,223 @@
-# routes/arm_router.py
-from fastapi import APIRouter, Depends, HTTPException, Request
+"""
+ARM API Router
+
+Exposes the Autonomous Reasoning Module via FastAPI.
+All endpoints require JWT authentication.
+Rate limited to 10 requests/minute to prevent cost runaway.
+
+Endpoints:
+  POST /arm/analyze  — analyze a code file
+  POST /arm/generate — generate or refactor code
+  GET  /arm/logs     — fetch reasoning session logs
+  GET  /arm/config   — read current ARM configuration
+  PUT  /arm/config   — update ARM configuration
+"""
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
+
 from db.database import get_db
-from services.deepseek_arm_service import (
-    run_analysis,
-    generate_code,
-    get_reasoning_logs,
-    get_config,
-    update_config,
-)
 from services.auth_service import get_current_user
 from services.rate_limiter import limiter
-from pydantic import BaseModel
+from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+from modules.deepseek.config_manager_deepseek import ConfigManager
+from db.models.arm_models import AnalysisResult, CodeGeneration
+from db.models.user import User
 
 
-router = APIRouter(prefix="/arm", tags=["Autonomous Reasoning Module"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/arm",
+    tags=["ARM — Autonomous Reasoning"],
+    dependencies=[Depends(get_current_user)],
+)
+
+# ── Singleton analyzer (loads config once per process) ───────────────────────
+
+_analyzer: Optional[DeepSeekCodeAnalyzer] = None
 
 
-# -----------------------------
-# Pydantic Inputs
-# -----------------------------
-class AnalyzeInput(BaseModel):
+def get_analyzer() -> DeepSeekCodeAnalyzer:
+    global _analyzer
+    if _analyzer is None:
+        _analyzer = DeepSeekCodeAnalyzer()
+    return _analyzer
+
+
+# ── Request schemas ───────────────────────────────────────────────────────────
+
+class AnalyzeRequest(BaseModel):
     file_path: str
-    analysis_type: str | None = "full"
+    complexity: Optional[float] = None
+    urgency: Optional[float] = None
+    context: Optional[str] = ""
 
 
-class GenerateInput(BaseModel):
-    file_path: str
-    instructions: str | None = None
+class GenerateRequest(BaseModel):
+    prompt: str
+    original_code: Optional[str] = ""
+    language: Optional[str] = "python"
+    generation_type: Optional[str] = "generate"
+    analysis_id: Optional[str] = None
+    complexity: Optional[float] = None
+    urgency: Optional[float] = None
 
 
-class ConfigUpdate(BaseModel):
-    parameter: str
-    value: str | int | float | bool
+class ConfigUpdateRequest(BaseModel):
+    updates: dict
 
 
-# -----------------------------
-# Endpoints
-# -----------------------------
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/analyze")
 @limiter.limit("10/minute")
-async def analyze_file(request: Request, data: AnalyzeInput, db: Session = Depends(get_db)):
+async def analyze_code(
+    request: Request,
+    body: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Run DeepSeek reasoning analysis on a codebase or logic file.
+    Analyze a code or logic file.
+
+    Returns architectural insights, performance findings,
+    and a prioritized improvement roadmap.
+
+    Task Priority is calculated per request via the Infinity Algorithm:
+        TP = (Complexity × Urgency) / Resource Cost
     """
-    try:
-        result = run_analysis(db, data.file_path, data.analysis_type)
-        return {"status": "success", "analysis": result}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ARM analysis error: {e}")
+    analyzer = get_analyzer()
+    return analyzer.run_analysis(
+        file_path=body.file_path,
+        user_id=str(current_user.id),
+        db=db,
+        complexity=body.complexity,
+        urgency=body.urgency,
+        additional_context=body.context,
+    )
 
 
 @router.post("/generate")
 @limiter.limit("10/minute")
-async def generate_logic(request: Request, data: GenerateInput, db: Session = Depends(get_db)):
+async def generate_code(
+    request: Request,
+    body: GenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Generate or refactor code using DeepSeek logic synthesis.
+    Generate or refactor code based on a prompt.
+    Optionally link to a previous analysis session via analysis_id.
     """
-    try:
-        output = generate_code(db, data.file_path, data.instructions)
-        return {"status": "success", "generated_code": output}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"ARM generation error: {e}")
+    analyzer = get_analyzer()
+    return analyzer.generate_code(
+        prompt=body.prompt,
+        user_id=str(current_user.id),
+        db=db,
+        original_code=body.original_code,
+        language=body.language,
+        generation_type=body.generation_type,
+        analysis_id=body.analysis_id,
+        complexity=body.complexity,
+        urgency=body.urgency,
+    )
 
 
 @router.get("/logs")
-async def fetch_logs(db: Session = Depends(get_db)):
+async def get_arm_logs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Retrieve reasoning logs from ARM sessions.
+    Fetch reasoning session logs for the current user.
+
+    Returns analysis and generation history with Infinity Algorithm
+    performance metrics (execution speed, task priority).
     """
-    return get_reasoning_logs(db)
+    analyses = (
+        db.query(AnalysisResult)
+        .filter(AnalysisResult.user_id == str(current_user.id))
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    generations = (
+        db.query(CodeGeneration)
+        .filter(CodeGeneration.user_id == str(current_user.id))
+        .order_by(CodeGeneration.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "analyses": [
+            {
+                "session_id": str(a.session_id),
+                "file": a.file_path.split("/")[-1].split("\\")[-1] if a.file_path else "",
+                "status": a.status,
+                "execution_seconds": a.execution_seconds,
+                "input_tokens": a.input_tokens,
+                "output_tokens": a.output_tokens,
+                "task_priority": a.task_priority,
+                "execution_speed": round(
+                    ((a.input_tokens or 0) + (a.output_tokens or 0))
+                    / max(a.execution_seconds or 0.001, 0.001),
+                    1,
+                ),
+                "summary": a.result_summary,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in analyses
+        ],
+        "generations": [
+            {
+                "session_id": str(g.session_id),
+                "language": g.language,
+                "generation_type": g.generation_type,
+                "execution_seconds": g.execution_seconds,
+                "input_tokens": g.input_tokens,
+                "output_tokens": g.output_tokens,
+                "created_at": g.created_at.isoformat() if g.created_at else None,
+            }
+            for g in generations
+        ],
+        "summary": {
+            "total_analyses": len(analyses),
+            "total_generations": len(generations),
+            "total_tokens_used": sum(
+                (a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses
+            )
+            + sum(
+                (g.input_tokens or 0) + (g.output_tokens or 0) for g in generations
+            ),
+        },
+    }
 
 
 @router.get("/config")
-async def read_config(db: Session = Depends(get_db)):
-    """
-    View current DeepSeek ARM configuration parameters.
-    """
-    return get_config(db)
+async def get_config(
+    current_user: User = Depends(get_current_user),
+):
+    """Read current ARM configuration."""
+    return ConfigManager().get_all()
 
 
 @router.put("/config")
-async def modify_config(update: ConfigUpdate, db: Session = Depends(get_db)):
+async def update_config(
+    body: ConfigUpdateRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
-    Dynamically update DeepSeek ARM configuration parameters.
+    Update ARM configuration parameters.
+
+    Changes persist to deepseek_config.json.
+    The analyzer singleton is reset so the next request picks up the new config.
+
+    Phase 2: will also trigger the Infinity Algorithm self-tuning feedback loop.
     """
-    return update_config(db, update.parameter, update.value)
+    updated = ConfigManager().update(body.updates)
+    # Reset singleton so next request uses updated config
+    global _analyzer
+    _analyzer = None
+    return {"status": "updated", "config": updated}
