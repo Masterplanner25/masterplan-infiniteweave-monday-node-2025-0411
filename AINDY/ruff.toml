@@ -1,0 +1,27 @@
+line-length = 120
+target-version = "py311"
+exclude = [
+    "legacy/",
+    "bridge/memory_bridge_rs/",
+    "alembic/",
+    ".venv/",
+    "venv/",
+]
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E401",   # multiple-imports-on-one-line (existing patterns)
+    "E501",   # line too long (handled by formatter)
+    "E402",   # module level import not at top
+    "E731",   # lambda-assignment (existing patterns in config/database)
+    "F401",   # imported but unused (many conditional imports)
+    "F403",   # undefined-local-with-import-star (legacy patterns)
+    "F541",   # f-string-missing-placeholders (18 violations in codebase)
+    "F811",   # redefinition of unused name
+    "F821",   # undefined-name (forward references in some modules)
+    "F841",   # unused-variable (11 violations, often intentional)
+    "W291",   # trailing whitespace
+    "W292",   # missing-newline-at-end-of-file (18 violations in codebase)
+    "W293",   # whitespace before ':'
+]

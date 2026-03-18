@@ -46,7 +46,8 @@ This document inventories current technical debt based strictly on the existing 
 - Minimal unit coverage in `AINDY/services/`.
 - Integration tests are limited to calculation endpoints (`test_calculations.py`, `test_routes.py`).
 - No automated migration validation tests (`AINDY/alembic/` has no test harness).
-- No coverage metrics tooling is configured (no coverage config files in repo root).
+- ✅ **FIXED (2026-03-18 CI/CD Sprint):** CI pipeline live. GitHub Actions `ci.yml` runs lint (ruff) + tests (pytest + coverage) on every push and PR to `main`. Coverage threshold: 64% (baseline: 69%). Coverage XML uploaded to Codecov. PR template, CODEOWNERS, SECRETS.md, and `.env.example` added.
+- ✅ **FIXED (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured. `pytest-cov==7.0.0` + `.coveragerc` added. Baseline: 69%. CI threshold: 64% (`--cov-fail-under=64`). XML report generated and uploaded to Codecov on every push/PR.
 - Duplicate test names in `test_routes.py` can mask failures (`test_routes.py`).
 - `AINDY/bridge/smoke_memory.py` has broken imports: `from base import Base` and `from memory_persistence import MemoryNodeDAO` both fail with `ModuleNotFoundError`. Correct paths are `from db.database import Base` and `from services.memory_persistence import MemoryNodeDAO` (`AINDY/bridge/smoke_memory.py`).
 - `AINDY/bridge/Bridgeimport.py` is a 12-line manual import test with no `if __name__ == "__main__"` guard; it runs immediately on import and has no pytest structure. Move to `tests/` as a proper pytest test or add the guard (`AINDY/bridge/Bridgeimport.py`).

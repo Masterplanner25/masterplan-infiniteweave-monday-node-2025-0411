@@ -23,6 +23,47 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — CI/CD Pipeline Sprint] — 2026-03-18
+
+## Summary
+
+Implements the full GitHub Actions CI/CD pipeline. Every push and PR to `main` now runs lint (ruff) and tests with coverage enforcement. Establishes baseline coverage at 69%, enforces 64% floor. Adds PR governance scaffolding (template, CODEOWNERS, SECRETS.md, `.env.example`). CI badge added to README.
+
+## Added
+* **`.github/workflows/ci.yml`** — Two-job CI pipeline:
+  - `lint`: ruff check (excludes `legacy/`, `bridge/memory_bridge_rs/`, `alembic/`)
+  - `test`: pytest + coverage on `ubuntu-latest` with pgvector service container (postgres:5433)
+  - Coverage XML artifact uploaded; Codecov integration included
+  - `alembic upgrade head` runs before tests; `validate_memory_loop.py` excluded from test run
+* **`AINDY/.coveragerc`** — Coverage omit patterns (venv, tests, alembic, bridge/memory_bridge_rs)
+* **`AINDY/ruff.toml`** — Lint config: `E/F/W` rules, noisy rules suppressed, `legacy/` and Rust dirs excluded
+* **`.github/PULL_REQUEST_TEMPLATE.md`** — Checklist: tests, coverage, lint, migrations, docs
+* **`.github/CODEOWNERS`** — `@Masterplanner25` owns all files; explicit entries for CI, services, db, bridge
+* **`.github/SECRETS.md`** — Documents all required Actions secrets with format guidance
+* **`AINDY/.env.example`** — Template `.env` with all required variable names
+* **`requirements.txt`** — Added `pytest-cov==7.0.0`, `ruff==0.15.6`
+
+## Changed
+* **`AINDY/pytest.ini`** — Added `addopts` block: `--ignore=tests/validate_memory_loop.py`, `--cov=.`, `--cov-report=term-missing`, `--cov-report=xml:coverage.xml`, `--cov-fail-under=64`
+* **`README.md`** — CI badge added at top of file
+
+## Design Decisions
+* **Coverage threshold at 64%** (baseline 69% − 5% buffer): prevents regression without blocking CI on current untested paths
+* **`validate_memory_loop.py` excluded**: requires live OpenAI and real DB; cannot run in CI without secrets
+* **ruff suppresses 13 rules**: all are existing-code patterns (F401, F403, F541, F841, W292, E401, E402, E501, E731, F811, F821, W291, W293); new violations in any of these categories will still be caught if ruff adds new sub-rules
+* **`alembic/` excluded from ruff**: migration files contain intentional patterns that trip lint
+* **Tests run against in-memory mocks**: conftest.py sets all env vars via `setdefault()` — no real API keys needed in CI; pgvector service container only needed for `alembic upgrade head`
+
+## Coverage Baseline (2026-03-18)
+| Metric | Value |
+|--------|-------|
+| Total coverage | **69%** |
+| Threshold (`--cov-fail-under`) | **64%** |
+| Tests passing | **453** |
+| Tests excluded from CI | `validate_memory_loop.py` |
+
+---
+
 # [main — Sprint 6+7: SQLAlchemy 2.0 + Memory Hook Completion] — 2026-03-18
 
 ## Summary

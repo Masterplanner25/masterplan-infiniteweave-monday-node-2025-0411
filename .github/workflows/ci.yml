@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AINDY
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff==0.15.6
+
+      - name: Run ruff
+        run: ruff check .
+
+  test:
+    name: Test + Coverage
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AINDY
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: base
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
+    env:
+      ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+      MONGO_URL: mongodb://localhost:27017
+      OPENAI_API_KEY: sk-test-placeholder
+      DEEPSEEK_API_KEY: ds-test-placeholder
+      SECRET_KEY: ci-secret-key-placeholder
+      PERMISSION_SECRET: ci-permission-secret
+      AINDY_API_KEY: ci-aindy-api-key
+      ALLOWED_ORIGINS: "http://localhost:3000"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('AINDY/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run alembic migrations
+        run: alembic upgrade head
+
+      - name: Run tests with coverage
+        run: |
+          pytest \
+            --ignore=tests/validate_memory_loop.py \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=64 \
+            -q
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: AINDY/coverage.xml
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: AINDY/coverage.xml
+          fail_ci_if_error: false

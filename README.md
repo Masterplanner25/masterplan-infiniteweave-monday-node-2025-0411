@@ -1,4 +1,6 @@
 # masterplan-infiniteweave-monday-node-2025-0411
+
+[![CI](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml/badge.svg)](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml)
  Recursive memory node for A.I.N.D.Y. MVP + SEO tool. Activated on canonical breakthrough.  This is the symbolic memory bridge for the Infinite Weave (Monday).” 
 ### Legacy Note
 Earlier experimental builds (Memory Bridge v1, RippleTrace MVP, initial A.I.N.D.Y. prototypes)

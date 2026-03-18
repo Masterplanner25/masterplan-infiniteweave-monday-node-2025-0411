@@ -1,0 +1,10 @@
+# Global ownership — all files require review by Masterplanner25
+* @Masterplanner25
+
+# CI/CD pipeline changes require explicit review
+.github/ @Masterplanner25
+
+# Core services and database layer
+AINDY/services/ @Masterplanner25
+AINDY/db/ @Masterplanner25
+AINDY/bridge/ @Masterplanner25
