@@ -25,13 +25,36 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # 🧩 CORE FUNCTIONS
 # --------------------------------------------------------
 
-def run_ai_search(query: str):
+def run_ai_search(query: str, user_id: str = None, db=None):
     """
     Executes an AI-optimized search query.
     This is a placeholder function for the web_search logic.
     In production, integrate with A.I.N.D.Y.’s Codex or API-based web agent.
+
+    Recalls past leadgen searches before querying and writes an outcome
+    memory node after results are returned.
     """
+    import logging
     print(f"[LeadGen] Running AI search for query: {query}")
+
+    # Step 1: Recall relevant past leadgen searches
+    if user_id and db:
+        try:
+            from bridge import recall_memories
+            past_searches = recall_memories(
+                db=db,
+                query=query,
+                tags=["leadgen", "search", "outcome"],
+                user_id=user_id,
+                limit=2,
+            )
+            if past_searches:
+                print(
+                    f"[LeadGen] Recalled {len(past_searches)} past searches "
+                    f"for context."
+                )
+        except Exception as e:
+            logging.warning(f"LeadGen memory recall failed: {e}")
 
     # Example mocked results – replace with live search results later
     example_results = [
@@ -51,6 +74,29 @@ def run_ai_search(query: str):
             "context": "HealthEdge announced plans to adopt AI workflow automation."
         }
     ]
+
+    # Step 2: Write outcome memory node after results are gathered
+    if user_id and db:
+        try:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            dao = MemoryNodeDAO(db)
+            result_count = len(example_results)
+            top = example_results[0]["company"] if example_results else "none"
+            memory_content = (
+                f"LeadGen search: ‘{query[:100]}’. "
+                f"Found {result_count} leads. "
+                f"Top result: {top}"
+            )
+            dao.save(
+                content=memory_content,
+                source="leadgen_search",
+                tags=["leadgen", "search", "outcome", f"leads_{result_count}"],
+                user_id=user_id,
+                node_type="outcome",
+            )
+        except Exception as e:
+            logging.warning(f"LeadGen memory write failed: {e}")
+
     return example_results
 
 
@@ -127,16 +173,16 @@ Each score must be a number between 0 and 100.
         }
 
 
-def create_lead_results(db: Session, query: str):
+def create_lead_results(db: Session, query: str, user_id: str = None):
     """
     Runs the full pipeline:
-    1. Perform AI Search
+    1. Perform AI Search (with memory recall + write)
     2. Score each lead
     3. Store results in database
     4. Log symbolic traces into Memory Bridge
     """
     results = []
-    leads = run_ai_search(query)
+    leads = run_ai_search(query, user_id=user_id, db=db)
     print(f"[LeadGen] Found {len(leads)} potential leads")
 
     for lead in leads:

@@ -73,8 +73,10 @@ def genesis_message(
     current_state = session.summarized_state or {}
 
     llm_output = call_genesis_llm(
-        user_message=user_message,
-        current_state=current_state
+        message=user_message,
+        current_state=current_state,
+        user_id=user_id_str,
+        db=db,
     )
 
     reply = llm_output.get("reply", "")

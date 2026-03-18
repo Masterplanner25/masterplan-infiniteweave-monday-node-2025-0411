@@ -8,7 +8,8 @@ This document inventories current technical debt based strictly on the existing 
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
 - ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` deprecated `@app.on_event("startup")` handlers replaced with a single `@asynccontextmanager lifespan` function. Both startup handlers (cache init + system identity seeder) merged into one lifespan. Deprecation warnings eliminated (11 → 7 warnings in test suite).
-- ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** Pydantic v1 deprecations removed — `schemas/freelance.py` (3× `class Config: orm_mode = True` → `model_config = ConfigDict(from_attributes=True)`), `schemas/analytics_inputs.py` (`@validator` → `@field_validator` with `@classmethod`), `schemas/research_results_schema.py` (`class Config: from_attributes = True` → `model_config = ConfigDict(from_attributes=True)`). Deprecation warnings reduced from 7 → 1 (only SQLAlchemy `declarative_base()` remains; requires SQLAlchemy 2.0 migration).
+- ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** Pydantic v1 deprecations removed — `schemas/freelance.py` (3× `class Config: orm_mode = True` → `model_config = ConfigDict(from_attributes=True)`), `schemas/analytics_inputs.py` (`@validator` → `@field_validator` with `@classmethod`), `schemas/research_results_schema.py` (`class Config: from_attributes = True` → `model_config = ConfigDict(from_attributes=True)`). Deprecation warnings reduced from 7 → 1.
+- ✅ **FIXED (2026-03-18 Sprint 6):** SQLAlchemy 2.0 migration complete. `db/database.py:9` `from sqlalchemy.ext.declarative import declarative_base` → `from sqlalchemy.orm import declarative_base`. The final deprecation warning is eliminated. Deprecation warnings: 0. No other files used the old import path (`Base` was defined once and all models import it from `db.database`).
 - ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` startup DB session leak resolved. The unused `db = SessionLocal()` at startup has been removed. The system identity seeder now uses a proper `try/finally` block with `db.close()`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** Duplicate `get_db()` definitions removed from `main_router.py` and `analytics_router.py`. Both now import `get_db` from `db.database`. Single canonical definition.
 - **OPEN (2026-03-18 Audit):** `health_router.py` imports `seo_services` and `memory_persistence` without the `services.` package prefix (`import seo_services`, `import memory_persistence` — lines 43, 51). These will raise `ModuleNotFoundError` in any deployment where `PYTHONPATH` does not include `AINDY/services/` directly. Correct paths: `from services import seo_services`, `from services import memory_persistence`.
@@ -270,12 +271,15 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Status: Open. Deferred to Phase 3. Current behavior: 3-attempt retry then zero vector.
 
 ### §12.4 Phase 3 Workflow hooks — recall() integration
-- ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 3):** `recall()` is now wired:
+- ✅ **FULLY RESOLVED (2026-03-18 Sprint 7):** All 5 workflow memory hooks complete. `recall()` is now wired across the full system:
   - ARM analysis: retrieval hook before prompt build (top-3 prior results injected as "Prior analysis memory" section).
   - ARM codegen / Task completion / Genesis lock / Masterplan activate: write hooks persist structured outcome and decision nodes.
   - `bridge.recall_memories()` added as a programmatic bridge function for internal service use (no HTTP round-trip).
   - `bridge.create_memory_node()` upgraded to use `MemoryNodeDAO.save()` (with embedding) from `db.dao.memory_node_dao`.
-  - Remaining open: `genesis_ai.py` and `leadgen_service.py` prompt injection (deferred to Phase 4).
+  - ✅ **Sprint 7 (2026-03-18):** `genesis_ai.call_genesis_llm()` — recalls past strategic decisions/insights before Reflective Partner response (tags: `genesis`, `masterplan`, `decision`); writes `"insight"` node after each conversation turn. Router updated to pass `user_id` and `db`.
+  - ✅ **Sprint 7 (2026-03-18):** `leadgen_service.run_ai_search()` — recalls past leadgen searches before querying (tags: `leadgen`, `search`, `outcome`); writes `"outcome"` node after results. `create_lead_results()` and router updated to pass `user_id`.
+  - All memory hooks are fire-and-forget: exceptions silenced, main call unaffected. `user_id=None` / `db=None` gracefully bypasses all memory operations.
+  - Memory hook coverage: **5/5 workflows complete** (ARM analysis, ARM codegen, Task completion, Genesis conversation, LeadGen search).
 
 ## 13. Prioritization Table
 

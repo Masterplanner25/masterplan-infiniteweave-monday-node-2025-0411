@@ -23,6 +23,63 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — Sprint 6+7: SQLAlchemy 2.0 + Memory Hook Completion] — 2026-03-18
+
+## Summary
+
+Sprint 6 closes the final deprecation warning (SQLAlchemy `declarative_base` import path). Sprint 7 completes memory hook coverage across all 5 LLM-calling workflows: genesis conversation and leadgen search now recall past context before the AI call and write structured memory nodes after. 453 tests passing, 0 warnings.
+
+## Sprint 6 — SQLAlchemy 2.0 Migration
+
+### Changed
+* **`db/database.py`** — `from sqlalchemy.ext.declarative import declarative_base` → `from sqlalchemy.orm import declarative_base`. One-line fix, all models import `Base` from this single location. Deprecation warnings: **1 → 0**.
+
+## Sprint 7 — Memory Prompt Injection Hooks (TECH_DEBT §12.4)
+
+### Changed
+* **`services/genesis_ai.py` — `call_genesis_llm()`** updated:
+  - Renamed param `user_message` → `message`; added `user_id: str = None, db = None`
+  - Recalls past strategic decisions/insights before Reflective Partner LLM call (tags: `genesis`, `masterplan`, `decision`; limit 2; injected into system prompt)
+  - Writes `"insight"` node (`source="genesis_conversation"`) after each successful turn
+  - All memory operations fire-and-forget; exceptions silenced with `logging.warning()`
+
+* **`routes/genesis_router.py` — `POST /genesis/message`** updated:
+  - Passes `message=user_message, user_id=user_id_str, db=db` to `call_genesis_llm()`
+
+* **`services/leadgen_service.py` — `run_ai_search()`** updated:
+  - Added `user_id: str = None, db = None` params
+  - Recalls past leadgen searches before querying (tags: `leadgen`, `search`, `outcome`; limit 2)
+  - Writes `"outcome"` node (`source="leadgen_search"`) after results are gathered
+  - All memory operations fire-and-forget
+
+* **`services/leadgen_service.py` — `create_lead_results()`** updated:
+  - Added `user_id: str = None`; passes to `run_ai_search()`
+
+* **`routes/leadgen_router.py` — `POST /leadgen/`** updated:
+  - Passes `user_id=str(current_user["sub"])` to `create_lead_results()`
+
+### Memory Hook Coverage (complete)
+| Workflow | Recall | Write | node_type |
+|----------|--------|-------|-----------|
+| ARM analysis | ✅ | ✅ | outcome |
+| ARM codegen | — | ✅ | outcome |
+| Task completion | — | ✅ | outcome |
+| Genesis conversation | ✅ | ✅ | insight |
+| LeadGen search | ✅ | ✅ | outcome |
+
+### Tests
+* **`tests/test_sprint6_sprint7.py`** — 24 new tests across 3 classes:
+  - `TestSprint6SQLAlchemy` (4): no deprecation warning, Base importable, shared metadata, new import path in source
+  - `TestSprint7GenesisMemoryHook` (9): signature, recall/write hooks, insight node type, failure isolation, no-user-id skip, router pass-through
+  - `TestSprint7LeadGenMemoryHook` (11): signature, recall/write hooks, outcome node type, failure isolation, no-user-id skip, router pass-through
+
+### Design Decisions
+* Genesis: prior context injected into `system_content = GENESIS_SYSTEM_PROMPT + prior_context` — appended to system prompt, not as a separate message, to preserve the Reflective Partner persona.
+* LeadGen: recall happens on `run_ai_search()` (the search layer), not `create_lead_results()` (the pipeline layer), so the hook fires before any scoring or DB writes.
+* Both hooks use `user_id=None` / `db=None` guard — no memory operations for system-internal or unauthenticated calls.
+
+---
+
 # [main — Sprint 5 User Isolation] — 2026-03-18
 
 ## Summary

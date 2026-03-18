@@ -35,12 +35,36 @@ You MUST return valid JSON in this exact format:
 """
 
 
-def call_genesis_llm(user_message: str, current_state: dict):
+def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=None):
+    import logging
+
+    # Step 1: Recall relevant past strategic memories before responding
+    prior_context = ""
+    if user_id and db:
+        try:
+            from bridge import recall_memories
+            past_memories = recall_memories(
+                db=db,
+                query=message,
+                tags=["genesis", "masterplan", "decision"],
+                user_id=user_id,
+                limit=2,
+            )
+            if past_memories:
+                prior_context = (
+                    "\n\nRelevant past strategic context from this user:\n"
+                    + "\n".join(f"- {m['content'][:200]}" for m in past_memories)
+                )
+        except Exception as e:
+            logging.warning(f"Genesis memory recall failed: {e}")
+
+    # Step 2: Build prompt with injected memory context
+    system_content = GENESIS_SYSTEM_PROMPT + prior_context
 
     response = client.chat.completions.create(
         model=MODEL,
         messages=[
-            {"role": "system", "content": GENESIS_SYSTEM_PROMPT},
+            {"role": "system", "content": system_content},
             {
                 "role": "user",
                 "content": f"""
@@ -48,7 +72,7 @@ Current Structured State:
 {json.dumps(current_state)}
 
 New User Message:
-{user_message}
+{message}
 
 Update the structured state incrementally.
 Return only valid JSON.
@@ -61,14 +85,47 @@ Return only valid JSON.
     content = response.choices[0].message.content
 
     try:
-        return json.loads(content)
+        llm_output = json.loads(content)
     except Exception:
         # Fail-safe fallback
-        return {
+        llm_output = {
             "reply": "I need a bit more clarity. Can you elaborate?",
             "state_update": {},
-            "synthesis_ready": False
+            "synthesis_ready": False,
         }
+
+    # Step 3: Write memory node after successful LLM call
+    if user_id and db:
+        try:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            dao = MemoryNodeDAO(db)
+
+            state_signals = []
+            if current_state.get("vision_summary"):
+                state_signals.append(f"vision: {current_state['vision_summary'][:100]}")
+            if current_state.get("mechanism_summary"):
+                state_signals.append(f"mechanism: {current_state['mechanism_summary'][:100]}")
+
+            memory_content = (
+                f"Genesis conversation: user said '{message[:100]}'. "
+                f"Current signals: {'; '.join(state_signals) or 'gathering'}. "
+                f"Synthesis ready: {llm_output.get('synthesis_ready', False)}"
+            )
+
+            dao.save(
+                content=memory_content,
+                source="genesis_conversation",
+                tags=[
+                    "genesis", "conversation", "insight",
+                    "synthesis_ready" if llm_output.get("synthesis_ready") else "in_progress",
+                ],
+                user_id=user_id,
+                node_type="insight",
+            )
+        except Exception as e:
+            logging.warning(f"Genesis conversation memory write failed: {e}")
+
+    return llm_output
 
 
 SYNTHESIS_SYSTEM_PROMPT = """

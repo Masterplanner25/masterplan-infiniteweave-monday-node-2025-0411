@@ -27,7 +27,7 @@ def generate_b2b_leads(
     Executes the A.I.N.D.Y. Lead Generation module.
     Example: POST /leadgen?query=companies hiring AI consultants
     """
-    results = leadgen_service.create_lead_results(db, query)
+    results = leadgen_service.create_lead_results(db, query, user_id=str(current_user["sub"]))
     formatted = [
         {
             "company": r.company,
