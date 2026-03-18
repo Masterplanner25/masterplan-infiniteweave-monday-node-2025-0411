@@ -23,6 +23,46 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [main — Sprint 5 User Isolation] — 2026-03-18
+
+## Summary
+
+Closes all remaining cross-user data exposure gaps identified in the Sprint 4 audit. Adds `user_id` to 5 tables, scopes all writes and reads in freelance, research, and rippletrace modules. 429 tests passing.
+
+## Migration
+
+* `d37ae6ebc319` — `sprint5_user_id_freelance_research_rippletrace`
+  * `freelance_orders.user_id` — String, nullable, indexed
+  * `client_feedback.user_id` — String, nullable, indexed
+  * `research_results.user_id` — String, nullable, indexed
+  * `drop_points.user_id` — String, nullable, indexed
+  * `pings.user_id` — String, nullable, indexed
+
+## Changed
+
+* **`db/models/freelance.py`** — `FreelanceOrder` and `ClientFeedback` ORM models updated with `user_id` column.
+* **`db/models/research_results.py`** — `ResearchResult` ORM model updated with `user_id` column.
+* **`db/models/drop.py`** — `DropPointDB` and `PingDB` ORM models updated with `user_id` column.
+* **`services/freelance_service.py`** — `create_order()` and `collect_feedback()` accept `user_id=None` and set it on record. `get_all_orders()` and `get_all_feedback()` accept `user_id=None` and filter when set.
+* **`services/research_results_service.py`** — `create_research_result()` accepts `user_id=None` and sets it. `get_all_research_results()` accepts `user_id=None` and filters when set.
+* **`services/rippletrace_services.py`** — all 6 functions (`add_drop_point`, `add_ping`, `get_all_drop_points`, `get_all_pings`, `get_recent_ripples`, `get_ripples`) accept `user_id=None`. `log_ripple_event()` accepts `user_id=None` (system-internal calls pass None; system-generated drop points remain unowned).
+* **`routes/freelance_router.py`** — all create/read routes extract `current_user["sub"]` and pass to service. `POST /deliver/{id}` verifies ownership before delegating.
+* **`routes/research_results_router.py`** — all create/read routes pass `user_id=current_user["sub"]` to service.
+* **`routes/rippletrace_router.py`** — all create/read routes pass `user_id=current_user["sub"]` to service.
+
+## Tests
+
+* **`tests/test_sprint5_isolation.py`** — 27 new tests across 4 classes: `TestFreelanceIsolation`, `TestResearchIsolation`, `TestRippletraceIsolation`, `TestUserIdColumnPresence`. Verifies auth requirements, user_id presence in model/router/service, and ORM column existence.
+
+## Design Decisions
+
+* `client_feedback.user_id` is denormalized (not derived from the order FK) for simpler query filtering without joins.
+* `revenue_metrics` is system-wide aggregate — no user scope applied.
+* `rippletrace.log_ripple_event()` called by bridge system hooks passes `user_id=None` — system-generated pings remain unowned and will not appear in any user's scoped views.
+* Existing rows with `user_id = NULL` are treated as legacy unowned data — not visible to any user in scoped queries.
+
+---
+
 # [main — Sprint 4 Auth Hardening] — 2026-03-18
 
 ## Summary

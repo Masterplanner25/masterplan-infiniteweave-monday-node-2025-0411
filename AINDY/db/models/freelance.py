@@ -16,6 +16,7 @@ class FreelanceOrder(Base):
     ai_output = Column(Text, nullable=True)
     price = Column(Float, nullable=False, default=0.0)
     status = Column(String, default="pending")
+    user_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -28,6 +29,7 @@ class ClientFeedback(Base):
     rating = Column(Integer, nullable=True)
     feedback_text = Column(Text, nullable=True)
     ai_summary = Column(Text, nullable=True)
+    user_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())
 
     order = relationship("FreelanceOrder", backref="feedback")

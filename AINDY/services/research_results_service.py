@@ -42,9 +42,9 @@ def log_to_memory_bridge(query: str, summary: str):
         print(f"[MemoryBridge] Logging failed: {e}")
 
 
-def create_research_result(db: Session, result: ResearchResultCreate):
+def create_research_result(db: Session, result: ResearchResultCreate, user_id: str = None):
     """Store a new research result and propagate to the symbolic bridge."""
-    db_item = ResearchResult(**result.dict())
+    db_item = ResearchResult(**result.dict(), user_id=user_id)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -54,7 +54,10 @@ def create_research_result(db: Session, result: ResearchResultCreate):
     return db_item
 
 
-def get_all_research_results(db: Session):
+def get_all_research_results(db: Session, user_id: str = None):
     """Retrieve all stored research results ordered by creation date."""
-    return db.query(ResearchResult).order_by(ResearchResult.created_at.desc()).all()
+    q = db.query(ResearchResult)
+    if user_id:
+        q = q.filter(ResearchResult.user_id == user_id)
+    return q.order_by(ResearchResult.created_at.desc()).all()
 

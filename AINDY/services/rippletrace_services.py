@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from db.models import DropPointDB, PingDB
 from datetime import datetime
 
-def add_drop_point(db: Session, dp):
+def add_drop_point(db: Session, dp, user_id: str = None):
     db_dp = DropPointDB(
         id=dp.id,
         title=dp.title,
@@ -12,14 +12,15 @@ def add_drop_point(db: Session, dp):
         date_dropped=dp.date_dropped or datetime.utcnow(),
         core_themes=",".join(dp.core_themes),
         tagged_entities=",".join(dp.tagged_entities),
-        intent=dp.intent
+        intent=dp.intent,
+        user_id=user_id,
     )
     db.add(db_dp)
     db.flush()
     db.refresh(db_dp)
     return db_dp
 
-def add_ping(db: Session, pg):
+def add_ping(db: Session, pg, user_id: str = None):
     db_pg = PingDB(
         id=pg.id,
         drop_point_id=pg.drop_point_id,
@@ -28,33 +29,44 @@ def add_ping(db: Session, pg):
         date_detected=pg.date_detected or datetime.utcnow(),
         connection_summary=pg.connection_summary,
         external_url=pg.external_url,
-        reaction_notes=pg.reaction_notes
+        reaction_notes=pg.reaction_notes,
+        user_id=user_id,
     )
     db.add(db_pg)
     db.flush()
     db.refresh(db_pg)
     return db_pg
 
-def get_ripples(db: Session, drop_point_id: str):
-    return db.query(PingDB).filter(PingDB.drop_point_id == drop_point_id).all()
+def get_ripples(db: Session, drop_point_id: str, user_id: str = None):
+    q = db.query(PingDB).filter(PingDB.drop_point_id == drop_point_id)
+    if user_id:
+        q = q.filter(PingDB.user_id == user_id)
+    return q.all()
 
-def get_all_drop_points(db: Session):
-    return db.query(DropPointDB).all()
+def get_all_drop_points(db: Session, user_id: str = None):
+    q = db.query(DropPointDB)
+    if user_id:
+        q = q.filter(DropPointDB.user_id == user_id)
+    return q.all()
 
-def get_all_pings(db: Session):
-    return db.query(PingDB).all()
+def get_all_pings(db: Session, user_id: str = None):
+    q = db.query(PingDB)
+    if user_id:
+        q = q.filter(PingDB.user_id == user_id)
+    return q.all()
 
-def log_ripple_event(db: Session, event: dict):
+def log_ripple_event(db: Session, event: dict, user_id: str = None):
     """
     Logs a symbolic ripple event triggered by the Bridge or other ecosystem nodes.
     Ensures the referenced DropPoint exists before inserting.
+    user_id is optional — system-internal calls (bridge hooks) pass None.
     """
     from db.models import DropPointDB, PingDB
     from datetime import datetime
 
     drop_id = event.get("drop_point_id", "bridge")
 
-    # ✅ Ensure referenced DropPoint exists before inserting Ping
+    # Ensure referenced DropPoint exists before inserting Ping
     existing_dp = db.query(DropPointDB).filter_by(id=drop_id).first()
     if not existing_dp:
         new_dp = DropPointDB(
@@ -65,13 +77,14 @@ def log_ripple_event(db: Session, event: dict):
             date_dropped=datetime.utcnow(),
             core_themes="auto",
             tagged_entities="system",
-            intent="auto-generated"
+            intent="auto-generated",
+            user_id=None,  # system-generated drop points are unowned
         )
         db.add(new_dp)
-        db.flush()        
+        db.flush()
         db.refresh(new_dp)
 
-    # ✅ Create Ping record safely
+    # Create Ping record safely
     new_pg = PingDB(
         id=event.get("id") or f"ripple-{datetime.utcnow().timestamp()}",
         drop_point_id=drop_id,
@@ -80,7 +93,8 @@ def log_ripple_event(db: Session, event: dict):
         date_detected=datetime.utcnow(),
         connection_summary=event.get("summary", ""),
         external_url=event.get("url", ""),
-        reaction_notes=event.get("notes", "")
+        reaction_notes=event.get("notes", ""),
+        user_id=user_id,
     )
 
     db.add(new_pg)
@@ -89,9 +103,12 @@ def log_ripple_event(db: Session, event: dict):
     return new_pg
 
 
-def get_recent_ripples(db: Session, limit: int = 10):
+def get_recent_ripples(db: Session, limit: int = 10, user_id: str = None):
     """
     Fetch the most recent ripple/ping events for dashboard visualization.
     """
     from db.models import PingDB
-    return db.query(PingDB).order_by(PingDB.date_detected.desc()).limit(limit).all()
+    q = db.query(PingDB).order_by(PingDB.date_detected.desc())
+    if user_id:
+        q = q.filter(PingDB.user_id == user_id)
+    return q.limit(limit).all()

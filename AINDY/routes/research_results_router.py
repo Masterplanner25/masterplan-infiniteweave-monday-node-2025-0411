@@ -9,25 +9,40 @@ from services.auth_service import get_current_user
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
 
 @router.post("/", response_model=ResearchResultResponse)
-def create_result(result: ResearchResultCreate, db: Session = Depends(get_db)):
+def create_result(
+    result: ResearchResultCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Create and store a new research result.
+    Create and store a new research result owned by the current user.
     """
-    return research_results_service.create_research_result(db, result)
+    return research_results_service.create_research_result(
+        db, result, user_id=str(current_user["sub"])
+    )
 
 @router.get("/", response_model=list[ResearchResultResponse])
-def list_results(db: Session = Depends(get_db)):
+def list_results(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Retrieve all stored research results.
+    Retrieve all research results belonging to the current user.
     """
-    return research_results_service.get_all_research_results(db)
+    return research_results_service.get_all_research_results(
+        db, user_id=str(current_user["sub"])
+    )
 
 @router.post("/query", response_model=ResearchResultResponse)
-def run_research_query(request: ResearchResultCreate, db: Session = Depends(get_db)):
+def run_research_query(
+    request: ResearchResultCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Accepts a research query, stores it, and triggers MemoryBridge logging.
     """
-    print(f"🧠 Running research for query: {request.query}")
-
-    result = research_results_service.create_research_result(db, request)
-    return result
+    print(f"Running research for query: {request.query}")
+    return research_results_service.create_research_result(
+        db, request, user_id=str(current_user["sub"])
+    )

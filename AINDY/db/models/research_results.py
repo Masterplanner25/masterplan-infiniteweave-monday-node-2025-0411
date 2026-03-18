@@ -14,4 +14,5 @@ class ResearchResult(Base):
     summary = Column(Text, nullable=True)
     source = Column(String, nullable=True)
     data = Column(JSON, nullable=True)
+    user_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())

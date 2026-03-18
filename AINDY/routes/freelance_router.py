@@ -20,12 +20,16 @@ router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depend
 # 1️⃣  Create a New Order
 # -----------------------------------------------------
 @router.post("/order", response_model=FreelanceOrderResponse, status_code=status.HTTP_201_CREATED)
-def create_freelance_order(order: FreelanceOrderCreate, db: Session = Depends(get_db)):
+def create_freelance_order(
+    order: FreelanceOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Create a new freelance order and log it to the Memory Bridge.
     """
     try:
-        return freelance_service.create_order(db, order)
+        return freelance_service.create_order(db, order, user_id=str(current_user["sub"]))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create order: {e}")
 
@@ -34,10 +38,23 @@ def create_freelance_order(order: FreelanceOrderCreate, db: Session = Depends(ge
 # 2️⃣  Deliver an Order
 # -----------------------------------------------------
 @router.post("/deliver/{order_id}", response_model=FreelanceOrderResponse)
-def deliver_order(order_id: int, ai_output: str, db: Session = Depends(get_db)):
+def deliver_order(
+    order_id: int,
+    ai_output: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Mark an order as delivered and attach the AI-generated output.
+    Only the owner of the order can deliver it.
     """
+    from db.models.freelance import FreelanceOrder
+    order = db.query(FreelanceOrder).filter(
+        FreelanceOrder.id == order_id,
+        FreelanceOrder.user_id == str(current_user["sub"]),
+    ).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
     try:
         return freelance_service.deliver_order(db, order_id, ai_output)
     except ValueError as ve:
@@ -50,12 +67,16 @@ def deliver_order(order_id: int, ai_output: str, db: Session = Depends(get_db)):
 # 3️⃣  Collect Feedback
 # -----------------------------------------------------
 @router.post("/feedback", response_model=FeedbackResponse)
-def collect_feedback(feedback: FeedbackCreate, db: Session = Depends(get_db)):
+def collect_feedback(
+    feedback: FeedbackCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Collect client feedback and store summarized version.
     """
     try:
-        return freelance_service.collect_feedback(db, feedback)
+        return freelance_service.collect_feedback(db, feedback, user_id=str(current_user["sub"]))
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))
     except Exception as e:
@@ -63,25 +84,31 @@ def collect_feedback(feedback: FeedbackCreate, db: Session = Depends(get_db)):
 
 
 # -----------------------------------------------------
-# 4️⃣  Retrieve All Orders
+# 4️⃣  Retrieve All Orders (scoped to current user)
 # -----------------------------------------------------
 @router.get("/orders", response_model=list[FreelanceOrderResponse])
-def get_all_orders(db: Session = Depends(get_db)):
+def get_all_orders(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Retrieve all freelance orders.
+    Retrieve all freelance orders belonging to the current user.
     """
-    return freelance_service.get_all_orders(db)
+    return freelance_service.get_all_orders(db, user_id=str(current_user["sub"]))
 
 
 # -----------------------------------------------------
-# 5️⃣  Retrieve All Feedback
+# 5️⃣  Retrieve All Feedback (scoped to current user)
 # -----------------------------------------------------
 @router.get("/feedback", response_model=list[FeedbackResponse])
-def get_all_feedback(db: Session = Depends(get_db)):
+def get_all_feedback(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Retrieve all client feedback records.
+    Retrieve all client feedback records belonging to the current user.
     """
-    return freelance_service.get_all_feedback(db)
+    return freelance_service.get_all_feedback(db, user_id=str(current_user["sub"]))
 
 
 # -----------------------------------------------------
@@ -90,7 +117,7 @@ def get_all_feedback(db: Session = Depends(get_db)):
 @router.get("/metrics/latest", response_model=RevenueMetricsResponse)
 def get_latest_metrics(db: Session = Depends(get_db)):
     """
-    Retrieve the most recent revenue metrics record.
+    Retrieve the most recent revenue metrics record (system-wide aggregate).
     """
     metric = freelance_service.get_latest_metrics(db)
     if not metric:
@@ -104,7 +131,7 @@ def get_latest_metrics(db: Session = Depends(get_db)):
 @router.post("/metrics/update", response_model=RevenueMetricsResponse)
 def update_metrics(db: Session = Depends(get_db)):
     """
-    Manually trigger a recalculation of revenue metrics.
+    Manually trigger a recalculation of revenue metrics (system-wide aggregate).
     """
     try:
         return freelance_service.update_revenue_metrics(db)
