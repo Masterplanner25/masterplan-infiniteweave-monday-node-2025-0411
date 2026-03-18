@@ -6,7 +6,7 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-17)
 
-**Diagnostic suite** (`AINDY/tests/`) — 224 tests across 11 files. Final result: **224 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 246 tests across 11 files. Final result: **246 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -19,7 +19,7 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_routes_bridge.py` | 8 | HMAC validation, TTL enforcement, read path |
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
-| `tests/test_routes_genesis.py` | 13 | Route auth enforcement, import regression guards |
+| `tests/test_routes_genesis.py` | 35 | Route auth enforcement, import regression guards. Genesis Blocks 1-3 (22 new): TestGenesisBlock1 (10) — model column presence, factory signature, masterplan_router registration/auth; TestGenesisBlock2 (5) — new route registration, auth guards, one-way flag guard; TestGenesisBlock3 (7) — real LLM assertion, synthesis gate (422), posture logic, posture_description. |
 | `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
 | `tests/test_arm.py` | 62 | ARM Phase 1 (46): SecurityValidator, ConfigManager, FileProcessor, ARM routes with mocked OpenAI. ARM Phase 2 (16): TestARMMetrics route-level (4), TestARMMetricsService unit (7), TestARMConfigSuggestions unit (4), TestARMRoutes new endpoints (1). No DB required for service unit tests. |
 

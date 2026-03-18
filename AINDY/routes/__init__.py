@@ -17,6 +17,7 @@ from .social_router import router as social_router
 from .analytics_router import router as analytics_router
 from routes.genesis_router import router as genesis_router
 from routes.auth_router import router as auth_router
+from routes.masterplan_router import router as masterplan_router
 
 
 ROUTERS = [
@@ -39,5 +40,6 @@ ROUTERS = [
     analytics_router,
     genesis_router,
     auth_router,
+    masterplan_router,
 ]
 

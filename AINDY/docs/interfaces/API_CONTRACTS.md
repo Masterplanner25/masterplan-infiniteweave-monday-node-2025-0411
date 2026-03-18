@@ -24,6 +24,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/analytics_router.py` (prefix `/analytics`) **[JWT auth required]**
 - `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
 - `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
+- `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
 
 **Authentication model (Phase 2 + Phase 3 — complete):**
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social.
@@ -873,49 +874,93 @@ Response: Summary dict; schema depends on `group_by` and record availability.
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Genesis Routes (`AINDY/routes/genesis_router.py`, prefix `/genesis`)
+### Genesis Routes (`AINDY/routes/genesis_router.py`, prefix `/genesis`) **[JWT auth required]** — Genesis Blocks 1-3 (2026-03-17)
+
 `POST /genesis/session`
 Method: POST
 Request Body: None
-Query Params: None
+Auth: JWT Bearer (user_id_str bound from token sub)
 Response: `{ "session_id": int }`
 Status Codes: 200
-Errors: Not explicitly defined.
 
 `POST /genesis/message`
 Method: POST
-Request Body: `dict` with `session_id` and `message`
-Query Params: None
+Request Body: `dict` with `session_id` (int) and `message` (str)
+Auth: JWT Bearer
 Response: `{ "reply": str, "synthesis_ready": bool }`
-Status Codes: 200, 400 on missing fields, 404 if session not found.
+Status Codes: 200, 400 on missing fields, 404 if session not found or not owned by user.
+Notes: `synthesis_ready` is a one-way flag — once True, never reverts to False.
+
+`GET /genesis/session/{session_id}`
+Method: GET
+Auth: JWT Bearer
+Response: `{ "session_id": int, "status": str, "synthesis_ready": bool, "summarized_state": object, "created_at": datetime, "updated_at": datetime }`
+Status Codes: 200, 404 if not found or not owned.
+
+`GET /genesis/draft/{session_id}`
+Method: GET
+Auth: JWT Bearer
+Response: `{ "session_id": int, "draft": object, "synthesis_ready": bool }`
+Status Codes: 200, 404 if no draft yet (run /synthesize first) or session not owned.
 
 `POST /genesis/synthesize`
 Method: POST
-Request Body: `dict` with `session_id`
-Query Params: None
-Response: `{ "draft": <object> }` (shape from `call_genesis_synthesis_llm`)
-Status Codes: 200, 400 on missing session_id, 404 if session not found.
+Request Body: `dict` with `session_id` (int)
+Auth: JWT Bearer
+Response: `{ "draft": <synthesis object> }` — vision_statement, time_horizon_years, primary_mechanism, ambition_score, core_domains, phases, success_criteria, risk_factors, confidence_at_synthesis
+Status Codes: 200, 400 on missing session_id, 404 if session not owned, 422 if `synthesis_ready` is False.
+Notes: Persists draft to `session.draft_json`. Rate limited: 5/minute.
 
 `POST /genesis/lock`
 Method: POST
-Request Body: `dict` with `session_id` and `draft`
-Query Params: None
+Request Body: `dict` with `session_id` (int) and `draft` (object)
+Auth: JWT Bearer
 Response: `{ "masterplan_id": int, "version": str, "posture": str }`
-Status Codes: 200, 400 on missing fields or lock errors.
+Status Codes: 200, 400 on missing fields or session already locked.
 
 `POST /genesis/{plan_id}/activate`
 Method: POST
 Request Body: None
-Query Params: None
+Auth: JWT Bearer
 Response: `{ "status": "activated" }`
-Status Codes: 200, 404 if plan not found.
+Status Codes: 200, 404 if plan not found or not owned by user.
+Notes: Deactivates all other plans for the user first (single active plan invariant).
 
-## 3. Genesis API Contract (Current Implementation)
-- `POST /genesis/session` initializes a `GenesisSessionDB` row with a `summarized_state` dict and returns `session_id`.
-- `POST /genesis/message` requires `session_id` and `message`; response includes `reply` and `synthesis_ready` from model output.
-- Session state is updated by merging `state_update` into `summarized_state`; `confidence` is clamped to [0,1].
-- `POST /genesis/synthesize` returns `{ "draft": <object> }` from `call_genesis_synthesis_llm`.
-- `POST /genesis/lock` creates a masterplan from a session and marks it locked.
+### MasterPlan Routes (`AINDY/routes/masterplan_router.py`, prefix `/masterplans`) **[JWT auth required]** — Genesis Block 1 (2026-03-17)
+
+`GET /masterplans/`
+Method: GET
+Auth: JWT Bearer
+Response: Array of `{ id, version_label, posture, status, is_active, created_at, locked_at, activated_at }`
+Status Codes: 200
+Notes: Returns only plans owned by current user.
+
+`GET /masterplans/{plan_id}`
+Method: GET
+Auth: JWT Bearer
+Response: `{ id, version_label, posture, status, is_active, structure_json, created_at, locked_at, activated_at, linked_genesis_session_id }`
+Status Codes: 200, 404 if not found or not owned.
+
+`POST /masterplans/{plan_id}/lock`
+Method: POST
+Auth: JWT Bearer
+Response: `{ "plan_id": int, "status": "locked" }`
+Status Codes: 200, 400 if already locked, 404 if not found or not owned.
+
+`POST /masterplans/{plan_id}/activate`
+Method: POST
+Auth: JWT Bearer
+Response: `{ "status": "activated", "plan_id": int }`
+Status Codes: 200, 404 if not found or not owned.
+Notes: Deactivates all other user plans first.
+
+## 3. Genesis API Contract (Current Implementation — Genesis Blocks 1-3)
+- `POST /genesis/session` binds `user_id_str` from JWT `sub`. All subsequent queries scoped to that user.
+- `POST /genesis/message` persists `synthesis_ready` as one-way flag (True → never False). `synthesis_ready` returned reflects DB value, not LLM flag.
+- `POST /genesis/synthesize` requires `synthesis_ready == True`; returns 422 otherwise. Persists `draft_json` to session. Calls real GPT-4o.
+- Posture is one of `Stable | Accelerated | Aggressive | Reduced` (determined by `ambition_score` + `time_horizon_years`).
+- `POST /genesis/lock` validates session ownership before delegating to `create_masterplan_from_genesis(user_id=...)`.
+- `masterplan_router` manages plans independently; all queries user-scoped.
 
 ## 4. Memory Bridge API Contract (Current Implementation)
 - `POST /bridge/nodes` and `POST /bridge/link` require a `permission` object (`TracePermission`) with `nonce`, `ts`, `ttl`, `scopes`, and `signature`.

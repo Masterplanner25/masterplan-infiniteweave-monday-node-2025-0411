@@ -51,6 +51,55 @@
   endpoint contracts.
 - Total test suite: **208 passing, 0 failing** (up from 162).
 
+### Added (2026-03-17 — Genesis Blocks 1-3)
+- **Alembic migration** `a1b2c3d4e5f6_genesis_block1_missing_columns` — additive columns:
+  - `genesis_sessions`: `synthesis_ready` (Boolean, default false), `draft_json` (JSON),
+    `locked_at` (DateTime), `user_id_str` (String UUID)
+  - `master_plans`: `user_id` (String UUID), `status` (String, default "draft")
+- `db/models/masterplan.py` — `MasterPlan` gains `user_id` + `status`; `GenesisSessionDB`
+  gains `synthesis_ready`, `draft_json`, `locked_at`, `user_id_str`.
+- `services/masterplan_factory.py` — accepts `user_id` param; version count scoped per-user;
+  sets `masterplan.status = "locked"` and `session.locked_at` on lock.
+- `services/posture.py` — real posture detection replacing stub. Returns one of
+  `Stable | Accelerated | Aggressive | Reduced` based on `time_horizon_years` and
+  `ambition_score` from synthesis draft. Adds `posture_description()` helper.
+- `services/genesis_ai.py` — `call_genesis_synthesis_llm()` replaced stub with real
+  GPT-4o call using `response_format={"type": "json_object"}` and `SYNTHESIS_SYSTEM_PROMPT`.
+  Produces structured draft: vision, horizon, mechanism, ambition_score, phases, domains,
+  success_criteria, risk_factors. Fail-safe fallback on parse error.
+- `routes/genesis_router.py` — full rewrite with user isolation:
+  - All session queries scoped to `user_id_str` (from JWT `sub`)
+  - `POST /genesis/session` — binds `user_id_str`
+  - `POST /genesis/message` — persists `synthesis_ready` to DB as one-way flag
+  - `GET /genesis/session/{id}` — new endpoint (Block 2)
+  - `GET /genesis/draft/{id}` — new endpoint (Block 2)
+  - `POST /genesis/synthesize` — gated on `synthesis_ready`, persists `draft_json`
+  - `POST /genesis/lock` — passes `user_id` to factory
+  - `POST /genesis/{plan_id}/activate` — scoped to current user, sets `status = "active"`
+- `routes/masterplan_router.py` — new router (prefix `/masterplans`), JWT auth:
+  - `POST /masterplans/{id}/lock`, `GET /masterplans/`, `GET /masterplans/{id}`,
+    `POST /masterplans/{id}/activate`
+- `routes/__init__.py` — `masterplan_router` registered.
+- Frontend: `client/src/components/Genesis.jsx` — auth-wired rewrite using `api.js`
+  functions (no raw fetch). Synthesis-ready banner, draft preview with LOCK PLAN button,
+  locked confirmation panel. Phase 2/3 UI fully implemented.
+- Frontend: `client/src/components/GenesisDraftPreview.jsx` — new Phase 3 editable preview
+  component. Shows vision, horizon, mechanism, ambition score, phases, domains,
+  success criteria, risk factors.
+- Frontend: `client/src/components/MasterPlanDashboard.jsx` — rewritten to use
+  authenticated `listMasterPlans()` / `activateMasterPlan()` from `api.js`. Status badges:
+  ACTIVE (green) / LOCKED (yellow) / DRAFT (grey) / ARCHIVED (muted). Activate button on
+  locked plans.
+- `client/src/api.js` — `authRequest` helper (reads Bearer token from localStorage);
+  10 new functions: `startGenesisSession`, `sendGenesisMessage`, `getGenesisSession`,
+  `synthesizeGenesisDraft`, `getGenesisDraft`, `lockMasterPlan`, `listMasterPlans`,
+  `getMasterPlan`, `activateMasterPlan`.
+- Tests: 22 new tests in `tests/test_routes_genesis.py`:
+  - `TestGenesisBlock1` (10 tests): model column presence, factory signature, masterplan_router registration/auth
+  - `TestGenesisBlock2` (5 tests): new route registration, auth guards, one-way flag guard
+  - `TestGenesisBlock3` (7 tests): real LLM assertion, synthesis gate, posture logic, posture_description helper
+- Total test suite: **246 passing, 0 failing** (up from 224).
+
 ### Added (2026-03-17 — ARM Phase 2)
 - `services/arm_metrics_service.py` — `ARMMetricsService` calculates all five
   Infinity Algorithm Thinking KPI metrics from `analysis_results` and

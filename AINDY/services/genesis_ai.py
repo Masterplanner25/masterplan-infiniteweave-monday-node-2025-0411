@@ -71,21 +71,74 @@ Return only valid JSON.
         }
 
 
-def call_genesis_synthesis_llm(current_state: dict) -> dict:
+SYNTHESIS_SYSTEM_PROMPT = """
+You are A.I.N.D.Y., a strategic synthesis engine. Given a structured session state, produce a
+complete, actionable MasterPlan draft.
 
-    # Minimal stub for now
-    return {
-        "vision_statement": current_state.get("vision_summary", ""),
-        "time_horizon_years": current_state.get("time_horizon", 5),
-        "primary_mechanism": current_state.get("mechanism_summary", ""),
-        "core_domains": [
-            {"name": d, "intent": ""}
-            for d in current_state.get("inferred_domains", [])
+You MUST return valid JSON in this exact format:
+
+{
+  "vision_statement": "...",
+  "time_horizon_years": 5,
+  "primary_mechanism": "...",
+  "ambition_score": 0.7,
+  "core_domains": [{"name": "...", "intent": "..."}],
+  "phases": [{"name": "...", "description": "...", "duration_months": 12}],
+  "key_assets": ["..."],
+  "success_criteria": ["..."],
+  "risk_factors": ["..."],
+  "confidence_at_synthesis": 0.0
+}
+
+Rules:
+- ambition_score is a float 0.0–1.0 representing how ambitious/aggressive the plan is.
+- time_horizon_years must be a number.
+- Return ONLY the JSON object. No explanation text.
+"""
+
+
+def call_genesis_synthesis_llm(current_state: dict) -> dict:
+    """Real GPT-4o synthesis call. Replaces the stub from initial implementation."""
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"""
+Session State:
+{json.dumps(current_state, indent=2)}
+
+Synthesize this into a complete MasterPlan draft.
+Return only valid JSON.
+"""
+            }
         ],
-        "phases": [
-            {"name": p, "description": ""}
-            for p in current_state.get("inferred_phases", [])
-        ],
-        "key_assets": current_state.get("assets_summary", []),
-        "confidence_at_synthesis": current_state.get("confidence", 0.0)
-    }
+        temperature=0.3,
+        response_format={"type": "json_object"},
+    )
+
+    content = response.choices[0].message.content
+
+    try:
+        return json.loads(content)
+    except Exception:
+        # Fail-safe: return minimal valid structure
+        return {
+            "vision_statement": current_state.get("vision_summary", ""),
+            "time_horizon_years": current_state.get("time_horizon", 5),
+            "primary_mechanism": current_state.get("mechanism_summary", ""),
+            "ambition_score": 0.5,
+            "core_domains": [
+                {"name": d, "intent": ""}
+                for d in current_state.get("inferred_domains", [])
+            ],
+            "phases": [
+                {"name": p, "description": "", "duration_months": 12}
+                for p in current_state.get("inferred_phases", [])
+            ],
+            "key_assets": current_state.get("assets_summary", []) or [],
+            "success_criteria": [],
+            "risk_factors": [],
+            "confidence_at_synthesis": current_state.get("confidence", 0.0)
+        }

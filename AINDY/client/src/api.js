@@ -156,3 +156,64 @@ export function startTask(taskName) {
     body: JSON.stringify({ name: taskName }),
   });
 }
+
+/* --- Auth helper (injects Bearer token from localStorage) --- */
+function authRequest(path, opts = {}) {
+  const token = localStorage.getItem("aindy_token");
+  return request(path, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
+/* --- Genesis Endpoints --- */
+
+export function startGenesisSession() {
+  return authRequest("/genesis/session", { method: "POST" });
+}
+
+export function sendGenesisMessage(sessionId, message) {
+  return authRequest("/genesis/message", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, message }),
+  });
+}
+
+export function getGenesisSession(sessionId) {
+  return authRequest(`/genesis/session/${sessionId}`, { method: "GET" });
+}
+
+export function synthesizeGenesisDraft(sessionId) {
+  return authRequest("/genesis/synthesize", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
+export function getGenesisDraft(sessionId) {
+  return authRequest(`/genesis/draft/${sessionId}`, { method: "GET" });
+}
+
+export function lockMasterPlan(sessionId, draft) {
+  return authRequest("/genesis/lock", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, draft }),
+  });
+}
+
+/* --- MasterPlan Endpoints --- */
+
+export function listMasterPlans() {
+  return authRequest("/masterplans/", { method: "GET" });
+}
+
+export function getMasterPlan(planId) {
+  return authRequest(`/masterplans/${planId}`, { method: "GET" });
+}
+
+export function activateMasterPlan(planId) {
+  return authRequest(`/masterplans/${planId}/activate`, { method: "POST" });
+}
