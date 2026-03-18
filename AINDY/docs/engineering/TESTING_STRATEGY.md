@@ -6,7 +6,7 @@ This document distinguishes current testing reality from required policy going f
 
 ### Current State (as of 2026-03-17)
 
-**Diagnostic suite** (`AINDY/tests/`) — 150 tests across 10 files. Final result: **150 passing, 0 failing**.
+**Diagnostic suite** (`AINDY/tests/`) — 162 tests across 10 files. Final result: **162 passing, 0 failing**.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -20,7 +20,7 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
 | `tests/test_routes_genesis.py` | 13 | Route auth enforcement, import regression guards |
-| `tests/test_security.py` | 13 | JWT auth (401 rejection + valid token acceptance), CORS explicit origins, rate limiting middleware, hardcoded key scan, permission secret |
+| `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
 
 Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery configured in `pytest.ini`.
 
@@ -30,6 +30,8 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 - `test_import.py` — simple import check
 
 **Phase 2 security tests** — all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth → 401) and the acceptance path (valid JWT → expected status). No intentional failures remain in the test suite.
+
+**Phase 3 security tests** — 12 additional tests in `TestPhase3RouteProtection` class verify every router protected in Phase 3: `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router` (JWT rejection), `db_verify_router`, `network_bridge_router` (API key rejection and acceptance).
 
 ## 2. Required Coverage Areas (Policy)
 

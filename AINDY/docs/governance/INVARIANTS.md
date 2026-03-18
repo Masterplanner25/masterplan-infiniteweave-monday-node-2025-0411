@@ -176,11 +176,27 @@ This document lists invariants enforced by the current implementation. Each inva
 
 ## 21. JWT Authentication on Protected Route Groups
 - Invariant Name: Protected route groups require valid JWT Bearer token
-- Description: Routes in `task_router`, `leadgen_router`, `genesis_router`, and `analytics_router` require a valid JWT Bearer token. Requests without credentials or with an invalid/expired token are rejected with HTTP 401 before any route body executes.
-- Enforcement Location: `AINDY/services/auth_service.py: get_current_user` (injected via `Depends(get_current_user)` on each route)
+- Description: All user-facing route groups require a valid JWT Bearer token. Routes protected via router-level `dependencies=[Depends(get_current_user)]`: `task_router`, `leadgen_router`, `genesis_router`, `analytics_router` (Phase 2); `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router` (Phase 3). Requests without credentials or with an invalid/expired token are rejected with HTTP 401 before any route body executes.
+- Enforcement Location: `AINDY/services/auth_service.py: get_current_user` (injected via router-level `dependencies=[Depends(get_current_user)]`)
 - Enforcement Mechanism: `HTTPBearer` extracts the `Authorization: Bearer <token>` header. `decode_access_token()` verifies the HS256 signature and expiry using `SECRET_KEY`. Raises `HTTPException(401)` if no credentials are present or if verification fails.
-- What Would Break If Violated: Unauthenticated users could access task management, lead generation, AI genesis, and analytics endpoints.
+- What Would Break If Violated: Unauthenticated users could access protected endpoints.
 - Enforcement Type: Application-enforced. Auth routes (`POST /auth/login`, `POST /auth/register`), health routes, and bridge routes remain public.
+
+## 22. API Key Authentication on Service-to-Service Routes
+- Invariant Name: Service-to-service routes require valid API key
+- Description: Routes intended for internal service-to-service calls require a valid `X-API-Key` header matching `AINDY_API_KEY` from the environment. Affected routers: `db_verify_router` (`/db/verify`), `network_bridge_router` (`/network_bridge/*`). Requests without the header or with an invalid key are rejected with HTTP 401.
+- Enforcement Location: `AINDY/services/auth_service.py: verify_api_key` (injected via router-level `dependencies=[Depends(verify_api_key)]`)
+- Enforcement Mechanism: Reads `X-API-Key` request header and compares to `settings.AINDY_API_KEY`. Raises `HTTPException(401)` on missing or mismatched key. Node.js gateway (`AINDY/server.js`) sends this key via `dotenv`-loaded `AINDY_API_KEY` env var on all FastAPI calls.
+- What Would Break If Violated: DB schema inspection endpoint and network bridge handshake endpoint would be accessible without credentials.
+- Enforcement Type: Application-enforced.
+
+## 23. Rate Limiting on AI/Expensive Endpoints
+- Invariant Name: AI-backed endpoints have per-IP rate limits
+- Description: Endpoints that invoke external AI providers or perform expensive operations are rate-limited per remote IP using SlowAPI. Limits: `POST /leadgen/` (10/min), `POST /genesis/message` (20/min), `POST /genesis/synthesize` (5/min), `POST /arm/analyze` (10/min), `POST /arm/generate` (10/min).
+- Enforcement Location: `@limiter.limit(...)` decorator on each route function; shared `Limiter` instance in `AINDY/services/rate_limiter.py`; `SlowAPIMiddleware` registered on the FastAPI app in `AINDY/main.py`.
+- Enforcement Mechanism: SlowAPI intercepts requests before route body; returns HTTP 429 with `Retry-After` header when limit is exceeded.
+- What Would Break If Violated: Unconstrained callers could exhaust OpenAI/Perplexity/DeepSeek API quotas and incur unbounded cost.
+- Enforcement Type: Application-enforced.
 
 ## 20. Documented but Not Enforced at Code Level
 - Session isolation beyond routes (e.g., across background threads) is documented in various docs but not enforced beyond usage patterns. Documented but not enforced at code level.

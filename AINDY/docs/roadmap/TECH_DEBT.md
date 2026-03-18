@@ -48,10 +48,12 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-17 Phase 2):** Rate limiting added — `SlowAPIMiddleware` registered in `main.py` with per-IP limiting via `slowapi`. AI endpoints (genesis, leadgen) can be rate-limited with `@limiter.limit()` decorator.
 - ✅ **FIXED (2026-03-17 Phase 2):** JWT authentication added to user-facing route groups: `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. Dependency: `Depends(get_current_user)` from `services/auth_service.py`. Auth routes at `POST /auth/login`, `POST /auth/register` are public.
 - ✅ **FIXED (2026-03-17 Phase 2):** CORS wildcard replaced — `allow_origins=["*"]` replaced with `ALLOWED_ORIGINS` read from `.env` environment variable. Default: localhost origins. No longer uses wildcard + credentials combination.
-- No authentication or authorization on gateway (`AINDY/server.js`). Node gateway still uses in-memory user list and no auth headers on FastAPI forwarding. Phase 3 target.
+- ✅ **FIXED (2026-03-17 Phase 3):** Node gateway auth wired — `server.js` now loads `AINDY_API_KEY` from `.env` via `dotenv` and sends `X-API-Key` header on all FastAPI service calls. `POST /network_bridge/connect` and `POST /network_bridge/user_event` are now API-key protected; gateway sends the key.
+- ✅ **FIXED (2026-03-17 Phase 3):** User ORM model created — `db/models/user.py` (`users` table: UUID PK, unique email/username indexes, `hashed_password`, `is_active`). Migration `37f972780d54` applied. `auth_router.py` replaced in-memory `_USERS` dict with `register_user()` / `authenticate_user()` from `auth_service.py` via `Depends(get_db)`.
+- ✅ **FIXED (2026-03-17 Phase 3):** All remaining unprotected routes secured. JWT (`get_current_user`): `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router`. API key (`verify_api_key`): `db_verify_router`, `network_bridge_router`. Zero unprotected non-public routes remain.
+- ✅ **FIXED (2026-03-17 Phase 3):** Rate limiting decorators applied to all AI/cost endpoints — `@limiter.limit()` on `/leadgen/` (10/min), `/genesis/message` (20/min), `/genesis/synthesize` (5/min), `/arm/analyze` (10/min), `/arm/generate` (10/min). Shared `Limiter` extracted to `services/rate_limiter.py`.
 - No documented secret rotation policy (`AINDY/routes/bridge_router.py` uses env secret without rotation).
 - HMAC protection exists for Memory Bridge writes but no replay protection beyond TTL (`AINDY/routes/bridge_router.py`).
-- No User ORM model — `routes/auth_router.py` uses an in-memory user store for MVP. Replace with `db.models.user.UserDB` model with DB-backed persistence. Phase 3 target.
 - `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
 
 ## 7. Observability Debt
@@ -92,7 +94,93 @@ The following bugs were revealed by the comprehensive diagnostic test suite adde
 ### §3 Testing (additions — resolved)
 - Comprehensive diagnostic test suite added: `AINDY/tests/` with 143 tests across 8 files covering services, memory bridge, Rust/C++ kernel, all route groups, models, and security. Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0` added to `requirements.txt`. Final result: **135 passing, 8 failing** (all failures are intentional diagnostic tests for known bugs).
 
-## 10. Prioritization Table
+## 10. Memory Bridge Architectural Debt
+
+The following items were identified during a structured architectural review of the Memory Bridge system (2026-03-17). They describe structural and design-level deficiencies distinct from the runtime bugs already recorded in §2, §8, and §9. Cross-references to those sections are noted where relevant.
+
+### §10.1 Data Model — MemoryNode.children is never persisted
+
+- **`MemoryNode.children` (recursive nested nodes) is silently dropped on every persist call.** The `children: Vec<MemoryNode>` field is defined in the Rust struct and serializable, but no code in `MemoryNodeDAO.save_memory_node()` or `bridge/bridge.py` walks the children array and inserts corresponding rows into `memory_links`. Every child node created in-memory is lost on process exit. This makes recursive trace continuity — a stated design objective — a no-op.
+  - Location: `AINDY/bridge/memory_bridge_rs/src/lib.rs` (MemoryNode struct), `AINDY/services/memory_persistence.py` (MemoryNodeDAO.save_memory_node)
+  - Mechanism: Callers construct nested MemoryNode trees; the persist path only writes the root node's fields; `children` is ignored.
+  - Impact: All associative chains are ephemeral. Any cross-session continuity built on children is silently incomplete.
+  - Status: Open.
+
+### §10.2 Data Model — MemoryTrace Python class creates a divergent shadow state
+
+- **`MemoryTrace` (defined in `bridge/bridge.py`) maintains an in-memory representation of memory nodes that is not synchronized with the database.** It has no read-from-DB path, no cache invalidation, and no recovery logic on restart. Any write that goes through `MemoryTrace` and any write that goes through `MemoryNodeDAO` produce independent, inconsistent views of the same logical data.
+  - Location: `AINDY/bridge/bridge.py` (MemoryTrace class)
+  - Mechanism: `MemoryTrace.add_node()` appends to `self.nodes` in-memory. `MemoryNodeDAO.save_memory_node()` writes to PostgreSQL. There is no path between them.
+  - Impact: Queries against the DB do not reflect in-memory state; in-memory state does not survive restart. Two consumers reading the same "memory" will see different results depending on which layer they use.
+  - Status: Open. Recommendation: eliminate `MemoryTrace` as an application-managed state container; treat PostgreSQL as the single source of truth. Retain the Rust `MemoryTrace` struct for wire serialization only.
+
+### §10.3 Graph Layer — memory_links has no traversal query
+
+- **`memory_links` is populated (or intended to be) but no query traverses it.** No method in `MemoryNodeDAO` fetches linked neighbors, expands from a seed node, or scores paths. The table has correct schema, correct indexes, and a uniqueness constraint — but zero read-path usage. The graph is write-only from the application's perspective.
+  - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO), `AINDY/routes/bridge_router.py` (no traversal endpoint)
+  - Mechanism: `POST /bridge/link` inserts rows. No endpoint or DAO method queries `memory_links` for neighbors, reachability, or subgraph expansion.
+  - Impact: The relational structure between memory nodes is unqueryable. Graph-based recall — the architectural basis for associative memory — does not function.
+  - Status: Open. Minimum viable fix: add `MemoryNodeDAO.get_linked_nodes(node_id, link_type=None, limit=50)` querying `memory_links` by `source_node_id`, and expose it at `GET /bridge/nodes/{id}/links`.
+
+### §10.4 Graph Layer — memory_links.strength is a VARCHAR, not a numeric value
+
+- **`memory_links.strength` is defined as `VARCHAR(20)` with default `"medium"`.** This means relationship weight is a non-comparable string enum (`"low"`, `"medium"`, `"high"`). It cannot be used in ORDER BY relevance, cannot be averaged, and cannot participate in any scoring formula. Any future graph traversal that needs weighted edges will require a schema migration to convert this to a numeric type.
+  - Location: `AINDY/alembic/versions/bff24d352475_create_memory_nodes_links.py`, `AINDY/services/memory_persistence.py` (MemoryLinkModel)
+  - Mechanism: Schema defines `strength VARCHAR(20) DEFAULT 'medium'`. No numeric weight column exists.
+  - Impact: Graph traversal scoring is blocked. Relationship strength carries no computational meaning in the current schema.
+  - Status: Open. Fix: add `weight FLOAT NOT NULL DEFAULT 0.5` column to `memory_links`; deprecate `strength` string in a subsequent migration.
+
+### §10.5 Retrieval — semantic retrieval is architecturally impossible in current state
+
+- **No embeddings are stored in `memory_nodes`.** The C++ `cosine_similarity` kernel is implemented and callable, but `MemoryNodeModel` has no `embedding` column and no embedding generation occurs on node creation. `GET /bridge/nodes` retrieves by tag match or full-text only. There is no `/bridge/nodes/search/semantic` endpoint, no pgvector integration, and no embedding provider call in the write path. This is cross-referenced in §8 but recorded here for completeness as a retrieval architecture gap.
+  - Location: `AINDY/services/memory_persistence.py` (MemoryNodeModel — no embedding field), `AINDY/bridge/memory_bridge_rs/src/lib.rs` (cosine_similarity callable but unused in retrieval)
+  - Mechanism: Write path: content stored as TEXT only. Read path: tag OR/AND query or tsvector FTS. No vector path exists.
+  - Impact: Semantic recall — retrieving memories by meaning rather than exact tags — does not function. The primary differentiation of this memory system over a text log is absent.
+  - Status: Open (tracked in §8; requires pgvector extension, `embedding VECTOR(1536)` column, embedding generation on write, HNSW index, and a semantic search endpoint).
+
+### §10.6 Retrieval — no temporal decay or recency weighting
+
+- **`created_at` is indexed on `memory_nodes` but is never incorporated into retrieval scoring.** All nodes matching a tag query or full-text query are returned with equal relevance regardless of age. A node created 2 years ago ranks identically to one created 30 seconds ago. There is no decay function, no recency weight, and no salience model.
+  - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO.find_by_tags — ORDER BY clause absent or arbitrary)
+  - Mechanism: `find_by_tags()` returns matching nodes without a relevance score. No timestamp-based ranking is applied.
+  - Impact: As node count grows, older or irrelevant memories contaminate recall. Retrieval quality degrades with scale.
+  - Status: Open. Minimum viable fix: add `ORDER BY created_at DESC` to `find_by_tags()`; defer decay weighting to v1.
+
+### §10.7 Retrieval — tag query returns unranked flat lists with no relevance signal
+
+- **Tag-based retrieval returns a flat list with no ordering by relevance, specificity, or recency.** OR mode returns all nodes matching any tag; AND mode returns all nodes matching all tags. No result carries a score. Callers cannot distinguish a node that matched 5 of 5 query tags from one that matched 1 of 5.
+  - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO.find_by_tags), `AINDY/routes/bridge_router.py` (GET /bridge/nodes response)
+  - Mechanism: SQL query returns rows; no rank, score, or tag-overlap count is computed or returned.
+  - Impact: High-cardinality tag queries return noisy results with no signal for the caller. Useful for exact lookups; breaks for fuzzy or exploratory recall.
+  - Status: Open. Fix: return a `match_score` field (count of matched tags / total query tags) alongside each node result.
+
+### §10.8 Persistence — no versioning or history table, state reconstruction is impossible
+
+- **`memory_nodes` has an `updated_at` column but no history table, no append-only log, and no event sourcing.** When a node's content is updated, the prior value is permanently overwritten. The stated design objective of reconstructing past states across sessions cannot be fulfilled without a record of mutations.
+  - Location: `AINDY/services/memory_persistence.py` (MemoryNodeModel — no history table), `AINDY/alembic/versions/` (no history migration)
+  - Mechanism: UPDATE on `memory_nodes` replaces content in-place. No trigger, no shadow table, no log of prior values.
+  - Impact: Temporal reconstruction — replaying what the system knew at time T — is not possible. Audit trail for node evolution does not exist.
+  - Status: Open. Deferred to Phase 3. Fix: add `memory_node_history` table with `node_id`, `content`, `tags`, `changed_at`, populated by a BEFORE UPDATE trigger.
+
+### §10.9 Infrastructure — Rust/C++ FFI chain is 3 layers deep for 2 math functions
+
+- **The build and runtime path is C++ → Rust FFI → PyO3 → Python.** This is three foreign function boundaries for `cosine_similarity` and `weighted_dot_product`. Each layer adds: platform-specific compilation requirements (MSVC vs GCC divergence already present in `build.rs`), build chain dependencies (`cc`, `cxx`, `pyo3`, `maturin`), and a distinct failure mode. The performance fallback in `calculation_services.py` (pure Python) handles all current load without issue.
+  - Location: `AINDY/bridge/memory_bridge_rs/build.rs`, `AINDY/bridge/memory_bridge_rs/src/cpp_bridge.rs`, `AINDY/bridge/memory_bridge_rs/src/lib.rs`, `AINDY/services/calculation_services.py`
+  - Mechanism: C++ compiled to `.lib` via `cc` crate; Rust calls it via `extern "C"` unsafe block; PyO3 exposes Rust to Python; Python calls `from memory_bridge_rs import semantic_similarity`.
+  - Impact: Build failures on new environments (already observed with Windows AppControl blocking release builds). High onboarding friction. Disproportionate complexity for two BLAS-level operations.
+  - Status: Open. Recommendation: retain the kernel only when pgvector semantic search is operational and profiling confirms Python numpy is a bottleneck. Until then, the pure Python fallback is sufficient and the FFI chain is a net liability.
+
+### §10.10 Security — HMAC permission tokens on memory writes are redundant with JWT
+
+- **`POST /bridge/nodes` and `POST /bridge/link` require a `permission` block with HMAC-SHA256 signature, nonce, TTL, and scopes.** JWT auth (`Depends(get_current_user)`) now exists on adjacent route groups (Phase 2, §6). Two independent token systems operate in the same stack for the same purpose: proving an authorized caller. The HMAC scheme adds implementation surface (signing logic in callers, TTL management, nonce generation) without adding security properties that JWT does not already provide.
+  - Location: `AINDY/routes/bridge_router.py:21-55` (HMAC verification), `AINDY/bridge/trace_permission.py` (permission token construction)
+  - Mechanism: Callers must generate a `permission` object with `nonce`, `ts`, `ttl`, `scopes`, and a valid HMAC-SHA256 signature over those fields using `PERMISSION_SECRET`. This is checked before any DB write. JWT is not checked on these routes.
+  - Impact: API clients must implement two authentication schemes. Any caller that uses the Memory Bridge write API must also manage HMAC token generation. Maintenance surface is doubled.
+  - Status: Open. Recommendation: migrate Memory Bridge write routes to `Depends(get_current_user)` (JWT). Retire the HMAC permission scheme or reduce it to a scope-tagging mechanism only, not a full authentication layer. Deferred to Phase 3.
+
+---
+
+## 11. Prioritization Table
 
 | Area | Risk Level (Low/Medium/High) | Impact | Recommended Phase |
 |------|------------------------------|--------|-------------------|
@@ -100,13 +188,23 @@ The following bugs were revealed by the comprehensive diagnostic test suite adde
 | Genesis Router (undefined names) | High | 3 of 5 genesis endpoints raise NameError at runtime | Phase 1 |
 | Error Handling | High | Inconsistent client behavior and poor fault isolation | Phase 1 |
 | C++ Kernel (wrong-table + import bug) | High | Memory nodes created via services are silently lost + ImportError | Phase 1 |
+| **MB §10.1 — children not persisted** | **High** | Every recursive memory trace is silently lost on process exit | **Phase 1** |
+| **MB §10.3 — graph traversal absent** | **High** | memory_links table is write-only; associative recall does not function | **Phase 1** |
 | Security (auth missing) | ✅ Resolved | JWT auth on task/leadgen/genesis/analytics routers (2026-03-17) | Phase 2 ✅ |
 | Concurrency | Medium | Duplicated background work and unbounded loops | Phase 2 |
 | Security (CORS + rate limiting) | ✅ Resolved | CORS locked to explicit origins; SlowAPIMiddleware added (2026-03-17) | Phase 2 ✅ |
 | Testing | Low | Test suite now added; coverage gaps remain | Phase 2 |
 | C++ Kernel (embeddings/release build) | Medium | Semantic search inoperable; performance gains unrealized | Phase 2 |
+| **MB §10.2 — MemoryTrace shadow state** | **Medium** | Dual state representation diverges silently; DB and in-memory views inconsistent | **Phase 2** |
+| **MB §10.5 — no embeddings / semantic retrieval impossible** | **Medium** | Primary differentiation of memory system over a log does not function | **Phase 2** |
+| **MB §10.4 — strength is VARCHAR** | **Medium** | Graph edge weights are non-numeric; scored traversal blocked until schema migration | **Phase 2** |
+| **MB §10.6 — no temporal decay** | **Medium** | Retrieval quality degrades with node count; stale memories rank equal to recent | **Phase 2** |
+| **MB §10.7 — unranked tag retrieval** | **Low** | No relevance signal in results; noisy output at scale | **Phase 2** |
+| **MB §10.10 — redundant HMAC + JWT auth** | **Low** | Callers must implement two auth schemes; maintenance surface doubled | **Phase 3** |
 | Observability | Medium | Limited visibility into failures | Phase 3 |
 | Structural | Low | Known coupling and in-memory state | Phase 3 |
+| **MB §10.8 — no versioning / history table** | **Low** | State reconstruction impossible; node mutation history lost permanently | **Phase 3** |
+| **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)
 - Background daemon threads: `AINDY/main.py:70`

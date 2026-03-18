@@ -5,30 +5,40 @@ This document formalizes the current FastAPI HTTP interface based strictly on im
 ## 1. Route Inventory
 
 Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
-- `AINDY/routes/seo_routes.py` (no router prefix)
-- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]**
+- `AINDY/routes/seo_routes.py` (no router prefix) **[JWT auth required]**
+- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]** · `/tasks/recurrence/check` public
 - `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[HMAC auth required for writes]**
-- `AINDY/routes/authorship_router.py` (prefix `/authorship`)
-- `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`)
-- `AINDY/routes/network_bridge_router.py` (prefix `/network_bridge`)
-- `AINDY/routes/db_verify_router.py` (prefix `/db`)
-- `AINDY/routes/research_results_router.py` (prefix `/research`)
-- `AINDY/routes/main_router.py` (no router prefix)
-- `AINDY/routes/freelance_router.py` (prefix `/freelance`)
-- `AINDY/routes/arm_router.py` (prefix `/arm`)
+- `AINDY/routes/authorship_router.py` (prefix `/authorship`) **[JWT auth required]**
+- `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`) **[JWT auth required]**
+- `AINDY/routes/network_bridge_router.py` (prefix `/network_bridge`) **[API key required]**
+- `AINDY/routes/db_verify_router.py` (prefix `/db`) **[API key required]**
+- `AINDY/routes/research_results_router.py` (prefix `/research`) **[JWT auth required]**
+- `AINDY/routes/main_router.py` (no router prefix) **[public — calculation math API]**
+- `AINDY/routes/freelance_router.py` (prefix `/freelance`) **[JWT auth required]**
+- `AINDY/routes/arm_router.py` (prefix `/arm`) **[JWT auth required]**
 - `AINDY/routes/leadgen_router.py` (prefix `/leadgen`) **[JWT auth required]**
-- `AINDY/routes/dashboard_router.py` (prefix `/dashboard`)
+- `AINDY/routes/dashboard_router.py` (prefix `/dashboard`) **[JWT auth required]**
 - `AINDY/routes/health_router.py` (prefix `/health`) **[public]**
-- `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`)
-- `AINDY/routes/social_router.py` (prefix `/social`)
+- `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`) **[public]**
+- `AINDY/routes/social_router.py` (prefix `/social`) **[JWT auth required]**
 - `AINDY/routes/analytics_router.py` (prefix `/analytics`) **[JWT auth required]**
 - `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
 - `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
 
-**Authentication model (Phase 2):**
-- JWT Bearer token — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`
-- Routes without auth annotation are currently unprotected (Phase 3 target)
-- Bridge writes use HMAC permission model (separate from JWT)
+**Authentication model (Phase 2 + Phase 3 — complete):**
+- **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social.
+- **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection). Key value from `AINDY_API_KEY` env var.
+- **HMAC permission** — required on Memory Bridge write routes (`/bridge/nodes`, `/bridge/link`). Separate from JWT; provides scope tagging and TTL.
+- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`, calculation math routes (`/calculate_twr` etc.), `/tasks/recurrence/check`.
+- Zero unprotected non-public routes as of Phase 3 (2026-03-17).
+
+**Rate limits (Phase 3):**
+- `POST /leadgen/` — 10 requests/minute per IP
+- `POST /genesis/message` — 20 requests/minute per IP
+- `POST /genesis/synthesize` — 5 requests/minute per IP
+- `POST /arm/analyze` — 10 requests/minute per IP
+- `POST /arm/generate` — 10 requests/minute per IP
+- Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
 
 Root route registered directly in `AINDY/main.py`:
 - `GET /`

@@ -23,6 +23,44 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — Phase 3 security] — 2026-03-17
+
+## Added
+
+* `db/models/user.py` — `User` SQLAlchemy model (`users` table): UUID PK, `email` (unique index), `username` (unique index, nullable), `hashed_password`, `is_active`, `created_at`
+* `alembic/versions/37f972780d54_create_users_table.py` — migration creating `users` table; applied via `alembic upgrade head`
+* `services/register_user()` and `services/authenticate_user()` — DB-backed user operations added to `auth_service.py`; replace in-memory `_USERS` dict
+* `services/rate_limiter.py` — shared `Limiter` instance extracted from `main.py` to allow route modules to import it without circular imports
+* Rate limiting decorators applied to all AI/expensive endpoints:
+  - `POST /leadgen/` — 10 requests/minute (Perplexity cost)
+  - `POST /genesis/message` — 20 requests/minute (OpenAI cost)
+  - `POST /genesis/synthesize` — 5 requests/minute (OpenAI cost)
+  - `POST /arm/analyze` — 10 requests/minute (DeepSeek cost)
+  - `POST /arm/generate` — 10 requests/minute (DeepSeek cost)
+* 12 new security tests in `test_security.py` (`TestPhase3RouteProtection` class) — one rejection test and one acceptance test per newly protected router
+
+## Fixed
+
+* **In-memory user store** — `auth_router.py` now uses `Depends(get_db)` + `register_user()` / `authenticate_user()` from `auth_service.py`. Users persist to PostgreSQL across restarts and across worker processes. `_USERS` dict removed.
+* **All remaining unprotected routers secured:**
+  - JWT (`Depends(get_current_user)`): `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router`
+  - API key (`Depends(verify_api_key)`): `db_verify_router` (exposes DB schema), `network_bridge_router` (service-to-service target)
+  - Zero unprotected non-public routes remain.
+* **Node.js gateway** — `server.js` now loads `AINDY_API_KEY` from `.env` via `dotenv` and sends `X-API-Key` header on all FastAPI service calls (`/network_bridge/connect`). Previously forwarded requests without credentials, which would 401 after Phase 3 route protection.
+
+## Test Results
+
+* **162 passing, 0 failing** (up from 150 passing, 0 failing after Phase 2)
+* `test_security.py`: 13 → 25 tests (12 Phase 3 additions)
+
+## Known Gaps (Phase 4+)
+
+* `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`
+* Memory Bridge write routes (`/bridge/nodes`, `/bridge/link`) use HMAC permission tokens alongside JWT — dual-auth scheme adds caller complexity (tracked in `TECH_DEBT.md` §10.10)
+* `db/models/user.py` has no role or permission fields — authorization is binary (authenticated vs. not); no scoped permissions
+
+---
+
 # [feature/cpp-semantic-engine — Phase 2 security] — 2026-03-17
 
 ## Added

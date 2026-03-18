@@ -28,8 +28,8 @@ Primary backend entry point: `AINDY/main.py`.
                         │
 ┌───────────────────────▼─────────────────────────────────────┐
 │  FastAPI Application  (AINDY/main.py)                       │
-│  18 routers · daemon background tasks · CORS middleware     │
-│  ⚠ No auth middleware (see docs/roadmap/TECH_DEBT.md §6)    │
+│  19 routers · daemon background tasks · CORS middleware     │
+│  JWT auth · API key auth · SlowAPI rate limiting            │
 └──────┬────────────────┬────────────────┬────────────────────┘
        │                │                │
 ┌──────▼──────┐  ┌──────▼──────┐  ┌─────▼──────────────────┐
@@ -52,7 +52,8 @@ Primary backend entry point: `AINDY/main.py`.
 │  ├── calculation_results                                   │
 │  ├── research_results                                      │
 │  ├── master_plans / genesis_sessions                       │
-│  └── … (17 total ORM models)                               │
+│  ├── users                                                 │
+│  └── … (18 total ORM models)                               │
 └────────────────────────────────────────────────────────────┘
        │
 ┌──────▼────────────────────────────────────────────────────┐
@@ -71,6 +72,7 @@ Primary backend entry point: `AINDY/main.py`.
 **Gateway**
 - Node/Express gateway in `AINDY/server.js`.
 - Accepts `/api/users` and forwards a handshake to the backend at `/network_bridge/connect`.
+- Sends `X-API-Key` header (read from `AINDY_API_KEY` env var via `dotenv`) on all FastAPI calls.
 
 **Backend**
 - FastAPI app (`AINDY/main.py`) with routers composed in `AINDY/routes/__init__.py`.
@@ -226,13 +228,15 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 
 ## Known Gaps/Tech Debt
 - Frontend `client/` is a template baseline with limited domain UI; contracts may evolve rapidly.
-- `AINDY/server.js` gateway uses an in-memory user list and lacks persistence and auth.
+- `AINDY/server.js` gateway uses an in-memory user list and lacks persistence. ✅ **Gateway auth wired (Phase 3):** `X-API-Key` header is now sent on all FastAPI forwarding calls.
 - Background tasks in `AINDY/main.py` are stubs and not using a formal scheduler/queue.
 - `AINDY/services/memory_persistence.py` includes an orphan `save_memory_node(self, memory_node)` at module level (takes `self` but is not a class method; dead code that raises `TypeError` if called).
 - ✅ **Resolved (2026-03-17)**: `AINDY/bridge/bridge.py` had a broken import path (`db.models.models` does not exist); fixed to `db.models.calculation`. Wrong-table architectural bug (`create_memory_node()` writes to `calculation_results` instead of `memory_nodes`) remains open — see `docs/roadmap/TECH_DEBT.md` §2.
 - ✅ **Resolved (2026-03-17)**: `AINDY/routes/genesis_router.py` had three undefined name references (`call_genesis_synthesis_llm`, `create_masterplan_from_genesis`, `MasterPlan`) causing NameError crashes. All three imports added; `services/posture.py` stub created to resolve cascading ModuleNotFoundError.
 - ✅ **Resolved (2026-03-17)**: `AINDY/tests/` comprehensive diagnostic suite added — 143 tests across 8 files (136 passing, 7 intentional `_WILL_FAIL` security gap tests). Coverage now spans services, memory bridge, Rust/C++ kernel, all route groups, models, and security.
-- ✅ **Resolved (2026-03-17 Phase 2):** JWT authentication added to user-facing route groups: `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. `services/auth_service.py` provides `get_current_user` dependency (Bearer JWT), API key validation (`X-API-Key`), password hashing. Auth endpoints at `POST /auth/login`, `POST /auth/register`. Node gateway (`server.js`) still lacks auth — Phase 3 target.
+- ✅ **Resolved (2026-03-17 Phase 2):** JWT authentication added to user-facing route groups: `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. `services/auth_service.py` provides `get_current_user` dependency (Bearer JWT), API key validation (`X-API-Key`), password hashing. Auth endpoints at `POST /auth/login`, `POST /auth/register`.
+- ✅ **Resolved (2026-03-17 Phase 3):** All remaining unprotected routers secured. JWT (`get_current_user`): `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router`. API key (`verify_api_key`): `db_verify_router`, `network_bridge_router`. Zero unprotected non-public routes remain.
+- ✅ **Resolved (2026-03-17 Phase 3):** In-memory user store replaced with `db/models/user.py` (`users` table, UUID PK, unique email/username indexes). `auth_router.py` uses `register_user()` / `authenticate_user()` via `Depends(get_db)`. Migration: `37f972780d54_create_users_table`.
 - C++ semantic kernel (`bridge/memory_bridge_rs/`) is built in debug mode only; `MemoryNode` has no vector embeddings, making semantic search inoperable. See `docs/roadmap/TECH_DEBT.md` §8.
 
 Full inventory: `docs/roadmap/TECH_DEBT.md`.

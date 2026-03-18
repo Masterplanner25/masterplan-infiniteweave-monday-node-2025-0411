@@ -481,6 +481,23 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: None
 - Relationships: Not explicitly defined in current implementation.
 
+### `AINDY/db/models/user.py`
+
+#### User (`users`)
+- Columns
+- `id`: UUID (postgresql UUID), primary key, default=uuid.uuid4, nullable: not explicitly set (primary key implies non-null)
+- `email`: String, unique=True, index=True, nullable=False
+- `username`: String, unique=True, index=True, nullable=True
+- `hashed_password`: String, nullable=False
+- `is_active`: Boolean, nullable=False, default=True
+- `created_at`: DateTime(timezone=True), nullable: not explicitly set, server_default=func.now()
+- Primary key: `id`
+- Unique constraints: `email` (unique=True), `username` (unique=True)
+- Indexes: `email` (index=True), `username` (index=True)
+- Foreign keys: None
+- Relationships: None
+- Purpose: Stores authenticated application users. Created by `register_user()` in `AINDY/services/auth_service.py`. Password is stored as a bcrypt hash; plaintext is never persisted.
+
 ### `AINDY/db/models/social_models.py`
 - Not an ORM module. Defines Pydantic models only (`SocialProfile`, `SocialPost`, `Connection`, `FeedItem`).
 - No SQLAlchemy tables are declared in this file.
@@ -511,6 +528,7 @@ Migration filenames exist in `AINDY/alembic/versions/`, but alignment requires a
 - `metrics_models` (engagement, etc.): `94bcd9284285_move_metrics_models_to_db_models.py` appears related by filename only
 - `research_results`: `4e392d916569_add_research_results_table.py`, `64872a402355_add_research_results_table.py`, `8b57835a640c_add_research_results_table.py`, `ec0e78e6e306_align_researchresult_schema_with_.py`
 - `system_health_logs`: `03adbb4b957b_add_system_health_logs_table.py`, `e52a1f667323_add_system_health_logs_table.py`
+- `users`: `37f972780d54_create_users_table.py` — applied; head revision as of Phase 3 security implementation.
 
 Alignment for each model cannot be confirmed from static inspection alone; verification requires a migration diff check against the current ORM metadata.
 
