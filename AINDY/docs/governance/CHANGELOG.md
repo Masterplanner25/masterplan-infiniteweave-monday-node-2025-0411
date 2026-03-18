@@ -23,6 +23,31 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ---
 
+# [feature/cpp-semantic-engine — Memory Bridge Phase 2] — 2026-03-18
+
+## Added
+
+* **`services/embedding_service.py`** — OpenAI `text-embedding-ada-002` embedding generation (1536 dims). `generate_embedding()` with zero-vector fallback and 3-attempt retry. `cosine_similarity()` using C++ kernel (`memory_bridge_rs.semantic_similarity`) with pure Python fallback.
+* **`memory_nodes.embedding`** — `VECTOR(1536)` column added via migration `mb2embed0001`. pgvector extension enabled. Nullable; zero-vector is written on OpenAI failure.
+* **`MemoryNodeDAO.find_similar()`** — pgvector `<=>` cosine distance retrieval. Filters NULL embeddings, user_id, node_type, min_similarity. Returns `similarity` and `distance` per node.
+* **`MemoryNodeDAO.recall()`** — resonance-scored retrieval combining semantic + tag + recency paths. Formula: `(semantic * 0.6) + (tag * 0.2) + (recency * 0.2)`.
+* **`MemoryNodeDAO.recall_by_type()`** — type-filtered resonance recall. Validates against `VALID_NODE_TYPES`.
+* **`POST /memory/nodes/search`** — semantic similarity search endpoint (JWT auth).
+* **`POST /memory/recall`** — primary retrieval API (JWT auth). Returns scoring metadata.
+* **`VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}`** — enforced via SQLAlchemy ORM event listener (`before_insert`/`before_update`) and Pydantic Literal on request schema.
+
+## Changed
+
+* **`MemoryNodeDAO.save()`** — now generates and stores embedding on every write. New param `generate_embedding: bool = True`.
+* **`CreateNodeRequest.node_type`** — upgraded from `str` to `Literal[...]` (API-level type validation).
+* **`docs/architecture/DATA_MODEL_MAP.md`** — `memory_nodes` schema updated (embedding column, source, user_id, VALID_NODE_TYPES, migration note).
+* **`docs/architecture/SYSTEM_SPEC.md`** — Memory Bridge section updated; data flow diagrams updated.
+* **`docs/governance/INVARIANTS.md`** — Invariants 27 (node type enforcement) and 28 (zero-vector fallback) added.
+* **`docs/interfaces/MEMORY_BRIDGE_CONTRACT.md`** — §8 added documenting all 7 `/memory/*` endpoints.
+* **`docs/roadmap/TECH_DEBT.md`** — §10.5, §10.6, §10.7, §8 embedding item closed. §12 (Phase 3 open items) added.
+
+---
+
 # [main — Docker pgvector Setup] — 2026-03-18
 
 ## Added

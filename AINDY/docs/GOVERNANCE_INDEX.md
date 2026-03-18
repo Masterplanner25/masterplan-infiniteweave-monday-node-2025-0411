@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-18 (Docker setup + docs protocol update)
+Last updated: 2026-03-18 (Memory Bridge Phase 2 — embedding pipeline, semantic retrieval, VALID_NODE_TYPES enforcement)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.

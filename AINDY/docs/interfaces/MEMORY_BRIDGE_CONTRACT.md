@@ -128,3 +128,84 @@ This document defines the Memory Bridge API contract and its security boundary b
 - No rate limiting in `AINDY/routes/bridge_router.py`.
 - TTL validation is the only replay defense; short TTLs reduce risk but are not enforced by policy in code.
 - File-system trace desynchronization risk: `AINDY/memoryevents/` and `AINDY/memorytraces/` are not automatically updated by API writes.
+
+---
+
+## 8. Memory Router — Phase 2 Endpoints (`/memory/*`)
+
+Added in Memory Bridge Phase 2 (2026-03-18). Authentication: JWT Bearer (`Depends(get_current_user)`). Defined in `AINDY/routes/memory_router.py`. DAO: `AINDY/db/dao/memory_node_dao.py`.
+
+### `POST /memory/nodes` (status 201)
+- Auth: JWT required.
+- Request body: `CreateNodeRequest`
+  - `content: str` (required)
+  - `source: Optional[str]`
+  - `tags: Optional[List[str]]` (default `[]`)
+  - `node_type: Optional[Literal["decision", "outcome", "insight", "relationship"]]` (default `None`)
+  - `extra: Optional[dict]` (default `{}`)
+- Behavior: calls `MemoryNodeDAO.save()`, which generates an embedding via `embedding_service.generate_embedding()` and persists to `memory_nodes`. Returns node dict.
+- Response: node dict with `id`, `content`, `tags`, `node_type`, `source`, `user_id`, `extra`, `created_at`, `updated_at`.
+
+### `GET /memory/nodes/{node_id}`
+- Auth: JWT required.
+- Path param: `node_id` (UUID string).
+- Response: node dict or 404.
+
+### `GET /memory/nodes/{node_id}/links`
+- Auth: JWT required.
+- Query params: `direction` (`in` | `out` | `both`, default `both`).
+- Response: `{"nodes": [...]}` — neighbors of the given node.
+- Error: 404 if node not found; 422 if direction invalid.
+
+### `GET /memory/nodes`
+- Auth: JWT required.
+- Query params: `tags` (comma-separated string), `mode` (`AND` | `OR`, default `AND`), `limit` (default 50).
+- Response: `{"nodes": [...]}` — tag-filtered flat list (unranked).
+
+### `POST /memory/links` (status 201)
+- Auth: JWT required.
+- Request body: `CreateLinkRequest`
+  - `source_id: str` (required)
+  - `target_id: str` (required)
+  - `link_type: Optional[str]` (default `"related"`)
+- Response: link dict or 422 on validation failure.
+
+### `POST /memory/nodes/search`
+- Auth: JWT required.
+- Request body: `SimilaritySearchRequest`
+  - `query: str` (required)
+  - `limit: Optional[int]` (default 5)
+  - `node_type: Optional[Literal[...]]`
+  - `min_similarity: Optional[float]` (default 0.0)
+- Behavior: generates query embedding via `generate_query_embedding(body.query)`, calls `MemoryNodeDAO.find_similar()` using pgvector `<=>` cosine distance. Filters NULL embeddings, user_id, node_type.
+- Response: `{"query": str, "results": [...], "count": int}`. Each result includes `similarity` and `distance` fields.
+
+### `POST /memory/recall`
+- Auth: JWT required.
+- Request body: `RecallRequest`
+  - `query: Optional[str]`
+  - `tags: Optional[List[str]]`
+  - `limit: Optional[int]` (default 5)
+  - `node_type: Optional[Literal[...]]`
+- Validation: at least one of `query` or `tags` must be provided; returns 400 otherwise.
+- Behavior: calls `MemoryNodeDAO.recall()`. Combines semantic path (via `find_similar()`) and tag path (via `get_by_tags()`), deduplicates, scores by resonance formula.
+- Response: `{"query", "tags", "results", "count", "scoring": {"semantic_weight": 0.6, "tag_weight": 0.2, "recency_weight": 0.2}}`.
+- Each result includes: `resonance_score`, `semantic_score`, `tag_score`, `recency_score`.
+
+### Resonance Scoring Formula
+```
+resonance = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)
+recency   = exp(-age_days / 30.0)   # half-life: 30 days
+tag_match = |node_tags ∩ query_tags| / |query_tags|
+```
+
+### Endpoint Model Map (Phase 2 additions)
+| Endpoint | Request Model | Response |
+|---|---|---|
+| `POST /memory/nodes` | `CreateNodeRequest` (`routes/memory_router.py`) | node dict |
+| `GET /memory/nodes/{id}` | none | node dict or 404 |
+| `GET /memory/nodes/{id}/links` | none | `{"nodes": [...]}` |
+| `GET /memory/nodes` | query params | `{"nodes": [...]}` |
+| `POST /memory/links` | `CreateLinkRequest` | link dict |
+| `POST /memory/nodes/search` | `SimilaritySearchRequest` | `{"query", "results", "count"}` |
+| `POST /memory/recall` | `RecallRequest` | `{"query", "tags", "results", "count", "scoring"}` |

@@ -514,6 +514,11 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 ## 3. Alembic Migration Alignment
 
+**Phase 2 migration (2026-03-18):**
+- `mb2embed0001` — `memory_bridge_phase2_embedding_column`: adds `embedding VECTOR(1536)` to `memory_nodes`, enables pgvector extension. Applied at `alembic upgrade head`. Current head: `mb2embed0001`.
+
+
+
 Migration filenames exist in `AINDY/alembic/versions/`, but alignment requires a migration diff check. The following filename matches suggest possible related migrations:
 
 - `arm_runs`, `arm_logs`, `arm_configs`: `0cea8869744b_add_arm_models.py`, `8e2909eee86c_add_arm_models.py`, `8addbdf88330_add_deepseek_arm_tables.py`, `bad4f7003aa5_register_arm_tables_properly.py`
@@ -571,12 +576,17 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `content`: Text, nullable=False
 - `tags`: JSONB, nullable=False, default=list
 - `node_type`: String(50), nullable=False
+- `source`: String(255), nullable=True
+- `user_id`: String(255), nullable=True
 - `created_at`: DateTime, nullable=False, server_default=func.now()
 - `updated_at`: DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
 - `extra`: JSONB, nullable=False, default=dict
+- `embedding`: Vector(1536), nullable=True — **added Memory Bridge Phase 2** (migration `mb2embed0001`)
 - Indexes
 - `ix_memory_nodes_tags_gin` on `tags` using GIN
 - Unique constraints: Not explicitly defined in current implementation.
+- Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` validated by SQLAlchemy `before_insert` / `before_update` event listener in `services/memory_persistence.py`. Non-null `node_type` values outside this set raise `ValueError` at ORM layer.
+- pgvector extension required: `CREATE EXTENSION IF NOT EXISTS vector` (included in migration `mb2embed0001`).
 
 ### `memory_links`
 - Model: `MemoryLinkModel`

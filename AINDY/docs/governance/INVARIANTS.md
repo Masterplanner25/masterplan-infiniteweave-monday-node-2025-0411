@@ -224,6 +224,23 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Partial DB state — e.g., a MasterPlan row inserted but session status not updated, or vice versa — could leave data in an inconsistent mid-lock state.
 - Enforcement Type: Application-enforced.
 
+## 27. Memory Node Type Enforcement (ORM Event)
+- Invariant Name: `node_type` must be a valid type when set
+- Description: When `memory_nodes.node_type` is not `None`, it must be one of `{"decision", "outcome", "insight", "relationship"}`.
+- Enforcement Location: `AINDY/services/memory_persistence.py: validate_node_type` (SQLAlchemy `@event.listens_for(MemoryNodeModel, "before_insert")` and `"before_update"`)
+- Enforcement Mechanism: Raises `ValueError` at ORM layer before the DB write executes if `node_type` is set to a value outside `VALID_NODE_TYPES`. API layer (`routes/memory_router.py`) additionally enforces this via Pydantic `Literal["decision", "outcome", "insight", "relationship"]` on `CreateNodeRequest.node_type`, returning HTTP 422 before DAO is called.
+- What Would Break If Violated: Memory nodes with unconstrained `node_type` values could enter the DB, making `recall_by_type()` results unreliable and breaking type-filtered semantic search.
+- Enforcement Type: Application-enforced (ORM event) + API-enforced (Pydantic Literal). Not enforced at DB level (no CHECK constraint).
+- Note: Existing rows with legacy values (e.g., `"generic"`) are not affected unless updated via the ORM.
+
+## 28. Embedding Zero-Vector Fallback on Failure
+- Invariant Name: `MemoryNodeDAO.save()` never fails due to embedding generation
+- Description: If OpenAI `text-embedding-ada-002` fails after 3 retries, `generate_embedding()` returns a zero vector (`[0.0] * 1536`) and the node is saved without a real embedding rather than failing the write.
+- Enforcement Location: `AINDY/services/embedding_service.py: generate_embedding` (try/except with retry loop)
+- Enforcement Mechanism: After 3 failed attempts, logs a warning and returns zero vector. The DAO write proceeds normally. Nodes with zero-vector embeddings are retrievable by tag/recall but will not be returned by `find_similar()` (they are excluded by `MemoryNodeModel.embedding.isnot(None)` — but zero vectors are not NULL; they are valid vectors with distance = 0 from the origin). Callers should not depend on embedding quality for failed writes.
+- What Would Break If Violated: Write failures would surface as HTTP 500 on memory node creation, breaking all callers of `POST /memory/nodes`.
+- Enforcement Type: Application-enforced.
+
 ## 20. Documented but Not Enforced at Code Level
 - Session isolation beyond routes (e.g., across background threads) is documented in various docs but not enforced beyond usage patterns. Documented but not enforced at code level.
 - Any architectural invariants stated in `README.md` or `Architecture_README_v1.md` are not enforced in code. Documented but not enforced at code level.

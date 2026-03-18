@@ -88,8 +88,15 @@ Primary backend entry point: `AINDY/main.py`.
 
 **Memory Bridge**
 - Database-backed memory nodes and links in `AINDY/services/memory_persistence.py`.
-- FastAPI interface in `AINDY/routes/bridge_router.py` with signed permissions.
-- Symbolic, file-based traces in `AINDY/memoryevents/` and `AINDY/memorytraces/`.
+- FastAPI interface split across two routers:
+  - `AINDY/routes/bridge_router.py` — HMAC-signed legacy write interface (`/bridge/*`).
+  - `AINDY/routes/memory_router.py` — JWT-authenticated read/write/search interface (`/memory/*`).
+- Canonical DAO: `AINDY/db/dao/memory_node_dao.py` (`MemoryNodeDAO`).
+- Embedding pipeline (Phase 2): `AINDY/services/embedding_service.py` generates OpenAI `text-embedding-ada-002` vectors (1536 dims) on every `MemoryNodeDAO.save()` call. Zero-vector fallback on failure.
+- Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance. `MemoryNodeDAO.recall()` applies resonance scoring: `(semantic * 0.6) + (tag * 0.2) + (recency * 0.2)`.
+- C++ kernel: `bridge/memory_bridge_rs/target/debug/memory_bridge_rs` provides `semantic_similarity()` via PyO3. Used in `embedding_service.cosine_similarity()` with Python fallback.
+- Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` enforced via SQLAlchemy event listener.
+- Symbolic, file-based traces in `AINDY/memoryevents/` and `AINDY/memorytraces/` (not referenced by API code).
 
 **C++ Semantic Kernel**
 - High-performance vector math exposed to Python via a Rust/PyO3 extension (`AINDY/bridge/memory_bridge_rs/`).
@@ -116,9 +123,16 @@ Primary backend entry point: `AINDY/main.py`.
 - MongoDB receives social-layer updates (task completion updates a profile metric snapshot).
 
 **Backend ↔ Memory Bridge**
-- `POST /bridge/nodes` creates memory nodes in `memory_nodes` table.
+- `POST /bridge/nodes` creates memory nodes via HMAC-authenticated `bridge_router.py`.
 - `POST /bridge/link` creates link edges in `memory_links`.
 - `GET /bridge/nodes` queries memory nodes by tags.
+- `POST /memory/nodes` creates memory nodes via JWT auth; generates and stores embedding via `embedding_service.py`.
+- `GET /memory/nodes/{id}` retrieves a node by UUID.
+- `GET /memory/nodes/{id}/links` retrieves graph neighbors.
+- `GET /memory/nodes` tag-based search.
+- `POST /memory/nodes/search` semantic similarity search via pgvector (`<=>` cosine distance).
+- `POST /memory/recall` resonance-scored retrieval: `(semantic*0.6) + (tag*0.2) + (recency*0.2)`.
+- `POST /memory/links` creates directed links.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
@@ -132,16 +146,36 @@ POST /tasks/complete
   └─► task_services.py: mark task complete → PostgreSQL tasks
         └─► MongoDB profiles: $inc execution_velocity, $inc twr_score, $set updated_at
               └─► bridge.py: create_memory_node()
-                    └─► ⚠ writes CalculationResult (wrong table — see TECH_DEBT §2)
+                    └─► MemoryNodeDAO.save() → INSERT INTO memory_nodes
+                          └─► embedding_service.generate_embedding() → OpenAI ada-002
 ```
 
-**Memory Node creation (correct path via bridge_router)**
+**Memory Node creation via bridge_router (HMAC path)**
 ```
 POST /bridge/nodes
   └─► bridge_router.py: verify_permission_or_403() (HMAC + TTL check)
         └─► MemoryNodeDAO.save_memory_node()  (memory_persistence.py)
               └─► INSERT INTO memory_nodes (UUID, content, tags, node_type, extra)
-                    └─► RippleTrace event emitted
+```
+
+**Memory Node creation via memory_router (JWT path — Phase 2)**
+```
+POST /memory/nodes
+  └─► memory_router.py: Depends(get_current_user) (JWT check)
+        └─► MemoryNodeDAO.save()  (db/dao/memory_node_dao.py)
+              └─► embedding_service.generate_embedding()
+                    └─► OpenAI text-embedding-ada-002 → [float * 1536]
+              └─► INSERT INTO memory_nodes (UUID, content, tags, node_type, user_id, embedding)
+
+POST /memory/recall
+  └─► memory_router.py: Depends(get_current_user)
+        └─► embedding_service.generate_query_embedding()
+              └─► OpenAI → query_embedding [float * 1536]
+        └─► MemoryNodeDAO.recall(query, tags, limit, user_id, node_type)
+              └─► find_similar(): SELECT ... ORDER BY embedding <=> query_embedding
+              └─► get_by_tags(): tag-based candidates
+              └─► resonance scoring: (semantic*0.6) + (tag*0.2) + (recency*0.2)
+              └─► sorted results with resonance_score, tag_score, recency_score
 ```
 
 **Engagement Score calculation (C++ kernel path)**
