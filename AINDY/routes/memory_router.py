@@ -66,6 +66,19 @@ class RecallV3Request(BaseModel):
     expand_results: Optional[bool] = False
 
 
+class FeedbackRequest(BaseModel):
+    outcome: Literal["success", "failure", "neutral"]
+    context: Optional[str] = None
+    # context: optional note about why this outcome occurred
+
+
+class SuggestRequest(BaseModel):
+    query: Optional[str] = None
+    tags: Optional[list[str]] = None
+    context: Optional[str] = None
+    limit: Optional[int] = 3
+
+
 # ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
@@ -305,7 +318,8 @@ def recall_memories(
 ):
     """
     Retrieve memories using resonance scoring.
-    score = (semantic*0.6) + (tag*0.2) + (recency*0.2)
+    score = (semantic*0.40) + (graph*0.15) + (recency*0.15)
+            + (success_rate*0.20) + (usage_freq*0.10)
     Primary retrieval API for all Phase 3 hooks.
     """
     if not body.query and not body.tags:
@@ -324,10 +338,14 @@ def recall_memories(
         "tags": body.tags,
         "results": results,
         "count": len(results),
-        "scoring": {
-            "semantic_weight": 0.6,
-            "tag_weight": 0.2,
-            "recency_weight": 0.2,
+        "scoring_version": "v2",
+        "formula": {
+            "semantic": 0.40,
+            "graph": 0.15,
+            "recency": 0.15,
+            "success_rate": 0.20,
+            "usage_frequency": 0.10,
+            "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
         },
     }
 
@@ -359,10 +377,14 @@ def recall_v3(
             **results,
             "query": body.query,
             "tags": body.tags,
-            "scoring": {
-                "semantic_weight": 0.6,
-                "tag_weight": 0.2,
-                "recency_weight": 0.2,
+            "scoring_version": "v2",
+            "formula": {
+                "semantic": 0.40,
+                "graph": 0.15,
+                "recency": 0.15,
+                "success_rate": 0.20,
+                "usage_frequency": 0.10,
+                "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
             },
         }
 
@@ -371,9 +393,146 @@ def recall_v3(
         "tags": body.tags,
         "results": results,
         "count": len(results),
-        "scoring": {
-            "semantic_weight": 0.6,
-            "tag_weight": 0.2,
-            "recency_weight": 0.2,
+        "scoring_version": "v2",
+        "formula": {
+            "semantic": 0.40,
+            "graph": 0.15,
+            "recency": 0.15,
+            "success_rate": 0.20,
+            "usage_frequency": 0.10,
+            "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
         },
     }
+
+
+@router.post("/nodes/{node_id}/feedback")
+async def record_node_feedback(
+    node_id: str,
+    body: FeedbackRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Record explicit feedback on a memory node.
+
+    Signals whether this memory led to a good or bad outcome.
+    Updates the node's success/failure counts and adjusts
+    its adaptive weight for future resonance v2 scoring.
+
+    outcome values:
+      "success" — this memory helped, boost its weight
+      "failure" — this memory misled, suppress its weight
+      "neutral" — acknowledged but no clear outcome
+
+    Called explicitly by the user (thumbs up/down UI)
+    or automatically by workflow hooks.
+    """
+    dao = MemoryNodeDAO(db)
+    node = dao.record_feedback(
+        node_id=node_id,
+        outcome=body.outcome,
+        user_id=str(current_user["sub"]),
+    )
+    if not node:
+        raise HTTPException(status_code=404, detail="Memory node not found")
+
+    return {
+        "node_id": node_id,
+        "outcome": body.outcome,
+        "success_count": node.success_count,
+        "failure_count": node.failure_count,
+        "usage_count": node.usage_count,
+        "adaptive_weight": node.weight,
+        "success_rate": dao.get_success_rate(node),
+        "message": {
+            "success": "Weight boosted — memory reinforced",
+            "failure": "Weight reduced — memory suppressed",
+            "neutral": "Usage recorded — no weight change",
+        }[body.outcome],
+    }
+
+
+@router.get("/nodes/{node_id}/performance")
+async def get_node_performance(
+    node_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Get performance metrics for a memory node.
+    Shows how well this memory has performed over time.
+    """
+    dao = MemoryNodeDAO(db)
+    node = dao._get_model_by_id(node_id, user_id=str(current_user["sub"]))
+    if not node:
+        raise HTTPException(status_code=404, detail="Memory node not found")
+
+    success_rate = dao.get_success_rate(node)
+    usage_freq = dao.get_usage_frequency_score(node)
+    graph_score = dao.get_graph_connectivity_score(node_id)
+
+    total_feedback = (node.success_count or 0) + (node.failure_count or 0)
+
+    return {
+        "node_id": node_id,
+        "content_preview": (node.content or "")[:100],
+        "node_type": node.node_type,
+        "performance": {
+            "success_count": node.success_count or 0,
+            "failure_count": node.failure_count or 0,
+            "usage_count": node.usage_count or 0,
+            "success_rate": round(success_rate, 3),
+            "adaptive_weight": round(node.weight or 1.0, 3),
+            "last_outcome": node.last_outcome,
+            "last_used_at": node.last_used_at.isoformat()
+            if node.last_used_at
+            else None,
+            "total_feedback_signals": total_feedback,
+            "graph_connectivity": round(graph_score, 3),
+            "usage_frequency_score": round(usage_freq, 3),
+        },
+        "resonance_v2_preview": {
+            "note": "Scores shown for this node in isolation. "
+            "Actual resonance depends on query context.",
+            "success_rate_component": round(success_rate * 0.20, 4),
+            "usage_freq_component": round(usage_freq * 0.10, 4),
+            "graph_component": round(graph_score * 0.15, 4),
+            "adaptive_weight": round(node.weight or 1.0, 3),
+        },
+    }
+
+
+@router.post("/suggest")
+async def get_suggestions(
+    body: SuggestRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Get suggestions based on past high-performing memories.
+
+    Analyzes what worked before in similar contexts and
+    returns actionable recommendations with reasoning.
+
+    This is A.I.N.D.Y.'s "based on past, do this" layer —
+    memory actively guides future decisions rather than
+    just responding to queries.
+
+    Confidence score = resonance_v2 × adaptive_weight
+    Higher confidence = more validated by past outcomes.
+    """
+    if not body.query and not body.tags:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one of: query, tags",
+        )
+
+    dao = MemoryNodeDAO(db)
+    result = dao.suggest(
+        query=body.query,
+        tags=body.tags,
+        context=body.context,
+        user_id=str(current_user["sub"]),
+        limit=body.limit,
+    )
+    return result

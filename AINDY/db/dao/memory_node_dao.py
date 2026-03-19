@@ -279,7 +279,8 @@ class MemoryNodeDAO:
         """
         Retrieve most relevant memories using resonance scoring.
 
-        score = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)
+        score = (semantic * 0.40) + (graph * 0.15) + (recency * 0.15)
+                + (success_rate * 0.20) + (usage_freq * 0.10)
         recency = exp(-age_days / 30.0)  # half-life 30 days
 
         At least one of query or tags required.
@@ -320,15 +321,17 @@ class MemoryNodeDAO:
         scored = []
 
         for c in candidates:
+            # Signal 1: Semantic similarity (from find_similar)
             semantic = c.get("semantic_score", 0.0)
 
-            tag_score = 0.0
-            if tags:
-                node_tags = set(c.get("tags") or [])
-                query_tags = set(tags)
-                if query_tags:
-                    tag_score = len(node_tags & query_tags) / len(query_tags)
+            # Signal 2: Graph connectivity
+            graph_score = 0.0
+            try:
+                graph_score = self.get_graph_connectivity_score(c["id"])
+            except Exception:
+                graph_score = 0.0
 
+            # Signal 3: Recency decay (half-life 30 days)
             recency_score = 0.5
             created_str = c.get("created_at")
             if created_str:
@@ -344,13 +347,48 @@ class MemoryNodeDAO:
                 except Exception:
                     recency_score = 0.5
 
+            # Signal 4: Success rate (0.5 = no data, neutral prior)
+            success_rate = 0.5
+            adaptive_weight = 1.0
+            usage_freq = 0.0
+            node_obj = self._get_model_by_id(c["id"])
+            if node_obj:
+                success_rate = self.get_success_rate(node_obj)
+                adaptive_weight = node_obj.weight or 1.0
+                usage_freq = self.get_usage_frequency_score(node_obj)
+                c["success_count"] = node_obj.success_count or 0
+                c["failure_count"] = node_obj.failure_count or 0
+                c["usage_count"] = node_obj.usage_count or 0
+
+            # Signal 5: Usage frequency
+            usage_freq = usage_freq or 0.0
+
+            # Tag match (auxiliary — not in main formula)
+            tag_score = 0.0
+            if tags:
+                node_tags = set(c.get("tags") or [])
+                query_tags = set(tags)
+                if query_tags:
+                    tag_score = len(node_tags & query_tags) / len(query_tags)
+
             resonance = (
-                (semantic * 0.6)
-                + (tag_score * 0.2)
-                + (recency_score * 0.2)
-            )
+                (semantic * 0.40)
+                + (graph_score * 0.15)
+                + (recency_score * 0.15)
+                + (success_rate * 0.20)
+                + (usage_freq * 0.10)
+            ) * adaptive_weight
+
+            resonance = min(1.0, resonance)
+            resonance = min(1.0, resonance + (tag_score * 0.1))
+
+            c["semantic_score"] = round(semantic, 4)
+            c["graph_score"] = round(graph_score, 4)
             c["tag_score"] = round(tag_score, 4)
             c["recency_score"] = round(recency_score, 4)
+            c["success_rate"] = round(success_rate, 4)
+            c["usage_frequency"] = round(usage_freq, 4)
+            c["adaptive_weight"] = round(adaptive_weight, 4)
             c["resonance_score"] = round(resonance, 4)
             scored.append(c)
 
@@ -515,6 +553,108 @@ class MemoryNodeDAO:
             }
             for h in history
         ]
+
+    def record_feedback(
+        self,
+        node_id: str,
+        outcome: str,  # "success" | "failure" | "neutral"
+        user_id: str = None,
+    ) -> Optional[MemoryNodeModel]:
+        """
+        Record explicit or automatic feedback on a memory node.
+
+        Updates success/failure counts and adjusts the adaptive
+        weight. The weight is used in resonance v2 scoring to
+        boost memories that consistently lead to good outcomes
+        and suppress those that lead to failures.
+
+        Weight adjustment rules:
+          success: weight += 0.1 (max 2.0)
+          failure: weight -= 0.15 (min 0.1)
+          neutral: no weight change, usage_count incremented
+
+        Called by:
+          - Explicit: POST /memory/nodes/{id}/feedback
+          - Automatic: ARM analysis score, task completion,
+                       Genesis lock
+        """
+        from datetime import datetime
+
+        node = self._get_model_by_id(node_id, user_id=user_id)
+        if not node:
+            return None
+
+        now = datetime.utcnow()
+        node.usage_count = (node.usage_count or 0) + 1
+        node.last_used_at = now
+        node.last_outcome = outcome
+
+        if outcome == "success":
+            node.success_count = (node.success_count or 0) + 1
+            node.weight = min(2.0, (node.weight or 1.0) + 0.1)
+        elif outcome == "failure":
+            node.failure_count = (node.failure_count or 0) + 1
+            node.weight = max(0.1, (node.weight or 1.0) - 0.15)
+
+        self.db.add(node)
+        self.db.commit()
+        self.db.refresh(node)
+        return node
+
+    def get_success_rate(self, node: MemoryNodeModel) -> float:
+        """
+        Calculate success rate for a node (0.0 - 1.0).
+        Returns 0.5 (neutral) if no feedback recorded yet.
+        """
+        total = (node.success_count or 0) + (node.failure_count or 0)
+        if total == 0:
+            return 0.5
+        return (node.success_count or 0) / total
+
+    def get_usage_frequency_score(
+        self,
+        node: MemoryNodeModel,
+        max_usage: int = 100,
+    ) -> float:
+        """
+        Normalize usage count to 0.0-1.0 score.
+        Frequently used memories score higher.
+        Capped at max_usage to prevent domination.
+        """
+        usage = node.usage_count or 0
+        return min(1.0, usage / max(max_usage, 1))
+
+    def get_graph_connectivity_score(
+        self,
+        node_id: str,
+        max_connections: int = 20,
+    ) -> float:
+        """
+        Score how well-connected this node is in the graph.
+        More connections = more central to the memory network
+        = higher score.
+
+        Normalized to 0.0-1.0.
+        Capped at max_connections to prevent hub domination.
+        """
+        try:
+            node_uuid = uuid.UUID(str(node_id))
+        except ValueError:
+            return 0.0
+
+        outbound = (
+            self.db.query(MemoryLinkModel)
+            .filter(MemoryLinkModel.source_node_id == node_uuid)
+            .count()
+        )
+        inbound = (
+            self.db.query(MemoryLinkModel)
+            .filter(MemoryLinkModel.target_node_id == node_uuid)
+            .count()
+        )
+
+        total_connections = outbound + inbound
+        return min(1.0, total_connections / max(max_connections, 1))
 
     def traverse(
         self,
@@ -766,3 +906,128 @@ class MemoryNodeDAO:
         except SQLAlchemyError:
             self.db.rollback()
             raise
+
+    def suggest(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        context: str = None,
+        user_id: str = None,
+        limit: int = 3,
+    ) -> dict:
+        """
+        Generate suggestions based on past high-performing
+        memories.
+
+        Finds memories with:
+        - High resonance v2 score (semantically relevant)
+        - High success rate (led to good outcomes)
+        - High adaptive weight (reinforced over time)
+
+        Returns actionable suggestions with reasoning.
+
+        This is the "based on past, do this" layer —
+        memory actively guides future decisions.
+        """
+        if not query and not tags:
+            return {
+                "suggestions": [],
+                "message": "Provide query or tags for suggestions",
+            }
+
+        candidates = self.recall(
+            query=query,
+            tags=tags,
+            limit=limit * 3,
+            user_id=user_id,
+        )
+
+        if isinstance(candidates, dict):
+            candidates = candidates.get("results", [])
+
+        high_performers = [
+            c for c in candidates
+            if c.get("success_rate", 0.5) > 0.6
+            and c.get("adaptive_weight", 1.0) > 0.8
+        ]
+
+        if not high_performers:
+            high_performers = candidates[:limit]
+
+        suggestions = []
+        for memory in high_performers[:limit]:
+            node_type = memory.get("node_type", "memory")
+            content = memory.get("content", "")
+            success_rate = memory.get("success_rate", 0.5)
+            weight = memory.get("adaptive_weight", 1.0)
+            resonance = memory.get("resonance_score", 0.0)
+
+            if node_type == "decision":
+                action = (
+                    f"Consider repeating this decision: "
+                    f"{content[:120]}"
+                )
+                reasoning = (
+                    f"This decision type succeeded "
+                    f"{success_rate*100:.0f}% of the time "
+                    f"in similar contexts."
+                )
+            elif node_type == "outcome":
+                action = (
+                    f"This approach worked before: "
+                    f"{content[:120]}"
+                )
+                reasoning = (
+                    f"Similar actions led to positive outcomes "
+                    f"with {success_rate*100:.0f}% success rate."
+                )
+            elif node_type == "insight":
+                action = f"Apply this insight: {content[:120]}"
+                reasoning = (
+                    f"This pattern has been validated "
+                    f"{memory.get('usage_count', 0)} times."
+                )
+            else:
+                action = f"Relevant context: {content[:120]}"
+                reasoning = f"High relevance score: {resonance:.2f}"
+
+            warning = None
+            if memory.get("failure_count", 0) > 0:
+                failure_rate = 1 - success_rate
+                if failure_rate > 0.3:
+                    warning = (
+                        f"Caution: this approach failed "
+                        f"{failure_rate*100:.0f}% of the time. "
+                        f"Review context carefully."
+                    )
+
+            suggestions.append({
+                "node_id": memory.get("id"),
+                "node_type": node_type,
+                "action": action,
+                "reasoning": reasoning,
+                "warning": warning,
+                "confidence": round(resonance * weight, 3),
+                "success_rate": round(success_rate, 3),
+                "usage_count": memory.get("usage_count", 0),
+                "resonance_score": round(resonance, 3),
+            })
+
+        suggestions.sort(
+            key=lambda x: x["confidence"],
+            reverse=True,
+        )
+
+        return {
+            "query": query,
+            "tags": tags,
+            "suggestions": suggestions,
+            "suggestion_count": len(suggestions),
+            "message": (
+                f"Based on {len(suggestions)} high-performing "
+                f"past memories, here's what worked before:"
+                if suggestions else
+                "Not enough feedback data yet. Use memory nodes "
+                "and record outcomes to build suggestions."
+            ),
+        }

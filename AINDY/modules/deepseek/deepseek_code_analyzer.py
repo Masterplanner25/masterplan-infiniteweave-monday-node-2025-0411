@@ -258,6 +258,31 @@ class DeepSeekCodeAnalyzer:
             db.add(db_record)
             db.commit()
 
+            # Step 6a — Auto-feedback on recalled memories (fire-and-forget)
+            try:
+                if prior_memories and db and user_id:
+                    from db.dao.memory_node_dao import MemoryNodeDAO
+                    feedback_dao = MemoryNodeDAO(db)
+
+                    arch_score = result.get("architecture_score", 5)
+                    integrity_score = result.get("integrity_score", 5)
+                    avg_score = (arch_score + integrity_score) / 2
+
+                    outcome = (
+                        "success" if avg_score >= 7 else
+                        "neutral" if avg_score >= 4 else
+                        "failure"
+                    )
+
+                    for memory in prior_memories[:3]:
+                        feedback_dao.record_feedback(
+                            node_id=memory["id"],
+                            outcome=outcome,
+                            user_id=user_id,
+                        )
+            except Exception as e:
+                logger.warning("[ARM] Auto-feedback failed: %s", e)
+
             # Step 6b — Write analysis outcome to memory (fire-and-forget)
             if user_id:
                 try:

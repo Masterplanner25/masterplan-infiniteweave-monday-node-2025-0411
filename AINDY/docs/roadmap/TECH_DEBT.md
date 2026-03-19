@@ -309,9 +309,10 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 
 ## 14. Memory Bridge Phase 4 — Open Items
 
-- **Outcome feedback loop.** Persist outcome-to-decision feedback signals to strengthen future traversal relevance.
-- **Resonance v2.** Introduce multi-hop resonance scoring that weights chain relevance in addition to single-node semantic/tag/recency.
+- ✅ **Outcome feedback loop.** Implemented in Memory Bridge v4 (feedback counters + adaptive weight + feedback endpoints + auto-feedback hooks).
+- ✅ **Resonance v2.** Implemented in Memory Bridge v4 (semantic + graph + recency + success_rate + usage_frequency).
 - **Pattern detection.** Detect recurring memory motifs across time windows (e.g., repeated decision→outcome→insight sequences).
+- **v5 integration:** Nodus integration, automatic capture, identity layer.
 | **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)
