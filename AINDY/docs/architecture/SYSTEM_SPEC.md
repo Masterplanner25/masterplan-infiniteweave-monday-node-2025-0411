@@ -134,8 +134,11 @@ Primary backend entry point: `AINDY/main.py`.
 - `GET /memory/nodes/{id}/links` retrieves graph neighbors.
 - `GET /memory/nodes` tag-based search.
 - `POST /memory/nodes/search` semantic similarity search via pgvector (`<=>` cosine distance).
-- `POST /memory/recall` resonance-scored retrieval: `(semantic*0.6) + (tag*0.2) + (recency*0.2)`.
+- `POST /memory/recall` resonance-scored retrieval: `(semantic*0.40) + (graph*0.15) + (recency*0.15) + (success_rate*0.20) + (usage_frequency*0.10)` × adaptive weight, plus tag bonus.
 - `POST /memory/links` creates directed links.
+- `POST /memory/nodes/{id}/feedback` records explicit feedback.
+- `GET /memory/nodes/{id}/performance` returns performance metrics.
+- `POST /memory/suggest` returns guidance based on past outcomes.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
@@ -178,8 +181,10 @@ POST /memory/recall
         └─► MemoryNodeDAO.recall(query, tags, limit, user_id, node_type)
               └─► find_similar(): SELECT ... ORDER BY embedding <=> query_embedding
               └─► get_by_tags(): tag-based candidates
-              └─► resonance scoring: (semantic*0.6) + (tag*0.2) + (recency*0.2)
-              └─► sorted results with resonance_score, tag_score, recency_score
+              └─► resonance scoring: (semantic*0.40) + (graph*0.15) + (recency*0.15)
+                    + (success_rate*0.20) + (usage_frequency*0.10) × adaptive_weight
+              └─► sorted results with resonance_score, tag_score, graph_score,
+                    recency_score, success_rate, usage_frequency, adaptive_weight
 ```
 
 **ARM analysis with memory recall + write (Phase 3)**

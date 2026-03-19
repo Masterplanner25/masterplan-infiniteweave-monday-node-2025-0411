@@ -176,7 +176,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeDAO.find_by_tags — ORDER BY clause absent or arbitrary)
   - Mechanism: `find_by_tags()` returns matching nodes without a relevance score. No timestamp-based ranking is applied.
   - Impact: As node count grows, older or irrelevant memories contaminate recall. Retrieval quality degrades with scale.
-  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `MemoryNodeDAO.recall()` implements resonance scoring: `score = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)` where `recency = exp(-age_days / 30.0)`. All recall results are ranked by resonance score. `POST /memory/recall` is the primary retrieval API.
+- Status: ✅ **RESOLVED (2026-03-18 Memory Bridge v4):** `MemoryNodeDAO.recall()` implements resonance v2 scoring: `score = (semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` where `recency = exp(-age_days / 30.0)`, then multiplied by adaptive `weight` and capped at 1.0. All recall results are ranked by resonance score. `POST /memory/recall` is the primary retrieval API.
 
 ### §10.7 Retrieval — tag query returns unranked flat lists with no relevance signal
 
