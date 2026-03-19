@@ -3659,3 +3659,49 @@
 2026-03-18 14:43:40,786 - INFO - Retrying request to /embeddings in 0.446825 seconds
 2026-03-18 14:43:41,257 - INFO - Retrying request to /embeddings in 0.981062 seconds
 2026-03-18 14:43:42,254 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 19:14:12,194 - INFO - Loaded development environment from .env
+2026-03-18 20:35:01,866 - INFO - Loaded development environment from .env
+2026-03-18 20:35:04,296 - INFO - Retrying request to /embeddings in 0.463513 seconds
+2026-03-18 20:35:04,763 - INFO - Retrying request to /embeddings in 0.882254 seconds
+2026-03-18 20:35:06,690 - INFO - Retrying request to /embeddings in 0.471621 seconds
+2026-03-18 20:35:07,176 - INFO - Retrying request to /embeddings in 0.913595 seconds
+2026-03-18 20:35:10,182 - INFO - Retrying request to /embeddings in 0.480742 seconds
+2026-03-18 20:35:10,677 - INFO - Retrying request to /embeddings in 0.910102 seconds
+2026-03-18 20:35:11,623 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:35:11,972 - INFO - Retrying request to /embeddings in 0.437920 seconds
+2026-03-18 20:35:12,439 - INFO - Retrying request to /embeddings in 0.840318 seconds
+2026-03-18 20:35:14,337 - INFO - Retrying request to /embeddings in 0.465364 seconds
+2026-03-18 20:35:14,871 - INFO - Retrying request to /embeddings in 0.761951 seconds
+2026-03-18 20:35:17,703 - INFO - Retrying request to /embeddings in 0.463239 seconds
+2026-03-18 20:35:18,202 - INFO - Retrying request to /embeddings in 0.978053 seconds
+2026-03-18 20:35:19,216 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:35:19,333 - INFO - Retrying request to /embeddings in 0.400086 seconds
+2026-03-18 20:35:19,765 - INFO - Retrying request to /embeddings in 0.820774 seconds
+2026-03-18 20:35:21,666 - INFO - Retrying request to /embeddings in 0.458640 seconds
+2026-03-18 20:35:22,166 - INFO - Retrying request to /embeddings in 0.943214 seconds
+2026-03-18 20:35:25,195 - INFO - Retrying request to /embeddings in 0.440674 seconds
+2026-03-18 20:35:25,683 - INFO - Retrying request to /embeddings in 0.863426 seconds
+2026-03-18 20:35:26,563 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:40:05,503 - INFO - Loaded development environment from .env
+2026-03-18 20:40:08,032 - INFO - Retrying request to /embeddings in 0.380145 seconds
+2026-03-18 20:40:08,416 - INFO - Retrying request to /embeddings in 0.880244 seconds
+2026-03-18 20:40:10,371 - INFO - Retrying request to /embeddings in 0.426969 seconds
+2026-03-18 20:40:10,844 - INFO - Retrying request to /embeddings in 0.808678 seconds
+2026-03-18 20:40:13,715 - INFO - Retrying request to /embeddings in 0.379080 seconds
+2026-03-18 20:40:14,147 - INFO - Retrying request to /embeddings in 0.919056 seconds
+2026-03-18 20:40:15,094 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:40:15,395 - INFO - Retrying request to /embeddings in 0.433213 seconds
+2026-03-18 20:40:15,894 - INFO - Retrying request to /embeddings in 0.923063 seconds
+2026-03-18 20:40:17,880 - INFO - Retrying request to /embeddings in 0.462743 seconds
+2026-03-18 20:40:18,346 - INFO - Retrying request to /embeddings in 0.897483 seconds
+2026-03-18 20:40:21,298 - INFO - Retrying request to /embeddings in 0.446202 seconds
+2026-03-18 20:40:21,767 - INFO - Retrying request to /embeddings in 0.979412 seconds
+2026-03-18 20:40:22,783 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:40:22,909 - INFO - Retrying request to /embeddings in 0.496550 seconds
+2026-03-18 20:40:23,425 - INFO - Retrying request to /embeddings in 0.992037 seconds
+2026-03-18 20:40:25,471 - INFO - Retrying request to /embeddings in 0.452998 seconds
+2026-03-18 20:40:25,927 - INFO - Retrying request to /embeddings in 0.850718 seconds
+2026-03-18 20:40:28,849 - INFO - Retrying request to /embeddings in 0.487514 seconds
+2026-03-18 20:40:29,349 - INFO - Retrying request to /embeddings in 0.781711 seconds
+2026-03-18 20:40:30,148 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 20:40:48,944 - INFO - Loaded development environment from .env
