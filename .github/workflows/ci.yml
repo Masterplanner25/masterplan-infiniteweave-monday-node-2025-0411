@@ -52,7 +52,7 @@ jobs:
 
     env:
       ENV: test
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/base
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
       MONGO_URL: mongodb://localhost:27017
       OPENAI_API_KEY: sk-test-placeholder
       DEEPSEEK_API_KEY: ds-test-placeholder
