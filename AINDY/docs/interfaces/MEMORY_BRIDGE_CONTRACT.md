@@ -189,12 +189,20 @@ Added in Memory Bridge Phase 2 (2026-03-18). Authentication: JWT Bearer (`Depend
   - `node_type: Optional[Literal[...]]`
 - Validation: at least one of `query` or `tags` must be provided; returns 400 otherwise.
 - Behavior: calls `MemoryNodeDAO.recall()`. Combines semantic path (via `find_similar()`) and tag path (via `get_by_tags()`), deduplicates, scores by resonance formula.
-- Response: `{"query", "tags", "results", "count", "scoring": {"semantic_weight": 0.6, "tag_weight": 0.2, "recency_weight": 0.2}}`.
-- Each result includes: `resonance_score`, `semantic_score`, `tag_score`, `recency_score`.
+- Response: `{"query", "tags", "results", "count", "scoring_version": "v2", "formula": {...}}`.
+- Each result includes: `resonance_score`, `semantic_score`, `graph_score`, `recency_score`, `success_rate`, `usage_frequency`, `adaptive_weight`, `tag_score`.
 
-### Resonance Scoring Formula
+### Resonance Scoring Formula (v2)
 ```
-resonance = (semantic * 0.6) + (tag_match * 0.2) + (recency * 0.2)
+resonance = (semantic * 0.40)
+          + (graph * 0.15)
+          + (recency * 0.15)
+          + (success_rate * 0.20)
+          + (usage_frequency * 0.10)
+
+resonance = min(1.0, resonance * adaptive_weight)
+resonance = min(1.0, resonance + (tag_match * 0.1))
+
 recency   = exp(-age_days / 30.0)   # half-life: 30 days
 tag_match = |node_tags ∩ query_tags| / |query_tags|
 ```
@@ -241,6 +249,31 @@ Added in Memory Bridge v3 (2026-03-18). Authentication: JWT Bearer (`Depends(get
   - `node_type: Optional[Literal[...]]`
   - `expand_results: Optional[bool]`
 - Behavior: when `expand_results=true`, returns results plus expanded context.
+- Response includes the same `scoring_version` and `formula` metadata as `/memory/recall`.
+
+### `POST /memory/nodes/{node_id}/feedback`
+- Auth: JWT required.
+- Request body: `FeedbackRequest`
+  - `outcome: "success" | "failure" | "neutral"`
+  - `context: Optional[str]` (freeform note)
+- Behavior: records feedback on the node, increments usage, adjusts adaptive weight.
+- Response: outcome summary with counts, adaptive weight, success rate.
+- Errors: 404 if node not found; 422 on invalid outcome.
+
+### `GET /memory/nodes/{node_id}/performance`
+- Auth: JWT required.
+- Response: performance metrics for the node (success/failure counts, usage, success rate, adaptive weight, graph connectivity).
+- Errors: 404 if node not found.
+
+### `POST /memory/suggest`
+- Auth: JWT required.
+- Request body: `SuggestRequest`
+  - `query: Optional[str]`
+  - `tags: Optional[List[str]]`
+  - `context: Optional[str]`
+  - `limit: Optional[int]` (default 3)
+- Behavior: returns suggestions based on high-performing past memories.
+- Errors: 400 if neither `query` nor `tags` provided.
 
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
@@ -251,4 +284,7 @@ Added in Memory Bridge v3 (2026-03-18). Authentication: JWT Bearer (`Depends(get
 | `GET /memory/nodes` | query params | `{"nodes": [...]}` |
 | `POST /memory/links` | `CreateLinkRequest` | link dict |
 | `POST /memory/nodes/search` | `SimilaritySearchRequest` | `{"query", "results", "count"}` |
-| `POST /memory/recall` | `RecallRequest` | `{"query", "tags", "results", "count", "scoring"}` |
+| `POST /memory/recall` | `RecallRequest` | `{"query", "tags", "results", "count", "scoring_version", "formula"}` |
+| `POST /memory/nodes/{node_id}/feedback` | `FeedbackRequest` | outcome + counts + weight |
+| `GET /memory/nodes/{node_id}/performance` | None | performance metrics |
+| `POST /memory/suggest` | `SuggestRequest` | suggestions list |

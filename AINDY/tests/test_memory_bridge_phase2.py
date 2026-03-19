@@ -162,16 +162,25 @@ class TestMemoryNodeEmbeddingColumn:
 class TestResonanceScoring:
 
     def test_resonance_formula_weights_sum_to_one(self):
-        """Semantic(0.6) + tag(0.2) + recency(0.2) = 1.0."""
-        assert abs(0.6 + 0.2 + 0.2 - 1.0) < 1e-9
+        """v2 weights must sum to 1.0."""
+        weights = [0.40, 0.15, 0.15, 0.20, 0.10]
+        assert abs(sum(weights) - 1.0) < 1e-9
 
     def test_resonance_high_semantic_dominates(self):
-        """High semantic score produces resonance close to 0.6."""
+        """High semantic score produces resonance close to 0.40."""
         semantic = 1.0
-        tag = 0.0
+        graph = 0.0
         recency = 0.0
-        resonance = (semantic * 0.6) + (tag * 0.2) + (recency * 0.2)
-        assert abs(resonance - 0.6) < 1e-6
+        success_rate = 0.0
+        usage_freq = 0.0
+        resonance = (
+            (semantic * 0.40)
+            + (graph * 0.15)
+            + (recency * 0.15)
+            + (success_rate * 0.20)
+            + (usage_freq * 0.10)
+        )
+        assert abs(resonance - 0.40) < 1e-6
 
     def test_resonance_recency_decay(self):
         """Recency decay: today=1.0, 30d≈e^-1≈0.368, 90d<0.1."""
@@ -193,10 +202,18 @@ class TestResonanceScoring:
     def test_resonance_no_tags_no_penalty(self):
         """When tags=None, tag_score=0.0 (no penalty; not a negative signal)."""
         semantic = 0.8
-        tag_score = 0.0
+        graph = 0.0
         recency = 1.0
-        resonance = (semantic * 0.6) + (tag_score * 0.2) + (recency * 0.2)
-        assert abs(resonance - (0.48 + 0.0 + 0.2)) < 1e-6
+        success_rate = 0.5
+        usage_freq = 0.0
+        resonance = (
+            (semantic * 0.40)
+            + (graph * 0.15)
+            + (recency * 0.15)
+            + (success_rate * 0.20)
+            + (usage_freq * 0.10)
+        )
+        assert abs(resonance - (0.32 + 0.15 + 0.10)) < 1e-6
 
 
 # ---------------------------------------------------------------------------
@@ -286,10 +303,13 @@ class TestMemoryRoutePhase2:
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
-        assert "scoring" in data
-        assert data["scoring"]["semantic_weight"] == 0.6
-        assert data["scoring"]["tag_weight"] == 0.2
-        assert data["scoring"]["recency_weight"] == 0.2
+        assert data["scoring_version"] == "v2"
+        assert "formula" in data
+        assert data["formula"]["semantic"] == 0.40
+        assert data["formula"]["graph"] == 0.15
+        assert data["formula"]["recency"] == 0.15
+        assert data["formula"]["success_rate"] == 0.20
+        assert data["formula"]["usage_frequency"] == 0.10
 
     def test_search_with_auth(self, client, auth_headers):
         """POST /memory/nodes/search with auth returns query and results."""

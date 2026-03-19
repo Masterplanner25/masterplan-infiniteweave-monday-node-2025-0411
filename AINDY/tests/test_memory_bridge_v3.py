@@ -356,8 +356,9 @@ class TestRecallV3:
         )
         if r.status_code == 200:
             data = r.json()
-            assert "scoring" in data
-            assert data["scoring"]["semantic_weight"] == 0.6
+            assert data["scoring_version"] == "v2"
+            assert "formula" in data
+            assert data["formula"]["semantic"] == 0.40
 
     def test_recall_v3_expand_parameter(self, client, auth_headers, mock_db, mocker):
         """expand_results=True returns dict with expanded."""

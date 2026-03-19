@@ -97,6 +97,31 @@ def complete_task(db: Session, name: str, user_id: str = None):
         except Exception:
             pass
 
+    # Auto-feedback: task completion reinforces related decision memories
+    try:
+        if db and user_id:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            feedback_dao = MemoryNodeDAO(db)
+
+            task_title = getattr(task, "name", "")
+            related = feedback_dao.recall(
+                query=task_title,
+                tags=["decision", "task"],
+                limit=2,
+                user_id=str(user_id),
+            )
+
+            related_list = related if isinstance(related, list) else related.get("results", [])
+
+            for memory in related_list:
+                feedback_dao.record_feedback(
+                    node_id=memory["id"],
+                    outcome="success",
+                    user_id=str(user_id),
+                )
+    except Exception:
+        pass
+
     # Calculate TWR
     task_input = TaskInput(
         task_name=task.name, # Pydantic model uses 'task_name', DB uses 'name'

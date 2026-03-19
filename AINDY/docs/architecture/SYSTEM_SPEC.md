@@ -93,7 +93,10 @@ Primary backend entry point: `AINDY/main.py`.
   - `AINDY/routes/memory_router.py` — JWT-authenticated read/write/search interface (`/memory/*`).
 - Canonical DAO: `AINDY/db/dao/memory_node_dao.py` (`MemoryNodeDAO`).
 - Embedding pipeline (Phase 2): `AINDY/services/embedding_service.py` generates OpenAI `text-embedding-ada-002` vectors (1536 dims) on every `MemoryNodeDAO.save()` call. Zero-vector fallback on failure.
-- Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance. `MemoryNodeDAO.recall()` applies resonance scoring: `(semantic * 0.6) + (tag * 0.2) + (recency * 0.2)`.
+- Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance.
+- Resonance v2 (Phase 4): `MemoryNodeDAO.recall()` scores: `(semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` with adaptive weight multiplier and tag bonus.
+- Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight.
+- Suggestion engine (Phase 4): `MemoryNodeDAO.suggest()` returns actionable recommendations; endpoint `POST /memory/suggest`.
 - C++ kernel: `bridge/memory_bridge_rs/target/debug/memory_bridge_rs` provides `semantic_similarity()` via PyO3. Used in `embedding_service.cosine_similarity()` with Python fallback.
 - Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` enforced via SQLAlchemy event listener.
 - Symbolic, file-based traces in `AINDY/memoryevents/` and `AINDY/memorytraces/` (not referenced by API code).
@@ -131,8 +134,11 @@ Primary backend entry point: `AINDY/main.py`.
 - `GET /memory/nodes/{id}/links` retrieves graph neighbors.
 - `GET /memory/nodes` tag-based search.
 - `POST /memory/nodes/search` semantic similarity search via pgvector (`<=>` cosine distance).
-- `POST /memory/recall` resonance-scored retrieval: `(semantic*0.6) + (tag*0.2) + (recency*0.2)`.
+- `POST /memory/recall` resonance-scored retrieval: `(semantic*0.40) + (graph*0.15) + (recency*0.15) + (success_rate*0.20) + (usage_frequency*0.10)` × adaptive weight, plus tag bonus.
 - `POST /memory/links` creates directed links.
+- `POST /memory/nodes/{id}/feedback` records explicit feedback.
+- `GET /memory/nodes/{id}/performance` returns performance metrics.
+- `POST /memory/suggest` returns guidance based on past outcomes.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
@@ -175,8 +181,10 @@ POST /memory/recall
         └─► MemoryNodeDAO.recall(query, tags, limit, user_id, node_type)
               └─► find_similar(): SELECT ... ORDER BY embedding <=> query_embedding
               └─► get_by_tags(): tag-based candidates
-              └─► resonance scoring: (semantic*0.6) + (tag*0.2) + (recency*0.2)
-              └─► sorted results with resonance_score, tag_score, recency_score
+              └─► resonance scoring: (semantic*0.40) + (graph*0.15) + (recency*0.15)
+                    + (success_rate*0.20) + (usage_frequency*0.10) × adaptive_weight
+              └─► sorted results with resonance_score, tag_score, graph_score,
+                    recency_score, success_rate, usage_frequency, adaptive_weight
 ```
 
 **ARM analysis with memory recall + write (Phase 3)**

@@ -529,6 +529,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 - `dc59c589ab1e` - `memory_bridge_v3_history_table`: adds `memory_node_history` table (append-only change log) with index on (`node_id`, `changed_at`).
 - `edc8c8d84cbb` - `repair_memory_nodes_tsv_trigger_drift`: removes stale `content_tsv` trigger/function/index drift from `memory_nodes` on upgraded databases.
 
+**Memory Bridge v4 migration (2026-03-18):**
+- `5b14b05e179f` - `memory_bridge_v4_feedback_columns`: adds feedback columns to `memory_nodes` (`success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`).
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -596,6 +599,12 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `updated_at`: DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
 - `extra`: JSONB, nullable=False, default=dict
 - `embedding`: Vector(1536), nullable=True — **added Memory Bridge Phase 2** (migration `mb2embed0001`)
+- `success_count`: Integer, nullable=False, default=0
+- `failure_count`: Integer, nullable=False, default=0
+- `usage_count`: Integer, nullable=False, default=0
+- `last_used_at`: DateTime(timezone=True), nullable=True
+- `last_outcome`: String, nullable=True
+- `weight`: Float, nullable=False, default=1.0
 - Indexes
 - `ix_memory_nodes_tags_gin` on `tags` using GIN
 - Unique constraints: Not explicitly defined in current implementation.

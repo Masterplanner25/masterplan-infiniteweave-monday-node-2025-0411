@@ -61,7 +61,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 
 **Memory Bridge Phase 2 additions (2026-03-18):**
 - `POST /memory/nodes/search` — JWT required. Body: `SimilaritySearchRequest {query, limit?, node_type?, min_similarity?}`. Returns `{"query", "results", "count"}` with semantic `similarity` and `distance`.
-- `POST /memory/recall` — JWT required. Body: `RecallRequest {query?, tags?, limit?, node_type?}`. Returns resonance-scored results and scoring metadata. 400 if neither `query` nor `tags` provided.
+- `POST /memory/recall` — JWT required. Body: `RecallRequest {query?, tags?, limit?, node_type?}`. Returns resonance-scored results and scoring metadata (`scoring_version: "v2"`, `formula: {...}`). 400 if neither `query` nor `tags` provided.
 
 **Memory Bridge v3 additions (2026-03-18):**
 - `PUT /memory/nodes/{node_id}` — JWT required. Body: `UpdateNodeRequest {content?, tags?, node_type?, source?}`. Updates a memory node and records history (previous values).
@@ -69,6 +69,11 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/nodes/{node_id}/traverse` — JWT required. Query: `max_depth` (default 3, capped at 5), `link_type` (optional), `min_strength` (default 0.0). Returns DFS chain plus narrative.
 - `POST /memory/nodes/expand` — JWT required. Body: `ExpandRequest {node_ids, include_linked?, include_similar?, limit_per_node?}`. Returns expanded context graph; max 10 input nodes.
 - `POST /memory/recall/v3` — JWT required. Body: `RecallV3Request {query?, tags?, limit?, node_type?, expand_results?}`. Returns standard recall or expanded context when `expand_results=true`.
+
+**Memory Bridge v4 additions (2026-03-18):**
+- `POST /memory/nodes/{node_id}/feedback` — JWT required. Body: `FeedbackRequest {outcome, context?}`. Records feedback and adjusts adaptive weight.
+- `GET /memory/nodes/{node_id}/performance` — JWT required. Returns performance metrics for a node.
+- `POST /memory/suggest` — JWT required. Body: `SuggestRequest {query?, tags?, context?, limit?}`. Returns recommendations based on past high-performing memories.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,

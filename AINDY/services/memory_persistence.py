@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_, event
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_, event, Integer, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -37,6 +37,12 @@ class MemoryNodeModel(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
     embedding = Column(Vector(1536), nullable=True)
+    success_count = Column(Integer, nullable=False, default=0)
+    failure_count = Column(Integer, nullable=False, default=0)
+    usage_count = Column(Integer, nullable=False, default=0)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    last_outcome = Column(String, nullable=True)
+    weight = Column(Float, nullable=False, default=1.0)
 
 
 Index("ix_memory_nodes_tags_gin", MemoryNodeModel.tags, postgresql_using="gin")
