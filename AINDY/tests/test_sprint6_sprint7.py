@@ -122,7 +122,7 @@ class TestSprint7GenesisMemoryHook:
         """Genesis LLM must write memory node after successful call."""
         from services.genesis_ai import call_genesis_llm
         source = inspect.getsource(call_genesis_llm)
-        assert "dao.save" in source or "MemoryNodeDAO" in source, (
+        assert "MemoryCaptureEngine" in source or "evaluate_and_capture" in source, (
             "call_genesis_llm missing memory write"
         )
 
@@ -251,7 +251,7 @@ class TestSprint7LeadGenMemoryHook:
         """leadgen_service must write memory node after results."""
         from services import leadgen_service
         source = inspect.getsource(leadgen_service)
-        assert "dao.save" in source or "MemoryNodeDAO" in source, (
+        assert "MemoryCaptureEngine" in source or "evaluate_and_capture" in source, (
             "leadgen_service missing memory write"
         )
 

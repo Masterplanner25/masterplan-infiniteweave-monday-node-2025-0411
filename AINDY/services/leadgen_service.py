@@ -78,8 +78,6 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     # Step 2: Write outcome memory node after results are gathered
     if user_id and db:
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            dao = MemoryNodeDAO(db)
             result_count = len(example_results)
             top = example_results[0]["company"] if example_results else "none"
             memory_content = (
@@ -87,11 +85,13 @@ def run_ai_search(query: str, user_id: str = None, db=None):
                 f"Found {result_count} leads. "
                 f"Top result: {top}"
             )
-            dao.save(
+            from services.memory_capture_engine import MemoryCaptureEngine
+            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine.evaluate_and_capture(
+                event_type="leadgen_search",
                 content=memory_content,
                 source="leadgen_search",
                 tags=["leadgen", "search", "outcome", f"leads_{result_count}"],
-                user_id=user_id,
                 node_type="outcome",
             )
         except Exception as e:

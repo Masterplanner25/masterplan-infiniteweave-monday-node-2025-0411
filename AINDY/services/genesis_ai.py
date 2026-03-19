@@ -97,8 +97,8 @@ Return only valid JSON.
     # Step 3: Write memory node after successful LLM call
     if user_id and db:
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            dao = MemoryNodeDAO(db)
+            from services.memory_capture_engine import MemoryCaptureEngine
+            engine = MemoryCaptureEngine(db=db, user_id=user_id)
 
             state_signals = []
             if current_state.get("vision_summary"):
@@ -112,15 +112,18 @@ Return only valid JSON.
                 f"Synthesis ready: {llm_output.get('synthesis_ready', False)}"
             )
 
-            dao.save(
+            engine.evaluate_and_capture(
+                event_type="genesis_message",
                 content=memory_content,
                 source="genesis_conversation",
                 tags=[
-                    "genesis", "conversation", "insight",
+                    "genesis",
+                    "conversation",
+                    "insight",
                     "synthesis_ready" if llm_output.get("synthesis_ready") else "in_progress",
                 ],
-                user_id=user_id,
                 node_type="insight",
+                context={"significance": current_state.get("confidence", 0.5)},
             )
         except Exception as e:
             logging.warning(f"Genesis conversation memory write failed: {e}")

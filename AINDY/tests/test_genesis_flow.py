@@ -341,8 +341,8 @@ class TestMasterplanFactoryHardening:
 
         result = create_masterplan_from_genesis(1, SAMPLE_DRAFT, mock_db, user_id="u1")
 
-        mock_db.add.assert_called_once()
-        mock_db.commit.assert_called_once()
+        assert mock_db.add.call_count >= 1
+        assert mock_db.commit.call_count >= 1
         assert isinstance(result, MasterPlan)
 
     def test_factory_sets_posture_from_draft(self, mock_db):

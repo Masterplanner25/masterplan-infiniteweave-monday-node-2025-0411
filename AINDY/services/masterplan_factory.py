@@ -72,5 +72,28 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
         db.rollback()
         raise
 
+    # Capture lock event to memory (fire-and-forget)
+    if user_id:
+        try:
+            from services.memory_capture_engine import MemoryCaptureEngine
+            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            vision = ""
+            if isinstance(draft_to_use, dict):
+                vision = str(draft_to_use.get("vision_statement") or draft_to_use.get("vision_summary") or "")
+            engine.evaluate_and_capture(
+                event_type="masterplan_locked",
+                content=(
+                    f"Masterplan locked: {masterplan.version_label} "
+                    f"(posture: {masterplan.posture}, session: {session_id}). "
+                    f"Vision: {vision[:200]}"
+                ),
+                source="genesis_lock",
+                tags=["genesis", "masterplan", "decision"],
+                node_type="decision",
+                force=True,
+            )
+        except Exception:
+            pass
+
     return masterplan
 

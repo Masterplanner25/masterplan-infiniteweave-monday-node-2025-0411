@@ -1,0 +1,239 @@
+"""
+Nodus Memory Bridge
+
+Connects the Nodus language runtime to A.I.N.D.Y.'s
+Memory Bridge. Provides recall() and remember() as
+callable functions from within Nodus task blocks.
+
+Integration pattern:
+  Nodus task executes
+    → calls recall() / remember() via this bridge
+    → bridge calls MemoryNodeDAO
+    → results flow back into Nodus execution context
+
+This makes memory a first-class primitive in Nodus —
+tasks can retrieve and store knowledge as part of their
+execution logic, not as an afterthought.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+
+class NodusMemoryBridge:
+    """
+    Bridge between Nodus task execution and A.I.N.D.Y.
+    Memory Bridge.
+
+    Instantiated once per Nodus session with a DB connection
+    and user context. Provides the recall() and remember()
+    functions that Nodus tasks call.
+    """
+
+    def __init__(
+        self,
+        db=None,
+        user_id: str = None,
+        session_tags: list[str] = None,
+    ):
+        self.db = db
+        self.user_id = user_id
+        self.session_tags = session_tags or []
+        self._dao = None
+        self._engine = None
+
+    @property
+    def dao(self):
+        if self._dao is None and self.db:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            self._dao = MemoryNodeDAO(self.db)
+        return self._dao
+
+    @property
+    def engine(self):
+        if self._engine is None and self.db:
+            from services.memory_capture_engine import MemoryCaptureEngine
+            self._engine = MemoryCaptureEngine(
+                db=self.db,
+                user_id=self.user_id,
+            )
+        return self._engine
+
+    def recall(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        node_type: str = None,
+        limit: int = 3,
+    ) -> list[dict]:
+        """
+        Recall relevant memories from within a Nodus task.
+
+        Usage in Nodus:
+          let context = recall(["authentication"])
+          let past = recall("how did we handle auth")
+
+        Returns list of memory dicts with resonance scores.
+        Returns [] if no DB connection or on any error.
+        """
+        if not self.dao:
+            logger.warning(
+                "NodusMemoryBridge.recall() called without DB"
+            )
+            return []
+
+        try:
+            combined_tags = list(
+                set((tags or []) + self.session_tags)
+            )
+
+            results = self.dao.recall(
+                query=query,
+                tags=combined_tags or None,
+                limit=limit,
+                user_id=self.user_id,
+                node_type=node_type,
+            )
+
+            if isinstance(results, dict):
+                return results.get("results", [])
+            return results
+
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.recall() failed: %s",
+                exc,
+            )
+            return []
+
+    def remember(
+        self,
+        content: str,
+        outcome: str = "neutral",
+        tags: list[str] = None,
+        node_type: str = "outcome",
+        significance: float = 0.6,
+    ) -> Optional[str]:
+        """
+        Store a memory from within a Nodus task.
+
+        Usage in Nodus:
+          remember("implemented auth with JWT")
+          remember("chose Redis for session storage", "success")
+
+        Returns the node ID if stored, None if not significant
+        enough or on error.
+        """
+        if not self.engine:
+            logger.warning(
+                "NodusMemoryBridge.remember() called without DB"
+            )
+            return None
+
+        try:
+            combined_tags = list(
+                set((tags or []) + self.session_tags +
+                    ["nodus", "task_execution"])
+            )
+
+            node = self.engine.evaluate_and_capture(
+                event_type="task_completed",
+                content=content,
+                source="nodus_task",
+                tags=combined_tags,
+                node_type=node_type,
+                context={"significance": significance, "outcome": outcome},
+            )
+
+            return node.get("id") if node else None
+
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.remember() failed: %s",
+                exc,
+            )
+            return None
+
+    def get_suggestions(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        limit: int = 3,
+    ) -> list[dict]:
+        """
+        Get suggestions from within a Nodus task.
+
+        Usage in Nodus:
+          let hints = suggest("optimize this function")
+
+        Returns actionable suggestions based on past outcomes.
+        """
+        if not self.dao:
+            return []
+
+        try:
+            combined_tags = list(
+                set((tags or []) + self.session_tags)
+            )
+            result = self.dao.suggest(
+                query=query,
+                tags=combined_tags or None,
+                user_id=self.user_id,
+                limit=limit,
+            )
+            return result.get("suggestions", [])
+
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.get_suggestions() failed: %s",
+                exc,
+            )
+            return []
+
+    def record_outcome(
+        self,
+        node_id: str,
+        outcome: str,  # "success" | "failure" | "neutral"
+    ) -> None:
+        """
+        Record the outcome of using a recalled memory.
+
+        Usage in Nodus (after task completes):
+          record_outcome(memory_id, "success")
+
+        This closes the feedback loop — memories that
+        helped get boosted, ones that misled get suppressed.
+        """
+        if not self.dao or not node_id:
+            return
+
+        try:
+            self.dao.record_feedback(
+                node_id=node_id,
+                outcome=outcome,
+                user_id=self.user_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.record_outcome() failed: %s",
+                exc,
+            )
+
+
+def create_nodus_bridge(
+    db=None,
+    user_id: str = None,
+    session_tags: list[str] = None,
+) -> NodusMemoryBridge:
+    """
+    Factory function for creating a Nodus memory bridge.
+    """
+    return NodusMemoryBridge(
+        db=db,
+        user_id=user_id,
+        session_tags=session_tags or [],
+    )
