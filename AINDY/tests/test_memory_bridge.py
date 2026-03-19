@@ -344,12 +344,13 @@ class TestPythonFallbackSimilarity:
         assert result == 0.0
 
     def test_python_mismatched_length_behavior(self):
-    """Tests behavior for mismatched vector lengths."""
-    from services import calculation_services
-    a = [1.0, 0.0, 0.0]
-    b = [1.0, 0.0, 0.0, 99.0]
-    try:
-        result = calculation_services.semantic_similarity(a, b)
-        assert isinstance(result, float)
-    except (ValueError, Exception):
-        pass  # raising is also acceptable behavior
+
+        """Tests behavior for mismatched vector lengths."""
+        from services import calculation_services
+        a = [1.0, 0.0, 0.0]
+        b = [1.0, 0.0, 0.0, 99.0]
+        try:
+            result = calculation_services.semantic_similarity(a, b)
+            assert isinstance(result, float)
+        except (ValueError, Exception):
+            pass  # raising is also acceptable behavior  
