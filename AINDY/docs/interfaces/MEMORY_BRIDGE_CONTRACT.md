@@ -199,6 +199,49 @@ recency   = exp(-age_days / 30.0)   # half-life: 30 days
 tag_match = |node_tags ∩ query_tags| / |query_tags|
 ```
 
+## 9. Memory Router — v3 Endpoints (`/memory/*`)
+
+Added in Memory Bridge v3 (2026-03-18). Authentication: JWT Bearer (`Depends(get_current_user)`).
+
+### `PUT /memory/nodes/{node_id}`
+- Auth: JWT required.
+- Request body: `UpdateNodeRequest`
+  - `content: Optional[str]`
+  - `tags: Optional[List[str]]`
+  - `node_type: Optional[Literal["decision","outcome","insight","relationship"]]`
+  - `source: Optional[str]`
+- Behavior: updates a memory node and records previous values in `memory_node_history` when changes occur.
+- Response: node dict.
+
+### `GET /memory/nodes/{node_id}/history`
+- Auth: JWT required.
+- Query params: `limit` (int, default 20)
+- Response: `{ "node_id": str, "history": [...], "count": int }`
+
+### `GET /memory/nodes/{node_id}/traverse`
+- Auth: JWT required.
+- Query params: `max_depth` (default 3, capped at 5), `link_type` (optional), `min_strength` (default 0.0)
+- Response: traversal dict with `chain`, `nodes_visited`, `narrative`
+
+### `POST /memory/nodes/expand`
+- Auth: JWT required.
+- Request body: `ExpandRequest`
+  - `node_ids: List[str]` (max 10)
+  - `include_linked: bool` (default True)
+  - `include_similar: bool` (default True)
+  - `limit_per_node: int` (default 3)
+- Response: `{ original_node_ids, expanded_nodes, expansion_count, expansion_map }`
+
+### `POST /memory/recall/v3`
+- Auth: JWT required.
+- Request body: `RecallV3Request`
+  - `query: Optional[str]`
+  - `tags: Optional[List[str]]`
+  - `limit: Optional[int]`
+  - `node_type: Optional[Literal[...]]`
+  - `expand_results: Optional[bool]`
+- Behavior: when `expand_results=true`, returns results plus expanded context.
+
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
 |---|---|---|

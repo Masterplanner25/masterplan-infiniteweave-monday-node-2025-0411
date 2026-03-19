@@ -24,6 +24,13 @@ class CreateNodeRequest(BaseModel):
     extra: Optional[dict] = {}
 
 
+class UpdateNodeRequest(BaseModel):
+    content: Optional[str] = None
+    tags: Optional[List[str]] = None
+    node_type: Optional[NodeType] = None
+    source: Optional[str] = None
+
+
 class SimilaritySearchRequest(BaseModel):
     query: str
     limit: Optional[int] = 5
@@ -42,6 +49,21 @@ class CreateLinkRequest(BaseModel):
     source_id: str
     target_id: str
     link_type: Optional[str] = "related"
+
+
+class ExpandRequest(BaseModel):
+    node_ids: List[str]
+    include_linked: Optional[bool] = True
+    include_similar: Optional[bool] = True
+    limit_per_node: Optional[int] = 3
+
+
+class RecallV3Request(BaseModel):
+    query: Optional[str] = None
+    tags: Optional[List[str]] = None
+    limit: Optional[int] = 5
+    node_type: Optional[NodeType] = None
+    expand_results: Optional[bool] = False
 
 
 # ------------------------------------------------------------------
@@ -79,6 +101,56 @@ def get_node(
     if not node or node.get("user_id") != str(current_user["sub"]):
         raise HTTPException(status_code=404, detail="Memory node not found")
     return node
+
+
+@router.put("/nodes/{node_id}")
+def update_node(
+    node_id: str,
+    body: UpdateNodeRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Update a memory node.
+    Previous state is automatically recorded in history.
+    Only changed fields are recorded.
+    """
+    dao = MemoryNodeDAO(db)
+    updated = dao.update(
+        node_id=node_id,
+        user_id=str(current_user["sub"]),
+        content=body.content,
+        tags=body.tags,
+        node_type=body.node_type,
+        source=body.source,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Memory node not found")
+    return dao._node_to_dict(updated)
+
+
+@router.get("/nodes/{node_id}/history")
+def get_node_history(
+    node_id: str,
+    limit: Optional[int] = 20,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Get the change history for a memory node.
+    Returns previous states in reverse chronological order.
+    """
+    dao = MemoryNodeDAO(db)
+    history = dao.get_history(
+        node_id=node_id,
+        user_id=str(current_user["sub"]),
+        limit=limit,
+    )
+    return {
+        "node_id": node_id,
+        "history": history,
+        "count": len(history),
+    }
 
 
 @router.get("/nodes/{node_id}/links")
@@ -135,6 +207,72 @@ def create_link(
         raise HTTPException(status_code=422, detail=str(e))
 
 
+@router.get("/nodes/{node_id}/traverse")
+def traverse_from_node(
+    node_id: str,
+    max_depth: Optional[int] = 3,
+    link_type: Optional[str] = None,
+    min_strength: Optional[float] = 0.0,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    DFS traversal from a memory node.
+
+    Follows chains of thought by exploring the strongest
+    links depth-first up to max_depth hops.
+
+    Returns the full traversal tree and a human-readable
+    chain of thought narrative explaining WHY something
+    matters - not just WHAT was found.
+    """
+    if max_depth > 5:
+        max_depth = 5
+
+    dao = MemoryNodeDAO(db)
+    result = dao.traverse(
+        start_node_id=node_id,
+        max_depth=max_depth,
+        link_type=link_type,
+        user_id=str(current_user["sub"]),
+        min_strength=min_strength,
+    )
+
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="Memory node not found")
+
+    return result
+
+
+@router.post("/nodes/expand")
+def expand_nodes(
+    body: ExpandRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Expand a set of nodes to include their neighbors.
+
+    Takes a list of node IDs and returns their connected
+    context - both direct graph links and semantic neighbors.
+    """
+    if len(body.node_ids) > 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 10 nodes per expansion request",
+        )
+
+    dao = MemoryNodeDAO(db)
+    result = dao.expand(
+        node_ids=body.node_ids,
+        user_id=str(current_user["sub"]),
+        include_linked=body.include_linked,
+        include_similar=body.include_similar,
+        limit_per_node=body.limit_per_node,
+    )
+    return result
+
+
 @router.post("/nodes/search")
 def search_similar_nodes(
     body: SimilaritySearchRequest,
@@ -181,6 +319,53 @@ def recall_memories(
         user_id=str(current_user["sub"]),
         node_type=body.node_type,
     )
+    return {
+        "query": body.query,
+        "tags": body.tags,
+        "results": results,
+        "count": len(results),
+        "scoring": {
+            "semantic_weight": 0.6,
+            "tag_weight": 0.2,
+            "recency_weight": 0.2,
+        },
+    }
+
+
+@router.post("/recall/v3")
+def recall_v3(
+    body: RecallV3Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    v3 recall - resonance scoring + optional expansion.
+    """
+    if not body.query and not body.tags:
+        raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
+
+    dao = MemoryNodeDAO(db)
+    results = dao.recall(
+        query=body.query,
+        tags=body.tags,
+        limit=body.limit,
+        user_id=str(current_user["sub"]),
+        node_type=body.node_type,
+        expand_results=body.expand_results,
+    )
+
+    if isinstance(results, dict):
+        return {
+            **results,
+            "query": body.query,
+            "tags": body.tags,
+            "scoring": {
+                "semantic_weight": 0.6,
+                "tag_weight": 0.2,
+                "recency_weight": 0.2,
+            },
+        }
+
     return {
         "query": body.query,
         "tags": body.tags,

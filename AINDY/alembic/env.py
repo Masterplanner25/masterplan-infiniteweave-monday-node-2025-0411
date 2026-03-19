@@ -20,6 +20,7 @@ from sqlalchemy import engine_from_config, pool, create_engine
 from db.models import metrics_models  # ensures Alembic sees new models
 
 
+
 # -------------------------
 # Project root and sys.path
 # -------------------------
@@ -97,17 +98,20 @@ except ImportError:
 # Config helpers
 # -------------------------
 def get_database_url() -> str:
-    """
-    Return the database URL used for alembic.
-    Prefer `config.DATABASE_URL` if provided by config.py (memory bridge).
-    Otherwise fall back to the ini value `sqlalchemy.url`.
-    """
+    # 1. Check environment variable directly (CI/CD sets this)
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        return env_url
+    # 2. Fall back to config.py (local dev with .env file)
     if DATABASE_URL:
         return DATABASE_URL
-    # fallback to alembic.ini sqlalchemy.url
+    # 3. Fall back to alembic.ini
     url = config.get_main_option("sqlalchemy.url")
     if not url:
-        raise RuntimeError("No DATABASE_URL found: set config.DATABASE_URL or alembic.ini sqlalchemy.url")
+        raise RuntimeError(
+            "No DATABASE_URL found: set DATABASE_URL env var, "
+            "config.DATABASE_URL, or alembic.ini sqlalchemy.url"
+        )
     return url
 
 # -------------------------
