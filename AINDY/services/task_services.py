@@ -86,7 +86,11 @@ def complete_task(db: Session, name: str, user_id: str = None):
     if user_id:
         try:
             from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=user_id,
+                agent_namespace="user",
+            )
             engine.evaluate_and_capture(
                 event_type="task_completed",
                 content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",

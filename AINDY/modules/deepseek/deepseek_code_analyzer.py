@@ -304,7 +304,11 @@ class DeepSeekCodeAnalyzer:
                 try:
                     _summary = result.get("summary", "")[:300]
                     from services.memory_capture_engine import MemoryCaptureEngine
-                    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+                    engine = MemoryCaptureEngine(
+                        db=db,
+                        user_id=user_id,
+                        agent_namespace="arm",
+                    )
                     engine.evaluate_and_capture(
                         event_type="arm_analysis_complete",
                         content=f"ARM analysis of {path.name}: {_summary}",
@@ -453,7 +457,11 @@ class DeepSeekCodeAnalyzer:
                 try:
                     _task_summary = prompt[:100]
                     from services.memory_capture_engine import MemoryCaptureEngine
-                    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+                    engine = MemoryCaptureEngine(
+                        db=db,
+                        user_id=user_id,
+                        agent_namespace="arm",
+                    )
                     engine.evaluate_and_capture(
                         event_type="arm_generation_complete",
                         content=f"ARM generated {language} code for: {_task_summary}",

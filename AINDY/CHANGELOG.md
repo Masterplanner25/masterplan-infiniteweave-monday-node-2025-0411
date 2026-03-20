@@ -1,5 +1,24 @@
 ## [Unreleased] ? feature/cpp-semantic-engine
 
+### Added (2026-03-19 - Memory Bridge v5 Phase 3: Multi-Agent Memory)
+- `alembic/versions/a2ec23964f2c_multi_agent_memory_v5_phase3.py` - migration: `agents` table; `source_agent` + `is_shared` on `memory_nodes`; seeds system agents.
+- `db/models/agent.py` - Agent registry model and namespace constants.
+- `db/dao/memory_node_dao.py` - federated DAO methods: `save_as_agent()`, `recall_from_agent()`, `recall_federated()`, `share_memory()`.
+- `routes/memory_router.py` - federated endpoints:
+  - `POST /memory/federated/recall`
+  - `GET /memory/agents`
+  - `GET /memory/agents/{namespace}/recall`
+  - `POST /memory/nodes/{node_id}/share`
+- `bridge/nodus_memory_bridge.py` - federation helpers: `recall_from`, `recall_all_agents`, `share`.
+- `tests/test_memory_bridge_v5_phase3.py` - phase 3 test suite.
+- `tests/validate_memory_v5_phase3.py` - live validation script.
+
+### Changed (2026-03-19 - Memory Bridge v5 Phase 3)
+- `services/memory_capture_engine.py` now tags nodes with `source_agent` and `is_shared` (ARM/Genesis auto-share).
+- ARM, Genesis, LeadGen, Task workflows now pass `agent_namespace` to `MemoryCaptureEngine`.
+- Genesis synthesis and conversation calls now query ARM shared insights before LLM calls.
+- Nodus runtime built-ins extended: `recall_from`, `recall_all`, `share`.
+
 ### Added (2026-03-18 - Memory Bridge v5 Phase 1: Memory-Native Execution)
 - `services/memory_capture_engine.py` — centralized capture engine (significance scoring, dedup, auto-tagging, auto-linking).
 - `bridge/nodus_memory_bridge.py` — Nodus runtime bridge (recall/remember/suggest/record_outcome).

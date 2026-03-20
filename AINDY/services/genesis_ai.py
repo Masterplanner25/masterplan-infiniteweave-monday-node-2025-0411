@@ -58,6 +58,32 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
         except Exception as e:
             logging.warning(f"Genesis memory recall failed: {e}")
 
+    # Step 1b: Federated recall - ask ARM what it has learned
+    arm_context = ""
+    try:
+        if user_id and db:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            fed_dao = MemoryNodeDAO(db)
+            arm_memories = fed_dao.recall_from_agent(
+                agent_namespace="arm",
+                query=message,
+                tags=["insight", "analysis"],
+                limit=2,
+                user_id=user_id,
+                include_private=False,
+            )
+            if arm_memories:
+                arm_context = (
+                    "\n\nRelevant ARM analysis insights "
+                    "(from code reasoning engine):\n"
+                    + "\n".join(
+                        f"- {m['content'][:150]}"
+                        for m in arm_memories
+                    )
+                )
+    except Exception:
+        pass
+
     # Step 2: Build prompt with injected memory + identity context
     identity_context = ""
     try:
@@ -68,7 +94,9 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     except Exception:
         pass
 
-    system_content = GENESIS_SYSTEM_PROMPT + prior_context + identity_context
+    system_content = (
+        GENESIS_SYSTEM_PROMPT + prior_context + arm_context + identity_context
+    )
     response = client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -106,7 +134,11 @@ Return only valid JSON.
     if user_id and db:
         try:
             from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=user_id,
+                agent_namespace="genesis",
+            )
 
             state_signals = []
             if current_state.get("vision_summary"):
@@ -167,12 +199,42 @@ Rules:
 """
 
 
-def call_genesis_synthesis_llm(current_state: dict) -> dict:
+def call_genesis_synthesis_llm(
+    current_state: dict,
+    user_id: str = None,
+    db=None,
+) -> dict:
     """Real GPT-4o synthesis call. Replaces the stub from initial implementation."""
+    arm_insights = ""
+    try:
+        if user_id and db:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            fed_dao = MemoryNodeDAO(db)
+            arm_memories = fed_dao.recall_from_agent(
+                agent_namespace="arm",
+                query=str(current_state),
+                tags=["insight"],
+                limit=3,
+                user_id=user_id,
+                include_private=False,
+            )
+            if arm_memories:
+                arm_insights = (
+                    "\n\nTechnical insights from ARM "
+                    "(code analysis engine):\n"
+                    + "\n".join(
+                        f"- {m['content'][:200]}"
+                        for m in arm_memories
+                    )
+                )
+    except Exception:
+        pass
+
+    system_prompt = SYNTHESIS_SYSTEM_PROMPT + arm_insights
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {
                 "role": "user",
                 "content": f"""

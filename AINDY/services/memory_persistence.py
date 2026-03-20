@@ -4,7 +4,7 @@ from datetime import datetime
 import uuid
 from typing import List, Optional
 
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_, event, Integer, Float
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Index, func, or_, event, Integer, Float, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -32,6 +32,8 @@ class MemoryNodeModel(Base):
     tags = Column(JSONB, nullable=False, default=list)
     node_type = Column(String(50), nullable=False)
     source = Column(String(255), nullable=True)
+    source_agent = Column(String, nullable=True, index=True)
+    is_shared = Column(Boolean, nullable=False, default=False)
     user_id = Column(String(255), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

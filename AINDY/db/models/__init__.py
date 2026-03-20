@@ -15,6 +15,7 @@ from .system_health_log import SystemHealthLog
 from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
+from .agent import Agent
 
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "User",
     "UserIdentity",
     "MemoryNodeHistory",
+    "Agent",
 ]

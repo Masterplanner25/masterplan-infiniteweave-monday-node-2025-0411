@@ -316,8 +316,11 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - **Pattern detection.** Detect recurring memory motifs across time windows (e.g., repeated decision→outcome→insight sequences).
 - ✅ **v5 integration:** identity layer implemented (preferences, behavior, evolution) with `/identity/*` endpoints and prompt injection.
 - ✅ **Resolved (2026-03-19):** Nodus stdlib `memory.nd` updated with Memory Bridge helpers (`recall`, `remember`, `suggest`, `record_outcome`) and extended functions.
-- **OPEN (2026-03-19):** v5 Phase 3 — multi-agent shared memory (cross-agent recall, shared nodes, conflict resolution).
+- ✅ **RESOLVED (2026-03-19):** v5 Phase 3 — multi-agent shared memory (agent registry, shared/private memory, federated recall).
 - **OPEN (2026-03-19):** Identity ML inference — replace rules-only observation with probabilistic or model-driven inference.
+- **OPEN (2026-03-19):** SYLVA agent implementation (reserved namespace, inactive system agent).
+- **OPEN (2026-03-19):** Embedding-based deduplication in capture engine (Phase 2 note in `MemoryCaptureEngine._is_duplicate`).
+- **OPEN (2026-03-19):** Agent trust levels and access policy tiers (future).
 | **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)

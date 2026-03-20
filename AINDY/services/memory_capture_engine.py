@@ -41,9 +41,10 @@ EVENT_SIGNIFICANCE = {
 
 
 class MemoryCaptureEngine:
-    def __init__(self, db, user_id: str):
+    def __init__(self, db, user_id: str, agent_namespace: str = "user"):
         self.db = db
         self.user_id = user_id
+        self.agent_namespace = agent_namespace
         self._dao = None
 
     @property
@@ -62,6 +63,7 @@ class MemoryCaptureEngine:
         node_type: str = None,
         context: dict = None,
         force: bool = False,
+        agent_namespace: str = None,
     ) -> Optional[dict]:
         """
         Main entry point. Evaluates whether an event is
@@ -124,6 +126,26 @@ class MemoryCaptureEngine:
                 node_type=node_type,
                 generate_embedding=True,
             )
+
+            # Step 6: Tag with agent namespace (federation)
+            try:
+                namespace = agent_namespace or self.agent_namespace or "user"
+                node_id = node.get("id") if isinstance(node, dict) else None
+                if node_id:
+                    db_node = self.dao._get_model_by_id(
+                        node_id,
+                        user_id=self.user_id,
+                    )
+                    if db_node:
+                        db_node.source_agent = namespace
+                        db_node.is_shared = namespace in {"genesis", "arm"}
+                        self.db.add(db_node)
+                        self.db.commit()
+                        self.db.refresh(db_node)
+                        node["source_agent"] = db_node.source_agent
+                        node["is_shared"] = db_node.is_shared
+            except Exception:
+                pass
 
             # Step 6: Auto-link to related memories
             self._auto_link(node, enriched_tags)

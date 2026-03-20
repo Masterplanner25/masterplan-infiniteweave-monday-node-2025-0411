@@ -68,6 +68,13 @@ class RecallV3Request(BaseModel):
     expand_results: Optional[bool] = False
 
 
+class FederatedRecallRequest(BaseModel):
+    query: Optional[str] = None
+    tags: Optional[list[str]] = None
+    agent_namespaces: Optional[list[str]] = None
+    limit: Optional[int] = 5
+
+
 class FeedbackRequest(BaseModel):
     outcome: Literal["success", "failure", "neutral"]
     context: Optional[str] = None
@@ -433,6 +440,139 @@ def recall_v3(
     }
 
 
+@router.post("/federated/recall")
+async def federated_recall(
+    body: FederatedRecallRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Federated recall across multiple agent namespaces.
+
+    Queries shared memory from each specified agent and
+    returns merged results ranked by resonance.
+    """
+    if not body.query and not body.tags:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one of: query, tags",
+        )
+
+    dao = MemoryNodeDAO(db)
+    result = dao.recall_federated(
+        query=body.query,
+        tags=body.tags,
+        agent_namespaces=body.agent_namespaces,
+        limit=body.limit,
+        user_id=str(current_user["sub"]),
+    )
+    return result
+
+
+@router.get("/agents")
+async def list_agents(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    List all registered agents and their memory stats.
+    """
+    from db.models.agent import Agent
+    from services.memory_persistence import MemoryNodeModel
+
+    agents = db.query(Agent).filter(
+        Agent.is_active == True
+    ).all()
+
+    result = []
+    for agent in agents:
+        node_count = db.query(MemoryNodeModel).filter(
+            MemoryNodeModel.source_agent == agent.memory_namespace,
+            MemoryNodeModel.user_id == str(current_user["sub"]),
+        ).count()
+
+        shared_count = db.query(MemoryNodeModel).filter(
+            MemoryNodeModel.source_agent == agent.memory_namespace,
+            MemoryNodeModel.user_id == str(current_user["sub"]),
+            MemoryNodeModel.is_shared == True,
+        ).count()
+
+        result.append({
+            "id": agent.id,
+            "name": agent.name,
+            "agent_type": agent.agent_type,
+            "description": agent.description,
+            "memory_namespace": agent.memory_namespace,
+            "is_active": agent.is_active,
+            "memory_stats": {
+                "total_nodes": node_count,
+                "shared_nodes": shared_count,
+                "private_nodes": node_count - shared_count,
+            },
+        })
+
+    return {
+        "agents": result,
+        "total": len(result),
+    }
+
+
+@router.post("/nodes/{node_id}/share")
+async def share_memory_node(
+    node_id: str,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Share a private memory node with all agents.
+
+    Once shared, any agent can read this node via
+    federated recall. Sharing cannot be undone.
+    """
+    dao = MemoryNodeDAO(db)
+    node = dao.share_memory(
+        node_id=node_id,
+        user_id=str(current_user["sub"]),
+    )
+    if not node:
+        raise HTTPException(status_code=404, detail="Memory node not found")
+
+    return {
+        "node_id": node_id,
+        "is_shared": node.is_shared,
+        "source_agent": node.source_agent,
+        "message": "Memory node is now shared with all agents.",
+    }
+
+
+@router.get("/agents/{namespace}/recall")
+async def recall_from_agent_endpoint(
+    namespace: str,
+    query: Optional[str] = None,
+    limit: Optional[int] = 5,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Query a specific agent's shared memory.
+    """
+    dao = MemoryNodeDAO(db)
+    results = dao.recall_from_agent(
+        agent_namespace=namespace,
+        query=query,
+        limit=limit,
+        user_id=str(current_user["sub"]),
+        include_private=False,
+    )
+
+    return {
+        "agent_namespace": namespace,
+        "query": query,
+        "results": results,
+        "count": len(results),
+    }
+
+
 @router.post("/nodes/{node_id}/feedback")
 async def record_node_feedback(
     node_id: str,
@@ -598,6 +738,9 @@ async def execute_nodus_task(
         runtime.register_function("remember", bridge.remember, arity=(1, 2, 3, 4, 5))
         runtime.register_function("suggest", bridge.get_suggestions, arity=(0, 1, 2, 3))
         runtime.register_function("record_outcome", bridge.record_outcome, arity=2)
+        runtime.register_function("recall_from", bridge.recall_from, arity=(1, 2, 3, 4))
+        runtime.register_function("recall_all", bridge.recall_all_agents, arity=(0, 1, 2, 3))
+        runtime.register_function("share", bridge.share, arity=1)
 
         result = runtime.run_source(
             body.task_code,
@@ -713,7 +856,11 @@ async def complete_execution_loop(
     )
     from db.dao.memory_node_dao import MemoryNodeDAO
 
-    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+    engine = MemoryCaptureEngine(
+        db=db,
+        user_id=user_id,
+        agent_namespace="user",
+    )
     dao = MemoryNodeDAO(db)
 
     event_type = f"{body.workflow}_complete"

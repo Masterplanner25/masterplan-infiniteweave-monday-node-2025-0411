@@ -34,6 +34,8 @@ class MemoryNodeDAO:
             "tags": n.tags,
             "node_type": n.node_type,
             "source": n.source,
+            "source_agent": getattr(n, "source_agent", None),
+            "is_shared": getattr(n, "is_shared", None),
             "user_id": n.user_id,
             "extra": n.extra,
             "created_at": n.created_at.isoformat() if n.created_at else None,
@@ -103,6 +105,48 @@ class MemoryNodeDAO:
             self.db.rollback()
             raise
 
+    def save_as_agent(
+        self,
+        content: str,
+        source: str,
+        agent_namespace: str,
+        tags: list[str] = None,
+        node_type: str = None,
+        is_shared: bool = False,
+        user_id: str = None,
+        generate_embedding: bool = True,
+    ) -> MemoryNodeModel:
+        """
+        Save a memory node with agent namespace tagging.
+
+        is_shared=True: visible to all agents for this user.
+        is_shared=False: private to this agent's namespace.
+        """
+        from services.embedding_service import generate_embedding as gen_emb
+
+        db_node = MemoryNodeModel(
+            content=content,
+            tags=tags or [],
+            node_type=node_type,
+            source=source,
+            source_agent=agent_namespace,
+            is_shared=is_shared,
+            user_id=user_id,
+            extra={},
+        )
+
+        if generate_embedding:
+            db_node.embedding = gen_emb(content)
+
+        try:
+            self.db.add(db_node)
+            self.db.commit()
+            self.db.refresh(db_node)
+            return db_node
+        except SQLAlchemyError:
+            self.db.rollback()
+            raise
+
     def get_by_id(self, node_id: str, user_id: str = None) -> Optional[dict]:
         """Return a node dict by UUID string, or None if not found."""
         db_node = self._get_model_by_id(node_id, user_id=user_id)
@@ -162,6 +206,8 @@ class MemoryNodeDAO:
             MemoryNodeModel.tags,
             MemoryNodeModel.node_type,
             MemoryNodeModel.source,
+            MemoryNodeModel.source_agent,
+            MemoryNodeModel.is_shared,
             MemoryNodeModel.user_id,
             MemoryNodeModel.extra,
             MemoryNodeModel.created_at,
@@ -189,6 +235,8 @@ class MemoryNodeDAO:
                     "tags": row.tags,
                     "node_type": row.node_type,
                     "source": row.source,
+                    "source_agent": row.source_agent,
+                    "is_shared": row.is_shared,
                     "user_id": row.user_id,
                     "extra": row.extra,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -420,6 +468,132 @@ class MemoryNodeDAO:
             }
 
         return results
+
+    def recall_from_agent(
+        self,
+        agent_namespace: str,
+        query: str = None,
+        tags: list[str] = None,
+        limit: int = 5,
+        user_id: str = None,
+        include_private: bool = False,
+    ) -> list[dict]:
+        """
+        Query memory from a specific agent's namespace.
+
+        include_private: if True, also return private nodes.
+        Cross-agent queries must use include_private=False.
+        """
+        try:
+            results = self.recall(
+                query=query,
+                tags=tags,
+                limit=limit * 5,
+                user_id=user_id,
+            )
+
+            if isinstance(results, dict):
+                results = results.get("results", [])
+
+            filtered = [
+                r for r in results
+                if r.get("source_agent") == agent_namespace
+                and (include_private or r.get("is_shared") is True)
+            ]
+
+            return filtered[:limit]
+
+        except Exception as exc:
+            import logging
+            logging.warning(
+                "recall_from_agent failed for %s: %s",
+                agent_namespace,
+                exc,
+            )
+            return []
+
+    def recall_federated(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        agent_namespaces: list[str] = None,
+        limit: int = 5,
+        user_id: str = None,
+    ) -> dict:
+        """
+        Federated recall - query across multiple agents.
+
+        Queries each specified agent's shared memory and
+        merges results by resonance score.
+        """
+        from db.models.agent import SYSTEM_AGENTS
+
+        namespaces = agent_namespaces or list(SYSTEM_AGENTS)
+
+        results_by_agent = {}
+        all_results = []
+
+        for namespace in namespaces:
+            agent_results = self.recall_from_agent(
+                agent_namespace=namespace,
+                query=query,
+                tags=tags,
+                limit=limit,
+                user_id=user_id,
+                include_private=False,
+            )
+
+            if agent_results:
+                results_by_agent[namespace] = agent_results
+                all_results.extend(agent_results)
+
+        seen_ids = set()
+        merged = []
+        for result in sorted(
+            all_results,
+            key=lambda x: x.get("resonance_score", 0),
+            reverse=True,
+        ):
+            if result["id"] not in seen_ids:
+                seen_ids.add(result["id"])
+                merged.append(result)
+
+        return {
+            "query": query,
+            "tags": tags,
+            "agents_queried": namespaces,
+            "results_by_agent": results_by_agent,
+            "merged_results": merged[:limit],
+            "total_found": len(merged),
+            "federation_summary": {
+                namespace: len(results)
+                for namespace, results in results_by_agent.items()
+            },
+        }
+
+    def share_memory(
+        self,
+        node_id: str,
+        user_id: str,
+    ) -> Optional[MemoryNodeModel]:
+        """
+        Make a private memory node visible to all agents.
+
+        Once shared, any agent querying this user's shared
+        memory pool can see this node.
+        Cannot be unshared (append-only sharing policy).
+        """
+        node = self._get_model_by_id(node_id, user_id=user_id)
+        if not node:
+            return None
+
+        if not node.is_shared:
+            node.is_shared = True
+            self.db.add(node)
+            self.db.commit()
+            self.db.refresh(node)
+
+        return node
 
     def recall_by_type(
         self,
