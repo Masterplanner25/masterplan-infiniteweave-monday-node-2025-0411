@@ -53,7 +53,8 @@ Primary backend entry point: `AINDY/main.py`.
 │  ├── research_results                                      │
 │  ├── master_plans / genesis_sessions                       │
 │  ├── users                                                 │
-│  └── … (18 total ORM models)                               │
+│  ├── user_identity                                         │
+│  └── … (19 total ORM models)                               │
 └────────────────────────────────────────────────────────────┘
        │
 ┌──────▼────────────────────────────────────────────────────┐
@@ -80,6 +81,7 @@ Primary backend entry point: `AINDY/main.py`.
 - Domain logic in `AINDY/services/`.
 - Data models in `AINDY/db/models/`.
 - Pydantic schemas in `AINDY/schemas/`.
+- Identity Layer: `services/identity_service.py` + `routes/identity_router.py`, backed by `user_identity` table.
 
 **Databases**
 - Primary relational DB: PostgreSQL (enforced by `AINDY/config.py`).

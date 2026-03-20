@@ -314,9 +314,10 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - ✅ **Automatic memory capture.** Implemented in Memory Bridge v5 Phase 1 via centralized capture engine (no manual calls).
 - ✅ **Nodus runtime integration.** Implemented in Memory Bridge v5 Phase 1 via `NodusMemoryBridge` + v5 endpoints.
 - **Pattern detection.** Detect recurring memory motifs across time windows (e.g., repeated decision→outcome→insight sequences).
-- **v5 integration:** identity layer.
-- **OPEN (2026-03-18):** Nodus stdlib `memory.nd` not updated to expose A.I.N.D.Y. Memory Bridge helpers (`recall`, `remember`, `suggest`, `record_outcome`). Pending opt-in change to `C:\dev\Coding Language\src\nodus\stdlib\memory.nd` once approved.
-- **OPEN (2026-03-18):** v5 Phase 2 deferred items — identity layer (preferences/behavior/evolution) and multi-agent shared memory.
+- ✅ **v5 integration:** identity layer implemented (preferences, behavior, evolution) with `/identity/*` endpoints and prompt injection.
+- ✅ **Resolved (2026-03-19):** Nodus stdlib `memory.nd` updated with Memory Bridge helpers (`recall`, `remember`, `suggest`, `record_outcome`) and extended functions.
+- **OPEN (2026-03-19):** v5 Phase 3 — multi-agent shared memory (cross-agent recall, shared nodes, conflict resolution).
+- **OPEN (2026-03-19):** Identity ML inference — replace rules-only observation with probabilistic or model-driven inference.
 | **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)

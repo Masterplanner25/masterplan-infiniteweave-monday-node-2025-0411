@@ -16,10 +16,15 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Architecture specifications
 * Interface contracts
 * Governance policies
+* Identity Layer (v5 Phase 2): `user_identity` table, `UserIdentity` ORM model, `IdentityService`
+* Identity API endpoints: `GET/PUT /identity/`, `GET /identity/evolution`, `GET /identity/context`
+* Identity Layer tests (`tests/test_identity_layer.py`) and migration `bb4935e07dec_identity_layer_v5_phase2`
 
 ## Changed
 
 * Ongoing improvements to runtime behavior and system architecture
+* ARM analysis and Genesis prompts now inject identity context when available
+* Masterplan lock flow now observes identity posture signals for inference
 
 ---
 

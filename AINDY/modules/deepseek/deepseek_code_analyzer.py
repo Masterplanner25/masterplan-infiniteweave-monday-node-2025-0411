@@ -194,6 +194,22 @@ class DeepSeekCodeAnalyzer:
                 except Exception as _mem_exc:
                     logger.debug("[ARM] Memory recall skipped: %s", _mem_exc)
 
+            # Step 2c — Inject identity context (non-blocking)
+            identity_context = ""
+            try:
+                from services.identity_service import IdentityService
+                id_service = IdentityService(db=db, user_id=user_id)
+                identity_context = id_service.get_context_for_prompt()
+                id_service.observe(
+                    event_type="arm_analysis_complete",
+                    context={
+                        "language": path.suffix.lstrip("."),
+                        "file_type": path.suffix,
+                    },
+                )
+            except Exception:
+                pass
+
             # Step 3 — Build prompt
             context_section = (
                 f"\nAdditional context: {additional_context}\n"
@@ -215,6 +231,7 @@ class DeepSeekCodeAnalyzer:
                 f"File: {path.name}\n"
                 f"{context_section}"
                 f"{prior_context_section}"
+                f"{identity_context}"
                 f"```{path.suffix.lstrip('.')}\n"
                 f"{chunks[0]}\n"
                 f"```"

@@ -503,6 +503,36 @@ This document maps the current data model strictly as implemented in the reposit
 - Relationships: None
 - Purpose: Stores authenticated application users. Created by `register_user()` in `AINDY/services/auth_service.py`. Password is stored as a bcrypt hash; plaintext is never persisted.
 
+### `AINDY/db/models/user_identity.py`
+
+#### UserIdentity (`user_identity`)
+- Table args
+- `UniqueConstraint` on (`user_id`) named `uq_user_identity_user`
+- Columns
+- `id`: String, primary key, default: uuid.uuid4 (stringified), nullable: not explicitly set (primary key implies non-null)
+- `user_id`: String, ForeignKey("users.id"), nullable=False, unique=True, index=True
+- `tone`: String, nullable=True
+- `communication_notes`: Text, nullable=True
+- `preferred_languages`: JSON, nullable: not explicitly set, default=list
+- `preferred_tools`: JSON, nullable: not explicitly set, default=list
+- `avoided_tools`: JSON, nullable: not explicitly set, default=list
+- `risk_tolerance`: String, nullable=True
+- `speed_vs_quality`: String, nullable=True
+- `decision_notes`: Text, nullable=True
+- `learning_style`: String, nullable=True
+- `detail_preference`: String, nullable=True
+- `learning_notes`: Text, nullable=True
+- `observation_count`: Integer, nullable: not explicitly set, default=0
+- `last_updated`: DateTime(timezone=True), nullable=True
+- `evolution_log`: JSON, nullable: not explicitly set, default=list
+- `created_at`: DateTime(timezone=True), nullable: not explicitly set, server_default=func.now()
+- Primary key: `id`
+- Unique constraints: `uq_user_identity_user` (user_id unique)
+- Indexes: `user_id` (index=True)
+- Foreign keys: `user_id -> users.id`
+- Relationships: None
+- Purpose: Stores per-user identity preferences and evolution history inferred by `IdentityService`.
+
 ### `AINDY/db/models/social_models.py`
 - Not an ORM module. Defines Pydantic models only (`SocialProfile`, `SocialPost`, `Connection`, `FeedItem`).
 - No SQLAlchemy tables are declared in this file.
@@ -531,6 +561,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Memory Bridge v4 migration (2026-03-18):**
 - `5b14b05e179f` - `memory_bridge_v4_feedback_columns`: adds feedback columns to `memory_nodes` (`success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`).
+
+**Identity Layer migration (2026-03-19):**
+- `bb4935e07dec` - `identity_layer_v5_phase2`: adds `user_identity` table (one row per user) with preference dimensions and evolution tracking.
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
