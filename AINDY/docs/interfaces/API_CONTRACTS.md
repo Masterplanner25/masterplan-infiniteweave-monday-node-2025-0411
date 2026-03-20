@@ -26,6 +26,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
 - `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
 - `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
+- `AINDY/routes/identity_router.py` (prefix `/identity`) **[JWT auth required]**
 
 **Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
@@ -996,6 +997,38 @@ Auth: JWT Bearer
 Response: `{ "status": "activated", "plan_id": int }`
 Status Codes: 200, 404 if not found or not owned.
 Notes: Deactivates all other user plans first.
+
+### Identity Routes (`AINDY/routes/identity_router.py`, prefix `/identity`) **[JWT auth required]** — Memory Bridge v5 Phase 2 (2026-03-19)
+
+`GET /identity/`
+Method: GET
+Auth: JWT Bearer
+Response: Identity profile summary with communication, tools, decision_making, learning, evolution blocks.
+Status Codes: 200, 401.
+
+`PUT /identity/`
+Method: PUT
+Auth: JWT Bearer
+Request Body: `UpdateIdentityRequest` (inline Pydantic model)
+- `tone`, `preferred_languages`, `preferred_tools`, `avoided_tools`
+- `risk_tolerance`, `speed_vs_quality`
+- `learning_style`, `detail_preference`
+- `communication_notes`, `decision_notes`, `learning_notes`
+Response: `{ "changes_recorded": int, "changes": [...], "profile": {...} }`
+Status Codes: 200, 401, 422.
+Notes: Invalid enum values are silently ignored in service validation.
+
+`GET /identity/evolution`
+Method: GET
+Auth: JWT Bearer
+Response: Evolution summary with observation_count, total_changes, dimensions_evolved, recent_changes.
+Status Codes: 200, 401.
+
+`GET /identity/context`
+Method: GET
+Auth: JWT Bearer
+Response: `{ "context": str, "is_empty": bool, "message": str }`
+Status Codes: 200, 401.
 
 ## 3. Genesis API Contract (Current Implementation — Genesis Blocks 1-3)
 - `POST /genesis/session` binds `user_id_str` from JWT `sub`. All subsequent queries scoped to that user.

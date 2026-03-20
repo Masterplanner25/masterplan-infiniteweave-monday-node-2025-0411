@@ -58,9 +58,17 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
         except Exception as e:
             logging.warning(f"Genesis memory recall failed: {e}")
 
-    # Step 2: Build prompt with injected memory context
-    system_content = GENESIS_SYSTEM_PROMPT + prior_context
+    # Step 2: Build prompt with injected memory + identity context
+    identity_context = ""
+    try:
+        if user_id and db:
+            from services.identity_service import IdentityService
+            id_service = IdentityService(db=db, user_id=user_id)
+            identity_context = id_service.get_context_for_prompt()
+    except Exception:
+        pass
 
+    system_content = GENESIS_SYSTEM_PROMPT + prior_context + identity_context
     response = client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -285,3 +293,4 @@ Return only valid JSON.
         "overall_confidence": 0.0,
         "audit_summary": "Audit could not be completed due to a service error."
     }
+

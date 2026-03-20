@@ -3705,3 +3705,54 @@
 2026-03-18 20:40:29,349 - INFO - Retrying request to /embeddings in 0.781711 seconds
 2026-03-18 20:40:30,148 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
 2026-03-18 20:40:48,944 - INFO - Loaded development environment from .env
+2026-03-18 23:17:37,976 - INFO - Loaded development environment from .env
+2026-03-18 23:18:15,573 - INFO - Loaded development environment from .env
+2026-03-18 23:20:19,223 - INFO - Loaded development environment from .env
+2026-03-18 23:20:21,327 - INFO - Retrying request to /embeddings in 0.430676 seconds
+2026-03-18 23:20:21,796 - INFO - Retrying request to /embeddings in 0.854219 seconds
+2026-03-18 23:20:23,707 - INFO - Retrying request to /embeddings in 0.460231 seconds
+2026-03-18 23:20:24,169 - INFO - Retrying request to /embeddings in 0.992858 seconds
+2026-03-18 23:20:27,227 - INFO - Retrying request to /embeddings in 0.456571 seconds
+2026-03-18 23:20:27,697 - INFO - Retrying request to /embeddings in 0.923997 seconds
+2026-03-18 23:20:28,637 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:20:28,710 - INFO - Captured memory [decision] from masterplan_locked (significance=0.60): Strategic MasterPlan V1 locked: Building a SaaS pr...
+2026-03-18 23:20:28,740 - INFO - Retrying request to /embeddings in 0.406678 seconds
+2026-03-18 23:20:29,164 - INFO - Retrying request to /embeddings in 0.934956 seconds
+2026-03-18 23:20:31,157 - INFO - Retrying request to /embeddings in 0.422099 seconds
+2026-03-18 23:20:31,607 - INFO - Retrying request to /embeddings in 0.908376 seconds
+2026-03-18 23:20:34,579 - INFO - Retrying request to /embeddings in 0.458570 seconds
+2026-03-18 23:20:35,057 - INFO - Retrying request to /embeddings in 0.901158 seconds
+2026-03-18 23:20:35,983 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:20:36,003 - INFO - Captured memory [outcome] from task_completed (significance=0.37): Nodus task 'build_auth' completed. Used JWT with r...
+2026-03-18 23:20:36,016 - INFO - Retrying request to /embeddings in 0.379964 seconds
+2026-03-18 23:20:36,422 - INFO - Retrying request to /embeddings in 0.895362 seconds
+2026-03-18 23:20:38,385 - INFO - Retrying request to /embeddings in 0.461701 seconds
+2026-03-18 23:20:38,868 - INFO - Retrying request to /embeddings in 0.921793 seconds
+2026-03-18 23:20:41,851 - INFO - Retrying request to /embeddings in 0.421136 seconds
+2026-03-18 23:20:42,315 - INFO - Retrying request to /embeddings in 0.816969 seconds
+2026-03-18 23:20:43,165 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:20:43,281 - INFO - Retrying request to /embeddings in 0.494051 seconds
+2026-03-18 23:20:43,795 - INFO - Retrying request to /embeddings in 0.875813 seconds
+2026-03-18 23:20:45,711 - INFO - Retrying request to /embeddings in 0.397930 seconds
+2026-03-18 23:20:46,146 - INFO - Retrying request to /embeddings in 0.918755 seconds
+2026-03-18 23:20:49,128 - INFO - Retrying request to /embeddings in 0.477369 seconds
+2026-03-18 23:20:49,623 - INFO - Retrying request to /embeddings in 0.793418 seconds
+2026-03-18 23:20:50,458 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:20:50,539 - INFO - Retrying request to /embeddings in 0.412255 seconds
+2026-03-18 23:20:50,961 - INFO - Retrying request to /embeddings in 0.766712 seconds
+2026-03-18 23:20:52,793 - INFO - Retrying request to /embeddings in 0.479260 seconds
+2026-03-18 23:20:53,306 - INFO - Retrying request to /embeddings in 0.877093 seconds
+2026-03-18 23:20:56,256 - INFO - Retrying request to /embeddings in 0.394989 seconds
+2026-03-18 23:20:56,689 - INFO - Retrying request to /embeddings in 0.885805 seconds
+2026-03-18 23:20:57,622 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:20:57,730 - INFO - Retrying request to /embeddings in 0.487120 seconds
+2026-03-18 23:20:58,261 - INFO - Retrying request to /embeddings in 0.810980 seconds
+2026-03-18 23:21:00,133 - INFO - Retrying request to /embeddings in 0.380000 seconds
+2026-03-18 23:21:00,548 - INFO - Retrying request to /embeddings in 0.891104 seconds
+2026-03-18 23:21:03,508 - INFO - Retrying request to /embeddings in 0.398000 seconds
+2026-03-18 23:21:03,943 - INFO - Retrying request to /embeddings in 0.955950 seconds
+2026-03-18 23:21:04,935 - WARNING - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-18 23:21:04,955 - INFO - Captured memory [outcome] from task_completed (significance=0.35): Completed auth feature implementation. JWT + refre...
+2026-03-18 23:39:33,724 - INFO - Loaded development environment from .env
+2026-03-18 23:40:20,724 - INFO - Loaded development environment from .env
+2026-03-19 19:53:08,032 - INFO - Loaded development environment from .env

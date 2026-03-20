@@ -44,6 +44,7 @@ def app():
         # Make SessionLocal return a mock session
         mock_session = MagicMock()
         mock_session.query.return_value = mock_session
+        mock_session.filter.return_value = mock_session
         mock_session.filter_by.return_value = mock_session
         mock_session.first.return_value = None
         mock_session.add.return_value = None
@@ -69,6 +70,7 @@ def client(app):
 
         mock_session = MagicMock()
         mock_session.query.return_value = mock_session
+        mock_session.filter.return_value = mock_session
         mock_session.filter_by.return_value = mock_session
         mock_session.first.return_value = None
         mock_session.add.return_value = None
