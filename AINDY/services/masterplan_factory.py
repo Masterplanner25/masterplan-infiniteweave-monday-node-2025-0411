@@ -76,7 +76,11 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
     if user_id:
         try:
             from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=user_id,
+                agent_namespace="genesis",
+            )
             vision = ""
             if isinstance(draft_to_use, dict):
                 vision = str(draft_to_use.get("vision_statement") or draft_to_use.get("vision_summary") or "")

@@ -49,6 +49,24 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: None
 - Relationships: None
 
+### `AINDY/db/models/agent.py`
+
+#### Agent (`agents`)
+- Columns
+- `id`: String, primary key, nullable: not explicitly set (primary key implies non-null), default: not defined
+- `name`: String, nullable=False, unique=True
+- `agent_type`: String, nullable=False
+- `description`: Text, nullable=True
+- `owner_user_id`: String, nullable=True
+- `is_active`: Boolean, nullable=False, default=True
+- `memory_namespace`: String, nullable=False, unique=True
+- `created_at`: DateTime(timezone=True), nullable: not explicitly set, server_default=func.now()
+- Primary key: `id`
+- Unique constraints: `name`, `memory_namespace`
+- Indexes: Not explicitly defined in current implementation.
+- Foreign keys: None
+- Relationships: None
+
 ### `AINDY/db/models/author_model.py`
 
 #### AuthorDB (`authors`)
@@ -565,6 +583,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 **Identity Layer migration (2026-03-19):**
 - `bb4935e07dec` - `identity_layer_v5_phase2`: adds `user_identity` table (one row per user) with preference dimensions and evolution tracking.
 
+**Memory Bridge v5 Phase 3 migration (2026-03-19):**
+- `a2ec23964f2c` - `multi_agent_memory_v5_phase3`: adds `agents` table, adds `source_agent` + `is_shared` columns to `memory_nodes`, seeds system agents.
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -627,6 +648,8 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `tags`: JSONB, nullable=False, default=list
 - `node_type`: String(50), nullable=False
 - `source`: String(255), nullable=True
+- `source_agent`: String, nullable=True
+- `is_shared`: Boolean, nullable=False, default=False
 - `user_id`: String(255), nullable=True
 - `created_at`: DateTime, nullable=False, server_default=func.now()
 - `updated_at`: DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
@@ -640,6 +663,7 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `weight`: Float, nullable=False, default=1.0
 - Indexes
 - `ix_memory_nodes_tags_gin` on `tags` using GIN
+- `ix_memory_nodes_source_agent` on `source_agent`
 - Unique constraints: Not explicitly defined in current implementation.
 - Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` validated by SQLAlchemy `before_insert` / `before_update` event listener in `services/memory_persistence.py`. Non-null `node_type` values outside this set raise `ValueError` at ORM layer.
 - pgvector extension required: `CREATE EXTENSION IF NOT EXISTS vector` (included in migration `mb2embed0001`).

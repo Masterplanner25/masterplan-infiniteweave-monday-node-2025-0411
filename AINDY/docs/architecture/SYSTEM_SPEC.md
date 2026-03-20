@@ -261,6 +261,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - Pydantic request/response schemas live in `AINDY/schemas/*.py` and route-local BaseModels.
 - Service functions should accept a SQLAlchemy `Session` and operate only through ORM models.
 - The Memory Bridge tables (`memory_nodes`, `memory_links`) are separate from symbolic filesystem traces.
+- The agent registry (`agents` table) defines memory namespaces for federated memory.
 
 ## 6. Invariants That Must Not Be Broken
 - **PostgreSQL requirement**: `DATABASE_URL` must be a PostgreSQL URI (enforced in `AINDY/config.py`).

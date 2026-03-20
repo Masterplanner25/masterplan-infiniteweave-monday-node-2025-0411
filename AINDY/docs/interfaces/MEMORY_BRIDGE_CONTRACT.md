@@ -275,6 +275,34 @@ Added in Memory Bridge v3 (2026-03-18). Authentication: JWT Bearer (`Depends(get
 - Behavior: returns suggestions based on high-performing past memories.
 - Errors: 400 if neither `query` nor `tags` provided.
 
+## 10. Memory Router — v5 Phase 3 Endpoints (`/memory/*`)
+
+Added in Memory Bridge v5 Phase 3 (2026-03-19). Authentication: JWT Bearer (`Depends(get_current_user)`).
+
+### `POST /memory/federated/recall`
+- Auth: JWT required.
+- Request body: `FederatedRecallRequest`
+  - `query: Optional[str]`
+  - `tags: Optional[List[str]]`
+  - `agent_namespaces: Optional[List[str]]`
+  - `limit: Optional[int]` (default 5)
+- Validation: at least one of `query` or `tags` required; 400 otherwise.
+- Response: merged, ranked results across requested agents, plus per-agent grouping.
+
+### `GET /memory/agents`
+- Auth: JWT required.
+- Response: list of active agents with per-user memory stats (total/shared/private).
+
+### `GET /memory/agents/{namespace}/recall`
+- Auth: JWT required.
+- Query params: `query` (optional), `limit` (default 5).
+- Response: shared memories for the specified agent namespace.
+
+### `POST /memory/nodes/{node_id}/share`
+- Auth: JWT required.
+- Behavior: flips `is_shared=True` (one-way). Once shared, node is visible to all agents.
+- Response: `{ node_id, is_shared, source_agent, message }`.
+
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
 |---|---|---|

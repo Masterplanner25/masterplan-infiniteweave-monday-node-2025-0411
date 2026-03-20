@@ -76,6 +76,12 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/nodes/{node_id}/performance` — JWT required. Returns performance metrics for a node.
 - `POST /memory/suggest` — JWT required. Body: `SuggestRequest {query?, tags?, context?, limit?}`. Returns recommendations based on past high-performing memories.
 
+**Memory Bridge v5 Phase 3 additions (2026-03-19):**
+- `POST /memory/federated/recall` — JWT required. Body: `FederatedRecallRequest {query?, tags?, agent_namespaces?, limit?}`. Returns merged, ranked results across agents.
+- `GET /memory/agents` — JWT required. Returns list of agents and per-user memory stats.
+- `GET /memory/agents/{namespace}/recall` — JWT required. Query params: `query`, `limit`. Returns shared memories from a specific agent namespace.
+- `POST /memory/nodes/{node_id}/share` — JWT required. Shares a private node across all agents (one-way).
+
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,
   runs GPT-4o strategic integrity audit. Returns: `{audit_passed, findings, overall_confidence, audit_summary}`.

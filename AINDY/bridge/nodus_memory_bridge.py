@@ -39,10 +39,12 @@ class NodusMemoryBridge:
         db=None,
         user_id: str = None,
         session_tags: list[str] = None,
+        agent_namespace: str = "nodus",
     ):
         self.db = db
         self.user_id = user_id
         self.session_tags = session_tags or []
+        self.agent_namespace = agent_namespace
         self._dao = None
         self._engine = None
 
@@ -60,6 +62,7 @@ class NodusMemoryBridge:
             self._engine = MemoryCaptureEngine(
                 db=self.db,
                 user_id=self.user_id,
+                agent_namespace=self.agent_namespace,
             )
         return self._engine
 
@@ -147,6 +150,7 @@ class NodusMemoryBridge:
                 tags=combined_tags,
                 node_type=node_type,
                 context={"significance": significance, "outcome": outcome},
+                agent_namespace=self.agent_namespace,
             )
 
             return node.get("id") if node else None
@@ -157,6 +161,77 @@ class NodusMemoryBridge:
                 exc,
             )
             return None
+
+    def recall_from(
+        self,
+        agent_namespace: str,
+        query: str = None,
+        tags: list[str] = None,
+        limit: int = 3,
+    ) -> list[dict]:
+        """
+        Query another agent's shared memory.
+        """
+        if not self.dao:
+            return []
+
+        try:
+            return self.dao.recall_from_agent(
+                agent_namespace=agent_namespace,
+                query=query,
+                tags=tags,
+                limit=limit,
+                user_id=self.user_id,
+                include_private=False,
+            )
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.recall_from() failed: %s",
+                exc,
+            )
+            return []
+
+    def recall_all_agents(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        limit: int = 5,
+    ) -> dict:
+        """
+        Federated query across all agents.
+        """
+        if not self.dao:
+            return {"merged_results": [], "results_by_agent": {}}
+
+        try:
+            return self.dao.recall_federated(
+                query=query,
+                tags=tags,
+                limit=limit,
+                user_id=self.user_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.recall_all_agents() failed: %s",
+                exc,
+            )
+            return {"merged_results": [], "results_by_agent": {}}
+
+    def share(self, node_id: str) -> bool:
+        """
+        Share a private memory with all agents.
+        """
+        if not self.dao or not node_id:
+            return False
+
+        try:
+            result = self.dao.share_memory(
+                node_id=node_id,
+                user_id=self.user_id,
+            )
+            return result is not None
+        except Exception:
+            return False
 
     def get_suggestions(
         self,
@@ -228,6 +303,7 @@ def create_nodus_bridge(
     db=None,
     user_id: str = None,
     session_tags: list[str] = None,
+    agent_namespace: str = "nodus",
 ) -> NodusMemoryBridge:
     """
     Factory function for creating a Nodus memory bridge.
@@ -236,4 +312,5 @@ def create_nodus_bridge(
         db=db,
         user_id=user_id,
         session_tags=session_tags or [],
+        agent_namespace=agent_namespace,
     )

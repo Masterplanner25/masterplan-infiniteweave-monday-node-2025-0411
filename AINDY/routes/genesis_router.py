@@ -168,7 +168,11 @@ def synthesize_genesis(
         )
 
     current_state = session.summarized_state or {}
-    draft = call_genesis_synthesis_llm(current_state)
+    draft = call_genesis_synthesis_llm(
+        current_state,
+        user_id=user_id_str,
+        db=db,
+    )
 
     # Persist draft to session
     session.draft_json = draft
@@ -244,7 +248,11 @@ def lock_masterplan(
         _vision = ""
         if isinstance(draft, dict):
             _vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
-        engine = MemoryCaptureEngine(db=db, user_id=user_id_str)
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=user_id_str,
+            agent_namespace="genesis",
+        )
         engine.evaluate_and_capture(
             event_type="masterplan_locked",
             content=(
@@ -297,7 +305,11 @@ def activate_masterplan(
     # Write activation event to memory (fire-and-forget)
     try:
         from services.memory_capture_engine import MemoryCaptureEngine
-        engine = MemoryCaptureEngine(db=db, user_id=user_id_str)
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=user_id_str,
+            agent_namespace="genesis",
+        )
         engine.evaluate_and_capture(
             event_type="masterplan_activated",
             content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",

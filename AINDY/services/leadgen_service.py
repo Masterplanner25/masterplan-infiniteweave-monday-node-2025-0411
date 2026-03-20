@@ -86,7 +86,11 @@ def run_ai_search(query: str, user_id: str = None, db=None):
                 f"Top result: {top}"
             )
             from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=user_id,
+                agent_namespace="leadgen",
+            )
             engine.evaluate_and_capture(
                 event_type="leadgen_search",
                 content=memory_content,
