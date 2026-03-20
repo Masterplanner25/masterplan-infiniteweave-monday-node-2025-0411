@@ -231,8 +231,8 @@ class TestARMAnalysisMemoryHook:
         save_calls = mock_dao_instance.save.call_args_list
         assert len(save_calls) >= 1
         write_kwargs = save_calls[0][1]
-        assert write_kwargs["node_type"] == "outcome"
-        assert write_kwargs["source"] == "arm_analysis"
+        assert write_kwargs["node_type"] == "insight"
+        assert write_kwargs["source"].startswith("arm_analysis")
         assert "app.py" in write_kwargs["content"] or "ARM analysis" in write_kwargs["content"]
 
     def test_analysis_recall_runs_before_prompt(self):
@@ -353,7 +353,7 @@ class TestARMCodegenMemoryHook:
         assert len(save_calls) >= 1
         write_kwargs = save_calls[0][1]
         assert write_kwargs["node_type"] == "outcome"
-        assert write_kwargs["source"] == "arm_codegen"
+        assert write_kwargs["source"].startswith("arm_codegen")
         assert "python" in write_kwargs["tags"]
 
     def test_codegen_memory_failure_does_not_raise(self):

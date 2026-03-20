@@ -85,14 +85,14 @@ def complete_task(db: Session, name: str, user_id: str = None):
     # Write task completion to memory (fire-and-forget)
     if user_id:
         try:
-            from bridge import create_memory_node
-            create_memory_node(
+            from services.memory_capture_engine import MemoryCaptureEngine
+            engine = MemoryCaptureEngine(db=db, user_id=user_id)
+            engine.evaluate_and_capture(
+                event_type="task_completed",
                 content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",
                 source="task_service",
                 tags=["task", "completion"],
-                user_id=user_id,
-                db=db,
-                node_type="outcome",
+                context={"time_spent_seconds": task.time_spent},
             )
         except Exception:
             pass

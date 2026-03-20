@@ -1,4 +1,5 @@
 from .bridge import create_memory_node, create_memory_link, recall_memories
+from .nodus_memory_bridge import NodusMemoryBridge, create_nodus_bridge
 
 
 def suggest_from_memory(

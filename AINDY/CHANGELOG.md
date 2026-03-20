@@ -1,5 +1,19 @@
 ## [Unreleased] ? feature/cpp-semantic-engine
 
+### Added (2026-03-18 - Memory Bridge v5 Phase 1: Memory-Native Execution)
+- `services/memory_capture_engine.py` — centralized capture engine (significance scoring, dedup, auto-tagging, auto-linking).
+- `bridge/nodus_memory_bridge.py` — Nodus runtime bridge (recall/remember/suggest/record_outcome).
+- `routes/memory_router.py` — v5 endpoints:
+  - `POST /memory/execute`
+  - `POST /memory/execute/complete`
+  - `POST /memory/nodus/execute`
+- `tests/test_memory_bridge_v5.py` — v5 test suite (capture engine, Nodus bridge, execution loop).
+- `tests/validate_memory_v5.py` — live validation script.
+
+### Changed (2026-03-18 - Memory Bridge v5 Phase 1)
+- ARM analysis/codegen, task completion, genesis conversation, leadgen search now route memory writes through the capture engine.
+- Genesis lock/activate memory writes upgraded to capture engine with `force=True`.
+
 ### Added (2026-03-18 ? Memory Bridge v4: Adaptive Intelligence)
 - `alembic/versions/5b14b05e179f_memory_bridge_v4_feedback_columns.py` ? Migration: feedback columns on `memory_nodes` (`success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`).
 - `services/memory_persistence.py` ? `MemoryNodeModel` now stores feedback counters and adaptive weight fields used by v4 scoring.

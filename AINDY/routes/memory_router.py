@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Literal, Optional
 from pydantic import BaseModel
+import logging
 
 from db.database import get_db
 from db.dao.memory_node_dao import MemoryNodeDAO
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
+logger = logging.getLogger(__name__)
 
 NodeType = Literal["decision", "outcome", "insight", "relationship"]
 
@@ -77,6 +79,32 @@ class SuggestRequest(BaseModel):
     tags: Optional[list[str]] = None
     context: Optional[str] = None
     limit: Optional[int] = 3
+
+
+class NodusTaskRequest(BaseModel):
+    task_name: str
+    task_code: str  # The Nodus task block code
+    session_tags: Optional[list[str]] = []
+    context: Optional[dict] = {}
+
+
+class ExecutionLoopRequest(BaseModel):
+    workflow: str
+    # "arm_analysis" | "arm_generation" | "task" | "genesis" | "leadgen" | "nodus_task"
+    input: dict
+    session_tags: Optional[list[str]] = []
+    recall_before: Optional[bool] = True
+    remember_after: Optional[bool] = True
+    auto_feedback: Optional[bool] = True
+
+
+class ExecutionCompleteRequest(BaseModel):
+    workflow: str
+    outcome_content: str
+    outcome: Literal["success", "failure", "neutral"]
+    recalled_node_ids: Optional[list[str]] = []
+    session_tags: Optional[list[str]] = []
+    context: Optional[dict] = {}
 
 
 # ------------------------------------------------------------------
@@ -536,3 +564,201 @@ async def get_suggestions(
         limit=body.limit,
     )
     return result
+
+
+@router.post("/nodus/execute")
+async def execute_nodus_task(
+    body: NodusTaskRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Execute a Nodus task block with full Memory Bridge access.
+    """
+    from bridge.nodus_memory_bridge import create_nodus_bridge
+
+    bridge = create_nodus_bridge(
+        db=db,
+        user_id=str(current_user["sub"]),
+        session_tags=body.session_tags,
+    )
+
+    try:
+        import sys
+
+        nodus_path = r"C:\dev\Coding Language\src"
+        if nodus_path not in sys.path:
+            sys.path.insert(0, nodus_path)
+
+        from nodus.runtime.embedding import NodusRuntime
+
+        runtime = NodusRuntime()
+        # Pattern C: host-builtins registered per-session via embedding API.
+        runtime.register_function("recall", bridge.recall, arity=(0, 1, 2, 3, 4))
+        runtime.register_function("remember", bridge.remember, arity=(1, 2, 3, 4, 5))
+        runtime.register_function("suggest", bridge.get_suggestions, arity=(0, 1, 2, 3))
+        runtime.register_function("record_outcome", bridge.record_outcome, arity=2)
+
+        result = runtime.run_source(
+            body.task_code,
+            filename=f"<nodus:{body.task_name}>",
+        )
+
+        return {
+            "task_name": body.task_name,
+            "status": "executed" if result.get("ok") else "failed",
+            "memory_bridge": "active",
+            "session_tags": body.session_tags,
+            "result": result,
+        }
+
+    except ImportError:
+        return {
+            "task_name": body.task_name,
+            "status": "bridge_ready",
+            "message": (
+                "Nodus runtime not found. Memory Bridge is available for "
+                "direct API calls."
+            ),
+            "available_operations": [
+                "POST /memory/recall/v3",
+                "POST /memory/suggest",
+                "POST /memory/nodes/{id}/feedback",
+            ],
+        }
+
+    except Exception as exc:
+        raise HTTPException(500, f"Task execution failed: {exc}")
+
+
+@router.post("/execute")
+async def execute_with_memory(
+    body: ExecutionLoopRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Execute any workflow with the full v5 memory loop.
+    """
+    user_id = str(current_user["sub"])
+
+    from bridge.nodus_memory_bridge import create_nodus_bridge
+
+    bridge = create_nodus_bridge(
+        db=db,
+        user_id=user_id,
+        session_tags=body.session_tags,
+    )
+
+    recalled_memories = []
+
+    if body.recall_before:
+        query = (
+            body.input.get("query")
+            or body.input.get("prompt")
+            or body.input.get("message")
+            or body.workflow
+        )
+
+        recalled_memories = bridge.recall(
+            query=query,
+            tags=body.session_tags,
+            limit=3,
+        )
+
+    execution_context = {
+        "workflow": body.workflow,
+        "user_id": user_id,
+        "session_tags": body.session_tags,
+        "recalled_memories": recalled_memories,
+        "recall_count": len(recalled_memories),
+        "memory_bridge_version": "v5",
+        "instructions": {
+            "before_execution": (
+                "Use recalled_memories as context for "
+                "your workflow execution."
+            ),
+            "after_execution": (
+                "Call POST /memory/execute/complete "
+                "with your outcome to complete the loop."
+            ),
+        },
+    }
+
+    if recalled_memories:
+        suggestions = bridge.get_suggestions(
+            query=body.input.get("query", body.workflow),
+            tags=body.session_tags,
+            limit=2,
+        )
+        execution_context["suggestions"] = suggestions
+
+    return execution_context
+
+
+@router.post("/execute/complete")
+async def complete_execution_loop(
+    body: ExecutionCompleteRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Complete the v5 execution loop after workflow finishes.
+    """
+    user_id = str(current_user["sub"])
+
+    from services.memory_capture_engine import (
+        MemoryCaptureEngine,
+        EVENT_SIGNIFICANCE,
+    )
+    from db.dao.memory_node_dao import MemoryNodeDAO
+
+    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+    dao = MemoryNodeDAO(db)
+
+    event_type = f"{body.workflow}_complete"
+    if event_type not in EVENT_SIGNIFICANCE:
+        event_type = "task_completed"
+
+    node = engine.evaluate_and_capture(
+        event_type=event_type,
+        content=body.outcome_content,
+        source=f"v5_execution_loop:{body.workflow}",
+        tags=body.session_tags,
+        context={
+            **(body.context or {}),
+            "outcome": body.outcome,
+        },
+    )
+
+    feedback_results = []
+    for node_id in body.recalled_node_ids:
+        try:
+            updated = dao.record_feedback(
+                node_id=node_id,
+                outcome=body.outcome,
+                user_id=user_id,
+            )
+            if updated:
+                feedback_results.append({
+                    "node_id": node_id,
+                    "new_weight": updated.weight,
+                    "outcome": body.outcome,
+                })
+        except Exception as exc:
+            logger.warning("Feedback failed for %s: %s", node_id, exc)
+
+    return {
+        "loop_complete": True,
+        "memory_captured": node is not None,
+        "captured_node_id": node.get("id") if node else None,
+        "feedback_recorded": len(feedback_results),
+        "feedback_results": feedback_results,
+        "message": (
+            "Execution loop complete. Memory captured "
+            "and feedback recorded."
+            if node else
+            "Outcome below significance threshold — "
+            "not stored. Feedback recorded on recalled nodes."
+        ),
+    }

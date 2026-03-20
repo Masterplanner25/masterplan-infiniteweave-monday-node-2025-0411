@@ -28,3 +28,23 @@ Rules:
 **Why It Matters**
 - Retrieval can explain *why* a memory matters by following connected chains over time.
 - Historical snapshots allow temporal reconstruction of what the system knew at a given point.
+
+**Memory Bridge v5 - Memory-Native Execution**
+
+**Execution Loop Diagram**
+```text
+execute → remember → learn → adapt → execute better
+
+1) Recall (pre-execution)
+   - retrieve relevant memories by query/tags
+2) Execute (workflow runs)
+   - caller uses recalled context
+3) Remember (post-execution)
+   - capture outcome via MemoryCaptureEngine
+4) Feedback (learning)
+   - record outcomes on recalled memories
+```
+
+**Why It Matters**
+- Memory is embedded into execution, not a manual afterthought.
+- Centralized capture ensures consistent learning across workflows.

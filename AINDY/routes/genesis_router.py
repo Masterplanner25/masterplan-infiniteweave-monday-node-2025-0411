@@ -230,9 +230,13 @@ def lock_masterplan(
 
     # Write lock event to memory (fire-and-forget)
     try:
-        from bridge import create_memory_node
-        _vision = draft.get("vision_summary", "") if isinstance(draft, dict) else ""
-        create_memory_node(
+        from services.memory_capture_engine import MemoryCaptureEngine
+        _vision = ""
+        if isinstance(draft, dict):
+            _vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
+        engine = MemoryCaptureEngine(db=db, user_id=user_id_str)
+        engine.evaluate_and_capture(
+            event_type="masterplan_locked",
             content=(
                 f"Masterplan locked: {masterplan.version_label} "
                 f"(posture: {masterplan.posture}, session: {session_id}). "
@@ -240,9 +244,8 @@ def lock_masterplan(
             ),
             source="genesis_lock",
             tags=["genesis", "masterplan", "decision"],
-            user_id=user_id_str,
-            db=db,
             node_type="decision",
+            force=True,
         )
     except Exception:
         pass
@@ -283,14 +286,15 @@ def activate_masterplan(
 
     # Write activation event to memory (fire-and-forget)
     try:
-        from bridge import create_memory_node
-        create_memory_node(
+        from services.memory_capture_engine import MemoryCaptureEngine
+        engine = MemoryCaptureEngine(db=db, user_id=user_id_str)
+        engine.evaluate_and_capture(
+            event_type="masterplan_activated",
             content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",
             source="genesis_activate",
             tags=["genesis", "masterplan", "activation"],
-            user_id=user_id_str,
-            db=db,
             node_type="decision",
+            force=True,
         )
     except Exception:
         pass

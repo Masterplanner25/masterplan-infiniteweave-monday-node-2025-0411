@@ -236,6 +236,9 @@ class DeepSeekCodeAnalyzer:
                 result = {"summary": result_text, "findings": []}
 
             execution_seconds = time.time() - start_time
+            arch_score = result.get("architecture_score", 5)
+            integrity_score = result.get("integrity_score", 5)
+            avg_score = (arch_score + integrity_score) / 2
 
             # Step 6 — Persist to DB
             db_record = AnalysisResult(
@@ -264,10 +267,6 @@ class DeepSeekCodeAnalyzer:
                     from db.dao.memory_node_dao import MemoryNodeDAO
                     feedback_dao = MemoryNodeDAO(db)
 
-                    arch_score = result.get("architecture_score", 5)
-                    integrity_score = result.get("integrity_score", 5)
-                    avg_score = (arch_score + integrity_score) / 2
-
                     outcome = (
                         "success" if avg_score >= 7 else
                         "neutral" if avg_score >= 4 else
@@ -286,15 +285,15 @@ class DeepSeekCodeAnalyzer:
             # Step 6b — Write analysis outcome to memory (fire-and-forget)
             if user_id:
                 try:
-                    from bridge import create_memory_node
                     _summary = result.get("summary", "")[:300]
-                    create_memory_node(
+                    from services.memory_capture_engine import MemoryCaptureEngine
+                    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+                    engine.evaluate_and_capture(
+                        event_type="arm_analysis_complete",
                         content=f"ARM analysis of {path.name}: {_summary}",
-                        source="arm_analysis",
+                        source=f"arm_analysis:{path.name}",
                         tags=["arm", "analysis", path.suffix.lstrip(".")],
-                        user_id=user_id,
-                        db=db,
-                        node_type="outcome",
+                        context={"score": avg_score},
                     )
                 except Exception as _mem_exc:
                     logger.debug("[ARM] Memory write skipped: %s", _mem_exc)
@@ -435,15 +434,14 @@ class DeepSeekCodeAnalyzer:
             # Persist codegen outcome to memory (fire-and-forget)
             if user_id:
                 try:
-                    from bridge import create_memory_node
                     _task_summary = prompt[:100]
-                    create_memory_node(
+                    from services.memory_capture_engine import MemoryCaptureEngine
+                    engine = MemoryCaptureEngine(db=db, user_id=user_id)
+                    engine.evaluate_and_capture(
+                        event_type="arm_generation_complete",
                         content=f"ARM generated {language} code for: {_task_summary}",
-                        source="arm_codegen",
+                        source=f"arm_codegen:{language}",
                         tags=["arm", "codegen", language],
-                        user_id=user_id,
-                        db=db,
-                        node_type="outcome",
                     )
                 except Exception as _mem_exc:
                     logger.debug("[ARM] Memory write skipped: %s", _mem_exc)
