@@ -12,11 +12,14 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 6):** SQLAlchemy 2.0 migration complete. `db/database.py:9` `from sqlalchemy.ext.declarative import declarative_base` → `from sqlalchemy.orm import declarative_base`. The final deprecation warning is eliminated. Deprecation warnings: 0. No other files used the old import path (`Base` was defined once and all models import it from `db.database`).
 - ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` startup DB session leak resolved. The unused `db = SessionLocal()` at startup has been removed. The system identity seeder now uses a proper `try/finally` block with `db.close()`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** Duplicate `get_db()` definitions removed from `main_router.py` and `analytics_router.py`. Both now import `get_db` from `db.database`. Single canonical definition.
-- **OPEN (2026-03-18 Audit):** `health_router.py` imports `seo_services` and `memory_persistence` without the `services.` package prefix (`import seo_services`, `import memory_persistence` — lines 43, 51). These will raise `ModuleNotFoundError` in any deployment where `PYTHONPATH` does not include `AINDY/services/` directly. Correct paths: `from services import seo_services`, `from services import memory_persistence`.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `health_router.py` now imports `seo_services` and `memory_persistence` from `services.*`, avoiding `ModuleNotFoundError` when `PYTHONPATH` does not include `AINDY/services/` directly.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` duplicate `create_engine`/`sessionmaker` imports removed.
 - **OPEN (2026-03-18 Audit):** `services/master_index_service.py2.py` has an invalid Python filename (`.py2.py`). Python cannot import a file with this name. Either rename it or remove it.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `task_router.py POST /tasks/complete` now passes `user_id=current_user["sub"]` to `complete_task()`. Memory Bridge Phase 3 task completion hook now fires from the API.
 - **OPEN (2026-03-18 Audit):** `social_router.py POST /social/post` calls `create_memory_node()` without a `db` session argument. `bridge.create_memory_node()` requires a DB session to persist via `MemoryNodeDAO`. Without it the function creates a transient `MemoryNode` and returns without writing to the database. The memory write for social posts silently does nothing (`AINDY/routes/social_router.py`).
+- ✅ **FIXED (2026-03-20 Security Sprint):** Frontend auth regressions resolved — all listed components now use `client/src/api.js` functions backed by `authRequest()`.
+- ✅ **FIXED (2026-03-20 Security Sprint):** Frontend/backend contract mismatches resolved — `AnalyticsPanel.jsx` uses `/analytics/masterplan/{id}/summary`, and `LeadGen.jsx` maps `{results}` with `overall_score` + `reasoning`.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `Dashboard.jsx` stray JSX removed.
 - Implicit coupling exists between:
 - `AINDY/routes/social_router.py` and `AINDY/bridge/bridge.py` (social post logging invokes memory bridge creation).
 - `AINDY/routes/health_router.py` and `AINDY/routes/seo_routes.py` via hardcoded endpoint paths.
@@ -86,6 +89,11 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /memory/nodes/{node_id}` now enforces ownership — returns 404 if `node.user_id != current_user["sub"]`. Cross-user node reads blocked.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `.env` orphan bare Google API key on line 7 removed. `.env` now parses cleanly with no floating values.
 - **OPEN (2026-03-18 Audit):** `task_services.complete_task()` updates MongoDB with hardcoded `username: "me"` regardless of which user completed the task. Social velocity metrics are not user-scoped (`AINDY/services/task_services.py:121`).
+- ✅ **FIXED (2026-03-20 Security Sprint):** Memory tag search, link traversal, and link creation are user-scoped. `GET /memory/nodes` and `GET /memory/nodes/{id}/links` filter by `user_id`, and `POST /memory/links` verifies ownership before linking.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `/bridge/nodes` now uses `MemoryCaptureEngine` and sets `user_id` (when provided) plus `source_agent` for federation tagging.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `POST /analytics/linkedin/manual` now verifies `MasterPlan.user_id == current_user["sub"]` and returns 404 when not owned.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `GET /masterplans` and `GET /results` now filter by `user_id`, and `POST /create_masterplan` sets `user_id` from JWT. `calculation_results.user_id` added with migration `c1f2a9d0b7e4`.
+- ✅ **FIXED (2026-03-20 Security Sprint):** `POST /social/profile` upserts are scoped by `user_id` and block cross-user overwrites.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `client/src/api.js` — all protected endpoints now use `authRequest()`. ARM (analyze/generate/logs/config/metrics/suggest), Tasks (create/list/start/complete), Social (profile/feed/post), Research (query), and LeadGen now all send the JWT Bearer token. `runLeadGen` refactored from raw `fetch()` to `authRequest()`. `authRequest` definition moved before first use.
 
 ## 7. Observability Debt

@@ -46,12 +46,18 @@ from schemas.analytics_inputs import (
 
 
 
-def save_calculation(db: Session, metric_name: str, value: float):
+def save_calculation(
+    db: Session,
+    metric_name: str,
+    value: float,
+    user_id: str = None,
+):
     from datetime import datetime
     try:
         result = CalculationResult(
             metric_name=metric_name,
             result_value=value,
+            user_id=user_id,
             created_at=datetime.utcnow(),
         )
         db.add(result)

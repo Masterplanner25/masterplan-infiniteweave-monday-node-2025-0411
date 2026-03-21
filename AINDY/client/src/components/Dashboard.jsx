@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
+import { getDashboardOverview } from "../api";
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
-      const res = await fetch("http://127.0.0.1:8000/dashboard/overview");
-      const json = await res.json();
+      const json = await getDashboardOverview();
       setData(json.overview);
     };
     fetchData();
@@ -40,11 +40,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    <div style={{ marginTop: 18 }}>
-  <h4>Autonomous Reasoning</h4>
-  <div>
-    <a href="/arm/analyze" style={{ marginRight: 12 }}>Open ARM — Analyze</a>
-    <a href="/arm/generate">Open ARM — Generate</a>
-  </div>
-</div>

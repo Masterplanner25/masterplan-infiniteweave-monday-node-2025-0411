@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateIncomeEfficiency } from "../api";
 
 export default function IncomeEfficiencyPanel() {
   const [focusedEffort, setFocusedEffort] = useState(0);
@@ -36,17 +37,12 @@ export default function IncomeEfficiencyPanel() {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch("http://localhost:8000/income_efficiency", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          focused_effort: parseFloat(focusedEffort),
-          ai_utilization: parseFloat(aiUtilization),
-          time: parseFloat(time),
-          capital: parseFloat(capital)
-        })
+      const data = await calculateIncomeEfficiency({
+        focused_effort: parseFloat(focusedEffort),
+        ai_utilization: parseFloat(aiUtilization),
+        time: parseFloat(time),
+        capital: parseFloat(capital)
       });
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error("Income Efficiency Error:", err);

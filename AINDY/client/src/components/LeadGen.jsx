@@ -12,7 +12,7 @@ export default function LeadGen() {
     setLoading(true);
     try {
       const response = await runLeadGen(query);
-      setResults(response.leads || []);
+      setResults(response.results || []);
     } catch (err) {
       console.error("LeadGen error:", err);
     }
@@ -97,8 +97,8 @@ export default function LeadGen() {
         {results.map((lead, i) => (
           <div key={i} className="lead-card">
             <h3>{lead.company}</h3>
-            <p>{lead.reason}</p>
-            <div className="lead-score">Match Score: {lead.score}</div>
+            <p>{lead.reasoning}</p>
+            <div className="lead-score">Match Score: {lead.overall_score}</div>
           </div>
         ))}
       </div>

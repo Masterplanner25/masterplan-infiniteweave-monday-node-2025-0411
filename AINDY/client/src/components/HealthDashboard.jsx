@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getDashboardHealth } from "../api";
 
 export default function HealthDashboard() {
   const [logs, setLogs] = useState([]);
@@ -8,8 +9,7 @@ export default function HealthDashboard() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/dashboard/health");
-        const json = await res.json();
+        const json = await getDashboardHealth();
         setLogs(json.logs || []);
       } catch (err) {
         setError("Failed to load health logs");

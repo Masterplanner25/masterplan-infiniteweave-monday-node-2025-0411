@@ -39,7 +39,7 @@ def health_check(db: Session = Depends(get_db)):
         status["components"]["nltk"] = "missing"
 
     try:
-        import seo_services
+        from services import seo_services
         status["components"]["seo_analyzer"] = (
             "ready" if hasattr(seo_services, "seo_analysis") else "not loaded"
         )
@@ -47,7 +47,7 @@ def health_check(db: Session = Depends(get_db)):
         status["components"]["seo_analyzer"] = f"error: {str(e)}"
 
     try:
-        import memory_persistence
+        from services import memory_persistence
         status["components"]["memory_bridge"] = (
             "ready" if hasattr(memory_persistence, "MemoryNodeDAO") else "not loaded"
         )

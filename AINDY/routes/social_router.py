@@ -19,24 +19,41 @@ router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depend
 
 @router.post("/profile", response_model=SocialProfile)
 def upsert_profile(
-    profile_data: SocialProfile, 
-    db: Database = Depends(get_mongo_db)
+    profile_data: SocialProfile,
+    db: Database = Depends(get_mongo_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Create or Update a user's social profile.
     Uses 'username' as the unique key.
     """
     profiles = db["profiles"]
-    
-    existing = profiles.find_one({"username": profile_data.username})
+
+    user_id = str(current_user["sub"])
+    existing_any = profiles.find_one({"username": profile_data.username})
+    if existing_any and existing_any.get("user_id") != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot modify another user's profile",
+        )
+
+    existing = profiles.find_one({
+        "username": profile_data.username,
+        "user_id": user_id,
+    })
     
     if existing:
         update_data = profile_data.dict(exclude={"id", "joined_at"})
         update_data["updated_at"] = datetime.utcnow()
-        profiles.update_one({"username": profile_data.username}, {"$set": update_data})
+        update_data["user_id"] = user_id
+        profiles.update_one(
+            {"username": profile_data.username, "user_id": user_id},
+            {"$set": update_data},
+        )
         return {**existing, **update_data}
     else:
         new_profile = profile_data.dict()
+        new_profile["user_id"] = user_id
         profiles.insert_one(new_profile)
         return new_profile
 

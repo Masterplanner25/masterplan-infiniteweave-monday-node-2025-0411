@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateAttentionValue } from "../api";
 
 export default function AttentionValuePanel() {
   const [contentOutput, setContentOutput] = useState(0);
@@ -10,16 +11,12 @@ export default function AttentionValuePanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/attention_value", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content_output: parseFloat(contentOutput),
-        platform_presence: parseFloat(platformPresence),
-        time: parseFloat(time)
-      })
+    const data = await calculateAttentionValue({
+      content_output: parseFloat(contentOutput),
+      platform_presence: parseFloat(platformPresence),
+      time: parseFloat(time)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

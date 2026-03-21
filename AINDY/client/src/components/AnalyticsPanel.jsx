@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ingestLinkedInManual, getMasterplanSummary } from "../api";
 
 export default function AnalyticsPanel() {
   const [masterplanId, setMasterplanId] = useState("");
@@ -44,22 +45,18 @@ export default function AnalyticsPanel() {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch("http://localhost:8000/analytics/linkedin/manual", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          masterplan_id: parseInt(masterplanId),
-          platform: "linkedin",
-          period_type: "weekly",
-          period_start: periodStart,
-          period_end: periodEnd,
-          impressions: parseInt(impressions),
-          reach: parseInt(reach),
-          interactions: parseInt(interactions),
-          followers: parseInt(followers)
-        })
+      await ingestLinkedInManual({
+        masterplan_id: parseInt(masterplanId),
+        platform: "linkedin",
+        period_type: "weekly",
+        period_start: periodStart,
+        period_end: periodEnd,
+        impressions: parseInt(impressions),
+        reach: parseInt(reach),
+        interactions: parseInt(interactions),
+        followers: parseInt(followers)
       });
-      if (response.ok) alert("Metrics Synchronized");
+      alert("Metrics Synchronized");
     } catch (err) {
       console.error("Submission error:", err);
     }
@@ -68,10 +65,7 @@ export default function AnalyticsPanel() {
   const fetchSummary = async () => {
     if (!masterplanId) return alert("Enter a MasterPlan ID first");
     try {
-      const res = await fetch(
-        `http://localhost:8000/analytics/summary?masterplan_id=${masterplanId}&platform=linkedin&period_type=weekly`
-      );
-      const data = await res.json();
+      const data = await getMasterplanSummary(masterplanId);
       setSummary(data);
     } catch (err) {
       console.error("Fetch error:", err);

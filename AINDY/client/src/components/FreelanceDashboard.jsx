@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer } from "recharts";
+import {
+  getFreelanceOrders,
+  getFreelanceFeedback,
+  getFreelanceMetricsLatest,
+} from "../api";
 
 export default function FreelanceDashboard() {
   const [orders, setOrders] = useState([]);
@@ -8,26 +13,21 @@ export default function FreelanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // --- API FIX: Added full paths ---
-  const API_BASE = "http://localhost:8000";
-
   async function fetchOrders() {
-    const res = await fetch(`${API_BASE}/freelance/orders`);
-    if (!res.ok) throw new Error('Failed to fetch orders');
-    return res.json();
+    return getFreelanceOrders();
   }
 
   async function fetchFeedback() {
-    const res = await fetch(`${API_BASE}/freelance/feedback`);
-    if (!res.ok) throw new Error('Failed to fetch feedback');
-    return res.json();
+    return getFreelanceFeedback();
   }
 
   async function fetchMetrics() {
-    const res = await fetch(`${API_BASE}/freelance/metrics/latest`);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error('Failed to fetch metrics');
-    return res.json();
+    try {
+      return await getFreelanceMetricsLatest();
+    } catch (err) {
+      if (String(err.message || "").includes("404")) return null;
+      throw err;
+    }
   }
 
   useEffect(() => {

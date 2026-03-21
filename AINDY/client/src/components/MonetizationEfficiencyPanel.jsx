@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateMonetizationEfficiency } from "../api";
 
 export default function MonetizationEfficiencyPanel() {
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -14,15 +15,11 @@ export default function MonetizationEfficiencyPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/monetization_efficiency", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        total_revenue: parseFloat(totalRevenue),
-        audience_size: parseFloat(audienceSize)
-      })
+    const data = await calculateMonetizationEfficiency({
+      total_revenue: parseFloat(totalRevenue),
+      audience_size: parseFloat(audienceSize)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

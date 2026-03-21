@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateImpactScore } from "../api";
 
 export default function ImpactPanel() {
   const [reach, setReach] = useState(0);
@@ -48,17 +49,11 @@ export default function ImpactPanel() {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch("http://localhost:8000/calculate_impact_score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reach: parseInt(reach),
-          engagement: parseInt(engagement),
-          conversion: parseInt(conversion)
-        })
+      const data = await calculateImpactScore({
+        reach: parseInt(reach),
+        engagement: parseInt(engagement),
+        conversion: parseInt(conversion)
       });
-
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error("Impact Calculation Error:", err);

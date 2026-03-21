@@ -163,8 +163,9 @@ task_services.complete_task(db, name, user_id)
 ```
 POST /bridge/nodes
   └─► bridge_router.py: verify_permission_or_403() (HMAC + TTL check)
-        └─► MemoryNodeDAO.save_memory_node()  (memory_persistence.py)
-              └─► INSERT INTO memory_nodes (UUID, content, tags, node_type, extra)
+        └─► MemoryCaptureEngine.evaluate_and_capture(force=True)
+              └─► MemoryNodeDAO.save() → INSERT INTO memory_nodes
+                  (UUID, content, tags, node_type, user_id, source_agent, extra)
 ```
 
 **Memory Node creation via memory_router (JWT path — Phase 2)**
@@ -334,6 +335,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - ✅ **Resolved (2026-03-17 Phase 3):** All remaining unprotected routers secured. JWT (`get_current_user`): `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router`. API key (`verify_api_key`): `db_verify_router`, `network_bridge_router`.
 - ✅ **Resolved (2026-03-18 Sprint 5 User Isolation):** Cross-user data exposure closed for freelance, research, and rippletrace. Migration `d37ae6ebc319` adds `user_id` to `freelance_orders`, `client_feedback`, `research_results`, `drop_points`, `pings`. All write operations set `user_id` from JWT; all read operations filter by `user_id`. 429 tests passing.
 - ✅ **Resolved (2026-03-18 Sprint 4 Auth Hardening):** Bridge and calc route auth gaps closed. `bridge_router.py` — `POST/GET /bridge/nodes`, `POST /bridge/link` now require JWT; `POST /bridge/user_event` now requires API key. `main_router.py` — router-level `dependencies=[Depends(get_current_user)]`; all 17 calc endpoints, `/results`, `/masterplans`, `/create_masterplan` now JWT-protected. Analytics and memory cross-user ownership enforcement: `GET /analytics/masterplan/{id}`, `/analytics/masterplan/{id}/summary` verify `MasterPlan.user_id`; `GET /memory/nodes/{node_id}` verifies `user_id` — returns 404 for wrong owner. All non-public routes are now protected. 402 tests passing, 1 warning.
+- ✅ **Resolved (2026-03-20 Security Sprint):** Memory endpoints are user-scoped (`/memory/nodes`, `/memory/nodes/{id}/links`, `/memory/links`), bridge node creation sets `user_id` + `source_agent` via `MemoryCaptureEngine`, analytics manual ingest verifies MasterPlan ownership, legacy `main_router` results/masterplans are user-scoped (new `calculation_results.user_id` + migration `c1f2a9d0b7e4`), social profile upserts are scoped by `user_id`, frontend auth uses `authRequest()`, analytics/leadgen response contracts are aligned, and health router imports are package-safe.
 - ✅ **Resolved (2026-03-17 Phase 3):** In-memory user store replaced with `db/models/user.py` (`users` table, UUID PK, unique email/username indexes). `auth_router.py` uses `register_user()` / `authenticate_user()` via `Depends(get_db)`. Migration: `37f972780d54_create_users_table`.
 - C++ semantic kernel (`bridge/memory_bridge_rs/`) is built in debug mode only; `MemoryNode` has no vector embeddings, making semantic search inoperable. See `docs/roadmap/TECH_DEBT.md` §8.
 - ✅ **Resolved (2026-03-17 ARM Phase 2):** Infinity Algorithm Thinking KPI System implemented. `services/arm_metrics_service.py` adds `ARMMetricsService` (5 metrics from DB history: Execution Speed, Decision Efficiency, AI Productivity Boost, Lost Potential, Learning Efficiency) and `ARMConfigSuggestionEngine` (advisory self-tuning suggestions, risk-classified, never auto-applied). New endpoints: `GET /arm/metrics` and `GET /arm/config/suggest`. Frontend: `ARMMetrics.jsx` and `ARMConfigSuggest.jsx`. ARM Phase 3 deferred: Memory Bridge feedback loop (bridge design in progress); auto-approve low-risk suggestions.

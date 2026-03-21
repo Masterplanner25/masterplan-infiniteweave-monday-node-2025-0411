@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateBusinessGrowth } from "../api";
 
 export default function BusinessGrowthPanel() {
   const [revenue, setRevenue] = useState(0);
@@ -15,16 +16,12 @@ export default function BusinessGrowthPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/business_growth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        revenue: parseFloat(revenue),
-        expenses: parseFloat(expenses),
-        scaling_friction: parseFloat(scalingFriction)
-      })
+    const data = await calculateBusinessGrowth({
+      revenue: parseFloat(revenue),
+      expenses: parseFloat(expenses),
+      scaling_friction: parseFloat(scalingFriction)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

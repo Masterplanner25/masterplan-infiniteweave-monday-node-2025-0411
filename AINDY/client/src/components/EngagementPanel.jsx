@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateEngagement } from "../api";
 
 export default function EngagementPanel() {
   const [likes, setLikes] = useState(0);
@@ -51,20 +52,14 @@ export default function EngagementPanel() {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch("http://localhost:8000/calculate_engagement", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          likes: parseInt(likes),
-          shares: parseInt(shares),
-          comments: parseInt(comments),
-          clicks: parseInt(clicks),
-          time_on_page: parseFloat(timeOnPage),
-          total_views: parseInt(totalViews)
-        })
+      const data = await calculateEngagement({
+        likes: parseInt(likes),
+        shares: parseInt(shares),
+        comments: parseInt(comments),
+        clicks: parseInt(clicks),
+        time_on_page: parseFloat(timeOnPage),
+        total_views: parseInt(totalViews)
       });
-
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error("Engagement Calculation Error:", err);
