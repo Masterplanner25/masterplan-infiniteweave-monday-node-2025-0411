@@ -113,7 +113,18 @@ Each module functions as both \*\*a tool\*\* and \*\*a node in a growing AI cogn
 \- \*\*RippleTrace\*\* — Visibility layer that tracks signals, resonance, and recognition.  
 
 \- \*\*Memory Bridge\*\* — Symbolic persistence system enabling continuity across AI models.  
+- **Memory Bridge Canon** � docs/architecture/MEMORY_BRIDGE.md (canonical definition + evolution plan).  
+- **Infinity Algorithm Support System Canon** — docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md (signal/observation/feedback layer).  
+- **RippleTrace Canon** — docs/roadmap/RIPPLETRACE.md (visibility and influence tracing system).  
+- **Search System Canon** — docs/roadmap/SEARCH_SYSTEM.md (AI retrieval + scoring stack).  
+- **Freelancing System Canon** — docs/roadmap/FREELANCING_SYSTEM.md (revenue automation layer).  
+- **Social Layer Canon** — docs/roadmap/SOCIAL_LAYER.md (profiles, posts, visibility signals).  
 
+## Search System
+
+- Canon: `docs/roadmap/SEARCH_SYSTEM.md`
+- Surfaces: SEO (`/analyze_seo/`, `/seo/analyze`, `/seo/meta`), LeadGen (`/leadgen/`), Research (`/research/*`), Memory search (`/memory/nodes/search`, `/memory/recall`).
+- Reality: fragmented surface area; leadgen retrieval is mocked and research routes do not invoke external search.
 \- \*\*Authorship / Epistemic Reclaimer\*\* — Governance and human–AI collaboration framework.  
 
 

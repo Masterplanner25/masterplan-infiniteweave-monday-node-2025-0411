@@ -1,5 +1,5 @@
 ﻿# Infinity Algorithm Formalization
-
+Support system (inputs, observation, feedback): docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md.\r\n\r\n
 This document describes implemented execution behavior and algorithmic logic from the current codebase.
 
 **Core Computational Cycle**

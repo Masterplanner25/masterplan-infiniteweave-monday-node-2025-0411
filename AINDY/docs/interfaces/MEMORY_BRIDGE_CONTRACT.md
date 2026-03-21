@@ -5,6 +5,7 @@ This document defines the Memory Bridge API contract and its security boundary b
 ## 1. Overview
 
 ### Current Behavior
+- Canonical architecture reference: `docs/architecture/MEMORY_BRIDGE.md`.
 - Memory Bridge is implemented in `AINDY/routes/bridge_router.py` with persistence in `AINDY/services/memory_persistence.py`.
 - Database tables involved:
 - `memory_nodes`

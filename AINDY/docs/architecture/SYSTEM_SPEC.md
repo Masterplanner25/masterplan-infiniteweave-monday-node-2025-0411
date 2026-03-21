@@ -1,20 +1,22 @@
 # SYSTEM_SPEC
 
-This document is the authoritative, agent-facing specification for the `masterplan-infiniteweave-monday-node-2025-0411` repository. It is intentionally architectural and safety-focused.
+This document is the authoritative, agent-facing specification for the `masterplan-infiniteweave-monday-node-2025-0411` repository. 
+It is intentionally architectural and safety-focused.
 
 ## 1. High-Level System Purpose
 - Provide the A.I.N.D.Y. backend as the operational execution layer for Masterplan Infinite Weave, including task execution, metrics, memory persistence, research logging, and system governance hooks.
+
 - Expose a FastAPI API that supports:
   - AI-assisted “Genesis” masterplan creation and lifecycle management.
   - Memory Bridge persistence and symbolic trace logging.
   - RippleTrace visibility events.
   - Task execution and analytics/metrics calculations.
-  - Auxiliary subsystems (ARM/DeepSeek analysis, leadgen, social/network events).
-
+  - Auxiliary subsystems (ARM analysis, leadgen, social/network events).
+  - A future Agentics execution loop (Plan → Dry-Run → Approve → Execute → Verify), documented in `docs/roadmap/AGENTICS.md`.
 Primary backend entry point: `AINDY/main.py`.
 
-## 2. Architectural Overview
 
+## 2. Architectural Overview
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Frontend  (React/Vite — client/)                           │
@@ -30,6 +32,12 @@ Primary backend entry point: `AINDY/main.py`.
 │  FastAPI Application  (AINDY/main.py)                       │
 │  19 routers · daemon background tasks · CORS middleware     │
 │  JWT auth · API key auth · SlowAPI rate limiting            │
+                        |
++-------------------------------------------------------------+
+|  Agent Runtime (Agentics + Nodus)                           |
+|  Plan -> Dry-Run -> Approve -> Execute -> Verify            |
+|  Deterministic workflows - checkpoints - audit traces       |
++-------------------------------------------------------------+
 └──────┬────────────────┬────────────────┬────────────────────┘
        │                │                │
 ┌──────▼──────┐  ┌──────▼──────┐  ┌─────▼──────────────────┐
@@ -89,19 +97,60 @@ Primary backend entry point: `AINDY/main.py`.
 - MongoDB for the social layer (used in `AINDY/services/task_services.py` via `AINDY/db/mongo_setup.py`).
 
 **Memory Bridge**
+- Canonical definition and evolution plan: `docs/architecture/MEMORY_BRIDGE.md`.
+- Infinity Algorithm support system canon: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
+
+**RippleTrace**
+- Canonical definition and evolution plan: `docs/roadmap/RIPPLETRACE.md`.
+
+**Search System**
+- Canonical definition and evolution plan: `docs/roadmap/SEARCH_SYSTEM.md`.
+
+**Freelancing System**
+- Canonical definition and evolution plan: `docs/roadmap/FREELANCING_SYSTEM.md`.
+
+**Social Layer**
+- Canonical definition and evolution plan: `docs/roadmap/SOCIAL_LAYER.md`.
 - Database-backed memory nodes and links in `AINDY/services/memory_persistence.py`.
+
 - FastAPI interface split across two routers:
   - `AINDY/routes/bridge_router.py` — HMAC-signed legacy write interface (`/bridge/*`).
   - `AINDY/routes/memory_router.py` — JWT-authenticated read/write/search interface (`/memory/*`).
+
 - Canonical DAO: `AINDY/db/dao/memory_node_dao.py` (`MemoryNodeDAO`).
 - Embedding pipeline (Phase 2): `AINDY/services/embedding_service.py` generates OpenAI `text-embedding-ada-002` vectors (1536 dims) on every `MemoryNodeDAO.save()` call. Zero-vector fallback on failure.
+
 - Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance.
 - Resonance v2 (Phase 4): `MemoryNodeDAO.recall()` scores: `(semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` with adaptive weight multiplier and tag bonus.
+
 - Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight.
 - Suggestion engine (Phase 4): `MemoryNodeDAO.suggest()` returns actionable recommendations; endpoint `POST /memory/suggest`.
 - C++ kernel: `bridge/memory_bridge_rs/target/debug/memory_bridge_rs` provides `semantic_similarity()` via PyO3. Used in `embedding_service.cosine_similarity()` with Python fallback.
+
 - Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` enforced via SQLAlchemy event listener.
 - Symbolic, file-based traces in `AINDY/memoryevents/` and `AINDY/memorytraces/` (not referenced by API code).
+
+**Autonomous Reasoning Module (ARM)**
+- Canonical definition and evolution plan: `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`.
+
+**Masterplan SaaS**
+- Canonical definition and evolution plan: `docs/roadmap/MASTERPLAN_SAAS.md`.
+
+**Implementation Docs (Utility Audit)**
+- Summary audit of implementation-doc utilities vs runtime: `docs/roadmap/IMPLEMENTATION_DOCS_AUDIT.md`.
+
+**Agentics (Execution Runtime Layer)**
+- Canonical definition and feasibility audit: `docs/roadmap/AGENTICS.md`.
+- Defines the system-wide execution control plane:
+  - Plan → Dry-Run → Approve → Execute → Verify → Observe → Memory
+- Not yet implemented in A.I.N.D.Y. runtime.
+- Execution substrate provided by Nodus (external runtime), not yet integrated.
+- Will orchestrate all system layers:
+  - Memory Bridge (continuity)
+  - Infinity Algorithm (scoring/decision)
+  - Support System (signals)
+  - RippleTrace (external influence)
+  - ARM (reasoning)
 
 **C++ Semantic Kernel**
 - High-performance vector math exposed to Python via a Rust/PyO3 extension (`AINDY/bridge/memory_bridge_rs/`).
@@ -144,7 +193,7 @@ Primary backend entry point: `AINDY/main.py`.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
-- DeepSeek tooling is invoked via `AINDY/services/deepseek_arm_service.py` (modules in `AINDY/modules/deepseek/`).
+- ARM analysis/generation is invoked via `AINDY/routes/arm_router.py` and `modules/deepseek/deepseek_code_analyzer.py` (OpenAI GPT-4o runtime under the legacy "DeepSeek" namespace). `services/deepseek_arm_service.py` is a legacy path and not used by the router.
 
 ### Detailed Flow Paths
 
@@ -158,7 +207,6 @@ task_services.complete_task(db, name, user_id)
               └─► INSERT INTO memory_nodes (content, node_type, user_id, embedding)
         (fire-and-forget: exception silenced, task completion unaffected)
 ```
-
 **Memory Node creation via bridge_router (HMAC path)**
 ```
 POST /bridge/nodes
@@ -167,7 +215,6 @@ POST /bridge/nodes
               └─► MemoryNodeDAO.save() → INSERT INTO memory_nodes
                   (UUID, content, tags, node_type, user_id, source_agent, extra)
 ```
-
 **Memory Node creation via memory_router (JWT path — Phase 2)**
 ```
 POST /memory/nodes
@@ -176,7 +223,6 @@ POST /memory/nodes
               └─► embedding_service.generate_embedding()
                     └─► OpenAI text-embedding-ada-002 → [float * 1536]
               └─► INSERT INTO memory_nodes (UUID, content, tags, node_type, user_id, embedding)
-
 POST /memory/recall
   └─► memory_router.py: Depends(get_current_user)
         └─► embedding_service.generate_query_embedding()
@@ -189,7 +235,6 @@ POST /memory/recall
               └─► sorted results with resonance_score, tag_score, graph_score,
                     recency_score, success_rate, usage_frequency, adaptive_weight
 ```
-
 **ARM analysis with memory recall + write (Phase 3)**
 ```
 POST /arm/analyze
@@ -205,7 +250,6 @@ POST /arm/analyze
                     └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
                     (fire-and-forget)
 ```
-
 **ARM code generation with memory write (Phase 3)**
 ```
 POST /arm/generate
@@ -216,7 +260,6 @@ POST /arm/generate
               └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
               (fire-and-forget)
 ```
-
 **Genesis lock with memory write (Phase 3)**
 ```
 POST /genesis/lock
@@ -226,20 +269,16 @@ POST /genesis/lock
               └─► MemoryNodeDAO.save() → embedding → INSERT INTO memory_nodes
               (fire-and-forget)
 ```
-
 **Programmatic memory bridge (internal services — Phase 3)**
 ```
 from bridge import create_memory_node, recall_memories
-
 recall_memories(query, tags, limit, user_id, db)
   └─► MemoryNodeDAO.recall() → resonance scoring
   └─► returns [] on failure (never raises)
-
 create_memory_node(content, source, tags, user_id, db, node_type)
   └─► MemoryNodeDAO.save() → embedding generation → INSERT INTO memory_nodes
   └─► returns transient MemoryNode if db=None (not persisted)
 ```
-
 **Engagement Score calculation (C++ kernel path)**
 ```
 POST /analytics/engagement  (or any route invoking calculate_engagement_score)
@@ -250,7 +289,6 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
                     └─► C++: weighted_dot_product() — semantic.cpp
                           └─► Python fallback if extension not loaded
 ```
-
 ## 4. Session Isolation Rules
 - Each API request must use its own SQLAlchemy session from `get_db()` in `AINDY/db/database.py`.
 - Never share a `Session` between requests, threads, or async tasks.
@@ -338,11 +376,9 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - ✅ **Resolved (2026-03-20 Security Sprint):** Memory endpoints are user-scoped (`/memory/nodes`, `/memory/nodes/{id}/links`, `/memory/links`), bridge node creation sets `user_id` + `source_agent` via `MemoryCaptureEngine`, analytics manual ingest verifies MasterPlan ownership, legacy `main_router` results/masterplans are user-scoped (new `calculation_results.user_id` + migration `c1f2a9d0b7e4`), social profile upserts are scoped by `user_id`, frontend auth uses `authRequest()`, analytics/leadgen response contracts are aligned, and health router imports are package-safe.
 - ✅ **Resolved (2026-03-17 Phase 3):** In-memory user store replaced with `db/models/user.py` (`users` table, UUID PK, unique email/username indexes). `auth_router.py` uses `register_user()` / `authenticate_user()` via `Depends(get_db)`. Migration: `37f972780d54_create_users_table`.
 - C++ semantic kernel (`bridge/memory_bridge_rs/`) is built in debug mode only; `MemoryNode` has no vector embeddings, making semantic search inoperable. See `docs/roadmap/TECH_DEBT.md` §8.
-- ✅ **Resolved (2026-03-17 ARM Phase 2):** Infinity Algorithm Thinking KPI System implemented. `services/arm_metrics_service.py` adds `ARMMetricsService` (5 metrics from DB history: Execution Speed, Decision Efficiency, AI Productivity Boost, Lost Potential, Learning Efficiency) and `ARMConfigSuggestionEngine` (advisory self-tuning suggestions, risk-classified, never auto-applied). New endpoints: `GET /arm/metrics` and `GET /arm/config/suggest`. Frontend: `ARMMetrics.jsx` and `ARMConfigSuggest.jsx`. ARM Phase 3 deferred: Memory Bridge feedback loop (bridge design in progress); auto-approve low-risk suggestions.
+- ✅ **Resolved (2026-03-17 ARM Phase 2):** Infinity Algorithm Thinking KPI System implemented. `services/arm_metrics_service.py` adds `ARMMetricsService` (5 metrics from DB history: Execution Speed, Decision Efficiency, AI Productivity Boost, Lost Potential, Learning Efficiency) and `ARMConfigSuggestionEngine` (advisory self-tuning suggestions, risk-classified, never auto-applied). New endpoints: `GET /arm/metrics` and `GET /arm/config/suggest`. Frontend: `ARMMetrics.jsx` and `ARMConfigSuggest.jsx`. ARM Phase 3 note: Memory Bridge recall/write hooks are implemented in `modules/deepseek/deepseek_code_analyzer.py`; auto-approve low-risk suggestions remains deferred.
 - ✅ **Resolved (2026-03-17 Genesis Blocks 1-3):** Genesis/MasterPlan module fully implemented end-to-end. Migration `a1b2c3d4e5f6` adds `synthesis_ready`, `draft_json`, `locked_at`, `user_id_str` to `genesis_sessions`; `user_id`, `status` to `master_plans`. All Genesis routes user-scoped. `call_genesis_synthesis_llm()` real GPT-4o call (replaces stub). `determine_posture()` real logic (Stable/Accelerated/Aggressive/Reduced). New router `masterplan_router.py` (prefix `/masterplans`, 4 JWT-auth endpoints). `GET /genesis/session/{id}` and `GET /genesis/draft/{id}` added. `POST /genesis/synthesize` gated on `synthesis_ready`. Frontend: Genesis.jsx auth-wired, synthesis-ready banner, draft preview, lock confirmation; GenesisDraftPreview.jsx new; MasterPlanDashboard.jsx rewritten with authenticated `listMasterPlans()` and correct status badges.
-
 Full inventory: `docs/roadmap/TECH_DEBT.md`.
-
 ## Notes for AI Agents
 - Prefer edits in `AINDY/services/` for domain logic and `AINDY/routes/` for HTTP contracts.
 - Avoid introducing new cross-module state. Use dependency injection (FastAPI `Depends`) and per-request sessions.

@@ -8,6 +8,16 @@ This plan defines controlled evolution aligned with current architecture and gov
 - Preserve SQLAlchemy session isolation per request.
 - Avoid architectural rewrites.
 - Prioritize hardening and consistency before scaling.
+- Memory Bridge evolution is defined in `docs/architecture/MEMORY_BRIDGE.md`.
+- Infinity Algorithm Support System evolution is defined in `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
+- RippleTrace evolution is defined in `docs/roadmap/RIPPLETRACE.md`.
+- Search System evolution is defined in `docs/roadmap/SEARCH_SYSTEM.md`.
+- Freelancing System evolution is defined in `docs/roadmap/FREELANCING_SYSTEM.md`.
+- Social Layer evolution is defined in `docs/roadmap/SOCIAL_LAYER.md`.
+- ARM evolution is defined in `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`.
+- Masterplan SaaS evolution is defined in `docs/roadmap/MASTERPLAN_SAAS.md`.
+- Implementation docs utility audit is defined in `docs/roadmap/IMPLEMENTATION_DOCS_AUDIT.md`.
+- Agentics conceptual layer audit and completion roadmap are defined in `docs/roadmap/AGENTICS.md` (Phases 1–7).
 
 ## Phase Entry Conditions
 - A phase may only begin after the prior phase’s exit criteria are met.

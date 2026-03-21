@@ -1,5 +1,7 @@
 # Infinity Algorithm Canonical
 
+Support system (inputs, observation, feedback): `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
+
 ## 1. Symbol Definitions
 
 Let \(t \in \mathbb{T}\) denote discrete decision times with increment \(\Delta t > 0\).
