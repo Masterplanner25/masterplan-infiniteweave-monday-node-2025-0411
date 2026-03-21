@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateTwr } from "../api";
 // Import all panels from the same directory
 import EngagementPanel from "./EngagementPanel";
 import AIEfficiencyPanel from "./AIEfficiencyPanel";
@@ -91,19 +92,15 @@ export default function ExecutionConsole() {
 
   const handleCalculate = async () => {
     try {
-      const response = await fetch("http://localhost:8000/calculate_twr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task_name: taskName,
-          time_spent: parseFloat(timeSpent),
-          task_complexity: parseInt(complexity),
-          skill_level: parseInt(skill),
-          ai_utilization: parseInt(aiUse),
-          task_difficulty: parseInt(difficulty)
-        })
+      const data = await calculateTwr({
+        task_name: taskName,
+        time_spent: parseFloat(timeSpent),
+        task_complexity: parseInt(complexity),
+        skill_level: parseInt(skill),
+        ai_utilization: parseInt(aiUse),
+        task_difficulty: parseInt(difficulty)
       });
-      setResult(await response.json());
+      setResult(data);
     } catch (err) { alert("TWR failed."); }
   };
 

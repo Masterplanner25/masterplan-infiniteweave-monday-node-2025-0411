@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateDecisionEfficiency } from "../api";
 
 export default function DecisionEfficiencyPanel() {
   const [automatedDecisions, setAutomatedDecisions] = useState(0);
@@ -10,16 +11,12 @@ export default function DecisionEfficiencyPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/decision_efficiency", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        automated_decisions: parseFloat(automatedDecisions),
-        manual_decisions: parseFloat(manualDecisions),
-        processing_time: parseFloat(processingTime)
-      })
+    const data = await calculateDecisionEfficiency({
+      automated_decisions: parseFloat(automatedDecisions),
+      manual_decisions: parseFloat(manualDecisions),
+      processing_time: parseFloat(processingTime)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

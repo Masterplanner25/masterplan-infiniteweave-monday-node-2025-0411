@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateAiProductivityBoost } from "../api";
 
 export default function AIProductivityBoostPanel() {
   const [tasksWithAI, setTasksWithAI] = useState(0);
@@ -10,16 +11,12 @@ export default function AIProductivityBoostPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/ai_productivity_boost", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tasks_with_ai: parseFloat(tasksWithAI),
-        tasks_without_ai: parseFloat(tasksWithoutAI),
-        time_saved: parseFloat(timeSaved)
-      })
+    const data = await calculateAiProductivityBoost({
+      tasks_with_ai: parseFloat(tasksWithAI),
+      tasks_without_ai: parseFloat(tasksWithoutAI),
+      time_saved: parseFloat(timeSaved)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

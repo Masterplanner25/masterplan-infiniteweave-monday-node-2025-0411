@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-19 (Memory Bridge v5 Phase 3)
+Last updated: 2026-03-21 (Agentics block added to SYSTEM_SPEC overview)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.
@@ -13,6 +13,7 @@ This file is the authoritative registry of documentation scope and authority. It
 ### Level 2 – Operational Authority
 - `docs/architecture/RUNTIME_BEHAVIOR.md`
 - `docs/architecture/DATA_MODEL_MAP.md`
+- `docs/architecture/MEMORY_BRIDGE.md`
 - `docs/governance/ERROR_HANDLING_POLICY.md`
 - `docs/engineering/MIGRATION_POLICY.md`
 - `docs/engineering/DEPLOYMENT_MODEL.md`
@@ -29,6 +30,15 @@ This file is the authoritative registry of documentation scope and authority. It
 ### Level 5 – Evolution & Risk Tracking
 - `docs/roadmap/TECH_DEBT.md`
 - `docs/roadmap/EVOLUTION_PLAN.md`
+- `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`
+- `docs/roadmap/RIPPLETRACE.md`
+- `docs/roadmap/SEARCH_SYSTEM.md`
+- `docs/roadmap/FREELANCING_SYSTEM.md`
+- `docs/roadmap/SOCIAL_LAYER.md`
+- `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`
+- `docs/roadmap/MASTERPLAN_SAAS.md`
+- `docs/roadmap/IMPLEMENTATION_DOCS_AUDIT.md`
+- `docs/roadmap/AGENTICS.md`
 
 ## 2. Authority Rules
 - `docs/architecture/SYSTEM_SPEC.md` defines architecture.
@@ -42,6 +52,7 @@ This file is the authoritative registry of documentation scope and authority. It
 ## 3. Change Protocol
 Any structural change must:
 - Update `docs/architecture/SYSTEM_SPEC.md` if architecture changes.
+- Update `docs/architecture/MEMORY_BRIDGE.md` for Memory Bridge architecture changes.
 - Update `docs/governance/INVARIANTS.md` if enforcement changes.
 - Update `docs/architecture/DATA_MODEL_MAP.md` if schema changes.
 - Update `docs/interfaces/API_CONTRACTS.md` if route behavior changes.

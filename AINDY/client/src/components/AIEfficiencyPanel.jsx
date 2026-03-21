@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateAiEfficiency } from "../api";
 
 export default function AIEfficiencyPanel() {
   const [aiContributions, setAiContributions] = useState(0);
@@ -39,16 +40,11 @@ export default function AIEfficiencyPanel() {
 
   const handleSubmit = async () => {
     try {
-      const response = await fetch("http://localhost:8000/calculate_ai_efficiency", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ai_contributions: parseInt(aiContributions),
-          human_contributions: parseInt(humanContributions),
-          total_tasks: parseInt(totalTasks)
-        })
+      const data = await calculateAiEfficiency({
+        ai_contributions: parseInt(aiContributions),
+        human_contributions: parseInt(humanContributions),
+        total_tasks: parseInt(totalTasks)
       });
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       console.error("Efficiency Calculation Error:", err);

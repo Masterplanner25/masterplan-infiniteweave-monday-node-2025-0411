@@ -1,5 +1,9 @@
 import { useState } from "react";
-import axios from "axios";
+import {
+    analyzeSeo as apiAnalyzeSeo,
+    generateMeta as apiGenerateMeta,
+    suggestSeoImprovements as apiSuggestSeoImprovements,
+} from "../api";
 
 export default function AiSeoTool() {
     const [content, setContent] = useState("");
@@ -11,8 +15,8 @@ export default function AiSeoTool() {
     const analyzeSeo = async () => {
         setLoading(true);
         try {
-            const response = await axios.post("http://localhost:8000/analyze_seo/", { content });
-            setSeoData(response.data);
+            const data = await apiAnalyzeSeo(content);
+            setSeoData(data);
         } catch (error) {
             console.error("SEO Analysis Error: ", error);
         }
@@ -22,8 +26,8 @@ export default function AiSeoTool() {
     const generateMeta = async () => {
         setLoading(true);
         try {
-            const response = await axios.post("http://localhost:8000/generate_meta/", { content });
-            setMetaDescription(response.data.meta_description);
+            const data = await apiGenerateMeta(content);
+            setMetaDescription(data.meta_description);
         } catch (error) {
             console.error("Meta Description Error: ", error);
         }
@@ -33,8 +37,8 @@ export default function AiSeoTool() {
     const getSeoSuggestions = async () => {
         setLoading(true);
         try {
-            const response = await axios.post("http://localhost:8000/suggest_improvements/", { content });
-            setSeoSuggestions(response.data.seo_suggestions);
+            const data = await apiSuggestSeoImprovements(content);
+            setSeoSuggestions(data.seo_suggestions);
         } catch (error) {
             console.error("SEO Suggestions Error: ", error);
         }

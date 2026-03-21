@@ -1,5 +1,21 @@
 ## [Unreleased] ? feature/cpp-semantic-engine
 
+### Added (2026-03-20 - Security Sprint)
+- `alembic/versions/c1f2a9d0b7e4_add_user_id_to_calculation_results.py` - migration: adds `user_id` column + index on `calculation_results`.
+- `tests/test_security_sprint2.py` - security regression tests for user scoping and ownership checks.
+
+### Changed (2026-03-20 - Security Sprint)
+- `routes/memory_router.py` - user-scoped tag search/link traversal and link ownership verification.
+- `db/dao/memory_node_dao.py` - `get_by_tags()` now accepts `user_id` for scoping.
+- `routes/bridge_router.py` - bridge node creation uses `MemoryCaptureEngine` and supports `user_id` + `source_agent`.
+- `routes/analytics_router.py` - manual LinkedIn ingest now verifies MasterPlan ownership.
+- `routes/main_router.py` - `/results` and `/masterplans` filtered by `user_id`; `/create_masterplan` sets `user_id`.
+- `db/models/calculation.py` + `services/calculation_services.py` - calculations now store `user_id`.
+- `routes/social_router.py` - profile upsert scoped by `user_id`.
+- `routes/health_router.py` - fixed imports for `seo_services` and `memory_persistence`.
+- `client/src/api.js` - added auth-wired helpers for dashboard, analytics, metrics, SEO, and freelance endpoints.
+- `client/src/components/*` - replaced raw `fetch()`/`axios` with `authRequest()` helpers; updated AnalyticsPanel and LeadGen response mapping; removed stray Dashboard JSX.
+
 ### Added (2026-03-19 - Memory Bridge v5 Phase 3: Multi-Agent Memory)
 - `alembic/versions/a2ec23964f2c_multi_agent_memory_v5_phase3.py` - migration: `agents` table; `source_agent` + `is_shared` on `memory_nodes`; seeds system agents.
 - `db/models/agent.py` - Agent registry model and namespace constants.

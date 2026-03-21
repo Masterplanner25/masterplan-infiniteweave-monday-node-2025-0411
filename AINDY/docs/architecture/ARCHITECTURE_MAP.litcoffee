@@ -39,6 +39,7 @@ Defines:
 * system components
 * high-level execution flow
 * major subsystems
+* Memory Bridge canonical definition and evolution plan: `MEMORY_BRIDGE.md`
 
 This document should be read first when learning the system.
 
@@ -179,6 +180,11 @@ Key files include:
 ```
 EVOLUTION_PLAN.md
 TECH_DEBT.md
+INFINITY_ALGORITHM_SUPPORT_SYSTEM.md
+RIPPLETRACE.md
+SEARCH_SYSTEM.md
+FREELANCING_SYSTEM.md
+SOCIAL_LAYER.md
 release_notes.md
 ```
 

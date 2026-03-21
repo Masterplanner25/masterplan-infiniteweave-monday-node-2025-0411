@@ -11,6 +11,7 @@ class CalculationResult(Base):
     id = Column(Integer, primary_key=True, index=True)
     metric_name = Column(String, index=True)
     result_value = Column(Float)
+    user_id = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())
 
     

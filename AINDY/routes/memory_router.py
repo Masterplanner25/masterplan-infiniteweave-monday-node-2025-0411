@@ -215,10 +215,16 @@ def get_linked_nodes(
     if direction not in ("in", "out", "both"):
         raise HTTPException(status_code=422, detail="direction must be 'in', 'out', or 'both'")
     dao = MemoryNodeDAO(db)
-    # Verify node exists first
-    if not dao.get_by_id(node_id):
+    # Verify node exists and is owned by current user
+    if not dao.get_by_id(node_id, user_id=str(current_user["sub"])):
         raise HTTPException(status_code=404, detail="Memory node not found")
-    return {"nodes": dao.get_linked_nodes(node_id, direction=direction)}
+    return {
+        "nodes": dao.get_linked_nodes(
+            node_id,
+            direction=direction,
+            user_id=str(current_user["sub"]),
+        )
+    }
 
 
 @router.get("/nodes")
@@ -238,7 +244,14 @@ def search_nodes_by_tags(
         raise HTTPException(status_code=422, detail="mode must be 'AND' or 'OR'")
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     dao = MemoryNodeDAO(db)
-    return {"nodes": dao.get_by_tags(tag_list, limit=limit, mode=mode)}
+    return {
+        "nodes": dao.get_by_tags(
+            tag_list,
+            limit=limit,
+            mode=mode,
+            user_id=str(current_user["sub"]),
+        )
+    }
 
 
 @router.post("/links", status_code=201)
@@ -249,6 +262,15 @@ def create_link(
 ):
     """Create a directed relationship between two existing memory nodes."""
     dao = MemoryNodeDAO(db)
+    user_id = str(current_user["sub"])
+    source = dao.get_by_id(body.source_id, user_id=user_id)
+    if not source:
+        if dao._get_model_by_id(body.source_id) is not None:
+            raise HTTPException(status_code=404, detail="Source node not found")
+    target = dao.get_by_id(body.target_id, user_id=user_id)
+    if not target:
+        if dao._get_model_by_id(body.target_id) is not None:
+            raise HTTPException(status_code=404, detail="Target node not found")
     try:
         return dao.create_link(body.source_id, body.target_id, body.link_type)
     except ValueError as e:

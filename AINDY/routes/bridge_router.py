@@ -8,6 +8,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from services.memory_capture_engine import MemoryCaptureEngine
 from services.memory_persistence import MemoryNodeDAO
 from config import settings
 from services import rippletrace_services
@@ -49,9 +50,12 @@ def verify_permission_or_403(permission: TracePermission):
 # --- Node + Link Models ---------------------------------------------------
 class NodeCreateRequest(BaseModel):
     content: str
+    source: Optional[str] = None
     tags: Optional[List[str]] = Field(default_factory=list)
     node_type: Optional[str] = None
     extra: Optional[dict] = Field(default_factory=dict)
+    user_id: Optional[str] = None
+    source_agent: Optional[str] = None
     permission: TracePermission
 
 
@@ -89,17 +93,26 @@ router = APIRouter(prefix="/bridge", tags=["Bridge"])
 @router.post("/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
 def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     verify_permission_or_403(payload.permission)
-    dao = MemoryNodeDAO(db)
-
-    class _NodeLike:
-        def __init__(self, content, tags, node_type, extra):
-            self.id = None
-            self.content = content
-            self.tags = tags or []
-            self.node_type = node_type
-            self.extra = extra or {}
-
-    saved = dao.save_memory_node(_NodeLike(payload.content, payload.tags, payload.node_type, payload.extra))
+    engine = MemoryCaptureEngine(
+        db=db,
+        user_id=payload.user_id or "system",
+        agent_namespace=payload.source_agent or "user",
+    )
+    saved = engine.evaluate_and_capture(
+        event_type="task_completed",
+        content=payload.content,
+        source=payload.source or "bridge",
+        tags=payload.tags,
+        node_type=payload.node_type,
+        context=payload.extra,
+        extra=payload.extra,
+        force=True,
+    )
+    if not saved:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create memory node",
+        )
 
     # 🔁 Emit RippleTrace event
     rippletrace_services.log_ripple_event(db, {
@@ -110,11 +123,11 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
     })
 
     return NodeResponse(
-        id=str(saved.id),
-        content=saved.content,
-        tags=saved.tags,
-        node_type=saved.node_type,
-        extra=saved.extra or {},
+        id=str(saved.get("id")),
+        content=saved.get("content"),
+        tags=saved.get("tags", []),
+        node_type=saved.get("node_type"),
+        extra=saved.get("extra") or {},
     )
 
 

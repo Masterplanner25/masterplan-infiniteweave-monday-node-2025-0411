@@ -154,13 +154,21 @@ class MemoryNodeDAO:
             return None
         return self._node_to_dict(db_node)
 
-    def get_by_tags(self, tags: List[str], limit: int = 50, mode: str = "AND") -> List[dict]:
+    def get_by_tags(
+        self,
+        tags: List[str],
+        limit: int = 50,
+        mode: str = "AND",
+        user_id: str = None,
+    ) -> List[dict]:
         """
         Return nodes whose tags array contains the given tags.
         mode='AND'  - all tags must be present.
         mode='OR'   - any tag must be present.
         """
         query = self.db.query(MemoryNodeModel)
+        if user_id:
+            query = query.filter(MemoryNodeModel.user_id == user_id)
         clean_tags = [t for t in (tags or []) if t]
         if clean_tags:
             if mode.upper() == "OR":
@@ -354,7 +362,11 @@ class MemoryNodeDAO:
 
         # Tag path
         if tags:
-            tag_nodes = self.get_by_tags(tags=tags, limit=limit * 3)
+            tag_nodes = self.get_by_tags(
+                tags=tags,
+                limit=limit * 3,
+                user_id=user_id,
+            )
             existing_ids = {c["id"] for c in candidates}
             for node_dict in tag_nodes:
                 if node_dict["id"] not in existing_ids:

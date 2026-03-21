@@ -53,6 +53,27 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `POST /arm/generate` — 10 requests/minute per IP
 - Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
 
+**Search System summary (current implementation):**
+- SEO: `POST /analyze_seo/`, `POST /generate_meta/`, `POST /suggest_improvements/`, `POST /seo/analyze`, `POST /seo/meta`.
+- LeadGen: `POST /leadgen/` (query param), `GET /leadgen/`.
+- Research: `POST /research/`, `POST /research/query`, `GET /research/`.
+- Memory search: `POST /memory/nodes/search`, `POST /memory/recall`.
+- Note: LeadGen retrieval is mocked in `services/leadgen_service.py`; research routes do not invoke `modules/research_engine.py`.
+
+**Freelancing summary (current implementation):**
+- Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
+- Feedback: `POST /freelance/feedback`, `GET /freelance/feedback`.
+- Metrics: `GET /freelance/metrics/latest`, `POST /freelance/metrics/update`.
+
+**Social Layer summary (current implementation):**
+- Profiles: `POST /social/profile`, `GET /social/profile/{username}`.
+- Posts/Feed: `POST /social/post`, `GET /social/feed`.
+
+**Masterplan SaaS summary (current implementation):**
+- Genesis: `/genesis/*` supports draft, synthesize, audit, and lock flows.
+- MasterPlans: `/masterplans/*` supports list, lock, and activate.
+- Note: Masterplan anchor/ETA projection and dependency cascade outputs are not exposed as APIs.
+
 **Memory Bridge Phase 1 additions (2026-03-18):**
 - `POST /memory/nodes` — JWT required. Body: `CreateNodeRequest {content, source?, tags?, node_type?, extra?}`. Persists a memory node. Returns node dict. Status 201.
 - `GET /memory/nodes/{node_id}` — JWT required. Returns node dict or 404.
@@ -1063,6 +1084,7 @@ Status Codes: 200, 401.
 - ARM `POST /arm/analyze` and `POST /arm/generate` are rate-limited to 10/min per IP to prevent cost runaway.
 - ARM responses include Infinity Algorithm metrics: `task_priority` (TP = C×U/R) and `execution_speed` (tokens/second).
 - ARM DB persistence: `analysis_results` table records every call (including failures) for audit trail; `code_generations` table records every generation. Both use UUID PKs.
+- ARM runtime uses OpenAI GPT-4o via `modules/deepseek/deepseek_code_analyzer.py` (legacy "DeepSeek" namespace; `services/deepseek_arm_service.py` is not used by the router).
 - Research endpoints are synchronous and persist results; they do not implement async or background execution.
 
 ## 7. Error Response Shape (Current Implementation)
@@ -1083,6 +1105,7 @@ Status Codes: 200, 401.
 - Many routes do not declare response models and return ORM objects or dicts without schema enforcement.
 - Error handling is inconsistent; many routes do not catch exceptions.
 - Some endpoints accept query parameters where request bodies might be expected (e.g., `/authorship/reclaim`, `/freelance/deliver/{order_id}`).
+- Masterplan SaaS provides Genesis and MasterPlan lifecycle endpoints only; no API exists for masterplan anchors, ETA projection, or dependency cascade outputs.
 
 ## Appendix: Route-to-Schema Map
 This appendix lists request schemas where they are explicitly defined.

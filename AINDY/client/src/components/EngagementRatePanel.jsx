@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateEngagementRate } from "../api";
 
 export default function EngagementRatePanel() {
   const [totalInteractions, setTotalInteractions] = useState(0);
@@ -9,15 +10,11 @@ export default function EngagementRatePanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/engagement_rate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        total_interactions: parseFloat(totalInteractions),
-        total_views: parseFloat(totalViews)
-      })
+    const data = await calculateEngagementRate({
+      total_interactions: parseFloat(totalInteractions),
+      total_views: parseFloat(totalViews)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

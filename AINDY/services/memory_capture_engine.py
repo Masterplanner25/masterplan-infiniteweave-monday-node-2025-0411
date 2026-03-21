@@ -62,6 +62,7 @@ class MemoryCaptureEngine:
         tags: list[str] = None,
         node_type: str = None,
         context: dict = None,
+        extra: dict = None,
         force: bool = False,
         agent_namespace: str = None,
     ) -> Optional[dict]:
@@ -124,6 +125,7 @@ class MemoryCaptureEngine:
                 tags=enriched_tags,
                 user_id=self.user_id,
                 node_type=node_type,
+                extra=extra or {},
                 generate_embedding=True,
             )
 
@@ -313,6 +315,7 @@ class MemoryCaptureEngine:
             related = self.dao.get_by_tags(
                 tags=tags,
                 limit=3,
+                user_id=self.user_id,
             )
             related = [
                 r for r in related

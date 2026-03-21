@@ -19,7 +19,10 @@ def ingest_linkedin_manual(
     current_user: dict = Depends(get_current_user),
 ):
 
-    plan = db.query(MasterPlan).filter_by(id=data.masterplan_id).first()
+    plan = db.query(MasterPlan).filter(
+        MasterPlan.id == data.masterplan_id,
+        MasterPlan.user_id == str(current_user["sub"]),
+    ).first()
     if not plan:
         raise HTTPException(status_code=404, detail="MasterPlan not found")
 

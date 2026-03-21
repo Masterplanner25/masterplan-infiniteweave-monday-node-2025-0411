@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateLostPotential } from "../api";
 
 export default function LostPotentialPanel() {
   const [missedOpportunities, setMissedOpportunities] = useState(0);
@@ -15,16 +16,12 @@ export default function LostPotentialPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/lost_potential", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        missed_opportunities: parseFloat(missedOpportunities),
-        time_delayed: parseFloat(timeDelayed),
-        gains_from_action: parseFloat(gainsFromAction)
-      })
+    const data = await calculateLostPotential({
+      missed_opportunities: parseFloat(missedOpportunities),
+      time_delayed: parseFloat(timeDelayed),
+      gains_from_action: parseFloat(gainsFromAction)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (

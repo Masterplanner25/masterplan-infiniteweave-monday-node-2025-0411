@@ -219,3 +219,161 @@ export function getMasterPlan(planId) {
 export function activateMasterPlan(planId) {
   return authRequest(`/masterplans/${planId}/activate`, { method: "POST" });
 }
+
+/* --- Dashboard Endpoints --- */
+export function getDashboardOverview() {
+  return authRequest("/dashboard/overview", { method: "GET" });
+}
+
+export function getDashboardHealth() {
+  return authRequest("/dashboard/health", { method: "GET" });
+}
+
+/* --- Analytics Endpoints --- */
+export function ingestLinkedInManual(payload) {
+  return authRequest("/analytics/linkedin/manual", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMasterplanSummary(masterplanId, groupBy = null) {
+  const query = groupBy ? `?group_by=${encodeURIComponent(groupBy)}` : "";
+  return authRequest(`/analytics/masterplan/${masterplanId}/summary${query}`, {
+    method: "GET",
+  });
+}
+
+/* --- Execution Metrics Endpoints --- */
+export function calculateTwr(payload) {
+  return authRequest("/calculate_twr", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateEngagement(payload) {
+  return authRequest("/calculate_engagement", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateAiEfficiency(payload) {
+  return authRequest("/calculate_ai_efficiency", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateImpactScore(payload) {
+  return authRequest("/calculate_impact_score", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateIncomeEfficiency(payload) {
+  return authRequest("/income_efficiency", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateRevenueScaling(payload) {
+  return authRequest("/revenue_scaling", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateExecutionSpeed(payload) {
+  return authRequest("/execution_speed", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateAttentionValue(payload) {
+  return authRequest("/attention_value", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateEngagementRate(payload) {
+  return authRequest("/engagement_rate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateBusinessGrowth(payload) {
+  return authRequest("/business_growth", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateMonetizationEfficiency(payload) {
+  return authRequest("/monetization_efficiency", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateAiProductivityBoost(payload) {
+  return authRequest("/ai_productivity_boost", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateDecisionEfficiency(payload) {
+  return authRequest("/decision_efficiency", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function calculateLostPotential(payload) {
+  return authRequest("/lost_potential", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/* --- SEO Tool Endpoints --- */
+export function analyzeSeo(content) {
+  return authRequest("/analyze_seo/", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function generateMeta(content) {
+  return authRequest("/generate_meta/", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+export function suggestSeoImprovements(content) {
+  return authRequest("/suggest_improvements/", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+}
+
+/* --- Freelance Endpoints --- */
+export function getFreelanceOrders() {
+  return authRequest("/freelance/orders", { method: "GET" });
+}
+
+export function getFreelanceFeedback() {
+  return authRequest("/freelance/feedback", { method: "GET" });
+}
+
+export function getFreelanceMetricsLatest() {
+  return authRequest("/freelance/metrics/latest", { method: "GET" });
+}

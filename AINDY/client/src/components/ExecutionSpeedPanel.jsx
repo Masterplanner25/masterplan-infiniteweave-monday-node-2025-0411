@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { calculateExecutionSpeed } from "../api";
 
 export default function ExecutionSpeedPanel() {
   const [aiAutomations, setAiAutomations] = useState(0);
@@ -10,16 +11,12 @@ export default function ExecutionSpeedPanel() {
   const inputStyle = { backgroundColor: "#222", color: "#fff", border: "1px solid #444", padding: "10px", borderRadius: "4px", width: "100%", boxSizing: "border-box" };
 
   const handleSubmit = async () => {
-    const response = await fetch("http://localhost:8000/execution_speed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ai_automations: parseFloat(aiAutomations),
-        systemized_workflows: parseFloat(systemizedWorkflows),
-        decision_lag: parseFloat(decisionLag)
-      })
+    const data = await calculateExecutionSpeed({
+      ai_automations: parseFloat(aiAutomations),
+      systemized_workflows: parseFloat(systemizedWorkflows),
+      decision_lag: parseFloat(decisionLag)
     });
-    setResult(await response.json());
+    setResult(data);
   };
 
   return (
