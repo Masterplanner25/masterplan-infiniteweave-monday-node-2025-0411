@@ -60,7 +60,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - LeadGen: `POST /leadgen/` (query param), `GET /leadgen/`.
 - Research: `POST /research/`, `POST /research/query`, `GET /research/`.
 - Memory search: `POST /memory/nodes/search`, `POST /memory/recall`.
-- Note: LeadGen retrieval is mocked in `services/leadgen_service.py`; research routes do not invoke `modules/research_engine.py`.
+- Note: LeadGen uses external retrieval with structured parsing; research routes now invoke `modules/research_engine.web_search()` + `ai_analyze()`.
 
 **Freelancing summary (current implementation):**
 - Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
@@ -398,7 +398,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: `ResearchResultCreate` (`AINDY/schemas/research_results_schema.py`)
 Query Params: None
-Response: `ResearchResultResponse`
+Response: `ResearchResultResponse` (includes `source` and `data`; may include `search_score`)
 Status Codes: 200
 Errors: Not explicitly defined.
 
@@ -414,7 +414,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: `ResearchResultCreate`
 Query Params: None
-Response: `ResearchResultResponse`
+Response: `ResearchResultResponse` (includes `source` and `data`; may include `search_score`)
 Status Codes: 200
 Errors: Not explicitly defined.
 
@@ -874,7 +874,7 @@ Note: Advisory only — never auto-applies. User must call PUT /arm/config with
 Method: POST
 Request Body: None
 Query Params: `query` (required)
-Response: `{ "query": str, "count": int, "results": [ {company, url, fit_score, intent_score, data_quality_score, overall_score, reasoning, created_at} ] }`
+Response: `{ "query": str, "count": int, "results": [ {company, url, fit_score, intent_score, data_quality_score, overall_score, reasoning, search_score, created_at} ] }`
 Status Codes: 200
 Errors: Not explicitly defined.
 

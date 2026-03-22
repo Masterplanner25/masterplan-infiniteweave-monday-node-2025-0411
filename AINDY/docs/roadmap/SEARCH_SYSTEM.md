@@ -114,10 +114,11 @@ Structured results:
 * DB persistence
 * Memory Bridge logging
 * Memory Orchestrator recall for prior leadgen context
+* External retrieval via `modules/research_engine.web_search()` with structured response parsing + fallback
 
 **Missing:**
 
-* real search retrieval (currently mocked)
+* provider-backed lead search with richer parsing (current structured parsing is minimal)
 * query template system (documented but not implemented)
 
 ---
@@ -135,6 +136,7 @@ Structured results:
 * research result storage
 * memory logging (capture engine)
 * Memory Orchestrator recall attached to `/research/query` results
+* Live summary generation via `modules/research_engine.ai_analyze()`
 
 **Missing:**
 
@@ -192,9 +194,9 @@ This capability exists but is not wired into the Search System flows documented 
 
 **Missing:**
 
-* live web search for leadgen and research
+* live web search for research (provider-dependent reliability)
 * unified search pipeline
-* consistent ranking model across search surfaces
+* consistent ranking model across search surfaces (now shared scorer, still early)
 * UI integration for SEO and LeadGen
 
 ---
@@ -246,7 +248,7 @@ It is NOT:
 
 **Actions:**
 
-* unify relevance scoring across SEO, leadgen, research
+* unify relevance scoring across SEO, leadgen, research (shared scorer in use)
 
 ---
 
@@ -297,7 +299,7 @@ It is NOT:
 | ----- | -------------------- | ----------- | --------------- |
 | v1    | Surface Alignment    | Partial     | Normalize       |
 | v2    | Retrieval Integration| Partial     | Wire + replace  |
-| v3    | Ranking Unification  | Missing     | Unify scoring   |
+| v3    | Ranking Unification  | Partial     | Unify scoring   |
 | v4    | Feedback Loop        | Missing     | Persist + reuse |
 | v5    | UI Integration       | Missing     | Implement       |
 

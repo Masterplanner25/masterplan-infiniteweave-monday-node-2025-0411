@@ -7,7 +7,7 @@ This document inventories current technical debt based strictly on the existing 
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
-- Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is now integrated in LeadGen + Research query flow, but live external retrieval is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
+- Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete and memory logging uses a legacy DAO path. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
 - Social Layer lacks visibility scoring and persistent bridge event logging; memory logging for posts is non-persistent. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
 - RippleTrace remains signal-capture only; pattern engine, graph layer, and insight engine are not implemented. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.

@@ -18,3 +18,5 @@ class ResearchResultResponse(ResearchResultBase):
 
     id: int
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    source: str | None = None
+    data: dict | None = None

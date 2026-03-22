@@ -6,6 +6,8 @@ from schemas.research_results_schema import ResearchResultCreate, ResearchResult
 from services import research_results_service
 from db.dao.memory_node_dao import MemoryNodeDAO
 from runtime.memory import MemoryOrchestrator
+from modules.research_engine import web_search, ai_analyze
+from services.search_scoring import score_research_result
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
@@ -63,17 +65,39 @@ def run_research_query(
     except Exception:
         context = None
 
+    summary = request.summary
+    source = None
+    raw_excerpt = None
+    try:
+        raw = web_search(request.query)
+        raw_excerpt = (raw or "")[:2000]
+        summary = ai_analyze(raw)
+        source = "external_search"
+    except Exception:
+        summary = request.summary
+
     data = None
     if context and context.items:
         data = {
             "memory_context_ids": context.ids,
             "memory_context": context.formatted,
         }
+    memory_context_count = len(context.items) if context else 0
+    search_score = score_research_result(
+        summary=summary or "",
+        memory_context_count=memory_context_count,
+    )
+    data = data or {}
+    data.update({
+        "search_score": search_score,
+        "raw_excerpt": raw_excerpt,
+        "source": source,
+    })
 
     return research_results_service.create_research_result(
         db,
-        request,
+        ResearchResultCreate(query=request.query, summary=summary),
         user_id=str(current_user["sub"]),
         data=data,
-        source="research_query",
+        source=source or "research_query",
     )
