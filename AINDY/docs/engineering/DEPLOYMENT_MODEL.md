@@ -82,15 +82,13 @@ This document distinguishes current deployment reality from required policy rule
 
 ### Current State
 - Logging is configured in `AINDY/config.py` with file and stream handlers.
-- Request logging middleware exists in `AINDY/main.py`.
-- Many modules use `print(...)` for runtime output.
+- Request logging middleware exists in `AINDY/main.py` (structured JSON logs).
 - Centralized logging and tracing are not present.
-- FastAPI cache uses `InMemoryBackend` (per-process only); multi-instance deployments will not share cache state.
+- FastAPI cache uses `InMemoryBackend` by default (per-process). Redis is supported via `AINDY_CACHE_BACKEND=redis` and `REDIS_URL`.
 - Basic liveness endpoints exist:
 - `GET /health/` in `AINDY/routes/health_router.py` performs component checks, endpoint pings, and logs to DB.
 - `GET /dashboard/health` in `AINDY/routes/health_dashboard_router.py` returns recent health logs.
-- `/health/` performs HTTP POST pings to local endpoints (e.g., `/calculate_twr`, `/tools/seo/analyze`, `/tools/seo/meta`) and can report degraded status if those routes are unavailable.
-- Note: `AINDY/routes/health_router.py` pings `/tools/seo/analyze` and `/tools/seo/meta`, but `AINDY/routes/seo_routes.py` defines `/seo/analyze` and `/seo/meta` (and separate `/analyze_seo/`, `/generate_meta/` routes). This mismatch can cause health checks to fail if `/tools/seo/*` is not routed.
+- `/health/` performs HTTP pings to local endpoints (e.g., `/calculate_twr`, `/seo/analyze`, `/seo/meta`, `/memory/metrics`) and can report degraded status if those routes are unavailable.
 
 ## 8. Known Deployment Risks
 - Schema drift risk if Alembic migrations are not applied before start.
