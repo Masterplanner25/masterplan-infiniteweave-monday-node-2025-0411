@@ -285,15 +285,15 @@ This document maps the current data model strictly as implemented in the reposit
 #### GenesisSessionDB (`genesis_sessions`)
 - Columns
 - `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
-- `user_id`: Integer, nullable=True, default: not defined
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True
 - `status`: String, nullable: not explicitly set, default="active"
 - `summarized_state`: JSON, nullable=True, default: not defined
 - `created_at`: DateTime(timezone=True), nullable: not explicitly set, server_default=func.now()
 - `updated_at`: DateTime(timezone=True), nullable: not explicitly set, onupdate=func.now()
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
-- Foreign keys: None
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_genesis_sessions_user_id`)
+- Foreign keys: `user_id -> users.id`
 - Relationships: Not explicitly defined in current implementation.
 
 ### `AINDY/db/models/memory_metrics.py`
@@ -500,7 +500,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Columns
 - `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
 - `masterplan_id`: Integer, ForeignKey("master_plans.id"), nullable=False
-- `user_id`: Integer, nullable=True
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True
 - `platform`: String, nullable: not explicitly set
 - `scope_type`: String, nullable: not explicitly set
 - `scope_id`: String, nullable=True
@@ -525,8 +525,8 @@ This document maps the current data model strictly as implemented in the reposit
 - `growth_rate`: Float, nullable: not explicitly set
 - Primary key: `id`
 - Unique constraints: `uq_canonical_period_scope`
-- Indexes: `id` (index=True)
-- Foreign keys: `masterplan_id -> master_plans.id`
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_canonical_metrics_user_id`)
+- Foreign keys: `masterplan_id -> master_plans.id`, `user_id -> users.id`
 - Relationships: Not explicitly defined in current implementation.
 
 ### `AINDY/db/models/research_results.py`
@@ -560,6 +560,24 @@ This document maps the current data model strictly as implemented in the reposit
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True)
 - Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/request_metric.py`
+
+#### RequestMetric (`request_metrics`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `request_id`: String, nullable=True, index=True
+- `user_id`: UUID, nullable=True, index=True
+- `method`: String, nullable=False
+- `path`: String, nullable=False, index=True
+- `status_code`: Integer, nullable=False
+- `duration_ms`: Float, nullable=False
+- `created_at`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True), `request_id` (index=True, `ix_request_metrics_request_id`), `user_id` (index=True, `ix_request_metrics_user_id`), `path` (index=True, `ix_request_metrics_path`)
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/task.py`
@@ -682,6 +700,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 **Bridge user events migration (2026-03-21):**
 - `cb417760d319` - `add_bridge_user_events`: adds `bridge_user_events` table for persisted `/bridge/user_event` audit trail.
 
+**Auth identity cleanup + request metrics (2026-03-22):**
+- `b7c8d9e0f1a2` - `auth_identity_cleanup_and_request_metrics`: adds `request_metrics` table and converts `genesis_sessions.user_id` + `canonical_metrics.user_id` to UUID with FK to `users.id`.
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -700,6 +721,7 @@ Migration filenames exist in `AINDY/alembic/versions/`, but alignment requires a
 - `metrics_models` (engagement, etc.): `94bcd9284285_move_metrics_models_to_db_models.py` appears related by filename only
 - `research_results`: `4e392d916569_add_research_results_table.py`, `64872a402355_add_research_results_table.py`, `8b57835a640c_add_research_results_table.py`, `ec0e78e6e306_align_researchresult_schema_with_.py`
 - `system_health_logs`: `03adbb4b957b_add_system_health_logs_table.py`, `e52a1f667323_add_system_health_logs_table.py`
+- `request_metrics`: `b7c8d9e0f1a2_auth_identity_cleanup_and_request_metrics.py`
 - `users`: `37f972780d54_create_users_table.py` — applied; head revision as of Phase 3 security implementation.
 
 Alignment for each model cannot be confirmed from static inspection alone; verification requires a migration diff check against the current ORM metadata.

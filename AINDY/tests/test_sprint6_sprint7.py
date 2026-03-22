@@ -200,7 +200,7 @@ class TestSprint7GenesisMemoryHook:
     def test_genesis_router_passes_user_id_to_llm(self):
         """genesis_router /message must pass user_id and db to call_genesis_llm."""
         source = _read_source(os.path.join(_ROUTES_DIR, "genesis_router.py"))
-        assert "user_id=user_id_str" in source or "user_id=str(" in source, (
+        assert "user_id=str(user_id)" in source or "user_id=str(" in source, (
             "genesis_router does not pass user_id to call_genesis_llm"
         )
         assert "db=db" in source, (

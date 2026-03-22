@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db.database import Base
@@ -70,9 +71,7 @@ class GenesisSessionDB(Base):
     __tablename__ = "genesis_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=True)
-    # UUID string from User.id — additive; user_id (Integer) left in place
-    user_id_str = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
 
     status = Column(String, default="active")  # active | paused | synthesized | locked | abandoned
 

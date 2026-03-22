@@ -206,12 +206,12 @@ class TestGenesisBlock1:
             f"draft_json missing from genesis_sessions. Columns: {col_names}"
         )
 
-    def test_genesis_session_has_user_id_str_column(self):
-        """GenesisSessionDB must have user_id_str (String) column."""
+    def test_genesis_session_has_user_id_column(self):
+        """GenesisSessionDB must have user_id (UUID) column."""
         from db.models import GenesisSessionDB
         col_names = [c.key for c in GenesisSessionDB.__table__.columns]
-        assert "user_id_str" in col_names, (
-            f"user_id_str missing from genesis_sessions. Columns: {col_names}"
+        assert "user_id" in col_names, (
+            f"user_id missing from genesis_sessions. Columns: {col_names}"
         )
 
     def test_genesis_session_has_locked_at_column(self):

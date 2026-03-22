@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -30,6 +31,7 @@ def ingest_linkedin_manual(
         )
 
     canonical = linkedin_adapter(data)
+    canonical["user_id"] = uuid.UUID(str(current_user["sub"]))
 
     existing = db.query(CanonicalMetricDB).filter_by(
         masterplan_id=canonical["masterplan_id"],

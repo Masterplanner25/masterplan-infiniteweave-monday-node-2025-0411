@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, Float, String, Date, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 from datetime import datetime
 
@@ -142,7 +143,7 @@ class CanonicalMetricDB(Base):
 
     # --- RELATIONSHIPS ---
     masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=False)
-    user_id = Column(Integer, nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
 
     # --- CONTEXT ---
     platform = Column(String)

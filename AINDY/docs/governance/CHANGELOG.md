@@ -22,6 +22,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Memory Metrics system: `memory_metrics` table, `MemoryMetricsEngine`, `MemoryMetricsStore`, and `/memory/metrics*` endpoints
 * Memory Trace layer: `memory_traces` + `memory_trace_nodes`, `MemoryTraceDAO`, and `/memory/traces*` endpoints
 * Symbolic memory ingest: `services/memory_ingest_service.py` and `Tools/ingest_memory.py`
+* Request metrics baseline: `request_metrics` table + structured request logging middleware
 
 ## Changed
 
@@ -31,6 +32,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Ongoing improvements to runtime behavior and system architecture
 * ARM analysis and Genesis prompts now inject identity context when available
 * Masterplan lock flow now observes identity posture signals for inference
+* Genesis sessions now bind `user_id` (UUID FK to users) and legacy `user_id`/`user_id_str` columns are removed
 
 ---
 
@@ -96,7 +98,7 @@ Sprint 6 closes the final deprecation warning (SQLAlchemy `declarative_base` imp
   - All memory operations fire-and-forget; exceptions silenced with `logging.warning()`
 
 * **`routes/genesis_router.py` — `POST /genesis/message`** updated:
-  - Passes `message=user_message, user_id=user_id_str, db=db` to `call_genesis_llm()`
+  - Passes `message=user_message, user_id=str(user_id), db=db` to `call_genesis_llm()`
 
 * **`services/leadgen_service.py` — `run_ai_search()`** updated:
   - Added `user_id: str = None, db = None` params

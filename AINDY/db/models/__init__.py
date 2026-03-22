@@ -15,6 +15,7 @@ from .arm_models import ARMRun, ARMLog, ARMConfig
 from .leadgen_model import LeadGenResult
 from .author_model import AuthorDB
 from .system_health_log import SystemHealthLog
+from .request_metric import RequestMetric
 from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
@@ -40,6 +41,7 @@ __all__ = [
     "LeadGenResult",
     "AuthorDB",
     "SystemHealthLog",
+    "RequestMetric",
     "GenesisSessionDB",
     "User",
     "UserIdentity",

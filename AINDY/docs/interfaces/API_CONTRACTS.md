@@ -984,7 +984,7 @@ Errors: Not explicitly defined.
 `POST /genesis/session`
 Method: POST
 Request Body: None
-Auth: JWT Bearer (user_id_str bound from token sub)
+Auth: JWT Bearer (user_id bound from token sub)
 Response: `{ "session_id": int }`
 Status Codes: 200
 
@@ -1092,7 +1092,7 @@ Response: `{ "context": str, "is_empty": bool, "message": str }`
 Status Codes: 200, 401.
 
 ## 3. Genesis API Contract (Current Implementation — Genesis Blocks 1-3)
-- `POST /genesis/session` binds `user_id_str` from JWT `sub`. All subsequent queries scoped to that user.
+- `POST /genesis/session` binds `user_id` (UUID) from JWT `sub`. All subsequent queries scoped to that user.
 - `POST /genesis/message` persists `synthesis_ready` as one-way flag (True → never False). `synthesis_ready` returned reflects DB value, not LLM flag.
 - `POST /genesis/synthesize` requires `synthesis_ready == True`; returns 422 otherwise. Persists `draft_json` to session. Calls real GPT-4o.
 - Posture is one of `Stable | Accelerated | Aggressive | Reduced` (determined by `ambition_score` + `time_horizon_years`).
