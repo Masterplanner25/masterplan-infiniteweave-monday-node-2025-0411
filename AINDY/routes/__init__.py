@@ -19,6 +19,7 @@ from routes.genesis_router import router as genesis_router
 from routes.auth_router import router as auth_router
 from routes.masterplan_router import router as masterplan_router
 from routes.memory_router import router as memory_router
+from routes.memory_metrics_router import router as memory_metrics_router
 from routes.identity_router import router as identity_router
 
 
@@ -44,6 +45,7 @@ ROUTERS = [
     auth_router,
     masterplan_router,
     memory_router,
+    memory_metrics_router,
     identity_router,
 ]
 

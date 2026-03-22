@@ -261,6 +261,23 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: None
 - Relationships: Not explicitly defined in current implementation.
 
+### `AINDY/db/models/memory_metrics.py`
+
+#### MemoryMetric (`memory_metrics`)
+- Columns
+- `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null)
+- `user_id`: String, nullable=False, index=True
+- `task_type`: String, nullable=True, index=True
+- `impact_score`: Float, nullable=False, default=0.0
+- `memory_count`: Integer, nullable=False, default=0
+- `avg_similarity`: Float, nullable=False, default=0.0
+- `created_at`: DateTime, nullable=False, default=datetime.utcnow
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_memory_metrics_user_id`), `task_type` (index=True, `ix_memory_metrics_task_type`)
+- Foreign keys: None
+- Relationships: None
+
 ### `AINDY/db/models/metrics_models.py`
 
 #### Engagement (`engagements`)
@@ -586,6 +603,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 **Memory Bridge v5 Phase 3 migration (2026-03-19):**
 - `a2ec23964f2c` - `multi_agent_memory_v5_phase3`: adds `agents` table, adds `source_agent` + `is_shared` columns to `memory_nodes`, seeds system agents.
 
+**Memory Metrics migration (2026-03-21):**
+- `7c12f8c9a1b4` - `add_memory_metrics_table`: adds `memory_metrics` table with per-run impact metrics.
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -682,6 +702,17 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `ix_memory_links_target` on `target_node_id`
 - `uq_memory_links_unique` unique index on (`source_node_id`, `target_node_id`, `link_type`)
 - Link-type constraints: Not explicitly defined in current implementation.
+
+### `memory_metrics`
+- Model: `MemoryMetric` (`AINDY/db/models/memory_metrics.py`)
+- Columns
+- `id`: Integer, primary key
+- `user_id`: String, nullable=False, index=True
+- `task_type`: String, nullable=True, index=True
+- `impact_score`: Float, nullable=False, default=0.0
+- `memory_count`: Integer, nullable=False, default=0
+- `avg_similarity`: Float, nullable=False, default=0.0
+- `created_at`: DateTime, nullable=False, server_default=func.now()
 
 ### `memory_node_history`
 - Model: `MemoryNodeHistory` (`AINDY/db/models/memory_node_history.py`)

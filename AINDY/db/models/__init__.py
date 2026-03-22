@@ -6,6 +6,7 @@ from .drop import DropPointDB, PingDB
 from .task import Task
 from .masterplan import MasterPlan, GenesisSessionDB
 from .metrics_models import CanonicalMetricDB
+from .memory_metrics import MemoryMetric
 from .research_results import ResearchResult
 from .freelance import FreelanceOrder, ClientFeedback, RevenueMetrics
 from .arm_models import ARMRun, ARMLog, ARMConfig
@@ -40,4 +41,5 @@ __all__ = [
     "UserIdentity",
     "MemoryNodeHistory",
     "Agent",
+    "MemoryMetric",
 ]
