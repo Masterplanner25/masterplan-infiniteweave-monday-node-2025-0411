@@ -10,6 +10,8 @@ import json
 import uuid
 import re
 from urllib.parse import urlparse
+
+from services.search_scoring import score_lead_result
 from datetime import datetime
 from sqlalchemy.orm import Session
 from openai import OpenAI
@@ -281,6 +283,12 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
 
     for lead in leads:
         score = score_lead(lead)
+        search_score = score_lead_result(
+            overall_score=score.get("overall_score"),
+            fit_score=score.get("fit_score"),
+            intent_score=score.get("intent_score"),
+            data_quality_score=score.get("data_quality_score"),
+        )
 
         db_entry = LeadGenResult(
             query=query,
@@ -310,6 +318,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
         )
 
         print(f"[LeadGen] Logged {lead['company']} ({score['overall_score']})")
-        results.append(db_entry)
+        results.append((db_entry, search_score))
 
+    results.sort(key=lambda item: item[1], reverse=True)
     return results

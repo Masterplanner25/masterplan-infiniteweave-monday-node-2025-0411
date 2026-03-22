@@ -38,9 +38,10 @@ def generate_b2b_leads(
             "data_quality_score": r.data_quality_score,
             "overall_score": r.overall_score,
             "reasoning": r.reasoning,
+            "search_score": search_score,
             "created_at": r.created_at
         }
-        for r in results
+        for r, search_score in results
     ]
     return {"query": query, "count": len(formatted), "results": formatted}
 
