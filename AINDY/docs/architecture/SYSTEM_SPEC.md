@@ -123,7 +123,7 @@ Primary backend entry point: `AINDY/main.py`.
 - Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance.
 - Resonance v2 (Phase 4): `MemoryOrchestrator` (in `AINDY/runtime/memory/`) drives recall, scoring, filtering, and token budgeting; it delegates retrieval to `MemoryNodeDAO.recall()` and applies the resonance formula: `(semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` with adaptive weight multiplier and tag bonus.
 
-- Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight.
+- Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight. Memory Learning (runtime) updates per-execution success_rate and low-value flags (stored in `extra`) via `AINDY/runtime/memory/memory_learning.py`.
 - Suggestion engine (Phase 4): `MemoryNodeDAO.suggest()` returns actionable recommendations; endpoint `POST /memory/suggest`.
 - C++ kernel: `bridge/memory_bridge_rs/target/debug/memory_bridge_rs` provides `semantic_similarity()` via PyO3. Used in `embedding_service.cosine_similarity()` with Python fallback.
 

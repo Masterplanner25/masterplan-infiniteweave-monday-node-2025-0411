@@ -8,7 +8,7 @@ from .types import MemoryItem, RecallRequest
 
 
 class MemoryScorer:
-    def score(self, nodes: Iterable[dict], request: RecallRequest) -> List[MemoryItem]:
+    def score(self, nodes: Iterable[dict], request: RecallRequest | None) -> List[MemoryItem]:
         scored: List[MemoryItem] = []
         now = datetime.utcnow()
 
@@ -19,16 +19,28 @@ class MemoryScorer:
                 recency = _compute_recency(node.get("created_at"), now)
 
             success_rate = _safe_float(node.get("success_rate", 0.0))
+            low_value_flag = False
+            extra = node.get("extra") if isinstance(node, dict) else None
+            if isinstance(extra, dict) and extra.get("success_rate") is not None:
+                success_rate = _safe_float(extra.get("success_rate"))
+            if isinstance(extra, dict) and extra.get("low_value_flag") is True:
+                low_value_flag = True
             usage_frequency = _safe_float(node.get("usage_frequency", node.get("usage_count", 0.0)))
             graph_bonus = _safe_float(node.get("graph_score", 0.0))
+
+            success_weight = 0.20
+            if usage_frequency and usage_frequency > 5:
+                success_weight = 0.25
 
             score = (
                 similarity * 0.40
                 + recency * 0.15
-                + success_rate * 0.20
+                + success_rate * success_weight
                 + _normalize_usage(usage_frequency) * 0.10
                 + graph_bonus * 0.15
             )
+            if low_value_flag:
+                score *= 0.5
 
             item = MemoryItem(
                 id=str(node.get("id")),
