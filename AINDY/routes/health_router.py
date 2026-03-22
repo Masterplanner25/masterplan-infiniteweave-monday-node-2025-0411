@@ -112,6 +112,7 @@ def health_check(db: Session = Depends(get_db)):
     status["status"] = "healthy" if not criticals and not fails else "degraded"
     avg_latency = statistics.mean(latencies) if latencies else 0
     status["avg_latency_ms"] = avg_latency
+    logger.info("Health status=%s avg_latency_ms=%.2f", status["status"], avg_latency)
 
     # --- Log to database -----------------------------------------------------
     try:

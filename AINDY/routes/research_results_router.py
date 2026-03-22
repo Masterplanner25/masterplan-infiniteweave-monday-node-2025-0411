@@ -1,6 +1,7 @@
 # routers/research_results_router.py
 from fastapi import APIRouter, Depends
 import logging
+import time
 from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate, ResearchResultResponse
@@ -48,6 +49,7 @@ def run_research_query(
     """
     Accepts a research query, stores it, and triggers MemoryBridge logging.
     """
+    start = time.perf_counter()
     logger.info("Running research for query: %s", request.query)
     context = None
     try:
@@ -107,6 +109,8 @@ def run_research_query(
     result_data = getattr(result, "data", None)
     if isinstance(result_data, dict):
         search_score = result_data.get("search_score")
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info("Research query completed in %.2fms", duration_ms)
     return {
         "id": result.id,
         "query": result.query,

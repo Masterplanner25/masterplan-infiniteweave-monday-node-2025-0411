@@ -116,7 +116,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 7. Observability Debt
 - Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).
 - No centralized logging or tracing infrastructure (no config or tooling present).
-- No metrics instrumentation beyond DB logging in `AINDY/routes/health_router.py`.
+- Basic latency logging added to core routes, but no centralized metrics store beyond `SystemHealthLog` (`AINDY/routes/health_router.py`).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt
