@@ -72,6 +72,8 @@ Focus areas:
 - Strengthen deployment safeguards (schema drift detection, health verification before exposure).
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 2 (Schema / Migration Debt).
 
+**Status:** Complete (2026-03-22)
+
 Exit criteria (policy-aligned):
 - Structured logging is used across core routes and services.
 - Basic metrics exist for core endpoints or request outcomes.

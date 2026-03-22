@@ -115,9 +115,9 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `InfiniteNetwork.jsx` now uses `authRequestExternal()` with JWT headers for gateway calls.
 
 ## 7. Observability Debt
-- Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).
+- ✅ **RESOLVED (2026-03-22):** Core routes/services now use `logger` instead of `print(...)` with structured error details.
 - No centralized logging or tracing infrastructure (no config or tooling present).
-- Basic latency logging added to core routes, but no centralized metrics store beyond `SystemHealthLog` (`AINDY/routes/health_router.py`).
+- ✅ **PARTIALLY RESOLVED (2026-03-22):** Basic latency logging added to core routes, but no centralized metrics store beyond `SystemHealthLog` (`AINDY/routes/health_router.py`).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt
