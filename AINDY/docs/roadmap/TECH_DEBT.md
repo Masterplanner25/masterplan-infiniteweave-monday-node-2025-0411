@@ -185,6 +185,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/alembic/versions/bff24d352475_create_memory_nodes_links.py`, `AINDY/services/memory_persistence.py` (MemoryLinkModel)
   - Mechanism: Schema defines `strength VARCHAR(20) DEFAULT 'medium'`. No numeric weight column exists.
   - Impact: Graph traversal scoring is blocked. Relationship strength carries no computational meaning in the current schema.
+  - Status: ✅ **RESOLVED (2026-03-21):** `weight FLOAT` added to `memory_links` via migration `e2c3d4f5a6b7`; traversal now prefers numeric `weight` with legacy `strength` fallback.
   - Status: Open. Fix: add `weight FLOAT NOT NULL DEFAULT 0.5` column to `memory_links`; deprecate `strength` string in a subsequent migration.
 
 ### §10.5 Retrieval — semantic retrieval is architecturally impossible in current state

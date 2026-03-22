@@ -729,6 +729,7 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `target_node_id`: UUID, ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False
 - `link_type`: String(50), nullable=False
 - `strength`: String(20), nullable=False, default="medium"
+- `weight`: Float, nullable=False, default=0.5
 - `created_at`: DateTime, nullable=False, server_default=func.now()
 - Indexes
 - `ix_memory_links_source` on `source_node_id`

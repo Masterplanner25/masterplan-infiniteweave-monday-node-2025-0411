@@ -51,6 +51,7 @@ class CreateLinkRequest(BaseModel):
     source_id: str
     target_id: str
     link_type: Optional[str] = "related"
+    weight: Optional[float] = 0.5
 
 
 class ExpandRequest(BaseModel):
@@ -272,7 +273,7 @@ def create_link(
         if dao._get_model_by_id(body.target_id) is not None:
             raise HTTPException(status_code=404, detail="Target node not found")
     try:
-        return dao.create_link(body.source_id, body.target_id, body.link_type)
+        return dao.create_link(body.source_id, body.target_id, body.link_type, body.weight or 0.5)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 

@@ -363,7 +363,7 @@ class TestCreateMemoryLinkUnit:
         # create_memory_link uses services.memory_persistence.MemoryNodeDAO
         with patch("services.memory_persistence.MemoryNodeDAO.create_link", return_value=expected) as mock_create:
             result = create_memory_link(src, tgt, link_type="related", db=mock_db)
-            mock_create.assert_called_once_with(src, tgt, "related")
+            mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 
         assert result == expected
 
@@ -376,7 +376,7 @@ class TestCreateMemoryLinkUnit:
         tgt = str(uuid.uuid4())
         with patch("services.memory_persistence.MemoryNodeDAO.create_link", return_value={}) as mock_create:
             create_memory_link(src, tgt, db=mock_db)
-            mock_create.assert_called_once_with(src, tgt, "related")
+            mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 
     def test_memory_node_model_has_source_column(self):
         """MemoryNodeModel must have source column (added in Phase 1 migration)."""
