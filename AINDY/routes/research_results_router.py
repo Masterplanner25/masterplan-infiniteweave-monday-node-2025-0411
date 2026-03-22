@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate, ResearchResultResponse
 from services import research_results_service
+from db.dao.memory_node_dao import MemoryNodeDAO
+from runtime.memory import MemoryOrchestrator
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
@@ -43,6 +45,35 @@ def run_research_query(
     Accepts a research query, stores it, and triggers MemoryBridge logging.
     """
     print(f"Running research for query: {request.query}")
+    context = None
+    try:
+        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+        context = orchestrator.get_context(
+            user_id=str(current_user["sub"]),
+            query=request.query,
+            task_type="analysis",
+            db=db,
+            max_tokens=400,
+            metadata={
+                "tags": ["research", "insight"],
+                "node_type": "insight",
+                "limit": 3,
+            },
+        )
+    except Exception:
+        context = None
+
+    data = None
+    if context and context.items:
+        data = {
+            "memory_context_ids": context.ids,
+            "memory_context": context.formatted,
+        }
+
     return research_results_service.create_research_result(
-        db, request, user_id=str(current_user["sub"])
+        db,
+        request,
+        user_id=str(current_user["sub"]),
+        data=data,
+        source="research_query",
     )

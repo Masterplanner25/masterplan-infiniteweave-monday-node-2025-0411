@@ -27,9 +27,20 @@ def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | N
         print(f"[MemoryBridge] Logging failed: {e}")
 
 
-def create_research_result(db: Session, result: ResearchResultCreate, user_id: str = None):
+def create_research_result(
+    db: Session,
+    result: ResearchResultCreate,
+    user_id: str = None,
+    data: dict | None = None,
+    source: str | None = None,
+):
     """Store a new research result and propagate to the symbolic bridge."""
-    db_item = ResearchResult(**result.dict(), user_id=user_id)
+    payload = result.dict()
+    if data:
+        payload["data"] = data
+    if source:
+        payload["source"] = source
+    db_item = ResearchResult(**payload, user_id=user_id)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
