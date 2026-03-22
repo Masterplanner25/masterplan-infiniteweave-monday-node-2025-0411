@@ -16,6 +16,9 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_models.py` | 15 | SQLAlchemy model structure, orphan function documentation |
 | `tests/test_routes_health.py` | 6 | Health endpoint structure and response time |
 | `tests/test_routes_observability.py` | 2 | Observability endpoint auth + response shape |
+| `tests/test_routes_dashboard.py` | 2 | Dashboard overview auth + response shape |
+| `tests/test_routes_identity.py` | 4 | Identity route auth + response shapes |
+| `tests/test_routes_memory_metrics.py` | 3 | Memory metrics auth + response shapes |
 | `tests/test_routes_tasks.py` | 14 | Task route auth enforcement (401 without token), acceptance with valid JWT, schema validation |
 | `tests/test_routes_bridge.py` | 8 | Bridge routes (JWT-only writes, read path) |
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
