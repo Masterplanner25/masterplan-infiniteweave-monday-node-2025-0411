@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Iterable
 
@@ -22,7 +23,16 @@ class MemoryMetricsEngine:
 
         delta = max(quality_2 - quality_1, 0.0)
         impact = delta * relevance * usage
-        return self._clamp(impact)
+        impact = self._clamp(impact)
+        self._emit_summary(
+            impact=impact,
+            quality_1=quality_1,
+            quality_2=quality_2,
+            relevance=relevance,
+            usage=usage,
+            memory_context=memory_context,
+        )
+        return impact
 
     def evaluate_quality(self, result: Any) -> float:
         if result is None:
@@ -109,3 +119,27 @@ class MemoryMetricsEngine:
         if value > 1:
             return 1.0
         return float(value)
+
+    def _emit_summary(
+        self,
+        *,
+        impact: float,
+        quality_1: float,
+        quality_2: float,
+        relevance: float,
+        usage: float,
+        memory_context: MemoryContext | None,
+    ) -> None:
+        try:
+            payload = {
+                "event": "memory_metrics_summary",
+                "impact_score": impact,
+                "quality_baseline": self._clamp(quality_1),
+                "quality_result": self._clamp(quality_2),
+                "relevance": self._clamp(relevance),
+                "usage": self._clamp(usage),
+                "memory_count": len(memory_context.items) if memory_context else 0,
+            }
+            logger.info(json.dumps(payload, ensure_ascii=False))
+        except Exception:
+            logger.warning("Failed to emit memory metrics summary")
