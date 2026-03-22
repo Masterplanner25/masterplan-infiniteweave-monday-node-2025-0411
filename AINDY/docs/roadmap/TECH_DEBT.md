@@ -9,7 +9,7 @@ This document inventories current technical debt based strictly on the existing 
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete and memory logging uses a legacy DAO path. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
-- Social Layer lacks visibility scoring and persistent bridge event logging; memory logging for posts is non-persistent. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
+- ✅ **RESOLVED (2026-03-21):** Social Layer visibility scoring + bridge event persistence implemented; social posts now log to Memory Bridge with DB session. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
 - RippleTrace remains signal-capture only; pattern engine, graph layer, and insight engine are not implemented. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.
 - Masterplan SaaS lacks a masterplan anchor (target state), ETA projection, and dependency cascade modeling; current implementation is planning + activation only. Canonical reference: `docs/roadmap/MASTERPLAN_SAAS.md`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` deprecated `@app.on_event("startup")` handlers replaced with a single `@asynccontextmanager lifespan` function. Both startup handlers (cache init + system identity seeder) merged into one lifespan. Deprecation warnings eliminated (11 → 7 warnings in test suite).
@@ -24,8 +24,8 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `POST /social/post` now uses `MemoryCaptureEngine` with SQLAlchemy session and `current_user["sub"]` for persistent memory capture.
 - ✅ **RESOLVED (2026-03-21):** `services/research_results_service.py::log_to_memory_bridge()` now uses `MemoryCaptureEngine` with DB session and `user_id` (no transient memory nodes).
 - ✅ **RESOLVED (2026-03-21):** `services/freelance_service.py` now logs via `MemoryCaptureEngine` (removes legacy DAO path and invalid node_type usage).
-- **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::create_lead_results()` calls `create_memory_node()` with `user_id=None`, creating unowned memory nodes in `memory_nodes`.
-- **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::score_lead()` calls `client.chat.completions.create(... input=...)` (chat API expects `messages`) and contains dead code after the first `return`.
+- ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::create_lead_results()` now requires `user_id` and persists owned memory nodes.
+- ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::score_lead()` now uses chat `messages` and dead code removed.
 - **OPEN (2026-03-22 Audit):** Duplicate `generate_meta_description()` is defined twice in `services/seo_services.py`.
 - **OPEN (2026-03-22 Audit):** `client/src/components/RevenueScalingPanel.jsx` is wired to `calculateIncomeEfficiency()` and uses income-efficiency labels; no revenue-scaling endpoint is called.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend auth regressions resolved — all listed components now use `client/src/api.js` functions backed by `authRequest()`.
@@ -35,7 +35,7 @@ This document inventories current technical debt based strictly on the existing 
 - `AINDY/routes/social_router.py` and `AINDY/bridge/bridge.py` (social post logging invokes memory bridge creation).
 - `AINDY/routes/health_router.py` and `AINDY/routes/seo_routes.py` via hardcoded endpoint paths.
 - Health checks are present (`/health/`, `/dashboard/health`) but no readiness gating is implemented (`AINDY/routes/health_router.py`, `AINDY/routes/health_dashboard_router.py`).
-- `POST /bridge/user_event` accepts user join events and responds `{"status": "logged"}` but only calls `print()`; no persistence to any table and no RippleTrace event emitted (`AINDY/routes/bridge_router.py:159`).
+- ✅ **RESOLVED (2026-03-21):** `POST /bridge/user_event` now persists to `bridge_user_events` table (`AINDY/routes/bridge_router.py`).
 - `AINDY/bridge/trace_permission.py` defines `trace_permission()` but is not imported or used anywhere; not exported from `bridge/__init__.py`. Either wire it into `bridge_router.py` as a permission log layer or delete it (`AINDY/bridge/trace_permission.py`).
 - `AINDY/bridge/archive/` contains two files pending team confirmation of deletion: `memory_bridge_core_draft.rs` and `Memorybridgerecognitiontrace.rs`.
 

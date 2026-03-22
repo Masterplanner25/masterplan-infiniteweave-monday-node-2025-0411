@@ -19,6 +19,7 @@ from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
+from .bridge_user_event import BridgeUserEvent
 
 
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     "MemoryMetric",
     "MemoryTrace",
     "MemoryTraceNode",
+    "BridgeUserEvent",
 ]

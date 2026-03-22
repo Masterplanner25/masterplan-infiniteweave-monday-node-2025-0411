@@ -102,14 +102,9 @@ Analytics + feedback:
 **Current Capabilities:**
 
 * create posts
-* fetch feed (most recent)
+* fetch feed with trust-tier weighted relevance scoring
 
-**Missing:**
-
-* trust-tier weighted ranking
-* visibility scoring
-
----
+--- 
 
 ### 3.3 Bridge Integration
 
@@ -121,10 +116,7 @@ Analytics + feedback:
 **Current Capabilities:**
 
 * Node → FastAPI bridge exists
-
-**Missing:**
-
-* persistence of user_event data
+* `/bridge/user_event` persists to SQL audit table (`bridge_user_events`)
 
 ---
 
@@ -136,11 +128,7 @@ Analytics + feedback:
 
 **Current Capabilities:**
 
-* attempt to log social posts
-
-**Missing:**
-
-* DB session passed → logs are non-persistent
+* posts are logged to Memory Bridge with DB session
 
 ---
 
@@ -182,16 +170,12 @@ Analytics + feedback:
 
 * profile CRUD
 * post creation
-* feed listing
+* feed listing + visibility scoring
 * Node → FastAPI bridge
 
 **Missing:**
 
-* visibility scoring
-* trust-tier weighting
 * analytics dashboards
-* persistent bridge event logging
-* persistent memory logging
 
 ---
 
@@ -201,10 +185,10 @@ Analytics + feedback:
 | --- | --- | --- | --- | --- |
 | Profile CRUD | Social layer notes | Profile create/update/read via MongoDB | Implemented | `routes/social_router.py`, `db/models/social_models.py` |
 | Post creation | Social layer notes | Post insert + list | Implemented | `routes/social_router.py` |
-| Feed ranking | Roadmap intent | No ranking or scoring | Missing | `routes/social_router.py` |
-| Trust-tier weighting | Roadmap intent | Trust tier exists but unused in ranking | Missing | `db/models/social_models.py` |
-| Bridge event persistence | Bridge integration notes | `/bridge/user_event` exists but not persisted | Missing | `routes/bridge_router.py` |
-| Memory logging | Social layer notes | `create_memory_node()` called without DB session | Partial (non-persistent) | `routes/social_router.py` |
+| Feed ranking | Roadmap intent | Trust-tier weighted ranking + engagement scoring | Implemented | `routes/social_router.py` |
+| Trust-tier weighting | Roadmap intent | Trust tier weighted relevance scoring in feed | Implemented | `routes/social_router.py` |
+| Bridge event persistence | Bridge integration notes | `/bridge/user_event` persists to `bridge_user_events` | Implemented | `routes/bridge_router.py`, `db/models/bridge_user_event.py` |
+| Memory logging | Social layer notes | Posts logged via `MemoryCaptureEngine` with DB session | Implemented | `routes/social_router.py` |
 | Analytics dashboard | Roadmap intent | Not implemented | Missing | N/A |
 
 ---
@@ -213,10 +197,7 @@ Analytics + feedback:
 
 | Gap | Impact | Files to Update |
 | --- | --- | --- |
-| Bridge events not persisted | User events lost, no audit trail | `routes/bridge_router.py`, `db/models/social_models.py` |
-| Memory logging non-persistent | Social activity not captured in Memory Bridge | `routes/social_router.py`, `services/memory_service.py` |
-| No feed ranking | Feed is chronological only | `routes/social_router.py` |
-| No trust-tier weighting | Trust tier has no operational effect | `routes/social_router.py`, `db/models/social_models.py` |
+| No analytics output | No visibility metrics | `routes/social_router.py`, `client/src/components/*` |
 | No analytics output | No visibility metrics | `routes/social_router.py`, `client/src/components/*` |
 
 ---
@@ -225,9 +206,7 @@ Analytics + feedback:
 
 | Risk | Type | Failure Mode | Impact | Likely? |
 | --- | --- | --- | --- | --- |
-| Silent loss of user_event | Data integrity | Bridge payload accepted but not stored | Observability gap | High |
-| Social activity not in memory | Continuity | Posts never captured as memory | Loss of longitudinal signal | High |
-| Flat feed reduces relevance | Product | No ranking or trust tier impact | Low engagement | Medium |
+| Heuristic scoring noise | Product | Visibility scores may not reflect true relevance | Medium engagement | Medium |
 | Divergent schemas | Technical | Social profile fields drift across code/docs | Inconsistent UI + data | Medium |
 | Cross-system mismatch | Integration | Social signals not linked to Memory Bridge | Broken feedback loop | Medium |
 
@@ -237,7 +216,7 @@ Analytics + feedback:
 
 The Social Layer is currently:
 
-> A basic social CRUD layer backed by MongoDB, without visibility scoring or analytics.
+> A social CRUD layer backed by MongoDB with visibility scoring and bridge persistence, but without analytics dashboards.
 
 It is NOT:
 
@@ -268,8 +247,7 @@ It is NOT:
 
 **Actions:**
 
-* persist `/bridge/user_event`
-* add audit table or memory capture
+* persist `/bridge/user_event` ✅
 
 ---
 
@@ -279,8 +257,8 @@ It is NOT:
 
 **Actions:**
 
-* trust-tier weighting
-* engagement-based ordering
+* trust-tier weighting ✅
+* engagement-based ordering ✅
 
 ---
 
@@ -310,12 +288,11 @@ It is NOT:
 
 ### Structural
 
-* bridge endpoint does not persist events
+* analytics persistence not defined for visibility metrics
 
 ### Functional
 
-* feed has no ranking or scoring
-* memory logging is non-persistent
+* analytics dashboards not implemented
 
 ### Conceptual
 
@@ -328,8 +305,8 @@ It is NOT:
 | Phase | Component           | Status      | Required Action |
 | ----- | ------------------- | ----------- | --------------- |
 | v1    | CRUD + Feed         | Implemented | Stabilize       |
-| v2    | Bridge Persistence  | Missing     | Persist         |
-| v3    | Visibility Scoring  | Missing     | Rank            |
+| v2    | Bridge Persistence  | Implemented | Persisted       |
+| v3    | Visibility Scoring  | Implemented | Ranked          |
 | v4    | Analytics Layer     | Missing     | Build           |
 | v5    | Feedback Loop       | Missing     | Connect         |
 

@@ -211,15 +211,13 @@ Each score must be a number between 0 and 100.
     try:
         completion = client.chat.completions.create(
             model="gpt-4o-mini",
-            input=f"{system_prompt}\n\n{lead_summary}"
+            messages=[
+                {"role": "system", "content": system_prompt.strip()},
+                {"role": "user", "content": lead_summary},
+            ],
         )
 
-        # Depending on SDK version, output may differ:
-        text_output = (
-            completion.choices[0].message.content
-            if hasattr(completion, "output") and completion.output
-            else completion.choices[0].message.content
-        ).strip()
+        text_output = (completion.choices[0].message.content or "").strip()
 
         # Extract JSON from messy output if needed
         if not text_output.startswith("{"):
@@ -241,30 +239,6 @@ Each score must be a number between 0 and 100.
             "reasoning": f"Parsing or API error: {e}"
         }
 
-    # Combine context into a single lead summary
-    lead_summary = f"Company: {lead_data['company']}\nURL: {lead_data['url']}\nContext: {lead_data['context']}"
-    print(f"[LeadGen] Scoring lead: {lead_data['company']}")
-
-    try:
-        completion = client.chat.completions.create(
-            model="gpt-4o",
-            input=f"{system_prompt}\n\n{lead_summary}"
-        )
-
-        # The model should return a JSON block
-        response_text = completion.choices[0].message.content.strip()
-        result = json.loads(response_text)
-        return result
-
-    except Exception as e:
-        print(f"[LeadGen] Scoring failed for {lead_data['company']}: {e}")
-        return {
-            "fit_score": 0,
-            "intent_score": 0,
-            "data_quality_score": 0,
-            "overall_score": 0,
-            "reasoning": f"Error: {e}"
-        }
 
 
 def create_lead_results(db: Session, query: str, user_id: str = None):

@@ -4,6 +4,7 @@ import os
 import hmac
 import hashlib
 import time
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from services.memory_persistence import MemoryNodeDAO
 from config import settings
 from services import rippletrace_services
 from services.auth_service import get_current_user, verify_api_key
+from db.models.bridge_user_event import BridgeUserEvent
 
 # --- Environment / Config -------------------------------------------------
 if not settings.DATABASE_URL:
@@ -173,9 +175,34 @@ class UserEvent(BaseModel):
     timestamp: Optional[str] = None
 
 
+def _parse_event_timestamp(raw_timestamp: Optional[str]) -> Optional[datetime]:
+    if not raw_timestamp:
+        return None
+    try:
+        cleaned = raw_timestamp.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(cleaned)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except ValueError:
+        return None
+
+
 @router.post("/user_event")
-def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key)):
+def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key), db: Session = Depends(get_db)):
     """Accept symbolic user join or runtime events."""
     timestamp = event.timestamp or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    occurred_at = _parse_event_timestamp(event.timestamp) or datetime.now(timezone.utc)
+    try:
+        db.add(BridgeUserEvent(
+            user_name=event.user,
+            origin=event.origin,
+            raw_timestamp=event.timestamp,
+            occurred_at=occurred_at,
+        ))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"⚠️ Failed to persist bridge user event: {exc}")
     print(f"🔗 {event.user} joined from {event.origin} at {timestamp}")
     return {"status": "logged", "user": event.user, "origin": event.origin, "timestamp": timestamp}
