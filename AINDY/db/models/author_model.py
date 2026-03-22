@@ -1,5 +1,6 @@
 # /db/models/author_model.py
-from sqlalchemy import Column, String, DateTime, Text
+from sqlalchemy import Column, String, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
 from db.database import Base
 
@@ -12,3 +13,4 @@ class AuthorDB(Base):
     notes = Column(Text, nullable=True)
     joined_at = Column(DateTime, default=datetime.utcnow)
     last_seen = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)

@@ -6,7 +6,7 @@ This document formalizes the current FastAPI HTTP interface based strictly on im
 
 Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/seo_routes.py` (no router prefix) **[JWT auth required]**
-- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]** · `/tasks/recurrence/check` public
+- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]**
 - `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[JWT auth required for /nodes and /link; API key required for /user_event]**
 - `AINDY/routes/authorship_router.py` (prefix `/authorship`) **[JWT auth required]**
 - `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`) **[JWT auth required]**
@@ -34,7 +34,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
 - **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection), `/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
 - **HMAC permission** — no longer used as the sole write guard on `/bridge`. JWT is the primary auth on bridge write routes.
-- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`, `/tasks/recurrence/check`.
+- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`.
 - Zero unprotected non-public routes as of Sprint 4 (2026-03-18).
 
 **Sprint 5 User Isolation (2026-03-18):**
@@ -205,13 +205,14 @@ Status Codes: 200
 Errors: Not explicitly defined.
 
 ### Task Routes (`AINDY/routes/task_router.py`, prefix `/tasks`)
-`POST /tasks/create`
-Method: POST
-Request Body: `TaskCreate` (`AINDY/schemas/task_schemas.py`)
-Query Params: None
-Response: ORM `Task` model serialized by FastAPI (fields from `AINDY/db/models/task.py`).
-Status Codes: 200
-Errors: Not explicitly defined.
+  `POST /tasks/create`
+  Method: POST
+  Request Body: `TaskCreate` (`AINDY/schemas/task_schemas.py`)
+  Query Params: None
+  Response: ORM `Task` model serialized by FastAPI (fields from `AINDY/db/models/task.py`).
+  Auth: JWT required; task is owned by `current_user["sub"]`.
+  Status Codes: 200
+  Errors: Not explicitly defined.
 
 `POST /tasks/start`
 Method: POST
@@ -237,34 +238,37 @@ Response: String message from `task_services.complete_task`.
 Status Codes: 200
 Errors: Not explicitly defined.
 
-`GET /tasks/list`
-Method: GET
-Request Body: None
-Query Params: None
-Response: List of dicts with `task_name`, `status`, `time_spent`.
-Status Codes: 200
-Errors: Not explicitly defined.
+  `GET /tasks/list`
+  Method: GET
+  Request Body: None
+  Query Params: None
+  Response: List of dicts with `task_name`, `status`, `time_spent`.
+  Auth: JWT required; returns tasks scoped to `current_user["sub"]`.
+  Status Codes: 200
+  Errors: Not explicitly defined.
 
-`POST /tasks/recurrence/check`
-Method: POST
-Request Body: None
-Query Params: None
-Response: `{ "message": "Recurrence job started in background." }`
-Status Codes: 200
-Errors: Not explicitly defined.
+  `POST /tasks/recurrence/check`
+  Method: POST
+  Request Body: None
+  Query Params: None
+  Response: `{ "message": "Recurrence job started in background." }`
+  Auth: JWT required.
+  Status Codes: 200
+  Errors: Not explicitly defined.
 
 ### Bridge Routes (`AINDY/routes/bridge_router.py`, prefix `/bridge`)
-`POST /bridge/nodes`
-Method: POST
-Request Body: `NodeCreateRequest` (inline Pydantic model) with fields:
-- `content: str`
-- `tags: List[str]`
-- `node_type: str`
-- `extra: dict`
-- `permission: TracePermission`
-Query Params: None
-Response: `NodeResponse` with `id`, `content`, `tags`, `node_type`, `extra`.
-Status Codes: 201
+  `POST /bridge/nodes`
+  Method: POST
+  Request Body: `NodeCreateRequest` (inline Pydantic model) with fields:
+  - `content: str`
+  - `tags: List[str]`
+  - `node_type: str`
+  - `extra: dict`
+  - `permission: TracePermission`
+  Query Params: None
+  Response: `NodeResponse` with `id`, `content`, `tags`, `node_type`, `extra`.
+  Auth: JWT required; `user_id` enforced from `current_user["sub"]` (payload user_id is ignored).
+  Status Codes: 201
 Errors: 403 on invalid HMAC signature or expired TTL.
 
 `GET /bridge/nodes`
@@ -272,6 +276,7 @@ Method: GET
 Request Body: None
 Query Params: `tag` (list), `mode` (default "OR"), `limit` (default 100)
 Response: `NodeSearchResponse` with `nodes: [NodeResponse]`.
+  Auth: JWT required; results filtered by `current_user[\"sub\"]`.
 Status Codes: 200
 Errors: Not explicitly defined.
 
@@ -284,6 +289,7 @@ Request Body: `LinkCreateRequest` (inline Pydantic model) with fields:
 - `permission: TracePermission`
 Query Params: None
 Response: `LinkResponse` with `id`, `source_node_id`, `target_node_id`, `link_type`, `strength`, `created_at`.
+  Auth: JWT required; link creation is rejected if either node is not owned by `current_user[\"sub\"]`.
 Status Codes: 201
 Errors: 403 on invalid HMAC signature or expired TTL; 400 on invalid IDs (from `ValueError`) is not explicitly mapped.
 
@@ -877,6 +883,7 @@ Method: GET
 Request Body: None
 Query Params: None
 Response: List of dicts with lead fields.
+Auth: JWT required; results filtered by `current_user["sub"]`.
 Status Codes: 200
 Errors: Not explicitly defined.
 

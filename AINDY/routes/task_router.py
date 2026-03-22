@@ -1,4 +1,5 @@
 # /routers/task_router.py
+import uuid
 from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -26,7 +27,8 @@ def create_task(
         dependencies=task.dependencies,
         scheduled_time=task.scheduled_time,
         reminder_time=task.reminder_time,
-        recurrence=task.recurrence
+        recurrence=task.recurrence,
+        user_id=current_user["sub"],
     )
 
 @router.post("/start")
@@ -35,7 +37,7 @@ def start_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return task_services.start_task(db, task.name)
+    return task_services.start_task(db, task.name, user_id=current_user["sub"])
 
 @router.post("/pause")
 def pause_task(
@@ -43,7 +45,7 @@ def pause_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return task_services.pause_task(db, task.name)
+    return task_services.pause_task(db, task.name, user_id=current_user["sub"])
 
 @router.post("/complete")
 def complete_task(
@@ -58,8 +60,9 @@ def list_tasks(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    # TODO: Filter tasks by current_user["sub"] when user_id is added to Task model
-    tasks = db.query(task_services.Task).all()
+    tasks = db.query(task_services.Task).filter(
+        task_services.Task.user_id == uuid.UUID(str(current_user["sub"]))
+    ).all()
     return [
         {
             "task_name": t.name,
@@ -70,7 +73,10 @@ def list_tasks(
     ]
 
 @router.post("/recurrence/check")
-def trigger_recurrence(background_tasks: BackgroundTasks):
+def trigger_recurrence(
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Triggers the recurrence check job asynchronously.
     Public — no auth required (internal maintenance endpoint).

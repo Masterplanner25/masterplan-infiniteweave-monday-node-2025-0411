@@ -6,6 +6,7 @@ Purpose: Exposes API routes to trigger A.I.N.D.Y.’s autonomous
 lead discovery and scoring engine.
 """
 
+import uuid
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -53,7 +54,9 @@ def list_all_leads(
     Retrieve all stored lead generation results.
     """
     from db.models.leadgen_model import LeadGenResult
-    all_results = db.query(LeadGenResult).order_by(LeadGenResult.created_at.desc()).all()
+    all_results = db.query(LeadGenResult).filter(
+        LeadGenResult.user_id == uuid.UUID(str(current_user["sub"]))
+    ).order_by(LeadGenResult.created_at.desc()).all()
     return [
         {
             "company": r.company,

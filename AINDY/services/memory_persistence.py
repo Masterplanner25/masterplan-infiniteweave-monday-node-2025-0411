@@ -124,8 +124,10 @@ class MemoryNodeDAO:
             "updated_at": db_node.updated_at,
         }
 
-    def find_by_tags(self, tags: List[str], limit: int = 100, mode: str = "AND"):
+    def find_by_tags(self, tags: List[str], limit: int = 100, mode: str = "AND", user_id: Optional[str] = None):
         query = self.db.query(MemoryNodeModel)
+        if user_id:
+            query = query.filter(MemoryNodeModel.user_id == user_id)
         tags = [t for t in (tags or []) if t]
         if tags:
             if mode.upper() == "OR":

@@ -516,7 +516,7 @@ class TestGenesisMemoryHooks:
         mock_masterplan.id = 99
         mock_masterplan.version_label = "V1"
         mock_masterplan.posture = "aggressive"
-        mock_user = {"sub": "user-42"}
+        mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
         with patch("routes.genesis_router._get_user_session"), \
              patch("routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
@@ -545,7 +545,7 @@ class TestGenesisMemoryHooks:
         mock_masterplan.id = 99
         mock_masterplan.version_label = "V1"
         mock_masterplan.posture = "balanced"
-        mock_user = {"sub": "user-42"}
+        mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
         with patch("routes.genesis_router._get_user_session"), \
              patch("routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
@@ -569,7 +569,7 @@ class TestGenesisMemoryHooks:
         mock_plan.version_label = "V1"
         mock_plan.is_active = False
         mock_plan.status = "locked"
-        mock_user = {"sub": "user-42"}
+        mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
         mock_db = MagicMock()
         mock_query = MagicMock()
@@ -598,7 +598,7 @@ class TestGenesisMemoryHooks:
         mock_plan.version_label = "V1"
         mock_plan.is_active = False
         mock_plan.status = "locked"
-        mock_user = {"sub": "user-42"}
+        mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
         mock_db = MagicMock()
         mock_query = MagicMock()

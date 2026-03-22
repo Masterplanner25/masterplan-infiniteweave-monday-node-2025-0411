@@ -95,7 +95,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
     verify_permission_or_403(payload.permission)
     engine = MemoryCaptureEngine(
         db=db,
-        user_id=payload.user_id or "system",
+        user_id=str(current_user["sub"]),
         agent_namespace=payload.source_agent or "user",
     )
     saved = engine.evaluate_and_capture(
@@ -134,7 +134,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
 @router.get("/nodes", response_model=NodeSearchResponse)
 def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", limit: int = 100, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     dao = MemoryNodeDAO(db)
-    nodes = dao.find_by_tags(tag or [], limit=limit, mode=mode)
+    nodes = dao.find_by_tags(tag or [], limit=limit, mode=mode, user_id=str(current_user["sub"]))
     result = [NodeResponse(**{
         "id": str(getattr(n, "id", n.get("id"))),
         "content": getattr(n, "content", n.get("content", "")),
@@ -149,6 +149,12 @@ def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", li
 def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     verify_permission_or_403(payload.permission)
     dao = MemoryNodeDAO(db)
+    source = dao.load_memory_node(payload.source_id)
+    target = dao.load_memory_node(payload.target_id)
+    if not source or not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source or target node not found")
+    if source.get("user_id") != str(current_user["sub"]) or target.get("user_id") != str(current_user["sub"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot link nodes you do not own")
     link = dao.create_link(payload.source_id, payload.target_id, link_type=payload.link_type)
     return LinkResponse(
         id=link["id"],
