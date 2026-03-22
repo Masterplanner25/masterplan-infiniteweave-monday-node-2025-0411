@@ -111,6 +111,7 @@ Final stage where:
 
 * Central scoring pipeline
 * Combines all memory signals into ranked recall
+* Trace-aware bonus applied when `trace_id` is provided in recall metadata
 
 ---
 
