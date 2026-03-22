@@ -575,7 +575,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `created_at`: DateTime, nullable: not explicitly set, default=datetime.utcnow
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True), `request_id` (index=True, `ix_request_metrics_request_id`), `user_id` (index=True, `ix_request_metrics_user_id`), `path` (index=True, `ix_request_metrics_path`)
+- Indexes: `id` (index=True), `request_id` (index=True, `ix_request_metrics_request_id`), `user_id` (index=True, `ix_request_metrics_user_id`), `path` (index=True, `ix_request_metrics_path`), `created_at` (index=True, `ix_request_metrics_created_at`), `(path, created_at)` (index `ix_request_metrics_path_created_at`)
 - Foreign keys: `user_id -> users.id`
 - Relationships: None
 
@@ -704,6 +704,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Masterplan version cleanup (2026-03-22):**
 - `c4f2a9d1e7b3` - `drop_masterplan_version_column`: removes redundant `master_plans.version` column.
+
+**Request metrics index improvement (2026-03-22):**
+- `d2a7f4c1b9e8` - `add_request_metrics_indexes`: adds `created_at` and `(path, created_at)` indexes for request metrics queries.
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 

@@ -16,4 +16,4 @@ class RequestMetric(Base):
     path = Column(String, nullable=False, index=True)
     status_code = Column(Integer, nullable=False)
     duration_ms = Column(Float, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
