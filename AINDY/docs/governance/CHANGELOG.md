@@ -458,7 +458,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 ## Known Gaps (Phase 4+)
 
 * `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`
-* Memory Bridge write routes (`/bridge/nodes`, `/bridge/link`) use HMAC permission tokens alongside JWT — dual-auth scheme adds caller complexity (tracked in `TECH_DEBT.md` §10.10)
+* ✅ **Resolved (2026-03-21):** Bridge write routes are JWT-only; HMAC permission retired.
 * `db/models/user.py` has no role or permission fields — authorization is binary (authenticated vs. not); no scoped permissions
 
 ---
@@ -469,7 +469,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 * `services/auth_service.py` — JWT token creation/verification, API key validation, password hashing (`python-jose`, `passlib/bcrypt==4.0.1`)
 * `schemas/auth_schemas.py` — `LoginRequest`, `RegisterRequest`, `TokenResponse` Pydantic models
-* `routes/auth_router.py` — `POST /auth/login`, `POST /auth/register` (public endpoints, in-memory user store MVP)
+* ✅ **Resolved (2026-03-17):** Auth routes use DB-backed user model (no in-memory user store).
 * `slowapi==0.1.9` — rate limiting package; `SlowAPIMiddleware` registered on FastAPI app
 * `config.py` — `SECRET_KEY` and `AINDY_API_KEY` settings fields
 * `tests/conftest.py` — `auth_headers` and `api_key_headers` fixtures; `SECRET_KEY`, `AINDY_API_KEY`, `ALLOWED_ORIGINS` env defaults
@@ -489,7 +489,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Known Gaps (Phase 3)
 
-* No User ORM model — auth router uses in-memory store; replace with `db.models.user.UserDB`
+* ✅ **Resolved (2026-03-17):** User ORM model added; auth router uses `db.models.user.User`.
 * Node gateway (`server.js`) still lacks auth headers when forwarding to FastAPI
 * `SECRET_KEY` default is insecure placeholder — must be set in production `.env`
 

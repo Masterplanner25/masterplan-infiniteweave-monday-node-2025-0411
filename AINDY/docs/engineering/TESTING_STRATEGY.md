@@ -16,7 +16,7 @@ This document distinguishes current testing reality from required policy going f
 | `tests/test_models.py` | 15 | SQLAlchemy model structure, orphan function documentation |
 | `tests/test_routes_health.py` | 6 | Health endpoint structure and response time |
 | `tests/test_routes_tasks.py` | 14 | Task route auth enforcement (401 without token), acceptance with valid JWT, schema validation |
-| `tests/test_routes_bridge.py` | 8 | HMAC validation, TTL enforcement, read path |
+| `tests/test_routes_bridge.py` | 8 | Bridge routes (JWT-only writes, read path) |
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
 | `tests/test_routes_genesis.py` | 35 | Route auth enforcement, import regression guards. Genesis Blocks 1-3 (22 new): TestGenesisBlock1 (10) — model column presence, factory signature, masterplan_router registration/auth; TestGenesisBlock2 (5) — new route registration, auth guards, one-way flag guard; TestGenesisBlock3 (7) — real LLM assertion, synthesis gate (422), posture logic, posture_description. |

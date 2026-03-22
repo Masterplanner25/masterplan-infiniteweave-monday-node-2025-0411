@@ -375,7 +375,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 
 ## Known Gaps/Tech Debt
 - Frontend `client/` is a template baseline with limited domain UI; contracts may evolve rapidly.
-- `AINDY/server.js` gateway uses an in-memory user list and lacks persistence. ✅ **Gateway auth wired (Phase 3):** `X-API-Key` header is now sent on all FastAPI forwarding calls.
+- `AINDY/server.js` gateway reads persisted authors via `/network_bridge/authors` (no in-memory user list). ✅ **Gateway auth wired (Phase 3):** `X-API-Key` header is now sent on all FastAPI forwarding calls.
 - Background tasks in `AINDY/main.py` are stubs and not using a formal scheduler/queue.
 - `AINDY/services/memory_persistence.py` includes an orphan `save_memory_node(self, memory_node)` at module level (takes `self` but is not a class method; dead code that raises `TypeError` if called).
 - ✅ **Resolved (2026-03-17)**: `AINDY/bridge/bridge.py` had a broken import path (`db.models.models` does not exist); fixed to `db.models.calculation`. Wrong-table architectural bug (`create_memory_node()` writes to `calculation_results` instead of `memory_nodes`) remains open — see `docs/roadmap/TECH_DEBT.md` §2.
