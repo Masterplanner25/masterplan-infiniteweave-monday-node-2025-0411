@@ -56,7 +56,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
 
 **Search System summary (current implementation):**
-- SEO: `POST /analyze_seo/`, `POST /generate_meta/`, `POST /suggest_improvements/`, `POST /seo/analyze`, `POST /seo/meta`.
+- SEO: `POST /seo/analyze`, `POST /seo/meta`.
 - LeadGen: `POST /leadgen/` (query param), `GET /leadgen/`.
 - Research: `POST /research/`, `POST /research/query`, `GET /research/`.
 - Memory search: `POST /memory/nodes/search`, `POST /memory/recall`.
@@ -164,30 +164,6 @@ Status Codes: 200
 Errors: Not explicitly defined.
 
 ### SEO Routes (`AINDY/routes/seo_routes.py`)
-`POST /analyze_seo/`
-Method: POST
-Request Body: `ContentInput` (inline Pydantic model with `content: str`)
-Query Params: None
-Response: `{ "word_count": int, "readability": number, "top_keywords": [str], "keyword_densities": {str: number} }`
-Status Codes: 200
-Errors: Not explicitly defined.
-
-`POST /generate_meta/`
-Method: POST
-Request Body: `ContentInput`
-Query Params: None
-Response: `{ "meta_description": str }`
-Status Codes: 200
-Errors: Not explicitly defined.
-
-`POST /suggest_improvements/`
-Method: POST
-Request Body: `ContentInput`
-Query Params: None
-Response: `{ "seo_suggestions": str }`
-Status Codes: 200
-Errors: Not explicitly defined.
-
 `POST /seo/analyze`
 Method: POST
 Request Body: `SEOInput` (`AINDY/services/seo.py`)
@@ -1167,7 +1143,7 @@ This appendix lists request schemas where they are explicitly defined.
 - `AINDY/routes/leadgen_router.py` → query parameter only (`query`); no Pydantic body model
 - `AINDY/routes/main_router.py` → `AINDY/schemas/analytics_inputs.py` (`TaskInput`, `EngagementInput`, etc.), `AINDY/schemas/batch.py` (`BatchInput`), `AINDY/schemas/masterplan.py` (`MasterPlanInput`)
 - `AINDY/routes/research_results_router.py` → `AINDY/schemas/research_results_schema.py` (`ResearchResultCreate`)
-- `AINDY/routes/seo_routes.py` → `AINDY/services/seo.py` (`SEOInput`, `MetaInput`) and inline `ContentInput`
+- `AINDY/routes/seo_routes.py` → `AINDY/services/seo.py` (`SEOInput`, `MetaInput`)
 - `AINDY/routes/social_router.py` → `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
 - `AINDY/routes/task_router.py` → `AINDY/schemas/task_schemas.py` (`TaskCreate`, `TaskAction`)
 
