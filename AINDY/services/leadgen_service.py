@@ -8,6 +8,8 @@ and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 
 import json
 import uuid
+import re
+from urllib.parse import urlparse
 from datetime import datetime
 from sqlalchemy.orm import Session
 from openai import OpenAI
@@ -25,6 +27,26 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # --------------------------------------------------------
 # 🧩 CORE FUNCTIONS
 # --------------------------------------------------------
+
+def _extract_leads_from_text(text: str, max_results: int = 3):
+    urls = re.findall(r"https?://[^\s)]+", text or "")
+    seen = set()
+    leads = []
+    for url in urls:
+        if url in seen:
+            continue
+        seen.add(url)
+        domain = urlparse(url).netloc or url
+        company = domain.replace("www.", "").split(".")[0].replace("-", " ").title()
+        leads.append({
+            "company": company or "Unknown",
+            "url": url,
+            "context": (text or "")[:240],
+        })
+        if len(leads) >= max_results:
+            break
+    return leads
+
 
 def run_ai_search(query: str, user_id: str = None, db=None):
     """
@@ -65,26 +87,44 @@ def run_ai_search(query: str, user_id: str = None, db=None):
         except Exception as e:
             logging.warning(f"LeadGen memory recall failed: {e}")
 
-    # Example mocked results – replace with live search results later
-    example_results = [
-        {
-            "company": "Acme AI Solutions",
-            "url": "https://acmeai.com",
-            "context": "Acme AI is hiring ML engineers and seeking automation partners."
-        },
-        {
-            "company": "Finovate Labs",
-            "url": "https://finovatelabs.io",
-            "context": "Finovate is implementing AI-driven fintech automation tools."
-        },
-        {
-            "company": "HealthEdge Analytics",
-            "url": "https://healthedge.ai",
-            "context": "HealthEdge announced plans to adopt AI workflow automation."
-        }
-    ]
+    # Step 2: External retrieval (best-effort)
+    example_results = []
+    try:
+        from modules.research_engine import web_search
+        raw = web_search(query)
+        example_results = _extract_leads_from_text(raw, max_results=3)
+        if not example_results:
+            example_results = [
+                {
+                    "company": "External Search",
+                    "url": "",
+                    "context": (raw or "")[:240],
+                }
+            ]
+    except Exception as e:
+        print(f"[LeadGen] External search failed, using fallback: {e}")
 
-    # Step 2: Write outcome memory node after results are gathered
+    # Fallback mocked results if external search fails
+    if not example_results:
+        example_results = [
+            {
+                "company": "Acme AI Solutions",
+                "url": "https://acmeai.com",
+                "context": "Acme AI is hiring ML engineers and seeking automation partners."
+            },
+            {
+                "company": "Finovate Labs",
+                "url": "https://finovatelabs.io",
+                "context": "Finovate is implementing AI-driven fintech automation tools."
+            },
+            {
+                "company": "HealthEdge Analytics",
+                "url": "https://healthedge.ai",
+                "context": "HealthEdge announced plans to adopt AI workflow automation."
+            }
+        ]
+
+    # Step 3: Write outcome memory node after results are gathered
     if user_id and db:
         try:
             result_count = len(example_results)
