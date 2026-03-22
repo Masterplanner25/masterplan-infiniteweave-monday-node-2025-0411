@@ -52,8 +52,8 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
 - **OPEN (2026-03-18 Audit):** `MasterPlan` has both `version` (String) and `version_label` (String) — redundant columns with overlapping semantics (`AINDY/db/models/masterplan.py`). Requires a clean-up migration.
-- **OPEN (2026-03-18 Audit):** `GenesisSessionDB` has both `user_id` (Integer, legacy) and `user_id_str` (String, new) — dual ownership columns in the same row (`AINDY/db/models/masterplan.py`). Requires deprecating `user_id` Integer and migrating all FK references to `user_id_str`.
-- **OPEN (2026-03-18 Audit):** `CanonicalMetricDB.user_id` is `Integer, nullable, no FK` — not referencing `users.id`. Any user_id stored here is unverifiable and non-relational (`AINDY/db/models/metrics_models.py:145`).
+- ✅ **RESOLVED (2026-03-22):** `GenesisSessionDB` dual user columns removed. `genesis_sessions.user_id` is now UUID with FK to `users.id`; legacy `user_id` (Integer) and `user_id_str` dropped.
+- ✅ **RESOLVED (2026-03-22):** `CanonicalMetricDB.user_id` now uses UUID with FK to `users.id`. Legacy Integer column dropped.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` `node_type="generic"` defaults changed to `None` in `NodeCreateRequest` schema and `_NodeLike` inner class. `NodeResponse.node_type` updated to `Optional[str]`. ORM event validator crash eliminated.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `services/memory_persistence.py::MemoryNodeDAO.save_memory_node()` fallback changed from `"generic"` to `None`. ORM event violation path removed.
 - ✅ **RESOLVED (2026-03-21):** `version.json` and `system_manifest.json` updated to `1.0.0` with current metadata.
@@ -122,8 +122,9 @@ This document inventories current technical debt based strictly on the existing 
 
 ## 7. Observability Debt
 - ✅ **RESOLVED (2026-03-22):** Core routes/services now use `logger` instead of `print(...)` with structured error details.
-- No centralized logging or tracing infrastructure (no config or tooling present).
-- ✅ **PARTIALLY RESOLVED (2026-03-22):** Basic latency logging added to core routes, but no centralized metrics store beyond `SystemHealthLog` (`AINDY/routes/health_router.py`).
+- ✅ **RESOLVED (2026-03-22):** Structured request logging added via middleware with per-request IDs and latency.
+- ✅ **RESOLVED (2026-03-22):** Request metrics persisted to `request_metrics` (basic baseline store).
+- No centralized tracing or log aggregation pipeline (beyond local logs + DB request metrics).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt
@@ -177,7 +178,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/bridge/bridge.py` (MemoryTrace class)
   - Mechanism: `MemoryTrace.add_node()` appends to `self.nodes` in-memory. `MemoryNodeDAO.save_memory_node()` writes to PostgreSQL. There is no path between them.
   - Impact: Queries against the DB do not reflect in-memory state; in-memory state does not survive restart. Two consumers reading the same "memory" will see different results depending on which layer they use.
-  - Status: ✅ **PARTIALLY RESOLVED (2026-03-18 Memory Bridge Phase 1):** `MemoryTrace` now has a docstring explicitly marking it as transient and not a source of truth. PostgreSQL (via `MemoryNodeDAO`) is the authoritative read path. `MemoryTrace` still exists for in-process scratchpad use; full elimination remains open for a future phase.
+  - Status: ✅ **RESOLVED (2026-03-22):** `MemoryTrace` is now explicitly deprecated and emits a runtime warning on use. Database-backed traces (`MemoryTraceDAO` + `memory_traces`) are the only supported trace state.
 
 ### §10.3 Graph Layer — memory_links has no traversal query
 
@@ -327,7 +328,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 | Security (CORS + rate limiting) | ✅ Resolved | CORS locked to explicit origins; SlowAPIMiddleware added (2026-03-17) | Phase 2 ✅ |
 | Testing | Low | Test suite now added; coverage gaps remain | Phase 2 |
 | C++ Kernel (embeddings/release build) | Medium | Semantic search inoperable; performance gains unrealized | Phase 2 |
-| **MB §10.2 — MemoryTrace shadow state** | **Medium** | Dual state representation diverges silently; DB and in-memory views inconsistent | **Phase 2** |
+| **MB §10.2 — MemoryTrace shadow state** | **Closed** | Deprecated with runtime warning; DB traces are authoritative | **Done** |
 | **MB §10.5 — no embeddings / semantic retrieval impossible** | **Medium** | Primary differentiation of memory system over a log does not function | **Phase 2** |
 | **MB §10.4 — strength is VARCHAR** | **Medium** | Graph edge weights are non-numeric; scored traversal blocked until schema migration | **Phase 2** |
 | **MB §10.6 — no temporal decay** | **Medium** | Retrieval quality degrades with node count; stale memories rank equal to recent | **Phase 2** |

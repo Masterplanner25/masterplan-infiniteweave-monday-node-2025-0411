@@ -45,7 +45,7 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 - Location: `AINDY/bridge/bridge.py`
 - Risk: Divergent per-process state; not shared between instances.
 - Impact: Inconsistent memory view; already captured in TECH_DEBT.
-- Status: Open (architectural debt).
+- Status: Resolved (deprecated in-memory trace with runtime warning).
 
 ## Actionable Recommendations (No redesign)
 - Replace `InMemoryBackend` with Redis/DB cache if cache consistency is required.

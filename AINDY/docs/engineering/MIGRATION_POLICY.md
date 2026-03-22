@@ -44,6 +44,7 @@ alembic upgrade head     # apply all pending migrations
 - Columns are added, never removed, during active development unless explicitly agreed.
 - This policy exists because removing a column requires coordinating model code, migration, and all query sites simultaneously — additive changes reduce blast radius.
 - Example applied: `user_id_str` (String) was added to `genesis_sessions` alongside the existing integer `user_id` rather than replacing it.
+- Exception applied (2026-03-22): `genesis_sessions.user_id` converted to UUID with FK and legacy `user_id`/`user_id_str` removed via dedicated migration.
 
 ## 3. Migration Integrity
 

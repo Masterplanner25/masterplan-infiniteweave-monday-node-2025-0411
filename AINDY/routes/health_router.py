@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -112,7 +113,21 @@ def health_check(db: Session = Depends(get_db)):
     status["status"] = "healthy" if not criticals and not fails else "degraded"
     avg_latency = statistics.mean(latencies) if latencies else 0
     status["avg_latency_ms"] = avg_latency
-    logger.info("Health status=%s avg_latency_ms=%.2f", status["status"], avg_latency)
+    log_payload = {
+        "event": "health_check",
+        "route": "/health",
+        "status": status["status"],
+        "avg_latency_ms": avg_latency,
+        "components_ok": sum(1 for v in status["components"].values() if "error" not in str(v).lower() and v != "missing"),
+        "components_total": len(status["components"]),
+        "endpoints_failed": sum(
+            1
+            for v in status["api_endpoints"].values()
+            if v.get("result") not in ("ok", "skipped_auth")
+        ),
+        "endpoints_total": len(status["api_endpoints"]),
+    }
+    logger.info(json.dumps(log_payload, ensure_ascii=False))
 
     # --- Log to database -----------------------------------------------------
     try:

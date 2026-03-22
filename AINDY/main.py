@@ -1,6 +1,9 @@
+import json
 import logging
 import threading
 import os
+import time
+import uuid
 from fastapi import Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -25,6 +28,7 @@ except Exception:
     MigrationContext = None
 from routes import ROUTERS
 from db.models.metrics_models import *
+from db.models.request_metric import RequestMetric
 
 # --- Ensure root path is importable ---
 import sys, os
@@ -194,11 +198,68 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         },
     )
 
+def _extract_user_id_from_request(request: Request):
+    auth = request.headers.get("Authorization")
+    if not auth or not auth.lower().startswith("bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    if not token:
+        return None
+    try:
+        from services.auth_service import decode_access_token
+        payload = decode_access_token(token)
+        if not payload or "sub" not in payload:
+            return None
+        return uuid.UUID(str(payload["sub"]))
+    except Exception:
+        return None
+
+
 @app.middleware("http")
 async def log_requests(request, call_next):
-    logger.info(f"Request: {request.method} {request.url}")
+    request_id = str(uuid.uuid4())
+    start_time = time.time()
+
     response = await call_next(request)
-    logger.info(f"Response: {response.status_code}")
+
+    duration_ms = round((time.time() - start_time) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+
+    user_id = _extract_user_id_from_request(request)
+    log_payload = {
+        "event": "request_complete",
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+        "duration_ms": duration_ms,
+        "user_id": str(user_id) if user_id else None,
+    }
+    logger.info(json.dumps(log_payload, ensure_ascii=False))
+
+    db = None
+    try:
+        db = SessionLocal()
+        db.add(
+            RequestMetric(
+                request_id=request_id,
+                user_id=user_id,
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+            )
+        )
+        db.commit()
+    except Exception as exc:
+        logger.warning("Failed to record request metric: %s", exc)
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+
     return response
 
 @app.get("/")

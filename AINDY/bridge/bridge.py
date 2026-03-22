@@ -4,6 +4,7 @@
 
 from datetime import datetime
 from uuid import uuid4
+import warnings
 
 # --- SYMBOLIC LAYER: MemoryNode represents a moment of resonance ---
 class MemoryNode:
@@ -36,9 +37,17 @@ class MemoryTrace:
     NOT a source of truth — nodes held here are not persisted to the database.
     Use MemoryNodeDAO.save_memory_node() to persist, and the memory_router
     endpoints to retrieve. MemoryTrace is a local scratchpad only.
+
+    DEPRECATED: in-memory MemoryTrace creates a divergent shadow state.
+    Use database-backed traces (MemoryTraceDAO / memory_traces) instead.
     """
 
     def __init__(self):
+        warnings.warn(
+            "MemoryTrace is deprecated. Use database-backed traces instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.root_nodes = []  # Entry points of the memory trace
 
     def add_node(self, node: MemoryNode):

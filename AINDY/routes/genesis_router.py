@@ -1,4 +1,5 @@
 import os
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -13,11 +14,11 @@ from services.rate_limiter import limiter
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
 
-def _get_user_session(session_id: int, user_id_str: str, db: Session) -> GenesisSessionDB:
+def _get_user_session(session_id: int, user_id: uuid.UUID, db: Session) -> GenesisSessionDB:
     """Retrieve a genesis session owned by the current user or raise 404."""
     session = (
         db.query(GenesisSessionDB)
-        .filter(GenesisSessionDB.id == session_id, GenesisSessionDB.user_id_str == user_id_str)
+        .filter(GenesisSessionDB.id == session_id, GenesisSessionDB.user_id == user_id)
         .first()
     )
     if not session:
@@ -33,9 +34,9 @@ def create_genesis_session(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     session = GenesisSessionDB(
-        user_id_str=user_id_str,
+        user_id=user_id,
         synthesis_ready=False,
         summarized_state={
             "vision_summary": None,
@@ -63,7 +64,7 @@ def genesis_message(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     session_id = payload.get("session_id")
     user_message = payload.get("message")
 
@@ -78,14 +79,14 @@ def genesis_message(
             detail={"error": "message_required", "message": "message is required"},
         )
 
-    session = _get_user_session(session_id, user_id_str, db)
+    session = _get_user_session(session_id, user_id, db)
 
     current_state = session.summarized_state or {}
 
     llm_output = call_genesis_llm(
         message=user_message,
         current_state=current_state,
-        user_id=user_id_str,
+        user_id=str(user_id),
         db=db,
     )
 
@@ -122,8 +123,8 @@ def get_genesis_session(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
-    session = _get_user_session(session_id, user_id_str, db)
+    user_id = uuid.UUID(str(current_user["sub"]))
+    session = _get_user_session(session_id, user_id, db)
 
     return {
         "session_id": session.id,
@@ -141,8 +142,8 @@ def get_genesis_draft(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
-    session = _get_user_session(session_id, user_id_str, db)
+    user_id = uuid.UUID(str(current_user["sub"]))
+    session = _get_user_session(session_id, user_id, db)
 
     if not session.draft_json:
         raise HTTPException(
@@ -168,7 +169,7 @@ def synthesize_genesis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     session_id = payload.get("session_id")
 
     if not session_id:
@@ -177,7 +178,7 @@ def synthesize_genesis(
             detail={"error": "session_id_required", "message": "session_id required"},
         )
 
-    session = _get_user_session(session_id, user_id_str, db)
+    session = _get_user_session(session_id, user_id, db)
 
     if not session.synthesis_ready:
         raise HTTPException(
@@ -191,7 +192,7 @@ def synthesize_genesis(
     current_state = session.summarized_state or {}
     draft = call_genesis_synthesis_llm(
         current_state,
-        user_id=user_id_str,
+        user_id=str(user_id),
         db=db,
     )
 
@@ -216,9 +217,9 @@ def audit_genesis_draft(
 ):
     """Run a strategic integrity audit on the persisted draft for a genesis session."""
     # NOTE: returns 422 when no draft_json is available.
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     try:
-        session = _get_user_session(body.session_id, user_id_str, db)
+        session = _get_user_session(body.session_id, user_id, db)
     except HTTPException as exc:
         if exc.status_code == 404 and os.getenv("ENV") == "test":
             class _SessionStub:
@@ -246,7 +247,7 @@ def lock_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     session_id = payload.get("session_id")
     draft = payload.get("draft")
 
@@ -257,14 +258,14 @@ def lock_masterplan(
         )
 
     # Validate session ownership before locking
-    _get_user_session(session_id, user_id_str, db)
+    _get_user_session(session_id, user_id, db)
 
     try:
         masterplan = create_masterplan_from_genesis(
             session_id=session_id,
             draft=draft,
             db=db,
-            user_id=user_id_str,
+            user_id=str(user_id),
         )
     except Exception as e:
         raise HTTPException(
@@ -280,7 +281,7 @@ def lock_masterplan(
             _vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
         engine = MemoryCaptureEngine(
             db=db,
-            user_id=user_id_str,
+            user_id=str(user_id),
             agent_namespace="genesis",
         )
         engine.evaluate_and_capture(
@@ -311,11 +312,11 @@ def activate_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    user_id_str = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
 
     plan = (
         db.query(MasterPlan)
-        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
+        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == str(user_id))
         .first()
     )
 
@@ -326,7 +327,7 @@ def activate_masterplan(
         )
 
     # Deactivate all plans owned by this user
-    db.query(MasterPlan).filter(MasterPlan.user_id == user_id_str).update({"is_active": False})
+    db.query(MasterPlan).filter(MasterPlan.user_id == str(user_id)).update({"is_active": False})
 
     # Activate selected
     plan.is_active = True
@@ -340,7 +341,7 @@ def activate_masterplan(
         from services.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(
             db=db,
-            user_id=user_id_str,
+            user_id=str(user_id),
             agent_namespace="genesis",
         )
         engine.evaluate_and_capture(
