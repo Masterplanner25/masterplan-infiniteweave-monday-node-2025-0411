@@ -3,7 +3,7 @@
 This document inventories current technical debt based strictly on the existing implementation. It does not propose redesigns or new systems.
 
 ## 1. Structural Debt
-- Background tasks are implemented as daemon threads in `AINDY/main.py` with no scheduler or supervision.
+- ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
@@ -19,7 +19,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4):** Duplicate `get_db()` definitions removed from `main_router.py` and `analytics_router.py`. Both now import `get_db` from `db.database`. Single canonical definition.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `health_router.py` now imports `seo_services` and `memory_persistence` from `services.*`, avoiding `ModuleNotFoundError` when `PYTHONPATH` does not include `AINDY/services/` directly.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` duplicate `create_engine`/`sessionmaker` imports removed.
-- **OPEN (2026-03-18 Audit):** `services/master_index_service.py2.py` has an invalid Python filename (`.py2.py`). Python cannot import a file with this name. Either rename it or remove it.
+- ✅ **RESOLVED (2026-03-21):** `services/master_index_service.py2.py` renamed to `services/master_index_service.py`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `task_router.py POST /tasks/complete` now passes `user_id=current_user["sub"]` to `complete_task()`. Memory Bridge Phase 3 task completion hook now fires from the API.
 - ✅ **RESOLVED (2026-03-21):** `POST /social/post` now uses `MemoryCaptureEngine` with SQLAlchemy session and `current_user["sub"]` for persistent memory capture.
 - ✅ **RESOLVED (2026-03-21):** `services/research_results_service.py::log_to_memory_bridge()` now uses `MemoryCaptureEngine` with DB session and `user_id` (no transient memory nodes).
