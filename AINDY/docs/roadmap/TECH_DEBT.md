@@ -6,7 +6,10 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
 - ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
-- Gateway lacks state durability across restarts (`AINDY/server.js`).
+- ✅ **RESOLVED (2026-03-22):** Gateway state durability now backed by `authors` table via `/network_bridge/authors`.
+-
+- Cache consistency is per-process only (`FastAPICache` with `InMemoryBackend` in `AINDY/main.py`); multi-instance deployments will diverge unless a shared backend is introduced.
+- ARM analyzer config updates are process-local; multi-instance propagation requires restarts or explicit reload across instances (`AINDY/routes/arm_router.py`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
 - ✅ **RESOLVED (2026-03-21):** Social Layer visibility scoring + bridge event persistence implemented; social posts now log to Memory Bridge with DB session. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
