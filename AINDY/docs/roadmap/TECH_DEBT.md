@@ -41,6 +41,7 @@ This document inventories current technical debt based strictly on the existing 
 
 ## 2. Schema / Migration Debt
 - Migration drift risk exists due to multiple overlapping migrations and no automated migration validation in deployment (`AINDY/alembic/versions/`).
+- ✅ **RESOLVED (2026-03-22):** Startup schema drift guard enforced in `main.py` (blocks app start if `alembic current` != `alembic heads`).
 - Some application-level constraints are not enforced at DB level (e.g., session locking is application logic in `AINDY/services/masterplan_factory.py`).
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).

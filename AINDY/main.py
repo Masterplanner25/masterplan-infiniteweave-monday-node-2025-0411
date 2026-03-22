@@ -15,6 +15,14 @@ from slowapi.middleware import SlowAPIMiddleware
 from services.rate_limiter import limiter
 from services import task_services
 from db.database import SessionLocal
+try:
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from alembic.runtime.migration import MigrationContext
+except Exception:
+    Config = None
+    ScriptDirectory = None
+    MigrationContext = None
 from routes import ROUTERS
 from db.models.metrics_models import *
 
@@ -39,6 +47,31 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # --- Startup ---
     FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+
+    enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
+    if enforce_schema and not os.getenv("PYTEST_CURRENT_TEST"):
+        if not (Config and ScriptDirectory and MigrationContext):
+            logger.error("Schema guard unavailable: alembic not installed.")
+            raise RuntimeError("Schema guard unavailable: alembic not installed.")
+        db = SessionLocal()
+        try:
+            conn = db.connection()
+            context = MigrationContext.configure(conn)
+            current_rev = context.get_current_revision()
+
+            alembic_cfg = Config("alembic.ini")
+            script = ScriptDirectory.from_config(alembic_cfg)
+            heads = script.get_heads()
+
+            if not current_rev or (current_rev not in heads):
+                logger.error(
+                    "Schema drift detected. current=%s heads=%s",
+                    current_rev,
+                    heads,
+                )
+                raise RuntimeError("Schema drift detected. Run alembic upgrade head.")
+        finally:
+            db.close()
 
     enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
     if os.getenv("PYTEST_CURRENT_TEST"):
