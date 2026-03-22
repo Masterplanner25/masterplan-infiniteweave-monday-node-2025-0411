@@ -1,4 +1,4 @@
-from services.leadgen_service import run_ai_search, _extract_leads_from_text
+from services.leadgen_service import run_ai_search, _extract_leads_from_text, _extract_leads_from_response
 
 
 def test_extract_leads_from_text_parses_urls():
@@ -9,9 +9,21 @@ def test_extract_leads_from_text_parses_urls():
     assert leads[0]["company"]
 
 
+def test_extract_leads_from_response_parses_structured_results():
+    payload = {
+        "results": [
+            {"title": "Acme AI", "url": "https://acmeai.com", "snippet": "Hiring ML engineers"},
+            {"title": "Finovate Labs", "url": "https://finovatelabs.io", "snippet": "Automation tools"},
+        ]
+    }
+    leads = _extract_leads_from_response(payload, max_results=2)
+    assert len(leads) == 2
+    assert leads[0]["url"] == "https://acmeai.com"
+
+
 def test_run_ai_search_uses_external_search(monkeypatch):
     def _fake_search(query: str) -> str:
-        return "Results: https://example.com Best fit."
+        return '{"results":[{"title":"Example","url":"https://example.com","snippet":"Best fit"}]}'
 
     monkeypatch.setattr("modules.research_engine.web_search", _fake_search)
     results = run_ai_search("test query")

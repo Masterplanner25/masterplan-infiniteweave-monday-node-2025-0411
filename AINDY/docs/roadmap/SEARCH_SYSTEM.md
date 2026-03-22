@@ -114,11 +114,11 @@ Structured results:
 * DB persistence
 * Memory Bridge logging
 * Memory Orchestrator recall for prior leadgen context
-* External retrieval via `modules/research_engine.web_search()` with fallback
+* External retrieval via `modules/research_engine.web_search()` with structured response parsing + fallback
 
 **Missing:**
 
-* provider-backed lead search with structured parsing (current extraction is heuristic)
+* provider-backed lead search with richer parsing (current structured parsing is minimal)
 * query template system (documented but not implemented)
 
 ---
