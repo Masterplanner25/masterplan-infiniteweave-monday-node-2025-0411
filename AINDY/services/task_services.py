@@ -1,12 +1,21 @@
 # /services/task_services.py
 import time
 import uuid
+import threading
+import logging
 from sqlalchemy.orm import Session
 from datetime import datetime
 from db.database import SessionLocal
 from db.models.task import Task
 from services.calculation_services import save_calculation, calculate_twr, TaskInput
 from db.mongo_setup import get_mongo_client
+
+logger = logging.getLogger(__name__)
+
+_BACKGROUND_LOCK = threading.Lock()
+_BACKGROUND_STARTED = False
+_BACKGROUND_STOP_EVENT = None
+_BACKGROUND_THREADS: list[threading.Thread] = []
 
 # ----------------------------
 # Core CRUD Task Management
@@ -188,32 +197,101 @@ def complete_task(db: Session, name: str, user_id: str = None):
 # Background / Recurrence Logic
 # ----------------------------
 
+def _check_reminders_once(log: logging.Logger | None = None):
+    log = log or logger
+    db = SessionLocal()
+    try:
+        now = datetime.now()
+        tasks = db.query(Task).all()
+        for t in tasks:
+            if getattr(t, "reminder_time", None):
+                if now >= t.reminder_time and t.status != "completed":
+                    log.info("Reminder: Task '%s' is due soon!", t.name)
+                    t.reminder_time = None
+                    db.commit()
+    except Exception as e:
+        log.warning("[Reminder Error] %s", e)
+    finally:
+        db.close()
+
+
+def _run_check_reminders(stop_event: threading.Event, log: logging.Logger | None = None):
+    log = log or logger
+    while not stop_event.is_set():
+        _check_reminders_once(log=log)
+        stop_event.wait(60)
+
+def _handle_recurrence_once(log: logging.Logger | None = None):
+    log = log or logger
+    db = SessionLocal()
+    try:
+        tasks = db.query(Task).filter(Task.status == "completed").all()
+        _ = tasks
+    except Exception as e:
+        log.warning("[Recurrence Error] %s", e)
+    finally:
+        db.close()
+
+
+def _run_handle_recurrence(stop_event: threading.Event, log: logging.Logger | None = None):
+    log = log or logger
+    while not stop_event.is_set():
+        _handle_recurrence_once(log=log)
+        stop_event.wait(60)
+
+
 def check_reminders():
-    while True:
-        db = SessionLocal()
-        try:
-            now = datetime.now()
-            tasks = db.query(Task).all()
-            for t in tasks:
-                if getattr(t, "reminder_time", None):
-                    if now >= t.reminder_time and t.status != "completed":
-                        print(f"🔔 Reminder: Task '{t.name}' is due soon!")
-                        t.reminder_time = None
-                        db.commit()
-        except Exception as e:
-            print(f"[Reminder Error] {e}")
-        finally:
-            db.close()
-        time.sleep(60)
+    _check_reminders_once()
+
 
 def handle_recurrence():
-    while True:
-        db = SessionLocal()
-        try:
-            tasks = db.query(Task).filter(Task.status == "completed").all()
-            pass 
-        except Exception as e:
-            print(f"[Recurrence Error] {e}")
-        finally:
-            db.close()
-        time.sleep(60)
+    _handle_recurrence_once()
+
+
+def start_background_tasks(enable: bool = True, log: logging.Logger | None = None):
+    log = log or logger
+    if not enable:
+        log.info("Background task runner disabled by configuration.")
+        return None
+
+    global _BACKGROUND_STARTED, _BACKGROUND_STOP_EVENT, _BACKGROUND_THREADS
+    with _BACKGROUND_LOCK:
+        if _BACKGROUND_STARTED:
+            log.info("Background task runner already started.")
+            return _BACKGROUND_STOP_EVENT
+        _BACKGROUND_STARTED = True
+        _BACKGROUND_STOP_EVENT = threading.Event()
+        _BACKGROUND_THREADS = [
+            threading.Thread(
+                target=_run_handle_recurrence,
+                args=(_BACKGROUND_STOP_EVENT, log),
+                daemon=True,
+                name="task_recurrence",
+            ),
+            threading.Thread(
+                target=_run_check_reminders,
+                args=(_BACKGROUND_STOP_EVENT, log),
+                daemon=True,
+                name="task_reminders",
+            ),
+        ]
+        for thread in _BACKGROUND_THREADS:
+            thread.start()
+        log.info("Background task runner started (%s threads).", len(_BACKGROUND_THREADS))
+        return _BACKGROUND_STOP_EVENT
+
+
+def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.0):
+    log = log or logger
+    global _BACKGROUND_STARTED, _BACKGROUND_STOP_EVENT, _BACKGROUND_THREADS
+    with _BACKGROUND_LOCK:
+        if not _BACKGROUND_STARTED:
+            return
+        if _BACKGROUND_STOP_EVENT:
+            _BACKGROUND_STOP_EVENT.set()
+        for thread in _BACKGROUND_THREADS:
+            thread.join(timeout=timeout)
+        _BACKGROUND_THREADS = []
+        _BACKGROUND_STOP_EVENT = None
+        _BACKGROUND_STARTED = False
+        log.info("Background task runner stopped.")

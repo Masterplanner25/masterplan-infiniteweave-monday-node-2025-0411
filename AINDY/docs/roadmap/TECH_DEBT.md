@@ -33,7 +33,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-20 Security Sprint):** `Dashboard.jsx` stray JSX removed.
 - Implicit coupling exists between:
 - `AINDY/routes/social_router.py` and `AINDY/bridge/bridge.py` (social post logging invokes memory bridge creation).
-- `AINDY/routes/health_router.py` and `AINDY/routes/seo_routes.py` via hardcoded endpoint paths.
+- `AINDY/routes/health_router.py` pings SEO endpoints via hardcoded paths (now aligned to `/seo/*`).
 - Health checks are present (`/health/`, `/dashboard/health`) but no readiness gating is implemented (`AINDY/routes/health_router.py`, `AINDY/routes/health_dashboard_router.py`).
 - ✅ **RESOLVED (2026-03-21):** `POST /bridge/user_event` now persists to `bridge_user_events` table (`AINDY/routes/bridge_router.py`).
 - `AINDY/bridge/trace_permission.py` defines `trace_permission()` but is not imported or used anywhere; not exported from `bridge/__init__.py`. Either wire it into `bridge_router.py` as a permission log layer or delete it (`AINDY/bridge/trace_permission.py`).
@@ -69,7 +69,7 @@ This document inventories current technical debt based strictly on the existing 
 
 ## 4. Error Handling Debt
 - Error classification is inconsistent across routes (`AINDY/routes/*`).
-- Structured JSON error format is not enforced (`AINDY/routes/*`).
+- ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; no structured logging (`AINDY/config.py`, multiple routes/services).
 
@@ -355,7 +355,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - Genesis session lock enforcement: `AINDY/services/masterplan_factory.py:15`
 - Memory Bridge HMAC validation: `AINDY/routes/bridge_router.py:41`
 - Canonical metrics unique constraint migration: `AINDY/alembic/versions/97ef6237e153_structure_integrity_check.py:24`
-- Health check endpoint mismatch (`/tools/seo/*` pings): `AINDY/routes/health_router.py:61`
+- ✅ **RESOLVED (2026-03-21):** Health check endpoint mismatch fixed (`/seo/*` pings aligned).
 - Duplicate `POST /create_masterplan` definition: `AINDY/routes/main_router.py:236`
 - Note: Line numbers are approximate and may shift as files change; re-verify during audits.
 

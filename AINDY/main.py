@@ -1,5 +1,9 @@
 import logging
 import threading
+import os
+from fastapi import Request, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi_cache import FastAPICache
@@ -36,18 +40,10 @@ async def lifespan(app: FastAPI):
     # --- Startup ---
     FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
 
-    # Background thread stubs (no-op, replaced by real logic in task_services.py)
-    def handle_recurrence(*args, **kwargs):
-        logger.info("[Recurrence] Checking completed tasks for recurrence...")
-        logger.info("[Recurrence] Cycle complete.")
-
-    def check_reminders(*args, **kwargs):
-        logger.info("[Reminders] Checking pending reminders...")
-        logger.info("[Reminders] Check complete.")
-
-    threading.Thread(target=handle_recurrence, daemon=True).start()
-    threading.Thread(target=check_reminders, daemon=True).start()
-    logger.info("Background tasks initialized (ok).")
+    enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        enable_background = False
+    task_services.start_background_tasks(enable=enable_background, log=logger)
 
     # Seed system identity
     from db.models.author_model import AuthorDB
@@ -78,7 +74,8 @@ async def lifespan(app: FastAPI):
         db.close()
 
     yield
-    # --- Shutdown (nothing needed currently) ---
+    # --- Shutdown ---
+    task_services.stop_background_tasks(log=logger)
 
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)
@@ -108,6 +105,44 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    message = detail if isinstance(detail, str) else "Request failed"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "http_error",
+            "message": message,
+            "details": detail if not isinstance(detail, str) else None,
+        },
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Invalid request",
+            "details": exc.errors(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled error: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": "Internal server error",
+            "details": None,
+        },
+    )
 
 @app.middleware("http")
 async def log_requests(request, call_next):
