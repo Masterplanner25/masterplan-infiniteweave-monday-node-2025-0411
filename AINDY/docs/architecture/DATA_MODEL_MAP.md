@@ -101,6 +101,22 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: None
 - Relationships: None
 
+### `AINDY/db/models/background_task_lease.py`
+
+#### BackgroundTaskLease (`background_task_leases`)
+- Columns
+- `id`: UUID, primary key, default=uuid.uuid4
+- `name`: String, nullable=False, unique=True, index=True
+- `owner_id`: String, nullable=False, index=True
+- `acquired_at`: DateTime(timezone=True), nullable=False, server_default=func.now()
+- `heartbeat_at`: DateTime(timezone=True), nullable=False, server_default=func.now()
+- `expires_at`: DateTime(timezone=True), nullable=False
+- Primary key: `id`
+- Unique constraints: `name`
+- Indexes: `name` (index=True, `ix_background_task_leases_name`), `owner_id` (index=True, `ix_background_task_leases_owner_id`)
+- Foreign keys: None
+- Relationships: None
+
 ### `AINDY/db/models/calculation.py`
 
 #### CalculationResult (`calculation_results`)

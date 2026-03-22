@@ -75,8 +75,8 @@ This document inventories current technical debt based strictly on the existing 
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
-- Background loops can block or run indefinitely without supervision (`AINDY/services/task_services.py`).
-- No distributed-safe scheduler; multi-instance deployment risks duplicated background work (`AINDY/main.py` daemon threads).
+- ✅ **PARTIALLY RESOLVED (2026-03-22):** Background task runner now uses a DB lease (`background_task_leases`) to prevent duplicate work across instances (`AINDY/services/task_services.py`).
+- No distributed-safe scheduler; multi-instance deployment risks duplicated background work beyond the task runner (`AINDY/main.py` daemon threads).
 - No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
 
 ## 6. Security Debt
