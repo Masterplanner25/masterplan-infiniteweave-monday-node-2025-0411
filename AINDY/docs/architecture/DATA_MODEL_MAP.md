@@ -47,7 +47,8 @@ This document maps the current data model strictly as implemented in the reposit
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True)
 - Foreign keys: None
-- Relationships: None
+- Relationships:
+- `tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")`
 
 ### `AINDY/db/models/agent.py`
 
@@ -77,10 +78,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `notes`: Text, nullable=True, default: not defined
 - `joined_at`: DateTime, nullable: not explicitly set, default=datetime.utcnow
 - `last_seen`: DateTime, nullable: not explicitly set, default=datetime.utcnow
+- `user_id`: UUID, nullable=True, index=True
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id` (index=True)
-- Foreign keys: None
+- Indexes: `id` (index=True), `user_id` (index=True, `ix_authors_user_id`)
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/calculation.py`
@@ -191,6 +193,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Columns
 - `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
 - `query`: String, index=True, nullable: not explicitly set, default: not defined
+- `user_id`: UUID, nullable=True, index=True
 - `company`: String, index=True, nullable: not explicitly set, default: not defined
 - `url`: String, nullable: not explicitly set, default: not defined
 - `context`: String, nullable: not explicitly set, default: not defined
@@ -202,8 +205,8 @@ This document maps the current data model strictly as implemented in the reposit
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id`, `query`, `company` (index=True)
-- Foreign keys: None
+- Indexes: `id`, `query`, `company` (index=True), `user_id` (index=True, `ix_leadgen_results_user_id`)
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/masterplan.py`
@@ -548,11 +551,12 @@ This document maps the current data model strictly as implemented in the reposit
 - `skill_level`: Integer, nullable: not explicitly set, default=1
 - `ai_utilization`: Integer, nullable: not explicitly set, default=0
 - `task_difficulty`: Integer, nullable: not explicitly set, default=1
+- `user_id`: UUID, nullable=True, index=True
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id`, `name` (index=True)
-- Foreign keys: None
-- Relationships: Not explicitly defined in current implementation.
+- Indexes: `id`, `name` (index=True), `user_id` (index=True, `ix_tasks_user_id`)
+- Foreign keys: `user_id -> users.id`
+- Relationships: `user = relationship("User", back_populates="tasks")`
 
 ### `AINDY/db/models/user.py`
 
@@ -613,6 +617,7 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 - FreelanceOrder (`freelance_orders`) 1-to-many ClientFeedback (`client_feedback`) via `ClientFeedback.order` with `backref="feedback"`.
 - MasterPlan (`master_plans`) self-referential many-to-one via `MasterPlan.parent` (child points to parent via `parent_id`).
 - MasterPlan (`master_plans`) 1-to-many CanonicalMetricDB (`canonical_metrics`) via `MasterPlan.canonical_metrics` with `backref="masterplan"`.
+- User (`users`) 1-to-many Task (`tasks`) via `User.tasks` / `Task.user`.
 - No many-to-many relationships are explicitly defined.
 
 ## 3. Alembic Migration Alignment
@@ -638,6 +643,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Memory Metrics migration (2026-03-21):**
 - `7c12f8c9a1b4` - `add_memory_metrics_table`: adds `memory_metrics` table with per-run impact metrics.
+
+**Data ownership migration (2026-03-21):**
+- `64b531720229` - `add_user_id_to_tasks_leadgen_authors`: adds `user_id` to `tasks`, `leadgen_results`, and `authors` for ownership scoping.
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 

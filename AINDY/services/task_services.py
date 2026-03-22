@@ -1,5 +1,6 @@
 # /services/task_services.py
 import time
+import uuid
 from sqlalchemy.orm import Session
 from datetime import datetime
 from db.database import SessionLocal
@@ -12,10 +13,21 @@ from db.mongo_setup import get_mongo_client
 # ----------------------------
 
 def create_task(db: Session, name: str, category="general", priority="medium", due_date=None, 
-                dependencies=None, scheduled_time=None, reminder_time=None, recurrence=None):
+                dependencies=None, scheduled_time=None, reminder_time=None, recurrence=None, user_id: str | uuid.UUID | None = None):
     """Creates a new task entry in the database."""
+    if not user_id:
+        raise ValueError("user_id is required to create a task")
+    if dependencies is None:
+        dependencies = []
     task = Task(
         name=name,  # ✅ Fixed column name
+        category=category,
+        priority=priority,
+        due_date=due_date,
+        scheduled_time=scheduled_time,
+        reminder_time=reminder_time,
+        recurrence=recurrence,
+        user_id=uuid.UUID(str(user_id)),
         time_spent=0,
         task_complexity=1,
         skill_level=1,
@@ -30,15 +42,17 @@ def create_task(db: Session, name: str, category="general", priority="medium", d
     return task
 
 
-def find_task(db: Session, name: str):
+def find_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Find a task by name."""
     # ✅ Fixed column name here too
-    return db.query(Task).filter(Task.name == name).first()
+    if not user_id:
+        return None
+    return db.query(Task).filter(Task.name == name, Task.user_id == uuid.UUID(str(user_id))).first()
 
 
-def start_task(db: Session, name: str):
+def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Start tracking time for a task."""
-    task = find_task(db, name)
+    task = find_task(db, name, user_id=user_id)
     if not task:
         return f"❌ Task '{name}' not found."
 
@@ -50,9 +64,9 @@ def start_task(db: Session, name: str):
     return f"⚠️ Task '{name}' already started."
 
 
-def pause_task(db: Session, name: str):
+def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Pause an in-progress task."""
-    task = find_task(db, name)
+    task = find_task(db, name, user_id=user_id)
     if not task:
         return "❌ Task not found."
 
@@ -70,7 +84,7 @@ def complete_task(db: Session, name: str, user_id: str = None):
     """
     Mark task complete, log duration, AND update Social Velocity.
     """
-    task = find_task(db, name)
+    task = find_task(db, name, user_id=user_id)
     if not task:
         return "❌ Task not found."
 

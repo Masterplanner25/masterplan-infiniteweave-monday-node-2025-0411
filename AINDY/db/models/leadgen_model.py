@@ -5,7 +5,8 @@ Part of: A.I.N.D.Y. – Infinity Algorithm Layer
 Purpose: Store results from the B2B Lead Generation via AI Search Optimization module.
 """
 
-from sqlalchemy import Column, Integer, String, Float, DateTime, func
+from sqlalchemy import Column, Integer, String, Float, DateTime, func, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 
 
@@ -20,6 +21,7 @@ class LeadGenResult(Base):
     # --- Core Identification ---
     id = Column(Integer, primary_key=True, index=True)
     query = Column(String, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
 
     # --- Lead Information ---
     company = Column(String, index=True)

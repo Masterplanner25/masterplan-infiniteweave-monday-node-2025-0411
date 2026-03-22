@@ -1,4 +1,4 @@
-# Memory Bridge — Canonical Definition & Evolution Plan
+﻿# Memory Bridge - Canonical Definition & Evolution Plan
 
 ---
 
@@ -19,7 +19,7 @@ It is a **memory orchestration system** designed to:
 ## 2. Core Lifecycle (Canonical Pipeline)
 
 ```
-MemoryNode → Trace → Recall → Resonance → Continuity
+MemoryNode -> Trace -> Recall -> Resonance -> Continuity
 ```
 
 ### MemoryNode
@@ -102,7 +102,7 @@ Final stage where:
 ### Graph (Links)
 
 * Stored in: `memory_links`
-* Directed edges with strength
+* Directed edges with numeric weight (legacy strength retained)
 * Used for traversal and context expansion
 
 ---
@@ -128,16 +128,16 @@ Final stage where:
 Enforced lifecycle:
 
 ```
-recall → execute → capture → feedback
+recall -> execute -> capture -> feedback
 ```
 
 Current implementation note:
-* `runtime/memory/orchestrator.py` coordinates recall (strategy → scoring → filtering → token budget).
+* `runtime/memory/orchestrator.py` coordinates recall (strategy -> scoring -> filtering -> token budget).
 * `runtime/memory/memory_feedback.py` records usage/success signals.
-* `runtime/execution_loop.py` wraps recall → execute → capture → feedback (pluggable executor).
+* `runtime/execution_loop.py` wraps recall -> execute -> capture -> feedback (pluggable executor).
 * `runtime/memory/memory_learning.py` updates per-execution success_rate and low-value flags to adapt recall quality.
 * `runtime/memory/memory_metrics.py` + `runtime/memory/metrics_store.py` compute and persist memory impact metrics.
-* `tests/test_memory_loop_e2e.py` validates the full loop (execution → memory → recall → improved execution).
+* `tests/test_memory_loop_e2e.py` validates the full loop (execution -> memory -> recall -> improved execution).
 
 ---
 
@@ -147,7 +147,7 @@ Current implementation note:
 
 * PostgreSQL
 * JSONB (tags)
-* pgvector (embeddings)
+* pgvector (embeddings, HNSW index)
 * graph links
 * trace tables
 
@@ -161,7 +161,7 @@ Current implementation note:
 * execution hooks
 * Memory Orchestrator (recall orchestration + context building)
 * Memory Feedback Engine (usage/success recording)
-* Execution Loop wrapper (recall → execute → capture → feedback)
+* Execution Loop wrapper (recall -> execute -> capture -> feedback)
 * Memory Metrics Engine (impact scoring + persistence)
 
 ---
@@ -209,7 +209,7 @@ It is NOT:
 
 ---
 
-### Phase v1 — Canonical Unification (FOUNDATION)
+### Phase v1 - Canonical Unification (FOUNDATION)
 
 **Goal:** Single source of truth
 
@@ -229,9 +229,11 @@ It is NOT:
 * Stable, predictable memory layer
 * No behavioral drift between pathways
 
+**Status:** Complete
+
 ---
 
-### Phase v2 — Trace Layer (CORE COMPLETION)
+### Phase v2 - Trace Layer (CORE COMPLETION)
 
 **Goal:** Implement continuity structure
 
@@ -254,9 +256,11 @@ It is NOT:
 * Memory becomes ordered and contextual
 * Continuity becomes technically enforceable
 
+**Status:** Complete
+
 ---
 
-### Phase v3 — Symbolic Integration
+### Phase v3 - Symbolic Integration
 
 **Goal:** Unify symbolic and operational memory
 
@@ -282,52 +286,49 @@ It is NOT:
 * Symbolic memory becomes queryable
 * Identity/continuity anchors enter runtime system
 
+**Status:** Complete
+
 ---
 
-### Phase v4 — Resonance Engine
+### Phase v4 - Resonance Engine
 
 **Goal:** Replace ad-hoc recall with unified scoring
 
 **Actions:**
 
-* Build `services/resonance_engine.py`
-* Combine:
-
-  * semantic
-  * graph
-  * trace
-  * feedback
-* Integrate into DAO recall
+* Implemented scoring and ranking in `runtime/memory/scorer.py`
+* Integrated into `runtime/memory/orchestrator.py` pipeline
+* Combines semantic, graph, trace, recency, and feedback signals
 
 **Outcome:**
 
 * Deterministic, explainable memory ranking
 * Improved recall quality
 
+**Status:** Complete
+
 ---
 
-### Phase v5 — Execution Loop Enforcement
+### Phase v5 - Execution Loop Enforcement
 
 **Goal:** Make memory unavoidable
 
 **Actions:**
 
-* Create `services/execution_loop.py`
-* Enforce:
-
-  * recall before execution
-  * capture after execution
-  * automatic feedback
-* Route all workflows through execution loop
+* Implemented `runtime/execution_loop.py`
+* Enforced `recall -> execute -> capture -> feedback`
+* Routed `/memory/execute` and workflow handlers via execution registry
 
 **Outcome:**
 
 * Memory becomes part of execution, not optional
 * Closed-loop learning system
 
+**Status:** Complete
+
 ---
 
-### Phase v5+ — Engine Layer (Performance)
+### Phase v5+ - Engine Layer (Performance)
 
 **Goal:** High-performance memory engine
 
@@ -353,39 +354,25 @@ It is NOT:
 
 ## 8. Technical Debt (Current State)
 
-### Structural Debt
+### Open Debt
 
-* Dual DAO implementations
-* Bridge vs memory API divergence
-* Multiple memory entry points
-
----
-
-### Functional Debt
-
-* No Trace abstraction
-* Weak execution loop enforcement
-* Graph underutilized
-
----
-
-### Conceptual Debt
-
-* Symbolic memory disconnected from runtime
-* Continuity defined but not implemented
+* Legacy `node_type="generic"` cleanup on existing rows (migration to normalize)
+* Embedding generation is synchronous on write path (latency risk)
+* HMAC + JWT dual auth on bridge write endpoints (redundant surface)
+* Engine Layer (Rust/C++) not integrated into runtime scoring/traversal
 
 ---
 
 ## 9. Memory Bridge Phase Mapping
 
-| Phase | Component            | Status  | Required Action    |
-| ----- | -------------------- | ------- | ------------------ |
-| v1    | DAO + Schema         | Partial | Unify + clean      |
-| v2    | Trace Layer          | Partial | Wire into recall   |
-| v3    | Symbolic Integration | Missing | Ingest + map       |
-| v4    | Resonance Engine     | Partial | Replace scoring    |
-| v5    | Execution Loop       | Partial | Enforce runtime    |
-| v5+   | Engine Layer         | Partial | Integrate Rust/C++ |
+| Phase | Component            | Status   | Required Action        |
+| ----- | -------------------- | -------- | ---------------------- |
+| v1    | DAO + Schema         | Complete | Maintenance only       |
+| v2    | Trace Layer          | Complete | Maintenance only       |
+| v3    | Symbolic Integration | Complete | Maintenance only       |
+| v4    | Resonance Engine     | Complete | Tune/extend as needed  |
+| v5    | Execution Loop       | Complete | Expand workflow usage  |
+| v5+   | Engine Layer         | Partial  | Integrate Rust/C++     |
 
 ---
 
@@ -408,3 +395,4 @@ The Memory Bridge is not complete when it stores memory.
 It is complete when:
 
 > Memory directly shapes execution, and execution continuously reshapes memory through traceable continuity.
+

@@ -118,7 +118,7 @@ def auth_headers():
     """Valid JWT auth headers for protected route tests."""
     from services.auth_service import create_access_token
     token = create_access_token({
-        "sub": "test-user-id-123",
+        "sub": "00000000-0000-0000-0000-000000000001",
         "email": "test@aindy.test",
     })
     return {"Authorization": f"Bearer {token}"}

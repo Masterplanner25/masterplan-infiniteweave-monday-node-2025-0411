@@ -121,7 +121,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
     result = await execute_nodus_task(
         body=body,
         db=SimpleNamespace(),
-        current_user={"sub": "user-1"},
+        current_user={"sub": "00000000-0000-0000-0000-000000000003"},
     )
 
     assert result["status"] == "executed"

@@ -40,14 +40,14 @@ class TestTaskModel:
         for col in ["due_date", "start_time", "end_time", "reminder_time", "recurrence"]:
             assert col in col_names, f"Task missing scheduling column: {col}"
 
-    def test_task_has_no_user_fk(self):
-        """Documented gap: user_id FK is commented out in task.py."""
+    def test_task_has_user_fk(self):
+        """Task model now includes user_id for ownership scoping."""
         from db.models.task import Task
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(Task)
         col_names = [c.key for c in mapper.attrs]
-        assert "user_id" not in col_names, (
-            "user_id FK was added to Task model — update this test"
+        assert "user_id" in col_names, (
+            "user_id FK missing from Task model"
         )
 
 

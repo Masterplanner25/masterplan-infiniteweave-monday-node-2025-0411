@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from db.database import Base
 
 
@@ -34,6 +36,6 @@ class Task(Base):
     ai_utilization = Column(Integer, default=0)
     task_difficulty = Column(Integer, default=1)
 
-    # --- Optional Future Relationships ---
-    # user_id = Column(Integer, ForeignKey("users.id"))
-    # user = relationship("User", back_populates="tasks")
+    # --- Ownership ---
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    user = relationship("User", back_populates="tasks")

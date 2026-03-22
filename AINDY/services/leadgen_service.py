@@ -7,6 +7,7 @@ and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 """
 
 import json
+import uuid
 from datetime import datetime
 from sqlalchemy.orm import Session
 from openai import OpenAI
@@ -193,6 +194,8 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
     3. Store results in database
     4. Log symbolic traces into Memory Bridge
     """
+    if not user_id:
+        raise ValueError("user_id is required to create lead results")
     results = []
     leads = run_ai_search(query, user_id=user_id, db=db)
     print(f"[LeadGen] Found {len(leads)} potential leads")
@@ -202,6 +205,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
 
         db_entry = LeadGenResult(
             query=query,
+            user_id=uuid.UUID(str(user_id)) if user_id else None,
             company=lead["company"],
             url=lead["url"],
             context=lead["context"],
@@ -223,6 +227,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
             source="leadgen",
             tags=["leadgen", "aindy", "infinity", "ai-search"],
             db=db,
+            user_id=user_id,
         )
 
         print(f"[LeadGen] Logged {lead['company']} ({score['overall_score']})")

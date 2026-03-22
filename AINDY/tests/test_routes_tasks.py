@@ -93,6 +93,14 @@ class TestTaskRouteResponses:
         response = client.post("/tasks/complete", json={}, headers=auth_headers)
         assert response.status_code == 422
 
+    def test_recurrence_check_requires_auth(self, client):
+        """POST /tasks/recurrence/check without auth must return 401."""
+        response = client.post("/tasks/recurrence/check")
+        assert response.status_code == 401, (
+            f"POST /tasks/recurrence/check returned {response.status_code} without auth. "
+            "Expected 401."
+        )
+
 
 class TestTaskSchemas:
     def test_task_create_schema_importable(self):

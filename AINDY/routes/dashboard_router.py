@@ -1,4 +1,5 @@
 # /routes/dashboard_router.py
+import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -12,7 +13,10 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"], dependencie
 
 
 @router.get("/overview")
-async def get_system_overview(db: Session = Depends(get_db)) -> dict:
+async def get_system_overview(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> dict:
     """
     Returns a snapshot of A.I.N.D.Y.'s current awareness:
     - Total connected authors
@@ -20,7 +24,9 @@ async def get_system_overview(db: Session = Depends(get_db)) -> dict:
     - System heartbeat timestamp
     """
     # 🧠 1. Authors summary
-    authors = db.query(AuthorDB).order_by(AuthorDB.joined_at.desc()).limit(10).all()
+    authors = db.query(AuthorDB).filter(
+        AuthorDB.user_id == uuid.UUID(str(current_user["sub"]))
+    ).order_by(AuthorDB.joined_at.desc()).limit(10).all()
     author_list = [
         {
             "id": a.id,
@@ -33,7 +39,9 @@ async def get_system_overview(db: Session = Depends(get_db)) -> dict:
     ]
 
     # 🌊 2. RippleTrace summary
-    ripples = db.query(PingDB).order_by(PingDB.date_detected.desc()).limit(10).all()
+    ripples = db.query(PingDB).filter(
+        PingDB.user_id == str(current_user["sub"])
+    ).order_by(PingDB.date_detected.desc()).limit(10).all()
     ripple_list = [
         {
             "ping_type": r.ping_type,

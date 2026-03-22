@@ -44,8 +44,9 @@ This document inventories current technical debt based strictly on the existing 
 - Some application-level constraints are not enforced at DB level (e.g., session locking is application logic in `AINDY/services/masterplan_factory.py`).
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).
-- **OPEN (2026-03-18 Audit):** `Task.user_id` is commented out in `AINDY/db/models/task.py:38-39`. Tasks have no user ownership. Task CRUD (create/list/complete) is not user-scoped. Any authenticated user can list or complete any task by name. Requires uncommenting, adding FK to `users.id`, and a migration.
-- **OPEN (2026-03-18 Audit):** `LeadGenResult` has no `user_id` column (`AINDY/db/models/leadgen_model.py`). All lead gen results are globally shared. Requires adding `user_id` column and migration before user-scoped query filters can be applied.
+- **OPEN (2026-03-21):** Legacy rows in `tasks`, `leadgen_results`, and `authors` may have `user_id = NULL` after ownership migration. Backfill or cleanup needed to avoid orphaned records.
+- ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
+- ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
 - **OPEN (2026-03-18 Audit):** `MasterPlan` has both `version` (String) and `version_label` (String) — redundant columns with overlapping semantics (`AINDY/db/models/masterplan.py`). Requires a clean-up migration.
 - **OPEN (2026-03-18 Audit):** `GenesisSessionDB` has both `user_id` (Integer, legacy) and `user_id_str` (String, new) — dual ownership columns in the same row (`AINDY/db/models/masterplan.py`). Requires deprecating `user_id` Integer and migrating all FK references to `user_id_str`.
 - **OPEN (2026-03-18 Audit):** `CanonicalMetricDB.user_id` is `Integer, nullable, no FK` — not referencing `users.id`. Any user_id stored here is unverifiable and non-relational (`AINDY/db/models/metrics_models.py:145`).
@@ -90,13 +91,13 @@ This document inventories current technical debt based strictly on the existing 
 - `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `GET /dashboard/health` now requires JWT auth. `dependencies=[Depends(get_current_user)]` added to `health_dashboard_router.py` router level.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /bridge/nodes`, `POST /bridge/nodes`, and `POST /bridge/link` now require JWT (`Depends(get_current_user)` added per-endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints are now protected.
-- **OPEN (2026-03-18 Audit):** `POST /tasks/recurrence/check` is unauthenticated — public background trigger endpoint with no JWT or API key (`AINDY/routes/task_router.py`). Add `Depends(get_current_user)`.
+- ✅ **RESOLVED (2026-03-21):** `POST /tasks/recurrence/check` now requires JWT (`Depends(get_current_user)`).
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** All calculation endpoints in `main_router.py` now require JWT. `dependencies=[Depends(get_current_user)]` added at router level. Covers `/calculate_twr`, `/calculate_effort`, all Infinity Algorithm endpoints, `/results`, `/masterplans`, and `/create_masterplan`. Rate-limit bypass vector closed.
 - ✅ **PARTIALLY FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /analytics/masterplan/{id}` and `/analytics/masterplan/{id}/summary` now verify MasterPlan ownership via `MasterPlan.user_id == current_user["sub"]` before returning results. Returns 404 for wrong owner.
 - ✅ **FIXED (2026-03-18 Sprint 5):** Freelance cross-user exposure closed. Migration `d37ae6ebc319` adds `user_id` to `freelance_orders` and `client_feedback`. `create_order()` and `collect_feedback()` now set `user_id` from JWT. `get_all_orders()` and `get_all_feedback()` filter by `user_id`. `POST /deliver/{id}` verifies ownership before delegating.
 - ✅ **FIXED (2026-03-18 Sprint 5):** Research cross-user exposure closed. Migration adds `user_id` to `research_results`. `create_research_result()` sets `user_id`. `get_all_research_results()` filters by `user_id`.
 - ✅ **FIXED (2026-03-18 Sprint 5):** Rippletrace cross-user exposure closed. Migration adds `user_id` to `drop_points` and `pings`. All 6 service functions accept `user_id`. All router endpoints pass `current_user["sub"]`. System-internal `log_ripple_event()` calls pass `user_id=None` (system events are unowned).
-- **OPEN:** `GET /leadgen/` cross-user exposure — `leadgen_results` still has no `user_id` column. Requires migration before user-scoped query filter can be applied.
+- ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added and `GET /leadgen/` is user-scoped.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /memory/nodes/{node_id}` now enforces ownership — returns 404 if `node.user_id != current_user["sub"]`. Cross-user node reads blocked.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `.env` orphan bare Google API key on line 7 removed. `.env` now parses cleanly with no floating values.
 - **OPEN (2026-03-18 Audit):** `task_services.complete_task()` updates MongoDB with hardcoded `username: "me"` regardless of which user completed the task. Social velocity metrics are not user-scoped (`AINDY/services/task_services.py:121`).
@@ -107,9 +108,9 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-20 Security Sprint):** `POST /social/profile` upserts are scoped by `user_id` and block cross-user overwrites.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `client/src/api.js` — all protected endpoints now use `authRequest()`. ARM (analyze/generate/logs/config/metrics/suggest), Tasks (create/list/start/complete), Social (profile/feed/post), Research (query), and LeadGen now all send the JWT Bearer token. `runLeadGen` refactored from raw `fetch()` to `authRequest()`. `authRequest` definition moved before first use.
 - **OPEN (2026-03-22 Audit):** `GET /calculate_twr` uses `MasterPlan.active_plan/origin_plan` and `CalculationResult.twr_history` without `user_id` scoping; cross-user data exposure (`AINDY/routes/main_router.py`).
-- **OPEN (2026-03-22 Audit):** `dashboard_router.py` overview uses `Author` and `Ping` queries without `user_id` scoping; cross-user exposure (`AINDY/routes/dashboard_router.py`).
-- **OPEN (2026-03-22 Audit):** `GET /bridge/nodes` uses legacy `services.memory_persistence.MemoryNodeDAO` without `user_id` filtering (`AINDY/routes/bridge_router.py`).
-- **OPEN (2026-03-22 Audit):** `POST /bridge/nodes` trusts caller-supplied `user_id` (defaults to `"system"`) instead of enforcing JWT `current_user["sub"]` (`AINDY/routes/bridge_router.py`).
+- ✅ **RESOLVED (2026-03-21):** `dashboard_router.py` overview queries are scoped by `current_user["sub"]`; `authors.user_id` added for ownership filtering.
+- ✅ **RESOLVED (2026-03-21):** `GET /bridge/nodes` now filters by `current_user["sub"]` via `MemoryNodeDAO.find_by_tags(..., user_id=...)`.
+- ✅ **RESOLVED (2026-03-21):** `POST /bridge/nodes` now enforces `current_user["sub"]` and ignores caller-supplied `user_id`.
 - **OPEN (2026-03-22 Audit):** `client/src/components/InfiniteNetwork.jsx` makes raw `axios` calls to `http://localhost:5000` without `authRequest()`/JWT; bypasses frontend auth path.
 
 ## 7. Observability Debt
@@ -194,7 +195,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/services/memory_persistence.py` (MemoryNodeModel — no embedding field), `AINDY/bridge/memory_bridge_rs/src/lib.rs` (cosine_similarity callable but unused in retrieval)
   - Mechanism: Write path: content stored as TEXT only. Read path: tag OR/AND query or tsvector FTS. No vector path exists.
   - Impact: Semantic recall — retrieving memories by meaning rather than exact tags — does not function. The primary differentiation of this memory system over a text log is absent.
-  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` and DB (migration `mb2embed0001`). `services/embedding_service.py` generates embeddings via OpenAI `text-embedding-ada-002` on every `MemoryNodeDAO.save()` call. `find_similar()` retrieves via pgvector `<=>` cosine distance. Semantic search available at `POST /memory/nodes/search`. Open item: HNSW index not yet created; full-table scan acceptable until node count exceeds ~50k.
+  - Status: ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` and DB (migration `mb2embed0001`). `services/embedding_service.py` generates embeddings via OpenAI `text-embedding-ada-002` on every `MemoryNodeDAO.save()` call. `find_similar()` retrieves via pgvector `<=>` cosine distance. Semantic search available at `POST /memory/nodes/search`. HNSW index added via migration `f3a4b5c6d7e8`.
 
 ### §10.6 Retrieval — no temporal decay or recency weighting
 
@@ -285,8 +286,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 ### §12.1 HNSW index for pgvector performance
 - **No HNSW or IVFFlat index on `memory_nodes.embedding`.** Currently pgvector uses sequential scan for similarity queries. Acceptable at current node count; will degrade past ~50k rows.
   - Fix: `CREATE INDEX ON memory_nodes USING hnsw (embedding vector_cosine_ops);`
-  - Status: ? **RESOLVED (2026-03-21):** HNSW index added via migration `f3a4b5c6d7e8`.
-  - Status: Open. Deferred to Phase 3. Add migration when node count becomes a concern.
+  - Status: **RESOLVED (2026-03-21):** HNSW index added via migration `f3a4b5c6d7e8`.
 
 ### §12.2 VALID_NODE_TYPES backward compatibility
 - **Existing nodes may have `node_type="generic"` or other legacy values** that the new `validate_node_type` event listener would reject on UPDATE. The listener only fires on `before_insert` / `before_update`; existing rows are safe unless touched.
@@ -358,3 +358,5 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - Health check endpoint mismatch (`/tools/seo/*` pings): `AINDY/routes/health_router.py:61`
 - Duplicate `POST /create_masterplan` definition: `AINDY/routes/main_router.py:236`
 - Note: Line numbers are approximate and may shift as files change; re-verify during audits.
+
+
