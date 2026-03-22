@@ -33,6 +33,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * ARM analysis and Genesis prompts now inject identity context when available
 * Masterplan lock flow now observes identity posture signals for inference
 * Health checks and memory metrics now emit structured JSON log summaries
+* MasterPlan version column removed; `version_label` is canonical
 * Genesis sessions now bind `user_id` (UUID FK to users) and legacy `user_id`/`user_id_str` columns are removed
 
 ---

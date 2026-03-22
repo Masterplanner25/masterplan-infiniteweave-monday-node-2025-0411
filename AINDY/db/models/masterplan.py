@@ -10,7 +10,6 @@ class MasterPlan(Base):
     __tablename__ = "master_plans"
 
     id = Column(Integer, primary_key=True, index=True)
-    version = Column(String, index=True)
     start_date = Column(DateTime, nullable=False)
     duration_years = Column(Float, nullable=False)
     target_date = Column(DateTime, nullable=False)

@@ -246,7 +246,6 @@ This document maps the current data model strictly as implemented in the reposit
 #### MasterPlan (`master_plans`)
 - Columns
 - `id`: Integer, primary key, index=True, nullable: not explicitly set (primary key implies non-null), default: not defined
-- `version`: String, index=True, nullable: not explicitly set, default: not defined
 - `start_date`: DateTime, nullable=False, default: not defined
 - `duration_years`: Float, nullable=False, default: not defined
 - `target_date`: DateTime, nullable=False, default: not defined
@@ -275,7 +274,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `phase`: Integer, nullable: not explicitly set, default=1
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
-- Indexes: `id`, `version` (index=True)
+- Indexes: `id` (index=True)
 - Foreign keys: `parent_id -> master_plans.id`, `linked_genesis_session_id -> genesis_sessions.id`
 - Relationships:
 - `parent = relationship("MasterPlan", remote_side=[id])`
@@ -702,6 +701,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Auth identity cleanup + request metrics (2026-03-22):**
 - `b7c8d9e0f1a2` - `auth_identity_cleanup_and_request_metrics`: adds `request_metrics` table and converts `genesis_sessions.user_id` + `canonical_metrics.user_id` to UUID with FK to `users.id`.
+
+**Masterplan version cleanup (2026-03-22):**
+- `c4f2a9d1e7b3` - `drop_masterplan_version_column`: removes redundant `master_plans.version` column.
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
