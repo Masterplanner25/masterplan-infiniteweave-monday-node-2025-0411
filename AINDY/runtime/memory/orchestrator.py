@@ -9,6 +9,7 @@ from .query_expander import QueryExpander
 from .scorer import MemoryScorer
 from .strategies import StrategySelector
 from .types import MemoryContext, MemoryItem, RecallRequest
+from db.dao.memory_trace_dao import MemoryTraceDAO
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class MemoryOrchestrator:
             expanded_query = self.query_expander.expand(request)
             strategy = self.strategy_selector.select(request)
             request.metadata["diversity_factor"] = strategy.diversity_factor
+            self._inject_trace_context(request, db)
 
             tags = request.metadata.get("tags") if request.metadata else None
             override_node_type = request.metadata.get("node_type") if request.metadata else None
@@ -128,6 +130,19 @@ class MemoryOrchestrator:
             trimmed.append(node)
             total += tokens
         return trimmed
+
+    def _inject_trace_context(self, request: RecallRequest, db) -> None:
+        if not request.metadata:
+            return
+        trace_id = request.metadata.get("trace_id")
+        if not trace_id:
+            return
+        try:
+            trace_dao = MemoryTraceDAO(db)
+            nodes = trace_dao.get_trace_nodes(trace_id, user_id=request.user_id, limit=500)
+            request.metadata["trace_node_ids"] = {entry.get("node_id") for entry in nodes if entry.get("node_id")}
+        except Exception as exc:
+            logger.warning("[MemoryOrchestrator] trace context failed: %s", exc)
 
 
 def _estimate_tokens(text: str) -> int:

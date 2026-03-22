@@ -11,6 +11,9 @@ class MemoryScorer:
     def score(self, nodes: Iterable[dict], request: RecallRequest | None) -> List[MemoryItem]:
         scored: List[MemoryItem] = []
         now = datetime.utcnow()
+        trace_node_ids = set()
+        if request and request.metadata:
+            trace_node_ids = set(request.metadata.get("trace_node_ids", []))
 
         for node in nodes or []:
             similarity = _safe_float(node.get("semantic_score", node.get("similarity", 0.0)))
@@ -32,12 +35,18 @@ class MemoryScorer:
             if usage_frequency and usage_frequency > 5:
                 success_weight = 0.25
 
+            trace_bonus = 0.0
+            node_id = node.get("id")
+            if node_id and node_id in trace_node_ids:
+                trace_bonus = 0.10
+
             score = (
                 similarity * 0.40
                 + recency * 0.15
                 + success_rate * success_weight
                 + _normalize_usage(usage_frequency) * 0.10
                 + graph_bonus * 0.15
+                + trace_bonus
             )
             if low_value_flag:
                 score *= 0.5
