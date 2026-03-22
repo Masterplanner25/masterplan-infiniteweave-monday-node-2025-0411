@@ -1,5 +1,6 @@
 # /services/research_results_service.py
 import logging
+import uuid
 from sqlalchemy.orm import Session
 from services.memory_capture_engine import MemoryCaptureEngine
 from db.models.research_results import ResearchResult
@@ -43,7 +44,8 @@ def create_research_result(
         payload["data"] = data
     if source:
         payload["source"] = source
-    db_item = ResearchResult(**payload, user_id=user_id)
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
+    db_item = ResearchResult(**payload, user_id=user_uuid)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
@@ -57,6 +59,6 @@ def get_all_research_results(db: Session, user_id: str = None):
     """Retrieve all stored research results ordered by creation date."""
     q = db.query(ResearchResult)
     if user_id:
-        q = q.filter(ResearchResult.user_id == user_id)
+        q = q.filter(ResearchResult.user_id == uuid.UUID(str(user_id)))
     return q.order_by(ResearchResult.created_at.desc()).all()
 

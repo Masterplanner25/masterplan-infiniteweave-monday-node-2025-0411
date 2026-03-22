@@ -1,7 +1,8 @@
 # db/models/research_results.py
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, func, ForeignKey
 from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 
 # ✅ SQLAlchemy Model
@@ -14,5 +15,5 @@ class ResearchResult(Base):
     summary = Column(Text, nullable=True)
     source = Column(String, nullable=True)
     data = Column(JSON, nullable=True)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=func.now())

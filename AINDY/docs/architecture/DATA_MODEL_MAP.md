@@ -82,7 +82,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_authors_user_id`)
-- Foreign keys: `user_id -> users.id`
+- Foreign keys: None
 - Relationships: None
 
 ### `AINDY/db/models/bridge_user_event.py`
@@ -98,7 +98,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `user_name` (index=True, `ix_bridge_user_events_user_name`), `origin` (index=True, `ix_bridge_user_events_origin`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/background_task_lease.py`
@@ -114,7 +114,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: `name`
 - Indexes: `name` (index=True, `ix_background_task_leases_name`), `owner_id` (index=True, `ix_background_task_leases_owner_id`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/calculation.py`
@@ -143,11 +143,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `core_themes`: Text, nullable: not explicitly set, default: not defined
 - `tagged_entities`: Text, nullable: not explicitly set, default: not defined
 - `intent`: String, nullable: not explicitly set, default: not defined
-- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_drop_points_user_id`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### PingDB (`pings`)
@@ -160,11 +160,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `connection_summary`: Text, nullable=True, default: not defined
 - `external_url`: String, nullable=True, default: not defined
 - `reaction_notes`: Text, nullable=True, default: not defined
-- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_pings_user_id`)
-- Foreign keys: `drop_point_id -> drop_points.id`
+- Foreign keys: `drop_point_id -> drop_points.id`, `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/freelance.py`
@@ -181,11 +181,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `status`: String, nullable: not explicitly set, default="pending"
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
 - `updated_at`: DateTime, nullable: not explicitly set, default=func.now(), onupdate=func.now()
-- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_freelance_orders_user_id`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: Not explicitly defined in current implementation.
 
 #### ClientFeedback (`client_feedback`)
@@ -196,11 +196,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `feedback_text`: Text, nullable=True, default: not defined
 - `ai_summary`: Text, nullable=True, default: not defined
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
-- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation (denormalized; no join needed for ownership checks)
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation (denormalized; no join needed for ownership checks)
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_client_feedback_user_id`)
-- Foreign keys: `order_id -> freelance_orders.id` (ondelete="CASCADE")
+- Foreign keys: `order_id -> freelance_orders.id` (ondelete="CASCADE"), `user_id -> users.id`
 - Relationships:
 - `order = relationship("FreelanceOrder", backref="feedback")`
 - Cascade rules: Not explicitly defined in current implementation.
@@ -309,7 +309,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_memory_metrics_user_id`), `task_type` (index=True, `ix_memory_metrics_task_type`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/memory_trace.py`
@@ -327,7 +327,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `user_id` (index=True, `ix_memory_traces_user_id`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/memory_trace_node.py`
@@ -358,7 +358,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `total_views`: Integer, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### AIEfficiency (`ai_efficiencies`)
@@ -369,7 +369,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `total_tasks`: Integer, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### Impact (`impacts`)
@@ -380,7 +380,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `conversion`: Integer, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### Efficiency (`efficiencies`)
@@ -392,7 +392,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `capital`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### RevenueScaling (`revenue_scalings`)
@@ -404,7 +404,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `audience_engagement`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### ExecutionSpeed (`execution_speeds`)
@@ -415,7 +415,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `decision_lag`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### AttentionValue (`attention_values`)
@@ -426,7 +426,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `time`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### EngagementRate (`engagement_rates`)
@@ -436,7 +436,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `total_views`: Integer, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### BusinessGrowth (`business_growths`)
@@ -447,7 +447,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `scaling_friction`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### MonetizationEfficiency (`monetization_efficiencies`)
@@ -457,7 +457,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `audience_size`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### AIProductivityBoost (`ai_productivity_boosts`)
@@ -468,7 +468,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `time_saved`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### LostPotential (`lost_potentials`)
@@ -479,7 +479,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `gains_from_action`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### DecisionEfficiency (`decision_efficiencies`)
@@ -490,7 +490,7 @@ This document maps the current data model strictly as implemented in the reposit
 - `processing_time`: Float, nullable: not explicitly set
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id`
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 #### CanonicalMetricDB (`canonical_metrics`)
@@ -538,11 +538,11 @@ This document maps the current data model strictly as implemented in the reposit
 - `source`: String, nullable=True
 - `data`: JSON (postgresql JSON), nullable=True
 - `created_at`: DateTime, nullable: not explicitly set, default=func.now()
-- `user_id`: String, nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
+- `user_id`: UUID, ForeignKey("users.id"), nullable=True, index=True — **added Sprint 5 (2026-03-18)** for per-user data isolation
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True), `user_id` (index=True, `ix_research_results_user_id`)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/system_health_log.py`
@@ -558,7 +558,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: Not explicitly defined in current implementation.
 - Indexes: `id` (index=True)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 
 ### `AINDY/db/models/request_metric.py`
@@ -620,7 +620,7 @@ This document maps the current data model strictly as implemented in the reposit
 - Primary key: `id`
 - Unique constraints: `email` (unique=True), `username` (unique=True)
 - Indexes: `email` (index=True), `username` (index=True)
-- Foreign keys: None
+- Foreign keys: `user_id -> users.id`
 - Relationships: None
 - Purpose: Stores authenticated application users. Created by `register_user()` in `AINDY/services/auth_service.py`. Password is stored as a bcrypt hash; plaintext is never persisted.
 
@@ -707,6 +707,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Request metrics index improvement (2026-03-22):**
 - `d2a7f4c1b9e8` - `add_request_metrics_indexes`: adds `created_at` and `(path, created_at)` indexes for request metrics queries.
+
+**Ownership UUID normalization (2026-03-22):**
+- `2359cded7445` - `normalize_user_id_uuid`: converts `user_id` columns to UUID and adds FKs on `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings` (invalid UUIDs set to NULL before cast).
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
@@ -859,3 +862,8 @@ Defined in `AINDY/services/memory_persistence.py`.
 - Multiple overlapping migration filenames suggest possible historical drift; alignment requires migration diff checks.
 - Implicit constraints enforced only in application logic:
 - Examples include Memory Bridge JWT validation (`AINDY/routes/bridge_router.py`) and genesis session locking (`AINDY/services/masterplan_factory.py`).
+
+
+
+
+

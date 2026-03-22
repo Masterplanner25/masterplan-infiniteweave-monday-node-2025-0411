@@ -2,8 +2,10 @@
 from sqlalchemy.orm import Session
 from db.models import DropPointDB, PingDB
 from datetime import datetime
+import uuid
 
 def add_drop_point(db: Session, dp, user_id: str = None):
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
     db_dp = DropPointDB(
         id=dp.id,
         title=dp.title,
@@ -13,7 +15,7 @@ def add_drop_point(db: Session, dp, user_id: str = None):
         core_themes=",".join(dp.core_themes),
         tagged_entities=",".join(dp.tagged_entities),
         intent=dp.intent,
-        user_id=user_id,
+        user_id=user_uuid,
     )
     db.add(db_dp)
     db.flush()
@@ -21,6 +23,7 @@ def add_drop_point(db: Session, dp, user_id: str = None):
     return db_dp
 
 def add_ping(db: Session, pg, user_id: str = None):
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
     db_pg = PingDB(
         id=pg.id,
         drop_point_id=pg.drop_point_id,
@@ -30,7 +33,7 @@ def add_ping(db: Session, pg, user_id: str = None):
         connection_summary=pg.connection_summary,
         external_url=pg.external_url,
         reaction_notes=pg.reaction_notes,
-        user_id=user_id,
+        user_id=user_uuid,
     )
     db.add(db_pg)
     db.flush()
@@ -40,19 +43,19 @@ def add_ping(db: Session, pg, user_id: str = None):
 def get_ripples(db: Session, drop_point_id: str, user_id: str = None):
     q = db.query(PingDB).filter(PingDB.drop_point_id == drop_point_id)
     if user_id:
-        q = q.filter(PingDB.user_id == user_id)
+        q = q.filter(PingDB.user_id == uuid.UUID(str(user_id)))
     return q.all()
 
 def get_all_drop_points(db: Session, user_id: str = None):
     q = db.query(DropPointDB)
     if user_id:
-        q = q.filter(DropPointDB.user_id == user_id)
+        q = q.filter(DropPointDB.user_id == uuid.UUID(str(user_id)))
     return q.all()
 
 def get_all_pings(db: Session, user_id: str = None):
     q = db.query(PingDB)
     if user_id:
-        q = q.filter(PingDB.user_id == user_id)
+        q = q.filter(PingDB.user_id == uuid.UUID(str(user_id)))
     return q.all()
 
 def log_ripple_event(db: Session, event: dict, user_id: str = None):
@@ -85,6 +88,7 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
         db.refresh(new_dp)
 
     # Create Ping record safely
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
     new_pg = PingDB(
         id=event.get("id") or f"ripple-{datetime.utcnow().timestamp()}",
         drop_point_id=drop_id,
@@ -94,7 +98,7 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
         connection_summary=event.get("summary", ""),
         external_url=event.get("url", ""),
         reaction_notes=event.get("notes", ""),
-        user_id=user_id,
+        user_id=user_uuid,
     )
 
     db.add(new_pg)
@@ -110,5 +114,5 @@ def get_recent_ripples(db: Session, limit: int = 10, user_id: str = None):
     from db.models import PingDB
     q = db.query(PingDB).order_by(PingDB.date_detected.desc())
     if user_id:
-        q = q.filter(PingDB.user_id == user_id)
+        q = q.filter(PingDB.user_id == uuid.UUID(str(user_id)))
     return q.limit(limit).all()
