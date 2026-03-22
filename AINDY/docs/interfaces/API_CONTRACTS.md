@@ -1126,7 +1126,6 @@ Status Codes: 200, 401.
 - Human approval if breaking change.
 
 ## 9. Known Gaps
-- Duplicate route definitions exist for `POST /create_masterplan` in `AINDY/routes/main_router.py`, making the effective contract ambiguous.
 - Many routes do not declare response models and return ORM objects or dicts without schema enforcement.
 - Error handling is inconsistent; many routes do not catch exceptions.
 - Some endpoints accept query parameters where request bodies might be expected (e.g., `/authorship/reclaim`, `/freelance/deliver/{order_id}`).
