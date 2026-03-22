@@ -181,6 +181,7 @@ def create_memory_link(
     source_id: str,
     target_id: str,
     link_type: str = "related",
+    weight: float = 0.5,
     db=None,
 ):
     """
@@ -202,7 +203,7 @@ def create_memory_link(
 
     from services.memory_persistence import MemoryNodeDAO
     dao = MemoryNodeDAO(db)
-    return dao.create_link(source_id, target_id, link_type)
+    return dao.create_link(source_id, target_id, link_type, weight)
 
 
 # --- CONTINUITY MARKER ---

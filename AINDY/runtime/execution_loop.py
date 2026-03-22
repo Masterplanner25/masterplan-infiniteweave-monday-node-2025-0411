@@ -24,11 +24,18 @@ class ExecutionLoop:
         self.metrics_store = MemoryMetricsStore()
 
     def run(self, task: Any, user_id: str, db):
+        result, _ = self.run_with_context(task, user_id, db)
+        return result
+
+    def run_with_context(self, task: Any, user_id: str, db):
         trace_id = None
         try:
             trace_id = self._resolve_trace_id(task, user_id, db)
         except Exception as exc:
             logger.warning("[ExecutionLoop] trace resolution failed: %s", exc)
+
+        if trace_id and hasattr(task, "metadata") and isinstance(task.metadata, dict):
+            task.metadata["trace_id"] = trace_id
 
         context = None
         try:
@@ -105,7 +112,7 @@ class ExecutionLoop:
         except Exception as exc:
             logger.warning("[ExecutionLoop] metrics failed: %s", exc)
 
-        return result
+        return result, context
 
     def _execute(self, task: Any, context):
         if self.executor:

@@ -912,7 +912,7 @@ class MemoryNodeDAO:
 
             filtered_links = []
             for link in links:
-                strength_val = self._strength_value(link.strength)
+                strength_val = self._strength_value(getattr(link, "weight", link.strength))
                 if strength_val >= min_strength:
                     filtered_links.append((link, strength_val))
 
@@ -926,6 +926,7 @@ class MemoryNodeDAO:
                             "node_id": node_id,
                             "link_type": link.link_type,
                             "strength": link.strength,
+                            "weight": getattr(link, "weight", None),
                         }
                     ]
                     dfs(target_id, depth + 1, next_path)
@@ -1062,7 +1063,7 @@ class MemoryNodeDAO:
     # ------------------------------------------------------------------
 
     def create_link(
-        self, source_id: str, target_id: str, link_type: str = "related"
+        self, source_id: str, target_id: str, link_type: str = "related", weight: float = 0.5
     ) -> dict:
         """Create a directed link between two existing nodes."""
         sid = uuid.UUID(str(source_id))
@@ -1076,7 +1077,7 @@ class MemoryNodeDAO:
         )
         if count != 2:
             raise ValueError("source and/or target node does not exist")
-        link = MemoryLinkModel(source_node_id=sid, target_node_id=tid, link_type=link_type)
+        link = MemoryLinkModel(source_node_id=sid, target_node_id=tid, link_type=link_type, weight=weight)
         try:
             self.db.add(link)
             self.db.commit()
@@ -1087,6 +1088,7 @@ class MemoryNodeDAO:
                 "target_node_id": str(link.target_node_id),
                 "link_type": link.link_type,
                 "strength": link.strength,
+                "weight": link.weight,
                 "created_at": link.created_at.isoformat() if link.created_at else None,
             }
         except SQLAlchemyError:

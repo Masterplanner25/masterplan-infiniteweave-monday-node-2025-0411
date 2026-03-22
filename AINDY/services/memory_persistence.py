@@ -67,6 +67,7 @@ class MemoryLinkModel(Base):
     target_node_id = Column(UUID(as_uuid=True), ForeignKey("memory_nodes.id", ondelete="CASCADE"), nullable=False)
     link_type = Column(String(50), nullable=False)
     strength = Column(String(20), default="medium", nullable=False)
+    weight = Column(Float, default=0.5, nullable=False)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -148,7 +149,7 @@ class MemoryNodeDAO:
             for n in db_nodes
         ]
 
-    def create_link(self, source_id: str, target_id: str, link_type: str = "related"):
+    def create_link(self, source_id: str, target_id: str, link_type: str = "related", weight: float = 0.5):
         sid = uuid.UUID(str(source_id))
         tid = uuid.UUID(str(target_id))
         if sid == tid:
@@ -156,7 +157,7 @@ class MemoryNodeDAO:
         count = self.db.query(MemoryNodeModel.id).filter(MemoryNodeModel.id.in_([sid, tid])).count()
         if count != 2:
             raise ValueError("source and/or target node does not exist")
-        link = MemoryLinkModel(source_node_id=sid, target_node_id=tid, link_type=link_type)
+        link = MemoryLinkModel(source_node_id=sid, target_node_id=tid, link_type=link_type, weight=weight)
         try:
             self.db.add(link)
             self.db.commit()
@@ -167,6 +168,7 @@ class MemoryNodeDAO:
                 "target_node_id": str(link.target_node_id),
                 "link_type": link.link_type,
                 "strength": link.strength,
+                "weight": link.weight,
                 "created_at": link.created_at,
             }
         except SQLAlchemyError:

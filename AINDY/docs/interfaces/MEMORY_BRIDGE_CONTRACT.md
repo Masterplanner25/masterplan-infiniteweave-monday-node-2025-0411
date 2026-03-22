@@ -347,6 +347,20 @@ Added in Memory Bridge v5 Phase 5 (2026-03-21). Authentication: JWT Bearer (`Dep
 - Query params: `limit` (default 200), `include_nodes` (default false)
 - Response: `{trace_id, nodes, count}` with ordered nodes.
 
+## 13. Memory Router ? v5 Phase 6 Execution Loop (`/memory/*`)
+
+Added in Memory Bridge v5 Phase 6 (2026-03-21). Authentication: JWT Bearer (`Depends(get_current_user)`).
+
+### `POST /memory/execute`
+- Auth: JWT required.
+- Request body: `ExecutionLoopRequest {workflow, input, session_tags?, recall_before?, remember_after?, auto_feedback?}`
+- Response: `{workflow, user_id, session_tags, result, recalled_memories, recall_count, memory_context, trace_id}`
+
+### `POST /memory/execute/complete`
+- Auth: JWT required.
+- Request body: `ExecutionCompleteRequest {workflow, outcome_content, outcome, recalled_node_ids?, session_tags?, context?}`
+- Response: loop completion status + feedback summary.
+
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
 |---|---|---|

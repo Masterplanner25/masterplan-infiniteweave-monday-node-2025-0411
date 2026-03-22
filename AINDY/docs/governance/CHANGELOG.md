@@ -25,6 +25,8 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * Ongoing improvements to runtime behavior and system architecture
 * ARM analysis and Genesis prompts now inject identity context when available
 * Masterplan lock flow now observes identity posture signals for inference
@@ -146,6 +148,8 @@ Closes all remaining cross-user data exposure gaps identified in the Sprint 4 au
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`db/models/freelance.py`** — `FreelanceOrder` and `ClientFeedback` ORM models updated with `user_id` column.
 * **`db/models/research_results.py`** — `ResearchResult` ORM model updated with `user_id` column.
 * **`db/models/drop.py`** — `DropPointDB` and `PingDB` ORM models updated with `user_id` column.
@@ -184,6 +188,8 @@ Auth hardening sprint: closed all unprotected route vectors, added cross-user ow
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`routes/bridge_router.py`** — `POST /bridge/nodes`, `GET /bridge/nodes`, `POST /bridge/link` now require JWT (`Depends(get_current_user)` per endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints protected.
 * **`routes/main_router.py`** — `dependencies=[Depends(get_current_user)]` added at router level. All 17 calc endpoints, `/results`, `/masterplans`, `/create_masterplan` now require JWT. Rate-limit bypass vector closed.
 * **`routes/analytics_router.py`** — `GET /analytics/masterplan/{id}` and `GET /analytics/masterplan/{id}/summary` now verify `MasterPlan.user_id == current_user["sub"]` before returning data. Returns 404 for wrong owner (not 403 — don't leak existence).
@@ -220,6 +226,8 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`bridge/bridge.py::create_memory_node()`** — upgraded to use `db.dao.memory_node_dao.MemoryNodeDAO.save()` (with embedding generation). Default `node_type` changed from `"generic"` to `None` to pass ORM `VALID_NODE_TYPES` validation.
 * **`db/dao/memory_node_dao.MemoryNodeDAO.save()`** — default `node_type` changed from `"generic"` to `None` (was causing `ValueError` from ORM event listener on every call with default).
 * **`modules/deepseek/deepseek_code_analyzer.py`** — three memory hooks added:
@@ -261,6 +269,8 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`MemoryNodeDAO.save()`** — now generates and stores embedding on every write. New param `generate_embedding: bool = True`.
 * **`CreateNodeRequest.node_type`** — upgraded from `str` to `Literal[...]` (API-level type validation).
 * **`docs/architecture/DATA_MODEL_MAP.md`** — `memory_nodes` schema updated (embedding column, source, user_id, VALID_NODE_TYPES, migration note).
@@ -359,6 +369,8 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **Block 5 — Lock Pipeline Hardening**
   * `create_masterplan_from_genesis()` — `synthesis_ready` gate raises `ValueError` if
     session not ready; loads draft from `session.draft_json` (falls back to caller draft);
@@ -535,6 +547,8 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
+* Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * `calculate_engagement_score()` in `calculation_services.py` now routes through C++ `weighted_dot_product` kernel (with Python fallback)
 * `Cargo.toml` updated: `cc` build-dependency added; `cxx` removed
 * `build.rs` added for C++ compilation configuration (MSVC VS 2022 x64)
