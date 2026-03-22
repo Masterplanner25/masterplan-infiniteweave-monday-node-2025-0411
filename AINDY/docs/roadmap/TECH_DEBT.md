@@ -21,9 +21,9 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` duplicate `create_engine`/`sessionmaker` imports removed.
 - **OPEN (2026-03-18 Audit):** `services/master_index_service.py2.py` has an invalid Python filename (`.py2.py`). Python cannot import a file with this name. Either rename it or remove it.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `task_router.py POST /tasks/complete` now passes `user_id=current_user["sub"]` to `complete_task()`. Memory Bridge Phase 3 task completion hook now fires from the API.
-- **OPEN (2026-03-18 Audit):** `social_router.py POST /social/post` calls `create_memory_node()` without a `db` session argument. `bridge.create_memory_node()` requires a DB session to persist via `MemoryNodeDAO`. Without it the function creates a transient `MemoryNode` and returns without writing to the database. The memory write for social posts silently does nothing (`AINDY/routes/social_router.py`).
-- **OPEN (2026-03-22 Audit):** `services/research_results_service.py::log_to_memory_bridge()` calls `create_memory_node()` without a `db` session argument. The memory write is non-persistent and silently drops the node.
-- **OPEN (2026-03-22 Audit):** `services/freelance_service.py::create_order()` uses legacy `services.memory_persistence.MemoryNodeDAO.save_memory_node()` (no embeddings, no user_id), bypassing the Memory Bridge v5 DAO and capture engine.
+- ✅ **RESOLVED (2026-03-21):** `POST /social/post` now uses `MemoryCaptureEngine` with SQLAlchemy session and `current_user["sub"]` for persistent memory capture.
+- ✅ **RESOLVED (2026-03-21):** `services/research_results_service.py::log_to_memory_bridge()` now uses `MemoryCaptureEngine` with DB session and `user_id` (no transient memory nodes).
+- ✅ **RESOLVED (2026-03-21):** `services/freelance_service.py` now logs via `MemoryCaptureEngine` (removes legacy DAO path and invalid node_type usage).
 - **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::create_lead_results()` calls `create_memory_node()` with `user_id=None`, creating unowned memory nodes in `memory_nodes`.
 - **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::score_lead()` calls `client.chat.completions.create(... input=...)` (chat API expects `messages`) and contains dead code after the first `return`.
 - **OPEN (2026-03-22 Audit):** Duplicate `generate_meta_description()` is defined twice in `services/seo_services.py`.

@@ -2,15 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.database import Database
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 # ✅ Import the Mongo setup
 from db.mongo_setup import get_mongo_db
+from db.database import get_db
 # ✅ Import the Data Models
 from db.models.social_models import SocialProfile, SocialPost, FeedItem, TrustTier
 
 # ✅ NEW: Import the Memory Scribe Bridge
 # This allows us to "teleport" data from the Social Layer (Mongo) to the Memory Layer (SQL/Symbolic)
-from bridge.bridge import create_memory_node
+from services.memory_capture_engine import MemoryCaptureEngine
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depends(get_current_user)])
@@ -70,7 +72,12 @@ def get_profile(username: str, db: Database = Depends(get_mongo_db)):
 # --- 2. CONTENT ENDPOINTS (The Trust Feed) ----------------------------------
 
 @router.post("/post", response_model=SocialPost)
-def create_post(post: SocialPost, db: Database = Depends(get_mongo_db)):
+def create_post(
+    post: SocialPost,
+    db: Database = Depends(get_mongo_db),
+    sql_db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Publish a new update to the network AND log it to the Memory Scribe.
     """
@@ -82,11 +89,17 @@ def create_post(post: SocialPost, db: Database = Depends(get_mongo_db)):
     
     # 2. 🧠 Awaken the Memory Scribe (Bridge to AI Memory)
     try:
-        # We create a symbolic node representing this thought/update
-        create_memory_node(
+        engine = MemoryCaptureEngine(
+            db=sql_db,
+            user_id=str(current_user["sub"]),
+            agent_namespace="social",
+        )
+        engine.evaluate_and_capture(
+            event_type="social_post",
             content=f"Social Broadcast: @{post.author_username} | {post.content}",
             source="social_router",
             tags=["social", "broadcast", post.trust_tier_required] + post.tags,
+            node_type="outcome",
         )
         print(f"✅ [Scribe] Logged post by {post.author_username} to Memory Bridge.")
     except Exception as e:

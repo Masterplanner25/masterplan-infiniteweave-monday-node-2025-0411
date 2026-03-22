@@ -17,7 +17,7 @@ from schemas.freelance import (
     FeedbackCreate,
 )
 
-from services.memory_persistence import MemoryNodeDAO
+from services.memory_capture_engine import MemoryCaptureEngine
 
 
 # -----------------------------------------------------
@@ -44,14 +44,18 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
 
         # 🔗 Log to Memory Bridge
         try:
-            dao = MemoryNodeDAO(db)
-            dao.save_memory_node(
-                type("MemoryNode", (), {
-                    "content": f"New Freelance Order: {order.service_type} for {order.client_name}",
-                    "tags": ["freelance", "order", order.service_type],
-                    "node_type": "freelance_order",
-                    "extra": {"client_email": order.client_email, "price": order.price},
-                })()
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=str(user_id) if user_id else None,
+                agent_namespace="freelance",
+            )
+            engine.evaluate_and_capture(
+                event_type="freelance_order",
+                content=f"New Freelance Order: {order.service_type} for {order.client_name}",
+                source="freelance_service",
+                tags=["freelance", "order", order.service_type],
+                node_type="outcome",
+                extra={"client_email": order.client_email, "price": order.price},
             )
         except Exception as bridge_err:
             print(f"[MemoryBridge] Failed to log freelance order: {bridge_err}")
@@ -81,14 +85,18 @@ def deliver_order(db: Session, order_id: int, ai_output: str):
 
     # Log delivery to Memory Bridge
     try:
-        dao = MemoryNodeDAO(db)
-        dao.save_memory_node(
-            type("MemoryNode", (), {
-                "content": f"Delivered Order #{order.id}: {order.service_type}",
-                "tags": ["freelance", "delivery", order.service_type],
-                "node_type": "freelance_delivery",
-                "extra": {"client_name": order.client_name, "price": order.price},
-            })()
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=str(order.user_id) if order.user_id else None,
+            agent_namespace="freelance",
+        )
+        engine.evaluate_and_capture(
+            event_type="freelance_delivery",
+            content=f"Delivered Order #{order.id}: {order.service_type}",
+            source="freelance_service",
+            tags=["freelance", "delivery", order.service_type],
+            node_type="outcome",
+            extra={"client_name": order.client_name, "price": order.price},
         )
     except Exception as bridge_err:
         print(f"[MemoryBridge] Delivery log error: {bridge_err}")
@@ -127,14 +135,18 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
 
     # Log feedback to Memory Bridge
     try:
-        dao = MemoryNodeDAO(db)
-        dao.save_memory_node(
-            type("MemoryNode", (), {
-                "content": f"Feedback for Order #{feedback.order_id}: {summary}",
-                "tags": ["freelance", "feedback", order.service_type],
-                "node_type": "freelance_feedback",
-                "extra": {"rating": feedback.rating},
-            })()
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=str(user_id) if user_id else None,
+            agent_namespace="freelance",
+        )
+        engine.evaluate_and_capture(
+            event_type="freelance_feedback",
+            content=f"Feedback for Order #{feedback.order_id}: {summary}",
+            source="freelance_service",
+            tags=["freelance", "feedback", order.service_type],
+            node_type="insight",
+            extra={"rating": feedback.rating},
         )
     except Exception as bridge_err:
         print(f"[MemoryBridge] Feedback log error: {bridge_err}")
