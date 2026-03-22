@@ -16,11 +16,6 @@ def keyword_density(text: str, keyword: str):
     words = nltk.word_tokenize(text.lower())
     return round((words.count(keyword.lower()) / len(words)) * 100, 2)
 
-def generate_meta_description(text: str, limit: int = 160):
-    """Generate a concise meta description using text constraints and sentence-safe trimming."""
-    description = enforce_word_limit(text, limit, mode="soft", sentence_safe=True)
-    return description.strip()
-
 def seo_analysis(text: str, top_n=10):
     """Performs a basic SEO analysis on given text."""
     word_count = len(nltk.word_tokenize(text))
@@ -35,5 +30,6 @@ def seo_analysis(text: str, top_n=10):
     }
 
 def generate_meta_description(text: str, limit: int = 160):
-    cleaned = prepare_input_text(text, limit=limit, sentence_safe=True, mode="soft")
-    return cleaned
+    """Generate a concise meta description using text constraints and sentence-safe trimming."""
+    description = enforce_word_limit(text, limit, mode="soft", sentence_safe=True)
+    return description.strip()

@@ -68,8 +68,15 @@ async def process_task(
     save_calculation(db, "Time-to-Wealth Ratio", twr, user_id=str(current_user["sub"]))
 
     # 2️⃣ Fetch master plans
-    active_plan = db.query(MasterPlan).filter_by(is_active=True).first()
-    origin_plan = db.query(MasterPlan).filter_by(is_origin=True).first()
+    user_id = str(current_user["sub"])
+    active_plan = db.query(MasterPlan).filter(
+        MasterPlan.is_active == True,
+        MasterPlan.user_id == user_id,
+    ).first()
+    origin_plan = db.query(MasterPlan).filter(
+        MasterPlan.is_origin == True,
+        MasterPlan.user_id == user_id,
+    ).first()
 
     # If no plan exists yet
     if not active_plan or not origin_plan:
@@ -81,8 +88,10 @@ async def process_task(
 
     # 3️⃣ Fetch TWR history
     twr_history = db.query(CalculationResult)\
-        .filter_by(metric_name="Time-to-Wealth Ratio")\
-        .all()
+        .filter(
+            CalculationResult.metric_name == "Time-to-Wealth Ratio",
+            CalculationResult.user_id == user_id,
+        ).all()
 
     twr_values = [r.result_value for r in twr_history]
 

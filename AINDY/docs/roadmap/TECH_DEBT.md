@@ -8,7 +8,7 @@ This document inventories current technical debt based strictly on the existing 
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
-- Freelancing System lacks automation and AI generation; metrics are incomplete and memory logging uses a legacy DAO path. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
+- Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
 - ✅ **RESOLVED (2026-03-21):** Social Layer visibility scoring + bridge event persistence implemented; social posts now log to Memory Bridge with DB session. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
 - RippleTrace remains signal-capture only; pattern engine, graph layer, and insight engine are not implemented. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.
 - Masterplan SaaS lacks a masterplan anchor (target state), ETA projection, and dependency cascade modeling; current implementation is planning + activation only. Canonical reference: `docs/roadmap/MASTERPLAN_SAAS.md`.
@@ -26,14 +26,14 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `services/freelance_service.py` now logs via `MemoryCaptureEngine` (removes legacy DAO path and invalid node_type usage).
 - ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::create_lead_results()` now requires `user_id` and persists owned memory nodes.
 - ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::score_lead()` now uses chat `messages` and dead code removed.
-- **OPEN (2026-03-22 Audit):** Duplicate `generate_meta_description()` is defined twice in `services/seo_services.py`.
+- ✅ **RESOLVED (2026-03-21):** Duplicate `generate_meta_description()` removed in `services/seo_services.py`.
 - **OPEN (2026-03-22 Audit):** `client/src/components/RevenueScalingPanel.jsx` is wired to `calculateIncomeEfficiency()` and uses income-efficiency labels; no revenue-scaling endpoint is called.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend auth regressions resolved — all listed components now use `client/src/api.js` functions backed by `authRequest()`.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend/backend contract mismatches resolved — `AnalyticsPanel.jsx` uses `/analytics/masterplan/{id}/summary`, and `LeadGen.jsx` maps `{results}` with `overall_score` + `reasoning`.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `Dashboard.jsx` stray JSX removed.
 - Implicit coupling exists between:
 - `AINDY/routes/social_router.py` and `AINDY/bridge/bridge.py` (social post logging invokes memory bridge creation).
-- `AINDY/routes/health_router.py` and `AINDY/routes/seo_routes.py` via hardcoded endpoint paths.
+- `AINDY/routes/health_router.py` pings SEO endpoints via hardcoded paths (now aligned to `/seo/*`).
 - Health checks are present (`/health/`, `/dashboard/health`) but no readiness gating is implemented (`AINDY/routes/health_router.py`, `AINDY/routes/health_dashboard_router.py`).
 - ✅ **RESOLVED (2026-03-21):** `POST /bridge/user_event` now persists to `bridge_user_events` table (`AINDY/routes/bridge_router.py`).
 - `AINDY/bridge/trace_permission.py` defines `trace_permission()` but is not imported or used anywhere; not exported from `bridge/__init__.py`. Either wire it into `bridge_router.py` as a permission log layer or delete it (`AINDY/bridge/trace_permission.py`).
@@ -69,7 +69,7 @@ This document inventories current technical debt based strictly on the existing 
 
 ## 4. Error Handling Debt
 - Error classification is inconsistent across routes (`AINDY/routes/*`).
-- Structured JSON error format is not enforced (`AINDY/routes/*`).
+- ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; no structured logging (`AINDY/config.py`, multiple routes/services).
 
@@ -100,18 +100,18 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added and `GET /leadgen/` is user-scoped.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /memory/nodes/{node_id}` now enforces ownership — returns 404 if `node.user_id != current_user["sub"]`. Cross-user node reads blocked.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `.env` orphan bare Google API key on line 7 removed. `.env` now parses cleanly with no floating values.
-- **OPEN (2026-03-18 Audit):** `task_services.complete_task()` updates MongoDB with hardcoded `username: "me"` regardless of which user completed the task. Social velocity metrics are not user-scoped (`AINDY/services/task_services.py:121`).
+- ✅ **RESOLVED (2026-03-21):** `task_services.complete_task()` now updates MongoDB profile by `user_id` (no hardcoded username).
 - ✅ **FIXED (2026-03-20 Security Sprint):** Memory tag search, link traversal, and link creation are user-scoped. `GET /memory/nodes` and `GET /memory/nodes/{id}/links` filter by `user_id`, and `POST /memory/links` verifies ownership before linking.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `/bridge/nodes` now uses `MemoryCaptureEngine` and sets `user_id` (when provided) plus `source_agent` for federation tagging.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `POST /analytics/linkedin/manual` now verifies `MasterPlan.user_id == current_user["sub"]` and returns 404 when not owned.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `GET /masterplans` and `GET /results` now filter by `user_id`, and `POST /create_masterplan` sets `user_id` from JWT. `calculation_results.user_id` added with migration `c1f2a9d0b7e4`.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `POST /social/profile` upserts are scoped by `user_id` and block cross-user overwrites.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `client/src/api.js` — all protected endpoints now use `authRequest()`. ARM (analyze/generate/logs/config/metrics/suggest), Tasks (create/list/start/complete), Social (profile/feed/post), Research (query), and LeadGen now all send the JWT Bearer token. `runLeadGen` refactored from raw `fetch()` to `authRequest()`. `authRequest` definition moved before first use.
-- **OPEN (2026-03-22 Audit):** `GET /calculate_twr` uses `MasterPlan.active_plan/origin_plan` and `CalculationResult.twr_history` without `user_id` scoping; cross-user data exposure (`AINDY/routes/main_router.py`).
+- ✅ **RESOLVED (2026-03-21):** `GET /calculate_twr` scopes masterplan + calculation history by `user_id`.
 - ✅ **RESOLVED (2026-03-21):** `dashboard_router.py` overview queries are scoped by `current_user["sub"]`; `authors.user_id` added for ownership filtering.
 - ✅ **RESOLVED (2026-03-21):** `GET /bridge/nodes` now filters by `current_user["sub"]` via `MemoryNodeDAO.find_by_tags(..., user_id=...)`.
 - ✅ **RESOLVED (2026-03-21):** `POST /bridge/nodes` now enforces `current_user["sub"]` and ignores caller-supplied `user_id`.
-- **OPEN (2026-03-22 Audit):** `client/src/components/InfiniteNetwork.jsx` makes raw `axios` calls to `http://localhost:5000` without `authRequest()`/JWT; bypasses frontend auth path.
+- ✅ **RESOLVED (2026-03-21):** `InfiniteNetwork.jsx` now uses `authRequestExternal()` with JWT headers for gateway calls.
 
 ## 7. Observability Debt
 - Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).
@@ -355,7 +355,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - Genesis session lock enforcement: `AINDY/services/masterplan_factory.py:15`
 - Memory Bridge HMAC validation: `AINDY/routes/bridge_router.py:41`
 - Canonical metrics unique constraint migration: `AINDY/alembic/versions/97ef6237e153_structure_integrity_check.py:24`
-- Health check endpoint mismatch (`/tools/seo/*` pings): `AINDY/routes/health_router.py:61`
+- ✅ **RESOLVED (2026-03-21):** Health check endpoint mismatch fixed (`/seo/*` pings aligned).
 - Duplicate `POST /create_masterplan` definition: `AINDY/routes/main_router.py:236`
 - Note: Line numbers are approximate and may shift as files change; re-verify during audits.
 

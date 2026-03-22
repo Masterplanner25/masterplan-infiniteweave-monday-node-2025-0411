@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
-import nltk, time, requests, statistics
+import nltk, time, requests, statistics, os
 
 from db.database import get_db, engine
 from db.models.system_health_log import SystemHealthLog
@@ -55,18 +55,42 @@ def health_check(db: Session = Depends(get_db)):
         status["components"]["memory_bridge"] = f"error: {str(e)}"
 
     # --- Live endpoint pings -------------------------------------------------
-    base_url = "http://127.0.0.1:8000"
+    base_url = os.getenv("HEALTH_CHECK_BASE_URL", "http://127.0.0.1:8000")
+    auth_token = os.getenv("HEALTH_CHECK_TOKEN")
+    auth_headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
     endpoints = {
-        "calculate_twr": {"url": f"{base_url}/calculate_twr", "payload": {"returns": [0.1, 0.05, 0.2]}},
-        "seo_analyze": {"url": f"{base_url}/tools/seo/analyze", "payload": {"text": "AI Search Optimization", "top_n": 3}},
-        "seo_meta": {"url": f"{base_url}/tools/seo/meta", "payload": {"url": "https://example.com"}}
+        "calculate_twr": {
+            "url": f"{base_url}/calculate_twr",
+            "payload": {
+                "task_name": "health_check",
+                "time_spent": 1.0,
+                "task_complexity": 1,
+                "skill_level": 1,
+                "ai_utilization": 1,
+                "task_difficulty": 1,
+            },
+            "requires_auth": True,
+        },
+        "seo_analyze": {
+            "url": f"{base_url}/seo/analyze",
+            "payload": {"text": "AI Search Optimization", "top_n": 3},
+            "requires_auth": True,
+        },
+        "seo_meta": {
+            "url": f"{base_url}/seo/meta",
+            "payload": {"text": "AI Search Optimization", "limit": 160},
+            "requires_auth": True,
+        },
     }
 
     latencies = []
     for name, cfg in endpoints.items():
         start = time.time()
         try:
-            r = requests.post(cfg["url"], json=cfg["payload"], timeout=5)
+            if cfg.get("requires_auth") and not auth_headers:
+                status["api_endpoints"][name] = {"result": "skipped_auth"}
+                continue
+            r = requests.post(cfg["url"], json=cfg["payload"], headers=auth_headers, timeout=5)
             elapsed = round((time.time() - start) * 1000, 2)
             latencies.append(elapsed)
             status["api_endpoints"][name] = {
@@ -80,7 +104,10 @@ def health_check(db: Session = Depends(get_db)):
 
     # --- Summary -------------------------------------------------------------
     criticals = [v for v in status["components"].values() if "error" in str(v).lower() or v == "missing"]
-    fails = [v for v in status["api_endpoints"].values() if v.get("result") != "ok"]
+    fails = [
+        v for v in status["api_endpoints"].values()
+        if v.get("result") not in ("ok", "skipped_auth")
+    ]
     status["status"] = "healthy" if not criticals and not fails else "degraded"
     avg_latency = statistics.mean(latencies) if latencies else 0
     status["avg_latency_ms"] = avg_latency
