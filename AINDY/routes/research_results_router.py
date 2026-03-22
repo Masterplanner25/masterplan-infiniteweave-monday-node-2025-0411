@@ -94,10 +94,23 @@ def run_research_query(
         "source": source,
     })
 
-    return research_results_service.create_research_result(
+    result = research_results_service.create_research_result(
         db,
         ResearchResultCreate(query=request.query, summary=summary),
         user_id=str(current_user["sub"]),
         data=data,
         source=source or "research_query",
     )
+    search_score = None
+    result_data = getattr(result, "data", None)
+    if isinstance(result_data, dict):
+        search_score = result_data.get("search_score")
+    return {
+        "id": result.id,
+        "query": result.query,
+        "summary": result.summary,
+        "source": result.source,
+        "data": result_data,
+        "created_at": result.created_at,
+        "search_score": search_score,
+    }

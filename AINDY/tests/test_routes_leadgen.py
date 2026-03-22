@@ -81,6 +81,10 @@ class TestLeadGenResponseStructure:
             assert "results" in data, (
                 f"POST /leadgen/ response missing 'results' key. Got: {list(data.keys())}"
             )
+            if data["results"]:
+                assert "search_score" in data["results"][0], (
+                    "LeadGen results should include search_score"
+                )
 
 
 class TestLeadGenServiceBugs:

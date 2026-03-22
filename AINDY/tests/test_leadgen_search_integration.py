@@ -39,3 +39,25 @@ def test_run_ai_search_falls_back_on_error(monkeypatch):
     results = run_ai_search("test query")
     assert results
     assert all("company" in r and "url" in r and "context" in r for r in results)
+
+
+def test_search_scoring_for_leads():
+    from services.search_scoring import score_lead_result
+
+    score = score_lead_result(overall_score=80)
+    assert 0.0 <= score <= 1.0
+    assert score > 0.5
+
+
+def test_search_scoring_for_seo():
+    from services.search_scoring import score_seo_result
+
+    score = score_seo_result(readability=80, avg_keyword_density=2.0, word_count=800)
+    assert 0.0 <= score <= 1.0
+
+
+def test_search_scoring_for_research():
+    from services.search_scoring import score_research_result
+
+    score = score_research_result(summary="A" * 600, memory_context_count=2)
+    assert 0.0 <= score <= 1.0

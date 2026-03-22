@@ -20,3 +20,4 @@ class ResearchResultResponse(ResearchResultBase):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     source: str | None = None
     data: dict | None = None
+    search_score: float | None = None
