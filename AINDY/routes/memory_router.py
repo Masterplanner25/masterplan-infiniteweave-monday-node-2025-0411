@@ -894,58 +894,53 @@ async def execute_with_memory(
     """
     user_id = str(current_user["sub"])
 
-    from bridge.nodus_memory_bridge import create_nodus_bridge
+    from types import SimpleNamespace
 
-    bridge = create_nodus_bridge(
-        db=db,
-        user_id=user_id,
-        session_tags=body.session_tags,
+    from db.dao.memory_node_dao import MemoryNodeDAO
+    from runtime.execution_loop import ExecutionLoop
+    from runtime.execution_registry import REGISTRY
+    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+
+    orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+    loop = ExecutionLoop(orchestrator)
+
+    def executor(task, context):
+        return REGISTRY.execute(
+            workflow=task.type,
+            payload=task.input,
+            user_id=user_id,
+            db=db,
+        )
+
+    loop.executor = executor
+
+    task = SimpleNamespace(
+        type=body.workflow,
+        input=body.input,
+        source=f"execution_loop:{body.workflow}",
+        tags=body.session_tags,
+        metadata={
+            "trace_enabled": True,
+            "trace_title": body.workflow,
+            "trace_description": None,
+            "trace_extra": body.input or {},
+        },
     )
 
-    recalled_memories = []
+    result, context = loop.run_with_context(task, user_id, db)
+    recalled_memories = memory_items_to_dicts(context.items) if context else []
 
-    if body.recall_before:
-        query = (
-            body.input.get("query")
-            or body.input.get("prompt")
-            or body.input.get("message")
-            or body.workflow
-        )
-
-        recalled_memories = bridge.recall(
-            query=query,
-            tags=body.session_tags,
-            limit=3,
-        )
-
-    execution_context = {
+    return {
         "workflow": body.workflow,
         "user_id": user_id,
         "session_tags": body.session_tags,
+        "result": result,
         "recalled_memories": recalled_memories,
         "recall_count": len(recalled_memories),
         "memory_bridge_version": "v5",
-        "instructions": {
-            "before_execution": (
-                "Use recalled_memories as context for "
-                "your workflow execution."
-            ),
-            "after_execution": (
-                "Call POST /memory/execute/complete "
-                "with your outcome to complete the loop."
-            ),
-        },
+        "trace_id": task.metadata.get("trace_id"),
+        "memory_context": context.formatted if context else "",
     }
-
-    if recalled_memories:
-        suggestions = bridge.get_suggestions(
-            query=body.input.get("query", body.workflow),
-            tags=body.session_tags,
-            limit=2,
-        )
-        execution_context["suggestions"] = suggestions
-
-    return execution_context
 
 
 @router.post("/execute/complete")
