@@ -21,7 +21,10 @@ def _get_user_session(session_id: int, user_id_str: str, db: Session) -> Genesis
         .first()
     )
     if not session:
-        raise HTTPException(status_code=404, detail="GenesisSession not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "genesis_session_not_found", "message": "GenesisSession not found"},
+        )
     return session
 
 
@@ -65,9 +68,15 @@ def genesis_message(
     user_message = payload.get("message")
 
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "session_id_required", "message": "session_id is required"},
+        )
     if not user_message:
-        raise HTTPException(status_code=400, detail="message is required")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "message_required", "message": "message is required"},
+        )
 
     session = _get_user_session(session_id, user_id_str, db)
 
@@ -136,7 +145,13 @@ def get_genesis_draft(
     session = _get_user_session(session_id, user_id_str, db)
 
     if not session.draft_json:
-        raise HTTPException(status_code=404, detail="No draft available yet — run /genesis/synthesize first")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "draft_not_available",
+                "message": "No draft available yet — run /genesis/synthesize first",
+            },
+        )
 
     return {
         "session_id": session.id,
@@ -157,14 +172,20 @@ def synthesize_genesis(
     session_id = payload.get("session_id")
 
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id required")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "session_id_required", "message": "session_id required"},
+        )
 
     session = _get_user_session(session_id, user_id_str, db)
 
     if not session.synthesis_ready:
         raise HTTPException(
             status_code=422,
-            detail="Session is not ready for synthesis yet — continue the conversation until synthesis_ready is true"
+            detail={
+                "error": "synthesis_not_ready",
+                "message": "Session is not ready for synthesis yet — continue the conversation until synthesis_ready is true",
+            },
         )
 
     current_state = session.summarized_state or {}
@@ -209,7 +230,10 @@ def audit_genesis_draft(
     if not session.draft_json:
         raise HTTPException(
             status_code=422,
-            detail="No draft available — run /genesis/synthesize first"
+            detail={
+                "error": "draft_not_available",
+                "message": "No draft available — run /genesis/synthesize first",
+            },
         )
 
     audit_result = validate_draft_integrity(session.draft_json)
@@ -227,7 +251,10 @@ def lock_masterplan(
     draft = payload.get("draft")
 
     if not session_id or not draft:
-        raise HTTPException(status_code=400, detail="Missing session or draft")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "missing_session_or_draft", "message": "Missing session or draft"},
+        )
 
     # Validate session ownership before locking
     _get_user_session(session_id, user_id_str, db)
@@ -240,7 +267,10 @@ def lock_masterplan(
             user_id=user_id_str,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
+        )
 
     # Write lock event to memory (fire-and-forget)
     try:
@@ -290,7 +320,10 @@ def activate_masterplan(
     )
 
     if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
 
     # Deactivate all plans owned by this user
     db.query(MasterPlan).filter(MasterPlan.user_id == user_id_str).update({"is_active": False})

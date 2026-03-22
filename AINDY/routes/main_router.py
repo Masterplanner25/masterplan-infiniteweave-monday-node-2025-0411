@@ -62,9 +62,18 @@ async def process_task(
     try:
         twr = calculate_twr(task)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "twr_validation_failed", "message": "TWR validation failed", "details": str(e)},
+        )
     except ZeroDivisionError:
-        raise HTTPException(status_code=422, detail="task_difficulty cannot be zero")
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "twr_division_by_zero",
+                "message": "task_difficulty cannot be zero",
+            },
+        )
     save_calculation(db, "Time-to-Wealth Ratio", twr, user_id=str(current_user["sub"]))
 
     # 2️⃣ Fetch master plans

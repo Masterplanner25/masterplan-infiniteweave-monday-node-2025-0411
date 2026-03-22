@@ -239,6 +239,8 @@ It is NOT:
 * normalize profile schema
 * harden post creation + feed response
 
+**Status:** Complete
+
 ---
 
 ### Phase v2 — Bridge Persistence
@@ -248,6 +250,8 @@ It is NOT:
 **Actions:**
 
 * persist `/bridge/user_event` ✅
+
+**Status:** Complete
 
 ---
 
@@ -259,6 +263,8 @@ It is NOT:
 
 * trust-tier weighting ✅
 * engagement-based ordering ✅
+
+**Status:** Complete
 
 ---
 
@@ -304,9 +310,9 @@ It is NOT:
 
 | Phase | Component           | Status      | Required Action |
 | ----- | ------------------- | ----------- | --------------- |
-| v1    | CRUD + Feed         | Implemented | Stabilize       |
-| v2    | Bridge Persistence  | Implemented | Persisted       |
-| v3    | Visibility Scoring  | Implemented | Ranked          |
+| v1    | CRUD + Feed         | Complete    | Maintenance only |
+| v2    | Bridge Persistence  | Complete    | Maintenance only |
+| v3    | Visibility Scoring  | Complete    | Maintenance only |
 | v4    | Analytics Layer     | Missing     | Build           |
 | v5    | Feedback Loop       | Missing     | Connect         |
 

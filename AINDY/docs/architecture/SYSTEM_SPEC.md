@@ -44,7 +44,7 @@ Primary backend entry point: `AINDY/main.py`.
 │  Services   │  │   Routes    │  │  Memory Bridge          │
 │  (AINDY/    │  │  /tasks     │  │  bridge_router.py       │
 │  services/) │  │  /social    │  │  (/bridge/*)            │
-│             │  │  /analytics │  │  HMAC permission model  │
+│             │  │  /analytics │  │  JWT auth on bridge     │
 │  C++ kernel │  │  /bridge    │  │  → MemoryNodeDAO        │
 │  (via Rust  │  │  /research  │  │  → memory_nodes table   │
 │  PyO3)      │  │  /genesis   │  └────────────────────────┘
@@ -117,7 +117,7 @@ Primary backend entry point: `AINDY/main.py`.
 - Database-backed memory nodes and links in `AINDY/services/memory_persistence.py`.
 
 - FastAPI interface split across two routers:
-  - `AINDY/routes/bridge_router.py` — HMAC-signed legacy write interface (`/bridge/*`).
+- `AINDY/routes/bridge_router.py` — JWT-authenticated legacy write interface (`/bridge/*`).
   - `AINDY/routes/memory_router.py` — JWT-authenticated read/write/search interface (`/memory/*`).
 
 - Canonical DAO: `AINDY/db/dao/memory_node_dao.py` (`MemoryNodeDAO`).
@@ -181,7 +181,7 @@ Primary backend entry point: `AINDY/main.py`.
 - MongoDB receives social-layer updates (task completion updates a profile metric snapshot).
 
 **Backend ↔ Memory Bridge**
-- `POST /bridge/nodes` creates memory nodes via HMAC-authenticated `bridge_router.py`.
+- `POST /bridge/nodes` creates memory nodes via JWT-authenticated `bridge_router.py`.
 - `POST /bridge/link` creates link edges in `memory_links`.
 - `GET /bridge/nodes` queries memory nodes by tags.
 - `POST /memory/nodes` creates memory nodes via JWT auth; generates and stores embedding via `embedding_service.py`.
@@ -219,10 +219,10 @@ task_services.complete_task(db, name, user_id)
               └─► INSERT INTO memory_nodes (content, node_type, user_id, embedding)
         (fire-and-forget: exception silenced, task completion unaffected)
 ```
-**Memory Node creation via bridge_router (HMAC path)**
+**Memory Node creation via bridge_router (JWT path)**
 ```
 POST /bridge/nodes
-  └─► bridge_router.py: verify_permission_or_403() (HMAC + TTL check)
+  └─► bridge_router.py: JWT guard (`Depends(get_current_user)`)
         └─► MemoryCaptureEngine.evaluate_and_capture(force=True)
               └─► MemoryNodeDAO.save() → INSERT INTO memory_nodes
                   (UUID, content, tags, node_type, user_id, source_agent, extra)
@@ -320,7 +320,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - **Genesis session locking**: a `GenesisSessionDB` cannot be re-locked or re-used once status is `locked` (`AINDY/services/masterplan_factory.py`).
 - **Single active masterplan**: activating a plan must deactivate all others (`AINDY/routes/genesis_router.py`).
 - **Memory link uniqueness**: `memory_links` must be unique on `(source, target, link_type)` (`AINDY/services/memory_persistence.py`).
-- **Bridge permissions**: memory bridge mutations (`/bridge/nodes`, `/bridge/link`) require a valid HMAC signature and TTL (`AINDY/routes/bridge_router.py`).
+- **Bridge permissions**: memory bridge mutations (`/bridge/nodes`, `/bridge/link`) require JWT (`AINDY/routes/bridge_router.py`). `permission` is optional and ignored.
 
 ## 7. Integration Contracts Between Components
 
@@ -337,9 +337,9 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 
 **Memory Bridge Contract**
 - `POST /bridge/nodes` payload:
-  - `content`, `tags`, `node_type`, `extra`, and `permission` (HMAC signature).
+  - `content`, `tags`, `node_type`, `extra`, and optional `permission` (ignored).
 - `POST /bridge/link` payload:
-  - `source_id`, `target_id`, `link_type`, and `permission`.
+  - `source_id`, `target_id`, `link_type`, and optional `permission`.
 
 **Genesis Contract**
 - `/genesis/session` creates a session with a structured `summarized_state`.

@@ -148,7 +148,10 @@ def get_node(
     dao = MemoryNodeDAO(db)
     node = dao.get_by_id(node_id)
     if not node or node.get("user_id") != str(current_user["sub"]):
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
     return node
 
 
@@ -174,7 +177,10 @@ def update_node(
         source=body.source,
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
     return dao._node_to_dict(updated)
 
 
@@ -214,11 +220,20 @@ def get_linked_nodes(
     direction: 'in' | 'out' | 'both' (default)
     """
     if direction not in ("in", "out", "both"):
-        raise HTTPException(status_code=422, detail="direction must be 'in', 'out', or 'both'")
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "invalid_direction",
+                "message": "direction must be 'in', 'out', or 'both'",
+            },
+        )
     dao = MemoryNodeDAO(db)
     # Verify node exists and is owned by current user
     if not dao.get_by_id(node_id, user_id=str(current_user["sub"])):
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
     return {
         "nodes": dao.get_linked_nodes(
             node_id,
@@ -242,7 +257,10 @@ def search_nodes_by_tags(
     limit: max results (default 50)
     """
     if mode.upper() not in ("AND", "OR"):
-        raise HTTPException(status_code=422, detail="mode must be 'AND' or 'OR'")
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_mode", "message": "mode must be 'AND' or 'OR'"},
+        )
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     dao = MemoryNodeDAO(db)
     return {
@@ -267,15 +285,24 @@ def create_link(
     source = dao.get_by_id(body.source_id, user_id=user_id)
     if not source:
         if dao._get_model_by_id(body.source_id) is not None:
-            raise HTTPException(status_code=404, detail="Source node not found")
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "source_node_not_found", "message": "Source node not found"},
+            )
     target = dao.get_by_id(body.target_id, user_id=user_id)
     if not target:
         if dao._get_model_by_id(body.target_id) is not None:
-            raise HTTPException(status_code=404, detail="Target node not found")
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "target_node_not_found", "message": "Target node not found"},
+            )
     try:
         return dao.create_link(body.source_id, body.target_id, body.link_type, body.weight or 0.5)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "memory_link_invalid", "message": "Invalid memory link", "details": str(e)},
+        )
 
 
 @router.get("/nodes/{node_id}/traverse")
@@ -310,7 +337,10 @@ def traverse_from_node(
     )
 
     if not result["found"]:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
 
     return result
 
@@ -330,7 +360,10 @@ def expand_nodes(
     if len(body.node_ids) > 10:
         raise HTTPException(
             status_code=400,
-            detail="Maximum 10 nodes per expansion request",
+            detail={
+                "error": "expansion_limit_exceeded",
+                "message": "Maximum 10 nodes per expansion request",
+            },
         )
 
     dao = MemoryNodeDAO(db)
@@ -381,7 +414,10 @@ def recall_memories(
     Primary retrieval API for all Phase 3 hooks.
     """
     if not body.query and not body.tags:
-        raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
+        )
 
     from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
@@ -430,7 +466,10 @@ def recall_v3(
     v3 recall - resonance scoring + optional expansion.
     """
     if not body.query and not body.tags:
-        raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
+        )
 
     from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
@@ -512,7 +551,7 @@ async def federated_recall(
     if not body.query and not body.tags:
         raise HTTPException(
             status_code=400,
-            detail="Provide at least one of: query, tags",
+            detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
         )
 
     dao = MemoryNodeDAO(db)
@@ -592,7 +631,10 @@ async def share_memory_node(
         user_id=str(current_user["sub"]),
     )
     if not node:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
 
     return {
         "node_id": node_id,
@@ -659,7 +701,10 @@ async def record_node_feedback(
         user_id=str(current_user["sub"]),
     )
     if not node:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
 
     return {
         "node_id": node_id,
@@ -690,7 +735,10 @@ async def get_node_performance(
     dao = MemoryNodeDAO(db)
     node = dao._get_model_by_id(node_id, user_id=str(current_user["sub"]))
     if not node:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
 
     success_rate = dao.get_success_rate(node)
     usage_freq = dao.get_usage_frequency_score(node)
@@ -749,7 +797,7 @@ async def get_suggestions(
     if not body.query and not body.tags:
         raise HTTPException(
             status_code=400,
-            detail="Provide at least one of: query, tags",
+            detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
         )
 
     dao = MemoryNodeDAO(db)
@@ -881,7 +929,10 @@ async def execute_nodus_task(
         }
 
     except Exception as exc:
-        raise HTTPException(500, f"Task execution failed: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "nodus_execute_failed", "message": "Task execution failed", "details": str(exc)},
+        )
 
 
 @router.post("/execute")
@@ -911,14 +962,14 @@ async def execute_with_memory(
     def leadgen_handler(payload, user_id, db):
         query = payload.get("query") or payload.get("input") or payload.get("message")
         if not query:
-            return {"error": "missing query"}
+            return {"error": "missing_query", "message": "missing query"}
         return create_lead_results(db=db, query=str(query), user_id=user_id)
 
     def genesis_handler(payload, user_id, db):
         message = payload.get("message") or payload.get("query") or payload.get("input")
         current_state = payload.get("current_state") or payload.get("state") or {}
         if not message:
-            return {"error": "missing message"}
+            return {"error": "missing_message", "message": "missing message"}
         return call_genesis_llm(message=str(message), current_state=current_state, user_id=user_id, db=db)
 
     REGISTRY.register("leadgen", leadgen_handler)

@@ -12,14 +12,12 @@ This document distinguishes current behavior from required policy rules. It does
 - `AINDY/routes/bridge_router.py`: raises `HTTPException(status_code=403, ...)` on permission failures.
 - `AINDY/routes/social_router.py`: raises `HTTPException(status_code=404, ...)` when profile not found.
 - Many routes do not wrap exceptions; unhandled exceptions will propagate to FastAPI and return 500 responses with default behavior.
-- Routes with no explicit error handling (no `try/except` and no `HTTPException` usage) include:
+- Routes with minimal or no explicit error handling (no `try/except` and limited `HTTPException` usage) include:
 - `AINDY/routes/authorship_router.py`
 - `AINDY/routes/dashboard_router.py`
 - `AINDY/routes/db_verify_router.py`
 - `AINDY/routes/health_dashboard_router.py`
-- `AINDY/routes/leadgen_router.py`
 - `AINDY/routes/network_bridge_router.py`
-- `AINDY/routes/research_results_router.py`
 - `AINDY/routes/rippletrace_router.py`
 - `AINDY/routes/seo_routes.py`
 - `AINDY/routes/task_router.py`
@@ -96,7 +94,7 @@ Policy requirement for API errors (even if not fully implemented):
 }
 ```
 
-- Current implementation does not consistently return this shape.
+- Current implementation uses this shape for core routes, but unhandled exceptions still return FastAPI defaults.
 
 ## 6. Known Gaps
 - Inconsistent error handling across routes (`AINDY/routes/*`).

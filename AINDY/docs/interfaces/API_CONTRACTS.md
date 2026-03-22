@@ -33,7 +33,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 **Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
 - **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection), `/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
-- **HMAC permission** — no longer used as the sole write guard on `/bridge`. JWT is the primary auth on bridge write routes.
+- **HMAC permission** — deprecated. `/bridge` write routes rely on JWT; `permission` is ignored if provided.
 - **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`.
 - Zero unprotected non-public routes as of Sprint 4 (2026-03-18).
 
@@ -264,12 +264,12 @@ Errors: Not explicitly defined.
   - `tags: List[str]`
   - `node_type: str`
   - `extra: dict`
-  - `permission: TracePermission`
+  - `permission: TracePermission` (optional, ignored)
   Query Params: None
   Response: `NodeResponse` with `id`, `content`, `tags`, `node_type`, `extra`.
   Auth: JWT required; `user_id` enforced from `current_user["sub"]` (payload user_id is ignored).
   Status Codes: 201
-Errors: 403 on invalid HMAC signature or expired TTL.
+Errors: Not explicitly defined.
 
 `GET /bridge/nodes`
 Method: GET
@@ -286,12 +286,12 @@ Request Body: `LinkCreateRequest` (inline Pydantic model) with fields:
 - `source_id: str`
 - `target_id: str`
 - `link_type: str`
-- `permission: TracePermission`
+- `permission: TracePermission` (optional, ignored)
 Query Params: None
 Response: `LinkResponse` with `id`, `source_node_id`, `target_node_id`, `link_type`, `strength`, `created_at`.
   Auth: JWT required; link creation is rejected if either node is not owned by `current_user[\"sub\"]`.
 Status Codes: 201
-Errors: 403 on invalid HMAC signature or expired TTL; 400 on invalid IDs (from `ValueError`) is not explicitly mapped.
+Errors: 400 on invalid IDs (from `ValueError`) is not explicitly mapped.
 
 `POST /bridge/user_event`
 Method: POST
@@ -1092,9 +1092,8 @@ Status Codes: 200, 401.
 - `masterplan_router` manages plans independently; all queries user-scoped.
 
 ## 4. Memory Bridge API Contract (Current Implementation)
-- `POST /bridge/nodes` and `POST /bridge/link` require a `permission` object (`TracePermission`) with `nonce`, `ts`, `ttl`, `scopes`, and `signature`.
-- TTL enforcement: `permission.ts + permission.ttl < now` triggers HTTP 403.
-- Signature enforcement: HMAC SHA-256 over `nonce|ts|ttl|sorted(scopes)`; mismatches return HTTP 403.
+- `POST /bridge/nodes` and `POST /bridge/link` no longer require HMAC permissions; JWT is the write guard. `permission` is accepted but ignored for backward compatibility.
+- Signature enforcement: deprecated; JWT is the write guard.
 - `GET /bridge/nodes` supports tag search with `mode` and `limit` parameters.
 
 ## 5. Network Gateway Integration (Current Implementation)

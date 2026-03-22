@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { calculateIncomeEfficiency } from "../api";
+import { calculateRevenueScaling } from "../api";
 
-export default function IncomeEfficiencyPanel() {
-  const [focusedEffort, setFocusedEffort] = useState(0);
-  const [aiUtilization, setAiUtilization] = useState(0);
+export default function RevenueScalingPanel() {
+  const [aiLeverage, setAiLeverage] = useState(0);
+  const [contentDistribution, setContentDistribution] = useState(0);
   const [time, setTime] = useState(0);
-  const [capital, setCapital] = useState(0);
+  const [audienceEngagement, setAudienceEngagement] = useState(0);
   const [result, setResult] = useState(null);
 
   // --- Formatting Helper ---
@@ -37,38 +37,38 @@ export default function IncomeEfficiencyPanel() {
 
   const handleSubmit = async () => {
     try {
-      const data = await calculateIncomeEfficiency({
-        focused_effort: parseFloat(focusedEffort),
-        ai_utilization: parseFloat(aiUtilization),
+      const data = await calculateRevenueScaling({
+        ai_leverage: parseFloat(aiLeverage),
+        content_distribution: parseFloat(contentDistribution),
         time: parseFloat(time),
-        capital: parseFloat(capital)
+        audience_engagement: parseFloat(audienceEngagement)
       });
       setResult(data);
     } catch (err) {
-      console.error("Income Efficiency Error:", err);
+      console.error("Revenue Scaling Error:", err);
     }
   };
 
   return (
     <div style={panelStyle}>
-      <h3 style={{ marginTop: 0, fontSize: "16px", color: "#2ecc71" }}>Income Efficiency</h3>
+      <h3 style={{ marginTop: 0, fontSize: "16px", color: "#2ecc71" }}>Revenue Scaling</h3>
       
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
         <div>
-          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Focused Effort</label>
-          <input type="number" style={inputStyle} value={focusedEffort} onChange={(e)=>setFocusedEffort(e.target.value)} />
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>AI Leverage</label>
+          <input type="number" style={inputStyle} value={aiLeverage} onChange={(e)=>setAiLeverage(e.target.value)} />
         </div>
         <div>
-          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>AI Utilization</label>
-          <input type="number" style={inputStyle} value={aiUtilization} onChange={(e)=>setAiUtilization(e.target.value)} />
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Content Distribution</label>
+          <input type="number" style={inputStyle} value={contentDistribution} onChange={(e)=>setContentDistribution(e.target.value)} />
         </div>
         <div>
-          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Time Spent</label>
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Time</label>
           <input type="number" style={inputStyle} value={time} onChange={(e)=>setTime(e.target.value)} />
         </div>
         <div>
-          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Capital ($)</label>
-          <input type="number" style={inputStyle} value={capital} onChange={(e)=>setCapital(e.target.value)} />
+          <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Audience Engagement</label>
+          <input type="number" style={inputStyle} value={audienceEngagement} onChange={(e)=>setAudienceEngagement(e.target.value)} />
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export default function IncomeEfficiencyPanel() {
         style={{ backgroundColor: "#2ecc71", color: "#000", border: "none", padding: "12px", borderRadius: "6px", cursor: "pointer", width: "100%", fontWeight: "bold" }} 
         onClick={handleSubmit}
       >
-        Calculate Efficiency
+        Calculate Revenue Scaling
       </button>
 
       {result && (

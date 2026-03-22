@@ -226,7 +226,7 @@ It is NOT:
 
 * normalize SEO endpoints
 * remove stubbed responses or mark them explicitly
-* document mocked leadgen search
+* document leadgen retrieval integration ✅
 
 ---
 
@@ -283,8 +283,8 @@ It is NOT:
 
 ### Functional
 
-* leadgen search is mocked
-* research search not executed
+* ✅ leadgen search now uses real retrieval (orchestrator + provider)
+* ✅ research search executes via `/research/query`
 * SEO suggestions stubbed
 
 ### Conceptual

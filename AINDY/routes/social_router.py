@@ -60,7 +60,10 @@ def upsert_profile(
     if existing_any and existing_any.get("user_id") != user_id:
         raise HTTPException(
             status_code=403,
-            detail="Cannot modify another user's profile",
+            detail={
+                "error": "profile_forbidden",
+                "message": "Cannot modify another user's profile",
+            },
         )
 
     try:
@@ -118,7 +121,10 @@ def get_profile(username: str, db: Database = Depends(get_mongo_db)):
             detail={"error": "profile_fetch_failed", "message": "Profile fetch failed", "details": str(exc)},
         )
     if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "profile_not_found", "message": "Profile not found"},
+        )
     return profile
 
 # --- 2. CONTENT ENDPOINTS (The Trust Feed) ----------------------------------

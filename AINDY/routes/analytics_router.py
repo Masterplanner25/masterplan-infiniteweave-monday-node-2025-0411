@@ -24,7 +24,10 @@ def ingest_linkedin_manual(
         MasterPlan.user_id == str(current_user["sub"]),
     ).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="MasterPlan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "MasterPlan not found"},
+        )
 
     canonical = linkedin_adapter(data)
 
@@ -64,7 +67,10 @@ def get_masterplan_analytics(
         MasterPlan.user_id == str(current_user["sub"]),
     ).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="MasterPlan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "MasterPlan not found"},
+        )
 
     query = db.query(CanonicalMetricDB).filter(
         CanonicalMetricDB.masterplan_id == masterplan_id
@@ -95,7 +101,10 @@ def get_masterplan_summary(
         MasterPlan.user_id == str(current_user["sub"]),
     ).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="MasterPlan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "MasterPlan not found"},
+        )
 
     query = db.query(CanonicalMetricDB).filter(
         CanonicalMetricDB.masterplan_id == masterplan_id

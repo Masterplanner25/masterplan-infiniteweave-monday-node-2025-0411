@@ -53,7 +53,7 @@ Uniqueness constraints:
 - Link relations must be unique across source, target, and type.
 
 Permission validation:
-- Mutations require valid signatures and non-expired permissions.
+- Mutations require JWT validation; legacy permission signatures are ignored.
 
 **Recurrence / Background Loops**
 Implemented background loops exist in `AINDY/services/task_services.py`:

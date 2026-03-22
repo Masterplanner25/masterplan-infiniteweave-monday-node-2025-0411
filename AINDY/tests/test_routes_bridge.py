@@ -1,38 +1,26 @@
 """
 test_routes_bridge.py
-─────────────────────
+────────────────────
 Bridge route tests using actual paths from routes/bridge_router.py.
 
 Routes registered under prefix /bridge:
-  POST /bridge/nodes      (requires HMAC permission + JWT)
+  POST /bridge/nodes      (requires JWT; permission optional and ignored)
   GET  /bridge/nodes      (requires JWT)
-  POST /bridge/link       (requires HMAC permission + JWT)
+  POST /bridge/link       (requires JWT; permission optional and ignored)
   POST /bridge/user_event (requires API key)
 """
 import pytest
-import hmac
-import hashlib
-import time
 from unittest.mock import MagicMock, patch
 
 
-def _make_valid_permission(secret: str = "test-secret-for-pytest", scopes=None):
-    """Helper: generate a valid TracePermission payload."""
-    if scopes is None:
-        scopes = ["write"]
-    nonce = "test-nonce-123"
-    ts = int(time.time())
-    ttl = 300
-
-    payload = f"{nonce}|{ts}|{ttl}|{','.join(sorted(scopes))}"
-    sig = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-
+def _make_permission_payload():
+    """Helper: placeholder TracePermission payload (ignored under JWT-only bridge)."""
     return {
-        "nonce": nonce,
-        "ts": ts,
-        "ttl": ttl,
-        "scopes": scopes,
-        "signature": sig,
+        "nonce": "test-nonce-123",
+        "ts": 0,
+        "ttl": 300,
+        "scopes": ["write"],
+        "signature": "ignored",
     }
 
 
@@ -51,63 +39,62 @@ class TestBridgeRouteRegistration:
 
 
 class TestBridgeNodeCreation:
-    def test_post_nodes_without_permission_returns_422(self, client, auth_headers):
-        """POST /bridge/nodes with no permission field must return 422 (Pydantic validation)."""
-        response = client.post("/bridge/nodes", json={
-            "content": "test node",
-            "tags": ["test"],
-            "node_type": "insight",
-        }, headers=auth_headers)
-        assert response.status_code == 422, (
-            f"Expected 422 (missing permission field), got {response.status_code}"
+    def test_post_nodes_without_permission_returns_201(self, client, auth_headers):
+        """POST /bridge/nodes with no permission field should succeed under JWT-only policy."""
+        response = client.post(
+            "/bridge/nodes",
+            json={
+                "content": "test node",
+                "tags": ["test"],
+                "node_type": "insight",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201, (
+            f"Expected 201 (JWT-only), got {response.status_code}"
         )
 
-    def test_post_nodes_with_invalid_hmac_returns_403(self, client, auth_headers):
-        """POST /bridge/nodes with tampered signature must return 403."""
-        bad_permission = {
-            "nonce": "test-nonce",
-            "ts": int(time.time()),
-            "ttl": 300,
-            "scopes": ["write"],
-            "signature": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-        }
-        response = client.post("/bridge/nodes", json={
-            "content": "test node",
-            "tags": ["test"],
-            "node_type": "insight",
-            "permission": bad_permission,
-        }, headers=auth_headers)
-        assert response.status_code == 403, (
-            f"Expected 403 for invalid HMAC, got {response.status_code}: {response.text[:200]}"
+    def test_post_nodes_with_invalid_permission_is_ignored(self, client, auth_headers):
+        """POST /bridge/nodes with permission payload should be ignored under JWT-only policy."""
+        response = client.post(
+            "/bridge/nodes",
+            json={
+                "content": "test node",
+                "tags": ["test"],
+                "node_type": "insight",
+                "permission": _make_permission_payload(),
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201, (
+            f"Expected 201 for ignored permission, got {response.status_code}: {response.text[:200]}"
         )
 
-    def test_post_nodes_with_expired_permission_returns_403(self, client, auth_headers):
-        """POST /bridge/nodes with expired TTL must return 403."""
-        import os
-        secret = os.environ.get("PERMISSION_SECRET", "test-secret-for-pytest")
-        nonce = "test-nonce-expired"
-        ts = int(time.time()) - 600  # 10 minutes ago
-        ttl = 60  # TTL was 1 minute — now expired
-        scopes = ["write"]
-        payload = f"{nonce}|{ts}|{ttl}|{','.join(sorted(scopes))}"
-        sig = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-
-        response = client.post("/bridge/nodes", json={
-            "content": "test node",
-            "tags": [],
-            "permission": {"nonce": nonce, "ts": ts, "ttl": ttl, "scopes": scopes, "signature": sig},
-        }, headers=auth_headers)
-        assert response.status_code == 403, (
-            f"Expected 403 for expired permission, got {response.status_code}"
+    def test_post_nodes_with_expired_permission_returns_201(self, client, auth_headers):
+        """POST /bridge/nodes ignores permission payload under JWT-only policy."""
+        response = client.post(
+            "/bridge/nodes",
+            json={
+                "content": "test node",
+                "tags": [],
+                "permission": _make_permission_payload(),
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 201, (
+            f"Expected 201 for ignored permission, got {response.status_code}"
         )
 
     def test_post_nodes_without_jwt_returns_401(self, client):
         """POST /bridge/nodes without JWT must return 401."""
-        response = client.post("/bridge/nodes", json={
-            "content": "test node",
-            "tags": ["test"],
-            "permission": _make_valid_permission(),
-        })
+        response = client.post(
+            "/bridge/nodes",
+            json={
+                "content": "test node",
+                "tags": ["test"],
+                "permission": _make_permission_payload(),
+            },
+        )
         assert response.status_code == 401, (
             f"Expected 401 (missing JWT), got {response.status_code}"
         )
@@ -131,41 +118,50 @@ class TestBridgeNodeSearch:
 
 
 class TestBridgeLinkCreation:
-    def test_post_link_without_permission_returns_422(self, client, auth_headers):
-        """POST /bridge/link with no permission field must return 422."""
-        response = client.post("/bridge/link", json={
-            "source_id": "00000000-0000-0000-0000-000000000001",
-            "target_id": "00000000-0000-0000-0000-000000000002",
-        }, headers=auth_headers)
-        assert response.status_code == 422, (
-            f"Expected 422 (missing permission), got {response.status_code}"
+    def test_post_link_without_permission_returns_404_or_403(self, client, auth_headers):
+        """POST /bridge/link with no permission should return ownership or missing-node errors."""
+        response = client.post(
+            "/bridge/link",
+            json={
+                "source_id": "00000000-0000-0000-0000-000000000001",
+                "target_id": "00000000-0000-0000-0000-000000000002",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code in (403, 404), (
+            f"Expected 403/404 for invalid link IDs, got {response.status_code}"
         )
 
     def test_post_link_without_jwt_returns_401(self, client):
         """POST /bridge/link without JWT must return 401."""
-        response = client.post("/bridge/link", json={
-            "source_id": "00000000-0000-0000-0000-000000000001",
-            "target_id": "00000000-0000-0000-0000-000000000002",
-            "permission": _make_valid_permission(),
-        })
+        response = client.post(
+            "/bridge/link",
+            json={
+                "source_id": "00000000-0000-0000-0000-000000000001",
+                "target_id": "00000000-0000-0000-0000-000000000002",
+                "permission": _make_permission_payload(),
+            },
+        )
         assert response.status_code == 401, (
             f"Expected 401 (missing JWT), got {response.status_code}"
         )
 
 
 class TestBridgeUserEvent:
-    def test_bridge_user_event_no_persistence(self, client, api_key_headers):
+    def test_bridge_user_event_persists_and_returns_logged(self, client, api_key_headers):
         """
-        POST /bridge/user_event accepts events but only calls print().
-        No persistence to DB and no RippleTrace event is emitted.
-        The endpoint returns {"status": "logged"} but nothing is stored.
+        POST /bridge/user_event accepts events and persists them.
+        The endpoint returns {"status": "logged"}.
         """
-        response = client.post("/bridge/user_event", json={
-            "user": "diagnostic_test_user",
-            "origin": "pytest",
-            "timestamp": "2026-01-01T00:00:00",
-        }, headers=api_key_headers)
-        # The endpoint works (200) but nothing is persisted
+        response = client.post(
+            "/bridge/user_event",
+            json={
+                "user": "diagnostic_test_user",
+                "origin": "pytest",
+                "timestamp": "2026-01-01T00:00:00",
+            },
+            headers=api_key_headers,
+        )
         assert response.status_code == 200, (
             f"POST /bridge/user_event returned {response.status_code}"
         )
@@ -176,10 +172,13 @@ class TestBridgeUserEvent:
 
     def test_bridge_user_event_without_api_key_returns_401(self, client):
         """POST /bridge/user_event without API key must return 401."""
-        response = client.post("/bridge/user_event", json={
-            "user": "test_user",
-            "origin": "pytest",
-        })
+        response = client.post(
+            "/bridge/user_event",
+            json={
+                "user": "test_user",
+                "origin": "pytest",
+            },
+        )
         assert response.status_code == 401, (
             f"Expected 401 (missing API key), got {response.status_code}"
         )

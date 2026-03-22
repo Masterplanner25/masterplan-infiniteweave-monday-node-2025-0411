@@ -266,7 +266,7 @@ complete_task(name):
 ### Memory Bridge Permission Validation (`AINDY/routes/bridge_router.py`)
 Pseudocode:
 ```
-expected = HMAC(secret, nonce|ts|ttl|sorted(scopes))
+expected = JWT(authenticated request)
 if expected != signature: 403
 if ts + ttl < now: 403
 ```

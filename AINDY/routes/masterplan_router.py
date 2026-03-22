@@ -17,12 +17,17 @@ def lock_from_genesis(
     current_user: dict = Depends(get_current_user),
 ):
     """Create and lock a MasterPlan from a completed Genesis session."""
+    # Response includes posture_description for UI display.
+    # ValueError from factory maps to 422.
     user_id_str = str(current_user["sub"])
     session_id = payload.get("session_id")
     draft = payload.get("draft", {})
 
     if not session_id:
-        raise HTTPException(status_code=400, detail="session_id is required")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "session_id_required", "message": "session_id is required"},
+        )
 
     try:
         masterplan = create_masterplan_from_genesis(
@@ -32,15 +37,21 @@ def lock_from_genesis(
             user_id=user_id_str,
         )
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "masterplan_validation_failed", "message": "Masterplan validation failed", "details": str(e)},
+        )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
+        )
 
     return {
         "masterplan_id": masterplan.id,
         "version": masterplan.version_label,
-        "posture": masterplan.posture,
         "posture_description": posture_description(masterplan.posture),
+        "posture": masterplan.posture,
         "status": masterplan.status,
     }
 
@@ -59,9 +70,15 @@ def lock_plan(
         .first()
     )
     if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
     if plan.status == "locked":
-        raise HTTPException(status_code=400, detail="Plan is already locked")
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "masterplan_already_locked", "message": "Plan is already locked"},
+        )
 
     plan.status = "locked"
     plan.locked_at = datetime.utcnow()
@@ -114,7 +131,10 @@ def get_masterplan(
         .first()
     )
     if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
     return {
         "id": plan.id,
         "version_label": plan.version_label,
@@ -143,7 +163,10 @@ def activate_masterplan(
         .first()
     )
     if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
 
     # Single active masterplan invariant — deactivate all user plans first
     db.query(MasterPlan).filter(MasterPlan.user_id == user_id_str).update({"is_active": False})
