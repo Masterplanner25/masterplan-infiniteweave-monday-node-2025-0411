@@ -103,6 +103,26 @@ Exit criteria (policy-aligned):
 - Horizontal deployment does not violate invariants or session isolation (per `docs/governance/INVARIANTS.md`).
 Sign-off required: Human approval of Phase 4 completion and scalability readiness.
 
+## 6. Phase 6 – Ownership Cleanup + Observability Hardening
+Focus areas:
+- Backfill legacy `user_id` gaps where possible and confirm ownership consistency.
+- Normalize MasterPlan versioning to a single canonical field.
+- Provide a queryable observability surface for request metrics.
+- Align health check pings with active routes.
+- Ensure memory metrics persistence has a single write path.
+
+Execution checklist:
+1. `Tools/backfill_user_ids.py` added and executed (dry-run; apply when needed).
+2. `master_plans.version` removed; `version_label` is canonical.
+3. `GET /observability/requests` added for request metrics queries.
+4. `/health` pings align with active endpoints.
+5. Memory metrics persistence remains in `ExecutionLoop` only.
+
+Exit criteria (policy-aligned):
+- No remaining mixed ownership fields or redundant version columns.
+- Observability metrics can be queried without log scraping.
+- Health checks reflect active endpoints.
+
 ## 6. Change Governance Rules
 - No evolution phase may violate `docs/governance/INVARIANTS.md`.
 - No schema change without an Alembic migration.
