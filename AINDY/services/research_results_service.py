@@ -1,56 +1,52 @@
 # /services/research_results_service.py
 from sqlalchemy.orm import Session
-from bridge.bridge import create_memory_node, MemoryNode, MemoryTrace
+from services.memory_capture_engine import MemoryCaptureEngine
 from db.models.research_results import ResearchResult
 from schemas.research_results_schema import ResearchResultCreate
 
-# Singleton memory trace for runtime continuity
-_memory_trace = None
-
-
-def get_runtime_trace():
-    """Return a global runtime trace; initialize if missing."""
-    global _memory_trace
-    if _memory_trace is None:
-        _memory_trace = MemoryTrace()
-    return _memory_trace
-
-
-def log_to_memory_bridge(query: str, summary: str):
+def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | None):
     """
     Logs research results into A.I.N.D.Y.'s symbolic Memory Bridge layer.
-    Creates a MemoryNode and links it to the active runtime trace.
+    Persists a MemoryNode via the capture engine.
     """
     try:
-        trace = get_runtime_trace()
-        node = MemoryNode(
-            content=f"Research Summary for '{query}': {summary}",
-            source="Research Engine",
-            tags=["research", "insight", "bridge"],
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=str(user_id) if user_id else None,
+            agent_namespace="research",
         )
-        trace.add_node(node)
-
-        # Persist lightweight DB representation
-        create_memory_node(
+        engine.evaluate_and_capture(
+            event_type="research_result",
             content=f"Research: {query} | {summary}",
             source="research_engine",
             tags=["research", "insight"],
+            node_type="insight",
         )
-
         print(f"[MemoryBridge] Logged node for query: {query}")
     except Exception as e:
         print(f"[MemoryBridge] Logging failed: {e}")
 
 
-def create_research_result(db: Session, result: ResearchResultCreate, user_id: str = None):
+def create_research_result(
+    db: Session,
+    result: ResearchResultCreate,
+    user_id: str = None,
+    data: dict | None = None,
+    source: str | None = None,
+):
     """Store a new research result and propagate to the symbolic bridge."""
-    db_item = ResearchResult(**result.dict(), user_id=user_id)
+    payload = result.dict()
+    if data:
+        payload["data"] = data
+    if source:
+        payload["source"] = source
+    db_item = ResearchResult(**payload, user_id=user_id)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)
 
     # Log to bridge
-    log_to_memory_bridge(db_item.query, db_item.summary)
+    log_to_memory_bridge(db_item.query, db_item.summary, db=db, user_id=user_id)
     return db_item
 
 

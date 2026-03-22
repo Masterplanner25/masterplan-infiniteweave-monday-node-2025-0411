@@ -113,6 +113,7 @@ Structured results:
 * GPT-4o lead scoring
 * DB persistence
 * Memory Bridge logging
+* Memory Orchestrator recall for prior leadgen context
 
 **Missing:**
 
@@ -132,7 +133,8 @@ Structured results:
 **Current Capabilities:**
 
 * research result storage
-* memory logging (legacy bridge call)
+* memory logging (capture engine)
+* Memory Orchestrator recall attached to `/research/query` results
 
 **Missing:**
 
@@ -185,6 +187,7 @@ This capability exists but is not wired into the Search System flows documented 
 * basic SEO analysis endpoints
 * lead scoring + DB persistence
 * research result storage
+* Memory Orchestrator recall used in LeadGen and Research query flow
 * semantic memory search (separate system)
 
 **Missing:**
@@ -233,6 +236,7 @@ It is NOT:
 
 * wire `modules/research_engine.py` into `/research/query`
 * replace mocked `run_ai_search()` results with real provider calls
+* integrate Memory Orchestrator recall into search flows
 
 ---
 
@@ -292,7 +296,7 @@ It is NOT:
 | Phase | Component            | Status      | Required Action |
 | ----- | -------------------- | ----------- | --------------- |
 | v1    | Surface Alignment    | Partial     | Normalize       |
-| v2    | Retrieval Integration| Missing     | Wire + replace  |
+| v2    | Retrieval Integration| Partial     | Wire + replace  |
 | v3    | Ranking Unification  | Missing     | Unify scoring   |
 | v4    | Feedback Loop        | Missing     | Persist + reuse |
 | v5    | UI Integration       | Missing     | Implement       |
