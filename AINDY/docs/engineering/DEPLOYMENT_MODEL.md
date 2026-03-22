@@ -30,6 +30,8 @@ This document distinguishes current deployment reality from required policy rule
 - `MONGO_URL` (optional; defaults to `mongodb://localhost:27017` in `AINDY/db/mongo_setup.py`).
 - `MONGO_DB_NAME` (optional; defaults to `aindy_social_layer` in `AINDY/db/mongo_setup.py`).
 - `DEEPSEEK_CONFIG_PATH` (optional; defaults to `deepseek_config.json` in `AINDY/services/deepseek_arm_service.py`).
+- `AINDY_CACHE_BACKEND` (optional; `memory` or `redis`, defaults to `memory`).
+- `REDIS_URL` (required if `AINDY_CACHE_BACKEND=redis`).
 
 ### B. Environment Separation Rules (Policy)
 - Local, development, and production environments must use separate `.env` configurations.

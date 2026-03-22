@@ -8,7 +8,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
 - ✅ **RESOLVED (2026-03-22):** Gateway state durability now backed by `authors` table via `/network_bridge/authors`.
 -
-- Cache consistency is per-process only (`FastAPICache` with `InMemoryBackend` in `AINDY/main.py`); multi-instance deployments will diverge unless a shared backend is introduced.
+- ✅ **PARTIALLY RESOLVED (2026-03-22):** Cache backend can be configured for Redis via `AINDY_CACHE_BACKEND=redis` and `REDIS_URL`. Default remains in-memory, so multi-instance consistency requires explicit config.
 - ARM analyzer config updates are process-local; multi-instance propagation requires restarts or explicit reload across instances (`AINDY/routes/arm_router.py`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.

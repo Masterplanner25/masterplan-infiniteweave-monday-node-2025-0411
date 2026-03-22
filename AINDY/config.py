@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     # --- Optional runtime options ---
     LOG_LEVEL: str = "INFO"
+    REDIS_URL: str | None = None
+    AINDY_CACHE_BACKEND: str = "memory"
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(

@@ -46,7 +46,24 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
-    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    cache_backend = os.getenv("AINDY_CACHE_BACKEND", "memory").lower()
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        cache_backend = "memory"
+    if cache_backend == "redis":
+        try:
+            from redis import asyncio as aioredis
+            from fastapi_cache.backends.redis import RedisBackend
+        except Exception as exc:
+            logger.error("Redis cache backend unavailable: %s", exc)
+            raise RuntimeError("Redis cache backend unavailable.") from exc
+        if not settings.REDIS_URL:
+            raise RuntimeError("REDIS_URL is required for redis cache backend.")
+        redis = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
+        FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
+        logger.info("Cache backend initialized: redis")
+    else:
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+        logger.info("Cache backend initialized: memory")
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if enforce_schema and not os.getenv("PYTEST_CURRENT_TEST"):
