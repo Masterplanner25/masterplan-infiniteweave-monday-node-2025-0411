@@ -31,3 +31,21 @@ def register_author(db: Session, name: str, platform: str, notes: str | None = N
     db.commit()
     db.refresh(author)
     return author
+
+
+def list_authors(db: Session, platform: str | None = None, limit: int = 100):
+    query = db.query(AuthorDB)
+    if platform:
+        query = query.filter(AuthorDB.platform == platform)
+    authors = query.order_by(AuthorDB.last_seen.desc()).limit(limit).all()
+    return [
+        {
+            "id": a.id,
+            "name": a.name,
+            "platform": a.platform,
+            "notes": a.notes,
+            "joined_at": a.joined_at.isoformat() if a.joined_at else None,
+            "last_seen": a.last_seen.isoformat() if a.last_seen else None,
+        }
+        for a in authors
+    ]

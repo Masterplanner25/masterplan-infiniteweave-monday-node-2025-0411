@@ -20,6 +20,7 @@ from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
 from .bridge_user_event import BridgeUserEvent
+from .background_task_lease import BackgroundTaskLease
 
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     "MemoryTrace",
     "MemoryTraceNode",
     "BridgeUserEvent",
+    "BackgroundTaskLease",
 ]

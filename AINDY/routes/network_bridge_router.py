@@ -94,3 +94,16 @@ def log_user_event(event: NetworkUser, db: Session = Depends(get_db)):
         "tagline": event.tagline,
         "record_id": result.id if result else str(uuid.uuid4())
     }
+
+
+@router.get("/authors")
+def list_authors(
+    platform: str | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    """
+    Return persisted external authors for gateway state reads.
+    """
+    authors = network_bridge_services.list_authors(db=db, platform=platform, limit=limit)
+    return {"authors": authors, "count": len(authors), "platform": platform}

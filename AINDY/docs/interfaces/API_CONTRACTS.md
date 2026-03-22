@@ -385,6 +385,14 @@ Response: `{ "status": "logged", "user": str, "tagline": str, "record_id": str }
 Status Codes: 200
 Errors: Not explicitly defined.
 
+`GET /network_bridge/authors`
+Method: GET
+Request Body: None
+Query Params: `platform` (optional), `limit` (optional, default 100)
+Response: `{ "authors": [ { "id": str, "name": str, "platform": str, "notes": str|null, "joined_at": str|null, "last_seen": str|null } ], "count": int, "platform": str|null }`
+Status Codes: 200
+Errors: Not explicitly defined.
+
 ### DB Verify Routes (`AINDY/routes/db_verify_router.py`, prefix `/db`)
 `GET /db/verify`
 Method: GET

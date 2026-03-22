@@ -3,10 +3,13 @@ import time
 import uuid
 import threading
 import logging
+import os
+import socket
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from db.database import SessionLocal
 from db.models.task import Task
+from db.models.background_task_lease import BackgroundTaskLease
 from services.calculation_services import save_calculation, calculate_twr, TaskInput
 from db.mongo_setup import get_mongo_client
 
@@ -16,6 +19,125 @@ _BACKGROUND_LOCK = threading.Lock()
 _BACKGROUND_STARTED = False
 _BACKGROUND_STOP_EVENT = None
 _BACKGROUND_THREADS: list[threading.Thread] = []
+_BACKGROUND_LEASE_NAME = "task_background_runner"
+_BACKGROUND_OWNER_ID = None
+_BACKGROUND_LEASE_TTL_SECONDS = 120
+
+
+def _get_instance_id() -> str:
+    return (
+        os.environ.get("INSTANCE_ID")
+        or os.environ.get("HOSTNAME")
+        or socket.gethostname()
+        or "unknown-instance"
+    )
+
+
+def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
+    log = log or logger
+    instance_id = _get_instance_id()
+    now = datetime.utcnow()
+    expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
+    db = SessionLocal()
+    try:
+        lease = (
+            db.query(BackgroundTaskLease)
+            .filter(BackgroundTaskLease.name == _BACKGROUND_LEASE_NAME)
+            .with_for_update(nowait=False)
+            .first()
+        )
+        if lease:
+            if lease.expires_at and lease.expires_at > now and lease.owner_id != instance_id:
+                log.warning(
+                    "Background task lease held by %s (expires_at=%s).",
+                    lease.owner_id,
+                    lease.expires_at.isoformat(),
+                )
+                return False
+            lease.owner_id = instance_id
+            lease.acquired_at = now
+            lease.heartbeat_at = now
+            lease.expires_at = expires_at
+        else:
+            lease = BackgroundTaskLease(
+                name=_BACKGROUND_LEASE_NAME,
+                owner_id=instance_id,
+                acquired_at=now,
+                heartbeat_at=now,
+                expires_at=expires_at,
+            )
+            db.add(lease)
+        db.commit()
+        global _BACKGROUND_OWNER_ID
+        _BACKGROUND_OWNER_ID = instance_id
+        log.info("Background task lease acquired by %s.", instance_id)
+        return True
+    except Exception as exc:
+        db.rollback()
+        log.warning("Failed to acquire background task lease: %s", exc)
+        return False
+    finally:
+        db.close()
+
+
+def _refresh_background_lease(log: logging.Logger | None = None) -> bool:
+    log = log or logger
+    instance_id = _BACKGROUND_OWNER_ID or _get_instance_id()
+    now = datetime.utcnow()
+    expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
+    db = SessionLocal()
+    try:
+        lease = (
+            db.query(BackgroundTaskLease)
+            .filter(BackgroundTaskLease.name == _BACKGROUND_LEASE_NAME)
+            .with_for_update(nowait=False)
+            .first()
+        )
+        if not lease or lease.owner_id != instance_id:
+            log.warning("Background task lease lost (owner=%s).", getattr(lease, "owner_id", None))
+            return False
+        lease.heartbeat_at = now
+        lease.expires_at = expires_at
+        db.commit()
+        return True
+    except Exception as exc:
+        db.rollback()
+        log.warning("Failed to refresh background task lease: %s", exc)
+        return False
+    finally:
+        db.close()
+
+
+def _release_background_lease(log: logging.Logger | None = None) -> None:
+    log = log or logger
+    instance_id = _BACKGROUND_OWNER_ID or _get_instance_id()
+    db = SessionLocal()
+    try:
+        lease = (
+            db.query(BackgroundTaskLease)
+            .filter(BackgroundTaskLease.name == _BACKGROUND_LEASE_NAME)
+            .first()
+        )
+        if lease and lease.owner_id == instance_id:
+            lease.expires_at = datetime.utcnow()
+            lease.heartbeat_at = datetime.utcnow()
+            db.commit()
+            log.info("Background task lease released by %s.", instance_id)
+    except Exception as exc:
+        db.rollback()
+        log.warning("Failed to release background task lease: %s", exc)
+    finally:
+        db.close()
+
+
+def _run_lease_heartbeat(stop_event: threading.Event, log: logging.Logger | None = None):
+    log = log or logger
+    while not stop_event.is_set():
+        if not _refresh_background_lease(log=log):
+            log.warning("Stopping background tasks due to lost lease.")
+            stop_event.set()
+            return
+        stop_event.wait(_BACKGROUND_LEASE_TTL_SECONDS / 3)
 
 # ----------------------------
 # Core CRUD Task Management
@@ -259,9 +381,18 @@ def start_background_tasks(enable: bool = True, log: logging.Logger | None = Non
         if _BACKGROUND_STARTED:
             log.info("Background task runner already started.")
             return _BACKGROUND_STOP_EVENT
+        if not _acquire_background_lease(log=log):
+            log.warning("Background task runner not started (lease unavailable).")
+            return None
         _BACKGROUND_STARTED = True
         _BACKGROUND_STOP_EVENT = threading.Event()
         _BACKGROUND_THREADS = [
+            threading.Thread(
+                target=_run_lease_heartbeat,
+                args=(_BACKGROUND_STOP_EVENT, log),
+                daemon=True,
+                name="task_lease_heartbeat",
+            ),
             threading.Thread(
                 target=_run_handle_recurrence,
                 args=(_BACKGROUND_STOP_EVENT, log),
@@ -294,4 +425,5 @@ def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.
         _BACKGROUND_THREADS = []
         _BACKGROUND_STOP_EVENT = None
         _BACKGROUND_STARTED = False
+        _release_background_lease(log=log)
         log.info("Background task runner stopped.")
