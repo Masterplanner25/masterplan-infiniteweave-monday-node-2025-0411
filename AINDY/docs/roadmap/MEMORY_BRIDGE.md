@@ -380,7 +380,7 @@ It is NOT:
 | Phase | Component            | Status  | Required Action    |
 | ----- | -------------------- | ------- | ------------------ |
 | v1    | DAO + Schema         | Partial | Unify + clean      |
-| v2    | Trace Layer          | Missing | Implement          |
+| v2    | Trace Layer          | Partial | Wire into recall   |
 | v3    | Symbolic Integration | Missing | Ingest + map       |
 | v4    | Resonance Engine     | Partial | Replace scoring    |
 | v5    | Execution Loop       | Partial | Enforce runtime    |

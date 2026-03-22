@@ -7,6 +7,8 @@ from .task import Task
 from .masterplan import MasterPlan, GenesisSessionDB
 from .metrics_models import CanonicalMetricDB
 from .memory_metrics import MemoryMetric
+from .memory_trace import MemoryTrace
+from .memory_trace_node import MemoryTraceNode
 from .research_results import ResearchResult
 from .freelance import FreelanceOrder, ClientFeedback, RevenueMetrics
 from .arm_models import ARMRun, ARMLog, ARMConfig
@@ -42,4 +44,6 @@ __all__ = [
     "MemoryNodeHistory",
     "Agent",
     "MemoryMetric",
+    "MemoryTrace",
+    "MemoryTraceNode",
 ]

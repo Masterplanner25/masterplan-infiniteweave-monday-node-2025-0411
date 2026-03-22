@@ -27,6 +27,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
 - `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
 - `AINDY/routes/memory_metrics_router.py` (prefix `/memory`) **[JWT auth required]**
+- `AINDY/routes/memory_trace_router.py` (prefix `/memory`) **[JWT auth required]**
 - `AINDY/routes/identity_router.py` (prefix `/identity`) **[JWT auth required]**
 
 **Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
@@ -108,6 +109,13 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/metrics` ? JWT required. Returns summary impact metrics.
 - `GET /memory/metrics/detail` ? JWT required. Returns recent impact runs.
 - `GET /memory/metrics/dashboard` ? JWT required. Returns summary + recent runs + insights.
+
+**Memory Bridge v5 Phase 5 additions (2026-03-21):**
+- `POST /memory/traces` ? JWT required. Creates a new trace.
+- `POST /memory/traces/{trace_id}/append` ? JWT required. Appends a node to a trace.
+- `GET /memory/traces` ? JWT required. Lists traces for the user.
+- `GET /memory/traces/{trace_id}` ? JWT required. Returns trace metadata.
+- `GET /memory/traces/{trace_id}/nodes` ? JWT required. Returns ordered trace nodes.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,
