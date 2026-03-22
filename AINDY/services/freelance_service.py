@@ -1,6 +1,7 @@
 # services/freelance_service.py
 
 from datetime import datetime
+import uuid
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -31,6 +32,7 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
     Creates a new freelance order and logs it to the Memory Bridge.
     """
     try:
+        user_uuid = uuid.UUID(str(user_id)) if user_id else None
         order = FreelanceOrder(
             client_name=order_data.client_name,
             client_email=order_data.client_email,
@@ -38,7 +40,7 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
             project_details=order_data.project_details,
             price=order_data.price,
             status="pending",
-            user_id=user_id,
+            user_id=user_uuid,
         )
         db.add(order)
         db.commit()
@@ -115,12 +117,13 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
     if not order:
         raise ValueError(f"Order {feedback_data.order_id} not found")
 
+    user_uuid = uuid.UUID(str(user_id)) if user_id else None
     feedback = ClientFeedback(
         order_id=feedback_data.order_id,
         rating=feedback_data.rating,
         feedback_text=feedback_data.feedback_text,
         ai_summary=None,
-        user_id=user_id,
+        user_id=user_uuid,
     )
     db.add(feedback)
     db.commit()
@@ -193,14 +196,14 @@ def update_revenue_metrics(db: Session):
 def get_all_orders(db: Session, user_id: str = None):
     q = db.query(FreelanceOrder)
     if user_id:
-        q = q.filter(FreelanceOrder.user_id == user_id)
+        q = q.filter(FreelanceOrder.user_id == uuid.UUID(str(user_id)))
     return q.order_by(FreelanceOrder.created_at.desc()).all()
 
 
 def get_all_feedback(db: Session, user_id: str = None):
     q = db.query(ClientFeedback)
     if user_id:
-        q = q.filter(ClientFeedback.user_id == user_id)
+        q = q.filter(ClientFeedback.user_id == uuid.UUID(str(user_id)))
     return q.order_by(ClientFeedback.created_at.desc()).all()
 
 

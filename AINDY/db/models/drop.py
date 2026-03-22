@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey
+﻿from sqlalchemy import Column, String, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 
 
@@ -12,7 +13,8 @@ class DropPointDB(Base):
     core_themes = Column(Text)
     tagged_entities = Column(Text)
     intent = Column(String)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+
 
 class PingDB(Base):
     __tablename__ = "pings"
@@ -24,4 +26,4 @@ class PingDB(Base):
     connection_summary = Column(Text, nullable=True)
     external_url = Column(String, nullable=True)
     reaction_notes = Column(Text, nullable=True)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
