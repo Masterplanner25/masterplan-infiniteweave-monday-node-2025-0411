@@ -68,7 +68,7 @@ This document inventories current technical debt based strictly on the existing 
 - No automated migration validation tests (`AINDY/alembic/` has no test harness).
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** CI pipeline live. GitHub Actions `ci.yml` runs lint (ruff) + tests (pytest + coverage) on every push and PR to `main`. Coverage threshold: 64% (baseline: 69%). Coverage XML uploaded to Codecov. PR template, CODEOWNERS, SECRETS.md, and `.env.example` added.
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured. `pytest-cov==7.0.0` + `.coveragerc` added. Baseline: 69%. CI threshold: 64% (`--cov-fail-under=64`). XML report generated and uploaded to Codecov on every push/PR.
-- Duplicate test names in `test_routes.py` can mask failures (`test_routes.py`).
+- ✅ **RESOLVED (2026-03-22):** Duplicate test names in `test_routes.py` removed (unique identifiers added).
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/smoke_memory.py` imports fixed and project root path corrected (`db.dao.memory_node_dao.MemoryNodeDAO` + proper root resolution).
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/Bridgeimport.py` wrapped in a `__main__` guard to prevent import-time execution.
 
