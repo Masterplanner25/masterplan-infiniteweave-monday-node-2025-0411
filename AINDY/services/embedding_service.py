@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from typing import Optional
+import threading
 
 from openai import OpenAI
 
@@ -19,12 +20,15 @@ EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
 
 _client: Optional[OpenAI] = None
+_client_lock = threading.Lock()
 
 
 def get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        with _client_lock:
+            if _client is None:
+                _client = OpenAI(api_key=settings.OPENAI_API_KEY)
     return _client
 
 
