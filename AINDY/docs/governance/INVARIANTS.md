@@ -18,11 +18,11 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Timestamps could be stored in non-UTC timezone; time-based logic may drift.
 - Enforcement Type: Application-enforced (best-effort); DB-enforced only if the SQL succeeds.
 
-## 3. Memory Bridge Permission Signature and TTL
-- Invariant Name: Memory Bridge mutations require valid HMAC signature and TTL
-- Description: `/bridge/nodes` and `/bridge/link` require a signed permission with valid signature and non-expired TTL.
-- Enforcement Location: `AINDY/routes/bridge_router.py: verify_permission_or_403`
-- Enforcement Mechanism: HMAC SHA-256 signature check and timestamp + TTL expiration check; raises HTTP 403 on failure.
+## 3. Memory Bridge Mutation Auth (JWT)
+- Invariant Name: Memory Bridge mutations require JWT
+- Description: `/bridge/nodes` and `/bridge/link` require JWT authentication; legacy HMAC permission is deprecated and ignored.
+- Enforcement Location: `AINDY/routes/bridge_router.py` (router dependency `Depends(get_current_user)`)
+- Enforcement Mechanism: `get_current_user` verifies JWT and raises HTTP 401 on failure.
 - What Would Break If Violated: Unauthorized writes to memory bridge nodes or links.
 - Enforcement Type: Application-enforced.
 
@@ -144,13 +144,13 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: System identity row may be missing; downstream references could fail.
 - Enforcement Type: Application-enforced.
 
-## 16. Permission Secret Default Exists
+## 16. (Retired) Permission Secret Default Exists
 - Invariant Name: Permission secret is always defined
-- Description: `PERMISSION_SECRET` is read from env with a fallback string.
-- Enforcement Location: `AINDY/routes/bridge_router.py: PERMISSION_SECRET = os.getenv(..., "dev-secret-must-change")`
-- Enforcement Mechanism: Default value ensures non-empty secret string at runtime.
-- What Would Break If Violated: HMAC validation would be undefined; requests could not be verified.
-- Enforcement Type: Application-enforced.
+- Description: Deprecated; HMAC permission is no longer enforced.
+- Enforcement Location: Not enforced in current implementation.
+- Enforcement Mechanism: None.
+- What Would Break If Violated: N/A (HMAC retired).
+- Enforcement Type: Retired.
 
 ## 17. Session Isolation via `get_db`
 - Invariant Name: Per-request DB session lifecycle
@@ -160,13 +160,13 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Session leakage and cross-request contamination.
 - Enforcement Type: Application-enforced.
 
-## 18. HMAC Signature Computation Order and Scope Sorting
+## 18. (Retired) HMAC Signature Computation Order and Scope Sorting
 - Invariant Name: Permission signature depends on sorted scopes
-- Description: Permission signature uses `','.join(sorted(scopes))` in payload.
-- Enforcement Location: `AINDY/routes/bridge_router.py: compute_perm_sig`
-- Enforcement Mechanism: Application logic for signature generation/verification.
-- What Would Break If Violated: Valid permissions would fail verification if scopes are not sorted consistently.
-- Enforcement Type: Application-enforced.
+- Description: Deprecated; HMAC permission is no longer enforced.
+- Enforcement Location: Not enforced in current implementation.
+- Enforcement Mechanism: None.
+- What Would Break If Violated: N/A (HMAC retired).
+- Enforcement Type: Retired.
 
 ## 19. DropPoint Presence Before Ping Creation
 - Invariant Name: DropPoint exists for ripple events
@@ -245,6 +245,14 @@ This document lists invariants enforced by the current implementation. Each inva
 - Session isolation beyond routes (e.g., across background threads) is documented in various docs but not enforced beyond usage patterns. Documented but not enforced at code level.
 - Any architectural invariants stated in `README.md` or `Architecture_README_v1.md` are not enforced in code. Documented but not enforced at code level.
 - Alembic migrations define constraints but are not applied automatically at runtime. Documented but not enforced at code level.
+
+## 29. Startup Schema Drift Guard
+- Invariant Name: Application must refuse to start on schema drift
+- Description: Startup verifies `alembic current` equals `alembic heads` unless explicitly disabled.
+- Enforcement Location: `AINDY/main.py` (startup guard)
+- Enforcement Mechanism: If heads differ, logs error and raises `RuntimeError`.
+- What Would Break If Violated: App could run against stale or divergent schema.
+- Enforcement Type: Application-enforced (startup).
 
 ## Schema vs. Migration Verification Checklist
 - Confirm the current DB schema matches Alembic head:

@@ -25,7 +25,6 @@ This document distinguishes current deployment reality from required policy rule
 ### A. Required Environment Variables
 > See `AINDY/.env.example` for a template with all variable names. Never commit the real `.env` file.
 - `DATABASE_URL` (required; must be PostgreSQL URI).
-- `PERMISSION_SECRET` (HMAC secret for Memory Bridge; defaults to `dev-secret-must-change` if not set).
 - `OPENAI_API_KEY` (required by `AINDY/config.py` and used in `AINDY/services/genesis_ai.py`).
 - `DEEPSEEK_API_KEY` (optional in config; referenced in `AINDY/config.py`).
 - `MONGO_URL` (optional; defaults to `mongodb://localhost:27017` in `AINDY/db/mongo_setup.py`).
@@ -53,6 +52,7 @@ This document distinguishes current deployment reality from required policy rule
 - Application must not start against an outdated schema.
 - Deployment must ensure DB revision matches Alembic head.
 - Schema mismatch must block deployment.
+- Startup enforcement can be disabled explicitly via `AINDY_ENFORCE_SCHEMA=false` (not recommended for production).
 
 ### Development Reminder
 > **After any change to `AINDY/db/models/`, run `alembic upgrade head` before starting the server or running the test suite.**
@@ -64,7 +64,7 @@ This document distinguishes current deployment reality from required policy rule
 - Ensure PostgreSQL is used (no silent fallback).
 - Ensure background threads do not block startup (`AINDY/main.py`).
 - Ensure model provider keys are configured before use (`OPENAI_API_KEY`).
-- Ensure HMAC secrets are present for Memory Bridge; default secret must not be used in production.
+- Ensure `AINDY_ENFORCE_SCHEMA` is set appropriately for the environment (defaults to `true`).
 
 ## 6. Scaling Considerations (Current Reality)
 
