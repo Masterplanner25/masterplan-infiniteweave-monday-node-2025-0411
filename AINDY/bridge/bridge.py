@@ -143,6 +143,7 @@ def recall_memories(
     """
     import logging
     from db.dao.memory_node_dao import MemoryNodeDAO
+    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
     logger = logging.getLogger(__name__)
 
@@ -151,8 +152,25 @@ def recall_memories(
         return []
 
     try:
-        dao = MemoryNodeDAO(db)
-        return dao.recall(query=query, tags=tags, limit=limit, user_id=user_id, node_type=node_type)
+        metadata = {
+            "tags": tags,
+            "node_type": node_type,
+            "limit": limit,
+        }
+        if node_type is None:
+            metadata["node_types"] = []
+
+        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+        context = orchestrator.get_context(
+            user_id=user_id,
+            query=query or "",
+            task_type="analysis",
+            db=db,
+            max_tokens=1200,
+            metadata=metadata,
+        )
+        results = memory_items_to_dicts(context.items)
+        return results[:limit]
     except Exception as exc:
         logger.warning("[Bridge] recall_memories failed: %s", exc)
         return []

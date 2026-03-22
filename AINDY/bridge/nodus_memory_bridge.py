@@ -83,7 +83,7 @@ class NodusMemoryBridge:
         Returns list of memory dicts with resonance scores.
         Returns [] if no DB connection or on any error.
         """
-        if not self.dao:
+        if not self.db:
             logger.warning(
                 "NodusMemoryBridge.recall() called without DB"
             )
@@ -94,17 +94,28 @@ class NodusMemoryBridge:
                 set((tags or []) + self.session_tags)
             )
 
-            results = self.dao.recall(
-                query=query,
-                tags=combined_tags or None,
-                limit=limit,
-                user_id=self.user_id,
-                node_type=node_type,
-            )
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
-            if isinstance(results, dict):
-                return results.get("results", [])
-            return results
+            metadata = {
+                "tags": combined_tags or None,
+                "node_type": node_type,
+                "limit": limit,
+            }
+            if node_type is None:
+                metadata["node_types"] = []
+
+            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+            context = orchestrator.get_context(
+                user_id=self.user_id,
+                query=query or "",
+                task_type="nodus_execution",
+                db=self.db,
+                max_tokens=800,
+                metadata=metadata,
+            )
+            results = memory_items_to_dicts(context.items)
+            return results[:limit]
 
         except Exception as exc:
             logger.warning(
@@ -297,6 +308,70 @@ class NodusMemoryBridge:
                 "NodusMemoryBridge.record_outcome() failed: %s",
                 exc,
             )
+
+    def recall_tool(
+        self,
+        query: str = None,
+        tags: list[str] = None,
+        limit: int = 3,
+        max_tokens: int = 800,
+    ) -> dict:
+        """
+        Tool-style recall for Nodus runtime.
+
+        Returns a JSON-safe dict with formatted context and ids.
+        """
+        if not self.db:
+            return {
+                "formatted": "",
+                "items": [],
+                "ids": [],
+                "count": 0,
+                "tokens": 0,
+            }
+
+        try:
+            combined_tags = list(
+                set((tags or []) + self.session_tags)
+            )
+
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+
+            metadata = {
+                "tags": combined_tags or None,
+                "limit": limit,
+                "node_types": [],
+            }
+
+            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+            context = orchestrator.get_context(
+                user_id=self.user_id,
+                query=query or "",
+                task_type="nodus_execution",
+                db=self.db,
+                max_tokens=max_tokens,
+                metadata=metadata,
+            )
+            return {
+                "formatted": context.formatted,
+                "items": memory_items_to_dicts(context.items)[:limit],
+                "ids": context.ids[:limit],
+                "count": len(context.items),
+                "tokens": context.total_tokens,
+            }
+        except Exception as exc:
+            logger.warning(
+                "NodusMemoryBridge.recall_tool() failed: %s",
+                exc,
+            )
+            return {
+                "formatted": "",
+                "items": [],
+                "ids": [],
+                "count": 0,
+                "tokens": 0,
+            }
 
 
 def create_nodus_bridge(

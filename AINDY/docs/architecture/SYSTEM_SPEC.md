@@ -121,7 +121,7 @@ Primary backend entry point: `AINDY/main.py`.
 - Embedding pipeline (Phase 2): `AINDY/services/embedding_service.py` generates OpenAI `text-embedding-ada-002` vectors (1536 dims) on every `MemoryNodeDAO.save()` call. Zero-vector fallback on failure.
 
 - Semantic retrieval (Phase 2): `MemoryNodeDAO.find_similar()` uses pgvector `<=>` cosine distance.
-- Resonance v2 (Phase 4): `MemoryNodeDAO.recall()` scores: `(semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` with adaptive weight multiplier and tag bonus.
+- Resonance v2 (Phase 4): `MemoryOrchestrator` (in `AINDY/runtime/memory/`) drives recall, scoring, filtering, and token budgeting; it delegates retrieval to `MemoryNodeDAO.recall()` and applies the resonance formula: `(semantic * 0.40) + (graph * 0.15) + (recency * 0.15) + (success_rate * 0.20) + (usage_frequency * 0.10)` with adaptive weight multiplier and tag bonus.
 
 - Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight.
 - Suggestion engine (Phase 4): `MemoryNodeDAO.suggest()` returns actionable recommendations; endpoint `POST /memory/suggest`.
@@ -227,7 +227,7 @@ POST /memory/recall
   └─► memory_router.py: Depends(get_current_user)
         └─► embedding_service.generate_query_embedding()
               └─► OpenAI → query_embedding [float * 1536]
-        └─► MemoryNodeDAO.recall(query, tags, limit, user_id, node_type)
+        └─► MemoryOrchestrator.get_context(...) → MemoryNodeDAO.recall(...)
               └─► find_similar(): SELECT ... ORDER BY embedding <=> query_embedding
               └─► get_by_tags(): tag-based candidates
               └─► resonance scoring: (semantic*0.40) + (graph*0.15) + (recency*0.15)
@@ -242,7 +242,7 @@ POST /arm/analyze
         └─► DeepSeekCodeAnalyzer.run_analysis(file_path, db, user_id)
               └─► [Step 2] chunk_content()
               └─► [Step 2b] bridge.recall_memories(query=filename, tags=["arm","analysis"], limit=3)
-                    └─► MemoryNodeDAO.recall() → resonance-scored prior context
+                    └─► MemoryOrchestrator.get_context() → resonance-scored prior context
                     └─► inject as "Prior analysis memory" section in user_prompt
               └─► [Step 4] OpenAI GPT-4o analysis
               └─► [Step 6] INSERT INTO analysis_results [db.commit()]
@@ -273,7 +273,7 @@ POST /genesis/lock
 ```
 from bridge import create_memory_node, recall_memories
 recall_memories(query, tags, limit, user_id, db)
-  └─► MemoryNodeDAO.recall() → resonance scoring
+  └─► MemoryOrchestrator.get_context() → MemoryNodeDAO.recall() → resonance scoring
   └─► returns [] on failure (never raises)
 create_memory_node(content, source, tags, user_id, db, node_type)
   └─► MemoryNodeDAO.save() → embedding generation → INSERT INTO memory_nodes

@@ -105,21 +105,27 @@ def complete_task(db: Session, name: str, user_id: str = None):
     try:
         if db and user_id:
             from db.dao.memory_node_dao import MemoryNodeDAO
-            feedback_dao = MemoryNodeDAO(db)
+            from runtime.memory import MemoryOrchestrator
 
             task_title = getattr(task, "name", "")
-            related = feedback_dao.recall(
-                query=task_title,
-                tags=["decision", "task"],
-                limit=2,
+            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+            context = orchestrator.get_context(
                 user_id=str(user_id),
+                query=task_title,
+                task_type="analysis",
+                db=db,
+                max_tokens=400,
+                metadata={
+                    "tags": ["decision", "task"],
+                    "node_type": "decision",
+                    "limit": 2,
+                },
             )
 
-            related_list = related if isinstance(related, list) else related.get("results", [])
-
-            for memory in related_list:
+            feedback_dao = MemoryNodeDAO(db)
+            for memory_id in context.ids:
                 feedback_dao.record_feedback(
-                    node_id=memory["id"],
+                    node_id=memory_id,
                     outcome="success",
                     user_id=str(user_id),
                 )

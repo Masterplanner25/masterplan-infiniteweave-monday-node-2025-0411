@@ -42,18 +42,25 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     prior_context = ""
     if user_id and db:
         try:
-            from bridge import recall_memories
-            past_memories = recall_memories(
-                db=db,
-                query=message,
-                tags=["genesis", "masterplan", "decision"],
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            from runtime.memory import MemoryOrchestrator
+
+            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+            context = orchestrator.get_context(
                 user_id=user_id,
-                limit=2,
+                query=message,
+                task_type="strategy",
+                db=db,
+                max_tokens=600,
+                metadata={
+                    "tags": ["genesis", "masterplan", "decision"],
+                    "limit": 2,
+                },
             )
-            if past_memories:
+            if context.items:
                 prior_context = (
                     "\n\nRelevant past strategic context from this user:\n"
-                    + "\n".join(f"- {m['content'][:200]}" for m in past_memories)
+                    + "\n".join(f"- {m.content[:200]}" for m in context.items)
                 )
         except Exception as e:
             logging.warning(f"Genesis memory recall failed: {e}")

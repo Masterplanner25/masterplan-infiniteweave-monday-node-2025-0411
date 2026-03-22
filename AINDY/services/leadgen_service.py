@@ -40,17 +40,25 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     # Step 1: Recall relevant past leadgen searches
     if user_id and db:
         try:
-            from bridge import recall_memories
-            past_searches = recall_memories(
-                db=db,
-                query=query,
-                tags=["leadgen", "search", "outcome"],
+            from db.dao.memory_node_dao import MemoryNodeDAO
+            from runtime.memory import MemoryOrchestrator
+
+            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+            context = orchestrator.get_context(
                 user_id=user_id,
-                limit=2,
+                query=query,
+                task_type="strategy",
+                db=db,
+                max_tokens=500,
+                metadata={
+                    "tags": ["leadgen", "search", "outcome"],
+                    "node_type": "outcome",
+                    "limit": 2,
+                },
             )
-            if past_searches:
+            if context.items:
                 print(
-                    f"[LeadGen] Recalled {len(past_searches)} past searches "
+                    f"[LeadGen] Recalled {len(context.items)} past searches "
                     f"for context."
                 )
         except Exception as e:
