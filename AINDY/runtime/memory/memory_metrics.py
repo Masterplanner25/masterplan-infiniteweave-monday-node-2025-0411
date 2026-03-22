@@ -10,6 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class MemoryMetricsEngine:
+    """
+    Computes memory impact metrics.
+
+    Note: This class does not persist metrics. Persistence is handled by
+    ExecutionLoop via MemoryMetricsStore to avoid duplicate writes.
+    """
     def compute_impact(
         self,
         result_1: Any,
