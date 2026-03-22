@@ -298,6 +298,7 @@ Method: POST
 Request Body: `UserEvent` (inline Pydantic model with `user`, `origin`, optional `timestamp`)
 Query Params: None
 Response: `{ "status": "logged", "user": str, "origin": str, "timestamp": str }`
+Persistence: Writes to `bridge_user_events` with `user_name`, `origin`, `raw_timestamp`, `occurred_at`.
 Status Codes: 200
 Errors: Not explicitly defined.
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.database import Database
 from typing import List, Optional
+import math
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,20 @@ from services.memory_capture_engine import MemoryCaptureEngine
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depends(get_current_user)])
+
+TRUST_TIER_WEIGHTS = {
+    TrustTier.INNER_CIRCLE: 2.0,
+    TrustTier.COLLAB: 1.5,
+    TrustTier.OBSERVER: 1.0,
+    TrustTier.SYSTEM: 1.2,
+}
+
+
+def _compute_visibility_score(post: SocialPost) -> float:
+    trust_weight = TRUST_TIER_WEIGHTS.get(post.trust_tier_required, 1.0)
+    engagement_total = max(post.likes, 0) + max(post.boosts, 0) * 2 + max(post.comments_count, 0)
+    engagement_score = math.log1p(engagement_total) / 5.0
+    return trust_weight * (1.0 + min(engagement_score, 1.0))
 
 # --- 1. IDENTITY ENDPOINTS (The "Anti-Resume") ------------------------------
 
@@ -125,15 +140,12 @@ def get_feed(limit: int = 20, trust_filter: Optional[str] = None, db: Database =
     for post_doc in cursor:
         post_obj = SocialPost(**post_doc)
         
-        # "Proof of Visibility" Relevance Scoring (Placeholder Logic)
-        relevance = 1.0 
-        if post_obj.trust_tier_required == TrustTier.INNER_CIRCLE:
-            relevance = 2.0 
-            
+        relevance = _compute_visibility_score(post_obj)
         feed_items.append(FeedItem(
             post=post_obj,
             relevance_score=relevance,
-            reason="Network Activity"
+            reason=f"Trust tier {post_obj.trust_tier_required}"
         ))
-        
+
+    feed_items.sort(key=lambda item: item.relevance_score, reverse=True)
     return feed_items

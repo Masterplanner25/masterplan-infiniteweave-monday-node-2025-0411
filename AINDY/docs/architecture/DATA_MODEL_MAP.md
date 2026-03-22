@@ -85,6 +85,22 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: `user_id -> users.id`
 - Relationships: None
 
+### `AINDY/db/models/bridge_user_event.py`
+
+#### BridgeUserEvent (`bridge_user_events`)
+- Columns
+- `id`: UUID, primary key, default=uuid.uuid4
+- `user_name`: String, nullable=False, index=True
+- `origin`: String, nullable=False, index=True
+- `raw_timestamp`: String, nullable=True
+- `occurred_at`: DateTime(timezone=True), nullable=True
+- `created_at`: DateTime(timezone=True), nullable=False, server_default=func.now()
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `user_name` (index=True, `ix_bridge_user_events_user_name`), `origin` (index=True, `ix_bridge_user_events_origin`)
+- Foreign keys: None
+- Relationships: None
+
 ### `AINDY/db/models/calculation.py`
 
 #### CalculationResult (`calculation_results`)
@@ -646,6 +662,9 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 
 **Data ownership migration (2026-03-21):**
 - `64b531720229` - `add_user_id_to_tasks_leadgen_authors`: adds `user_id` to `tasks`, `leadgen_results`, and `authors` for ownership scoping.
+
+**Bridge user events migration (2026-03-21):**
+- `cb417760d319` - `add_bridge_user_events`: adds `bridge_user_events` table for persisted `/bridge/user_event` audit trail.
 
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
