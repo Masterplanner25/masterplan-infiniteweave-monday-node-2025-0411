@@ -83,6 +83,7 @@ This document distinguishes current deployment reality from required policy rule
 - Request logging middleware exists in `AINDY/main.py`.
 - Many modules use `print(...)` for runtime output.
 - Centralized logging and tracing are not present.
+- FastAPI cache uses `InMemoryBackend` (per-process only); multi-instance deployments will not share cache state.
 - Basic liveness endpoints exist:
 - `GET /health/` in `AINDY/routes/health_router.py` performs component checks, endpoint pings, and logs to DB.
 - `GET /dashboard/health` in `AINDY/routes/health_dashboard_router.py` returns recent health logs.
