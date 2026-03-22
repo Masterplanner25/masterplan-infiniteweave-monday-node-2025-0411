@@ -58,12 +58,14 @@ Primary backend entry point: `AINDY/main.py`.
 │  ├── memory_nodes (UUID/JSONB)       profiles              │
 │  ├── memory_links                                          │
 │  ├── memory_metrics                                        │
+│  ├── memory_traces                                         │
+│  ├── memory_trace_nodes                                   │
 │  ├── calculation_results                                   │
 │  ├── research_results                                      │
 │  ├── master_plans / genesis_sessions                       │
 │  ├── users                                                 │
 │  ├── user_identity                                         │
-│  └── … (20 total ORM models)                               │
+│  └── … (22 total ORM models)                               │
 └────────────────────────────────────────────────────────────┘
        │
 ┌──────▼────────────────────────────────────────────────────┐
@@ -195,6 +197,11 @@ Primary backend entry point: `AINDY/main.py`.
 - `GET /memory/metrics` returns summary impact metrics.
 - `GET /memory/metrics/detail` returns recent memory impact runs.
 - `GET /memory/metrics/dashboard` returns summary + recent runs + insights.
+- `POST /memory/traces` creates a new trace.
+- `POST /memory/traces/{trace_id}/append` appends a node to a trace.
+- `GET /memory/traces` lists traces.
+- `GET /memory/traces/{trace_id}` retrieves a trace.
+- `GET /memory/traces/{trace_id}/nodes` returns ordered trace nodes.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
@@ -304,7 +311,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - SQLAlchemy ORM models live in `AINDY/db/models/*.py`.
 - Pydantic request/response schemas live in `AINDY/schemas/*.py` and route-local BaseModels.
 - Service functions should accept a SQLAlchemy `Session` and operate only through ORM models.
-- The Memory Bridge tables (`memory_nodes`, `memory_links`, `memory_metrics`) are separate from symbolic filesystem traces.
+- The Memory Bridge tables (`memory_nodes`, `memory_links`, `memory_metrics`, `memory_traces`, `memory_trace_nodes`) are separate from symbolic filesystem traces.
 - The agent registry (`agents` table) defines memory namespaces for federated memory.
 
 ## 6. Invariants That Must Not Be Broken

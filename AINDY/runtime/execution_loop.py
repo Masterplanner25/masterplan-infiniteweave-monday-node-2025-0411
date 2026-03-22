@@ -9,6 +9,7 @@ from runtime.memory.memory_feedback import MemoryFeedbackEngine
 from runtime.memory.memory_learning import MemoryLearningEngine
 from runtime.memory.memory_metrics import MemoryMetricsEngine
 from runtime.memory.metrics_store import MemoryMetricsStore
+from db.dao.memory_trace_dao import MemoryTraceDAO
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,12 @@ class ExecutionLoop:
         self.metrics_store = MemoryMetricsStore()
 
     def run(self, task: Any, user_id: str, db):
+        trace_id = None
+        try:
+            trace_id = self._resolve_trace_id(task, user_id, db)
+        except Exception as exc:
+            logger.warning("[ExecutionLoop] trace resolution failed: %s", exc)
+
         context = None
         try:
             context = self.orchestrator.get_context(
@@ -43,8 +50,9 @@ class ExecutionLoop:
 
         result = self._execute(task, context)
 
+        created_node = None
         try:
-            create_memory_node(
+            created_node = create_memory_node(
                 content=str(result),
                 source=getattr(task, "source", "execution_loop"),
                 tags=getattr(task, "tags", []),
@@ -54,6 +62,17 @@ class ExecutionLoop:
             )
         except Exception as exc:
             logger.warning("[ExecutionLoop] memory write failed: %s", exc)
+
+        if trace_id and created_node and created_node.get("id"):
+            try:
+                trace_dao = MemoryTraceDAO(db)
+                trace_dao.append_node(
+                    trace_id=trace_id,
+                    node_id=created_node["id"],
+                    user_id=user_id,
+                )
+            except Exception as exc:
+                logger.warning("[ExecutionLoop] trace append failed: %s", exc)
 
         try:
             success_score = self._score(result)
@@ -103,6 +122,34 @@ class ExecutionLoop:
         if isinstance(result, (int, float)):
             return float(result)
         return 0.5
+
+    def _resolve_trace_id(self, task: Any, user_id: str, db) -> Optional[str]:
+        metadata = self._get_task_metadata(task)
+        trace_id = getattr(task, "trace_id", None) or metadata.get("trace_id")
+        if trace_id:
+            return str(trace_id)
+
+        trace_title = metadata.get("trace_title") or getattr(task, "trace_title", None)
+        trace_enabled = metadata.get("trace_enabled", False) or getattr(task, "trace_enabled", False)
+        if not trace_title and not trace_enabled:
+            return None
+
+        dao = MemoryTraceDAO(db)
+        trace = dao.create_trace(
+            user_id=user_id,
+            title=trace_title or getattr(task, "type", "execution"),
+            description=metadata.get("trace_description"),
+            source=metadata.get("trace_source") or getattr(task, "source", "execution_loop"),
+            extra=metadata.get("trace_extra"),
+        )
+        return trace.get("id") if trace else None
+
+    def _get_task_metadata(self, task: Any) -> dict:
+        if hasattr(task, "metadata") and isinstance(task.metadata, dict):
+            return task.metadata
+        if isinstance(task, dict):
+            return task.get("metadata", {}) if isinstance(task.get("metadata"), dict) else {}
+        return {}
 
     def _get_baseline_result(self, task: Any) -> Any:
         if isinstance(task, dict):

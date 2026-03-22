@@ -320,6 +320,33 @@ Added in Memory Bridge v5 Phase 4 (2026-03-21). Authentication: JWT Bearer (`Dep
 - Auth: JWT required.
 - Response: `{summary, recent_runs, insights}` for lightweight dashboard rendering.
 
+## 12. Memory Router ? v5 Phase 5 Trace Endpoints (`/memory/*`)
+
+Added in Memory Bridge v5 Phase 5 (2026-03-21). Authentication: JWT Bearer (`Depends(get_current_user)`).
+
+### `POST /memory/traces`
+- Auth: JWT required.
+- Request body: `{title?, description?, source?, extra?}`
+- Response: trace metadata with `id`.
+
+### `POST /memory/traces/{trace_id}/append`
+- Auth: JWT required.
+- Request body: `{node_id, position?}`
+- Response: appended trace node record.
+
+### `GET /memory/traces`
+- Auth: JWT required.
+- Response: `{traces: [...], count}`.
+
+### `GET /memory/traces/{trace_id}`
+- Auth: JWT required.
+- Response: trace metadata.
+
+### `GET /memory/traces/{trace_id}/nodes`
+- Auth: JWT required.
+- Query params: `limit` (default 200), `include_nodes` (default false)
+- Response: `{trace_id, nodes, count}` with ordered nodes.
+
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
 |---|---|---|

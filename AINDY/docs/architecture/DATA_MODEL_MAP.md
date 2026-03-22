@@ -278,6 +278,39 @@ This document maps the current data model strictly as implemented in the reposit
 - Foreign keys: None
 - Relationships: None
 
+### `AINDY/db/models/memory_trace.py`
+
+#### MemoryTrace (`memory_traces`)
+- Columns
+- `id`: UUID, primary key
+- `user_id`: String, nullable=False, index=True
+- `title`: String, nullable=True
+- `description`: Text, nullable=True
+- `source`: String, nullable=True
+- `extra`: JSONB, nullable=True
+- `created_at`: DateTime, nullable=False, default=datetime.utcnow
+- `updated_at`: DateTime, nullable=False, default=datetime.utcnow (onupdate)
+- Primary key: `id`
+- Unique constraints: Not explicitly defined in current implementation.
+- Indexes: `user_id` (index=True, `ix_memory_traces_user_id`)
+- Foreign keys: None
+- Relationships: None
+
+### `AINDY/db/models/memory_trace_node.py`
+
+#### MemoryTraceNode (`memory_trace_nodes`)
+- Columns
+- `id`: UUID, primary key
+- `trace_id`: UUID, ForeignKey(memory_traces.id), nullable=False, index=True
+- `node_id`: UUID, ForeignKey(memory_nodes.id), nullable=False, index=True
+- `position`: Integer, nullable=False
+- `created_at`: DateTime, nullable=False, default=datetime.utcnow
+- Primary key: `id`
+- Unique constraints: `uq_trace_position` on (`trace_id`, `position`)
+- Indexes: `trace_id` (index=True, `ix_memory_trace_nodes_trace_id`), `node_id` (index=True, `ix_memory_trace_nodes_node_id`)
+- Foreign keys: `trace_id -> memory_traces.id`, `node_id -> memory_nodes.id`
+- Relationships: None
+
 ### `AINDY/db/models/metrics_models.py`
 
 #### Engagement (`engagements`)
