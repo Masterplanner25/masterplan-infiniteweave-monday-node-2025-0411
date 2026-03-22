@@ -26,6 +26,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
 - `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
 - `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
+- `AINDY/routes/memory_metrics_router.py` (prefix `/memory`) **[JWT auth required]**
 - `AINDY/routes/identity_router.py` (prefix `/identity`) **[JWT auth required]**
 
 **Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
@@ -102,6 +103,11 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/agents` — JWT required. Returns list of agents and per-user memory stats.
 - `GET /memory/agents/{namespace}/recall` — JWT required. Query params: `query`, `limit`. Returns shared memories from a specific agent namespace.
 - `POST /memory/nodes/{node_id}/share` — JWT required. Shares a private node across all agents (one-way).
+
+**Memory Bridge v5 Phase 4 additions (2026-03-21):**
+- `GET /memory/metrics` ? JWT required. Returns summary impact metrics.
+- `GET /memory/metrics/detail` ? JWT required. Returns recent impact runs.
+- `GET /memory/metrics/dashboard` ? JWT required. Returns summary + recent runs + insights.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,

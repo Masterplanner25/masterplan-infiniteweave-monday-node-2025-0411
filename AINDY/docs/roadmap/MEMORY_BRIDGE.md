@@ -114,6 +114,14 @@ Final stage where:
 
 ---
 
+### Memory Metrics
+
+* Stored in: `memory_metrics`
+* Captures per-run impact signals (impact_score, memory_count, avg_similarity)
+* Exposed via `/memory/metrics`, `/memory/metrics/detail`, `/memory/metrics/dashboard`
+
+---
+
 ### Execution Loop
 
 Enforced lifecycle:
@@ -127,6 +135,7 @@ Current implementation note:
 * `runtime/memory/memory_feedback.py` records usage/success signals.
 * `runtime/execution_loop.py` wraps recall → execute → capture → feedback (pluggable executor).
 * `runtime/memory/memory_learning.py` updates per-execution success_rate and low-value flags to adapt recall quality.
+* `runtime/memory/memory_metrics.py` + `runtime/memory/metrics_store.py` compute and persist memory impact metrics.
 * `tests/test_memory_loop_e2e.py` validates the full loop (execution → memory → recall → improved execution).
 
 ---
@@ -152,6 +161,7 @@ Current implementation note:
 * Memory Orchestrator (recall orchestration + context building)
 * Memory Feedback Engine (usage/success recording)
 * Execution Loop wrapper (recall → execute → capture → feedback)
+* Memory Metrics Engine (impact scoring + persistence)
 
 ---
 

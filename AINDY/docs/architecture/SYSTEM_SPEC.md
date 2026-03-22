@@ -57,12 +57,13 @@ Primary backend entry point: `AINDY/main.py`.
 │  ├── tasks                       └── social posts          │
 │  ├── memory_nodes (UUID/JSONB)       profiles              │
 │  ├── memory_links                                          │
+│  ├── memory_metrics                                        │
 │  ├── calculation_results                                   │
 │  ├── research_results                                      │
 │  ├── master_plans / genesis_sessions                       │
 │  ├── users                                                 │
 │  ├── user_identity                                         │
-│  └── … (19 total ORM models)                               │
+│  └── … (20 total ORM models)                               │
 └────────────────────────────────────────────────────────────┘
        │
 ┌──────▼────────────────────────────────────────────────────┐
@@ -125,6 +126,7 @@ Primary backend entry point: `AINDY/main.py`.
 
 - Feedback loop (Phase 4): memory nodes track `success_count`, `failure_count`, `usage_count`, `last_used_at`, `last_outcome`, `weight`. `record_feedback()` adjusts adaptive weight. Memory Learning (runtime) updates per-execution success_rate and low-value flags (stored in `extra`) via `AINDY/runtime/memory/memory_learning.py`.
 - Suggestion engine (Phase 4): `MemoryNodeDAO.suggest()` returns actionable recommendations; endpoint `POST /memory/suggest`.
+- Memory metrics (Phase 5): `MemoryMetricsEngine` computes impact/relevance/usage; `MemoryMetricsStore` persists to `memory_metrics`. Endpoints: `GET /memory/metrics`, `/memory/metrics/detail`, `/memory/metrics/dashboard`.
 - C++ kernel: `bridge/memory_bridge_rs/target/debug/memory_bridge_rs` provides `semantic_similarity()` via PyO3. Used in `embedding_service.cosine_similarity()` with Python fallback.
 
 - Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` enforced via SQLAlchemy event listener.
@@ -190,6 +192,9 @@ Primary backend entry point: `AINDY/main.py`.
 - `POST /memory/nodes/{id}/feedback` records explicit feedback.
 - `GET /memory/nodes/{id}/performance` returns performance metrics.
 - `POST /memory/suggest` returns guidance based on past outcomes.
+- `GET /memory/metrics` returns summary impact metrics.
+- `GET /memory/metrics/detail` returns recent memory impact runs.
+- `GET /memory/metrics/dashboard` returns summary + recent runs + insights.
 
 **Backend ↔ External Model Providers**
 - OpenAI Chat Completions via `AINDY/services/genesis_ai.py`.
@@ -299,7 +304,7 @@ POST /analytics/engagement  (or any route invoking calculate_engagement_score)
 - SQLAlchemy ORM models live in `AINDY/db/models/*.py`.
 - Pydantic request/response schemas live in `AINDY/schemas/*.py` and route-local BaseModels.
 - Service functions should accept a SQLAlchemy `Session` and operate only through ORM models.
-- The Memory Bridge tables (`memory_nodes`, `memory_links`) are separate from symbolic filesystem traces.
+- The Memory Bridge tables (`memory_nodes`, `memory_links`, `memory_metrics`) are separate from symbolic filesystem traces.
 - The agent registry (`agents` table) defines memory namespaces for federated memory.
 
 ## 6. Invariants That Must Not Be Broken

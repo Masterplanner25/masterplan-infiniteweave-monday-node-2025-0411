@@ -19,6 +19,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Identity Layer (v5 Phase 2): `user_identity` table, `UserIdentity` ORM model, `IdentityService`
 * Identity API endpoints: `GET/PUT /identity/`, `GET /identity/evolution`, `GET /identity/context`
 * Identity Layer tests (`tests/test_identity_layer.py`) and migration `bb4935e07dec_identity_layer_v5_phase2`
+* Memory Metrics system: `memory_metrics` table, `MemoryMetricsEngine`, `MemoryMetricsStore`, and `/memory/metrics*` endpoints
 
 ## Changed
 

@@ -304,6 +304,22 @@ Added in Memory Bridge v5 Phase 3 (2026-03-19). Authentication: JWT Bearer (`Dep
 - Behavior: flips `is_shared=True` (one-way). Once shared, node is visible to all agents.
 - Response: `{ node_id, is_shared, source_agent, message }`.
 
+## 11. Memory Router ? v5 Phase 4 Metrics Endpoints (`/memory/*`)
+
+Added in Memory Bridge v5 Phase 4 (2026-03-21). Authentication: JWT Bearer (`Depends(get_current_user)`).
+
+### `GET /memory/metrics`
+- Auth: JWT required.
+- Response: summary impact metrics `{avg_impact_score, positive_impact_rate, zero_impact_rate, negative_impact_rate, total_runs}`.
+
+### `GET /memory/metrics/detail`
+- Auth: JWT required.
+- Response: list of recent runs with `impact_score`, `memory_count`, `avg_similarity`, `task_type`, `created_at`.
+
+### `GET /memory/metrics/dashboard`
+- Auth: JWT required.
+- Response: `{summary, recent_runs, insights}` for lightweight dashboard rendering.
+
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |
 |---|---|---|

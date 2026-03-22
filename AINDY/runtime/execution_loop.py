@@ -7,6 +7,8 @@ from bridge import create_memory_node
 from runtime.memory import MemoryOrchestrator
 from runtime.memory.memory_feedback import MemoryFeedbackEngine
 from runtime.memory.memory_learning import MemoryLearningEngine
+from runtime.memory.memory_metrics import MemoryMetricsEngine
+from runtime.memory.metrics_store import MemoryMetricsStore
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,8 @@ class ExecutionLoop:
         self.executor = executor
         self.feedback = MemoryFeedbackEngine()
         self.learning = MemoryLearningEngine()
+        self.metrics = MemoryMetricsEngine()
+        self.metrics_store = MemoryMetricsStore()
 
     def run(self, task: Any, user_id: str, db):
         context = None
@@ -67,6 +71,21 @@ class ExecutionLoop:
         except Exception as exc:
             logger.warning("[ExecutionLoop] feedback failed: %s", exc)
 
+        try:
+            baseline = self._get_baseline_result(task)
+            impact = self.metrics.compute_impact(baseline, result, context)
+            avg_similarity = self.metrics.compute_relevance(context)
+            self.metrics_store.record(
+                user_id=user_id,
+                task_type=getattr(task, "type", None),
+                impact_score=impact,
+                memory_count=len(context.items) if context else 0,
+                avg_similarity=avg_similarity,
+                db=db,
+            )
+        except Exception as exc:
+            logger.warning("[ExecutionLoop] metrics failed: %s", exc)
+
         return result
 
     def _execute(self, task: Any, context):
@@ -84,3 +103,13 @@ class ExecutionLoop:
         if isinstance(result, (int, float)):
             return float(result)
         return 0.5
+
+    def _get_baseline_result(self, task: Any) -> Any:
+        if isinstance(task, dict):
+            return task.get("baseline_result") or task.get("previous_result")
+        for attr in ("baseline_result", "previous_result"):
+            if hasattr(task, attr):
+                return getattr(task, attr)
+        if hasattr(task, "metadata") and isinstance(task.metadata, dict):
+            return task.metadata.get("baseline_result")
+        return None
