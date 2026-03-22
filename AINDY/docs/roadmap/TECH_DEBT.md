@@ -48,6 +48,7 @@ This document inventories current technical debt based strictly on the existing 
 - Some application-level constraints are not enforced at DB level (e.g., session locking is application logic in `AINDY/services/masterplan_factory.py`).
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).
+- Ownership tables with `user_id` stored as `String` (e.g., `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings`) cannot have FK constraints to `users.id` until columns are normalized to UUID. This blocks strict ownership enforcement at the DB layer.
 - **OPEN (2026-03-21):** Legacy rows in `tasks`, `leadgen_results`, and `authors` may have `user_id = NULL` after ownership migration. Backfill or cleanup needed to avoid orphaned records.
 - ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
