@@ -11,12 +11,13 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import leadgen_service
+from schemas.leadgen_schema import LeadGenResponse, LeadGenItem
 from services.auth_service import get_current_user
 from services.rate_limiter import limiter
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 
-@router.post("/")
+@router.post("/", response_model=LeadGenResponse)
 @limiter.limit("10/minute")
 def generate_b2b_leads(
     request: Request,
@@ -43,10 +44,10 @@ def generate_b2b_leads(
         }
         for r, search_score in results
     ]
-    return {"query": query, "count": len(formatted), "results": formatted}
+    return LeadGenResponse(query=query, count=len(formatted), results=[LeadGenItem(**row) for row in formatted])
 
 
-@router.get("/")
+@router.get("/", response_model=list[LeadGenItem])
 def list_all_leads(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -59,14 +60,15 @@ def list_all_leads(
         LeadGenResult.user_id == uuid.UUID(str(current_user["sub"]))
     ).order_by(LeadGenResult.created_at.desc()).all()
     return [
-        {
-            "company": r.company,
-            "url": r.url,
-            "fit_score": r.fit_score,
-            "intent_score": r.intent_score,
-            "overall_score": r.overall_score,
-            "reasoning": r.reasoning,
-            "created_at": r.created_at
-        }
+        LeadGenItem(
+            company=r.company,
+            url=r.url,
+            fit_score=r.fit_score,
+            intent_score=r.intent_score,
+            data_quality_score=r.data_quality_score,
+            overall_score=r.overall_score,
+            reasoning=r.reasoning,
+            created_at=r.created_at,
+        )
         for r in all_results
     ]

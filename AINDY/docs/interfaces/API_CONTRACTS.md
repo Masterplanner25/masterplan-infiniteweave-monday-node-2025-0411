@@ -398,7 +398,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: `ResearchResultCreate` (`AINDY/schemas/research_results_schema.py`)
 Query Params: None
-Response: `ResearchResultResponse` (includes `source` and `data`; may include `search_score`)
+Response: `ResearchResultResponse` (includes `source`, `data`, and top-level `search_score`)
 Status Codes: 200
 Errors: Not explicitly defined.
 
@@ -414,7 +414,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: `ResearchResultCreate`
 Query Params: None
-Response: `ResearchResultResponse` (includes `source` and `data`; may include `search_score`)
+Response: `ResearchResultResponse` (includes `source`, `data`, and top-level `search_score`)
 Status Codes: 200
 Errors: Not explicitly defined.
 
