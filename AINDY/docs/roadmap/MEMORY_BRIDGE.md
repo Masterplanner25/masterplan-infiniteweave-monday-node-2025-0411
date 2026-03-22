@@ -358,7 +358,7 @@ It is NOT:
 
 * Legacy `node_type="generic"` cleanup on existing rows (migration to normalize)
 * Embedding generation is synchronous on write path (latency risk)
-* HMAC + JWT dual auth on bridge write endpoints (redundant surface)
+* ✅ **Resolved:** HMAC removed from bridge write endpoints; JWT only.
 * Engine Layer (Rust/C++) not integrated into runtime scoring/traversal
 
 ---

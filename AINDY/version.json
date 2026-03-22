@@ -1,12 +1,12 @@
 {
   "project": "A.I.N.D.Y.",
   "codename": "AI Native Development and Yield",
-  "version": "0.9.0-pre",
-  "release_date": "2025-10-21T22:45:00-07:00",
+  "version": "1.0.0",
+  "release_date": "2026-03-21T00:00:00-07:00",
   "branch": "main",
   "merged_from": "feature/research-engine",
-  "status": "Pre-Release",
-  "summary": "Integrated Research Engine and Memory Bridge v0.1 into unified backend architecture.",
+  "status": "Stable",
+  "summary": "Memory Bridge v5, ownership hardening, and unified search integration.",
   "core_updates": {
     "modules_added": [
       "research_results_service.py",
@@ -43,8 +43,8 @@
     ]
   },
   "next_targets": {
-    "v1.0": "Rust Bridge and Frontend React integration",
-    "v1.1": "AI-Search Optimized API Docs and Knowledge Graph Indexing"
+    "v1.1": "AI-Search Optimized API Docs and Knowledge Graph Indexing",
+    "v1.2": "Agentic Orchestration Dashboard (Infinity Algorithm View)"
   },
   "author": {
     "name": "Shawn Knight",

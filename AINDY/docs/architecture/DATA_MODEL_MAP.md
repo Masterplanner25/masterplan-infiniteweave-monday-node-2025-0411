@@ -815,4 +815,4 @@ Defined in `AINDY/services/memory_persistence.py`.
 - Potential migration drift:
 - Multiple overlapping migration filenames suggest possible historical drift; alignment requires migration diff checks.
 - Implicit constraints enforced only in application logic:
-- Examples include permission validation for Memory Bridge (`AINDY/routes/bridge_router.py`) and genesis session locking (`AINDY/services/masterplan_factory.py`).
+- Examples include Memory Bridge JWT validation (`AINDY/routes/bridge_router.py`) and genesis session locking (`AINDY/services/masterplan_factory.py`).

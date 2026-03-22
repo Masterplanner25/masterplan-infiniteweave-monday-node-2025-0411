@@ -52,7 +52,7 @@ Focus areas:
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 1 (Structural Debt), Section 8 (Known Deployment Risks in `docs/engineering/DEPLOYMENT_MODEL.md`).
 - Improve external model failure handling with retry/fallback policy enforcement (without changing provider interfaces).
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 4 (Error Handling Debt).
-- Strengthen HMAC validation handling with consistent error mapping.
+- Retire legacy HMAC handling; enforce JWT-only bridge writes.
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 6 (Security Debt).
 
 Exit criteria (policy-aligned):
