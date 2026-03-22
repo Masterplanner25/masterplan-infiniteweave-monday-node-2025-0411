@@ -183,14 +183,22 @@ class DeepSeekCodeAnalyzer:
             prior_memories = []
             if user_id:
                 try:
-                    from bridge import recall_memories
-                    prior_memories = recall_memories(
-                        query=path.name,
-                        tags=["arm", "analysis"],
-                        limit=3,
+                    from db.dao.memory_node_dao import MemoryNodeDAO
+                    from runtime.memory import MemoryOrchestrator
+
+                    orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+                    context = orchestrator.get_context(
                         user_id=user_id,
+                        query=path.name,
+                        task_type="analysis",
                         db=db,
+                        max_tokens=800,
+                        metadata={
+                            "tags": ["arm", "analysis"],
+                            "limit": 3,
+                        },
                     )
+                    prior_memories = context.items
                 except Exception as _mem_exc:
                     logger.debug("[ARM] Memory recall skipped: %s", _mem_exc)
 
@@ -222,7 +230,7 @@ class DeepSeekCodeAnalyzer:
             prior_context_section = ""
             if prior_memories:
                 snippets = "\n".join(
-                    f"- [{m.get('node_type') or 'memory'}] {m.get('content', '')[:200]}"
+                    f"- [{m.node_type or 'memory'}] {m.content[:200]}"
                     for m in prior_memories
                 )
                 prior_context_section = f"\nPrior analysis memory:\n{snippets}\n"

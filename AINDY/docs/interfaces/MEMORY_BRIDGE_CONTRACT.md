@@ -189,7 +189,7 @@ Added in Memory Bridge Phase 2 (2026-03-18). Authentication: JWT Bearer (`Depend
   - `limit: Optional[int]` (default 5)
   - `node_type: Optional[Literal[...]]`
 - Validation: at least one of `query` or `tags` must be provided; returns 400 otherwise.
-- Behavior: calls `MemoryNodeDAO.recall()`. Combines semantic path (via `find_similar()`) and tag path (via `get_by_tags()`), deduplicates, scores by resonance formula.
+- Behavior: routes recall through `MemoryOrchestrator.get_context()` which delegates to `MemoryNodeDAO.recall()`. Combines semantic path (via `find_similar()`) and tag path (via `get_by_tags()`), deduplicates, scores by resonance formula, and enforces token budgets.
 - Response: `{"query", "tags", "results", "count", "scoring_version": "v2", "formula": {...}}`.
 - Each result includes: `resonance_score`, `semantic_score`, `graph_score`, `recency_score`, `success_rate`, `usage_frequency`, `adaptive_weight`, `tag_score`.
 

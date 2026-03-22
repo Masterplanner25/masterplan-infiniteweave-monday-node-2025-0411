@@ -382,14 +382,26 @@ def recall_memories(
     if not body.query and not body.tags:
         raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
 
-    dao = MemoryNodeDAO(db)
-    results = dao.recall(
-        query=body.query,
-        tags=body.tags,
-        limit=body.limit,
+    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+
+    metadata = {
+        "tags": body.tags,
+        "node_type": body.node_type,
+        "limit": body.limit,
+    }
+    if body.node_type is None:
+        metadata["node_types"] = []
+
+    orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+    context = orchestrator.get_context(
         user_id=str(current_user["sub"]),
-        node_type=body.node_type,
+        query=body.query or "",
+        task_type="analysis",
+        db=db,
+        max_tokens=1200,
+        metadata=metadata,
     )
+    results = memory_items_to_dicts(context.items)
     return {
         "query": body.query,
         "tags": body.tags,
@@ -419,21 +431,43 @@ def recall_v3(
     if not body.query and not body.tags:
         raise HTTPException(status_code=400, detail="Provide at least one of: query, tags")
 
-    dao = MemoryNodeDAO(db)
-    results = dao.recall(
-        query=body.query,
-        tags=body.tags,
-        limit=body.limit,
-        user_id=str(current_user["sub"]),
-        node_type=body.node_type,
-        expand_results=body.expand_results,
-    )
+    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
-    if isinstance(results, dict):
+    metadata = {
+        "tags": body.tags,
+        "node_type": body.node_type,
+        "limit": body.limit,
+    }
+    if body.node_type is None:
+        metadata["node_types"] = []
+
+    orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+    context = orchestrator.get_context(
+        user_id=str(current_user["sub"]),
+        query=body.query or "",
+        task_type="analysis",
+        db=db,
+        max_tokens=1200,
+        metadata=metadata,
+    )
+    results = memory_items_to_dicts(context.items)
+
+    if body.expand_results and context.ids:
+        dao = MemoryNodeDAO(db)
+        expansion = dao.expand(
+            node_ids=context.ids[:3],
+            user_id=str(current_user["sub"]),
+            include_linked=True,
+            include_similar=True,
+            limit_per_node=2,
+        )
         return {
-            **results,
             "query": body.query,
             "tags": body.tags,
+            "results": results,
+            "expanded": expansion.get("expanded_nodes", []),
+            "expansion_map": expansion.get("expansion_map", {}),
+            "total_context_nodes": len(results) + len(expansion.get("expanded_nodes", [])),
             "scoring_version": "v2",
             "formula": {
                 "semantic": 0.40,
@@ -754,9 +788,31 @@ async def execute_nodus_task(
 
         from nodus.runtime.embedding import NodusRuntime
 
+        from db.dao.memory_node_dao import MemoryNodeDAO
+        from runtime.memory import MemoryOrchestrator
+        from runtime.memory.memory_feedback import MemoryFeedbackEngine
+        from bridge import create_memory_node
+
+        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+        feedback_engine = MemoryFeedbackEngine()
+
+        memory_context = orchestrator.get_context(
+            user_id=str(current_user["sub"]),
+            query=body.task_name or "",
+            task_type="nodus_execution",
+            db=db,
+            max_tokens=800,
+            metadata={
+                "tags": body.session_tags or [],
+                "node_types": [],
+                "limit": 3,
+            },
+        )
+
         runtime = NodusRuntime()
         # Pattern C: host-builtins registered per-session via embedding API.
         runtime.register_function("recall", bridge.recall, arity=(0, 1, 2, 3, 4))
+        runtime.register_function("recall_tool", bridge.recall_tool, arity=(0, 1, 2, 3))
         runtime.register_function("remember", bridge.remember, arity=(1, 2, 3, 4, 5))
         runtime.register_function("suggest", bridge.get_suggestions, arity=(0, 1, 2, 3))
         runtime.register_function("record_outcome", bridge.record_outcome, arity=2)
@@ -767,7 +823,38 @@ async def execute_nodus_task(
         result = runtime.run_source(
             body.task_code,
             filename=f"<nodus:{body.task_name}>",
+            initial_globals={
+                "memory_context": memory_context.formatted,
+                "memory_ids": memory_context.ids,
+            },
+            host_globals={
+                "memory_bridge": bridge,
+                "memory_context": memory_context.formatted,
+                "memory_ids": memory_context.ids,
+            },
         )
+
+        try:
+            create_memory_node(
+                content=f"Nodus task '{body.task_name}' executed: {result.get('stdout', '')[:500]}",
+                source="nodus_task",
+                tags=(body.session_tags or []) + ["nodus", "task_execution"],
+                user_id=str(current_user["sub"]),
+                db=db,
+                node_type="outcome",
+            )
+        except Exception:
+            pass
+
+        try:
+            success_score = 1.0 if result.get("ok") else 0.0
+            feedback_engine.record_usage(
+                memory_ids=memory_context.ids,
+                success_score=success_score,
+                db=db,
+            )
+        except Exception:
+            pass
 
         return {
             "task_name": body.task_name,

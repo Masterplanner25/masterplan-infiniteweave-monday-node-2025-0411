@@ -122,6 +122,11 @@ Enforced lifecycle:
 recall → execute → capture → feedback
 ```
 
+Current implementation note:
+* `runtime/memory/orchestrator.py` coordinates recall (strategy → scoring → filtering → token budget).
+* `runtime/memory/memory_feedback.py` records usage/success signals.
+* `runtime/execution_loop.py` wraps recall → execute → capture → feedback (pluggable executor).
+
 ---
 
 ## 4. Architectural Layers
@@ -142,6 +147,9 @@ recall → execute → capture → feedback
 * DAOs
 * API routes
 * execution hooks
+* Memory Orchestrator (recall orchestration + context building)
+* Memory Feedback Engine (usage/success recording)
+* Execution Loop wrapper (recall → execute → capture → feedback)
 
 ---
 

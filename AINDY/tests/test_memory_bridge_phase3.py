@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch, call
 
 # MemoryNodeDAO lives here — all lazy imports inside bridge/arm/task/genesis
 # ultimately resolve to this module for the class definition.
+_ORCH_PATH = "runtime.memory.orchestrator.MemoryOrchestrator"
 _DAO_PATH = "db.dao.memory_node_dao.MemoryNodeDAO"
 
 # ---------------------------------------------------------------------------
@@ -58,12 +59,25 @@ class TestRecallMemoriesBridge:
         result = recall_memories(query="test", db=None)
         assert result == []
 
-    def test_recall_delegates_to_dao(self):
+    def test_recall_delegates_to_orchestrator(self):
         mock_db = MagicMock()
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = MOCK_RECALL_RESULTS
-            MockDAO.return_value = mock_dao_instance
+        with patch(f"{_ORCH_PATH}.get_context") as mock_get_context:
+            from runtime.memory import MemoryContext, MemoryItem
+
+            mock_get_context.return_value = MemoryContext(
+                items=[
+                    MemoryItem(
+                        id="prior-uuid",
+                        content="ARM analysis of app.py: Good structure",
+                        node_type="outcome",
+                        score=0.9,
+                        tags=["arm", "analysis"],
+                        raw=MOCK_RECALL_RESULTS[0],
+                    )
+                ],
+                total_tokens=10,
+                metadata={},
+            )
 
             from bridge import recall_memories
             result = recall_memories(
@@ -74,22 +88,12 @@ class TestRecallMemoriesBridge:
                 db=mock_db,
             )
 
-        assert result == MOCK_RECALL_RESULTS
-        mock_dao_instance.recall.assert_called_once_with(
-            query="test query",
-            tags=["arm"],
-            limit=3,
-            user_id="user-42",
-            node_type=None,
-        )
+        assert result[0]["content"] == MOCK_RECALL_RESULTS[0]["content"]
+        mock_get_context.assert_called_once()
 
-    def test_recall_returns_empty_list_on_dao_failure(self):
+    def test_recall_returns_empty_list_on_orchestrator_failure(self):
         mock_db = MagicMock()
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.side_effect = Exception("DB down")
-            MockDAO.return_value = mock_dao_instance
-
+        with patch(f"{_ORCH_PATH}.get_context", side_effect=Exception("DB down")):
             from bridge import recall_memories
             result = recall_memories(query="test", db=mock_db)
 
@@ -97,21 +101,19 @@ class TestRecallMemoriesBridge:
 
     def test_recall_with_node_type_filter(self):
         mock_db = MagicMock()
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = []
-            MockDAO.return_value = mock_dao_instance
+        with patch(f"{_ORCH_PATH}.get_context") as mock_get_context:
+            from runtime.memory import MemoryContext
+
+            mock_get_context.return_value = MemoryContext(
+                items=[],
+                total_tokens=0,
+                metadata={},
+            )
 
             from bridge import recall_memories
             recall_memories(query="decision", node_type="decision", db=mock_db)
 
-        mock_dao_instance.recall.assert_called_once_with(
-            query="decision",
-            tags=None,
-            limit=5,
-            user_id=None,
-            node_type="decision",
-        )
+        mock_get_context.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

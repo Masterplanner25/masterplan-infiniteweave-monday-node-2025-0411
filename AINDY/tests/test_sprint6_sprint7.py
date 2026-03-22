@@ -114,7 +114,7 @@ class TestSprint7GenesisMemoryHook:
         """Genesis LLM must recall memories before the OpenAI call."""
         from services.genesis_ai import call_genesis_llm
         source = inspect.getsource(call_genesis_llm)
-        assert "recall_memories" in source or "recall(" in source, (
+        assert "MemoryOrchestrator" in source or "get_context" in source, (
             "call_genesis_llm missing memory recall"
         )
 
@@ -136,7 +136,10 @@ class TestSprint7GenesisMemoryHook:
 
     def test_genesis_llm_memory_failure_does_not_crash(self, mocker):
         """Memory hook failure must not crash the Genesis LLM call."""
-        mocker.patch("bridge.recall_memories", side_effect=Exception("memory down"))
+        mocker.patch(
+            "runtime.memory.orchestrator.MemoryOrchestrator.get_context",
+            side_effect=Exception("memory down"),
+        )
         mocker.patch(
             f"{_DAO_PATH}.save",
             side_effect=Exception("db down"),
@@ -169,7 +172,9 @@ class TestSprint7GenesisMemoryHook:
 
     def test_genesis_llm_no_user_id_skips_memory(self, mocker):
         """Without user_id, no memory calls should be made."""
-        mock_recall = mocker.patch("bridge.recall_memories")
+        mock_recall = mocker.patch(
+            "runtime.memory.orchestrator.MemoryOrchestrator.get_context"
+        )
         mock_save = mocker.patch(f"{_DAO_PATH}.save")
 
         mock_response = MagicMock()
@@ -243,7 +248,7 @@ class TestSprint7LeadGenMemoryHook:
         """leadgen_service must recall memories before search."""
         from services import leadgen_service
         source = inspect.getsource(leadgen_service)
-        assert "recall_memories" in source or "recall(" in source, (
+        assert "MemoryOrchestrator" in source or "get_context" in source, (
             "leadgen_service missing memory recall"
         )
 
@@ -265,7 +270,10 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_leadgen_memory_failure_does_not_crash(self, mocker):
         """Memory hook failure must not crash LeadGen search."""
-        mocker.patch("bridge.recall_memories", side_effect=Exception("memory down"))
+        mocker.patch(
+            "runtime.memory.orchestrator.MemoryOrchestrator.get_context",
+            side_effect=Exception("memory down"),
+        )
         mocker.patch(
             f"{_DAO_PATH}.save",
             side_effect=Exception("db down"),
@@ -288,7 +296,9 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_leadgen_no_user_id_skips_memory(self, mocker):
         """Without user_id, no memory calls should be made."""
-        mock_recall = mocker.patch("bridge.recall_memories")
+        mock_recall = mocker.patch(
+            "runtime.memory.orchestrator.MemoryOrchestrator.get_context"
+        )
         mock_save = mocker.patch(f"{_DAO_PATH}.save")
 
         from services.leadgen_service import run_ai_search
