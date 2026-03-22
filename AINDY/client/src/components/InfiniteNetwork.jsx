@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import { authRequestExternal } from "../api";
 
 function App() {
   const [users, setUsers] = useState([]);
@@ -8,9 +8,8 @@ function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    axios
-      .get("http://localhost:5000/api/users")
-      .then((res) => setUsers(res.data))
+    authRequestExternal("http://localhost:5000/api/users")
+      .then((data) => setUsers(data))
       .catch((err) => {
         console.error("⚠️ Error fetching users:", err);
         setError("Could not load users.");
@@ -23,8 +22,11 @@ function App() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.post("http://localhost:5000/api/users", form);
-      setUsers([...users, res.data]);
+      const data = await authRequestExternal("http://localhost:5000/api/users", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      setUsers([...users, data]);
       setForm({ name: "", tagline: "" });
     } catch (err) {
       console.error("⚠️ Error creating user:", err);

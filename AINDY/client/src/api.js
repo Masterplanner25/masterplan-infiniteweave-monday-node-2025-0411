@@ -40,6 +40,40 @@ function authRequest(path, opts = {}) {
   });
 }
 
+/* --- Auth helper for absolute URLs (used by legacy gateway endpoints) --- */
+async function requestAbsolute(url, opts = {}) {
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`API Error (${res.status}): ${errText}`);
+  }
+
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+export function authRequestExternal(url, opts = {}) {
+  const token = localStorage.getItem("aindy_token");
+  return requestAbsolute(url, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 /* --- Research Endpoints --- */
 export function runResearch(query, summary) {
   return authRequest(`/research/query`, {

@@ -157,8 +157,8 @@ def complete_task(db: Session, name: str, user_id: str = None):
     )
     twr_score = calculate_twr(task_input)
     
-    save_calculation(db, "Time-to-Wealth Ratio", twr_score)
-    save_calculation(db, "Execution Speed", task.time_spent)
+    save_calculation(db, "Time-to-Wealth Ratio", twr_score, user_id=str(user_id))
+    save_calculation(db, "Execution Speed", task.time_spent, user_id=str(user_id))
 
     # Update Social Velocity
     try:
@@ -167,7 +167,7 @@ def complete_task(db: Session, name: str, user_id: str = None):
         profiles = db_mongo["profiles"]
         
         profiles.update_one(
-            {"username": "me"},
+            {"user_id": str(user_id)},
             {
                 "$inc": {
                     "metrics_snapshot.execution_velocity": 1, 
