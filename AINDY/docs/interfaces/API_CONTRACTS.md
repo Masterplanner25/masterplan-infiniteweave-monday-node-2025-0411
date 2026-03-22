@@ -118,7 +118,7 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/traces/{trace_id}/nodes` ? JWT required. Returns ordered trace nodes.
 
 **Memory Bridge v5 Phase 6 additions (2026-03-21):**
-- `POST /memory/execute` ? JWT required. Runs execution loop (recall ? execute ? capture ? feedback) and returns result + memory context.
+- `POST /memory/execute` ? JWT required. Runs execution loop (recall ? execute ? capture ? feedback) and returns result + memory context. Registered workflows include `leadgen` and `genesis_message` (via execution registry).
 - `POST /memory/execute/complete` ? JWT required. Completes loop with outcome + feedback.
 
 **Genesis Block 4-6 additions (2026-03-17):**
