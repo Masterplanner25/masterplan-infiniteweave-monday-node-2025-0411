@@ -1,8 +1,11 @@
 # /services/research_results_service.py
+import logging
 from sqlalchemy.orm import Session
 from services.memory_capture_engine import MemoryCaptureEngine
 from db.models.research_results import ResearchResult
 from schemas.research_results_schema import ResearchResultCreate
+
+logger = logging.getLogger(__name__)
 
 def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | None):
     """
@@ -22,9 +25,9 @@ def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | N
             tags=["research", "insight"],
             node_type="insight",
         )
-        print(f"[MemoryBridge] Logged node for query: {query}")
+        logger.info("[MemoryBridge] Logged node for query: %s", query)
     except Exception as e:
-        print(f"[MemoryBridge] Logging failed: {e}")
+        logger.warning("[MemoryBridge] Logging failed: %s", e)
 
 
 def create_research_result(

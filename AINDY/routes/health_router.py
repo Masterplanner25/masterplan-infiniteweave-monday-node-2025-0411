@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
-import nltk, time, requests, statistics, os
+import nltk, time, requests, statistics, os, logging
 
 from db.database import get_db, engine
 from db.models.system_health_log import SystemHealthLog
 
 router = APIRouter(prefix="/health", tags=["Health"])
+logger = logging.getLogger(__name__)
 
 @router.get("/")
 def health_check(db: Session = Depends(get_db)):
@@ -123,6 +124,6 @@ def health_check(db: Session = Depends(get_db)):
         db.add(log)
         db.commit()
     except Exception as e:
-        print(f"[HealthLog] DB logging error: {e}")
+        logger.warning("[HealthLog] DB logging error: %s", e)
 
     return status

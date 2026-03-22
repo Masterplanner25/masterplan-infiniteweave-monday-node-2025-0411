@@ -1,5 +1,6 @@
 # routers/research_results_router.py
 from fastapi import APIRouter, Depends
+import logging
 from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate, ResearchResultResponse
@@ -11,6 +12,7 @@ from services.search_scoring import score_research_result
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
+logger = logging.getLogger(__name__)
 
 @router.post("/", response_model=ResearchResultResponse)
 def create_result(
@@ -46,7 +48,7 @@ def run_research_query(
     """
     Accepts a research query, stores it, and triggers MemoryBridge logging.
     """
-    print(f"Running research for query: {request.query}")
+    logger.info("Running research for query: %s", request.query)
     context = None
     try:
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)

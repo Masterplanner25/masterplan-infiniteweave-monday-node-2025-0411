@@ -4,6 +4,7 @@ import os
 import hmac
 import hashlib
 import time
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +17,7 @@ from services import rippletrace_services
 from services.auth_service import get_current_user, verify_api_key
 from db.models.bridge_user_event import BridgeUserEvent
 
+logger = logging.getLogger(__name__)
 # --- Environment / Config -------------------------------------------------
 if not settings.DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not configured in .env or Settings.")
@@ -203,6 +205,6 @@ def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key), db:
         db.commit()
     except Exception as exc:
         db.rollback()
-        print(f"⚠️ Failed to persist bridge user event: {exc}")
-    print(f"🔗 {event.user} joined from {event.origin} at {timestamp}")
+        logger.warning("Failed to persist bridge user event: %s", exc)
+    logger.info("Bridge user event: user=%s origin=%s timestamp=%s", event.user, event.origin, timestamp)
     return {"status": "logged", "user": event.user, "origin": event.origin, "timestamp": timestamp}

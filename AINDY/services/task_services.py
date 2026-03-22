@@ -47,7 +47,7 @@ def create_task(db: Session, name: str, category="general", priority="medium", d
     db.add(task)
     db.commit()
     db.refresh(task)
-    print(f"✅ Created task: {task.name}")
+    logger.info("Created task: %s", task.name)
     return task
 
 
@@ -187,9 +187,9 @@ def complete_task(db: Session, name: str, user_id: str = None):
                 }
             }
         )
-        print(f"🚀 [Velocity Engine] Profile updated! TWR impact: {twr_score}")
+        logger.info("[Velocity Engine] Profile updated. TWR impact: %s", twr_score)
     except Exception as e:
-        print(f"⚠️ [Velocity Engine] Failed to sync with Social Layer: {e}")
+        logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", e)
 
     return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
 

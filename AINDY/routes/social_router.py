@@ -4,6 +4,7 @@ from typing import List, Optional
 import math
 from datetime import datetime
 from sqlalchemy.orm import Session
+import logging
 
 # ✅ Import the Mongo setup
 from db.mongo_setup import get_mongo_db
@@ -17,6 +18,7 @@ from services.memory_capture_engine import MemoryCaptureEngine
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depends(get_current_user)])
+logger = logging.getLogger(__name__)
 
 TRUST_TIER_WEIGHTS = {
     TrustTier.INNER_CIRCLE: 2.0,
@@ -116,10 +118,10 @@ def create_post(
             tags=["social", "broadcast", post.trust_tier_required] + post.tags,
             node_type="outcome",
         )
-        print(f"✅ [Scribe] Logged post by {post.author_username} to Memory Bridge.")
+        logger.info("[Scribe] Logged post by %s to Memory Bridge.", post.author_username)
     except Exception as e:
         # We don't want to crash the post if the scribe fails, just log the error
-        print(f"⚠️ [Scribe] Failed to capture memory: {e}")
+        logger.warning("[Scribe] Failed to capture memory: %s", e)
 
     return post_data
 

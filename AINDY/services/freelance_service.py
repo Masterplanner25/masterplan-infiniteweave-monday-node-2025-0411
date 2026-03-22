@@ -1,6 +1,7 @@
 # services/freelance_service.py
 
 from datetime import datetime
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,6 +20,7 @@ from schemas.freelance import (
 
 from services.memory_capture_engine import MemoryCaptureEngine
 
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------
 # Core Freelance Order Logic
@@ -58,14 +60,14 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
                 extra={"client_email": order.client_email, "price": order.price},
             )
         except Exception as bridge_err:
-            print(f"[MemoryBridge] Failed to log freelance order: {bridge_err}")
+            logger.warning("[MemoryBridge] Failed to log freelance order: %s", bridge_err)
 
-        print(f"✅ Created freelance order #{order.id} for {order.client_name}")
+        logger.info("Created freelance order #%s for %s", order.id, order.client_name)
         return order
 
     except SQLAlchemyError as e:
         db.rollback()
-        print(f"[DB Error] create_order: {e}")
+        logger.warning("[DB Error] create_order: %s", e)
         raise
 
 
@@ -99,9 +101,9 @@ def deliver_order(db: Session, order_id: int, ai_output: str):
             extra={"client_name": order.client_name, "price": order.price},
         )
     except Exception as bridge_err:
-        print(f"[MemoryBridge] Delivery log error: {bridge_err}")
+        logger.warning("[MemoryBridge] Delivery log error: %s", bridge_err)
 
-    print(f"📦 Delivered order #{order.id}")
+    logger.info("Delivered order #%s", order.id)
     return order
 
 
@@ -149,9 +151,9 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
             extra={"rating": feedback.rating},
         )
     except Exception as bridge_err:
-        print(f"[MemoryBridge] Feedback log error: {bridge_err}")
+        logger.warning("[MemoryBridge] Feedback log error: %s", bridge_err)
 
-    print(f"💬 Collected feedback for order #{order.id}")
+    logger.info("Collected feedback for order #%s", order.id)
     return feedback
 
 
@@ -180,7 +182,7 @@ def update_revenue_metrics(db: Session):
     db.add(metric)
     db.commit()
 
-    print(f"📈 Revenue metrics updated: Total Revenue = ${total:.2f}")
+    logger.info("Revenue metrics updated: Total Revenue = $%.2f", total)
     return metric
 
 
