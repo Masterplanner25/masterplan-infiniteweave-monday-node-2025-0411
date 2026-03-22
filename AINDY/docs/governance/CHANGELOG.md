@@ -25,6 +25,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * Ongoing improvements to runtime behavior and system architecture
@@ -148,6 +149,7 @@ Closes all remaining cross-user data exposure gaps identified in the Sprint 4 au
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`db/models/freelance.py`** — `FreelanceOrder` and `ClientFeedback` ORM models updated with `user_id` column.
@@ -188,6 +190,7 @@ Auth hardening sprint: closed all unprotected route vectors, added cross-user ow
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`routes/bridge_router.py`** — `POST /bridge/nodes`, `GET /bridge/nodes`, `POST /bridge/link` now require JWT (`Depends(get_current_user)` per endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints protected.
@@ -226,6 +229,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`bridge/bridge.py::create_memory_node()`** — upgraded to use `db.dao.memory_node_dao.MemoryNodeDAO.save()` (with embedding generation). Default `node_type` changed from `"generic"` to `None` to pass ORM `VALID_NODE_TYPES` validation.
@@ -269,6 +273,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **`MemoryNodeDAO.save()`** — now generates and stores embedding on every write. New param `generate_embedding: bool = True`.
@@ -369,6 +374,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * **Block 5 — Lock Pipeline Hardening**
@@ -547,6 +553,7 @@ Phase 3 ("Make It Useful") wires the memory recall and write hooks into ARM anal
 
 ## Changed
 
+* Execution loop routing: `/memory/execute` now dispatches registered workflows (leadgen, genesis_message) via `runtime/execution_registry.py`
 * Added HNSW index on `memory_nodes.embedding` (migration `f3a4b5c6d7e8`) for faster semantic recall
 * Memory links now store numeric `weight` (migration `e2c3d4f5a6b7`) and traversal prefers weight over legacy strength
 * `calculate_engagement_score()` in `calculation_services.py` now routes through C++ `weighted_dot_product` kernel (with Python fallback)

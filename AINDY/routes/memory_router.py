@@ -905,6 +905,25 @@ async def execute_with_memory(
     orchestrator = MemoryOrchestrator(MemoryNodeDAO)
     loop = ExecutionLoop(orchestrator)
 
+    from services.genesis_ai import call_genesis_llm
+    from services.leadgen_service import create_lead_results
+
+    def leadgen_handler(payload, user_id, db):
+        query = payload.get("query") or payload.get("input") or payload.get("message")
+        if not query:
+            return {"error": "missing query"}
+        return create_lead_results(db=db, query=str(query), user_id=user_id)
+
+    def genesis_handler(payload, user_id, db):
+        message = payload.get("message") or payload.get("query") or payload.get("input")
+        current_state = payload.get("current_state") or payload.get("state") or {}
+        if not message:
+            return {"error": "missing message"}
+        return call_genesis_llm(message=str(message), current_state=current_state, user_id=user_id, db=db)
+
+    REGISTRY.register("leadgen", leadgen_handler)
+    REGISTRY.register("genesis_message", genesis_handler)
+
     def executor(task, context):
         return REGISTRY.execute(
             workflow=task.type,
