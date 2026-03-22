@@ -580,14 +580,6 @@ Response: List of `CalculationResult` ORM objects.
 Status Codes: 200
 Errors: Not explicitly defined.
 
-`POST /create_masterplan`
-Method: POST
-Request Body: `MasterPlanCreate` (`AINDY/schemas/masterplan.py`)
-Query Params: None
-Response: ORM `MasterPlan` object.
-Status Codes: 200, 400 if origin plan already exists.
-Errors: HTTP 400 for duplicate origin; other errors not explicitly handled.
-
 `GET /masterplans`
 Method: GET
 Request Body: None
@@ -603,7 +595,6 @@ Query Params: None
 Response: ORM `MasterPlan` object.
 Status Codes: 200
 Errors: Not explicitly defined.
-Note: There are two `POST /create_masterplan` definitions in `AINDY/routes/main_router.py`. Behavior depends on FastAPI routing order; contract is ambiguous.
 
 ### Freelance Routes (`AINDY/routes/freelance_router.py`, prefix `/freelance`)
 `POST /freelance/order`
@@ -1174,7 +1165,7 @@ This appendix lists request schemas where they are explicitly defined.
 - `AINDY/routes/freelance_router.py` → `AINDY/schemas/freelance.py` (`FreelanceOrderCreate`, `FeedbackCreate`)
 - `AINDY/routes/genesis_router.py` → untyped `dict` payloads (no Pydantic models defined)
 - `AINDY/routes/leadgen_router.py` → query parameter only (`query`); no Pydantic body model
-- `AINDY/routes/main_router.py` → `AINDY/schemas/analytics_inputs.py` (`TaskInput`, `EngagementInput`, etc.), `AINDY/schemas/batch.py` (`BatchInput`), `AINDY/schemas/masterplan.py` (`MasterPlanCreate`, `MasterPlanInput`)
+- `AINDY/routes/main_router.py` → `AINDY/schemas/analytics_inputs.py` (`TaskInput`, `EngagementInput`, etc.), `AINDY/schemas/batch.py` (`BatchInput`), `AINDY/schemas/masterplan.py` (`MasterPlanInput`)
 - `AINDY/routes/research_results_router.py` → `AINDY/schemas/research_results_schema.py` (`ResearchResultCreate`)
 - `AINDY/routes/seo_routes.py` → `AINDY/services/seo.py` (`SEOInput`, `MetaInput`) and inline `ContentInput`
 - `AINDY/routes/social_router.py` → `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)

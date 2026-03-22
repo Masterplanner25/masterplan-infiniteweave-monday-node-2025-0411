@@ -5,7 +5,7 @@ from services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
 from services.projection_service import project_completion
 from datetime import timedelta
-from schemas.masterplan import MasterPlanCreate, MasterPlanInput
+from schemas.masterplan import MasterPlanInput
 from db.models import MasterPlan
 from db.models import CalculationResult
 from schemas.analytics_inputs import (
