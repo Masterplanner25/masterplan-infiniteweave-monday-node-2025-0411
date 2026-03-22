@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 from bridge import create_memory_node
 from runtime.memory import MemoryOrchestrator
 from runtime.memory.memory_feedback import MemoryFeedbackEngine
+from runtime.memory.memory_learning import MemoryLearningEngine
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class ExecutionLoop:
         self.orchestrator = orchestrator
         self.executor = executor
         self.feedback = MemoryFeedbackEngine()
+        self.learning = MemoryLearningEngine()
 
     def run(self, task: Any, user_id: str, db):
         context = None
@@ -54,6 +56,12 @@ class ExecutionLoop:
             self.feedback.record_usage(
                 memory_ids=context.ids if context else [],
                 success_score=success_score,
+                db=db,
+            )
+            self.learning.update_after_execution(
+                memory_ids=context.ids if context else [],
+                result=result,
+                user_id=user_id,
                 db=db,
             )
         except Exception as exc:

@@ -126,6 +126,7 @@ Current implementation note:
 * `runtime/memory/orchestrator.py` coordinates recall (strategy → scoring → filtering → token budget).
 * `runtime/memory/memory_feedback.py` records usage/success signals.
 * `runtime/execution_loop.py` wraps recall → execute → capture → feedback (pluggable executor).
+* `runtime/memory/memory_learning.py` updates per-execution success_rate and low-value flags to adapt recall quality.
 
 ---
 
