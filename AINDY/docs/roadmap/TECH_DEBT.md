@@ -3,7 +3,7 @@
 This document inventories current technical debt based strictly on the existing implementation. It does not propose redesigns or new systems.
 
 ## 1. Structural Debt
-- Background tasks are implemented as daemon threads in `AINDY/main.py` with no scheduler or supervision.
+- ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
 - Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
@@ -19,7 +19,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4):** Duplicate `get_db()` definitions removed from `main_router.py` and `analytics_router.py`. Both now import `get_db` from `db.database`. Single canonical definition.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `health_router.py` now imports `seo_services` and `memory_persistence` from `services.*`, avoiding `ModuleNotFoundError` when `PYTHONPATH` does not include `AINDY/services/` directly.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` duplicate `create_engine`/`sessionmaker` imports removed.
-- **OPEN (2026-03-18 Audit):** `services/master_index_service.py2.py` has an invalid Python filename (`.py2.py`). Python cannot import a file with this name. Either rename it or remove it.
+- ✅ **RESOLVED (2026-03-21):** `services/master_index_service.py2.py` renamed to `services/master_index_service.py`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `task_router.py POST /tasks/complete` now passes `user_id=current_user["sub"]` to `complete_task()`. Memory Bridge Phase 3 task completion hook now fires from the API.
 - ✅ **RESOLVED (2026-03-21):** `POST /social/post` now uses `MemoryCaptureEngine` with SQLAlchemy session and `current_user["sub"]` for persistent memory capture.
 - ✅ **RESOLVED (2026-03-21):** `services/research_results_service.py::log_to_memory_bridge()` now uses `MemoryCaptureEngine` with DB session and `user_id` (no transient memory nodes).
@@ -68,10 +68,10 @@ This document inventories current technical debt based strictly on the existing 
 - `AINDY/bridge/Bridgeimport.py` is a 12-line manual import test with no `if __name__ == "__main__"` guard; it runs immediately on import and has no pytest structure. Move to `tests/` as a proper pytest test or add the guard (`AINDY/bridge/Bridgeimport.py`).
 
 ## 4. Error Handling Debt
-- Error classification is inconsistent across routes (`AINDY/routes/*`).
+- ✅ **RESOLVED (2026-03-21):** Error classification consistency improved across core routes with structured `detail` payloads for 5xx failures.
 - ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
-- Logging is mixed between `print(...)` and logging module; no structured logging (`AINDY/config.py`, multiple routes/services).
+- Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
 - Background loops can block or run indefinitely without supervision (`AINDY/services/task_services.py`).
@@ -116,7 +116,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 7. Observability Debt
 - Logging granularity is limited; several routes rely on `print(...)` statements (`AINDY/routes/*`, `AINDY/services/*`).
 - No centralized logging or tracing infrastructure (no config or tooling present).
-- No metrics instrumentation beyond DB logging in `AINDY/routes/health_router.py`.
+- Basic latency logging added to core routes, but no centralized metrics store beyond `SystemHealthLog` (`AINDY/routes/health_router.py`).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt

@@ -1,5 +1,6 @@
 # /routes/network_bridge_router.py
 from fastapi import APIRouter, Depends
+import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -12,6 +13,7 @@ from services.auth_service import verify_api_key
 from services import rippletrace_services, network_bridge_services
 
 router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -62,8 +64,8 @@ async def connect_external_author(
     metric_name = f"UserEvent::{handshake.platform}"
     save_calculation(db, metric_name, 1)
 
-    print(f"🔗 {handshake.author_name} connected via {handshake.platform} at {datetime.utcnow()}")
-    print(f"🧩 Logged metric from router: {metric_name}")
+    logger.info("Bridge connect: %s via %s", handshake.author_name, handshake.platform)
+    logger.info("Logged metric from router: %s", metric_name)
     db.commit()  # Final commit after all other services
 
     return {
@@ -84,7 +86,7 @@ def log_user_event(event: NetworkUser, db: Session = Depends(get_db)):
 
     result = save_calculation(db, metric_name, value)
 
-    print(f"🔗 {event.name} joined from {event.platform} at {datetime.utcnow()}")
+    logger.info("Bridge user event: %s via %s", event.name, event.platform)
 
     return {
         "status": "logged",

@@ -4,6 +4,8 @@ import os
 import hmac
 import hashlib
 import time
+import logging
+import time
 from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +18,7 @@ from services import rippletrace_services
 from services.auth_service import get_current_user, verify_api_key
 from db.models.bridge_user_event import BridgeUserEvent
 
+logger = logging.getLogger(__name__)
 # --- Environment / Config -------------------------------------------------
 if not settings.DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not configured in .env or Settings.")
@@ -94,6 +97,7 @@ router = APIRouter(prefix="/bridge", tags=["Bridge"])
 
 @router.post("/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
 def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    start = time.perf_counter()
     verify_permission_or_403(payload.permission)
     engine = MemoryCaptureEngine(
         db=db,
@@ -123,6 +127,8 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
         "source_platform": "AINDY",
         "summary": f"Node created: {saved.content[:50]}",
     })
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info("Bridge node created in %.2fms", duration_ms)
 
     return NodeResponse(
         id=str(saved.get("id")),
@@ -149,6 +155,7 @@ def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", li
 
 @router.post("/link", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
 def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    start = time.perf_counter()
     verify_permission_or_403(payload.permission)
     dao = MemoryNodeDAO(db)
     source = dao.load_memory_node(payload.source_id)
@@ -158,6 +165,8 @@ def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db), curre
     if source.get("user_id") != str(current_user["sub"]) or target.get("user_id") != str(current_user["sub"]):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot link nodes you do not own")
     link = dao.create_link(payload.source_id, payload.target_id, link_type=payload.link_type)
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info("Bridge link created in %.2fms", duration_ms)
     return LinkResponse(
         id=link["id"],
         source_node_id=link["source_node_id"],
@@ -191,6 +200,7 @@ def _parse_event_timestamp(raw_timestamp: Optional[str]) -> Optional[datetime]:
 @router.post("/user_event")
 def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key), db: Session = Depends(get_db)):
     """Accept symbolic user join or runtime events."""
+    start = time.perf_counter()
     timestamp = event.timestamp or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
     occurred_at = _parse_event_timestamp(event.timestamp) or datetime.now(timezone.utc)
     try:
@@ -203,6 +213,13 @@ def bridge_user_event(event: UserEvent, _key: str = Depends(verify_api_key), db:
         db.commit()
     except Exception as exc:
         db.rollback()
-        print(f"⚠️ Failed to persist bridge user event: {exc}")
-    print(f"🔗 {event.user} joined from {event.origin} at {timestamp}")
+        logger.warning("Failed to persist bridge user event: %s", exc)
+    duration_ms = (time.perf_counter() - start) * 1000
+    logger.info(
+        "Bridge user event: user=%s origin=%s timestamp=%s duration_ms=%.2f",
+        event.user,
+        event.origin,
+        timestamp,
+        duration_ms,
+    )
     return {"status": "logged", "user": event.user, "origin": event.origin, "timestamp": timestamp}

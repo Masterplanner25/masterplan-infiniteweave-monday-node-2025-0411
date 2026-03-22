@@ -9,6 +9,7 @@ and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 import json
 import uuid
 import re
+import logging
 from urllib.parse import urlparse
 
 from services.search_scoring import score_lead_result
@@ -24,6 +25,7 @@ load_dotenv()
 
 # Initialize the OpenAI client (ensure API key is set in environment)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------
@@ -91,7 +93,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     memory node after results are returned.
     """
     import logging
-    print(f"[LeadGen] Running AI search for query: {query}")
+    logger.info("[LeadGen] Running AI search for query: %s", query)
 
     # Step 1: Recall relevant past leadgen searches
     if user_id and db:
@@ -113,12 +115,12 @@ def run_ai_search(query: str, user_id: str = None, db=None):
                 },
             )
             if context.items:
-                print(
-                    f"[LeadGen] Recalled {len(context.items)} past searches "
-                    f"for context."
+                logger.info(
+                    "[LeadGen] Recalled %s past searches for context.",
+                    len(context.items),
                 )
         except Exception as e:
-            logging.warning(f"LeadGen memory recall failed: {e}")
+            logger.warning("LeadGen memory recall failed: %s", e)
 
     # Step 2: External retrieval (best-effort)
     example_results = []
@@ -143,7 +145,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
                 }
             ]
     except Exception as e:
-        print(f"[LeadGen] External search failed, using fallback: {e}")
+        logger.warning("[LeadGen] External search failed, using fallback: %s", e)
 
     # Fallback mocked results if external search fails
     if not example_results:
@@ -206,7 +208,7 @@ Each score must be a number between 0 and 100.
 """
 
     lead_summary = f"Company: {lead_data['company']}\nURL: {lead_data['url']}\nContext: {lead_data['context']}"
-    print(f"[LeadGen] Scoring lead: {lead_data['company']}")
+    logger.info("[LeadGen] Scoring lead: %s", lead_data["company"])
 
     try:
         completion = client.chat.completions.create(
@@ -230,7 +232,7 @@ Each score must be a number between 0 and 100.
         return result
 
     except Exception as e:
-        print(f"[LeadGen] Scoring failed for {lead_data['company']}: {e}")
+        logger.warning("[LeadGen] Scoring failed for %s: %s", lead_data["company"], e)
         return {
             "fit_score": 0,
             "intent_score": 0,
@@ -253,7 +255,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
         raise ValueError("user_id is required to create lead results")
     results = []
     leads = run_ai_search(query, user_id=user_id, db=db)
-    print(f"[LeadGen] Found {len(leads)} potential leads")
+    logger.info("[LeadGen] Found %s potential leads", len(leads))
 
     for lead in leads:
         score = score_lead(lead)
@@ -291,7 +293,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
             user_id=user_id,
         )
 
-        print(f"[LeadGen] Logged {lead['company']} ({score['overall_score']})")
+        logger.info("[LeadGen] Logged %s (%s)", lead["company"], score["overall_score"])
         results.append((db_entry, search_score))
 
     results.sort(key=lambda item: item[1], reverse=True)

@@ -1,5 +1,8 @@
+import logging
 from sqlalchemy.orm import Session
 from db.models import CalculationResult
+
+logger = logging.getLogger(__name__)
 
 # C++ kernel — high-performance vector math for the Infinity Algorithm.
 # Falls back to pure Python if the compiled extension is not available
@@ -63,11 +66,11 @@ def save_calculation(
         db.add(result)
         db.commit()
         db.refresh(result)
-        print(f"✅ [save_calculation] Saved metric: {metric_name} (ID: {result.id})")
+        logger.info("Saved metric: %s (ID: %s)", metric_name, result.id)
         return result
     except Exception as e:
         db.rollback()
-        print(f"⚠️ [save_calculation] FAILED for {metric_name}: {e}")
+        logger.warning("save_calculation failed for %s: %s", metric_name, e)
         return None
 
 def calculate_twr(task: TaskInput):
