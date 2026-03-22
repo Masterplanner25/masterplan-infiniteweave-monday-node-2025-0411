@@ -76,6 +76,7 @@ This document inventories current technical debt based strictly on the existing 
 
 ## 5. Concurrency Debt
 - ✅ **PARTIALLY RESOLVED (2026-03-22):** Background task runner now uses a DB lease (`background_task_leases`) to prevent duplicate work across instances (`AINDY/services/task_services.py`).
+- ✅ **RESOLVED (2026-03-22):** Process-level singletons in ARM analyzer and embedding client now use thread-safe initialization guards.
 - No distributed-safe scheduler; multi-instance deployment risks duplicated background work beyond the task runner (`AINDY/main.py` daemon threads).
 - No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
 

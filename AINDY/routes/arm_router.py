@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import threading
 
 from db.database import get_db
 from services.auth_service import get_current_user
@@ -36,12 +37,15 @@ router = APIRouter(
 # ── Singleton analyzer (loads config once per process) ───────────────────────
 
 _analyzer: Optional[DeepSeekCodeAnalyzer] = None
+_analyzer_lock = threading.Lock()
 
 
 def get_analyzer() -> DeepSeekCodeAnalyzer:
     global _analyzer
     if _analyzer is None:
-        _analyzer = DeepSeekCodeAnalyzer()
+        with _analyzer_lock:
+            if _analyzer is None:
+                _analyzer = DeepSeekCodeAnalyzer()
     return _analyzer
 
 
