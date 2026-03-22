@@ -24,7 +24,7 @@ def test_post_income_efficiency():
     assert response.status_code == 200
     assert "Income Efficiency" in response.json()
 
-def test_get_results():
+def test_get_results_initial():
     response = client.get("/results")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
@@ -68,7 +68,7 @@ def test_post_decision_efficiency():
     assert response.status_code == 200
     assert "Decision Efficiency" in response.json()
 
-def test_get_results():
+def test_get_results_after_efficiency():
     response = client.get("/results")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
@@ -157,7 +157,7 @@ def test_post_batch_calculations():
     assert isinstance(response.json(), dict)
     assert "AI Productivity Boost" in response.json()
 
-def test_get_results():
+def test_get_results_after_batch():
     response = client.get("/results")
     assert response.status_code == 200
     assert isinstance(response.json(), list)   

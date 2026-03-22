@@ -49,7 +49,7 @@ This document inventories current technical debt based strictly on the existing 
 - Many tables lack explicit foreign keys, making referential integrity dependent on application logic (`AINDY/db/models/*.py`).
 - Cascade rules are sparse; only a subset of relationships define cascades (`AINDY/db/models/arm_models.py`, `AINDY/db/models/masterplan.py`).
 - ✅ **RESOLVED (2026-03-22):** Ownership tables with `user_id` stored as `String` (`research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings`) normalized to UUID with FKs to `users.id` (migration `2359cded7445`).
-- **OPEN (2026-03-21):** Legacy rows in `tasks`, `leadgen_results`, and `authors` may have `user_id = NULL` after ownership migration. Backfill or cleanup needed to avoid orphaned records.
+- ✅ **RESOLVED (2026-03-22):** Legacy rows in `tasks`, `leadgen_results`, and `authors` were checked with `Tools/backfill_user_ids.py` (dry-run) and no NULL `user_id` rows remain.
 - ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
 - ✅ **RESOLVED (2026-03-22):** `MasterPlan.version` removed; `version_label` is now the only version field (migration `c4f2a9d1e7b3`).
@@ -59,7 +59,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4):** `services/memory_persistence.py::MemoryNodeDAO.save_memory_node()` fallback changed from `"generic"` to `None`. ORM event violation path removed.
 - ✅ **RESOLVED (2026-03-21):** `version.json` and `system_manifest.json` updated to `1.0.0` with current metadata.
 - ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
-- Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
+- ✅ **RESOLVED (2026-03-22):** Orphan `save_memory_node(self, memory_node)` removed from `AINDY/services/memory_persistence.py` (dead code).
 - ✅ **RESOLVED (2026-03-21):** `AINDY/version.json` and `AINDY/system_manifest.json` updated to `1.0.0`.
 
 ## 3. Testing Debt
@@ -68,7 +68,7 @@ This document inventories current technical debt based strictly on the existing 
 - No automated migration validation tests (`AINDY/alembic/` has no test harness).
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** CI pipeline live. GitHub Actions `ci.yml` runs lint (ruff) + tests (pytest + coverage) on every push and PR to `main`. Coverage threshold: 64% (baseline: 69%). Coverage XML uploaded to Codecov. PR template, CODEOWNERS, SECRETS.md, and `.env.example` added.
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured. `pytest-cov==7.0.0` + `.coveragerc` added. Baseline: 69%. CI threshold: 64% (`--cov-fail-under=64`). XML report generated and uploaded to Codecov on every push/PR.
-- Duplicate test names in `test_routes.py` can mask failures (`test_routes.py`).
+- ✅ **RESOLVED (2026-03-22):** Duplicate test names in `test_routes.py` removed (unique identifiers added).
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/smoke_memory.py` imports fixed and project root path corrected (`db.dao.memory_node_dao.MemoryNodeDAO` + proper root resolution).
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/Bridgeimport.py` wrapped in a `__main__` guard to prevent import-time execution.
 
@@ -277,7 +277,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Status: Open. Deferred to ARM Phase 3.
 
 ### §11.4 deepseek_arm_service.py is now a dead code path
-- **`services/deepseek_arm_service.py` is no longer called by `arm_router.py`.**
+- ✅ **RESOLVED (2026-03-22):** `services/deepseek_arm_service.py` moved to `legacy/deepseek_arm_service.py` (not referenced by `arm_router.py`).
   The ARM router was rewritten in Phase 1 to use `DeepSeekCodeAnalyzer` directly.
   The service file remains in place for backward compat but its functions
   (`run_analysis`, `generate_code`, `get_reasoning_logs`, `get_config`,

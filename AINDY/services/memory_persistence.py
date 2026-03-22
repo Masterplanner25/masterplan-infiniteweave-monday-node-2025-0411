@@ -16,15 +16,6 @@ from db.database import Base
 
 VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}
 
-def save_memory_node(self, memory_node: 'MemoryNode'):
-    cleaned_content = prepare_input_text(memory_node.content, limit=300)
-    db_node = MemoryNodeModel(
-        content=cleaned_content,
-        tags=memory_node.tags,
-        node_type=memory_node.node_type,
-        metadata=getattr(memory_node, 'metadata', {})
-    )
-
 class MemoryNodeModel(Base):
     __tablename__ = "memory_nodes"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

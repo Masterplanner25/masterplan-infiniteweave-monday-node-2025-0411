@@ -127,9 +127,8 @@ A change cannot be merged if:
 - No migration validation tests (`AINDY/alembic/` has no test harness).
 - No tests for background task loops (`AINDY/services/task_services.py`).
 - No error handling contract tests validating JSON error structure per `docs/governance/ERROR_HANDLING_POLICY.md`.
-- Duplicate test function names in legacy root test files (potential collection conflicts):
-  - `test_get_results` (`test_calculations.py`, `test_routes.py`) — also appears 3 times within `test_routes.py`
-  - `test_post_ai_productivity_boost`, `test_post_batch_calculations`, `test_post_decision_efficiency`, `test_post_engagement_rate`, `test_post_execution_speed`, `test_post_income_efficiency`, `test_post_lost_potential` (`test_calculations.py`, `test_routes.py`)
+- ✅ **Resolved (2026-03-22):** Duplicate `test_get_results` names in `test_routes.py` renamed to unique identifiers. Other root tests still mirror names across files but are unique within each file.
+- ✅ **Resolved (2026-03-22):** Migration drift guard added via `tests/test_migrations.py` (asserts `alembic current` equals `alembic heads`).
 - ✅ **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/roadmap/TECH_DEBT.md` §6.
 - ✅ **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit — no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit — no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
 - ✅ **Resolved (2026-03-17 Genesis Blocks 4-6):** `test_genesis_flow.py` added with 55 tests covering: `validate_draft_integrity()` with mocked OpenAI (including retry and fail-safe paths), `POST /genesis/audit` route registration + auth, factory hardening (`synthesis_ready` gate, `db.rollback()` path), `POST /masterplans/lock` endpoint, `GET /masterplans/` response shape, duplicate route removal, synthesis prompt schema, posture description helper. Total: 301 passing.
