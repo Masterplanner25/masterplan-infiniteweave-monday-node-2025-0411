@@ -23,6 +23,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Memory Trace layer: `memory_traces` + `memory_trace_nodes`, `MemoryTraceDAO`, and `/memory/traces*` endpoints
 * Symbolic memory ingest: `services/memory_ingest_service.py` and `Tools/ingest_memory.py`
 * Request metrics baseline: `request_metrics` table + structured request logging middleware
+* Observability route tests for `GET /observability/requests`
 
 ## Changed
 
@@ -36,6 +37,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * MasterPlan version column removed; `version_label` is canonical
 * Observability query endpoint added: `GET /observability/requests`
 * Genesis sessions now bind `user_id` (UUID FK to users) and legacy `user_id`/`user_id_str` columns are removed
+* Legacy SEO endpoints removed; health ping list aligned to `/seo/*` and `/memory/metrics`
 
 ---
 

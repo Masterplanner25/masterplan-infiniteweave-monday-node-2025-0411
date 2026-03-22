@@ -96,7 +96,6 @@ This document distinguishes current deployment reality from required policy rule
 - Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`, `AINDY/services/deepseek_arm_service.py`).
 - Lack of graceful shutdown hooks in `AINDY/main.py`.
 - Readiness/health checks are limited; only health routes exist (no readiness gate is enforced).
-- Health check pings use `/tools/seo/*`, which is not defined in current `AINDY/routes/seo_routes.py` (only `/seo/*` routes exist). This can cause false degraded status.
 
 ## 9. Policy Rules for Safe Deployment
 - No deployment without successful migration to Alembic head.
@@ -128,7 +127,8 @@ Defined in `AINDY/routes/health_router.py`:
 
 - `POST http://127.0.0.1:8000/calculate_twr`
   - Payload: `{ "returns": [0.1, 0.05, 0.2] }`
-- `POST http://127.0.0.1:8000/tools/seo/analyze`
+- `POST http://127.0.0.1:8000/seo/analyze`
   - Payload: `{ "text": "AI Search Optimization", "top_n": 3 }`
-- `POST http://127.0.0.1:8000/tools/seo/meta`
-  - Payload: `{ "url": "https://example.com" }`
+- `POST http://127.0.0.1:8000/seo/meta`
+  - Payload: `{ "text": "AI Search Optimization", "limit": 160 }`
+- `GET http://127.0.0.1:8000/memory/metrics`
