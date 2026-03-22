@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
+import logging
+import threading
 from config import settings
 
 # --------------------------------------------------------------------
@@ -27,6 +29,9 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = logging.getLogger(__name__)
+_session_guard_lock = threading.Lock()
+_active_sessions: set[int] = set()
 
 # --------------------------------------------------------------------
 # UTC Enforcement
@@ -50,9 +55,16 @@ def set_utc(dbapi_connection, connection_record):
 def get_db():
     """Provide a transactional session scope for routes and services."""
     db = SessionLocal()
+    session_id = id(db)
+    with _session_guard_lock:
+        if session_id in _active_sessions:
+            logger.warning("DB session reuse detected (session_id=%s).", session_id)
+        _active_sessions.add(session_id)
     try:
         yield db
     finally:
+        with _session_guard_lock:
+            _active_sessions.discard(session_id)
         db.close()
 
 # --------------------------------------------------------------------

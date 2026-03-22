@@ -8,7 +8,7 @@ This document defines the contract between the Node/Express gateway and the Fast
 - Gateway implementation: `AINDY/server.js` (Express server).
 - Responsibilities:
 - Accepts HTTP requests from clients on `/api/users`.
-- Stores user records in an in-memory array `users`.
+- Reads persisted user records from `/network_bridge/authors` (no in-memory user array).
 - Forwards a handshake to the backend via `POST http://localhost:8000/network_bridge/connect`.
 - Responds to client with the stored user object.
 - Limitations:

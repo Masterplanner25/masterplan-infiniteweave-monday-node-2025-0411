@@ -91,6 +91,12 @@ Focus areas:
 - Concurrency improvements within current framework constraints.
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 5 (Concurrency Debt).
 
+Execution checklist:
+1. Background task lease prevents duplicate runners across instances.
+2. Gateway state persistence eliminates in-memory-only user state.
+3. Concurrency guards for shared singletons are in place.
+4. Startup schema drift guard blocks mismatched DB revisions.
+
 Exit criteria (policy-aligned):
 - Background task execution is isolated to avoid duplicate work in multi-instance deployments.
 - Gateway no longer relies on in-memory-only state for critical flows.

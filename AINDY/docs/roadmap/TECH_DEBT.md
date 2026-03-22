@@ -8,7 +8,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
 - ✅ **RESOLVED (2026-03-22):** Gateway state durability now backed by `authors` table via `/network_bridge/authors`.
 -
-- Cache consistency is per-process only (`FastAPICache` with `InMemoryBackend` in `AINDY/main.py`); multi-instance deployments will diverge unless a shared backend is introduced.
+- ✅ **PARTIALLY RESOLVED (2026-03-22):** Cache backend can be configured for Redis via `AINDY_CACHE_BACKEND=redis` and `REDIS_URL`. Default remains in-memory, so multi-instance consistency requires explicit config.
 - ARM analyzer config updates are process-local; multi-instance propagation requires restarts or explicit reload across instances (`AINDY/routes/arm_router.py`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
@@ -59,7 +59,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `version.json` and `system_manifest.json` updated to `1.0.0` with current metadata.
 - ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
 - Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
-- `AINDY/version.json` and `AINDY/system_manifest.json` report version `0.9.0-pre`; current release is `1.0.0` (Social Layer). These are not updated automatically and are stale.
+- ✅ **RESOLVED (2026-03-21):** `AINDY/version.json` and `AINDY/system_manifest.json` updated to `1.0.0`.
 
 ## 3. Testing Debt
 - Minimal unit coverage in `AINDY/services/`.
@@ -81,6 +81,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 5. Concurrency Debt
 - ✅ **PARTIALLY RESOLVED (2026-03-22):** Background task runner now uses a DB lease (`background_task_leases`) to prevent duplicate work across instances (`AINDY/services/task_services.py`).
 - ✅ **RESOLVED (2026-03-22):** Process-level singletons in ARM analyzer and embedding client now use thread-safe initialization guards.
+- ✅ **RESOLVED (2026-03-22):** Per-request session reuse warning added to `db/database.py`.
 - No distributed-safe scheduler; multi-instance deployment risks duplicated background work beyond the task runner (`AINDY/main.py` daemon threads).
 - No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
 
@@ -145,7 +146,7 @@ The following bugs were revealed by the comprehensive diagnostic test suite adde
 - **`services/leadgen_service.py::score_lead()` contains dead/unreachable code.** The function has two `try:` blocks, but the second is entirely unreachable because the first block always returns (or raises). The dead block calls `client.chat.completions.create(model="gpt-4o", ...)` — a different model than the live block — which is neither tested nor executed. Fix: remove the dead block (`AINDY/services/leadgen_service.py:104-127`). Revealed by: `test_routes_leadgen.py::TestLeadGenServiceBugs::test_score_lead_has_dead_code_after_return`.
 - **`routes/seo_routes.py` defines `analyze_seo()` twice.** The function is defined at line 17 and again at line 39. Python silently uses the second definition, making the first (basic) implementation unreachable. The duplicate also appears in the router — both map to `POST /analyze_seo/`. The second definition (`POST /seo/analyze`) works but shares a name with the dead first one (`AINDY/routes/seo_routes.py:17,39`).
 - **`routes/dashboard_router.py` and `routes/health_dashboard_router.py` both use prefix `/dashboard`.** This creates a route collision on `/dashboard/health`. FastAPI registers both but the last-registered takes precedence. The `dashboard_router.py` (overview) path is `/dashboard/overview` and is not directly conflicting, but the shared prefix means any future additions risk silent overrides (`AINDY/routes/__init__.py`).
-- **`main.py` uses deprecated `@app.on_event("startup")` twice.** FastAPI 0.119.0 deprecates `on_event` in favor of lifespan context managers. Two startup handlers are registered (`startup` and `ensure_system_identity`), both using the deprecated API. This generates deprecation warnings on every test run (`AINDY/main.py:50,83`).
+- ✅ **RESOLVED (2026-03-18):** Startup handlers consolidated into lifespan; deprecated `@app.on_event` removed (`AINDY/main.py`).
 
 ### §6 Security (additions — all resolved 2026-03-17 Phase 2)
 - ~~**No authentication or authorization on any API route confirmed by test suite.**~~ **FIXED (2026-03-17):** JWT auth (`Depends(get_current_user)`) added to `task_router`, `leadgen_router`, `genesis_router`, `analytics_router`. All five security-tested endpoints now return 401 without credentials. `services/auth_service.py` created with JWT creation/verification and password hashing (`python-jose`, `passlib/bcrypt`). Auth routes at `POST /auth/login`, `POST /auth/register`.
