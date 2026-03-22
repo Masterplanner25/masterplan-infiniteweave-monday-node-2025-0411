@@ -1,8 +1,6 @@
 # /routes/bridge_router.py
 from __future__ import annotations
 import os
-import hmac
-import hashlib
 import time
 import logging
 import time
@@ -22,7 +20,6 @@ logger = logging.getLogger(__name__)
 # --- Environment / Config -------------------------------------------------
 if not settings.DATABASE_URL:
     raise RuntimeError("DATABASE_URL is not configured in .env or Settings.")
-PERMISSION_SECRET = os.getenv("PERMISSION_SECRET", "dev-secret-must-change")
 
 # ✅ Use centralized configuration
 from db.database import get_db
@@ -37,21 +34,6 @@ class TracePermission(BaseModel):
     signature: str
 
 
-def compute_perm_sig(nonce: str, ts: int, ttl: int, scopes: List[str]) -> str:
-    payload = f"{nonce}|{ts}|{ttl}|{','.join(sorted(scopes))}"
-    return hmac.new(PERMISSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
-def verify_permission_or_403(permission: TracePermission):
-    expected = compute_perm_sig(permission.nonce, permission.ts, permission.ttl, permission.scopes)
-    if not hmac.compare_digest(expected, permission.signature):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid permission signature")
-    now = int(time.time())
-    if permission.ts + permission.ttl < now:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission expired")
-    return permission
-
-
 # --- Node + Link Models ---------------------------------------------------
 class NodeCreateRequest(BaseModel):
     content: str
@@ -61,7 +43,7 @@ class NodeCreateRequest(BaseModel):
     extra: Optional[dict] = Field(default_factory=dict)
     user_id: Optional[str] = None
     source_agent: Optional[str] = None
-    permission: TracePermission
+    permission: Optional[TracePermission] = None
 
 
 class NodeResponse(BaseModel):
@@ -80,7 +62,7 @@ class LinkCreateRequest(BaseModel):
     source_id: str
     target_id: str
     link_type: Optional[str] = "related"
-    permission: TracePermission
+    permission: Optional[TracePermission] = None
 
 
 class LinkResponse(BaseModel):
@@ -98,7 +80,6 @@ router = APIRouter(prefix="/bridge", tags=["Bridge"])
 @router.post("/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
 def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     start = time.perf_counter()
-    verify_permission_or_403(payload.permission)
     engine = MemoryCaptureEngine(
         db=db,
         user_id=str(current_user["sub"]),
@@ -117,7 +98,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
     if not saved:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create memory node",
+            detail={"error": "bridge_node_create_failed", "message": "Failed to create memory node"},
         )
 
     # 🔁 Emit RippleTrace event
@@ -125,7 +106,7 @@ def create_node(payload: NodeCreateRequest, db: Session = Depends(get_db), curre
         "drop_point_id": "bridge",
         "ping_type": "node_creation",
         "source_platform": "AINDY",
-        "summary": f"Node created: {saved.content[:50]}",
+        "summary": f"Node created: {(saved.get('content') or '')[:50]}",
     })
     duration_ms = (time.perf_counter() - start) * 1000
     logger.info("Bridge node created in %.2fms", duration_ms)
@@ -156,14 +137,19 @@ def search_nodes(tag: Optional[List[str]] = None, mode: Optional[str] = "OR", li
 @router.post("/link", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
 def create_link(payload: LinkCreateRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     start = time.perf_counter()
-    verify_permission_or_403(payload.permission)
     dao = MemoryNodeDAO(db)
     source = dao.load_memory_node(payload.source_id)
     target = dao.load_memory_node(payload.target_id)
     if not source or not target:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source or target node not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "bridge_link_nodes_not_found", "message": "Source or target node not found"},
+        )
     if source.get("user_id") != str(current_user["sub"]) or target.get("user_id") != str(current_user["sub"]):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot link nodes you do not own")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "bridge_link_forbidden", "message": "Cannot link nodes you do not own"},
+        )
     link = dao.create_link(payload.source_id, payload.target_id, link_type=payload.link_type)
     duration_ms = (time.perf_counter() - start) * 1000
     logger.info("Bridge link created in %.2fms", duration_ms)

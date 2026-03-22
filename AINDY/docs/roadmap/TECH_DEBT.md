@@ -27,7 +27,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::create_lead_results()` now requires `user_id` and persists owned memory nodes.
 - ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::score_lead()` now uses chat `messages` and dead code removed.
 - ✅ **RESOLVED (2026-03-21):** Duplicate `generate_meta_description()` removed in `services/seo_services.py`.
-- **OPEN (2026-03-22 Audit):** `client/src/components/RevenueScalingPanel.jsx` is wired to `calculateIncomeEfficiency()` and uses income-efficiency labels; no revenue-scaling endpoint is called.
+- ✅ **RESOLVED (2026-03-21):** `RevenueScalingPanel.jsx` now uses `calculateRevenueScaling()` with correct labels.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend auth regressions resolved — all listed components now use `client/src/api.js` functions backed by `authRequest()`.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend/backend contract mismatches resolved — `AnalyticsPanel.jsx` uses `/analytics/masterplan/{id}/summary`, and `LeadGen.jsx` maps `{results}` with `overall_score` + `reasoning`.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `Dashboard.jsx` stray JSX removed.
@@ -36,7 +36,7 @@ This document inventories current technical debt based strictly on the existing 
 - `AINDY/routes/health_router.py` pings SEO endpoints via hardcoded paths (now aligned to `/seo/*`).
 - Health checks are present (`/health/`, `/dashboard/health`) but no readiness gating is implemented (`AINDY/routes/health_router.py`, `AINDY/routes/health_dashboard_router.py`).
 - ✅ **RESOLVED (2026-03-21):** `POST /bridge/user_event` now persists to `bridge_user_events` table (`AINDY/routes/bridge_router.py`).
-- `AINDY/bridge/trace_permission.py` defines `trace_permission()` but is not imported or used anywhere; not exported from `bridge/__init__.py`. Either wire it into `bridge_router.py` as a permission log layer or delete it (`AINDY/bridge/trace_permission.py`).
+- ✅ **RESOLVED (2026-03-21):** `AINDY/bridge/trace_permission.py` moved to `legacy/trace_permission.py` (deprecated HMAC helper).
 - `AINDY/bridge/archive/` contains two files pending team confirmation of deletion: `memory_bridge_core_draft.rs` and `Memorybridgerecognitiontrace.rs`.
 
 ## 2. Schema / Migration Debt
@@ -52,7 +52,7 @@ This document inventories current technical debt based strictly on the existing 
 - **OPEN (2026-03-18 Audit):** `CanonicalMetricDB.user_id` is `Integer, nullable, no FK` — not referencing `users.id`. Any user_id stored here is unverifiable and non-relational (`AINDY/db/models/metrics_models.py:145`).
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` `node_type="generic"` defaults changed to `None` in `NodeCreateRequest` schema and `_NodeLike` inner class. `NodeResponse.node_type` updated to `Optional[str]`. ORM event validator crash eliminated.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `services/memory_persistence.py::MemoryNodeDAO.save_memory_node()` fallback changed from `"generic"` to `None`. ORM event violation path removed.
-- **OPEN (2026-03-18 Audit):** `AINDY/version.json` and `AINDY/system_manifest.json` still report version `0.9.0-pre`. Current release is post-v1.0.0. These are stale and not auto-updated.
+- ✅ **RESOLVED (2026-03-21):** `version.json` and `system_manifest.json` updated to `1.0.0` with current metadata.
 - ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
 - Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
 - `AINDY/version.json` and `AINDY/system_manifest.json` report version `0.9.0-pre`; current release is `1.0.0` (Social Layer). These are not updated automatically and are stale.
@@ -70,6 +70,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 4. Error Handling Debt
 - ✅ **RESOLVED (2026-03-21):** Error classification consistency improved across core routes with structured `detail` payloads for 5xx failures.
 - ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
+- ✅ **RESOLVED (2026-03-22):** Structured JSON error responses standardized across remaining core routes (analytics, masterplan, genesis, memory, memory_trace, freelance, bridge, social).
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
@@ -87,7 +88,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-17 Phase 3):** All remaining unprotected routes secured. JWT (`get_current_user`): `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router`. API key (`verify_api_key`): `db_verify_router`, `network_bridge_router`. Zero unprotected non-public routes remain.
 - ✅ **FIXED (2026-03-17 Phase 3):** Rate limiting decorators applied to all AI/cost endpoints — `@limiter.limit()` on `/leadgen/` (10/min), `/genesis/message` (20/min), `/genesis/synthesize` (5/min), `/arm/analyze` (10/min), `/arm/generate` (10/min). Shared `Limiter` extracted to `services/rate_limiter.py`.
 - No documented secret rotation policy (`AINDY/routes/bridge_router.py` uses env secret without rotation).
-- HMAC protection exists for Memory Bridge writes but no replay protection beyond TTL (`AINDY/routes/bridge_router.py`).
+- ✅ **RESOLVED (2026-03-21):** HMAC protection removed from bridge writes; JWT-only.
 - `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `GET /dashboard/health` now requires JWT auth. `dependencies=[Depends(get_current_user)]` added to `health_dashboard_router.py` router level.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /bridge/nodes`, `POST /bridge/nodes`, and `POST /bridge/link` now require JWT (`Depends(get_current_user)` added per-endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints are now protected.
@@ -125,7 +126,7 @@ The C++ semantic similarity kernel (`bridge/memory_bridge_rs/`) was added in `fe
 
 - **Release build blocked by Windows AppControl.** The kernel was built in debug mode because AppControl policy blocks writes to `target/release/`. Debug benchmark (dim=1536, 10k iters): Python 2.753s vs C++ 3.844s — FFI overhead dominates in debug. Release build is expected to show 10–50x improvement. Action: run `maturin develop --release` in an environment without AppControl restrictions (deployment server or CI) and record results (`AINDY/bridge/benchmark_similarity.py`, `AINDY/bridge/memory_bridge_rs/Cargo.toml`).
 - ~~**No vector embeddings on `MemoryNode`.**~~ ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` (`services/memory_persistence.py`) and DB via migration `mb2embed0001`. `services/embedding_service.py` generates OpenAI `text-embedding-ada-002` embeddings on every `MemoryNodeDAO.save()` call. C++ kernel (`memory_bridge_rs.semantic_similarity`) wired for cosine similarity with Python fallback. `find_similar()` uses pgvector `<=>` operator. Endpoints: `POST /memory/nodes/search`, `POST /memory/recall`.
-- **`PERMISSION_SECRET` defaults to `"dev-secret-must-change"`.** If `PERMISSION_SECRET` is not set in `.env`, HMAC signing uses this default. Any party who knows the default can forge valid permissions. This is a deployment configuration risk, not a code defect, but no rotation policy or validation on startup enforces that the secret has been changed (`AINDY/routes/bridge_router.py:21`).
+- ✅ **RESOLVED (2026-03-21):** HMAC permissions removed from bridge write path; `PERMISSION_SECRET` no longer used.
 
 ## 9. Newly Revealed Bugs (Diagnostic Test Suite — 2026-03-17)
 
@@ -231,11 +232,7 @@ The following items were identified during a structured architectural review of 
 
 ### §10.10 Security — HMAC permission tokens on memory writes are redundant with JWT
 
-- **`POST /bridge/nodes` and `POST /bridge/link` require a `permission` block with HMAC-SHA256 signature, nonce, TTL, and scopes.** JWT auth (`Depends(get_current_user)`) now exists on adjacent route groups (Phase 2, §6). Two independent token systems operate in the same stack for the same purpose: proving an authorized caller. The HMAC scheme adds implementation surface (signing logic in callers, TTL management, nonce generation) without adding security properties that JWT does not already provide.
-  - Location: `AINDY/routes/bridge_router.py:21-55` (HMAC verification), `AINDY/bridge/trace_permission.py` (permission token construction)
-  - Mechanism: Callers must generate a `permission` object with `nonce`, `ts`, `ttl`, `scopes`, and a valid HMAC-SHA256 signature over those fields using `PERMISSION_SECRET`. This is checked before any DB write. JWT is not checked on these routes.
-  - Impact: API clients must implement two authentication schemes. Any caller that uses the Memory Bridge write API must also manage HMAC token generation. Maintenance surface is doubled.
-  - Status: Open. Recommendation: migrate Memory Bridge write routes to `Depends(get_current_user)` (JWT). Retire the HMAC permission scheme or reduce it to a scope-tagging mechanism only, not a full authentication layer. Deferred to Phase 3.
+- ✅ **RESOLVED (2026-03-21):** Bridge write routes now rely on JWT; HMAC permission is deprecated and ignored. `trace_permission.py` moved to legacy.
 
 ---
 
@@ -329,7 +326,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 | **MB §10.4 — strength is VARCHAR** | **Medium** | Graph edge weights are non-numeric; scored traversal blocked until schema migration | **Phase 2** |
 | **MB §10.6 — no temporal decay** | **Medium** | Retrieval quality degrades with node count; stale memories rank equal to recent | **Phase 2** |
 | **MB §10.7 — unranked tag retrieval** | **Low** | No relevance signal in results; noisy output at scale | **Phase 2** |
-| **MB §10.10 — redundant HMAC + JWT auth** | **Low** | Callers must implement two auth schemes; maintenance surface doubled | **Phase 3** |
+| **MB §10.10 — redundant HMAC + JWT auth** | ✅ Resolved | JWT-only bridge writes; HMAC deprecated | **Phase 3** |
 | Observability | Medium | Limited visibility into failures | Phase 3 |
 | Structural | Low | Known coupling and in-memory state | Phase 3 |
 | **MB §10.8 — no versioning / history table** | ✅ Resolved | Append-only history table + update logging (Memory Bridge v3) | Phase 3 ✅ |
@@ -353,7 +350,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 ### Line References (Highest-Risk Items)
 - Background daemon threads: `AINDY/main.py:70`
 - Genesis session lock enforcement: `AINDY/services/masterplan_factory.py:15`
-- Memory Bridge HMAC validation: `AINDY/routes/bridge_router.py:41`
+- Memory Bridge HMAC validation: removed (JWT-only)
 - Canonical metrics unique constraint migration: `AINDY/alembic/versions/97ef6237e153_structure_integrity_check.py:24`
 - ✅ **RESOLVED (2026-03-21):** Health check endpoint mismatch fixed (`/seo/*` pings aligned).
 - Duplicate `POST /create_masterplan` definition: `AINDY/routes/main_router.py:236`

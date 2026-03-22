@@ -31,7 +31,14 @@ def create_freelance_order(
     try:
         return freelance_service.create_order(db, order, user_id=str(current_user["sub"]))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create order: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "freelance_order_create_failed",
+                "message": "Failed to create order",
+                "details": str(e),
+            },
+        )
 
 
 # -----------------------------------------------------
@@ -54,13 +61,30 @@ def deliver_order(
         FreelanceOrder.user_id == str(current_user["sub"]),
     ).first()
     if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "freelance_order_not_found", "message": "Order not found"},
+        )
     try:
         return freelance_service.deliver_order(db, order_id, ai_output)
     except ValueError as ve:
-        raise HTTPException(status_code=404, detail=str(ve))
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "freelance_order_not_found",
+                "message": "Order not found",
+                "details": str(ve),
+            },
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to deliver order: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "freelance_order_deliver_failed",
+                "message": "Failed to deliver order",
+                "details": str(e),
+            },
+        )
 
 
 # -----------------------------------------------------
@@ -78,9 +102,23 @@ def collect_feedback(
     try:
         return freelance_service.collect_feedback(db, feedback, user_id=str(current_user["sub"]))
     except ValueError as ve:
-        raise HTTPException(status_code=404, detail=str(ve))
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "freelance_feedback_not_found",
+                "message": "Feedback target not found",
+                "details": str(ve),
+            },
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to collect feedback: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "freelance_feedback_collect_failed",
+                "message": "Failed to collect feedback",
+                "details": str(e),
+            },
+        )
 
 
 # -----------------------------------------------------
@@ -121,7 +159,13 @@ def get_latest_metrics(db: Session = Depends(get_db)):
     """
     metric = freelance_service.get_latest_metrics(db)
     if not metric:
-        raise HTTPException(status_code=404, detail="No revenue metrics found.")
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "revenue_metrics_not_found",
+                "message": "No revenue metrics found",
+            },
+        )
     return metric
 
 
@@ -136,4 +180,11 @@ def update_metrics(db: Session = Depends(get_db)):
     try:
         return freelance_service.update_revenue_metrics(db)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Metrics update failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "revenue_metrics_update_failed",
+                "message": "Metrics update failed",
+                "details": str(e),
+            },
+        )

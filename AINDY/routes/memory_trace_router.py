@@ -66,7 +66,10 @@ def get_trace(
     dao = MemoryTraceDAO(db)
     trace = dao.get_trace(trace_id, user_id=str(current_user["sub"]))
     if not trace:
-        raise HTTPException(status_code=404, detail="Trace not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "trace_not_found", "message": "Trace not found"},
+        )
     return trace
 
 
@@ -111,7 +114,10 @@ def append_trace_node(
     memory_dao = MemoryNodeDAO(db)
     node = memory_dao.get_by_id(body.node_id, user_id=str(current_user["sub"]))
     if not node:
-        raise HTTPException(status_code=404, detail="Memory node not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
 
     dao = MemoryTraceDAO(db)
     appended = dao.append_node(
@@ -121,5 +127,8 @@ def append_trace_node(
         position=body.position,
     )
     if not appended:
-        raise HTTPException(status_code=404, detail="Trace not found")
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "trace_not_found", "message": "Trace not found"},
+        )
     return appended
