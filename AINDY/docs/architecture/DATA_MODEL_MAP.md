@@ -764,6 +764,10 @@ Defined in `AINDY/services/memory_persistence.py`.
   - `ix_memory_node_history_node_changed` on (`node_id`, `changed_at`)
 - Purpose: Append-only change history for MemoryNode updates (stores previous values only).
 
+## 5.5 Symbolic Ingest (Operational)
+
+- Ingest service: `AINDY/services/memory_ingest_service.py` reads `memorytraces/` and `memoryevents/` files, creates `memory_traces`, `memory_trace_nodes`, and `memory_nodes` with provenance in `extra`.
+
 ## 6. Cross-Database Boundaries
 
 - PostgreSQL is used by all SQLAlchemy ORM models in `AINDY/db/models/` and by Memory Bridge models in `AINDY/services/memory_persistence.py`.

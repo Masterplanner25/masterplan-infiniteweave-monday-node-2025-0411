@@ -21,6 +21,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Identity Layer tests (`tests/test_identity_layer.py`) and migration `bb4935e07dec_identity_layer_v5_phase2`
 * Memory Metrics system: `memory_metrics` table, `MemoryMetricsEngine`, `MemoryMetricsStore`, and `/memory/metrics*` endpoints
 * Memory Trace layer: `memory_traces` + `memory_trace_nodes`, `MemoryTraceDAO`, and `/memory/traces*` endpoints
+* Symbolic memory ingest: `services/memory_ingest_service.py` and `Tools/ingest_memory.py`
 
 ## Changed
 
