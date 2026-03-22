@@ -180,7 +180,7 @@ Operational summaries and dashboards:
 
 ### Memory Layer
 
-* Memory Bridge logging on order/delivery/feedback (legacy DAO path)
+* Memory Bridge logging on order/delivery/feedback (MemoryCaptureEngine + DB session)
 
 ---
 
@@ -198,7 +198,6 @@ Operational summaries and dashboards:
 * AI generation pipeline
 * automation connectors (delivery/payment)
 * performance metrics beyond revenue
-* modern Memory Bridge DAO integration
 
 ---
 
@@ -249,8 +248,8 @@ It is NOT:
 
 **Actions:**
 
-* replace legacy DAO path
-* include embeddings and user_id
+* replace legacy DAO path ✅
+* include embeddings and user_id ✅
 
 ---
 
@@ -291,7 +290,7 @@ It is NOT:
 ### Conceptual
 
 * feedback does not influence execution
-* memory logging uses legacy DAO
+* memory logging lacks feedback-driven use
 
 ---
 
@@ -301,7 +300,7 @@ It is NOT:
 | ----- | ----------------- | ----------- | --------------- |
 | v1    | Core CRUD         | Implemented | Stabilize       |
 | v2    | Metrics           | Partial     | Complete        |
-| v3    | Memory Alignment  | Partial     | Upgrade         |
+| v3    | Memory Alignment  | Complete    | Maintenance only |
 | v4    | Automation        | Missing     | Integrate       |
 | v5    | Feedback Loop     | Missing     | Connect         |
 

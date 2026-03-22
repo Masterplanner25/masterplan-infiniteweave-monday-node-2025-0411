@@ -24,8 +24,8 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `POST /social/post` now uses `MemoryCaptureEngine` with SQLAlchemy session and `current_user["sub"]` for persistent memory capture.
 - ✅ **RESOLVED (2026-03-21):** `services/research_results_service.py::log_to_memory_bridge()` now uses `MemoryCaptureEngine` with DB session and `user_id` (no transient memory nodes).
 - ✅ **RESOLVED (2026-03-21):** `services/freelance_service.py` now logs via `MemoryCaptureEngine` (removes legacy DAO path and invalid node_type usage).
-- **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::create_lead_results()` calls `create_memory_node()` with `user_id=None`, creating unowned memory nodes in `memory_nodes`.
-- **OPEN (2026-03-22 Audit):** `services/leadgen_service.py::score_lead()` calls `client.chat.completions.create(... input=...)` (chat API expects `messages`) and contains dead code after the first `return`.
+- ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::create_lead_results()` now requires `user_id` and persists owned memory nodes.
+- ✅ **RESOLVED (2026-03-21):** `services/leadgen_service.py::score_lead()` now uses chat `messages` and dead code removed.
 - **OPEN (2026-03-22 Audit):** Duplicate `generate_meta_description()` is defined twice in `services/seo_services.py`.
 - **OPEN (2026-03-22 Audit):** `client/src/components/RevenueScalingPanel.jsx` is wired to `calculateIncomeEfficiency()` and uses income-efficiency labels; no revenue-scaling endpoint is called.
 - ✅ **FIXED (2026-03-20 Security Sprint):** Frontend auth regressions resolved — all listed components now use `client/src/api.js` functions backed by `authRequest()`.

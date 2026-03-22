@@ -88,28 +88,23 @@ class TestLeadGenResponseStructure:
 
 
 class TestLeadGenServiceBugs:
-    def test_score_lead_has_dead_code_after_return(self):
+    def test_score_lead_has_no_dead_code_after_return(self):
         """
-        DIAGNOSTIC: leadgen_service.score_lead() has unreachable code after its first
-        return statement (a second try/except block with a different model call).
-        This test documents the dead code bug by inspecting source.
+        REGRESSION: leadgen_service.score_lead() should not contain unreachable
+        code after its first return statement.
         """
         import inspect
         from services import leadgen_service
 
         source = inspect.getsource(leadgen_service.score_lead)
-        # The function has two 'return result' statements and two 'try:' blocks
-        # Count occurrences of key patterns
         return_count = source.count("return result")
         try_count = source.count("try:")
 
-        assert return_count >= 2, (
-            f"Expected 2+ return statements in score_lead() — unreachable code may have been fixed. "
-            f"Found: {return_count}"
+        assert return_count == 1, (
+            f"Expected a single return statement in score_lead(). Found: {return_count}"
         )
-        assert try_count >= 2, (
-            f"Expected 2+ try blocks in score_lead() — dead code may have been removed. "
-            f"Found: {try_count}"
+        assert try_count == 1, (
+            f"Expected a single try block in score_lead(). Found: {try_count}"
         )
 
     def test_create_memory_node_no_longer_uses_wrong_table(self):

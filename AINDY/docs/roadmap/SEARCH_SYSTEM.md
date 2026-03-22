@@ -137,11 +137,11 @@ Structured results:
 * memory logging (capture engine)
 * Memory Orchestrator recall attached to `/research/query` results
 * Live summary generation via `modules/research_engine.ai_analyze()`
+* Live external retrieval via `modules/research_engine.web_search()`
 
 **Missing:**
 
-* routing that invokes `research_engine.web_search()`
-* live external retrieval
+* external provider reliability/coverage guarantees (current integration is best-effort)
 
 ---
 
@@ -191,10 +191,10 @@ This capability exists but is not wired into the Search System flows documented 
 * research result storage
 * Memory Orchestrator recall used in LeadGen and Research query flow
 * semantic memory search (separate system)
+* live external retrieval in research flow
 
 **Missing:**
 
-* live web search for research (provider-dependent reliability)
 * unified search pipeline
 * consistent ranking model across search surfaces (now shared scorer, still early)
 * UI integration for SEO and LeadGen
@@ -236,9 +236,9 @@ It is NOT:
 
 **Actions:**
 
-* wire `modules/research_engine.py` into `/research/query`
-* replace mocked `run_ai_search()` results with real provider calls
-* integrate Memory Orchestrator recall into search flows
+* wire `modules/research_engine.py` into `/research/query` ✅
+* replace mocked `run_ai_search()` results with real provider calls ✅
+* integrate Memory Orchestrator recall into search flows ✅
 
 ---
 
@@ -248,7 +248,7 @@ It is NOT:
 
 **Actions:**
 
-* unify relevance scoring across SEO, leadgen, research (shared scorer in use)
+* unify relevance scoring across SEO, leadgen, research ✅
 
 ---
 
@@ -298,8 +298,8 @@ It is NOT:
 | Phase | Component            | Status      | Required Action |
 | ----- | -------------------- | ----------- | --------------- |
 | v1    | Surface Alignment    | Partial     | Normalize       |
-| v2    | Retrieval Integration| Partial     | Wire + replace  |
-| v3    | Ranking Unification  | Partial     | Unify scoring   |
+| v2    | Retrieval Integration| Complete    | Maintenance only |
+| v3    | Ranking Unification  | Complete    | Maintenance only |
 | v4    | Feedback Loop        | Missing     | Persist + reuse |
 | v5    | UI Integration       | Missing     | Implement       |
 
