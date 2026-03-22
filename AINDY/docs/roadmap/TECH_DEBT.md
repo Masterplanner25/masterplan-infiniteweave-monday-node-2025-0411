@@ -285,6 +285,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 ### §12.1 HNSW index for pgvector performance
 - **No HNSW or IVFFlat index on `memory_nodes.embedding`.** Currently pgvector uses sequential scan for similarity queries. Acceptable at current node count; will degrade past ~50k rows.
   - Fix: `CREATE INDEX ON memory_nodes USING hnsw (embedding vector_cosine_ops);`
+  - Status: ? **RESOLVED (2026-03-21):** HNSW index added via migration `f3a4b5c6d7e8`.
   - Status: Open. Deferred to Phase 3. Add migration when node count becomes a concern.
 
 ### §12.2 VALID_NODE_TYPES backward compatibility
