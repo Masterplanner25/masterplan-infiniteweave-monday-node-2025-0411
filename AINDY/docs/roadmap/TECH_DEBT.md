@@ -5,7 +5,7 @@ This document inventories current technical debt based strictly on the existing 
 ## 1. Structural Debt
 - ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
 - Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
-- Gateway (`AINDY/server.js`) stores users in an in-memory array with no persistence.
+- ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
 - Gateway lacks state durability across restarts (`AINDY/server.js`).
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
