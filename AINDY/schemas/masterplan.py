@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class MasterPlanCreate(BaseModel):
-    version: str
+    version_label: str | None = None
     start_date: datetime
     duration_years: float
     is_origin: bool = False

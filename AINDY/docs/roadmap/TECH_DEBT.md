@@ -51,7 +51,7 @@ This document inventories current technical debt based strictly on the existing 
 - **OPEN (2026-03-21):** Legacy rows in `tasks`, `leadgen_results`, and `authors` may have `user_id = NULL` after ownership migration. Backfill or cleanup needed to avoid orphaned records.
 - ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
-- **OPEN (2026-03-18 Audit):** `MasterPlan` has both `version` (String) and `version_label` (String) — redundant columns with overlapping semantics (`AINDY/db/models/masterplan.py`). Requires a clean-up migration.
+- ✅ **RESOLVED (2026-03-22):** `MasterPlan.version` removed; `version_label` is now the only version field (migration `c4f2a9d1e7b3`).
 - ✅ **RESOLVED (2026-03-22):** `GenesisSessionDB` dual user columns removed. `genesis_sessions.user_id` is now UUID with FK to `users.id`; legacy `user_id` (Integer) and `user_id_str` dropped.
 - ✅ **RESOLVED (2026-03-22):** `CanonicalMetricDB.user_id` now uses UUID with FK to `users.id`. Legacy Integer column dropped.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `bridge_router.py` `node_type="generic"` defaults changed to `None` in `NodeCreateRequest` schema and `_NodeLike` inner class. `NodeResponse.node_type` updated to `Optional[str]`. ORM event validator crash eliminated.
