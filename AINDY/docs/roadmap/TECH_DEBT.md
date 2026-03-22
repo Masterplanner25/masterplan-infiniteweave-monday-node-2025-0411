@@ -124,6 +124,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Core routes/services now use `logger` instead of `print(...)` with structured error details.
 - ✅ **RESOLVED (2026-03-22):** Structured request logging added via middleware with per-request IDs and latency.
 - ✅ **RESOLVED (2026-03-22):** Request metrics persisted to `request_metrics` (basic baseline store).
+- ✅ **RESOLVED (2026-03-22):** Basic observability query endpoint added (`GET /observability/requests`).
 - No centralized tracing or log aggregation pipeline (beyond local logs + DB request metrics).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 

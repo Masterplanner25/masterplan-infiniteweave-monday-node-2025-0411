@@ -101,6 +101,7 @@ class ExecutionLoop:
             baseline = self._get_baseline_result(task)
             impact = self.metrics.compute_impact(baseline, result, context)
             avg_similarity = self.metrics.compute_relevance(context)
+            # Canonical persistence path for memory metrics.
             self.metrics_store.record(
                 user_id=user_id,
                 task_type=getattr(task, "type", None),

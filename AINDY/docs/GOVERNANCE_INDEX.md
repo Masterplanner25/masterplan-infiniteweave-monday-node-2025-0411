@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-03-22 (MasterPlan version cleanup)
+Last updated: 2026-03-22 (Observability query endpoint)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.

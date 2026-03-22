@@ -83,6 +83,12 @@ def health_check(db: Session = Depends(get_db)):
             "payload": {"text": "AI Search Optimization", "limit": 160},
             "requires_auth": True,
         },
+        "memory_metrics": {
+            "url": f"{base_url}/memory/metrics",
+            "method": "get",
+            "payload": None,
+            "requires_auth": True,
+        },
     }
 
     latencies = []
@@ -92,7 +98,11 @@ def health_check(db: Session = Depends(get_db)):
             if cfg.get("requires_auth") and not auth_headers:
                 status["api_endpoints"][name] = {"result": "skipped_auth"}
                 continue
-            r = requests.post(cfg["url"], json=cfg["payload"], headers=auth_headers, timeout=5)
+            method = cfg.get("method", "post").lower()
+            if method == "get":
+                r = requests.get(cfg["url"], headers=auth_headers, timeout=5)
+            else:
+                r = requests.post(cfg["url"], json=cfg["payload"], headers=auth_headers, timeout=5)
             elapsed = round((time.time() - start) * 1000, 2)
             latencies.append(elapsed)
             status["api_endpoints"][name] = {

@@ -1091,6 +1091,31 @@ Auth: JWT Bearer
 Response: `{ "context": str, "is_empty": bool, "message": str }`
 Status Codes: 200, 401.
 
+### Observability Routes (`AINDY/routes/observability_router.py`, prefix `/observability`) **[JWT auth required]**
+
+`GET /observability/requests`
+Method: GET
+Query Params:
+- `limit` (int, default 50, max 200)
+- `error_limit` (int, default 25, max 200)
+- `window_hours` (int, default 24, max 168)
+Response:
+```
+{
+  "summary": {
+    "total_requests": int,
+    "window_hours": int,
+    "window_requests": int,
+    "total_errors": int,
+    "window_errors": int,
+    "avg_latency_ms": float
+  },
+  "recent": [ { request_id, method, path, status_code, duration_ms, created_at } ],
+  "recent_errors": [ { request_id, method, path, status_code, duration_ms, created_at } ]
+}
+```
+Status Codes: 200, 401.
+
 ## 3. Genesis API Contract (Current Implementation — Genesis Blocks 1-3)
 - `POST /genesis/session` binds `user_id` (UUID) from JWT `sub`. All subsequent queries scoped to that user.
 - `POST /genesis/message` persists `synthesis_ready` as one-way flag (True → never False). `synthesis_ready` returned reflects DB value, not LLM flag.
