@@ -68,7 +68,7 @@ This document inventories current technical debt based strictly on the existing 
 - `AINDY/bridge/Bridgeimport.py` is a 12-line manual import test with no `if __name__ == "__main__"` guard; it runs immediately on import and has no pytest structure. Move to `tests/` as a proper pytest test or add the guard (`AINDY/bridge/Bridgeimport.py`).
 
 ## 4. Error Handling Debt
-- Error classification is inconsistent across routes (`AINDY/routes/*`).
+- ✅ **RESOLVED (2026-03-21):** Error classification consistency improved across core routes with structured `detail` payloads for 5xx failures.
 - ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).

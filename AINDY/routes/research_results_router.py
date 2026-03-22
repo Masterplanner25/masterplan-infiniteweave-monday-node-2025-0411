@@ -1,5 +1,5 @@
 # routers/research_results_router.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 import logging
 import time
 from sqlalchemy.orm import Session
@@ -24,9 +24,16 @@ def create_result(
     """
     Create and store a new research result owned by the current user.
     """
-    return research_results_service.create_research_result(
-        db, result, user_id=str(current_user["sub"])
-    )
+    try:
+        return research_results_service.create_research_result(
+            db, result, user_id=str(current_user["sub"])
+        )
+    except Exception as exc:
+        logger.warning("Research create failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "research_create_failed", "message": "Failed to create research result", "details": str(exc)},
+        )
 
 @router.get("/", response_model=list[ResearchResultResponse])
 def list_results(
@@ -36,9 +43,16 @@ def list_results(
     """
     Retrieve all research results belonging to the current user.
     """
-    return research_results_service.get_all_research_results(
-        db, user_id=str(current_user["sub"])
-    )
+    try:
+        return research_results_service.get_all_research_results(
+            db, user_id=str(current_user["sub"])
+        )
+    except Exception as exc:
+        logger.warning("Research list failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "research_list_failed", "message": "Failed to load research results", "details": str(exc)},
+        )
 
 @router.post("/query", response_model=ResearchResultResponse)
 def run_research_query(
@@ -98,13 +112,20 @@ def run_research_query(
         "source": source,
     })
 
-    result = research_results_service.create_research_result(
-        db,
-        ResearchResultCreate(query=request.query, summary=summary),
-        user_id=str(current_user["sub"]),
-        data=data,
-        source=source or "research_query",
-    )
+    try:
+        result = research_results_service.create_research_result(
+            db,
+            ResearchResultCreate(query=request.query, summary=summary),
+            user_id=str(current_user["sub"]),
+            data=data,
+            source=source or "research_query",
+        )
+    except Exception as exc:
+        logger.warning("Research query failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "research_query_failed", "message": "Research query failed", "details": str(exc)},
+        )
     search_score = None
     result_data = getattr(result, "data", None)
     if isinstance(result_data, dict):

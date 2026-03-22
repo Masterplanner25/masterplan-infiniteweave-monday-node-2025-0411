@@ -49,31 +49,59 @@ def upsert_profile(
     profiles = db["profiles"]
 
     user_id = str(current_user["sub"])
-    existing_any = profiles.find_one({"username": profile_data.username})
+    try:
+        existing_any = profiles.find_one({"username": profile_data.username})
+    except Exception as exc:
+        logger.warning("Profile lookup failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "profile_lookup_failed", "message": "Profile lookup failed", "details": str(exc)},
+        )
     if existing_any and existing_any.get("user_id") != user_id:
         raise HTTPException(
             status_code=403,
             detail="Cannot modify another user's profile",
         )
 
-    existing = profiles.find_one({
-        "username": profile_data.username,
-        "user_id": user_id,
-    })
+    try:
+        existing = profiles.find_one({
+            "username": profile_data.username,
+            "user_id": user_id,
+        })
+    except Exception as exc:
+        logger.warning("Profile lookup failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "profile_lookup_failed", "message": "Profile lookup failed", "details": str(exc)},
+        )
     
     if existing:
         update_data = profile_data.dict(exclude={"id", "joined_at"})
         update_data["updated_at"] = datetime.utcnow()
         update_data["user_id"] = user_id
-        profiles.update_one(
-            {"username": profile_data.username, "user_id": user_id},
-            {"$set": update_data},
-        )
+        try:
+            profiles.update_one(
+                {"username": profile_data.username, "user_id": user_id},
+                {"$set": update_data},
+            )
+        except Exception as exc:
+            logger.warning("Profile update failed: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "profile_update_failed", "message": "Profile update failed", "details": str(exc)},
+            )
         return {**existing, **update_data}
     else:
         new_profile = profile_data.dict()
         new_profile["user_id"] = user_id
-        profiles.insert_one(new_profile)
+        try:
+            profiles.insert_one(new_profile)
+        except Exception as exc:
+            logger.warning("Profile insert failed: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "profile_create_failed", "message": "Profile create failed", "details": str(exc)},
+            )
         return new_profile
 
 @router.get("/profile/{username}", response_model=SocialProfile)
@@ -81,7 +109,14 @@ def get_profile(username: str, db: Database = Depends(get_mongo_db)):
     """
     Fetch a public profile.
     """
-    profile = db["profiles"].find_one({"username": username})
+    try:
+        profile = db["profiles"].find_one({"username": username})
+    except Exception as exc:
+        logger.warning("Profile fetch failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "profile_fetch_failed", "message": "Profile fetch failed", "details": str(exc)},
+        )
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
@@ -100,9 +135,15 @@ def create_post(
     """
     posts = db["posts"]
     post_data = post.dict()
-    
-    # 1. Save to Social Layer (MongoDB)
-    posts.insert_one(post_data)
+    try:
+        # 1. Save to Social Layer (MongoDB)
+        posts.insert_one(post_data)
+    except Exception as exc:
+        logger.warning("Post insert failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "post_create_failed", "message": "Post create failed", "details": str(exc)},
+        )
     
     # 2. 🧠 Awaken the Memory Scribe (Bridge to AI Memory)
     try:
@@ -136,7 +177,14 @@ def get_feed(limit: int = 20, trust_filter: Optional[str] = None, db: Database =
     if trust_filter:
         query["trust_tier_required"] = trust_filter
 
-    cursor = posts_collection.find(query).sort("created_at", -1).limit(limit)
+    try:
+        cursor = posts_collection.find(query).sort("created_at", -1).limit(limit)
+    except Exception as exc:
+        logger.warning("Feed query failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "feed_load_failed", "message": "Feed load failed", "details": str(exc)},
+        )
     
     feed_items = []
     for post_doc in cursor:

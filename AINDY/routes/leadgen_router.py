@@ -9,7 +9,7 @@ lead discovery and scoring engine.
 import uuid
 import time
 import logging
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import leadgen_service
@@ -33,7 +33,14 @@ def generate_b2b_leads(
     Example: POST /leadgen?query=companies hiring AI consultants
     """
     start = time.perf_counter()
-    results = leadgen_service.create_lead_results(db, query, user_id=str(current_user["sub"]))
+    try:
+        results = leadgen_service.create_lead_results(db, query, user_id=str(current_user["sub"]))
+    except Exception as exc:
+        logger.warning("LeadGen failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "leadgen_failed", "message": "Lead generation failed", "details": str(exc)},
+        )
     formatted = [
         {
             "company": r.company,
@@ -63,9 +70,16 @@ def list_all_leads(
     """
     start = time.perf_counter()
     from db.models.leadgen_model import LeadGenResult
-    all_results = db.query(LeadGenResult).filter(
-        LeadGenResult.user_id == uuid.UUID(str(current_user["sub"]))
-    ).order_by(LeadGenResult.created_at.desc()).all()
+    try:
+        all_results = db.query(LeadGenResult).filter(
+            LeadGenResult.user_id == uuid.UUID(str(current_user["sub"]))
+        ).order_by(LeadGenResult.created_at.desc()).all()
+    except Exception as exc:
+        logger.warning("LeadGen list failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "leadgen_list_failed", "message": "Failed to load leads", "details": str(exc)},
+        )
     duration_ms = (time.perf_counter() - start) * 1000
     logger.info("LeadGen list returned %s results in %.2fms", len(all_results), duration_ms)
     return [
