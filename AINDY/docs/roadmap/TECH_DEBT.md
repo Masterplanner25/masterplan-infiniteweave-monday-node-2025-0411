@@ -59,7 +59,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 Sprint 4):** `services/memory_persistence.py::MemoryNodeDAO.save_memory_node()` fallback changed from `"generic"` to `None`. ORM event violation path removed.
 - ✅ **RESOLVED (2026-03-21):** `version.json` and `system_manifest.json` updated to `1.0.0` with current metadata.
 - ~~**`bridge/bridge.py::create_memory_node()` writes to the wrong table.**~~ ✅ **FIXED (2026-03-18 Memory Bridge Phase 1):** Fully rewritten to write `MemoryNodeModel` rows via `MemoryNodeDAO` (table: `memory_nodes`). New signature: `(content, source, tags, user_id, db, node_type)`. All three callers updated. Regression tests added and bug-documenting tests flipped.
-- Orphan `save_memory_node(self, memory_node)` defined at module level in `AINDY/services/memory_persistence.py:16`; takes `self` as first parameter but is not a method of any class. Would raise `TypeError` if called. The `MemoryNodeDAO.save_memory_node()` method below it handles persistence correctly; this function is dead code and should be removed.
+- ✅ **RESOLVED (2026-03-22):** Orphan `save_memory_node(self, memory_node)` removed from `AINDY/services/memory_persistence.py` (dead code).
 - ✅ **RESOLVED (2026-03-21):** `AINDY/version.json` and `AINDY/system_manifest.json` updated to `1.0.0`.
 
 ## 3. Testing Debt
@@ -277,7 +277,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Status: Open. Deferred to ARM Phase 3.
 
 ### §11.4 deepseek_arm_service.py is now a dead code path
-- **`services/deepseek_arm_service.py` is no longer called by `arm_router.py`.**
+- ✅ **RESOLVED (2026-03-22):** `services/deepseek_arm_service.py` moved to `legacy/deepseek_arm_service.py` (not referenced by `arm_router.py`).
   The ARM router was rewritten in Phase 1 to use `DeepSeekCodeAnalyzer` directly.
   The service file remains in place for backward compat but its functions
   (`run_analysis`, `generate_code`, `get_reasoning_logs`, `get_config`,
