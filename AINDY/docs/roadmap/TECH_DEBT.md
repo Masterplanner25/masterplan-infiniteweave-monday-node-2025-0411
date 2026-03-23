@@ -433,4 +433,24 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - ✅ **RESOLVED (prior sprint — confirmed 2026-03-22 audit):** Only one `analyze_seo()` definition remains in `routes/seo_routes.py`. The legacy duplicate was moved to `legacy/seo_routes_v1.py` which is not imported by any active router.
   - Location: `AINDY/routes/seo_routes.py`, `AINDY/legacy/seo_routes_v1.py`
 
+### §15.14 Memory Bridge, Identity Layer, Agent Registry had no frontend UI
+- ✅ **RESOLVED (2026-03-22 Make It Visible sprint):** `MemoryBrowser.jsx`, `IdentityDashboard.jsx`, and `AgentRegistry.jsx` created. All 3 routes added to `Sidebar.jsx` and `App.jsx`. 16 API functions added to `api.js`. 27 backend endpoint smoke tests added in `tests/test_memory_browser_ui.py`.
+
+### §15.15 Execution Loop Console — no frontend UI
+- **The memory execution loop (`runtime/execution_loop.py`, endpoints `/memory/execute*`) has no frontend surface.** Users cannot trigger, monitor, or inspect execution sessions from the UI.
+  - Location: `AINDY/runtime/execution_loop.py`, `AINDY/routes/memory_router.py`
+  - Fix: Build an `ExecutionConsole.jsx` component with session start/stop, step list, and live status polling.
+  - Status: Open.
+
+### §15.16 RippleTrace viewer — no frontend UI
+- **RippleTrace signal capture (`/memory/traces*`) has no frontend visualization.** Signals are written but never surfaced to users.
+  - Location: `AINDY/routes/memory_router.py` (`/memory/traces*`), `AINDY/db/dao/memory_node_dao.py` (MemoryTraceDAO)
+  - Fix: Build a `RippleTraceViewer.jsx` component with a signal timeline and trace-node graph.
+  - Status: Open.
+
+### §15.17 Observability dashboard — no frontend UI
+- **Request metrics (`/observability/requests*`) and memory metrics (`/memory/metrics*`) have no frontend dashboard.** System health data is only accessible via raw API or logs.
+  - Location: `AINDY/routes/memory_router.py`, `AINDY/routes/observability_router.py`
+  - Fix: Build an `ObservabilityDashboard.jsx` component with request latency, memory node counts, and coverage sparklines.
+  - Status: Open.
 

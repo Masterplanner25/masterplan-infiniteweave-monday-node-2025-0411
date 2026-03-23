@@ -10,6 +10,24 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Make It Visible UI Sprint — 2026-03-22
+
+### Added
+* **MemoryBrowser.jsx** — full React component surfacing Memory Bridge v4 recall, suggestions, agent filtering, per-node resonance bar, feedback (thumbs up/down with optimistic update), share toggle, and expandable detail panel (performance / history / traverse tabs). Route: `/memory`.
+* **IdentityDashboard.jsx** — 2×2 dimension grid (Communication, Tools, Decision Making, Learning) with inline edit modal, evolution timeline with observation count / change stats / arc badge / recent-changes log, and collapsible "how AINDY sees you" context preview. Route: `/identity`.
+* **AgentRegistry.jsx** — per-agent cards with memory stats, inline recall panel per agent, federated recall panel with namespace filter chips, active/inactive sections. Route: `/agents`.
+* **Sidebar.jsx** — new "Memory" section with items: 🧠 Memory Browser → `/memory`, 👤 Identity Profile → `/identity`, 🤖 Agent Federation → `/agents`.
+* **App.jsx** — imports and routes for all 3 new components.
+* **16 new API functions in `client/src/api.js`** — `getMemoryNodes`, `recallMemory`, `getMemorySuggestions`, `recordMemoryFeedback`, `getNodePerformance`, `traverseMemory`, `getNodeHistory`, `getFederatedRecall`, `shareMemoryNode`, `getIdentityProfile`, `updateIdentityProfile`, `getIdentityEvolution`, `getIdentityContext`, `getAgents`, `recallFromAgent`, `getFederatedMemory`.
+* **`tests/test_memory_browser_ui.py`** — 27 backend endpoint smoke tests across `TestMemoryBrowserEndpoints`, `TestIdentityDashboardEndpoints`, `TestAgentRegistryEndpoints`. Verifies auth enforcement, response shape, and 200-vs-404-vs-500 handling.
+
+### Results
+* Tests: 640 passed, 0 failed, 15 skipped (was: 613 passed)
+* Coverage: 69.76% (threshold: 69%)
+* Memory Bridge, Identity Layer, and Agent Federation now have frontend surfaces
+
+---
+
 ## Quick Wins Cleanup — 2026-03-22
 
 ### Fixed
