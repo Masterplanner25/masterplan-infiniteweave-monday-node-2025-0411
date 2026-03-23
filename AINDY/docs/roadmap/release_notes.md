@@ -1,4 +1,43 @@
-﻿## Release: Phase 7 — Contract + Test Coverage Hardening
+﻿## Release: Phase 8 — Data Integrity + Operational Hygiene
+
+- **Version/Tag:** `main` (commit `106f381`)
+- **Date:** 2026-03-22
+- **Owner:** Shawn Knight
+- **Designated maintainer:** Shawn Knight
+
+### Summary
+
+Phase 8 integrity and hygiene:
+- **Ownership UUID normalization:** `user_id` converted to UUID for `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings` with FKs to `users.id` (migration `2359cded7445`).
+- **Backfill verification:** `Tools/backfill_user_ids.py` dry-run shows no NULL `user_id` rows remaining in `tasks`, `leadgen_results`, `authors`.
+- **Dead code cleanup:** removed orphan `save_memory_node` helper; moved `deepseek_arm_service.py` to `legacy/`.
+- **Test hygiene:** duplicate `test_get_results` names in `test_routes.py` removed.
+- **Migration drift guard:** `tests/test_migrations.py` added to enforce `alembic current == alembic heads`.
+
+### Evidence Checklist
+
+- Tests executed: Not recorded in release note (see latest CI run)
+- `alembic current`: `2359cded7445`
+- `alembic heads`: `2359cded7445`
+
+### API Contract Updates
+
+- None (schema + test hygiene only).
+
+### Deployment Notes
+
+- **Environment:** No new environment variables required.
+- **Migration steps:** `alembic upgrade head` required to apply UUID normalization.
+
+### Sign-Off
+
+- **Approved by:** Shawn Knight
+- **Maintainer sign-off (Shawn Knight):** Pending
+- **Approval date:** 2026-03-22
+
+---
+
+## Release: Phase 7 — Contract + Test Coverage Hardening
 
 - **Version/Tag:** `main` (commit `1258c4e`)
 - **Date:** 2026-03-22
@@ -67,7 +106,7 @@ Phase 6 cleanup and observability hardening:
 
 - **Environment:** No new environment variables required.
 - **Migration steps:** `alembic upgrade head` required for schema cleanup.
-- **Known issues:** Legacy rows with `user_id = NULL` still require backfill execution (see `Tools/backfill_user_ids.py`).
+- **Known issues:** Legacy rows with `user_id = NULL` were checked via `Tools/backfill_user_ids.py` dry-run; none remain.
 
 ### Sign-Off
 
@@ -76,5 +115,6 @@ Phase 6 cleanup and observability hardening:
 - **Approval date:** 2026-03-22
 
 ---
+
 
 

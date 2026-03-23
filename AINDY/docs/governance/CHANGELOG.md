@@ -40,6 +40,8 @@ Changes that have been implemented but are not yet part of a tagged release.
 * Genesis sessions now bind `user_id` (UUID FK to users) and legacy `user_id`/`user_id_str` columns are removed
 * Legacy SEO endpoints removed; health ping list aligned to `/seo/*` and `/memory/metrics`
 * Benchmark similarity script guarded with `__main__` to prevent import-time execution
+* Ownership UUID normalization for `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings` (migration `2359cded7445`)
+* Migration drift guard added via `tests/test_migrations.py`
 
 ---
 

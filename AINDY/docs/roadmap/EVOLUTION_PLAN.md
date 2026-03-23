@@ -123,13 +123,30 @@ Exit criteria (policy-aligned):
 - Observability metrics can be queried without log scraping.
 - Health checks reflect active endpoints.
 
-## 6. Change Governance Rules
+## 7. Phase 8 – Data Integrity + Operational Hygiene
+Focus areas:
+- Normalize ownership columns to UUID with FK enforcement where feasible.
+- Remove dead code paths and legacy service stubs.
+- Close testing debt that can mask failures (duplicate names, migration drift guards).
+
+Execution checklist:
+1. `user_id` normalized to UUID for `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings` with FK constraints.
+2. Backfill script executed (dry-run) to confirm no orphaned user_id rows remain.
+3. Dead code removed or moved to `legacy/` (e.g., `deepseek_arm_service.py`).
+4. Root test duplicates removed and migration drift test added.
+
+Exit criteria (policy-aligned):
+- Ownership tables are enforceable at DB level.
+- No dead-path service code remains in core modules.
+- CI includes a migration drift guard.
+
+## 7. Change Governance Rules
 - No evolution phase may violate `docs/governance/INVARIANTS.md`.
 - No schema change without an Alembic migration.
 - No external integration without a mocking strategy and test coverage.
 - Major structural changes require proposal-first approval per `docs/governance/AGENT_WORKING_RULES.md`.
 
-## 7. Deferred Considerations
+## 8. Deferred Considerations
 The following are deferred unless explicitly prioritized:
 - Distributed job queue.
 - Auth layer redesign.
