@@ -22,3 +22,15 @@ class ExecutionRegistry:
 
 
 REGISTRY = ExecutionRegistry()
+
+
+# ── Flow Engine re-exports ────────────────────────────────────────────────────
+# NODE_REGISTRY and FLOW_REGISTRY are the canonical registries as of
+# Flow Engine Phase B. Exported here for backwards-compatibility.
+
+from services.flow_engine import (  # noqa: F401, E402
+    NODE_REGISTRY,
+    FLOW_REGISTRY,
+    register_node,
+    register_flow,
+)

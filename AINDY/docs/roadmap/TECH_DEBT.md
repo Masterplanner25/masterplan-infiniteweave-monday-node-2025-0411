@@ -3,8 +3,8 @@
 This document inventories current technical debt based strictly on the existing implementation. It does not propose redesigns or new systems.
 
 ## 1. Structural Debt
-- ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
-- Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
+- ✅ **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
+- ✅ **RESOLVED (Flow Engine Phase A):** Long-running loop variants in `task_services.py` replaced by APScheduler scheduled jobs.
 - ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
 - ✅ **RESOLVED (2026-03-22):** Gateway state durability now backed by `authors` table via `/network_bridge/authors`.
 -
@@ -274,7 +274,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   requires user to call `PUT /arm/config` manually. Phase 3 should optionally
   auto-apply low-risk suggestions after each session without user confirmation.
   - Location: `AINDY/services/arm_metrics_service.py`, `AINDY/routes/arm_router.py`
-  - Status: Open. Deferred to ARM Phase 3.
+  - Status: ✅ **PARTIALLY RESOLVED (2026-03-22 Flow Engine Phase B):** ARM workflow execution state now persists to DB via `FlowRun` (flow_runs table). Config state is checkpointed after each node — multi-instance config propagation via flow state. Auto-approve of low-risk suggestions in ARM Phase 3 remains open.
 
 ### §11.4 deepseek_arm_service.py is now a dead code path
 - ✅ **RESOLVED (2026-03-22):** `services/deepseek_arm_service.py` moved to `legacy/deepseek_arm_service.py` (not referenced by `arm_router.py`).
@@ -395,7 +395,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop is the core runtime for the memory execution system and is called by the `/memory/execute` and `/memory/execute/complete` endpoints. This is not a dev tool — untested production runtime code is a reliability risk.
   - Location: `AINDY/runtime/execution_loop.py`, `AINDY/runtime/execution_registry.py`
   - Fix: Add unit tests for the execution loop state machine and registry. Minimum: test state transitions, error handling, and session lifecycle.
-  - Status: Open. Medium priority.
+  - Status: ✅ **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` (PersistentFlowRunner) is the new canonical execution backbone, fully covered by `tests/test_flow_engine_phase_b.py` (62 tests). `runtime/execution_loop.py` and `runtime/execution_registry.py` now re-export from `flow_engine` for backward compatibility. Existing `ExecutionLoop` class and `REGISTRY` singleton preserved intact.
 
 ### §15.7 Coverage threshold floor is stale
 - ✅ **RESOLVED (2026-03-22 Quick Wins):** `--cov-fail-under` raised from 64 to 69 in `pytest.ini`. Actual coverage: 69.62%.
@@ -453,4 +453,41 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/routes/memory_router.py`, `AINDY/routes/observability_router.py`
   - Fix: Build an `ObservabilityDashboard.jsx` component with request latency, memory node counts, and coverage sparklines.
   - Status: Open.
+
+### §15.18 Flow Engine Phase B — Single File Engine integration
+- **Flow Engine Phase A replaces daemon threads with APScheduler. Phase B integrates the Nodus Single File Engine** — tasks defined in `.nodus` files should be parseable and executable by the scheduler via `run_task_now()`.
+  - Status: ✅ **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` is a clean rewrite of the Single File Engine (`Single File Engine.py`) prototype architecture. `PersistentFlowRunner`, `NODE_REGISTRY`, `FLOW_REGISTRY`, `route_event`, `select_strategy`, `record_outcome`, and `execute_intent` are all implemented and tested. DB-backed execution with WAIT/RESUME, per-node audit trail (flow_history), and adaptive strategy learning (strategies table). ARM analysis, task completion, and LeadGen search flows registered at startup.
+
+### §15.19 Flow Engine Phase C — Genesis → executable flow
+- **Genesis conversation and synthesis are not yet wired to the Flow Engine.** Genesis is a multi-turn, stateful workflow that would benefit from WAIT/RESUME (wait for user message, resume on response). Currently it is a direct LLM call in `genesis_ai.py` with no execution state in DB.
+  - Location: `AINDY/services/genesis_ai.py`, `AINDY/routes/genesis_router.py`
+  - Status: Open. Next sprint after Phase B.
+
+### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
+- **`flow_history` records every node execution with input/output patches but does not write to Memory Bridge.** High-signal flow completions (ARM analysis, LeadGen, task completion) should generate memory nodes from FlowHistory so execution patterns become retrievable context.
+  - Location: `AINDY/services/flow_engine.py` (PersistentFlowRunner.resume), `AINDY/services/memory_capture_engine.py`
+  - Status: Open. Planned after Phase C.
+
+### §15.19 Flow Engine Phase C — Genesis session → executable flow
+- **Genesis sessions produce markdown plans but no executable task graph.** Phase C wires Genesis output into the Flow Engine so a plan becomes a scheduled, auditable task sequence.
+  - Status: Open (after Phase B).
+
+### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
+- **AutomationLog is isolated from the Memory Bridge.** Phase D writes `AutomationLog` completion events into the Memory Bridge so task execution outcomes become searchable memories and inform ARM/Genesis context.
+  - Status: Open (after Phase C).
+
+### §15.21 Known remaining schema drift (intentional skips)
+Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9e2f1b8d3`. All items below are intentionally left alone.
+
+**DB indexes with no ORM declaration (DB has them, ORM doesn't — keep):**
+- `ix_automation_logs_source`, `ix_automation_logs_status`, `ix_automation_logs_user_id` — created by migration `37020d1c3951`, not declared as `Index()` on ORM model. Functionally correct, low-priority to add to ORM.
+- `ix_memory_nodes_embedding_hnsw` — HNSW pgvector cosine similarity index. **Must not be dropped.** Managed manually via migration `f3a4b5c6d7e8`. Autogenerate will always flag this as "removed" because pgvector HNSW is not introspectable by standard Alembic.
+- `ix_request_metrics_path_created_at` — composite index on `(path, created_at)`. Exists in DB, not declared in ORM. Keep.
+
+**DB constraints/FKs not in ORM (keep):**
+- `request_metrics_user_id_fkey` — FK from `request_metrics.user_id` → `users.id`. ORM model doesn't declare it (`user_id` is a plain UUID column with no ForeignKey). FK is valid; removing it would break referential integrity. Keep.
+- `background_task_leases_name_key` — implicit unique constraint on `name`. ORM uses `ix_background_task_leases_name` (unique index). Alembic sees this as a constraint rename. Deferred.
+
+**ORM declarations missing from DB (low-priority, non-critical):**
+- `ix_request_metrics_id` — ORM declares `index=True` on PK `id`. Primary key is always indexed by PostgreSQL; the named index is redundant. Deferred.
 

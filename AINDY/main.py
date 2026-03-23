@@ -17,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from services.rate_limiter import limiter
 from services import task_services
+from services import scheduler_service
 from db.database import SessionLocal
 try:
     from alembic.config import Config
@@ -98,7 +99,17 @@ async def lifespan(app: FastAPI):
     enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
     if os.getenv("PYTEST_CURRENT_TEST"):
         enable_background = False
+
+    # Start APScheduler before task_services — scheduler must be running
+    # before any startup tasks are submitted to it
+    if enable_background:
+        scheduler_service.start()
+
     task_services.start_background_tasks(enable=enable_background, log=logger)
+
+    # Register Flow Engine flows and nodes
+    from services.flow_definitions import register_all_flows
+    register_all_flows()
 
     # Seed system identity
     from db.models.author_model import AuthorDB
@@ -131,6 +142,7 @@ async def lifespan(app: FastAPI):
     yield
     # --- Shutdown ---
     task_services.stop_background_tasks(log=logger)
+    scheduler_service.stop()
 
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)

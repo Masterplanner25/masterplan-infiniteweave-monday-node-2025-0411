@@ -22,6 +22,8 @@ from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
 from .bridge_user_event import BridgeUserEvent
 from .background_task_lease import BackgroundTaskLease
+from .automation_log import AutomationLog
+from .flow_run import FlowRun, FlowHistory, EventOutcome, Strategy
 
 
 __all__ = [
@@ -52,4 +54,9 @@ __all__ = [
     "MemoryTraceNode",
     "BridgeUserEvent",
     "BackgroundTaskLease",
+    "AutomationLog",
+    "FlowRun",
+    "FlowHistory",
+    "EventOutcome",
+    "Strategy",
 ]

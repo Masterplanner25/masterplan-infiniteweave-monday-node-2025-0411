@@ -63,7 +63,7 @@ class UserIdentity(Base):
     learning_notes = Column(Text, nullable=True)
 
     # Evolution
-    observation_count = Column(Integer, default=0)
+    observation_count = Column(Integer, nullable=False, default=0)
     last_updated = Column(DateTime(timezone=True), nullable=True)
     evolution_log = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

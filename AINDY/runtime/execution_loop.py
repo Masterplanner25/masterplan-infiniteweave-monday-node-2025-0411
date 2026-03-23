@@ -168,3 +168,16 @@ class ExecutionLoop:
         if hasattr(task, "metadata") and isinstance(task.metadata, dict):
             return task.metadata.get("baseline_result")
         return None
+
+
+# ── Flow Engine re-exports ────────────────────────────────────────────────────
+# PersistentFlowRunner and related symbols are the canonical execution backbone
+# as of Flow Engine Phase B. Exported here for backwards-compatibility.
+
+from services.flow_engine import (  # noqa: F401, E402
+    PersistentFlowRunner,
+    execute_intent,
+    register_node,
+    register_flow,
+    route_event,
+)
