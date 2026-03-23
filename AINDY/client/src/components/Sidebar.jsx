@@ -117,10 +117,10 @@ export default function Sidebar() {
         </NavSection>
 
         {/* SECTION: ARM */}
-        <NavSection 
-          title="ARM Module" 
-          icon="🧠" 
-          isOpen={openSection === "ARM"} 
+        <NavSection
+          title="ARM Module"
+          icon="🧠"
+          isOpen={openSection === "ARM"}
           toggle={() => toggleSection("ARM")}
           isAnyChildActive={isActive("/arm")}
         >
@@ -128,6 +128,19 @@ export default function Sidebar() {
           <SubNavItem to="/arm/generate" active={isActive("/arm/generate")}>Generate</SubNavItem>
           <SubNavItem to="/arm/logs" active={isActive("/arm/logs")}>System Logs</SubNavItem>
           <SubNavItem to="/arm/config" active={isActive("/arm/config")}>Config</SubNavItem>
+        </NavSection>
+
+        {/* SECTION: MEMORY */}
+        <NavSection
+          title="Memory"
+          icon="💾"
+          isOpen={openSection === "Memory"}
+          toggle={() => toggleSection("Memory")}
+          isAnyChildActive={isActive("/memory") || isActive("/identity") || isActive("/agents")}
+        >
+          <SubNavItem to="/memory" active={isActive("/memory")}>🧠 Memory Browser</SubNavItem>
+          <SubNavItem to="/identity" active={isActive("/identity")}>👤 Identity Profile</SubNavItem>
+          <SubNavItem to="/agents" active={isActive("/agents")}>🤖 Agent Federation</SubNavItem>
         </NavSection>
       </nav>
       

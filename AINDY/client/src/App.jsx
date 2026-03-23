@@ -27,6 +27,11 @@ import ARMConfig from "./components/ARMConfig";
 import ProfileView from "./components/ProfileView";
 import Feed from "./components/Feed";
 
+// Memory Layer
+import MemoryBrowser from "./components/MemoryBrowser";
+import IdentityDashboard from "./components/IdentityDashboard";
+import AgentRegistry from "./components/AgentRegistry";
+
 import "./App.css";
 
 export default function App() {
@@ -83,6 +88,11 @@ export default function App() {
               <Route path="/network/feed" element={<Feed />} />
               <Route path="/social/profile/:username?" element={<ProfileView />} />
               
+              {/* Memory Layer */}
+              <Route path="/memory" element={<MemoryBrowser />} />
+              <Route path="/identity" element={<IdentityDashboard />} />
+              <Route path="/agents" element={<AgentRegistry />} />
+
               {/* Catch-all Redirect */}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
