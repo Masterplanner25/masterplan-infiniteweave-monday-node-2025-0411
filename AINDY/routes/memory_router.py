@@ -577,7 +577,7 @@ async def list_agents(
     from services.memory_persistence import MemoryNodeModel
 
     agents = db.query(Agent).filter(
-        Agent.is_active == True
+        Agent.is_active.is_(True)
     ).all()
 
     result = []
@@ -590,7 +590,7 @@ async def list_agents(
         shared_count = db.query(MemoryNodeModel).filter(
             MemoryNodeModel.source_agent == agent.memory_namespace,
             MemoryNodeModel.user_id == str(current_user["sub"]),
-            MemoryNodeModel.is_shared == True,
+            MemoryNodeModel.is_shared.is_(True),
         ).count()
 
         result.append({
@@ -829,9 +829,13 @@ async def execute_nodus_task(
     )
 
     try:
+        import os
         import sys
 
-        nodus_path = r"C:\dev\Coding Language\src"
+        nodus_path = os.environ.get(
+            "NODUS_SOURCE_PATH",
+            r"C:\dev\Coding Language\src",  # local dev fallback
+        )
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
 

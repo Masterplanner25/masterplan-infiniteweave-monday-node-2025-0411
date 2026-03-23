@@ -10,6 +10,26 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Quick Wins Cleanup — 2026-03-22
+
+### Fixed
+* **Tests (Fix 1):** Deleted 3 stale orphan-documentation tests that were asserting a bug that was correctly fixed (`test_orphan_save_memory_node_exists_at_module_level`, `test_orphan_save_memory_node_causes_type_error_if_called`, `test_memory_node_body_has_incomplete_logic`). Result: 3 fewer test failures.
+* **Tests (Fix 2):** `test_migrations.py` — replaced `python -m alembic` subprocess call (fails due to local `alembic/` package shadowing the installed one) with direct `alembic` CLI call. Test now skips gracefully in unit-test environments where the DB is unavailable rather than failing.
+* **Identity Service (Fix 3):** `IdentityService.get_evolution_summary()` now returns a consistent shape for both new and existing users. New-user early-return now includes `total_changes`, `dimensions_evolved`, `most_changed_dimension`, `recent_changes`, `evolution_arc` keys (with zero/empty values) matching the existing-user return shape.
+* **Tests (Fix 4):** `test_identity_profile_shape` updated to assert the real `GET /identity/` response shape (`communication`, `tools`, `decision_making`, `learning` keys) instead of a non-existent top-level `profile` key. Result: 2 fewer test failures.
+* **Lint (Fix 5):** All 6 ruff violations resolved — 4 E712 (SQLAlchemy `== True` → `.is_(True)` in filter expressions across `routes/main_router.py` and `routes/memory_router.py`) and 2 F405 (`settings` added as explicit import in `main.py` to fix star-import shadowing). Result: 0 ruff violations.
+* **Architecture (Fix 6):** Hardcoded Windows path `r"C:\dev\Coding Language\src"` in `routes/memory_router.py::execute_nodus_task()` replaced with `os.environ.get("NODUS_SOURCE_PATH", ...)`. `NODUS_SOURCE_PATH` added to `.env.example`.
+* **CI (Fix 8):** Coverage threshold raised from 64% to 69% in `pytest.ini` to close the 5.6-point gap between floor and actual baseline (69.62%).
+* **Config (Fix 9):** `PERMISSION_SECRET` given a default empty string in `config.py` — the HMAC path it protected was removed in Sprint 6; requiring deployment to set a meaningless secret caused friction.
+
+### Blocked
+* **Fix 7 (bridge_router DAO import):** Could not be completed as a simple import swap. The legacy `MemoryNodeDAO` in `services/memory_persistence.py` exposes `load_memory_node()` which the canonical DAO in `db/dao/memory_node_dao.py` does not implement. Swapping the import breaks `POST /bridge/link`. Requires DAO interface alignment (separate sprint item).
+
+### Results
+* Tests: 613 passed, 0 failed, 15 skipped (was: 611 passed, 6 failed, 14 skipped)
+* Lint: 0 violations (was: 6)
+* Coverage: 69.62% (threshold raised to 69%)
+
 ## Added
 
 * Initial system documentation structure
