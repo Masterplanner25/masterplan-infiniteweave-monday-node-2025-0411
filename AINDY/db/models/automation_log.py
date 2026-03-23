@@ -26,8 +26,8 @@ class AutomationLog(Base):
     payload = Column(JSON, nullable=True)
     status = Column(String, nullable=False, default="pending")
     # Values: "pending" | "running" | "success" | "failed" | "retrying"
-    attempt_count = Column(Integer, default=0)
-    max_attempts = Column(Integer, default=3)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    max_attempts = Column(Integer, nullable=False, default=3)
     error_message = Column(Text, nullable=True)
     user_id = Column(String, nullable=True)  # Nullable — system jobs have no user context
     result = Column(JSON, nullable=True)

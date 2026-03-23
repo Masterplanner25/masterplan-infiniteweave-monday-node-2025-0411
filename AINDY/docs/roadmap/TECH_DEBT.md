@@ -466,3 +466,18 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - **AutomationLog is isolated from the Memory Bridge.** Phase D writes `AutomationLog` completion events into the Memory Bridge so task execution outcomes become searchable memories and inform ARM/Genesis context.
   - Status: Open (after Phase C).
 
+### §15.21 Known remaining schema drift (intentional skips)
+Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9e2f1b8d3`. All items below are intentionally left alone.
+
+**DB indexes with no ORM declaration (DB has them, ORM doesn't — keep):**
+- `ix_automation_logs_source`, `ix_automation_logs_status`, `ix_automation_logs_user_id` — created by migration `37020d1c3951`, not declared as `Index()` on ORM model. Functionally correct, low-priority to add to ORM.
+- `ix_memory_nodes_embedding_hnsw` — HNSW pgvector cosine similarity index. **Must not be dropped.** Managed manually via migration `f3a4b5c6d7e8`. Autogenerate will always flag this as "removed" because pgvector HNSW is not introspectable by standard Alembic.
+- `ix_request_metrics_path_created_at` — composite index on `(path, created_at)`. Exists in DB, not declared in ORM. Keep.
+
+**DB constraints/FKs not in ORM (keep):**
+- `request_metrics_user_id_fkey` — FK from `request_metrics.user_id` → `users.id`. ORM model doesn't declare it (`user_id` is a plain UUID column with no ForeignKey). FK is valid; removing it would break referential integrity. Keep.
+- `background_task_leases_name_key` — implicit unique constraint on `name`. ORM uses `ix_background_task_leases_name` (unique index). Alembic sees this as a constraint rename. Deferred.
+
+**ORM declarations missing from DB (low-priority, non-critical):**
+- `ix_request_metrics_id` — ORM declares `index=True` on PK `id`. Primary key is always indexed by PostgreSQL; the named index is redundant. Deferred.
+

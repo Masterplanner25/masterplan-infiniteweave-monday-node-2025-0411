@@ -10,6 +10,33 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Migration Policy — Schema Sync (Additive) — 2026-03-22
+
+### Changed
+* **ORM models** — aligned `nullable=False` with DB reality:
+  - `automation_log.py`: `attempt_count`, `max_attempts` now `nullable=False`
+  - `user_identity.py`: `observation_count` now `nullable=False`
+  - `agent.py`: `is_active` now `nullable=False`
+* **Migration `a4c9e2f1b8d3`** — additive-only schema sync applied. Adds 3 missing indexes and 1 unique constraint:
+  - `ix_master_plans_user_id` (master_plans.user_id)
+  - `uq_memory_links_unique` (memory_links: source+target+type, unique)
+  - `ix_memory_metrics_id` (memory_metrics.id)
+  - `uq_user_identity_user` (user_identity.user_id, unique)
+* Deleted dangerous draft `fdfbc1dce688` (would have dropped HNSW vector index + request_metrics FK).
+
+### Skipped (documented in TECH_DEBT.md §15)
+* `ix_memory_nodes_embedding_hnsw` — HNSW pgvector index, managed manually, must not be dropped
+* `request_metrics_user_id_fkey` — intentional FK, kept
+* `ix_request_metrics_path_created_at` — composite index, kept
+* `background_task_leases` constraint rename — risky, deferred
+
+### Results
+* `alembic current == alembic heads == a4c9e2f1b8d3` ✅
+* Tests: 690 passed, 0 failed, 3 skipped
+* Coverage: 69.08% (threshold: 69%)
+
+---
+
 ## Flow Engine Phase A — APScheduler + tenacity replaces daemon threads — 2026-03-22
 
 ### Added
