@@ -23,6 +23,7 @@ from routes.memory_metrics_router import router as memory_metrics_router
 from routes.memory_trace_router import router as memory_trace_router
 from routes.identity_router import router as identity_router
 from routes.observability_router import router as observability_router
+from routes.automation_router import router as automation_router
 
 
 ROUTERS = [
@@ -51,6 +52,7 @@ ROUTERS = [
     memory_trace_router,
     identity_router,
     observability_router,
+    automation_router,
 ]
 
 

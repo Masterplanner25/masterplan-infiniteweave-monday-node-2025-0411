@@ -10,6 +10,29 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Flow Engine Phase A — APScheduler + tenacity replaces daemon threads — 2026-03-22
+
+### Added
+* **`services/scheduler_service.py`** — APScheduler `BackgroundScheduler` wrapper with tenacity retry, `AutomationLog` audit trail, task registry (`@register_task`), `run_task_now()` / `replay_task()` / `get_scheduler()`, and 3 system jobs on startup: `task_reminder_check` (1 min), `cleanup_stale_logs` (1 hr), `task_recurrence_check` (every 6 hrs via cron).
+* **`db/models/automation_log.py`** — `AutomationLog` ORM model with 14 columns covering source, status, attempt tracking, user scoping, payload, result, and timestamps.
+* **Migration `37020d1c3951`** — `automation_logs` table + 3 indexes. Applied.
+* **`routes/automation_router.py`** — `GET /automation/logs`, `GET /automation/logs/{id}`, `POST /automation/logs/{id}/replay`, `GET /automation/scheduler/status`.
+* **`tests/test_flow_engine_phase_a.py`** — 38 tests across scheduler service, lifecycle, model, endpoints, and daemon-thread elimination assertions.
+
+### Changed
+* **`services/task_services.py`** — All 3 `daemon=True` threads eliminated. `start_background_tasks()` now acquires inter-instance DB lease only; recurring jobs moved to `scheduler_service`. `threading` module import removed entirely.
+* **`main.py`** — `scheduler_service.start()` before `start_background_tasks()` in lifespan; `scheduler_service.stop()` in shutdown.
+
+### Tech Debt Closed
+* §partially-resolved "Background tasks supervised via daemon threads" → **FULLY RESOLVED**: 0 daemon threads, APScheduler running, tenacity retry, `AutomationLog` audit trail + replay.
+
+### Results
+* Tests: 690 passed, 0 failed, 3 skipped (was: 652)
+* Coverage: 69.08% (threshold: 69%)
+* daemon=True occurrences in task_services.py: 0
+
+---
+
 ## Make It Visible UI Sprint — 2026-03-22
 
 ### Added

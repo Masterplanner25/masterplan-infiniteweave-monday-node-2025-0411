@@ -3,8 +3,8 @@
 This document inventories current technical debt based strictly on the existing implementation. It does not propose redesigns or new systems.
 
 ## 1. Structural Debt
-- ✅ **PARTIALLY RESOLVED (2026-03-21):** Background tasks are now supervised and gated via `task_services.start_background_tasks()` with start/stop control. Still uses daemon threads (no external scheduler).
-- Long-running loop variants exist in `AINDY/services/task_services.py` but are not managed by a job system.
+- ✅ **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
+- ✅ **RESOLVED (Flow Engine Phase A):** Long-running loop variants in `task_services.py` replaced by APScheduler scheduled jobs.
 - ✅ **RESOLVED (2026-03-22):** Gateway (`AINDY/server.js`) now reads persisted authors via `/network_bridge/authors` (no in-memory user array).
 - ✅ **RESOLVED (2026-03-22):** Gateway state durability now backed by `authors` table via `/network_bridge/authors`.
 -
@@ -453,4 +453,16 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/routes/memory_router.py`, `AINDY/routes/observability_router.py`
   - Fix: Build an `ObservabilityDashboard.jsx` component with request latency, memory node counts, and coverage sparklines.
   - Status: Open.
+
+### §15.18 Flow Engine Phase B — Single File Engine integration
+- **Flow Engine Phase A replaces daemon threads with APScheduler. Phase B integrates the Nodus Single File Engine** — tasks defined in `.nodus` files should be parseable and executable by the scheduler via `run_task_now()`.
+  - Status: Open (next sprint after Phase A).
+
+### §15.19 Flow Engine Phase C — Genesis session → executable flow
+- **Genesis sessions produce markdown plans but no executable task graph.** Phase C wires Genesis output into the Flow Engine so a plan becomes a scheduled, auditable task sequence.
+  - Status: Open (after Phase B).
+
+### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
+- **AutomationLog is isolated from the Memory Bridge.** Phase D writes `AutomationLog` completion events into the Memory Bridge so task execution outcomes become searchable memories and inform ARM/Genesis context.
+  - Status: Open (after Phase C).
 

@@ -1,7 +1,6 @@
 # /services/task_services.py
 import time
 import uuid
-import threading
 import logging
 import os
 import socket
@@ -15,10 +14,7 @@ from db.mongo_setup import get_mongo_client
 
 logger = logging.getLogger(__name__)
 
-_BACKGROUND_LOCK = threading.Lock()
-_BACKGROUND_STARTED = False
-_BACKGROUND_STOP_EVENT = None
-_BACKGROUND_THREADS: list[threading.Thread] = []
+# Lease constants kept for _acquire/_release helpers used during startup
 _BACKGROUND_LEASE_NAME = "task_background_runner"
 _BACKGROUND_OWNER_ID = None
 _BACKGROUND_LEASE_TTL_SECONDS = 120
@@ -130,14 +126,6 @@ def _release_background_lease(log: logging.Logger | None = None) -> None:
         db.close()
 
 
-def _run_lease_heartbeat(stop_event: threading.Event, log: logging.Logger | None = None):
-    log = log or logger
-    while not stop_event.is_set():
-        if not _refresh_background_lease(log=log):
-            log.warning("Stopping background tasks due to lost lease.")
-            stop_event.set()
-            return
-        stop_event.wait(_BACKGROUND_LEASE_TTL_SECONDS / 3)
 
 # ----------------------------
 # Core CRUD Task Management
@@ -337,12 +325,6 @@ def _check_reminders_once(log: logging.Logger | None = None):
         db.close()
 
 
-def _run_check_reminders(stop_event: threading.Event, log: logging.Logger | None = None):
-    log = log or logger
-    while not stop_event.is_set():
-        _check_reminders_once(log=log)
-        stop_event.wait(60)
-
 def _handle_recurrence_once(log: logging.Logger | None = None):
     log = log or logger
     db = SessionLocal()
@@ -355,13 +337,6 @@ def _handle_recurrence_once(log: logging.Logger | None = None):
         db.close()
 
 
-def _run_handle_recurrence(stop_event: threading.Event, log: logging.Logger | None = None):
-    log = log or logger
-    while not stop_event.is_set():
-        _handle_recurrence_once(log=log)
-        stop_event.wait(60)
-
-
 def check_reminders():
     _check_reminders_once()
 
@@ -370,60 +345,34 @@ def handle_recurrence():
     _handle_recurrence_once()
 
 
-def start_background_tasks(enable: bool = True, log: logging.Logger | None = None):
+def start_background_tasks(enable: bool = True, log: logging.Logger | None = None) -> None:
+    """
+    Called from main.py lifespan on startup.
+
+    APScheduler (started separately in main.py lifespan via
+    scheduler_service.start()) now handles all recurring jobs.
+    This function acquires the inter-instance DB lease so that only one
+    process runs background jobs in multi-instance deployments, then logs
+    that the scheduler is active. Daemon threads have been eliminated.
+    """
     log = log or logger
     if not enable:
         log.info("Background task runner disabled by configuration.")
-        return None
+        return
 
-    global _BACKGROUND_STARTED, _BACKGROUND_STOP_EVENT, _BACKGROUND_THREADS
-    with _BACKGROUND_LOCK:
-        if _BACKGROUND_STARTED:
-            log.info("Background task runner already started.")
-            return _BACKGROUND_STOP_EVENT
-        if not _acquire_background_lease(log=log):
-            log.warning("Background task runner not started (lease unavailable).")
-            return None
-        _BACKGROUND_STARTED = True
-        _BACKGROUND_STOP_EVENT = threading.Event()
-        _BACKGROUND_THREADS = [
-            threading.Thread(
-                target=_run_lease_heartbeat,
-                args=(_BACKGROUND_STOP_EVENT, log),
-                daemon=True,
-                name="task_lease_heartbeat",
-            ),
-            threading.Thread(
-                target=_run_handle_recurrence,
-                args=(_BACKGROUND_STOP_EVENT, log),
-                daemon=True,
-                name="task_recurrence",
-            ),
-            threading.Thread(
-                target=_run_check_reminders,
-                args=(_BACKGROUND_STOP_EVENT, log),
-                daemon=True,
-                name="task_reminders",
-            ),
-        ]
-        for thread in _BACKGROUND_THREADS:
-            thread.start()
-        log.info("Background task runner started (%s threads).", len(_BACKGROUND_THREADS))
-        return _BACKGROUND_STOP_EVENT
+    if not _acquire_background_lease(log=log):
+        log.warning("Background task runner not started (lease unavailable — another instance holds it).")
+        return
+
+    log.info("Background tasks initialized via APScheduler (daemon threads eliminated).")
 
 
-def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.0):
+def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.0) -> None:
+    """
+    Called from main.py lifespan on shutdown.
+    Releases the inter-instance DB lease.
+    APScheduler is shut down separately via scheduler_service.stop().
+    """
     log = log or logger
-    global _BACKGROUND_STARTED, _BACKGROUND_STOP_EVENT, _BACKGROUND_THREADS
-    with _BACKGROUND_LOCK:
-        if not _BACKGROUND_STARTED:
-            return
-        if _BACKGROUND_STOP_EVENT:
-            _BACKGROUND_STOP_EVENT.set()
-        for thread in _BACKGROUND_THREADS:
-            thread.join(timeout=timeout)
-        _BACKGROUND_THREADS = []
-        _BACKGROUND_STOP_EVENT = None
-        _BACKGROUND_STARTED = False
-        _release_background_lease(log=log)
-        log.info("Background task runner stopped.")
+    _release_background_lease(log=log)
+    log.info("Background task lease released.")
