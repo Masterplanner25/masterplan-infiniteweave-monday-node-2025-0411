@@ -1,3 +1,51 @@
+## [Unreleased] — feature/memory-bridge-v4
+
+### Added (2026-03-23 - Flow Engine Phase C + D)
+
+**Phase C — Genesis → executable flow with WAIT states**
+
+- `services/flow_definitions.py` — 3 new genesis nodes:
+  - `genesis_validate_session`: validates session_id in state before tracking
+  - `genesis_record_exchange`: WAIT/RESUME tracking node; no LLM call — router
+    handles that; returns WAIT when synthesis not ready, SUCCESS when ready
+  - `genesis_store_synthesis`: writes synthesis completion to Memory Bridge
+    (non-fatal, returns SUCCESS even on exception)
+- `services/flow_definitions.py` — `genesis_conversation` flow registered at startup:
+  - `genesis_validate_session → genesis_record_exchange → genesis_store_synthesis`
+  - Conditional edge: advances to `genesis_store_synthesis` when `synthesis_ready=True`
+  - WAIT/RESUME: pauses at `genesis_record_exchange` between user messages; resumes
+    via `route_event("genesis_user_message", ...)` on next message
+- `routes/genesis_router.py` — fire-and-forget Phase C block in `genesis_message()`:
+  - First message: starts a `genesis_conversation` FlowRun, stores `_genesis_flow_run_id`
+    in `session.summarized_state`
+  - Subsequent messages: routes `genesis_user_message` event to resume waiting run
+  - Entire block is non-fatal (wrapped in `try/except`) — existing behaviour unchanged
+- `tests/test_flow_engine_phase_c_d.py` — 38 tests covering Phase C + D
+
+**Phase D — FlowHistory → Memory Bridge**
+
+- `services/flow_engine.py` — `PersistentFlowRunner._capture_flow_completion()`:
+  - Called automatically when a flow run reaches SUCCESS
+  - Queries `FlowHistory` for the run, builds an execution pattern summary
+    (node names, timing, success rate)
+  - Writes summary to Memory Bridge via `MemoryCaptureEngine`
+  - Maps `workflow_type` to significance event type:
+    `arm_analysis` → `arm_analysis_complete`, `task_completion` → `task_completed`,
+    `leadgen_search` → `leadgen_search`, `genesis_conversation` → `genesis_synthesized`,
+    unknown → `flow_completion`
+  - Skipped when `user_id` or `workflow_type` is `None` (system flows)
+  - Non-fatal: storage failures do not crash the run
+- `services/memory_capture_engine.py` — `"flow_completion": 0.5` added to
+  `EVENT_SIGNIFICANCE` for unknown workflow type fallback
+
+**Tech Debt Closed:**
+- §15.19 Flow Engine Phase C: Genesis → executable flow with WAIT states
+- §15.20 Flow Engine Phase D: FlowHistory → Memory Bridge
+
+**Tests:** 790 passing, 0 failing, 69.22% coverage (was 752 / 69.16%)
+
+---
+
 ## [Unreleased] — feature/flow-engine-phase-b
 
 ### Added (2026-03-22 - Flow Engine Phase B: PersistentFlowRunner Execution Backbone)

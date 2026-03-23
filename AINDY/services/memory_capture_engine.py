@@ -37,6 +37,7 @@ EVENT_SIGNIFICANCE = {
     "leadgen_search": 0.4,
     "error_encountered": 0.8,  # errors = learning
     "insight_detected": 0.7,
+    "flow_completion": 0.5,  # Phase D: flow execution patterns
 }
 
 
