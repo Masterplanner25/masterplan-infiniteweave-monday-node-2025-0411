@@ -1,3 +1,50 @@
+## [Unreleased] — feature/flow-engine-phase-b
+
+### Added (2026-03-22 - Flow Engine Phase B: PersistentFlowRunner Execution Backbone)
+
+- `services/flow_engine.py` — clean rewrite of Single File Engine prototype architecture:
+  - `PersistentFlowRunner`: stateful flow execution with DB checkpointing after each node
+  - `NODE_REGISTRY` + `@register_node` decorator: global node function registry
+  - `FLOW_REGISTRY` + `register_flow()`: named flow graph registry
+  - `execute_node`: policy enforcement + attempt tracking + execution timing
+  - `resolve_next_node`: simple and conditional edge resolution
+  - `route_event`: WAIT/RESUME — resume waiting flow runs on external event arrival
+  - `record_outcome`: EventOutcome DB writes for strategy learning
+  - `select_strategy` / `update_strategy_score`: adaptive flow selection (score: min 0.1, max 2.0)
+  - `execute_intent`: top-level entry point — intent → strategy or generated plan → flow → runner
+- `services/flow_definitions.py` — A.I.N.D.Y. workflow flow graphs:
+  - ARM analysis flow: `arm_validate_input → arm_analyze_code → arm_store_result`
+  - Task completion flow: `task_validate → task_complete → task_store_outcome`
+  - LeadGen search flow: `leadgen_validate → leadgen_search → leadgen_store`
+  - `register_all_flows()` called at startup from `main.py` lifespan
+- `db/models/flow_run.py` — 4 new SQLAlchemy ORM models: `FlowRun`, `FlowHistory`, `EventOutcome`, `Strategy`
+- `alembic/versions/b5d4e3f2c1a0_flow_engine_phase_b_tables.py` — migration: `flow_runs`, `flow_history`, `event_outcomes`, `strategies` tables
+- `routes/flow_router.py` — 5 new endpoints:
+  - `GET /flows/runs` — list flow runs for current user (filterable by status, workflow_type)
+  - `GET /flows/runs/{run_id}` — run detail with full state
+  - `GET /flows/runs/{run_id}/history` — per-node execution audit trail
+  - `POST /flows/runs/{run_id}/resume` — resume a WAIT-state run with an event payload
+  - `GET /flows/registry` — inspect registered flows and nodes
+- `tests/test_flow_engine_phase_b.py` — 62 new tests across 7 test classes
+
+### Changed (2026-03-22 - Flow Engine Phase B)
+
+- `runtime/execution_loop.py` — added `PersistentFlowRunner`, `execute_intent`, `register_node`, `register_flow`, `route_event` re-exports from `services/flow_engine`. Existing `ExecutionLoop` class preserved.
+- `runtime/execution_registry.py` — added `NODE_REGISTRY`, `FLOW_REGISTRY`, `register_node`, `register_flow` re-exports from `services/flow_engine`. Existing `REGISTRY` singleton preserved.
+- `db/models/__init__.py` — exports `FlowRun`, `FlowHistory`, `EventOutcome`, `Strategy`
+- `routes/__init__.py` — registers `flow_router`
+- `main.py` — calls `register_all_flows()` at startup lifespan
+
+### Tech Debt Closed
+
+- §15.18: Single File Engine integration — implemented as `services/flow_engine.py`
+- §15.6: Runtime execution loop 0% coverage — flow_engine.py is fully tested; runtime files re-export for compat
+- §11.6: ARM config process-local — FlowRun persists workflow execution state to DB per checkpoint
+
+### Test Count: 752 passing, 0 failing | Coverage: 69.16%
+
+---
+
 ## [Unreleased] ? feature/cpp-semantic-engine
 
 ### Added (2026-03-20 - Security Sprint)

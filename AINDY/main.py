@@ -107,6 +107,10 @@ async def lifespan(app: FastAPI):
 
     task_services.start_background_tasks(enable=enable_background, log=logger)
 
+    # Register Flow Engine flows and nodes
+    from services.flow_definitions import register_all_flows
+    register_all_flows()
+
     # Seed system identity
     from db.models.author_model import AuthorDB
     from datetime import datetime

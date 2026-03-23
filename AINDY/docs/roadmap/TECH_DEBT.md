@@ -274,7 +274,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   requires user to call `PUT /arm/config` manually. Phase 3 should optionally
   auto-apply low-risk suggestions after each session without user confirmation.
   - Location: `AINDY/services/arm_metrics_service.py`, `AINDY/routes/arm_router.py`
-  - Status: Open. Deferred to ARM Phase 3.
+  - Status: ✅ **PARTIALLY RESOLVED (2026-03-22 Flow Engine Phase B):** ARM workflow execution state now persists to DB via `FlowRun` (flow_runs table). Config state is checkpointed after each node — multi-instance config propagation via flow state. Auto-approve of low-risk suggestions in ARM Phase 3 remains open.
 
 ### §11.4 deepseek_arm_service.py is now a dead code path
 - ✅ **RESOLVED (2026-03-22):** `services/deepseek_arm_service.py` moved to `legacy/deepseek_arm_service.py` (not referenced by `arm_router.py`).
@@ -395,7 +395,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop is the core runtime for the memory execution system and is called by the `/memory/execute` and `/memory/execute/complete` endpoints. This is not a dev tool — untested production runtime code is a reliability risk.
   - Location: `AINDY/runtime/execution_loop.py`, `AINDY/runtime/execution_registry.py`
   - Fix: Add unit tests for the execution loop state machine and registry. Minimum: test state transitions, error handling, and session lifecycle.
-  - Status: Open. Medium priority.
+  - Status: ✅ **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` (PersistentFlowRunner) is the new canonical execution backbone, fully covered by `tests/test_flow_engine_phase_b.py` (62 tests). `runtime/execution_loop.py` and `runtime/execution_registry.py` now re-export from `flow_engine` for backward compatibility. Existing `ExecutionLoop` class and `REGISTRY` singleton preserved intact.
 
 ### §15.7 Coverage threshold floor is stale
 - ✅ **RESOLVED (2026-03-22 Quick Wins):** `--cov-fail-under` raised from 64 to 69 in `pytest.ini`. Actual coverage: 69.62%.
@@ -456,7 +456,17 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 
 ### §15.18 Flow Engine Phase B — Single File Engine integration
 - **Flow Engine Phase A replaces daemon threads with APScheduler. Phase B integrates the Nodus Single File Engine** — tasks defined in `.nodus` files should be parseable and executable by the scheduler via `run_task_now()`.
-  - Status: Open (next sprint after Phase A).
+  - Status: ✅ **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` is a clean rewrite of the Single File Engine (`Single File Engine.py`) prototype architecture. `PersistentFlowRunner`, `NODE_REGISTRY`, `FLOW_REGISTRY`, `route_event`, `select_strategy`, `record_outcome`, and `execute_intent` are all implemented and tested. DB-backed execution with WAIT/RESUME, per-node audit trail (flow_history), and adaptive strategy learning (strategies table). ARM analysis, task completion, and LeadGen search flows registered at startup.
+
+### §15.19 Flow Engine Phase C — Genesis → executable flow
+- **Genesis conversation and synthesis are not yet wired to the Flow Engine.** Genesis is a multi-turn, stateful workflow that would benefit from WAIT/RESUME (wait for user message, resume on response). Currently it is a direct LLM call in `genesis_ai.py` with no execution state in DB.
+  - Location: `AINDY/services/genesis_ai.py`, `AINDY/routes/genesis_router.py`
+  - Status: Open. Next sprint after Phase B.
+
+### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
+- **`flow_history` records every node execution with input/output patches but does not write to Memory Bridge.** High-signal flow completions (ARM analysis, LeadGen, task completion) should generate memory nodes from FlowHistory so execution patterns become retrievable context.
+  - Location: `AINDY/services/flow_engine.py` (PersistentFlowRunner.resume), `AINDY/services/memory_capture_engine.py`
+  - Status: Open. Planned after Phase C.
 
 ### §15.19 Flow Engine Phase C — Genesis session → executable flow
 - **Genesis sessions produce markdown plans but no executable task graph.** Phase C wires Genesis output into the Flow Engine so a plan becomes a scheduled, auditable task sequence.
