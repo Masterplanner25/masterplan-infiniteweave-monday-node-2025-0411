@@ -79,11 +79,11 @@ async def process_task(
     # 2️⃣ Fetch master plans
     user_id = str(current_user["sub"])
     active_plan = db.query(MasterPlan).filter(
-        MasterPlan.is_active == True,
+        MasterPlan.is_active.is_(True),
         MasterPlan.user_id == user_id,
     ).first()
     origin_plan = db.query(MasterPlan).filter(
-        MasterPlan.is_origin == True,
+        MasterPlan.is_origin.is_(True),
         MasterPlan.user_id == user_id,
     ).first()
 

@@ -156,35 +156,6 @@ class TestMemoryNodeDAO:
         from services.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel.__tablename__ == "memory_links"
 
-    def test_orphan_save_memory_node_exists_at_module_level(self):
-        """
-        BUG DOCUMENTED: An orphan save_memory_node() function exists at module level
-        in services/memory_persistence.py with `self` as first parameter,
-        but it is NOT a method of any class.
-
-        If called, it would raise TypeError because 'self' is treated as a positional arg.
-        This test confirms the function exists as module-level dead code.
-        """
-        import services.memory_persistence as mp
-        # The orphan function exists at module level
-        assert hasattr(mp, "save_memory_node"), (
-            "Orphan save_memory_node function no longer at module level — "
-            "verify it was properly removed or refactored"
-        )
-
-        # Confirm it is NOT a method of MemoryNodeDAO (it's a standalone function)
-        import inspect
-        func = mp.save_memory_node
-        assert inspect.isfunction(func), "save_memory_node should be a bare function, not a method"
-
-        # Confirm calling it directly (without a class instance) reveals the self bug
-        # We don't call it because it would try to DB write — just check the signature
-        sig = inspect.signature(func)
-        params = list(sig.parameters.keys())
-        assert params[0] == "self", (
-            f"Expected first param to be 'self' (orphan bug), got: {params[0]}"
-        )
-
     def test_dao_save_memory_node_mock(self):
         """MemoryNodeDAO.save_memory_node correctly uses memory_nodes table."""
         from services.memory_persistence import MemoryNodeDAO, MemoryNodeModel

@@ -51,6 +51,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Ownership tables with `user_id` stored as `String` (`research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings`) normalized to UUID with FKs to `users.id` (migration `2359cded7445`).
 - ✅ **RESOLVED (2026-03-22):** Legacy rows in `tasks`, `leadgen_results`, and `authors` were checked with `Tools/backfill_user_ids.py` (dry-run) and no NULL `user_id` rows remain.
 - ✅ **RESOLVED (2026-03-21):** `tasks.user_id` added (nullable) with user-scoped routing in `task_router.py` and user_id enforcement in `task_services.py`. Existing legacy rows without `user_id` no longer appear in user-scoped queries.
+- ✅ **RESOLVED (2026-03-22):** Stale TODO comment at `task_router.py:20` ("Scope task to current_user when user_id is added to Task model") — `user_id` is present on the model and all task routes are already scoped. Comment removed.
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added (nullable) with user-scoped routing in `leadgen_router.py`. New writes require `user_id` and are filtered per user.
 - ✅ **RESOLVED (2026-03-22):** `MasterPlan.version` removed; `version_label` is now the only version field (migration `c4f2a9d1e7b3`).
 - ✅ **RESOLVED (2026-03-22):** `GenesisSessionDB` dual user columns removed. `genesis_sessions.user_id` is now UUID with FK to `users.id`; legacy `user_id` (Integer) and `user_id_str` dropped.
@@ -197,7 +198,6 @@ The following items were identified during a structured architectural review of 
   - Mechanism: Schema defines `strength VARCHAR(20) DEFAULT 'medium'`. No numeric weight column exists.
   - Impact: Graph traversal scoring is blocked. Relationship strength carries no computational meaning in the current schema.
   - Status: ✅ **RESOLVED (2026-03-21):** `weight FLOAT` added to `memory_links` via migration `e2c3d4f5a6b7`; traversal now prefers numeric `weight` with legacy `strength` fallback.
-  - Status: Open. Fix: add `weight FLOAT NOT NULL DEFAULT 0.5` column to `memory_links`; deprecate `strength` string in a subsequent migration.
 
 ### §10.5 Retrieval — semantic retrieval is architecturally impossible in current state
 
@@ -364,5 +364,73 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - ✅ **RESOLVED (2026-03-21):** Health check endpoint mismatch fixed (`/seo/*` pings aligned).
 - Duplicate `POST /create_masterplan` definition: `AINDY/routes/main_router.py:236`
 - Note: Line numbers are approximate and may shift as files change; re-verify during audits.
+
+---
+
+## 15. Full System Audit — 2026-03-22 — Newly Found Issues
+
+### §15.1 Stale orphan-documentation tests (3 failing)
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** 3 stale documentation tests deleted. `save_memory_node()` was correctly removed; tests that asserted its existence were deleted.
+  - Location: `AINDY/tests/test_memory_bridge.py`, `AINDY/tests/test_models.py`
+
+### §15.2 Alembic CLI test broken by entry-point mismatch
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** `test_migrations.py` rewritten. Root cause: local `AINDY/alembic/` directory has `__init__.py` which shadows the installed alembic package when using `python -m alembic`. Fix: use `shutil.which("alembic")` to find the console-script entry point and call it directly. Test skips gracefully if DB is unavailable (test environment) rather than failing.
+  - Location: `AINDY/tests/test_migrations.py`
+
+### §15.3 Identity route tests failing — shape mismatch + monkeypatch scope
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** Two fixes applied: (1) `get_evolution_summary()` new-user early-return normalized to include all keys (`total_changes`, `dimensions_evolved`, `most_changed_dimension`, `recent_changes`, `evolution_arc`) with zero/empty values — both code paths now return the same shape. (2) `test_identity_profile_shape` updated to assert real response keys (`communication`, `tools`, `decision_making`, `learning`) instead of non-existent `profile` key.
+  - Location: `AINDY/services/identity_service.py`, `AINDY/tests/test_routes_identity.py`
+
+### §15.4 Hardcoded Windows absolute path in production route
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** Replaced hardcoded `r"C:\dev\Coding Language\src"` with `os.environ.get("NODUS_SOURCE_PATH", ...)`. `NODUS_SOURCE_PATH` documented in `.env.example`. The old path remains as a local dev fallback.
+  - Location: `AINDY/routes/memory_router.py`, `AINDY/.env.example`
+
+### §15.5 Dual DAO implementations for memory_nodes table
+- **`services/memory_persistence.py::MemoryNodeDAO` and `db/dao/memory_node_dao.py::MemoryNodeDAO` are two separate implementations** for the same `memory_nodes` table. `bridge_router.py` imports from the legacy path (`services.memory_persistence`). The two DAOs have incompatible interfaces: the legacy DAO exposes `load_memory_node()` which `bridge_router.py` uses for link creation; the canonical DAO does not implement this method. A simple import swap breaks `POST /bridge/link`.
+  - Location: `AINDY/services/memory_persistence.py`, `AINDY/db/dao/memory_node_dao.py`, `AINDY/routes/bridge_router.py:13`
+  - Fix: Add `load_memory_node()` (or equivalent `get_by_id()`) to canonical DAO, then update `bridge_router.py` import. This is a medium-effort refactor, not a quick win.
+  - Status: Open (blocked — DAO interface mismatch; attempted and reverted in Quick Wins sprint 2026-03-22).
+
+### §15.6 Runtime execution loop has 0% test coverage
+- **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop is the core runtime for the memory execution system and is called by the `/memory/execute` and `/memory/execute/complete` endpoints. This is not a dev tool — untested production runtime code is a reliability risk.
+  - Location: `AINDY/runtime/execution_loop.py`, `AINDY/runtime/execution_registry.py`
+  - Fix: Add unit tests for the execution loop state machine and registry. Minimum: test state transitions, error handling, and session lifecycle.
+  - Status: Open. Medium priority.
+
+### §15.7 Coverage threshold floor is stale
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** `--cov-fail-under` raised from 64 to 69 in `pytest.ini`. Actual coverage: 69.62%.
+  - Location: `AINDY/pytest.ini`
+
+### §15.8 `SECRET_KEY` has insecure hardcoded default
+- **`config.py` declares `SECRET_KEY: str = "dev-secret-change-in-production"`** — if `.env` is missing or incomplete, JWT signing silently uses this well-known placeholder. An attacker who knows the default can forge valid JWT tokens.
+  - Location: `AINDY/config.py`
+  - Fix: Remove the default entirely (make it required like `DATABASE_URL`), or add a startup check that rejects the default value in non-test environments.
+  - Status: Open. Medium severity.
+
+### §15.9 `PERMISSION_SECRET` is required config for a removed feature
+- ✅ **RESOLVED (2026-03-22 Quick Wins):** `PERMISSION_SECRET` given default empty string in `config.py`. Still referenced by `conftest.py` and `test_security.py` so cannot be removed, but deployments no longer need to set it.
+  - Location: `AINDY/config.py`
+
+### §15.10 `get_evolution_summary()` has incompatible return shapes for new vs existing users
+- **`IdentityService.get_evolution_summary()` returns two incompatible dict shapes.** New users (no evolution log) get `{message, observation_count, changes}`. Existing users get `{observation_count, total_changes, dimensions_evolved, most_changed_dimension, recent_changes, evolution_arc}`. Frontend components rendering this response must handle both shapes or will crash on one code path.
+  - Location: `AINDY/services/identity_service.py` (early-return path at ~line 359-365)
+  - Fix: Normalize the new-user early-return to include all keys with zero/empty values.
+  - Status: Open. Quick win (5 min).
+
+### §15.11 MongoDB credentials not enforced by config
+- **`pymongo==4.16.0` is in `requirements.txt` and `db/mongo_setup.py` exists**, but no MongoDB connection string is validated in `config.py`. If MongoDB is unavailable, errors are silent or late-binding. `task_services.py` calls MongoDB for profile updates — a failed connection would silently drop profile state.
+  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`, `AINDY/services/task_services.py`
+  - Fix: Add `MONGO_URI` to `config.py` with a clear optional-with-warning behavior; add startup connectivity check if Mongo is required.
+  - Status: Open. Low priority until MongoDB becomes load-bearing.
+
+### §15.12 cpython-314 pycache present alongside cpython-311
+- **`modules/deepseek/__pycache__/` contains both cpython-311 and cpython-314 compiled bytecode.** This indicates the project has been executed under Python 3.14 (pre-release as of 2026-03). Mixed pycache creates confusion about which Python version is authoritative and may cause subtle import resolution issues.
+  - Location: `AINDY/modules/deepseek/__pycache__/`
+  - Fix: Run `find . -name '__pycache__' -type d -exec rm -rf {} +` to clear all pycache; ensure CI and dev environments standardize on Python 3.11.
+  - Status: Open. Low priority.
+
+### §15.13 `routes/seo_routes.py` defines `analyze_seo()` twice
+- ✅ **RESOLVED (prior sprint — confirmed 2026-03-22 audit):** Only one `analyze_seo()` definition remains in `routes/seo_routes.py`. The legacy duplicate was moved to `legacy/seo_routes_v1.py` which is not imported by any active router.
+  - Location: `AINDY/routes/seo_routes.py`, `AINDY/legacy/seo_routes_v1.py`
 
 

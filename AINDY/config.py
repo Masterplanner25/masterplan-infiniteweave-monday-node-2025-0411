@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # --- Core runtime variables ---
     ENV: str = "development"
     DATABASE_URL: str
-    PERMISSION_SECRET: str
+    PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
     OPENAI_API_KEY: str
     DEEPSEEK_API_KEY: str | None = None
 

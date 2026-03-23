@@ -27,6 +27,7 @@ except Exception:
     ScriptDirectory = None
     MigrationContext = None
 from routes import ROUTERS
+from config import settings
 from db.models.metrics_models import *
 from db.models.request_metric import RequestMetric
 

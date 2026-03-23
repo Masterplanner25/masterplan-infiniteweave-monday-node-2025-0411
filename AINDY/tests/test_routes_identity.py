@@ -41,7 +41,11 @@ class TestIdentityRoutes:
         )
         payload = response.json()
         assert "user_id" in payload, f"Missing user_id in response: {payload}"
-        assert "profile" in payload, f"Missing profile in response: {payload}"
+        # Real response shape has 4 identity dimensions (no top-level 'profile' key)
+        assert "communication" in payload, f"Missing communication in response: {payload}"
+        assert "tools" in payload, f"Missing tools in response: {payload}"
+        assert "decision_making" in payload, f"Missing decision_making in response: {payload}"
+        assert "learning" in payload, f"Missing learning in response: {payload}"
 
     def test_identity_context_shape(self, client, auth_headers, monkeypatch):
         monkeypatch.setattr(identity_service, "IdentityService", StubIdentityService)

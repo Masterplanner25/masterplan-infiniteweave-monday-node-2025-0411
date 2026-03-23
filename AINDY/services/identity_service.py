@@ -362,6 +362,14 @@ class IdentityService:
                     "A.I.N.D.Y."
                 ),
                 "observation_count": 0,
+                "total_changes": 0,
+                "dimensions_evolved": [],
+                "most_changed_dimension": None,
+                "recent_changes": [],
+                "evolution_arc": (
+                    "No observations yet. Use A.I.N.D.Y. features to build "
+                    "your identity profile."
+                ),
                 "changes": [],
             }
 
