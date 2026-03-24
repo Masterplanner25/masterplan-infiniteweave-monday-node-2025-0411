@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, String, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, DateTime, Text, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from db.database import Base
 
@@ -14,6 +14,9 @@ class DropPointDB(Base):
     tagged_entities = Column(Text)
     intent = Column(String)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    narrative_score = Column(Float, nullable=True)
+    velocity_score = Column(Float, nullable=True)
+    spread_score = Column(Float, nullable=True)
 
 
 class PingDB(Base):
@@ -27,3 +30,5 @@ class PingDB(Base):
     external_url = Column(String, nullable=True)
     reaction_notes = Column(Text, nullable=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    strength = Column(Float, default=1.0, nullable=False)
+    connection_type = Column(String, default="direct", nullable=False)

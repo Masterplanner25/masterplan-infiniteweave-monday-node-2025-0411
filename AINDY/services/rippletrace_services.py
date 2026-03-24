@@ -1,8 +1,14 @@
 # /services/rippletrace_services.py
-from sqlalchemy.orm import Session
-from db.models import DropPointDB, PingDB
+import logging
 from datetime import datetime
+
 import uuid
+from sqlalchemy.orm import Session
+
+from db.models import DropPointDB, PingDB
+from services.threadweaver import analyze_drop_point, classify_connection_type
+
+logger = logging.getLogger(__name__)
 
 def add_drop_point(db: Session, dp, user_id: str = None):
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
@@ -24,6 +30,10 @@ def add_drop_point(db: Session, dp, user_id: str = None):
 
 def add_ping(db: Session, pg, user_id: str = None):
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
+    strength = getattr(pg, "strength", None)
+    connection_type = classify_connection_type(pg.connection_summary)
+    if strength is None:
+        strength = 1.0
     db_pg = PingDB(
         id=pg.id,
         drop_point_id=pg.drop_point_id,
@@ -34,10 +44,16 @@ def add_ping(db: Session, pg, user_id: str = None):
         external_url=pg.external_url,
         reaction_notes=pg.reaction_notes,
         user_id=user_uuid,
+        strength=strength,
+        connection_type=connection_type,
     )
     db.add(db_pg)
     db.flush()
     db.refresh(db_pg)
+    try:
+        analyze_drop_point(pg.drop_point_id, db)
+    except Exception as exc:
+        logger.warning("ThreadWeaver analysis failed for ping %s: %s", pg.id, exc)
     return db_pg
 
 def get_ripples(db: Session, drop_point_id: str, user_id: str = None):
@@ -89,6 +105,7 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
 
     # Create Ping record safely
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
+    connection_type = classify_connection_type(event.get("summary", ""))
     new_pg = PingDB(
         id=event.get("id") or f"ripple-{datetime.utcnow().timestamp()}",
         drop_point_id=drop_id,
@@ -99,11 +116,17 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
         external_url=event.get("url", ""),
         reaction_notes=event.get("notes", ""),
         user_id=user_uuid,
+        connection_type=connection_type,
+        strength=1.0,
     )
 
     db.add(new_pg)
     db.flush()
     db.refresh(new_pg)
+    try:
+        analyze_drop_point(drop_id, db)
+    except Exception as exc:
+        logger.warning("ThreadWeaver analysis failed for event ping %s: %s", new_pg.id, exc)
     return new_pg
 
 

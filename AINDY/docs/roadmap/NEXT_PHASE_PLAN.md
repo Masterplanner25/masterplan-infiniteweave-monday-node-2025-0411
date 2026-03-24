@@ -110,9 +110,9 @@ Items that are documented in roadmap files but have no implementation.
 | Agentics Phase 3 — Nodus integration (deterministic execution) | AGENTICS.md | Phase 3 |
 | Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 |
 | Agentics Phase 5 — agent_runs/agent_steps observability | AGENTICS.md | Phase 5 |
-| RippleTrace Pattern Engine (ThreadWeaver) | RIPPLETRACE.md | Phase v2 |
-| RippleTrace Graph Layer (Visibility Map) | RIPPLETRACE.md | Phase v3 |
-| RippleTrace Insight Engine (Proofboard) | RIPPLETRACE.md | Phase v4 |
+| RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
+| RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
+| RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
 | Freelancing: AI generation pipeline for delivery | FREELANCING_SYSTEM.md | Phase v2 |
 | Freelancing: execution speed + income efficiency metrics | FREELANCING_SYSTEM.md | Phase v2 |
 | Freelancing: automation connectors (delivery/payment) | FREELANCING_SYSTEM.md | Phase v4 |
@@ -171,7 +171,7 @@ Sorted by (Impact × Risk) / Effort descending.
 │ Agentics Phase 1 — Minimal runtime          │   5    │   4    │  3   │ Memory ✅, JWT ✅          │  3.75  │
 │ Nodus integration (Agentics Phase 3)        │   5    │   5    │  3   │ Agentics Phase 1-2         │  3.00  │
 │ §15.5 — Dual DAO consolidation              │   2    │   2    │  3   │ None                       │  3.00  │
-│ RippleTrace Pattern Engine (ThreadWeaver)   │   3    │   3    │  2   │ DropPoint/Ping ✅          │  2.00  │
+│ ThreadWeaver v1–v3 (Delta + Prediction + Narrative) │   3    │   3    │  2   │ DropPoint/Ping ✅          │  2.00  │
 │ Masterplan dependency cascade model         │   3    │   3    │  2   │ Masterplan anchor          │  2.00  │
 │ Search System unified pipeline              │   3    │   4    │  2   │ SEO/LeadGen/Research ✅    │  1.50  │
 │ Observability Dashboard UI                  │   3    │   2    │  1   │ Observability endpoints ✅ │  1.50  │
@@ -244,7 +244,7 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 - Approval gate: `POST /agent/runs/{id}/approve` for high-risk plans; risk scoring via `risk_level` in plan schema
 - New routes: `POST /agent/runs`, `GET /agent/runs`, `POST /agent/runs/{id}/approve`, `GET /agent/runs/{id}`
 - Frontend: `AgentConsole.jsx` — goal input, plan preview, approve/execute, step timeline
-- RippleTrace Pattern Engine (ThreadWeaver): detect time-to-response patterns and semantic echoes across Ping sequences; new service `services/rippletrace_pattern_service.py`
+- ThreadWeaver v1–v3: detects time-to-response patterns, deltas, predictions, and narratives across Ping sequences; service `services.threadweaver.py` is fully implemented.
 - Frontend: `RippleTraceViewer.jsx` — signal timeline, ripple chain visualization (§15.16)
 - Frontend: `ObservabilityDashboard.jsx` — request latency, memory node counts, flow run counts (§15.17)
 

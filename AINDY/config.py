@@ -9,6 +9,7 @@ Usage:
 
 from pathlib import Path
 import logging
+import os
 from datetime import datetime, timezone
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
@@ -57,6 +58,13 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL")
     @classmethod
     def ensure_postgres(cls, v: str) -> str:
+        allow_sqlite = os.getenv("AINDY_ALLOW_SQLITE", "0").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if allow_sqlite:
+            return v
         if not v.startswith("postgres"):
             raise ValueError("DATABASE_URL must be a valid PostgreSQL URI")
         return v

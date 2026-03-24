@@ -141,7 +141,7 @@ Captures:
 
 ---
 
-### 4.3 Retrieval Layer
+### 4.3 Retrieval Layer (Operational)
 
 **Implementation:**
 
@@ -149,43 +149,53 @@ Captures:
 * `/rippletrace/drop_points`
 * `/rippletrace/pings`
 * `/rippletrace/recent`
+* `/dashboard`
+* `/proofboard`
 
 Returns:
 
 * all ripple signals for a given DropPoint
+* aggregated impact metrics
+* scoring, prediction and recommendation snapshots
 
 ---
 
-### 4.4 Pattern Engine — ThreadWeaver (NOT IMPLEMENTED)
+### 4.4 Pattern Engine — ThreadWeaver (Implemented v1–v3)
 
-Intended:
+ThreadWeaver is live and chained across the stack:
 
-* connect signals
-* detect patterns
-* generate narrative summaries
+* ThreadWeaver v1 computes velocity, spread, and narrative heuristics for each DropPoint.
+* v2 builds deltas, momentum signals, cliques, and predicted trajectories.
+* v3 (Narrative Engine) stitches causal chains, inflection points, timelines, and interpretations.
 
----
+Outputs:
 
-### 4.5 Graph Layer — Visibility Map (NOT IMPLEMENTED)
-
-Intended:
-
-* visualize ripple spread
-* map connection strength
-* show propagation over time
+* computed scores on each DropPoint
+* `/analyze_ripple`, `/ripple_deltas`, `/predict`, `/narrative`
 
 ---
 
-### 4.6 Dashboard — Proofboard (NOT IMPLEMENTED)
+### 4.5 Graph Layer — Visibility Map (Implemented)
 
-Intended:
+The Graph Layer exposes:
 
-* summarize influence
-* quantify invisible impact
-* export insights
+* `/influence_graph`, `/influence_chain` (semantic + entity linkage)
+* `/causal_graph`, `/causal_chain` (directional influence)
+* Frontend `GraphView` tab rendering the D3-powered visualization with influence/causal toggles, zoom, and drop-down details.
 
 ---
 
+### 4.6 Dashboard — Proofboard (Operational)
+
+Proofboard now surfaces:
+
+* `/dashboard` overview with momentum leaders, predicted spike candidates, declining drops, and recommendation summaries.
+* New Graph tab for live relationship intelligence.
+* `/top_drop_points` and supporting endpoints for connection tracing.
+
+The Proofboard is the core insight surface for RippleTrace.
+
+---
 ### 4.7 Event Ingest — Symbolic Ripple Log
 
 **Implementation:**
@@ -244,16 +254,19 @@ Used by:
 * Ping storage
 * Retrieval APIs (ripples, drop points, pings, recent)
 * Symbolic ripple event logging
+* ThreadWeaver scoring + narrative (v1–v3)
+* Delta Engine, Prediction Engine, Recommendation Engine
+* Influence Graph + Causal Engine with Graph UI tab
+* Proofboard dashboard with momentum leaders, graph insights, and Graph tab
+* Learning Engine, Strategy Engine, Playbook Engine, Content Generator Engine
+* Narrative, strategy, and recommendation summaries
 
 ---
 
-### Missing
+### In Progress
 
-* Pattern detection (ThreadWeaver)
-* Graph visualization
-* Narrative engine
-* Influence scoring
-* Silent signal inference
+* Autonomous execution orchestration (A.I.N.D.Y.) integrating playbooks, content generation, and scheduling hooks
+* SaaS / multi-tenant foundation with API-keyed automation and per-account analytics
 
 ---
 
@@ -406,3 +419,24 @@ RippleTrace does not measure engagement.
 It reveals:
 
 > How ideas propagate and create influence—even when no one explicitly tells you they did.
+
+## 13. Autonomous Execution Layer (A.I.N.D.Y.)
+
+A.I.N.D.Y. orchestrates strategy → playbook → execution:
+
+* Playbooks generated from strategy patterns can be executed automatically via scheduling hooks or manual triggers.
+* Content Generator drafts structured posts aligned to playbooks and platform formats, closing the loop between signal discovery and creative action.
+* System-triggered actions (recommended amplifications, follow-ups, or archival moves) are surfaced in dashboards or actions queues.
+
+This layer is the natural extension for Proofboard insights, handing control to execution orchestration while keeping humans in the loop.
+
+## 14. SaaS / Multi-user Architecture
+
+RippleTrace serves teams via a SaaS-ready foundation:
+
+* Users are scoped by authenticated accounts, each backed by API keys and tokens.
+* Data separation keeps DropPoints, snapshots, and learning records isolated per tenant/organization.
+* Strategy learning runs per organization, capturing contextual thresholds and success patterns.
+* Organization-level analytics summarize multi-author influence, trending playbooks, and recommendation adoption.
+
+The infrastructure is now ready for multi-tenant pipelines, billing hooks, and hosted deployment models.
