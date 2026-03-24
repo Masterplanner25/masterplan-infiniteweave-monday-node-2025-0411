@@ -254,6 +254,17 @@ export function activateMasterPlan(planId) {
   return authRequest(`/masterplans/${planId}/activate`, { method: "POST" });
 }
 
+export function setMasterplanAnchor(planId, anchorData) {
+  return authRequest(`/masterplans/${planId}/anchor`, {
+    method: "PUT",
+    body: JSON.stringify(anchorData),
+  });
+}
+
+export function getMasterplanProjection(planId) {
+  return authRequest(`/masterplans/${planId}/projection`, { method: "GET" });
+}
+
 /* --- Dashboard Endpoints --- */
 export function getDashboardOverview() {
   return authRequest("/dashboard/overview", { method: "GET" });

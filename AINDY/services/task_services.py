@@ -301,6 +301,21 @@ def complete_task(db: Session, name: str, user_id: str = None):
     except Exception as e:
         logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", e)
 
+    # Recalculate ETA for active masterplan (fire-and-forget)
+    if user_id:
+        try:
+            from services.eta_service import calculate_eta
+            from db.models.masterplan import MasterPlan
+            active_plan = (
+                db.query(MasterPlan)
+                .filter(MasterPlan.user_id == str(user_id), MasterPlan.is_active.is_(True))
+                .first()
+            )
+            if active_plan and active_plan.anchor_date:
+                calculate_eta(db=db, masterplan_id=active_plan.id, user_id=str(user_id))
+        except Exception:
+            pass
+
     return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
 
 # ----------------------------

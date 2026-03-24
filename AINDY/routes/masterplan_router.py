@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import MasterPlan
@@ -6,6 +7,7 @@ from services.auth_service import get_current_user
 from services.masterplan_factory import create_masterplan_from_genesis
 from services.posture import posture_description
 from datetime import datetime
+from typing import Optional
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
 
@@ -147,6 +149,89 @@ def get_masterplan(
         "activated_at": plan.activated_at,
         "linked_genesis_session_id": plan.linked_genesis_session_id,
     }
+
+
+class AnchorRequest(BaseModel):
+    anchor_date: Optional[str] = None      # ISO date string e.g. "2027-01-01"
+    goal_value: Optional[float] = None
+    goal_unit: Optional[str] = None
+    goal_description: Optional[str] = None
+
+
+@router.put("/{plan_id}/anchor")
+def set_masterplan_anchor(
+    plan_id: int,
+    body: AnchorRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Set or update the anchor (user-declared milestone) on a masterplan."""
+    user_id_str = str(current_user["sub"])
+    plan = (
+        db.query(MasterPlan)
+        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
+        .first()
+    )
+    if not plan:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
+
+    if body.anchor_date is not None:
+        try:
+            plan.anchor_date = datetime.fromisoformat(body.anchor_date)
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "invalid_anchor_date", "message": "anchor_date must be ISO format (YYYY-MM-DD)"},
+            )
+    if body.goal_value is not None:
+        plan.goal_value = body.goal_value
+    if body.goal_unit is not None:
+        plan.goal_unit = body.goal_unit
+    if body.goal_description is not None:
+        plan.goal_description = body.goal_description
+
+    db.commit()
+
+    return {
+        "plan_id": plan.id,
+        "anchor_date": plan.anchor_date.isoformat() if plan.anchor_date else None,
+        "goal_value": plan.goal_value,
+        "goal_unit": plan.goal_unit,
+        "goal_description": plan.goal_description,
+    }
+
+
+@router.get("/{plan_id}/projection")
+def get_masterplan_projection(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Compute (or return cached) ETA projection for a masterplan."""
+    user_id_str = str(current_user["sub"])
+    plan = (
+        db.query(MasterPlan)
+        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
+        .first()
+    )
+    if not plan:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "masterplan_not_found", "message": "Plan not found"},
+        )
+
+    from services.eta_service import calculate_eta
+    try:
+        result = calculate_eta(db=db, masterplan_id=plan_id, user_id=user_id_str)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "eta_calculation_failed", "message": str(exc)},
+        )
+    return result
 
 
 @router.post("/{plan_id}/activate")

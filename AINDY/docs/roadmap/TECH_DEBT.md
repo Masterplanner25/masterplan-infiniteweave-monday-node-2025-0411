@@ -97,7 +97,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-17 Phase 3):** Rate limiting decorators applied to all AI/cost endpoints — `@limiter.limit()` on `/leadgen/` (10/min), `/genesis/message` (20/min), `/genesis/synthesize` (5/min), `/arm/analyze` (10/min), `/arm/generate` (10/min). Shared `Limiter` extracted to `services/rate_limiter.py`.
 - No documented secret rotation policy (`AINDY/routes/bridge_router.py` uses env secret without rotation).
 - ✅ **RESOLVED (2026-03-21):** HMAC protection removed from bridge writes; JWT-only.
-- `SECRET_KEY` default is insecure placeholder — must be set to a cryptographically random value in production `.env`.
+- ✅ **FIXED (2026-03-23 Sprint N+1):** `SECRET_KEY` insecure default hardened. `config.py` validator warns on placeholder; `main.py` lifespan raises `RuntimeError` in production if placeholder is still set. Test env uses strong key via conftest.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `GET /dashboard/health` now requires JWT auth. `dependencies=[Depends(get_current_user)]` added to `health_dashboard_router.py` router level.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /bridge/nodes`, `POST /bridge/nodes`, and `POST /bridge/link` now require JWT (`Depends(get_current_user)` added per-endpoint). `POST /bridge/user_event` now requires API key (`Depends(verify_api_key)`). All bridge endpoints are now protected.
 - ✅ **RESOLVED (2026-03-21):** `POST /tasks/recurrence/check` now requires JWT (`Depends(get_current_user)`).
@@ -173,7 +173,7 @@ The following items were identified during a structured architectural review of 
   - Location: `AINDY/bridge/memory_bridge_rs/src/lib.rs` (MemoryNode struct), `AINDY/services/memory_persistence.py` (MemoryNodeDAO.save_memory_node)
   - Mechanism: Callers construct nested MemoryNode trees; the persist path only writes the root node's fields; `children` is ignored.
   - Impact: All associative chains are ephemeral. Any cross-session continuity built on children is silently incomplete.
-  - Status: Open.
+  - ✅ **FIXED (2026-03-23 Sprint N+1):** `MemoryNodeDAO.save()` now reads `extra["children"]` after persisting the root node and creates `MemoryLink` rows (link_type="child") for each valid child UUID that exists in the DB. Children passed via `extra["children"]` are no longer silently dropped.
 
 ### §10.2 Data Model — MemoryTrace Python class creates a divergent shadow state
 
@@ -386,10 +386,8 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/routes/memory_router.py`, `AINDY/.env.example`
 
 ### §15.5 Dual DAO implementations for memory_nodes table
-- **`services/memory_persistence.py::MemoryNodeDAO` and `db/dao/memory_node_dao.py::MemoryNodeDAO` are two separate implementations** for the same `memory_nodes` table. `bridge_router.py` imports from the legacy path (`services.memory_persistence`). The two DAOs have incompatible interfaces: the legacy DAO exposes `load_memory_node()` which `bridge_router.py` uses for link creation; the canonical DAO does not implement this method. A simple import swap breaks `POST /bridge/link`.
+- ✅ **FIXED (2026-03-23 Sprint N+1):** `load_memory_node()` and `find_by_tags()` added to canonical DAO (`db/dao/memory_node_dao.py`) as aliases. `bridge_router.py` import updated to canonical path. `services/memory_persistence.py` legacy DAO still exists for backward compatibility but is no longer the primary import for any router.
   - Location: `AINDY/services/memory_persistence.py`, `AINDY/db/dao/memory_node_dao.py`, `AINDY/routes/bridge_router.py:13`
-  - Fix: Add `load_memory_node()` (or equivalent `get_by_id()`) to canonical DAO, then update `bridge_router.py` import. This is a medium-effort refactor, not a quick win.
-  - Status: Open (blocked — DAO interface mismatch; attempted and reverted in Quick Wins sprint 2026-03-22).
 
 ### §15.6 Runtime execution loop has 0% test coverage
 - **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop is the core runtime for the memory execution system and is called by the `/memory/execute` and `/memory/execute/complete` endpoints. This is not a dev tool — untested production runtime code is a reliability risk.
@@ -402,10 +400,8 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/pytest.ini`
 
 ### §15.8 `SECRET_KEY` has insecure hardcoded default
-- **`config.py` declares `SECRET_KEY: str = "dev-secret-change-in-production"`** — if `.env` is missing or incomplete, JWT signing silently uses this well-known placeholder. An attacker who knows the default can forge valid JWT tokens.
-  - Location: `AINDY/config.py`
-  - Fix: Remove the default entirely (make it required like `DATABASE_URL`), or add a startup check that rejects the default value in non-test environments.
-  - Status: Open. Medium severity.
+- ✅ **FIXED (2026-03-23 Sprint N+1):** `config.py` validator warns when placeholder is active; `main.py` lifespan raises `RuntimeError` in `is_prod` environments before the server binds. Dev/test environments log a warning but continue.
+  - Location: `AINDY/config.py`, `AINDY/main.py`
 
 ### §15.9 `PERMISSION_SECRET` is required config for a removed feature
 - ✅ **RESOLVED (2026-03-22 Quick Wins):** `PERMISSION_SECRET` given default empty string in `config.py`. Still referenced by `conftest.py` and `test_security.py` so cannot be removed, but deployments no longer need to set it.

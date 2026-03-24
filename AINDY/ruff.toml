@@ -6,6 +6,8 @@ exclude = [
     "alembic/",
     ".venv/",
     "venv/",
+    "Nodus Runner.py",
+    "Single File Engine.py",
 ]
 
 [lint]
