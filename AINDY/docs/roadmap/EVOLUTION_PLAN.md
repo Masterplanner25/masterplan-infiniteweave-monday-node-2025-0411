@@ -140,6 +140,59 @@ Exit criteria (policy-aligned):
 - No dead-path service code remains in core modules.
 - CI includes a migration drift guard.
 
+## Phase: Autonomous Intelligence
+
+Focus areas:
+* Playbook auto-execution relies on the Strategy → Playbook → Content pipeline with scheduling hooks.
+* Recommendation → action loop captures system recommendations, executes or queues them, and feeds the results back into the Learning Engine.
+* Feedback is captured as learning records and delta analytics so thresholds improve as we observe outcomes.
+
+Execution checklist:
+1. Playbook execution API wiring with scheduling/polling triggers is implemented.
+2. Recommendation outcomes automatically mark learning records for evaluation (success/failure).
+3. Learning thresholds adjust based on recorded outcomes and the new data pipeline from recommendations.
+
+Exit criteria:
+* The Learning Engine receives actionable outcomes from recommendation executions.
+* Operating playbooks can be triggered autonomously (with optional human approval).
+* Documentation for the Autonomous Intelligence layer is added to `docs/roadmap/RIPPLETRACE.md` (Autonomous Execution Layer section).
+
+## Phase: Productization
+
+Focus areas:
+* Production-grade auth system with API key support, org-scoped access controls, and admin tooling.
+* Multi-user support for dashboards, strategies, learning records, and playbooks with tenant isolation.
+* Billing hooks mapped to usage (API calls, playbook executions, Graph UI sessions).
+* Hosted deployment model documented with infrastructure, observability, and compliance guidelines.
+
+Execution checklist:
+1. Auth + API key management flows exist, documented via interface contracts and route policies.
+2. Multi-tenant isolation is enforced at the DB level and documented in `docs/roadmap/MASTERPLAN_SAAS.md`.
+3. Billing integration points for usage-based metering are defined and surfaced through `/billing/*` or similar endpoints.
+4. Hosted deployment guide covers security, scaling, and operational runbooks.
+
+Exit criteria:
+* Organizations have dedicated data views, recommendation queues, and learning thresholds.
+* Billing hooks emit usage events or can be connected to a pricing engine.
+* Hosted deployment instructions cover prerequisites, secrets, scaling, and monitoring.
+
+## Phase: Advanced Intelligence
+
+Focus areas:
+* ML-based prediction refinement (retrainable models, embeddings, or tree-based heuristics supplementing ThreadWeaver).
+* Causal inference improvements that incorporate richer momentum, theme/entity embeddings, and counterfactual guardrails.
+* Strategy optimization loops that test playbooks, measure impact, and iterate with reinforcement-style scoring.
+
+Execution checklist:
+1. Prediction_engine can plug in new scoring models, measure drift, and surface model explainability data to dashboards.
+2. Causal engine can ingest embedding-based coherence signals and support scenario simulations.
+3. Strategy playbooks are evaluated in experiments with success tracking, scoring models, and feedback into recommendation priorities.
+
+Exit criteria:
+* Prediction and causal models have ML-ready hooks (configurable thresholds, retraining markers).
+* Strategy optimization pipelines log outcomes and adjust confidence automatically.
+* Documentation in `docs/roadmap/RIPPLETRACE.md` and relevant architecture docs references the Advanced Intelligence roadmap.
+
 ## 7. Change Governance Rules
 - No evolution phase may violate `docs/governance/INVARIANTS.md`.
 - No schema change without an Alembic migration.

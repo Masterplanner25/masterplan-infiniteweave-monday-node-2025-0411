@@ -62,6 +62,7 @@ export default function App() {
               
               {/* Core Dashboards */}
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/graph" element={<Dashboard />} />
               <Route path="/genesis" element={<Genesis />} />
               <Route path="/health" element={<HealthDashboard />} />
               

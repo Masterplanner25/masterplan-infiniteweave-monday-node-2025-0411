@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getDashboardOverview } from "../api";
 import FlowEngineConsole from "./FlowEngineConsole";
+import GraphView from "./GraphView";
 
 const C = {
   bg1: "#161b22",
@@ -43,11 +45,16 @@ function OverviewTab({ data }) {
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "execution", label: "Execution" },
+  { id: "graph", label: "Graph" },
 ];
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [localTab, setLocalTab] = useState("overview");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isGraphRoute = location.pathname === "/dashboard/graph";
+  const activeTab = isGraphRoute ? "graph" : localTab;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,6 +63,17 @@ export default function Dashboard() {
     };
     fetchData();
   }, []);
+
+  const handleTabClick = (tabId) => {
+    if (tabId === "graph") {
+      if (!isGraphRoute) navigate("/dashboard/graph");
+      return;
+    }
+    if (isGraphRoute) {
+      navigate("/dashboard");
+    }
+    setLocalTab(tabId);
+  };
 
   return (
     <div style={{ color: C.text0, fontFamily: "sans-serif" }}>
@@ -71,7 +89,7 @@ export default function Dashboard() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabClick(tab.id)}
             style={{
               padding: "8px 18px",
               background: "none",
@@ -93,6 +111,7 @@ export default function Dashboard() {
 
       {activeTab === "overview" && <OverviewTab data={data} />}
       {activeTab === "execution" && <FlowEngineConsole />}
+      {activeTab === "graph" && <GraphView />}
     </div>
   );
 }

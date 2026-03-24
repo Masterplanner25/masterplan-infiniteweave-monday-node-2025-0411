@@ -25,6 +25,7 @@ from routes.identity_router import router as identity_router
 from routes.observability_router import router as observability_router
 from routes.automation_router import router as automation_router
 from routes.flow_router import router as flow_router
+from routes.watcher_router import router as watcher_router
 
 
 ROUTERS = [
@@ -55,6 +56,7 @@ ROUTERS = [
     observability_router,
     automation_router,
     flow_router,
+    watcher_router,
 ]
 
 

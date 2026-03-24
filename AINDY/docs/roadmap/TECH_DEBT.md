@@ -73,6 +73,26 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/smoke_memory.py` imports fixed and project root path corrected (`db.dao.memory_node_dao.MemoryNodeDAO` + proper root resolution).
 - ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/Bridgeimport.py` wrapped in a `__main__` guard to prevent import-time execution.
 
+## 3.1 RippleTrace Intelligence Debt (Priority Queue)
+
+### High Priority
+
+* Missing automated test coverage across the ThreadWeaver/Delta/Prediction/Recommendation/Influence/Causal/Narrative/Learning/Strategy/Playbook/Content Generator engines.
+* No caching on `/influence_graph` or `/causal_graph`, so each page load hits SQLite directly and risks contention under load.
+* Pairwise comparisons inside `services.influence_graph` and `services.causal_engine` may trigger N+1 behavior as the drop point count grows.
+* No dedicated background job system (Celery/Redis/ARQ) to offload scoring, snapshotting, or predictive scans, leaving those tasks on request threads.
+
+### Medium Priority
+
+* Threshold tuning in `services.learning_engine.adjust_thresholds` is still heuristic and lacks probabilistic calibration.
+* Strategy clustering in `services.strategy_engine.build_strategies` relies on simple frequency counters rather than semantic similarity or embeddings.
+* `services.content_generator` remains rule-based with no LLM-assisted variation or guardrails yet.
+
+### Low Priority
+
+* Graph UI (`client/src/components/GraphView.jsx`) has no batching / virtualization for >100 nodes, so performance may degrade on larger graphs.
+* Snapshot storage (`score_snapshots`) grows without retention policies, increasing sqlite file size if not trimmed.
+
 ## 4. Error Handling Debt
 - ✅ **RESOLVED (2026-03-21):** Error classification consistency improved across core routes with structured `detail` payloads for 5xx failures.
 - ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.

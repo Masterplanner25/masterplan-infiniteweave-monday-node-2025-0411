@@ -13,6 +13,7 @@ from .research_results import ResearchResult
 from .freelance import FreelanceOrder, ClientFeedback, RevenueMetrics
 from .arm_models import ARMRun, ARMLog, ARMConfig
 from .leadgen_model import LeadGenResult
+from .score_snapshot import ScoreSnapshotDB
 from .author_model import AuthorDB
 from .system_health_log import SystemHealthLog
 from .request_metric import RequestMetric
@@ -24,6 +25,10 @@ from .bridge_user_event import BridgeUserEvent
 from .background_task_lease import BackgroundTaskLease
 from .automation_log import AutomationLog
 from .flow_run import FlowRun, FlowHistory, EventOutcome, Strategy
+from .learning_record import LearningRecordDB
+from .learning_threshold import LearningThresholdDB
+from .strategy import StrategyDB
+from .playbook import PlaybookDB
 
 
 __all__ = [
@@ -59,4 +64,9 @@ __all__ = [
     "FlowHistory",
     "EventOutcome",
     "Strategy",
+    "ScoreSnapshotDB",
+    "LearningRecordDB",
+    "LearningThresholdDB",
+    "StrategyDB",
+    "PlaybookDB",
 ]

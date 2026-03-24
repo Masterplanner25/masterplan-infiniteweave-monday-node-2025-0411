@@ -11,6 +11,7 @@ omit =
     validate_memory_loop.py
     Single File Engine.py
     Nodus_Runner.py
+    watcher/watcher.py
 
 [report]
 exclude_lines =

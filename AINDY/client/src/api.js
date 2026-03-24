@@ -274,6 +274,18 @@ export function getDashboardHealth() {
   return authRequest("/dashboard/health", { method: "GET" });
 }
 
+export function getInfluenceGraph() {
+  return authRequest("/influence_graph", { method: "GET" });
+}
+
+export function getCausalGraph() {
+  return authRequest("/causal_graph", { method: "GET" });
+}
+
+export function getNarrative(dropPointId) {
+  return authRequest(`/narrative/${dropPointId}`, { method: "GET" });
+}
+
 /* --- Analytics Endpoints --- */
 export function ingestLinkedInManual(payload) {
   return authRequest("/analytics/linkedin/manual", {

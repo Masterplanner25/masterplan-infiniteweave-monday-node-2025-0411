@@ -110,9 +110,9 @@ Items that are documented in roadmap files but have no implementation.
 | Agentics Phase 3 — Nodus integration (deterministic execution) | AGENTICS.md | Phase 3 |
 | Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 |
 | Agentics Phase 5 — agent_runs/agent_steps observability | AGENTICS.md | Phase 5 |
-| RippleTrace Pattern Engine (ThreadWeaver) | RIPPLETRACE.md | Phase v2 |
-| RippleTrace Graph Layer (Visibility Map) | RIPPLETRACE.md | Phase v3 |
-| RippleTrace Insight Engine (Proofboard) | RIPPLETRACE.md | Phase v4 |
+| RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
+| RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
+| RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
 | Freelancing: AI generation pipeline for delivery | FREELANCING_SYSTEM.md | Phase v2 |
 | Freelancing: execution speed + income efficiency metrics | FREELANCING_SYSTEM.md | Phase v2 |
 | Freelancing: automation connectors (delivery/payment) | FREELANCING_SYSTEM.md | Phase v4 |
@@ -171,7 +171,7 @@ Sorted by (Impact × Risk) / Effort descending.
 │ Agentics Phase 1 — Minimal runtime          │   5    │   4    │  3   │ Memory ✅, JWT ✅          │  3.75  │
 │ Nodus integration (Agentics Phase 3)        │   5    │   5    │  3   │ Agentics Phase 1-2         │  3.00  │
 │ §15.5 — Dual DAO consolidation              │   2    │   2    │  3   │ None                       │  3.00  │
-│ RippleTrace Pattern Engine (ThreadWeaver)   │   3    │   3    │  2   │ DropPoint/Ping ✅          │  2.00  │
+│ ThreadWeaver v1–v3 (Delta + Prediction + Narrative) │   3    │   3    │  2   │ DropPoint/Ping ✅          │  2.00  │
 │ Masterplan dependency cascade model         │   3    │   3    │  2   │ Masterplan anchor          │  2.00  │
 │ Search System unified pipeline              │   3    │   4    │  2   │ SEO/LeadGen/Research ✅    │  1.50  │
 │ Observability Dashboard UI                  │   3    │   2    │  1   │ Observability endpoints ✅ │  1.50  │
@@ -211,23 +211,25 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ---
 
-### Sprint N+2: "The Watcher + The Loop"
+### ✅ Sprint N+2: "The Watcher" — COMPLETE (2026-03-24)
 
-**Goal:** Feed real behavioral signals into the Infinity Algorithm and close the execution feedback loop.
+**Delivered:**
+- ✅ `watcher/window_detector.py` — cross-platform active window detection; Windows/macOS/Linux/psutil fallback; never raises
+- ✅ `watcher/classifier.py` — `ActivityType` (WORK/COMMUNICATION/DISTRACTION/IDLE/UNKNOWN); 60+ process name patterns + window title regexes
+- ✅ `watcher/session_tracker.py` — `SessionState` machine; 6 signal types: session_started, session_ended, distraction_detected, focus_achieved, context_switch, heartbeat
+- ✅ `watcher/signal_emitter.py` — batched HTTP, 3-attempt retry, DRY_RUN mode
+- ✅ `watcher/config.py` — env-var configurable; validate()
+- ✅ `watcher/watcher.py` — main loop; argparse CLI; SIGINT/SIGTERM graceful shutdown
+- ✅ `db/models/watcher_signal.py` + migration `d7e6f5a4b3c2`
+- ✅ `routes/watcher_router.py` — `POST /watcher/signals`, `GET /watcher/signals`; API key auth; ETA recalc on session_ended
+- ✅ 65 new tests (916 total passing, 0 failing)
 
-**Items:**
-- Build `services/watcher_service.py`: focus session tracking (start/stop/duration), task attention signals — INFINITY_ALGORITHM_SUPPORT_SYSTEM Phase v2
-- New DB table: `focus_sessions` (user_id, task_id, started_at, ended_at, duration_seconds, distraction_count)
-- Connect `watcher_service` outputs into TWR adjustment (replace task-level `time_spent` stub with actual focus session data) — Phase v3
-- Build `services/infinity_loop.py`: enforced `input → score → decision → feedback → update state` cycle — INFINITY_ALGORITHM Phase v4
-- Wire `infinity_loop.py` into task completion and ARM analysis endpoints (score every execution, update strategy weights)
-- Freelancing metrics: compute execution speed, income efficiency, AI productivity boost in `freelance_service.py`
-- Frontend: `WatcherPanel.jsx` (session start/stop, attention stats); update `TaskDashboard.jsx` to show TWR-based priority ordering
+**Tech debt closed:** INFINITY_ALGORITHM_SUPPORT_SYSTEM Phase v2 (Observation Layer — Watcher) §7
 
-**Expected outcome for the user:** Starting a task now starts a focus session. Completing it feeds real attention data into the algorithm. The dashboard shows a live trajectory score driven by actual work patterns, not just task metadata. Freelance panel gains meaningful efficiency metrics.
-
-**Estimated tests added:** ~55
-**Tech debt closed:** INFINITY_ALGORITHM §Phase v4, INFINITY_ALGORITHM_SUPPORT_SYSTEM §Phase v2–v3, FREELANCING_SYSTEM §Phase v2
+**Remaining from original N+2 scope (deferred to N+3):**
+- `services/infinity_loop.py` — enforced execution feedback loop
+- Watcher signals → TWR scoring integration (Phase v3)
+- Freelancing metrics completion
 
 ---
 
@@ -242,7 +244,7 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 - Approval gate: `POST /agent/runs/{id}/approve` for high-risk plans; risk scoring via `risk_level` in plan schema
 - New routes: `POST /agent/runs`, `GET /agent/runs`, `POST /agent/runs/{id}/approve`, `GET /agent/runs/{id}`
 - Frontend: `AgentConsole.jsx` — goal input, plan preview, approve/execute, step timeline
-- RippleTrace Pattern Engine (ThreadWeaver): detect time-to-response patterns and semantic echoes across Ping sequences; new service `services/rippletrace_pattern_service.py`
+- ThreadWeaver v1–v3: detects time-to-response patterns, deltas, predictions, and narratives across Ping sequences; service `services.threadweaver.py` is fully implemented.
 - Frontend: `RippleTraceViewer.jsx` — signal timeline, ripple chain visualization (§15.16)
 - Frontend: `ObservabilityDashboard.jsx` — request latency, memory node counts, flow run counts (§15.17)
 

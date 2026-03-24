@@ -30,6 +30,7 @@ class Ping(BaseModel):
     connection_summary: Optional[str] = None
     external_url: Optional[str] = None
     reaction_notes: Optional[str] = None
+    strength: Optional[float] = Field(1.0, ge=0.0)
 
 class RippleEvent(BaseModel):
     ping_type: str
