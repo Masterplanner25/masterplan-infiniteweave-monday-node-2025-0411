@@ -9,6 +9,8 @@ omit =
     */migrations/*
     bridge/memory_bridge_rs/*
     validate_memory_loop.py
+    Single File Engine.py
+    Nodus_Runner.py
 
 [report]
 exclude_lines =

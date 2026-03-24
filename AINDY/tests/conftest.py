@@ -83,11 +83,13 @@ def client(app):
 
 
 @pytest.fixture
-def mock_db():
+def mock_db(app):
     """
     A MagicMock standing in for a SQLAlchemy Session.
-    Used by unit tests that call service functions directly.
+    Overrides get_db in the app's DI so route handlers
+    receive this mock instead of the real SessionLocal.
     """
+    from db.database import get_db
     db = MagicMock()
     db.query.return_value = db
     db.filter.return_value = db
@@ -98,7 +100,10 @@ def mock_db():
     db.commit.return_value = None
     db.refresh.return_value = None
     db.rollback.return_value = None
-    return db
+
+    app.dependency_overrides[get_db] = lambda: db
+    yield db
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.fixture
