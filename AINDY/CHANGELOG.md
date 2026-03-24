@@ -1,3 +1,43 @@
+## [Unreleased] — feat/sprint-n1-anchor-close
+
+### Added (2026-03-23 - Sprint N+1 "Anchor and Close")
+
+**FIX 1 — SECRET_KEY startup hardening (§15.8)**
+- `config.py` — `warn_insecure_secret_key` validator warns when placeholder default is used
+- `main.py` lifespan — raises `RuntimeError` if `SECRET_KEY` is placeholder in production; logs warning in dev/test
+
+**FIX 2 — Dual DAO consolidation (§15.5)**
+- `db/dao/memory_node_dao.py` — added `load_memory_node()` (alias for `get_by_id()`) and `find_by_tags()` (alias for `get_by_tags()`) for API compatibility
+- `routes/bridge_router.py` — updated import from legacy `services.memory_persistence.MemoryNodeDAO` → canonical `db.dao.memory_node_dao.MemoryNodeDAO`
+
+**FIX 3 — MemoryNode.children silent trace loss (§10.1)**
+- `db/dao/memory_node_dao.py` `save()` — after persisting the node, reads `extra["children"]` and creates `MemoryLink` rows for each valid child UUID, so child references are no longer silently discarded
+
+**FIX 4 — Lint violations**
+- `ruff.toml` — excluded `Nodus Runner.py` and `Single File Engine.py` (untracked prototype files with invalid syntax/markdown fences); all ruff checks now pass clean
+
+**STEP 5 — MasterPlan anchor + ETA migration**
+- `db/models/masterplan.py` — added 9 new columns: `anchor_date`, `goal_value`, `goal_unit`, `goal_description`, `projected_completion_date`, `current_velocity`, `days_ahead_behind`, `eta_last_calculated`, `eta_confidence`
+- `alembic/versions/c6e5d4f3b2a1_masterplan_anchor_eta_v1.py` — Alembic migration (additive, all nullable)
+
+**STEP 6 — Anchor endpoint**
+- `routes/masterplan_router.py` — `PUT /masterplans/{id}/anchor` with `AnchorRequest` (anchor_date, goal_value, goal_unit, goal_description); partial updates supported
+
+**STEP 7 — ETA projection service + scheduler job**
+- `services/eta_service.py` — `calculate_eta()` (velocity = tasks/14d rolling, projects completion, computes days_ahead_behind, writes to plan), `recalculate_all_etas()` (batch for all anchored plans)
+- `routes/masterplan_router.py` — `GET /masterplans/{id}/projection` endpoint
+- `services/task_services.py` `complete_task()` — ETA recalculation hook (fire-and-forget) when active plan has anchor_date
+- `services/scheduler_service.py` — daily 6am `daily_eta_recalculation` APScheduler job
+
+**STEP 8 — MasterPlanDashboard UI**
+- `client/src/api.js` — `setMasterplanAnchor()`, `getMasterplanProjection()`
+- `client/src/components/MasterPlanDashboard.jsx` — `ETAProjectionPanel` (velocity, ETA, days ahead/behind, confidence) + `AnchorModal` (set anchor_date, goal_value, goal_unit, goal_description)
+
+**Tests**
+- `tests/test_sprint_n1_anchor_close.py` — 42 new tests: SECRET_KEY hardening, dual DAO consolidation, children persistence, anchor columns, anchor endpoint, ETA service, projection endpoint, scheduler job, complete_task hook
+
+---
+
 ## [Unreleased] — feat/flow-engine-console-ui
 
 ### Added (2026-03-23 - Flow Engine Console UI)

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from services.memory_capture_engine import MemoryCaptureEngine
-from services.memory_persistence import MemoryNodeDAO
+from db.dao.memory_node_dao import MemoryNodeDAO
 from config import settings
 from services import rippletrace_services
 from services.auth_service import get_current_user, verify_api_key

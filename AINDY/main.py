@@ -71,6 +71,20 @@ async def lifespan(app: FastAPI):
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
         logger.info("Cache backend initialized: memory")
 
+    # SECRET_KEY guard — reject insecure placeholder in production
+    _placeholder = "dev-secret-change-in-production"
+    if settings.SECRET_KEY == _placeholder:
+        if settings.is_prod:
+            raise RuntimeError(
+                "SECRET_KEY is using the insecure default placeholder. "
+                "Set a strong SECRET_KEY in your .env before running in production."
+            )
+        else:
+            logger.warning(
+                "SECRET_KEY is using the insecure default placeholder. "
+                "This is acceptable for local development but MUST be changed before production."
+            )
+
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if enforce_schema and not os.getenv("PYTEST_CURRENT_TEST"):
         if not (Config and ScriptDirectory and MigrationContext):

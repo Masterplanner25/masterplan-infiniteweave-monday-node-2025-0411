@@ -100,10 +100,38 @@ class MemoryNodeDAO:
             self.db.add(db_node)
             self.db.commit()
             self.db.refresh(db_node)
-            return self._node_to_dict(db_node)
         except SQLAlchemyError:
             self.db.rollback()
             raise
+
+        # Persist children references from extra dict as MemoryLink rows.
+        # Without this, any child IDs passed via extra["children"] are silently dropped.
+        children = (extra or {}).get("children") if extra else None
+        if children:
+            for child_id in children:
+                try:
+                    child_uuid = uuid.UUID(str(child_id))
+                    child_exists = (
+                        self.db.query(MemoryNodeModel.id)
+                        .filter(MemoryNodeModel.id == child_uuid)
+                        .first()
+                    )
+                    if child_exists:
+                        link = MemoryLinkModel(
+                            source_node_id=db_node.id,
+                            target_node_id=child_uuid,
+                            link_type="child",
+                            weight=1.0,
+                        )
+                        self.db.add(link)
+                except (ValueError, SQLAlchemyError):
+                    pass
+            try:
+                self.db.commit()
+            except SQLAlchemyError:
+                self.db.rollback()
+
+        return self._node_to_dict(db_node)
 
     def save_as_agent(
         self,
@@ -153,6 +181,20 @@ class MemoryNodeDAO:
         if not db_node:
             return None
         return self._node_to_dict(db_node)
+
+    def load_memory_node(self, node_id: str) -> Optional[dict]:
+        """Alias for get_by_id() — provides API compatibility with legacy MemoryNodeDAO."""
+        return self.get_by_id(node_id)
+
+    def find_by_tags(
+        self,
+        tags: List[str],
+        limit: int = 50,
+        mode: str = "AND",
+        user_id: str = None,
+    ) -> List[dict]:
+        """Alias for get_by_tags() — provides API compatibility with legacy MemoryNodeDAO."""
+        return self.get_by_tags(tags=tags, limit=limit, mode=mode, user_id=user_id)
 
     def get_by_tags(
         self,

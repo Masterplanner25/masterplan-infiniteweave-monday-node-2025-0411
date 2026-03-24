@@ -30,6 +30,17 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-change-in-production"
     AINDY_API_KEY: str | None = None
 
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def warn_insecure_secret_key(cls, v: str) -> str:
+        if v == "dev-secret-change-in-production":
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "SECRET_KEY is using the insecure default placeholder. "
+                "Set SECRET_KEY in your .env file before deploying to production."
+            )
+        return v
+
     # --- Optional runtime options ---
     LOG_LEVEL: str = "INFO"
     REDIS_URL: str | None = None

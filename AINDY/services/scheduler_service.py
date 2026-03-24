@@ -123,6 +123,31 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         replace_existing=True,
     )
 
+    # Daily ETA recalculation — recomputes velocity + projection for all anchored plans
+    scheduler.add_job(
+        _recalculate_all_etas_job,
+        trigger=CronTrigger(hour=6),
+        id="daily_eta_recalculation",
+        name="Daily ETA projection recalculation",
+        replace_existing=True,
+    )
+
+
+def _recalculate_all_etas_job() -> None:
+    """Daily job: recalculate ETA projections for all anchored MasterPlans."""
+    try:
+        from db.database import SessionLocal
+        from services.eta_service import recalculate_all_etas
+
+        db = SessionLocal()
+        try:
+            updated = recalculate_all_etas(db)
+            logger.info("[ETA Scheduler] Recalculated ETAs for %d plans", updated)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.error("[ETA Scheduler] Daily ETA recalculation failed: %s", exc)
+
 
 def _cleanup_stale_logs() -> None:
     """Clean up AutomationLog entries stuck in 'pending' for > 1 hour."""
