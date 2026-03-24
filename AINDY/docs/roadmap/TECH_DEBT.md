@@ -461,20 +461,12 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 ### §15.19 Flow Engine Phase C — Genesis → executable flow
 - **Genesis conversation and synthesis are not yet wired to the Flow Engine.** Genesis is a multi-turn, stateful workflow that would benefit from WAIT/RESUME (wait for user message, resume on response). Currently it is a direct LLM call in `genesis_ai.py` with no execution state in DB.
   - Location: `AINDY/services/genesis_ai.py`, `AINDY/routes/genesis_router.py`
-  - Status: Open. Next sprint after Phase B.
+  - Status: ✅ **RESOLVED (2026-03-23 Flow Engine Phase C).** Three genesis nodes registered (`genesis_validate_session`, `genesis_record_exchange`, `genesis_store_synthesis`) + `genesis_conversation` flow with conditional WAIT/RESUME edges. `genesis_router.py POST /genesis/message` co-runs a FlowRun alongside each message (fire-and-forget, non-fatal). FlowRun persists WAIT state between user messages; resumes via `route_event("genesis_user_message", ...)`. Genesis conversation now visible in `/flows/runs`.
 
 ### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
 - **`flow_history` records every node execution with input/output patches but does not write to Memory Bridge.** High-signal flow completions (ARM analysis, LeadGen, task completion) should generate memory nodes from FlowHistory so execution patterns become retrievable context.
   - Location: `AINDY/services/flow_engine.py` (PersistentFlowRunner.resume), `AINDY/services/memory_capture_engine.py`
-  - Status: Open. Planned after Phase C.
-
-### §15.19 Flow Engine Phase C — Genesis session → executable flow
-- **Genesis sessions produce markdown plans but no executable task graph.** Phase C wires Genesis output into the Flow Engine so a plan becomes a scheduled, auditable task sequence.
-  - Status: Open (after Phase B).
-
-### §15.20 Flow Engine Phase D — FlowHistory → Memory Bridge
-- **AutomationLog is isolated from the Memory Bridge.** Phase D writes `AutomationLog` completion events into the Memory Bridge so task execution outcomes become searchable memories and inform ARM/Genesis context.
-  - Status: Open (after Phase C).
+  - Status: ✅ **RESOLVED (2026-03-23 Flow Engine Phase D).** `PersistentFlowRunner._capture_flow_completion()` called automatically on flow SUCCESS. Queries FlowHistory for completed run, builds execution pattern summary (node names, timing, success rate), writes to Memory Bridge via `MemoryCaptureEngine`. Workflow-type → event-type mapping: arm_analysis→arm_analysis_complete, task_completion→task_completed, leadgen_search→leadgen_search, genesis_conversation→genesis_synthesized. `"flow_completion": 0.5` added to `EVENT_SIGNIFICANCE` for unknown types. Non-fatal.
 
 ### §15.21 Known remaining schema drift (intentional skips)
 Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9e2f1b8d3`. All items below are intentionally left alone.

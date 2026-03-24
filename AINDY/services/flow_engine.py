@@ -390,6 +390,7 @@ class PersistentFlowRunner:
                 run.completed_at = datetime.now(timezone.utc)
                 self.db.commit()
                 logger.info("FlowRun %s completed successfully", run.id)
+                self._capture_flow_completion(run, state)  # Phase D
                 return {"status": "SUCCESS", "run_id": run.id, "state": state}
 
             # Advance to next node
@@ -412,6 +413,74 @@ class PersistentFlowRunner:
             run.state = state
             self.db.commit()
             current_node = next_node
+
+    # ── Phase D: FlowHistory → Memory Bridge ───────────────────────────────────
+
+    def _capture_flow_completion(self, run, state: dict) -> None:
+        """
+        Phase D — Write FlowHistory execution summary to Memory Bridge.
+
+        Called when a flow run reaches SUCCESS. Captures the execution
+        pattern (nodes run, timing) as a memory node so that flow
+        completions become retrievable context for ARM and Genesis.
+
+        Only fires for named workflows with a user_id.
+        Storage failures are non-fatal.
+        """
+        if not self.user_id or not self.workflow_type:
+            return
+
+        try:
+            from db.models.flow_run import FlowHistory
+            from services.memory_capture_engine import MemoryCaptureEngine
+
+            history = (
+                self.db.query(FlowHistory)
+                .filter(FlowHistory.flow_run_id == run.id)
+                .order_by(FlowHistory.created_at.asc())
+                .all()
+            )
+
+            if not history:
+                return
+
+            node_summary = " → ".join(
+                f"{h.node_name}({h.execution_time_ms or 0}ms)" for h in history
+            )
+            total_ms = sum(h.execution_time_ms or 0 for h in history)
+            success_count = sum(1 for h in history if h.status == "SUCCESS")
+
+            content = (
+                f"Flow '{run.flow_name}' ({self.workflow_type}) completed: "
+                f"{node_summary}. "
+                f"{success_count}/{len(history)} nodes succeeded, "
+                f"{total_ms}ms total."
+            )
+
+            # Map workflow_type to event_type for significance scoring
+            _event_map = {
+                "arm_analysis": "arm_analysis_complete",
+                "task_completion": "task_completed",
+                "leadgen_search": "leadgen_search",
+                "genesis_conversation": "genesis_synthesized",
+            }
+            event_type = _event_map.get(self.workflow_type, "flow_completion")
+            namespace = self.workflow_type.split("_")[0]
+
+            engine = MemoryCaptureEngine(
+                db=self.db,
+                user_id=self.user_id,
+                agent_namespace=namespace,
+            )
+            engine.evaluate_and_capture(
+                event_type=event_type,
+                content=content,
+                source=f"flow_history:{run.flow_name}",
+                tags=["flow_history", "execution_pattern", self.workflow_type],
+                context={"run_id": run.id, "total_ms": total_ms},
+            )
+        except Exception as e:
+            logger.warning("FlowHistory → Memory Bridge capture failed: %s", e)
 
 
 # ── Event Router ───────────────────────────────────────────────────────────────

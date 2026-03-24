@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,6 +11,8 @@ from services.masterplan_factory import create_masterplan_from_genesis
 from datetime import datetime
 from services.auth_service import get_current_user
 from services.rate_limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
@@ -110,6 +113,48 @@ def genesis_message(
         session.synthesis_ready = True
 
     db.commit()
+
+    # ── Phase C: co-run genesis FlowRun for observability (non-fatal) ──────────
+    # Does not modify the response or existing session logic.
+    # Manages a genesis_conversation FlowRun alongside each message.
+    try:
+        from services.flow_engine import (
+            FLOW_REGISTRY,
+            PersistentFlowRunner,
+            route_event as _flow_route_event,
+        )
+        _flow_run_id = current_state.get("_genesis_flow_run_id")
+        _synthesis_ready = bool(session.synthesis_ready)
+        if _flow_run_id:
+            _flow_route_event(
+                event_type="genesis_user_message",
+                payload={"synthesis_ready": _synthesis_ready},
+                db=db,
+                user_id=str(user_id),
+            )
+        else:
+            _flow = FLOW_REGISTRY.get("genesis_conversation")
+            if _flow:
+                _runner = PersistentFlowRunner(
+                    flow=_flow,
+                    db=db,
+                    user_id=str(user_id),
+                    workflow_type="genesis_conversation",
+                )
+                _result = _runner.start(
+                    initial_state={
+                        "session_id": session_id,
+                        "synthesis_ready": _synthesis_ready,
+                    },
+                    flow_name="genesis_conversation",
+                )
+                _rid = _result.get("run_id")
+                if _rid:
+                    current_state["_genesis_flow_run_id"] = _rid
+                    session.summarized_state = current_state
+                    db.commit()
+    except Exception:
+        pass  # flow engine integration is non-fatal
 
     return {
         "reply": reply,

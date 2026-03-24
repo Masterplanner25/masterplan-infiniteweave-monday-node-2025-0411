@@ -193,6 +193,65 @@ def leadgen_store(state, context):
         return {"status": "SUCCESS", "output_patch": {"stored": False}}
 
 
+# ── Genesis Conversation Flow ──────────────────────────────────────────────────
+
+
+@register_node("genesis_validate_session")
+def genesis_validate_session(state, context):
+    """Validate genesis session input before tracking."""
+    if not state.get("session_id"):
+        return {"status": "FAILURE", "error": "session_id required"}
+    return {"status": "SUCCESS", "output_patch": {"validated": True}}
+
+
+@register_node("genesis_record_exchange")
+def genesis_record_exchange(state, context):
+    """
+    Track a genesis message exchange.
+
+    Does NOT call the LLM — the router handles that.
+    Reads synthesis_ready from state or resumed event payload.
+    Returns WAIT if conversation still active; SUCCESS if synthesis is ready.
+    """
+    synthesis_ready = state.get("synthesis_ready", False) or state.get(
+        "event", {}
+    ).get("synthesis_ready", False)
+
+    if synthesis_ready:
+        return {"status": "SUCCESS", "output_patch": {"synthesis_ready": True}}
+    return {"status": "WAIT", "wait_for": "genesis_user_message"}
+
+
+@register_node("genesis_store_synthesis")
+def genesis_store_synthesis(state, context):
+    """Store genesis synthesis completion to Memory Bridge."""
+    try:
+        from services.memory_capture_engine import MemoryCaptureEngine
+
+        db = context.get("db")
+        user_id = context.get("user_id")
+        session_id = state.get("session_id")
+
+        if db and user_id:
+            engine = MemoryCaptureEngine(
+                db=db, user_id=user_id, agent_namespace="genesis"
+            )
+            engine.evaluate_and_capture(
+                event_type="genesis_synthesized",
+                content=(
+                    f"Genesis conversation {session_id} synthesis complete "
+                    f"via Flow Engine."
+                ),
+                source="flow_engine:genesis_conversation",
+                tags=["genesis", "synthesis", "flow_engine"],
+                node_type="decision",
+            )
+        return {"status": "SUCCESS", "output_patch": {"stored": True}}
+    except Exception as e:
+        logger.warning("genesis_store_synthesis failed (non-fatal): %s", e)
+        return {"status": "SUCCESS", "output_patch": {"stored": False}}
+
+
 # ── Flow Registrations ─────────────────────────────────────────────────────────
 
 
@@ -234,6 +293,30 @@ def register_all_flows() -> None:
                 "leadgen_search": ["leadgen_store"],
             },
             "end": ["leadgen_store"],
+        },
+    )
+
+    register_flow(
+        "genesis_conversation",
+        {
+            "start": "genesis_validate_session",
+            "edges": {
+                "genesis_validate_session": ["genesis_record_exchange"],
+                # Conditional: advance to synthesis store when ready;
+                # WAIT without a matching edge is handled by the WAIT/RESUME
+                # contract — current_node stays at genesis_record_exchange
+                # until synthesis_ready becomes True.
+                "genesis_record_exchange": [
+                    {
+                        "condition": lambda s: (
+                            s.get("synthesis_ready", False)
+                            or s.get("event", {}).get("synthesis_ready", False)
+                        ),
+                        "target": "genesis_store_synthesis",
+                    }
+                ],
+            },
+            "end": ["genesis_store_synthesis"],
         },
     )
 
