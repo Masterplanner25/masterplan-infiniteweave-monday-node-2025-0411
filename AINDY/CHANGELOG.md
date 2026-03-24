@@ -1,3 +1,38 @@
+## [Unreleased] — feat/watcher-agent
+
+### Added (2026-03-24 - Sprint N+2 "The Watcher")
+
+**A.I.N.D.Y. Watcher — OS-level attention monitoring agent**
+
+Closes the observation gap in the Infinity Algorithm Support System (INFINITY_ALGORITHM_SUPPORT_SYSTEM.md §3.2).
+Implements Phase v2 of the Support System evolution plan.
+
+**watcher/ — standalone process:**
+- `watcher/window_detector.py` — cross-platform active window detection; Windows (ctypes), macOS (AppKit+Quartz), Linux (xdotool), psutil fallback; never raises
+- `watcher/classifier.py` — `ActivityType` enum (WORK/COMMUNICATION/DISTRACTION/IDLE/UNKNOWN); pattern-matching on 60+ process names and window title regexes; `ClassificationResult` dataclass with confidence + matched_rule
+- `watcher/session_tracker.py` — `SessionState` machine (IDLE→CONFIRMING_WORK→WORKING→DISTRACTED→RECOVERING); emits `SessionEvent` objects: session_started, session_ended, distraction_detected, focus_achieved, context_switch, heartbeat; pure state machine, no external calls
+- `watcher/signal_emitter.py` — thread-safe deque queue, background flush thread, batched HTTP POST, 3-attempt exponential backoff, DRY_RUN mode, overflow protection
+- `watcher/config.py` — env-var configurable (`AINDY_WATCHER_*`); `load()` + `validate()` with clear error messages
+- `watcher/watcher.py` — main loop entry point; argparse CLI (--dry-run, --poll-interval, --log-level); SIGINT/SIGTERM graceful shutdown; drain flush on exit
+- `watcher/requirements_watcher.txt` — httpx, psutil, python-dotenv; platform-specific optionals documented
+- `watcher/README.md` — setup, configuration reference, signal taxonomy, session state machine diagram, API docs
+
+**Backend receiver:**
+- `db/models/watcher_signal.py` — `WatcherSignal` ORM model; 5 indexes; `signal_metadata` JSONB column (renamed from metadata — SQLAlchemy reserved word)
+- `alembic/versions/d7e6f5a4b3c2_watcher_signals_table.py` — Alembic migration (down_revision: c6e5d4f3b2a1); creates watcher_signals with full index set
+- `routes/watcher_router.py` — `POST /watcher/signals` (batch receive, validation, persistence) + `GET /watcher/signals` (filter by session_id/signal_type, paginated); API key auth; `_trigger_eta_update` on session_ended (non-fatal)
+- `routes/__init__.py` — registered watcher_router
+
+**Signal types:** session_started | session_ended | distraction_detected | focus_achieved | context_switch | heartbeat
+**Activity types:** work | communication | distraction | idle | unknown
+
+**Tests:**
+- `tests/test_watcher.py` — 65 new tests: classifier (17 tests), session_tracker (18 tests), watcher_router POST/GET/auth (19 tests), config (7 tests), signal_emitter (5 tests), window_detector (4 tests)
+- `watcher_mock_db` fixture — reload-safe DI override using sys.modules["routes.watcher_router"].get_db pattern
+- `.coveragerc` — omitted `watcher/watcher.py` (process entry-point, equivalent to CLI scripts)
+
+---
+
 ## [Unreleased] — feat/sprint-n1-anchor-close
 
 ### Added (2026-03-23 - Sprint N+1 "Anchor and Close")

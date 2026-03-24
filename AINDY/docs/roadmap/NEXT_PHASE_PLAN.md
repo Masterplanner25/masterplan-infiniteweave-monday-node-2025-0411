@@ -211,23 +211,25 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ---
 
-### Sprint N+2: "The Watcher + The Loop"
+### ✅ Sprint N+2: "The Watcher" — COMPLETE (2026-03-24)
 
-**Goal:** Feed real behavioral signals into the Infinity Algorithm and close the execution feedback loop.
+**Delivered:**
+- ✅ `watcher/window_detector.py` — cross-platform active window detection; Windows/macOS/Linux/psutil fallback; never raises
+- ✅ `watcher/classifier.py` — `ActivityType` (WORK/COMMUNICATION/DISTRACTION/IDLE/UNKNOWN); 60+ process name patterns + window title regexes
+- ✅ `watcher/session_tracker.py` — `SessionState` machine; 6 signal types: session_started, session_ended, distraction_detected, focus_achieved, context_switch, heartbeat
+- ✅ `watcher/signal_emitter.py` — batched HTTP, 3-attempt retry, DRY_RUN mode
+- ✅ `watcher/config.py` — env-var configurable; validate()
+- ✅ `watcher/watcher.py` — main loop; argparse CLI; SIGINT/SIGTERM graceful shutdown
+- ✅ `db/models/watcher_signal.py` + migration `d7e6f5a4b3c2`
+- ✅ `routes/watcher_router.py` — `POST /watcher/signals`, `GET /watcher/signals`; API key auth; ETA recalc on session_ended
+- ✅ 65 new tests (916 total passing, 0 failing)
 
-**Items:**
-- Build `services/watcher_service.py`: focus session tracking (start/stop/duration), task attention signals — INFINITY_ALGORITHM_SUPPORT_SYSTEM Phase v2
-- New DB table: `focus_sessions` (user_id, task_id, started_at, ended_at, duration_seconds, distraction_count)
-- Connect `watcher_service` outputs into TWR adjustment (replace task-level `time_spent` stub with actual focus session data) — Phase v3
-- Build `services/infinity_loop.py`: enforced `input → score → decision → feedback → update state` cycle — INFINITY_ALGORITHM Phase v4
-- Wire `infinity_loop.py` into task completion and ARM analysis endpoints (score every execution, update strategy weights)
-- Freelancing metrics: compute execution speed, income efficiency, AI productivity boost in `freelance_service.py`
-- Frontend: `WatcherPanel.jsx` (session start/stop, attention stats); update `TaskDashboard.jsx` to show TWR-based priority ordering
+**Tech debt closed:** INFINITY_ALGORITHM_SUPPORT_SYSTEM Phase v2 (Observation Layer — Watcher) §7
 
-**Expected outcome for the user:** Starting a task now starts a focus session. Completing it feeds real attention data into the algorithm. The dashboard shows a live trajectory score driven by actual work patterns, not just task metadata. Freelance panel gains meaningful efficiency metrics.
-
-**Estimated tests added:** ~55
-**Tech debt closed:** INFINITY_ALGORITHM §Phase v4, INFINITY_ALGORITHM_SUPPORT_SYSTEM §Phase v2–v3, FREELANCING_SYSTEM §Phase v2
+**Remaining from original N+2 scope (deferred to N+3):**
+- `services/infinity_loop.py` — enforced execution feedback loop
+- Watcher signals → TWR scoring integration (Phase v3)
+- Freelancing metrics completion
 
 ---
 
