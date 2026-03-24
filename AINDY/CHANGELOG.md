@@ -1,3 +1,22 @@
+## [Unreleased] — feat/flow-engine-console-ui
+
+### Added (2026-03-23 - Flow Engine Console UI)
+
+**Flow Engine Console — execution backbone made visible**
+
+- `client/src/components/FlowEngineConsole.jsx` — 4-tab console in Dashboard:
+  - **Flow Runs**: all workflow executions with status badges, filter by status + workflow type, summary bar (counts by status), inline run detail with node history timeline, state snapshot, timing per node, WAIT/RESUME controls with confirmation dialog
+  - **Automation Logs**: Phase A scheduler execution log, APScheduler status + registered jobs, per-log detail (task name, attempts, duration, error), replay failed tasks with confirmation, "Replay all failed" batch action
+  - **Registry**: all registered flows as visual node chains (CSS-only), all registered nodes as pills, click node to see which flows use it
+  - **Strategies**: learned flow scores (0.0 → 2.0 bar), usage count + success rate per strategy, system vs user-specific strategies, informative empty state for new installations
+- `client/src/api.js` — 9 new API functions: `getFlowRuns`, `getFlowRun`, `getFlowRunHistory`, `resumeFlowRun`, `getFlowRegistry`, `getAutomationLogs`, `getAutomationLog`, `replayAutomationLog`, `getSchedulerStatus`
+- `client/src/components/Dashboard.jsx` — tabbed: Overview (existing, unchanged) + Execution (new FlowEngineConsole)
+- `tests/test_flow_console_ui.py` — 19 backend endpoint tests covering auth protection, response shapes, and component/API existence
+
+**Design**: manual refresh only (no polling), confirmation dialogs for RESUME + Replay, consistent status colors across all panels, full loading/data/error/empty states per panel.
+
+---
+
 ## [Unreleased] — feature/memory-bridge-v4
 
 ### Added (2026-03-23 - Flow Engine Phase C + D)
