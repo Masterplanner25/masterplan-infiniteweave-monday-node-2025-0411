@@ -286,6 +286,18 @@ class DeepSeekCodeAnalyzer:
             db.add(db_record)
             db.commit()
 
+            # Trigger Infinity score recalculation (fire-and-forget)
+            try:
+                if user_id and db:
+                    from services.infinity_service import calculate_infinity_score
+                    calculate_infinity_score(
+                        user_id=str(user_id),
+                        db=db,
+                        trigger_event="arm_analysis",
+                    )
+            except Exception as e:
+                logger.warning("[ARM] Infinity score after ARM failed: %s", e)
+
             # Step 6a — Auto-feedback on recalled memories (fire-and-forget)
             try:
                 if prior_memories and db and user_id:

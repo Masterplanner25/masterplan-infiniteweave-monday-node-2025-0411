@@ -574,3 +574,17 @@ export function replayAutomationLog(logId) {
 export function getSchedulerStatus() {
   return authRequest("/automation/scheduler/status", { method: "GET" });
 }
+
+// ── Infinity Score ────────────────────────────────────────────────────────────
+
+export function getMyScore() {
+  return authRequest("/scores/me", { method: "GET" });
+}
+
+export function recalculateScore() {
+  return authRequest("/scores/me/recalculate", { method: "POST" });
+}
+
+export function getScoreHistory(limit = 30) {
+  return authRequest(`/scores/me/history?limit=${limit}`, { method: "GET" });
+}

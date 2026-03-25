@@ -132,6 +132,44 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         replace_existing=True,
     )
 
+    # Daily Infinity score recalculation — 7am (after 6am ETA job)
+    scheduler.add_job(
+        _recalculate_all_scores,
+        trigger=CronTrigger(hour=7),
+        id="daily_infinity_score_recalculation",
+        name="Daily Infinity score recalculation",
+        replace_existing=True,
+    )
+
+
+def _recalculate_all_scores() -> None:
+    """Daily job: recalculate Infinity scores for all users."""
+    try:
+        from db.database import SessionLocal
+        from db.models.user import User
+        from services.infinity_service import calculate_infinity_score
+
+        db = SessionLocal()
+        try:
+            users = db.query(User).all()
+            updated = 0
+            for user in users:
+                result = calculate_infinity_score(
+                    user_id=str(user.id),
+                    db=db,
+                    trigger_event="scheduled",
+                )
+                if result:
+                    updated += 1
+            logger.info(
+                "[Infinity Scheduler] Recalculated scores for %d/%d users",
+                updated, len(users)
+            )
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("[Infinity Scheduler] Daily score recalculation failed: %s", exc)
+
 
 def _recalculate_all_etas_job() -> None:
     """Daily job: recalculate ETA projections for all anchored MasterPlans."""

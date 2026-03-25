@@ -1,3 +1,57 @@
+## [Unreleased] — feat/infinity-algorithm-loop
+
+### Added (2026-03-24 - Sprint N+3 "Infinity Algorithm Loop")
+
+**Infinity Algorithm Event-Driven Loop — execution scoring engine**
+
+Closes INFINITY_ALGORITHM.md §Phase v4 (unified loop) and
+INFINITY_ALGORITHM_SUPPORT_SYSTEM.md §Phase v3 (watcher signals fed into scoring).
+
+**Score storage (db/models/user_score.py + migration):**
+- `user_scores` table: latest cached score per user (upserted on recalculation)
+- `score_history` table: append-only time series of all score snapshots
+- `KPI_WEIGHTS` dict: hard-invariant (asserts sum == 1.0 at import time)
+- 5 KPI component scores (0-100) + master score (0-100)
+- confidence: "high" / "medium" / "low" based on data density
+
+**KPI calculators (services/infinity_service.py):**
+- `calculate_execution_speed`: task velocity vs 14-day historical baseline (sigmoid scoring)
+- `calculate_decision_efficiency`: task completion rate + ARM analysis quality trend
+- `calculate_ai_productivity_boost`: ARM usage frequency + code quality improvement trend
+- `calculate_focus_quality`: watcher session duration, distraction ratio, focus achievement rate (returns neutral 50.0 until user_id added to watcher_signals)
+- `calculate_masterplan_progress`: task completion % + days ahead/behind target
+- `calculate_infinity_score`: weighted KPI average (0.25+0.25+0.20+0.15+0.15=1.0); never raises; returns None on failure
+
+**Event triggers (fire-and-forget, wrapped in try/except):**
+- Task completion → score recalculation (task_services.py complete_task)
+- Watcher session_ended → score recalculation (watcher_router.py _trigger_eta_update)
+- ARM analysis complete → score recalculation (deepseek_code_analyzer.py run_analysis)
+- APScheduler 7am daily job → recalculate all users (scheduler_service.py)
+
+**Social feed ranking (social_router.py):**
+- New: `_compute_infinity_ranked_score()` — recency(0.4) + author_score(0.4) + trust(0.2)
+- get_feed() batch-loads author UserScore from PostgreSQL, incorporates into ranking
+- Fallback: author_score defaults to 50.0 if no score exists
+
+**Score API (routes/score_router.py):**
+- GET /scores/me — latest score + 5 KPI breakdown + weights + metadata
+- POST /scores/me/recalculate — force refresh
+- GET /scores/me/history — time series (reverse chronological)
+
+**Dashboard UI:**
+- `InfinityScorePanel` component: SVG score ring (color-coded 0-40 red / 40-70 yellow / 70-100 green), 5 KPI cards with progress bars + weight labels, history sparkline
+- `ScoreRing` SVG component with animated stroke-dasharray
+- api.js: `getMyScore`, `recalculateScore`, `getScoreHistory`
+
+**Tests (tests/test_infinity_algorithm.py):**
+- 55 new tests: models, KPI helpers, calculators, master score formula, event triggers, social ranking, API endpoints, frontend presence
+
+**TECH DEBT CLOSED:**
+- INFINITY_ALGORITHM.md §Phase v4: unified execution loop
+- INFINITY_ALGORITHM_SUPPORT_SYSTEM.md §Phase v3: watcher signals → scoring
+
+---
+
 ## [Unreleased] — feat/watcher-agent
 
 ### Added (2026-03-24 - Sprint N+2 "The Watcher")

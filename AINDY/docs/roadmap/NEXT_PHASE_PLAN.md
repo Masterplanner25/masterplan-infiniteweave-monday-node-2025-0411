@@ -233,7 +233,32 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ---
 
-### Sprint N+3: "First Agent"
+### ✅ Sprint N+3: "Infinity Algorithm Loop" — COMPLETE (2026-03-24)
+
+**Delivered:**
+- ✅ `db/models/user_score.py` — `UserScore` + `ScoreHistory` + `KPI_WEIGHTS` (assert sum==1.0 at import)
+- ✅ Alembic migration — `user_scores` (latest cache, unique per user) + `score_history` (append-only time series)
+- ✅ `services/infinity_service.py` — 5 KPI calculators + `calculate_infinity_score()` (never raises)
+  - `calculate_execution_speed`: task velocity sigmoid vs 14-day baseline
+  - `calculate_decision_efficiency`: completion rate + ARM quality trend (parses result_full JSON)
+  - `calculate_ai_productivity_boost`: ARM usage frequency + quality improvement trend
+  - `calculate_focus_quality`: watcher session duration + distraction ratio (neutral 50.0 until user_id added to watcher_signals)
+  - `calculate_masterplan_progress`: task completion % + days_ahead_behind schedule sigmoid
+- ✅ Event triggers (fire-and-forget, try/except): task completion, watcher session_ended, ARM analysis complete
+- ✅ APScheduler 7am daily `_recalculate_all_scores` job (after 6am ETA job)
+- ✅ Social feed ranking updated: `_compute_infinity_ranked_score()` — recency(0.4) + author_score(0.4) + trust(0.2); batch PostgreSQL lookup per feed request
+- ✅ `routes/score_router.py` — `GET /scores/me`, `POST /scores/me/recalculate`, `GET /scores/me/history`
+- ✅ `InfinityScorePanel` in `Dashboard.jsx` — SVG score ring, 5 KPI cards, history sparkline
+- ✅ `api.js` — `getMyScore`, `recalculateScore`, `getScoreHistory`
+- ✅ 55 new tests (995 total passing, 5 pre-existing failures unchanged)
+
+**Tech debt closed:** INFINITY_ALGORITHM §Phase v4, INFINITY_ALGORITHM_SUPPORT §Phase v3
+
+**Known open (deferred to N+4):** `WatcherSignal.user_id` missing — focus_quality returns neutral until per-user association added
+
+---
+
+### Sprint N+4: "First Agent"
 
 **Goal:** Launch the Agentics runtime Phase 1–2, and expose the system's invisible signals as visible surfaces.
 

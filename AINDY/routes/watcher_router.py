@@ -110,8 +110,8 @@ def _signal_to_response(s: WatcherSignal) -> SignalResponse:
     )
 
 
-def _trigger_eta_update(db: Session) -> None:
-    """Fire-and-forget ETA recalculation on session_ended. Never propagates."""
+def _trigger_eta_update(db: Session, user_id: str = None) -> None:
+    """Fire-and-forget ETA + Infinity score recalculation on session_ended. Never propagates."""
     try:
         from db.models.masterplan import MasterPlan
         from services.eta_service import recalculate_all_etas
@@ -119,6 +119,19 @@ def _trigger_eta_update(db: Session) -> None:
         logger.debug("ETA recalculation triggered by watcher session_ended")
     except Exception as exc:
         logger.debug("ETA recalculation skipped (non-fatal): %s", exc)
+
+    # Trigger Infinity score recalculation (fire-and-forget)
+    try:
+        from services.infinity_service import calculate_infinity_score
+        # WatcherSignal has no user_id; when user_id is provided by caller, recalculate
+        if user_id:
+            calculate_infinity_score(
+                user_id=user_id,
+                db=db,
+                trigger_event="session_ended",
+            )
+    except Exception as exc:
+        logger.warning("Infinity score after session failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
