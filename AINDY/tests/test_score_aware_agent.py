@@ -1,5 +1,5 @@
 """
-Score-Aware Agent Tests — Sprint N+5 Phase 1 + Phase 2
+Score-Aware Agent Tests — Sprint N+5 Phase 1 + Phase 2 + Phase 3
 
 Phase 1: WatcherSignal user_id gap fix
   - WatcherSignal model has user_id column
@@ -423,3 +423,185 @@ class TestGeneratePlanKpiInjection:
 
         assert captured_args.get("user_id") == "user-target"
         assert captured_args.get("db") is mock_db
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3 — suggest_tools + /agent/suggestions endpoint
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSuggestTools:
+
+    def _snap(self, master=60.0, focus=60.0, speed=60.0, ai_boost=60.0):
+        return {
+            "master_score": master,
+            "focus_quality": focus,
+            "execution_speed": speed,
+            "ai_productivity_boost": ai_boost,
+            "decision_efficiency": 60.0,
+            "masterplan_progress": 60.0,
+            "confidence": "medium",
+        }
+
+    def test_returns_empty_for_none_snapshot(self):
+        from services.agent_tools import suggest_tools
+        assert suggest_tools(None) == []
+
+    def test_returns_empty_for_empty_snapshot(self):
+        from services.agent_tools import suggest_tools
+        assert suggest_tools({}) == []
+
+    def test_low_focus_triggers_memory_recall(self):
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(focus=30.0))
+        tools = [s["tool"] for s in result]
+        assert "memory.recall" in tools
+
+    def test_low_speed_triggers_task_create(self):
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(speed=35.0))
+        tools = [s["tool"] for s in result]
+        assert "task.create" in tools
+
+    def test_medium_low_speed_triggers_task_create(self):
+        """Speed between 40-55 still triggers task.create."""
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(speed=48.0))
+        tools = [s["tool"] for s in result]
+        assert "task.create" in tools
+
+    def test_low_ai_boost_triggers_arm_analyze(self):
+        from services.agent_tools import suggest_tools
+        # Keep focus and speed healthy so arm slot is available
+        result = suggest_tools(self._snap(focus=80.0, speed=80.0, ai_boost=25.0))
+        tools = [s["tool"] for s in result]
+        assert "arm.analyze" in tools
+
+    def test_high_master_score_triggers_genesis(self):
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(master=80.0, focus=80.0, speed=80.0, ai_boost=80.0))
+        tools = [s["tool"] for s in result]
+        assert "genesis.message" in tools
+
+    def test_max_three_suggestions(self):
+        from services.agent_tools import suggest_tools
+        # All low → could fire many rules, but must cap at 3
+        result = suggest_tools(self._snap(master=30.0, focus=20.0, speed=20.0, ai_boost=20.0))
+        assert len(result) <= 3
+
+    def test_suggestion_shape(self):
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(focus=20.0))
+        assert len(result) > 0
+        for s in result:
+            assert "tool" in s
+            assert "reason" in s
+            assert "suggested_goal" in s
+            assert isinstance(s["tool"], str)
+            assert isinstance(s["reason"], str)
+            assert isinstance(s["suggested_goal"], str)
+
+    def test_no_suggestions_for_healthy_scores(self):
+        """No low KPIs, master < 70 → no suggestions (no rules trigger)."""
+        from services.agent_tools import suggest_tools
+        result = suggest_tools(self._snap(master=65.0, focus=65.0, speed=65.0, ai_boost=65.0))
+        assert result == []
+
+    def test_never_raises_on_bad_snapshot(self):
+        from services.agent_tools import suggest_tools
+        # Snapshot with non-numeric values — should return []
+        result = suggest_tools({"focus_quality": "bad", "execution_speed": None})
+        assert isinstance(result, list)
+
+
+class TestSuggestionsEndpoint:
+
+    def test_suggestions_route_exists(self):
+        from routes.agent_router import router
+        paths = [r.path for r in router.routes]
+        assert any("suggestions" in p for p in paths)
+
+    def test_suggestions_endpoint_is_get(self):
+        from routes.agent_router import router
+        suggestion_route = next(
+            (r for r in router.routes if hasattr(r, "path") and "suggestions" in r.path),
+            None,
+        )
+        assert suggestion_route is not None
+        assert "GET" in suggestion_route.methods
+
+    def test_suggestions_endpoint_returns_list(self):
+        """With a mocked KPI snapshot, endpoint returns a list."""
+        from routes.agent_router import get_tool_suggestions
+        mock_user = {"sub": "user-123"}
+        mock_db = MagicMock()
+
+        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("services.infinity_service.get_user_kpi_snapshot", return_value=None):
+            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+
+        assert isinstance(result, list)
+
+    def test_suggestions_endpoint_returns_suggestions_when_scores_low(self):
+        """Low focus score → endpoint returns at least one suggestion."""
+        from routes.agent_router import get_tool_suggestions
+        mock_user = {"sub": "user-abc"}
+        mock_db = MagicMock()
+        snap = {
+            "master_score": 40.0,
+            "focus_quality": 25.0,
+            "execution_speed": 60.0,
+            "ai_productivity_boost": 60.0,
+            "decision_efficiency": 60.0,
+            "masterplan_progress": 60.0,
+            "confidence": "low",
+        }
+
+        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+
+        assert len(result) >= 1
+        assert result[0]["tool"] == "memory.recall"
+
+    def test_suggestions_endpoint_empty_when_no_scores(self):
+        """User with no score history → empty list."""
+        from routes.agent_router import get_tool_suggestions
+        mock_user = {"sub": "new-user"}
+        mock_db = MagicMock()
+
+        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("services.infinity_service.get_user_kpi_snapshot", return_value=None):
+            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+
+        assert result == []
+
+
+class TestAgentConsolePhase3UI:
+
+    def test_agent_console_imports_get_agent_suggestions(self):
+        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        assert "getAgentSuggestions" in src
+
+    def test_suggestion_chips_component_exists(self):
+        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        assert "SuggestionChips" in src
+
+    def test_suggestions_state_initialized(self):
+        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        assert "suggestions" in src
+        assert "setSuggestions" in src
+
+    def test_load_suggestions_called_on_mount(self):
+        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        assert "loadSuggestions" in src
+
+    def test_on_select_sets_goal(self):
+        """Chip click handler should call setGoal with the suggested_goal."""
+        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        assert "setGoal" in src
+        assert "onSelect" in src
+
+    def test_api_js_exports_get_agent_suggestions(self):
+        src = open("client/src/api.js", encoding="utf-8").read()
+        assert "getAgentSuggestions" in src
+        assert "/agent/suggestions" in src

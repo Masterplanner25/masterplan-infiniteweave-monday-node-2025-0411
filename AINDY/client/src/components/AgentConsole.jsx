@@ -8,6 +8,7 @@ import {
   getAgentTools,
   getAgentTrust,
   updateAgentTrust,
+  getAgentSuggestions,
 } from "../api";
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
@@ -265,6 +266,39 @@ const TrustPanel = ({ trust, onUpdate }) => {
   );
 };
 
+// ── Suggestion chips ─────────────────────────────────────────────────────────
+
+const TOOL_CHIP_COLORS = {
+  "memory.recall": "border-blue-500/30 text-blue-300 hover:bg-blue-500/10",
+  "task.create": "border-[#00ffaa]/30 text-[#00ffaa] hover:bg-[#00ffaa]/10",
+  "arm.analyze": "border-purple-500/30 text-purple-300 hover:bg-purple-500/10",
+  "genesis.message": "border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/10",
+};
+
+const SuggestionChips = ({ suggestions, onSelect }) => {
+  if (!suggestions || suggestions.length === 0) return null;
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-2">Suggested Actions</p>
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map((s, i) => (
+          <button
+            key={i}
+            title={s.reason}
+            onClick={() => onSelect(s.suggested_goal)}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-medium transition-colors ${
+              TOOL_CHIP_COLORS[s.tool] || "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+            }`}
+          >
+            <span className="font-mono text-[10px] opacity-70">{s.tool}</span>
+            <span className="truncate max-w-[180px]">{s.suggested_goal}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ── Main AgentConsole ─────────────────────────────────────────────────────────
 
 export default function AgentConsole() {
@@ -276,6 +310,7 @@ export default function AgentConsole() {
   const [stepsLoading, setStepsLoading] = useState(false);
   const [tools, setTools] = useState([]);
   const [trust, setTrust] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
   const [activeTab, setActiveTab] = useState("runs"); // runs | tools | trust
   const [error, setError] = useState(null);
 
@@ -306,11 +341,21 @@ export default function AgentConsole() {
     }
   }, []);
 
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const data = await getAgentSuggestions();
+      setSuggestions(data || []);
+    } catch (e) {
+      // Suggestions are non-critical — fail silently
+    }
+  }, []);
+
   useEffect(() => {
     loadRuns();
     loadTools();
     loadTrust();
-  }, [loadRuns, loadTools, loadTrust]);
+    loadSuggestions();
+  }, [loadRuns, loadTools, loadTrust, loadSuggestions]);
 
   const handleSelect = async (run) => {
     setSelectedRun(run);
@@ -388,6 +433,12 @@ export default function AgentConsole() {
           Type a goal. A.I.N.D.Y. generates a plan and executes it with your approval.
         </p>
       </div>
+
+      {/* Suggestion chips */}
+      <SuggestionChips
+        suggestions={suggestions}
+        onSelect={(suggestedGoal) => setGoal(suggestedGoal)}
+      />
 
       {/* Goal input */}
       <div className="mb-6">

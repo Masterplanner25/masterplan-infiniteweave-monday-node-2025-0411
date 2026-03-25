@@ -79,6 +79,74 @@ def get_tool_risk(tool_name: str) -> str:
     return entry["risk"] if entry else "high"
 
 
+def suggest_tools(kpi_snapshot: dict) -> list:
+    """
+    Return up to 3 tool suggestions based on the user's current KPI state.
+
+    Each suggestion: {tool, reason, suggested_goal}
+
+    Rules (in priority order):
+      focus_quality < 40   → memory.recall   (recall context before deep work)
+      execution_speed < 40 → task.create     (rebuild momentum with a concrete task)
+      ai_boost < 40        → arm.analyze     (improve code quality via ARM)
+      task_velocity low    → task.create     (secondary trigger if speed between 40-55)
+      master_score >= 70   → genesis.message (high performer unlock)
+
+    Returns [] when kpi_snapshot is None/empty or no rules trigger.
+    Never raises.
+    """
+    if not kpi_snapshot:
+        return []
+
+    try:
+        suggestions = []
+
+        focus = kpi_snapshot.get("focus_quality", 50.0)
+        speed = kpi_snapshot.get("execution_speed", 50.0)
+        ai_boost = kpi_snapshot.get("ai_productivity_boost", 50.0)
+        master = kpi_snapshot.get("master_score", 50.0)
+
+        if focus < 40:
+            suggestions.append({
+                "tool": "memory.recall",
+                "reason": f"Focus quality is low ({focus:.0f}/100) — recall past context before starting new work",
+                "suggested_goal": "Recall recent memories and notes to regain context on current priorities",
+            })
+
+        if speed < 40:
+            suggestions.append({
+                "tool": "task.create",
+                "reason": f"Execution speed is low ({speed:.0f}/100) — create a concrete next action to rebuild momentum",
+                "suggested_goal": "Create a focused task for the most important thing I need to do today",
+            })
+        elif speed < 55:
+            suggestions.append({
+                "tool": "task.create",
+                "reason": f"Execution pace is below average ({speed:.0f}/100) — a new task could help",
+                "suggested_goal": "Create a small, completable task to get back on track",
+            })
+
+        if ai_boost < 40 and len(suggestions) < 3:
+            suggestions.append({
+                "tool": "arm.analyze",
+                "reason": f"ARM usage is low ({ai_boost:.0f}/100) — analyzing code could boost quality scores",
+                "suggested_goal": "Analyze the current codebase for architecture and integrity improvements",
+            })
+
+        if master >= 70 and len(suggestions) < 3:
+            suggestions.append({
+                "tool": "genesis.message",
+                "reason": f"Strong overall performance ({master:.0f}/100) — review strategic direction with Genesis",
+                "suggested_goal": "Review my current MasterPlan progress and refine next priorities with Genesis",
+            })
+
+        return suggestions[:3]
+
+    except Exception as exc:
+        logger.warning("[AgentTools] suggest_tools failed: %s", exc)
+        return []
+
+
 # ── Tool Implementations ─────────────────────────────────────────────────────
 
 

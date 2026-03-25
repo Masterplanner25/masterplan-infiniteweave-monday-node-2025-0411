@@ -1,5 +1,5 @@
 """
-Agent Router — Sprint N+4 Agentics Phase 1+2
+Agent Router — Sprint N+4 Agentics Phase 1+2 / Sprint N+5 Phase 3
 
 Endpoints:
   POST   /agent/run                     — create a new agent run (goal → plan)
@@ -11,6 +11,7 @@ Endpoints:
   GET    /agent/tools                   — list available tools
   GET    /agent/trust                   — get trust settings
   PUT    /agent/trust                   — update trust settings
+  GET    /agent/suggestions             — KPI-based tool suggestions (Phase 3)
 """
 import logging
 from typing import Optional
@@ -240,6 +241,27 @@ def get_trust_settings(
         "auto_execute_medium": trust.auto_execute_medium if trust else False,
         "note": "High-risk plans always require approval regardless of trust settings.",
     }
+
+
+@router.get("/suggestions")
+def get_tool_suggestions(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return up to 3 KPI-driven tool suggestions for the current user.
+
+    Reads the user's latest Infinity score snapshot and maps low KPIs to
+    recommended tools + pre-filled goal strings.
+
+    Returns [] when the user has no score history yet.
+    """
+    from services.agent_tools import suggest_tools
+    from services.infinity_service import get_user_kpi_snapshot
+
+    user_id = str(current_user["sub"])
+    snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+    return suggest_tools(kpi_snapshot=snapshot)
 
 
 @router.put("/trust")
