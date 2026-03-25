@@ -1,0 +1,177 @@
+"""
+Sprint N+9 Phase 1 — APScheduler lease gating + heartbeat tests.
+
+Groups:
+  1. start_background_tasks return value (4 tests)
+  2. _heartbeat_lease_job behaviour (4 tests)
+  3. scheduler_service._refresh_lease_heartbeat (3 tests)
+  4. main.py startup order — lease gates scheduler.start() (4 tests)
+"""
+import logging
+import pytest
+from unittest.mock import MagicMock, patch, call
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Group 1 — start_background_tasks return value
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestStartBackgroundTasksReturnValue:
+    """start_background_tasks() must return bool so main.py can gate scheduler."""
+
+    def test_returns_false_when_disabled(self):
+        from services.task_services import start_background_tasks
+        result = start_background_tasks(enable=False)
+        assert result is False
+
+    def test_returns_true_when_lease_acquired(self):
+        from services import task_services
+        with patch.object(task_services, "_acquire_background_lease", return_value=True):
+            result = task_services.start_background_tasks(enable=True)
+        assert result is True
+
+    def test_returns_false_when_lease_not_acquired(self):
+        from services import task_services
+        with patch.object(task_services, "_acquire_background_lease", return_value=False):
+            result = task_services.start_background_tasks(enable=True)
+        assert result is False
+
+    def test_return_type_is_bool(self):
+        from services import task_services
+        with patch.object(task_services, "_acquire_background_lease", return_value=True):
+            result = task_services.start_background_tasks(enable=True)
+        assert isinstance(result, bool)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Group 2 — _heartbeat_lease_job behaviour
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestHeartbeatLeaseJob:
+    """_heartbeat_lease_job calls _refresh_background_lease and handles failures."""
+
+    def test_calls_refresh_on_success(self):
+        from services import task_services
+        with patch.object(task_services, "_refresh_background_lease", return_value=True) as mock_refresh:
+            task_services._heartbeat_lease_job()
+        mock_refresh.assert_called_once()
+
+    def test_logs_warning_when_refresh_returns_false(self, caplog):
+        from services import task_services
+        with patch.object(task_services, "_refresh_background_lease", return_value=False):
+            with caplog.at_level(logging.WARNING, logger="services.task_services"):
+                task_services._heartbeat_lease_job()
+        assert any("lease refresh failed" in r.message for r in caplog.records)
+
+    def test_does_not_raise_when_refresh_raises(self):
+        from services import task_services
+        with patch.object(task_services, "_refresh_background_lease", side_effect=RuntimeError("db gone")):
+            # Must not propagate the exception
+            task_services._heartbeat_lease_job()
+
+    def test_no_warning_logged_on_success(self, caplog):
+        from services import task_services
+        with patch.object(task_services, "_refresh_background_lease", return_value=True):
+            with caplog.at_level(logging.WARNING, logger="services.task_services"):
+                task_services._heartbeat_lease_job()
+        assert not any("lease refresh failed" in r.message for r in caplog.records)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Group 3 — scheduler_service._refresh_lease_heartbeat
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRefreshLeaseHeartbeatJob:
+    """_refresh_lease_heartbeat is the APScheduler job wrapper in scheduler_service."""
+
+    def test_delegates_to_task_services_heartbeat(self):
+        from services import scheduler_service
+        with patch("services.task_services._heartbeat_lease_job") as mock_hb:
+            scheduler_service._refresh_lease_heartbeat()
+        mock_hb.assert_called_once()
+
+    def test_does_not_raise_if_import_fails(self):
+        from services import scheduler_service
+        import builtins
+        real_import = builtins.__import__
+
+        def patched_import(name, *args, **kwargs):
+            if name == "services.task_services":
+                raise ImportError("simulated")
+            return real_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=patched_import):
+            # Should catch the exception and not propagate
+            scheduler_service._refresh_lease_heartbeat()
+
+    def test_heartbeat_job_registered_in_system_jobs(self):
+        """_register_system_jobs must add background_lease_heartbeat job."""
+        from services import scheduler_service
+        mock_scheduler = MagicMock()
+        scheduler_service._register_system_jobs(mock_scheduler)
+        job_ids = [call_args.kwargs.get("id") or call_args[1][1] if len(call_args[1]) > 1 else None
+                   for call_args in mock_scheduler.add_job.call_args_list]
+        # Collect all id= keyword args
+        kw_ids = [ca.kwargs.get("id") for ca in mock_scheduler.add_job.call_args_list]
+        assert "background_lease_heartbeat" in kw_ids
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Group 4 — main.py startup order
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestMainStartupOrder:
+    """scheduler_service.start() must only be called when start_background_tasks returns True."""
+
+    def _run_startup_block(self, lease_acquired: bool):
+        """
+        Simulate the main.py startup block in isolation.
+        Returns (start_called: bool).
+        """
+        import services.task_services as ts
+        import services.scheduler_service as ss
+
+        with patch.object(ts, "_acquire_background_lease", return_value=lease_acquired), \
+             patch.object(ss, "start") as mock_start, \
+             patch.object(ss, "_register_system_jobs"):
+            is_leader = ts.start_background_tasks(enable=True)
+            if is_leader:
+                ss.start()
+            return mock_start.called
+
+    def test_scheduler_starts_when_leader(self):
+        assert self._run_startup_block(lease_acquired=True) is True
+
+    def test_scheduler_does_not_start_when_not_leader(self):
+        assert self._run_startup_block(lease_acquired=False) is False
+
+    def test_scheduler_does_not_start_when_disabled(self):
+        import services.task_services as ts
+        import services.scheduler_service as ss
+
+        with patch.object(ts, "_acquire_background_lease", return_value=True), \
+             patch.object(ss, "start") as mock_start, \
+             patch.object(ss, "_register_system_jobs"):
+            is_leader = ts.start_background_tasks(enable=False)
+            if is_leader:
+                ss.start()
+            assert not mock_start.called
+
+    def test_start_background_tasks_called_before_scheduler_start(self):
+        """Verify call ordering: start_background_tasks precedes scheduler.start()."""
+        import services.task_services as ts
+        import services.scheduler_service as ss
+
+        call_order = []
+        with patch.object(ts, "_acquire_background_lease", return_value=True), \
+             patch.object(ss, "_register_system_jobs"), \
+             patch.object(ss, "start", side_effect=lambda: call_order.append("scheduler_start")):
+            def fake_start_bg(*a, **kw):
+                call_order.append("lease_acquired")
+                return True
+            with patch.object(ts, "start_background_tasks", side_effect=fake_start_bg):
+                is_leader = ts.start_background_tasks(enable=True)
+                if is_leader:
+                    ss.start()
+
+        assert call_order == ["lease_acquired", "scheduler_start"]

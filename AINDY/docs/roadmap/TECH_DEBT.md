@@ -101,10 +101,10 @@ This document inventories current technical debt based strictly on the existing 
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
-- ✅ **PARTIALLY RESOLVED (2026-03-22):** Background task runner now uses a DB lease (`background_task_leases`) to prevent duplicate work across instances (`AINDY/services/task_services.py`).
+- ✅ **RESOLVED (2026-03-25 Sprint N+9):** Background task runner uses a DB lease (`background_task_leases`) to gate APScheduler startup — `start_background_tasks()` returns `bool`; `scheduler_service.start()` only called by the leader. Heartbeat job (`background_lease_heartbeat`, 60s interval) keeps the lease alive so it doesn't expire (TTL=120s). `is_background_leader()` public helper + `GET /observability/scheduler/status` endpoint expose current state. APScheduler no longer starts on follower instances.
 - ✅ **RESOLVED (2026-03-22):** Process-level singletons in ARM analyzer and embedding client now use thread-safe initialization guards.
 - ✅ **RESOLVED (2026-03-22):** Per-request session reuse warning added to `db/database.py`.
-- No distributed-safe scheduler; multi-instance deployment risks duplicated background work beyond the task runner (`AINDY/main.py` daemon threads).
+- ✅ **RESOLVED (2026-03-22):** Daemon threads eliminated — APScheduler replaces all `threading.Thread(daemon=True)` patterns.
 - No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
 
 ## 6. Security Debt
@@ -147,7 +147,9 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Structured request logging added via middleware with per-request IDs and latency.
 - ✅ **RESOLVED (2026-03-22):** Request metrics persisted to `request_metrics` (basic baseline store).
 - ✅ **RESOLVED (2026-03-22):** Basic observability query endpoint added (`GET /observability/requests`).
-- No centralized tracing or log aggregation pipeline (beyond local logs + DB request metrics).
+- ✅ **RESOLVED (2026-03-25 Sprint N+8):** Agent lifecycle tracing implemented — `AgentEvent` table captures PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED with `correlation_id` (`run_<uuid4>`) threading through `AgentRun`, `AgentStep`, and `AgentEvent`. `GET /agent/runs/{run_id}/events` merges lifecycle + step events into a chronological timeline.
+- ✅ **RESOLVED (2026-03-25 Sprint N+9):** Request-scoped `request_id` now propagates through async call stacks via `contextvars.ContextVar`. `RequestContextFilter` injects `request_id` into every `LogRecord`; all root-logger handlers upgraded to format `%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s`. Non-request code paths log `[-]`.
+- No system-wide centralized tracing or log aggregation pipeline (OpenTelemetry / external aggregator).
 - Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt
@@ -503,16 +505,14 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 
 ## 16. Sprint N+4–N+7 Audit — 2026-03-25
 
-### §16.1 Agentics Phase 1–3 + Observability — RESOLVED
+### §16.1 Agentics Phase 1–3 + Observability + Event Log — RESOLVED
 - ✅ **RESOLVED (Sprint N+4, 2026-03-24):** Agent runtime Phase 1 (goal→plan→execute) and Phase 2 (dry-run preview + approval gate) implemented. `services/agent_runtime.py`, `services/agent_tools.py`, `db/models/agent_run.py`, `routes/agent_router.py`.
 - ✅ **RESOLVED (Sprint N+6, 2026-03-25):** Agentics Phase 3 (deterministic execution). `NodusAgentAdapter` + `AGENT_FLOW` wired to `PersistentFlowRunner`. Per-step retry policy. `flow_run_id` linkage. Nodus pip package confirmed NOT usable (separate scripting-language VM).
 - ✅ **RESOLVED (Sprint N+7, 2026-03-25):** Agentics Phase 5 (observability). Stuck-run startup scan, `/recover` and `/replay` endpoints, `replayed_from_run_id` lineage, serializer unification.
+- ✅ **RESOLVED (Sprint N+8, 2026-03-25):** Agent Event Log. `AgentEvent` table, `correlation_id` threading through `AgentRun`/`AgentStep`/`AgentEvent`, `emit_event()`, `GET /agent/runs/{id}/events` merged timeline, `AgentConsole.jsx` Timeline tab + pending-approval badge.
 
-### §16.2 `new_plan` replay mode not implemented — Open
-- **`replay_run()` only supports `mode="same_plan"`** — re-uses the original plan verbatim without calling GPT-4o. A `mode="new_plan"` path (re-generate plan from same goal) was explicitly deferred to a future sprint.
-  - Location: `AINDY/services/agent_runtime.py::replay_run()`
-  - Fix: Add `elif mode == "new_plan": return create_run(goal=original.goal, ...)` branch.
-  - Status: Open. Low effort.
+### §16.2 `new_plan` replay mode — RESOLVED
+- ✅ **RESOLVED (Sprint N+8, 2026-03-25):** `replay_run(mode="new_plan")` re-calls GPT-4o with the original goal to generate a fresh plan. New run is created via `_create_run_from_plan()` with new `correlation_id` and `REPLAY_CREATED` event emitted with `{original_run_id, mode: "new_plan"}`. The prior approval does not carry forward — trust gate re-evaluated on new run.
 
 ### §16.3 Agent capability/policy system missing — Open
 - **No scoped capability enforcement exists.** Any approved agent run can invoke any tool in `TOOL_REGISTRY` regardless of user permissions or run context. High-risk tools (`genesis.message`) are rate-limited only by the trust gate and per-step no-retry rule; they are not capability-gated.
@@ -524,8 +524,9 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 - **Migration `b1c2d3e4f5a6` adds `user_id` to `watcher_signals`** but the column is `String` (not UUID with FK to `users.id`) for consistency with the watcher's HTTP-posted signal flow. This is intentional but creates a heterogeneous `user_id` type pattern across tables. Future user FK normalization work would need to include this table.
   - Status: Documented. Not blocking.
 
-### §16.5 Agent approval inbox has no dedicated UI — Open
-- **Pending-approval runs are visible in `AgentConsole.jsx` only when the user navigates to that page.** There is no notification surface, inbox view, or badge count for runs awaiting approval.
+### §16.5 Agent approval inbox has no dedicated UI — Partially Resolved
+- ✅ **PARTIALLY RESOLVED (Sprint N+8, 2026-03-25):** `AgentConsole.jsx` now shows an amber pending-approval badge on the runs section header when runs are awaiting approval. The badge count is derived from `pendingRuns.length`.
+- **Still open:** No standalone `AgentApprovalInbox.jsx` component; no badge surfaced in top-level navigation (Sidebar). Users must navigate to AgentConsole to see pending runs.
   - Location: `AINDY/client/src/components/AgentConsole.jsx`
-  - Fix: Add a pending-runs badge to the Sidebar nav item; optionally add a dedicated `AgentApprovalInbox.jsx` component.
-  - Status: Open. Low effort, Medium UX impact.
+  - Remaining fix: Dedicated `AgentApprovalInbox.jsx` or Sidebar badge count.
+  - Status: Partially resolved. Remaining work: Low effort, Medium UX impact.

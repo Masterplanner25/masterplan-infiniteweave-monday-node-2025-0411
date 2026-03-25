@@ -638,3 +638,7 @@ export function updateAgentTrust(payload) {
 export function getAgentSuggestions() {
   return authRequest("/agent/suggestions", { method: "GET" });
 }
+
+export async function fetchRunEvents(runId) {
+  return authRequest(`/agent/runs/${runId}/events`);
+}

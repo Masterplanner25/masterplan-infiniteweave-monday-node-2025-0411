@@ -372,26 +372,49 @@ def handle_recurrence():
     _handle_recurrence_once()
 
 
-def start_background_tasks(enable: bool = True, log: logging.Logger | None = None) -> None:
+def is_background_leader() -> bool:
+    """Return True if this instance currently holds the background task lease."""
+    return _BACKGROUND_OWNER_ID is not None and _BACKGROUND_OWNER_ID == _get_instance_id()
+
+
+def _heartbeat_lease_job() -> None:
+    """
+    APScheduler job — refresh the background task lease every 60 seconds.
+    Registered in scheduler_service._register_system_jobs() on leader instances only.
+    Logs a warning if the lease has been lost; never raises.
+    """
+    try:
+        result = _refresh_background_lease()
+        if not result:
+            logger.warning(
+                "[BackgroundTaskLease] Heartbeat: lease refresh failed — lease may have been lost."
+            )
+    except Exception as exc:  # pragma: no cover
+        logger.warning("[BackgroundTaskLease] Heartbeat job raised unexpectedly: %s", exc)
+
+
+def start_background_tasks(enable: bool = True, log: logging.Logger | None = None) -> bool:
     """
     Called from main.py lifespan on startup.
 
-    APScheduler (started separately in main.py lifespan via
-    scheduler_service.start()) now handles all recurring jobs.
-    This function acquires the inter-instance DB lease so that only one
-    process runs background jobs in multi-instance deployments, then logs
-    that the scheduler is active. Daemon threads have been eliminated.
+    Acquires the inter-instance DB lease so that only one process runs
+    background jobs in multi-instance deployments.
+
+    Returns:
+        True  — lease acquired; caller should start APScheduler.
+        False — lease unavailable or disabled; caller must NOT start APScheduler.
     """
     log = log or logger
     if not enable:
         log.info("Background task runner disabled by configuration.")
-        return
+        return False
 
     if not _acquire_background_lease(log=log):
         log.warning("Background task runner not started (lease unavailable — another instance holds it).")
-        return
+        return False
 
     log.info("Background tasks initialized via APScheduler (daemon threads eliminated).")
+    return True
 
 
 def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.0) -> None:

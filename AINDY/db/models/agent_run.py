@@ -37,6 +37,11 @@ class AgentRun(Base):
     # (nullable — only set on replayed runs; absent on originals)
     replayed_from_run_id = Column(String, nullable=True, index=False)
 
+    # N+8: correlation token propagated through all child records (AgentStep, AgentEvent)
+    # Format: run_<uuid4> — generated at create_run() time
+    # Nullable: pre-N+8 runs have no correlation_id
+    correlation_id = Column(String(72), nullable=True, index=True)
+
     # Goal and plan
     goal = Column(Text, nullable=False)
     plan = Column(JSONB, nullable=True)          # Full GPT-4o plan JSON
@@ -95,6 +100,10 @@ class AgentStep(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    # N+8: correlation token from the parent AgentRun
+    # Nullable: pre-N+8 runs have no correlation_id
+    correlation_id = Column(String(72), nullable=True, index=True)
 
 
 class AgentTrustSettings(Base):

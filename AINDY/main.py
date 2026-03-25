@@ -4,6 +4,7 @@ import threading
 import os
 import time
 import uuid
+from contextvars import ContextVar
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -89,8 +90,29 @@ if ROOT_DIR not in sys.path:
 # from redis import asyncio as aioredis
 
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+# ── Request-scoped logging context ──────────────────────────────────────────
+# ContextVar carries the current request_id through async call stacks.
+# Default "-" appears in log lines that originate outside a request context.
+_request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class RequestContextFilter(logging.Filter):
+    """Inject request_id from ContextVar into every LogRecord."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_ctx.get()
+        return True
+
+
+# config.py already called logging.basicConfig (FileHandler + StreamHandler).
+# Upgrade all root-logger handlers in-place: attach the filter and apply the
+# new format that includes [request_id].  No duplicate basicConfig call needed.
+_REQUEST_LOG_FORMAT = "%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s"
+_ctx_filter = RequestContextFilter()
+for _handler in logging.root.handlers:
+    _handler.addFilter(_ctx_filter)
+    _handler.setFormatter(logging.Formatter(_REQUEST_LOG_FORMAT))
+
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -158,12 +180,11 @@ async def lifespan(app: FastAPI):
     if os.getenv("PYTEST_CURRENT_TEST"):
         enable_background = False
 
-    # Start APScheduler before task_services — scheduler must be running
-    # before any startup tasks are submitted to it
-    if enable_background:
+    # Acquire the inter-instance DB lease first; only the leader starts APScheduler.
+    # start_background_tasks() returns True iff this instance holds the lease.
+    is_leader = task_services.start_background_tasks(enable=enable_background, log=logger)
+    if is_leader:
         scheduler_service.start()
-
-    task_services.start_background_tasks(enable=enable_background, log=logger)
 
     # Register Flow Engine flows and nodes
     from services.flow_definitions import register_all_flows
@@ -300,6 +321,7 @@ def _extract_user_id_from_request(request: Request):
 @app.middleware("http")
 async def log_requests(request, call_next):
     request_id = str(uuid.uuid4())
+    _request_id_ctx.set(request_id)  # propagate through async call stack
     start_time = time.time()
 
     response = await call_next(request)

@@ -219,6 +219,18 @@ def recover_stuck_agent_run(
             run_id,
             len(step_results),
         )
+
+        # Emit RECOVERED lifecycle event
+        from services.agent_event_service import emit_event
+        emit_event(
+            run_id=str(run.id),
+            user_id=run.user_id,
+            event_type="RECOVERED",
+            db=db,
+            correlation_id=getattr(run, "correlation_id", None),
+            payload={"recovered_at": run.completed_at.isoformat() if run.completed_at else None},
+        )
+
         return {"ok": True, "run": _run_to_dict(run)}
 
     except Exception as exc:

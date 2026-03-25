@@ -9,6 +9,7 @@ import {
   getAgentTrust,
   updateAgentTrust,
   getAgentSuggestions,
+  fetchRunEvents,
 } from "../api";
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
@@ -299,6 +300,24 @@ const SuggestionChips = ({ suggestions, onSelect }) => {
   );
 };
 
+// ── Event type color helper ───────────────────────────────────────────────────
+
+function eventTypeColor(eventType) {
+  const colors = {
+    PLAN_CREATED: "#6366f1",
+    APPROVED: "#10b981",
+    REJECTED: "#ef4444",
+    EXECUTION_STARTED: "#3b82f6",
+    COMPLETED: "#059669",
+    EXECUTION_FAILED: "#dc2626",
+    RECOVERED: "#f59e0b",
+    REPLAY_CREATED: "#8b5cf6",
+    STEP_EXECUTED: "#64748b",
+    STEP_FAILED: "#b91c1c",
+  };
+  return colors[eventType] || "#6b7280";
+}
+
 // ── Main AgentConsole ─────────────────────────────────────────────────────────
 
 export default function AgentConsole() {
@@ -313,6 +332,8 @@ export default function AgentConsole() {
   const [suggestions, setSuggestions] = useState([]);
   const [activeTab, setActiveTab] = useState("runs"); // runs | tools | trust
   const [error, setError] = useState(null);
+  const [runEvents, setRunEvents] = useState([]);
+  const [activeDetailTab, setActiveDetailTab] = useState("steps"); // "steps" | "timeline"
 
   const loadRuns = useCallback(async () => {
     try {
@@ -360,6 +381,8 @@ export default function AgentConsole() {
   const handleSelect = async (run) => {
     setSelectedRun(run);
     setSelectedSteps([]);
+    setRunEvents([]);
+    setActiveDetailTab("steps");
     if (run.status === "completed" || run.status === "failed") {
       setStepsLoading(true);
       try {
@@ -371,6 +394,9 @@ export default function AgentConsole() {
         setStepsLoading(false);
       }
     }
+    fetchRunEvents(run.run_id)
+      .then(data => setRunEvents(data?.events || []))
+      .catch(() => setRunEvents([]));
   };
 
   const handleSubmit = async () => {
@@ -489,7 +515,24 @@ export default function AgentConsole() {
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
               >
-                {tab === "runs" ? `Runs${runs.length ? ` (${runs.length})` : ""}` : tab === "tools" ? "Tools" : "Trust"}
+                {tab === "runs" ? (
+                  <span>
+                    {`Runs${runs.length ? ` (${runs.length})` : ""}`}
+                    {pendingRuns.length > 0 && (
+                      <span style={{
+                        background: "#f59e0b",
+                        color: "#fff",
+                        borderRadius: "10px",
+                        padding: "1px 6px",
+                        fontSize: "10px",
+                        marginLeft: "5px",
+                        fontWeight: 700,
+                      }}>
+                        {pendingRuns.length}
+                      </span>
+                    )}
+                  </span>
+                ) : tab === "tools" ? "Tools" : "Trust"}
               </button>
             ))}
           </div>
@@ -540,11 +583,108 @@ export default function AgentConsole() {
         {/* Right: plan detail */}
         <div className="flex-1 min-w-0 border border-zinc-800/60 rounded-xl p-5 overflow-y-auto custom-scrollbar">
           {selectedRun ? (
-            <PlanPreview
-              run={selectedRun}
-              steps={selectedSteps}
-              loading={stepsLoading}
-            />
+            <div className="flex flex-col h-full">
+              {/* Detail tab switcher */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+                <button
+                  onClick={() => setActiveDetailTab("steps")}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    border: "1px solid #3f3f46",
+                    background: activeDetailTab === "steps" ? "#3b82f6" : "transparent",
+                    color: activeDetailTab === "steps" ? "#fff" : "#a1a1aa",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                  }}
+                >
+                  Steps
+                </button>
+                <button
+                  onClick={() => setActiveDetailTab("timeline")}
+                  style={{
+                    padding: "4px 12px",
+                    borderRadius: "4px",
+                    border: "1px solid #3f3f46",
+                    background: activeDetailTab === "timeline" ? "#3b82f6" : "transparent",
+                    color: activeDetailTab === "timeline" ? "#fff" : "#a1a1aa",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                  }}
+                >
+                  Timeline {runEvents.length > 0 && `(${runEvents.length})`}
+                </button>
+              </div>
+
+              {activeDetailTab === "steps" && (
+                <PlanPreview
+                  run={selectedRun}
+                  steps={selectedSteps}
+                  loading={stepsLoading}
+                />
+              )}
+
+              {activeDetailTab === "timeline" && (
+                <div>
+                  {runEvents.length === 0 ? (
+                    <p style={{ color: "#6b7280", fontStyle: "italic", fontSize: "12px" }}>
+                      No events recorded (run may predate N+8).
+                    </p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {runEvents.map((evt, i) => (
+                        <div
+                          key={evt.id || i}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #27272a",
+                            background: "#09090b",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{
+                              background: eventTypeColor(evt.event_type),
+                              color: "#fff",
+                              borderRadius: "4px",
+                              padding: "2px 8px",
+                              fontSize: "11px",
+                              fontWeight: 600,
+                              letterSpacing: "0.05em",
+                            }}>
+                              {evt.event_type}
+                            </span>
+                            <span style={{ color: "#6b7280", fontSize: "12px" }}>
+                              {evt.occurred_at ? new Date(evt.occurred_at).toLocaleTimeString() : ""}
+                            </span>
+                          </div>
+                          {evt.payload && Object.keys(evt.payload).length > 0 && (
+                            <div style={{ marginTop: "4px", fontSize: "12px", color: "#a1a1aa" }}>
+                              {evt.event_type === "STEP_EXECUTED" || evt.event_type === "STEP_FAILED" ? (
+                                <span>
+                                  Step {evt.payload.step_index} · {evt.payload.tool_name}
+                                  {evt.payload.execution_ms ? ` · ${evt.payload.execution_ms}ms` : ""}
+                                  {evt.payload.error_message ? ` · ${evt.payload.error_message}` : ""}
+                                </span>
+                              ) : (
+                                <span>
+                                  {Object.entries(evt.payload)
+                                    .filter(([k, v]) => v !== null && v !== undefined && v !== "")
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(" · ")}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full">
               <p className="text-xs text-zinc-600">Select a run to view its plan</p>

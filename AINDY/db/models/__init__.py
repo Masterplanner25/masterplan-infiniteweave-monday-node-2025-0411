@@ -31,6 +31,7 @@ from .strategy import StrategyDB
 from .playbook import PlaybookDB
 from .user_score import UserScore, ScoreHistory
 from .agent_run import AgentRun, AgentStep, AgentTrustSettings
+from .agent_event import AgentEvent
 
 
 __all__ = [
@@ -76,4 +77,5 @@ __all__ = [
     "AgentRun",
     "AgentStep",
     "AgentTrustSettings",
+    "AgentEvent",
 ]
