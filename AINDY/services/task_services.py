@@ -320,11 +320,15 @@ def complete_task(db: Session, name: str, user_id: str = None):
     if user_id:
         try:
             from services.infinity_service import calculate_infinity_score
-            calculate_infinity_score(
+            from services.infinity_loop import run_loop
+
+            result = calculate_infinity_score(
                 user_id=str(user_id),
                 db=db,
                 trigger_event="task_completion",
             )
+            if result:
+                run_loop(user_id=str(user_id), trigger_event="task_completed", db=db)
         except Exception as e:
             logger.warning("Infinity score after task failed: %s", e)
 

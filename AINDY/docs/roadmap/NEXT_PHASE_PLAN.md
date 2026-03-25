@@ -9,8 +9,8 @@ Based on: docs/roadmap/*.md + docs/architecture/SYSTEM_SPEC.md + docs/architectu
 
 | Metric                   | Value                                                     |
 |--------------------------|-----------------------------------------------------------|
-| Tests                    | **1,326 passing, 5 pre-existing failures, 1 error** (as of Sprint N+9) |
-| Coverage                 | **69.65%** (threshold: 69%)                               |
+| Tests                    | **1,424 passed, 5 failed, 3 skipped, 1 error** (confirmed by local `pytest -q --tb=short` run after Sprint N+11) |
+| Coverage                 | **70.22%** (threshold: 69%)                               |
 | Ruff lint errors         | 0 (prototype files excluded from lint)                    |
 | API endpoints            | **~147** (+13 agent endpoints + 1 scheduler/status since N+4) |
 | Frontend components      | **~43 JSX files** (AgentConsole + Timeline tab + pending-approval badge added N+8) |
@@ -100,12 +100,12 @@ Items that are documented in roadmap files but have no implementation.
 | ETA projection / timeline compression output | MASTERPLAN_SAAS.md | Phase v2 |
 | Dependency cascade model for tasks | MASTERPLAN_SAAS.md | Phase v3 |
 | Execution automation layer (social/CRM/payments) | MASTERPLAN_SAAS.md | Phase v4 |
-| Infinity Algorithm unified execution loop (`infinity_loop.py`) | INFINITY_ALGORITHM.md | Phase v4 |
+| ~~Infinity Algorithm unified execution loop (`infinity_loop.py`)~~ | INFINITY_ALGORITHM.md | **DONE Sprint N+11** |
 | Expanded TWR model (multi-variable: quality, risk, AI lift) | INFINITY_ALGORITHM.md | Phase v2 |
 | Ranking/Elo system (expected vs actual perf) | INFINITY_ALGORITHM.md | Phase v5 |
-| Watcher service (focus, distraction, session tracking) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v2 |
-| Watcher signals fed into TWR/scoring | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v3 |
-| User feedback capture (explicit + implicit) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v5 |
+| ~~Watcher service (focus, distraction, session tracking)~~ | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | **DONE Sprint N+2** |
+| Watcher signals fed into TWR/scoring | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v3 (partial remaining) |
+| User feedback capture (explicit + implicit) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v5 (explicit done; implicit open) |
 | ~~Agentics runtime Phase 1 (agent_runtime.py — goal→plan→execute)~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 2 — dry-run preview + approval gate~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 3 — deterministic execution (PersistentFlowRunner)~~ | AGENTICS.md | **DONE Sprint N+6** |
@@ -114,7 +114,7 @@ Items that are documented in roadmap files but have no implementation.
 | ~~`new_plan` replay mode~~ | AGENTICS.md §16.2 | **DONE Sprint N+8** |
 | ~~APScheduler lease-gated startup + heartbeat~~ | TECH_DEBT.md §5 | **DONE Sprint N+9** |
 | ~~Request-id context propagation (ContextVar + RequestContextFilter)~~ | TECH_DEBT.md §7 | **DONE Sprint N+9** |
-| Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 — Open |
+| ~~Agentics Phase 4 — capability/policy system~~ | AGENTICS.md | **DONE Sprint N+10** |
 | RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
 | RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
 | RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
@@ -143,9 +143,10 @@ Items still open in TECH_DEBT.md, annotated with risk level.
 | §10.1 | `MemoryNode.children` never persisted | **MEDIUM** | ✅ Fixed N+1 |
 | §12.3 | Embedding generation is synchronous on write path | **MEDIUM** | Open |
 | §1 | ARM config updates are process-local | **MEDIUM** | Open |
-| §7 | Infinity Algorithm open-loop — Watcher missing, feedback not enforced | **MEDIUM** | ✅ Watcher done N+2; loop done N+3 |
+| §7 | Infinity Algorithm open-loop — Watcher missing, feedback not enforced | **MEDIUM** | ✅ Closed through N+11 loop enforcement + feedback capture |
 | §5/§1 | No distributed-safe scheduler | **MEDIUM** | ✅ Resolved N+9 — APScheduler lease-gated; heartbeat job prevents TTL expiry |
-| §16.3 | No agent capability/policy system — any approved run can invoke any tool | **MEDIUM** | Open (Agentics Phase 4) |
+| §16.3 | No agent capability/policy system — any approved run can invoke any tool | **MEDIUM** | ✅ Closed N+10 |
+| §16.6 | Infinity loop optimization depth is rule-based; TWR/ranking still incomplete | **MEDIUM** | Open |
 | §16.2 | `replay_run()` only supports `same_plan` — `new_plan` mode deferred | **LOW** | ✅ Resolved N+8 — `new_plan` mode re-calls GPT-4o for fresh plan |
 | §16.5 | Agent approval inbox has no dedicated UI — pending runs not surfaced | **LOW** | ⚠️ Partial N+8 — badge added to AgentConsole; standalone inbox still missing |
 | §15.16 | RippleTrace viewer has no frontend UI | **LOW** | Open |
@@ -235,8 +236,8 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 **Tech debt closed:** INFINITY_ALGORITHM_SUPPORT_SYSTEM Phase v2 (Observation Layer — Watcher) §7
 
 **Remaining from original N+2 scope (deferred to N+3):**
-- `services/infinity_loop.py` — enforced execution feedback loop
-- Watcher signals → TWR scoring integration (Phase v3)
+- Watcher-derived focus/distraction → standalone TWR integration (Phase v3 remaining)
+- Ranking / expected-vs-actual optimization (Phase v5)
 - Freelancing metrics completion
 
 ---
@@ -275,7 +276,7 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 - ✅ `_request_id_ctx: ContextVar[str]` at `main.py` module level; `RequestContextFilter` injects `request_id` into every `LogRecord`
 - ✅ All root-logger handlers upgraded in-place: format now includes `[%(request_id)s]`; `log_requests` middleware sets ContextVar before `call_next()`
 - ✅ `GET /observability/scheduler/status` (JWT-gated) — returns `{scheduler_running, is_leader, lease: {owner_id, acquired_at, heartbeat_at, expires_at}}`
-- ✅ 30 new tests (1,326 total passing, 69.65% coverage)
+- ✅ 30 new tests (baseline later normalized to 1,326 passed, 5 failed, 3 skipped, 1 error; 69.62% coverage on the confirming local rerun)
 
 **Tech debt closed:** TECH_DEBT.md §5 (Concurrency — APScheduler multi-instance), §7 (Observability — request_id context propagation)
 
@@ -377,13 +378,11 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ## Strategic Assessment
 
-A.I.N.D.Y. is designed to be a **self-improving autonomous execution system**: a trajectory engine that turns human work into compressed timelines, measurable identity, and adaptive intelligence. As of today, the foundation is genuinely impressive — 134 endpoints, a fully instrumented Memory Bridge, a working Flow Engine with WAIT/RESUME semantics, federated agent memory, and a tested auth/security layer. The system is architecturally coherent and technically solid. But it has a critical gap: **the loop is not closed.**
+A.I.N.D.Y. is now materially closer to the intended system shape: the Memory Bridge is instrumented, the Flow Engine is persistent, Agentics has bounded authority, and the Infinity loop is closed at the MVP level. Scores no longer stop at storage. A score recalculation can now trigger deterministic execution adjustments, persist loop state, and collect explicit user feedback on ARM and agent outcomes.
 
-The Infinity Algorithm exists as five endpoints and some formulas. The Memory Bridge writes beautifully and recalls with resonance scoring. The Flow Engine tracks execution with node-level granularity. But none of these systems feed back into each other in an enforced, autonomous way. A task completion updates a score, but nothing adjusts future task prioritization. An ARM analysis captures a memory node, but nothing changes what question is asked next. The MasterPlan is locked, but there is no trajectory projection — the user cannot see whether they are ahead or behind. The system measures everything and acts on nothing.
+The remaining gap is no longer “the loop does not exist.” The remaining gap is **optimization depth**. Watcher-derived focus signals influence `focus_quality` and loop decisions, but not the standalone TWR endpoint directly. Loop decisions are rule-based rather than learned. Ranking, expected-vs-actual performance comparison, and adaptive thresholding are still missing. The next phase should therefore shift from “close the loop” to “make the loop smarter.”
 
-The next 90 days should focus on two things above all else: **closing the feedback loop** (Infinity Algorithm v4 + Watcher) and **launching the first agent** (Agentics Phase 1). These two items together transform A.I.N.D.Y. from a sophisticated metrics and memory platform into an autonomous execution partner. The MasterPlan anchor work in Sprint N+1 is the prerequisite: you cannot compress a timeline without declaring one. Once ETA projection is live, every task completion becomes a signal that either advances or delays the target, and the system has a reason to act.
-
-The Agentics runtime in Sprint N+3 is the most strategically important bet in the roadmap. The Nodus execution substrate already exists. The Memory Bridge already provides context. The tool surface (tasks, ARM, memory) is already built. What is missing is the thin adapter layer that wraps these capabilities into a goal-oriented execution loop. Agentics Phase 1 is not a research project — it is integration work on top of systems that already function. Once a user can say "grow my freelance pipeline" and receive a plan, approve it, and watch A.I.N.D.Y. execute tasks, query research, and store outcomes autonomously, the product crosses from "powerful tool" into "intelligent partner."
+The highest-leverage next work is: expanded TWR integration, ranking/decision intelligence, and broader system surfaces that consume persisted loop adjustments. That is the path from a functioning closed-loop control system to a genuinely optimizing one.
 
 ---
 

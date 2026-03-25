@@ -150,7 +150,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-25 Sprint N+8):** Agent lifecycle tracing implemented — `AgentEvent` table captures PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED with `correlation_id` (`run_<uuid4>`) threading through `AgentRun`, `AgentStep`, and `AgentEvent`. `GET /agent/runs/{run_id}/events` merges lifecycle + step events into a chronological timeline.
 - ✅ **RESOLVED (2026-03-25 Sprint N+9):** Request-scoped `request_id` now propagates through async call stacks via `contextvars.ContextVar`. `RequestContextFilter` injects `request_id` into every `LogRecord`; all root-logger handlers upgraded to format `%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s`. Non-request code paths log `[-]`.
 - No system-wide centralized tracing or log aggregation pipeline (OpenTelemetry / external aggregator).
-- Infinity Algorithm Support System remains open-loop (Watcher missing, feedback not enforced, task priority unused). Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
+- Infinity Algorithm Support System no longer operates as a score-only open loop. Watcher, explicit feedback capture, and `services/infinity_loop.py` are implemented. Remaining gaps are expanded TWR weighting, ranking, and learned optimization. Canonical reference: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md`.
 
 ## 8. C++ Semantic Kernel Debt
 
@@ -514,11 +514,17 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 ### §16.2 `new_plan` replay mode — RESOLVED
 - ✅ **RESOLVED (Sprint N+8, 2026-03-25):** `replay_run(mode="new_plan")` re-calls GPT-4o with the original goal to generate a fresh plan. New run is created via `_create_run_from_plan()` with new `correlation_id` and `REPLAY_CREATED` event emitted with `{original_run_id, mode: "new_plan"}`. The prior approval does not carry forward — trust gate re-evaluated on new run.
 
-### §16.3 Agent capability/policy system missing — Open
-- **No scoped capability enforcement exists.** Any approved agent run can invoke any tool in `TOOL_REGISTRY` regardless of user permissions or run context. High-risk tools (`genesis.message`) are rate-limited only by the trust gate and per-step no-retry rule; they are not capability-gated.
-  - Location: `AINDY/services/agent_tools.py`, `AINDY/services/agent_runtime.py`
-  - Fix: Agentics Phase 4 — capability descriptor model, policy engine, scoped execution tokens.
-  - Status: Open. Medium effort, High impact.
+### §16.3 Agent capability/policy system missing — Resolved
+- ✅ **RESOLVED (Sprint N+10, 2026-03-26):** Scoped capability enforcement now exists. Tool registry entries carry capability metadata, `AgentTrustSettings.allowed_auto_grant_tools` defines static policy, `AgentRun.capability_token` stores per-run scoped grants, approve-time preflight blocks ungrantable plans, and step-time enforcement in `services/nodus_adapter.py` fails closed with `CAPABILITY_DENIED`.
+  - Location: `AINDY/services/capability_service.py`, `AINDY/services/agent_runtime.py`, `AINDY/services/nodus_adapter.py`
+  - Outcome: approved runs can no longer invoke arbitrary tools outside their scoped token; `genesis.message` remains manual-approval only.
+
+### §16.6 Infinity loop optimization depth remains limited — Open
+- **The Infinity loop is now closed, but the decision engine is intentionally shallow.** `services/infinity_loop.py` applies deterministic rule-based adjustments (`task_reprioritization`, `suggestion_refresh`, `no_op`) and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
+  - modify the standalone TWR formula using watcher-derived focus/distraction
+  - learn from `UserFeedback` to change decision thresholds or KPI weights
+  - implement recommendation ranking or expected-vs-actual scoring
+  - Status: Open. Medium effort, Medium impact.
 
 ### §16.4 `WatcherSignal.user_id` migration not chained cleanly — Low priority
 - **Migration `b1c2d3e4f5a6` adds `user_id` to `watcher_signals`** but the column is `String` (not UUID with FK to `users.id`) for consistency with the watcher's HTTP-posted signal flow. This is intentional but creates a heterogeneous `user_id` type pattern across tables. Future user FK normalization work would need to include this table.

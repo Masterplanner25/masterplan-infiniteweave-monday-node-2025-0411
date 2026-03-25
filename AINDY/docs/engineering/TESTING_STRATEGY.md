@@ -4,7 +4,16 @@ This document distinguishes current testing reality from required policy going f
 
 ## 1. Current Testing Landscape
 
-### Current State (as of 2026-03-18)
+### Current State (as of 2026-03-27)
+
+The historical breakdown below is preserved, but the current validated baseline has moved substantially since the early CI rollout.
+
+**Current validated baseline** — local `pytest -q --tb=short` after Sprint N+11:
+- **1,424 passed**
+- **5 failed**
+- **3 skipped**
+- **1 error**
+- **70.22% coverage**
 
 **Diagnostic suite** (`AINDY/tests/`) — 453 tests across 17 files. Final result: **453 passing, 0 failing**.
 
@@ -39,7 +48,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 |------|-------|----------|
 | `tests/test_sprint6_sprint7.py` | 24 | SQLAlchemy 2.0 import path (4), Genesis memory hook signature/behavior (9), LeadGen memory hook signature/behavior (11) |
 
-**CI enforcement (2026-03-18):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage enforced at `--cov-fail-under=64` (baseline: 69%). Ruff lint enforced in a separate job. `tests/validate_memory_loop.py` excluded from CI (requires live OpenAI + real DB).
+**CI enforcement (current):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage threshold is 69%, and the current validated baseline is 70.22%. Ruff lint is enforced in a separate job. `tests/validate_memory_loop.py` remains excluded from CI because it requires live OpenAI + a real DB.
 
 **Root test files** (legacy, minimal scope):
 - `test_calculations.py` — FastAPI TestClient calls for calculation endpoints

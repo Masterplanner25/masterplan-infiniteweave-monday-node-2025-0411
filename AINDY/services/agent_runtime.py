@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from services.agent_tools import TOOL_REGISTRY, execute_tool, get_tool_risk
+from services.capability_service import mint_token
 from services.agent_event_service import emit_event
 
 logger = logging.getLogger(__name__)
@@ -262,6 +263,31 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         db.commit()
         db.refresh(run)
 
+        if status == "approved":
+            token = mint_token(
+                run_id=str(run.id),
+                user_id=user_id,
+                plan=plan,
+                db=db,
+                approval_mode="auto",
+            )
+            if token:
+                run.capability_token = token
+                db.commit()
+                db.refresh(run)
+            else:
+                logger.warning(
+                    "[AgentRuntime] Auto-approval capability preflight failed for run %s",
+                    run.id,
+                )
+                run.status = "pending_approval"
+                run.error_message = (
+                    "Capability preflight failed for auto-approval; manual approval required."
+                )
+                db.commit()
+                db.refresh(run)
+                status = run.status
+
         logger.info(
             "[AgentRuntime] Run created: %s (risk=%s, status=%s)",
             run.id, overall_risk, status,
@@ -349,6 +375,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             user_id=user_id,
             db=db,
             correlation_id=getattr(run, "correlation_id", None),
+            capability_token=getattr(run, "capability_token", None),
         )
 
         db.refresh(run)
@@ -382,6 +409,25 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         run.status = "approved"
         run.approved_at = datetime.now(timezone.utc)
+        token = mint_token(
+            run_id=str(run.id),
+            user_id=user_id,
+            plan=run.plan,
+            db=db,
+            approval_mode="manual",
+        )
+        if not token:
+            db.rollback()
+            run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+            if run:
+                run.error_message = "Capability preflight failed; run not approved."
+                db.commit()
+                db.refresh(run)
+                return _run_to_dict(run)
+            return None
+
+        run.capability_token = token
+        run.error_message = None
         db.commit()
 
         # Emit APPROVED lifecycle event
@@ -437,6 +483,9 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _run_to_dict(run) -> dict:
+    capability_token = getattr(run, "capability_token", None)
+    if not isinstance(capability_token, dict):
+        capability_token = {}
     return {
         "run_id": str(run.id),
         "user_id": run.user_id,
@@ -455,6 +504,7 @@ def _run_to_dict(run) -> dict:
             if getattr(run, "replayed_from_run_id", None)
             else None
         ),
+        "granted_tools": capability_token.get("granted_tools", []),
         "correlation_id": getattr(run, "correlation_id", None),
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "approved_at": run.approved_at.isoformat() if run.approved_at else None,
@@ -503,6 +553,26 @@ def _create_run_from_plan(
         db.add(run)
         db.commit()
         db.refresh(run)
+
+        if status == "approved":
+            token = mint_token(
+                run_id=str(run.id),
+                user_id=user_id,
+                plan=plan,
+                db=db,
+                approval_mode="auto",
+            )
+            if token:
+                run.capability_token = token
+                db.commit()
+                db.refresh(run)
+            else:
+                run.status = "pending_approval"
+                run.error_message = (
+                    "Capability preflight failed for auto-approval; manual approval required."
+                )
+                db.commit()
+                db.refresh(run)
 
         logger.info(
             "[AgentRuntime] Replay run created: %s (origin=%s, risk=%s, status=%s)",

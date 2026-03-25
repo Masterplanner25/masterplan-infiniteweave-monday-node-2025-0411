@@ -158,6 +158,7 @@ def _recalculate_all_scores() -> None:
         from db.database import SessionLocal
         from db.models.user import User
         from services.infinity_service import calculate_infinity_score
+        from services.infinity_loop import run_loop
 
         db = SessionLocal()
         try:
@@ -170,6 +171,7 @@ def _recalculate_all_scores() -> None:
                     trigger_event="scheduled",
                 )
                 if result:
+                    run_loop(user_id=str(user.id), trigger_event="scheduled", db=db)
                     updated += 1
             logger.info(
                 "[Infinity Scheduler] Recalculated scores for %d/%d users",

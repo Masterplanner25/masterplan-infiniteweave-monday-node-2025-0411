@@ -105,9 +105,10 @@ User Action → Task API → Task Service → DB → Algorithm Input
 
 #### Reality
 
-* **Conceptual only**
-* Not implemented in runtime
-* No signals captured or stored
+* **Implemented in runtime**
+* Watcher signals are stored in `watcher_signals`
+* `focus_quality` scoring reads `session_ended`, `distraction_detected`, and `focus_achieved`
+* Remaining gap: watcher data influences loop decisions through KPI state, but does not yet modify the standalone TWR formula directly
 
 #### Impact
 
@@ -154,7 +155,7 @@ Metrics:
 
 ---
 
-#### 3.3.2 User Feedback (Conceptual)
+#### 3.3.2 User Feedback
 
 ##### Source
 
@@ -174,8 +175,10 @@ Metrics:
 
 ##### Reality
 
-* **Not implemented**
-* No direct user feedback capture in task or scoring systems
+* **Implemented (explicit)**
+* `POST /scores/feedback` writes `UserFeedback`
+* ARM and agent UI surfaces can submit thumbs feedback
+* Remaining gap: implicit feedback weighting and broader satisfaction signals are still missing
 
 ---
 
@@ -186,7 +189,12 @@ Metrics:
 ### Current System (Reality)
 
 ```plaintext
-Task → Metric → Storage → Display → User decides
+Task / Watcher / ARM / Agent Outcome
+→ Score recalculation
+→ Loop decision
+→ Task reprioritization or suggestion refresh
+→ Explicit feedback capture
+→ Re-score
 ```
 
 ---
@@ -225,11 +233,11 @@ Task → Watcher → Signals → Algorithm → Score
 
 ---
 
-### Signals Defined but NOT Used
+### Signals Defined but NOT Fully Used
 
-* Distraction / focus signals (Watcher)
-* Task priority (not connected)
-* User satisfaction / engagement input
+* Watcher-derived focus/distraction does not yet modify standalone TWR directly
+* Task priority is now adjusted by the loop, but not yet used as an input weighting term
+* Broader user satisfaction / engagement input is still missing beyond explicit thumbs feedback
 
 ---
 
@@ -263,51 +271,47 @@ It currently functions as:
 
 ### Phase v2 — Watcher Implementation (CRITICAL)
 
-**Goal:** Enable real-time observation
+**Status:** Implemented
 
-* Build `services/watcher_service.py`
-* Implement:
-
-  * focus tracking
-  * distraction detection
-  * session logging
-* Store signals in DB (new tables if needed)
+* Watcher runtime, signal receiver, and `watcher_signals` persistence are live
+* Focus tracking, distraction detection, session logging, and heartbeat signals are stored
 
 ---
 
 ### Phase v3 — Signal Integration
 
-**Goal:** Feed observation into algorithm
+**Status:** Implemented partially
 
-* Integrate watcher outputs into:
+* Watcher outputs feed `focus_quality`
+* `focus_quality` now drives loop decisions through `run_loop()`
+* Remaining work:
 
   * TWR adjustments
-  * engagement scoring
-* Include focus/distraction in scoring formulas
+  * broader engagement weighting
 
 ---
 
 ### Phase v4 — Feedback Enforcement
 
-**Goal:** Close the loop
+**Status:** Implemented
 
-* Convert ARM suggestions into:
+* Loop decisions now produce:
 
-  * automatic adjustments OR
-  * enforced recommendations
-* Connect feedback → execution behavior
+  * automatic task reprioritization OR
+  * persisted suggestion refresh
+* Feedback is connected to execution behavior through `LoopAdjustment` + `UserFeedback`
 
 ---
 
 ### Phase v5 — User Feedback Integration
 
-**Goal:** Add human signal layer
+**Status:** Implemented partially
 
-* Add explicit feedback inputs:
+* Explicit thumbs feedback exists for ARM and agent outcomes
+* Remaining work:
 
-  * satisfaction
-  * perceived value
-* Integrate into scoring and weighting
+  * richer satisfaction signals
+  * weighting feedback directly into score formulas
 
 ---
 
@@ -330,23 +334,22 @@ observe → score → adjust → execute → observe
 
 ### Structural
 
-* No watcher implementation
-* Feedback not connected to execution
+* Feedback persistence exists but weighting into score formulas is still limited
+* Loop decisions are rule-based rather than learned
 
 ---
 
 ### Functional
 
-* Missing real-time signals
-* Task priority unused
-* Feedback not influencing scoring
+* Standalone TWR still ignores watcher-derived focus/distraction
+* Feedback is captured and evaluated, but does not yet alter KPI weights directly
 
 ---
 
 ### Conceptual
 
-* Algorithm assumes signals that do not exist in runtime
-* System is open-loop, not closed-loop
+* The system is now closed-loop at the execution layer
+* Remaining conceptual gap is optimization depth, not loop existence
 
 ---
 
@@ -355,11 +358,11 @@ observe → score → adjust → execute → observe
 | Phase | Component            | Status  | Required Action     |
 | ----- | -------------------- | ------- | ------------------- |
 | v1    | Task Inputs          | Partial | Normalize + connect |
-| v2    | Watcher              | Missing | Build               |
-| v3    | Signal Integration   | Missing | Connect to scoring  |
-| v4    | Feedback Enforcement | Partial | Enforce             |
-| v5    | User Feedback        | Missing | Implement           |
-| v6    | Closed Loop          | Missing | Complete            |
+| v2    | Watcher              | Implemented | Extend coverage   |
+| v3    | Signal Integration   | Partial | Extend to TWR      |
+| v4    | Feedback Enforcement | Implemented | Refine policy    |
+| v5    | User Feedback        | Partial | Expand weighting   |
+| v6    | Closed Loop          | Implemented (MVP) | Optimize     |
 
 ---
 

@@ -12,10 +12,18 @@ Risk classification (hardcoded invariant):
     high   — mutates long-term planning state (genesis, locked plans)
 
 Registration:
-    @register_tool("name", risk="low|medium|high", description="...")
+    @register_tool(
+        "name",
+        risk="low|medium|high",
+        description="...",
+        capability="tool:name",
+        category="...",
+        egress_scope="none|internal|external_*",
+    )
     def my_tool(args: dict, user_id: str, db) -> dict: ...
 
-The TOOL_REGISTRY dict maps tool_name → {fn, risk, description}.
+The TOOL_REGISTRY dict maps tool_name →
+{fn, risk, description, capability, category, egress_scope}.
 """
 import logging
 from typing import Callable
@@ -27,12 +35,26 @@ logger = logging.getLogger(__name__)
 TOOL_REGISTRY: dict[str, dict] = {}
 
 
-def register_tool(name: str, risk: str, description: str):
+def register_tool(
+    name: str,
+    risk: str,
+    description: str,
+    capability: str,
+    category: str,
+    egress_scope: str,
+):
     """
     Decorator to register an agent tool.
 
     Usage:
-        @register_tool("task.create", risk="low", description="Create a new task")
+        @register_tool(
+            "task.create",
+            risk="low",
+            description="Create a new task",
+            capability="tool:task.create",
+            category="task",
+            egress_scope="internal",
+        )
         def task_create(args: dict, user_id: str, db) -> dict:
             ...
     """
@@ -41,6 +63,9 @@ def register_tool(name: str, risk: str, description: str):
             "fn": fn,
             "risk": risk,
             "description": description,
+            "capability": capability,
+            "category": category,
+            "egress_scope": egress_scope,
         }
         return fn
     return wrapper
@@ -79,7 +104,7 @@ def get_tool_risk(tool_name: str) -> str:
     return entry["risk"] if entry else "high"
 
 
-def suggest_tools(kpi_snapshot: dict) -> list:
+def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
     """
     Return up to 3 tool suggestions based on the user's current KPI state.
 
@@ -95,6 +120,18 @@ def suggest_tools(kpi_snapshot: dict) -> list:
     Returns [] when kpi_snapshot is None/empty or no rules trigger.
     Never raises.
     """
+    if user_id and db:
+        try:
+            from services.infinity_loop import get_latest_adjustment
+
+            latest = get_latest_adjustment(user_id=user_id, db=db)
+            if latest and latest.adjustment_payload:
+                persisted = latest.adjustment_payload.get("suggestions")
+                if isinstance(persisted, list):
+                    return persisted[:3]
+        except Exception as exc:
+            logger.warning("[AgentTools] persisted suggestions lookup failed: %s", exc)
+
     if not kpi_snapshot:
         return []
 
@@ -154,6 +191,9 @@ def suggest_tools(kpi_snapshot: dict) -> list:
     "task.create",
     risk="low",
     description="Create a new task in the user's task list",
+    capability="tool:task.create",
+    category="task",
+    egress_scope="internal",
 )
 def task_create(args: dict, user_id: str, db) -> dict:
     from services.task_services import create_task
@@ -177,6 +217,9 @@ def task_create(args: dict, user_id: str, db) -> dict:
     "task.complete",
     risk="medium",
     description="Mark a task as complete by name",
+    capability="tool:task.complete",
+    category="task",
+    egress_scope="internal",
 )
 def task_complete(args: dict, user_id: str, db) -> dict:
     from services.task_services import complete_task
@@ -193,6 +236,9 @@ def task_complete(args: dict, user_id: str, db) -> dict:
     "memory.recall",
     risk="low",
     description="Recall relevant memory nodes for a given query",
+    capability="tool:memory.recall",
+    category="memory",
+    egress_scope="internal",
 )
 def memory_recall(args: dict, user_id: str, db) -> dict:
     from bridge.bridge import recall_memories
@@ -215,6 +261,9 @@ def memory_recall(args: dict, user_id: str, db) -> dict:
     "memory.write",
     risk="low",
     description="Write a memory node with content and tags",
+    capability="tool:memory.write",
+    category="memory",
+    egress_scope="internal",
 )
 def memory_write(args: dict, user_id: str, db) -> dict:
     from bridge.bridge import create_memory_node
@@ -238,6 +287,9 @@ def memory_write(args: dict, user_id: str, db) -> dict:
     "arm.analyze",
     risk="medium",
     description="Analyze code or a topic using the ARM reasoning engine",
+    capability="tool:arm.analyze",
+    category="arm",
+    egress_scope="external_llm",
 )
 def arm_analyze(args: dict, user_id: str, db) -> dict:
     from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
@@ -268,6 +320,9 @@ def arm_analyze(args: dict, user_id: str, db) -> dict:
     "arm.generate",
     risk="medium",
     description="Generate or refactor code using the ARM code generation engine",
+    capability="tool:arm.generate",
+    category="arm",
+    egress_scope="external_llm",
 )
 def arm_generate(args: dict, user_id: str, db) -> dict:
     from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
@@ -295,6 +350,9 @@ def arm_generate(args: dict, user_id: str, db) -> dict:
     "leadgen.search",
     risk="medium",
     description="Search for B2B leads matching a query",
+    capability="tool:leadgen.search",
+    category="leadgen",
+    egress_scope="external_web",
 )
 def leadgen_search(args: dict, user_id: str, db) -> dict:
     from services.leadgen_service import run_ai_search
@@ -311,6 +369,9 @@ def leadgen_search(args: dict, user_id: str, db) -> dict:
     "research.query",
     risk="low",
     description="Query external sources for research on a topic",
+    capability="tool:research.query",
+    category="research",
+    egress_scope="external_web",
 )
 def research_query(args: dict, user_id: str, db) -> dict:
     from modules.research_engine import web_search
@@ -327,6 +388,9 @@ def research_query(args: dict, user_id: str, db) -> dict:
     "genesis.message",
     risk="high",
     description="Send a message to the Genesis strategic planning session (modifies MasterPlan state)",
+    capability="tool:genesis.message",
+    category="genesis",
+    egress_scope="external_llm",
 )
 def genesis_message(args: dict, user_id: str, db) -> dict:
     from services.genesis_ai import call_genesis_llm

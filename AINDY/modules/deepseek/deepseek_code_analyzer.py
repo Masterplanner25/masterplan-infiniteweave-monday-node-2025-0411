@@ -290,11 +290,15 @@ class DeepSeekCodeAnalyzer:
             try:
                 if user_id and db:
                     from services.infinity_service import calculate_infinity_score
-                    calculate_infinity_score(
+                    from services.infinity_loop import run_loop
+
+                    score_result = calculate_infinity_score(
                         user_id=str(user_id),
                         db=db,
                         trigger_event="arm_analysis",
                     )
+                    if score_result:
+                        run_loop(user_id=str(user_id), trigger_event="arm_analyzed", db=db)
             except Exception as e:
                 logger.warning("[ARM] Infinity score after ARM failed: %s", e)
 
