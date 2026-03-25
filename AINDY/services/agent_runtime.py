@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from services.agent_tools import TOOL_REGISTRY, execute_tool, get_tool_risk
+from services.agent_event_service import emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,9 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         needs_approval = _requires_approval(overall_risk, user_id, db)
         status = "pending_approval" if needs_approval else "approved"
 
+        # Generate correlation token — propagated through all child records
+        correlation_id = f"run_{uuid.uuid4()}"
+
         run = AgentRun(
             user_id=user_id,
             goal=goal,
@@ -252,6 +256,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
             overall_risk=overall_risk,
             status=status,
             steps_total=len(plan.get("steps", [])),
+            correlation_id=correlation_id,
         )
         db.add(run)
         db.commit()
@@ -260,6 +265,23 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         logger.info(
             "[AgentRuntime] Run created: %s (risk=%s, status=%s)",
             run.id, overall_risk, status,
+        )
+
+        # Emit PLAN_CREATED lifecycle event
+        auto_executed = status == "approved"
+        emit_event(
+            run_id=str(run.id),
+            user_id=user_id,
+            event_type="PLAN_CREATED",
+            db=db,
+            correlation_id=correlation_id,
+            payload={
+                "overall_risk": overall_risk,
+                "steps_total": len(plan.get("steps", [])),
+                "auto_executed": auto_executed,
+                "goal_preview": goal[:120],
+                "requires_approval": not auto_executed,
+            },
         )
 
         return _run_to_dict(run)
@@ -310,12 +332,23 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.started_at = datetime.now(timezone.utc)
         db.commit()
 
+        # Emit EXECUTION_STARTED lifecycle event
+        emit_event(
+            run_id=run_id,
+            user_id=user_id,
+            event_type="EXECUTION_STARTED",
+            db=db,
+            correlation_id=getattr(run, "correlation_id", None),
+            payload={},
+        )
+
         # Delegate entirely to the deterministic adapter
         NodusAgentAdapter.execute_with_flow(
             run_id=str(run.id),
             plan=run.plan,
             user_id=user_id,
             db=db,
+            correlation_id=getattr(run, "correlation_id", None),
         )
 
         db.refresh(run)
@@ -351,6 +384,16 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.approved_at = datetime.now(timezone.utc)
         db.commit()
 
+        # Emit APPROVED lifecycle event
+        emit_event(
+            run_id=run_id,
+            user_id=user_id,
+            event_type="APPROVED",
+            db=db,
+            correlation_id=getattr(run, "correlation_id", None),
+            payload={"auto_executed": False},
+        )
+
         return execute_run(run_id=run_id, user_id=user_id, db=db)
 
     except Exception as exc:
@@ -373,6 +416,16 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.status = "rejected"
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
+
+        # Emit REJECTED lifecycle event
+        emit_event(
+            run_id=run_id,
+            user_id=user_id,
+            event_type="REJECTED",
+            db=db,
+            correlation_id=getattr(run, "correlation_id", None),
+            payload={},
+        )
 
         return _run_to_dict(run)
 
@@ -402,6 +455,7 @@ def _run_to_dict(run) -> dict:
             if getattr(run, "replayed_from_run_id", None)
             else None
         ),
+        "correlation_id": getattr(run, "correlation_id", None),
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "approved_at": run.approved_at.isoformat() if run.approved_at else None,
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -432,6 +486,9 @@ def _create_run_from_plan(
         needs_approval = _requires_approval(overall_risk, user_id, db)
         status = "pending_approval" if needs_approval else "approved"
 
+        # Generate correlation token — propagated through all child records
+        correlation_id = f"run_{uuid.uuid4()}"
+
         run = AgentRun(
             user_id=user_id,
             goal=goal,
@@ -441,6 +498,7 @@ def _create_run_from_plan(
             status=status,
             steps_total=len(plan.get("steps", [])),
             replayed_from_run_id=replayed_from_run_id,
+            correlation_id=correlation_id,
         )
         db.add(run)
         db.commit()
@@ -453,6 +511,7 @@ def _create_run_from_plan(
             overall_risk,
             status,
         )
+
         return _run_to_dict(run)
 
     except Exception as exc:
@@ -493,7 +552,18 @@ def replay_run(
             logger.warning("[AgentRuntime] replay_run: owner mismatch for %s", run_id)
             return None
 
-        plan = original.plan or {}
+        if mode == "new_plan":
+            fresh_plan = generate_plan(goal=original.goal, user_id=user_id, db=db)
+            if not fresh_plan:
+                logger.warning(
+                    "[AgentRuntime] replay_run new_plan: plan generation failed for %s",
+                    run_id,
+                )
+                return None
+            plan = fresh_plan
+        else:
+            plan = original.plan or {}
+
         new_run = _create_run_from_plan(
             goal=original.goal,
             plan=plan,
@@ -501,8 +571,117 @@ def replay_run(
             db=db,
             replayed_from_run_id=str(original.id),
         )
+
+        # Emit REPLAY_CREATED lifecycle event on the new run
+        if new_run:
+            emit_event(
+                run_id=new_run["run_id"],
+                user_id=user_id,
+                event_type="REPLAY_CREATED",
+                db=db,
+                correlation_id=new_run.get("correlation_id"),
+                payload={
+                    "original_run_id": str(original.id),
+                    "mode": mode,
+                },
+            )
+
         return new_run
 
     except Exception as exc:
         logger.warning("[AgentRuntime] replay_run failed for %s: %s", run_id, exc)
+        return None
+
+
+# ── Event timeline ────────────────────────────────────────────────────────────
+
+def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
+    """
+    Return a unified event timeline for a single agent run (Sprint N+8).
+
+    Merges:
+      - AgentEvent rows (lifecycle events: PLAN_CREATED, APPROVED, etc.)
+      - AgentStep rows (synthesised as STEP_EXECUTED / STEP_FAILED events)
+
+    Both lists are sorted by occurred_at ASC to produce a single chronological
+    timeline. AgentStep.executed_at=None falls back to created_at.
+
+    Returns:
+      {
+        "run_id": str,
+        "correlation_id": str | None,
+        "events": [ {id, event_type, occurred_at, payload}, ... ]
+      }
+      OR None if run not found / ownership mismatch.
+
+    Never raises.
+    """
+    try:
+        from db.models.agent_run import AgentRun, AgentStep
+        from db.models.agent_event import AgentEvent
+
+        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if not run:
+            return None
+        if run.user_id != user_id:
+            return None
+
+        # ── Lifecycle events from agent_events ────────────────────────────
+        lifecycle_rows = (
+            db.query(AgentEvent)
+            .filter(AgentEvent.run_id == run_id)
+            .order_by(AgentEvent.occurred_at.asc())
+            .all()
+        )
+        lifecycle_events = [
+            {
+                "id": str(row.id),
+                "event_type": row.event_type,
+                "occurred_at": row.occurred_at.isoformat() if row.occurred_at else None,
+                "payload": row.payload or {},
+            }
+            for row in lifecycle_rows
+        ]
+
+        # ── Step events synthesised from agent_steps ──────────────────────
+        step_rows = (
+            db.query(AgentStep)
+            .filter(AgentStep.run_id == run_id)
+            .order_by(AgentStep.step_index.asc())
+            .all()
+        )
+        step_events = []
+        for step in step_rows:
+            ts = step.executed_at or step.created_at
+            step_events.append(
+                {
+                    "id": str(step.id),
+                    "event_type": "STEP_EXECUTED" if step.status == "success" else "STEP_FAILED",
+                    "occurred_at": ts.isoformat() if ts else None,
+                    "payload": {
+                        "step_index": step.step_index,
+                        "tool_name": step.tool_name,
+                        "risk_level": step.risk_level,
+                        "description": step.description,
+                        "status": step.status,
+                        "execution_ms": step.execution_ms,
+                        "error_message": step.error_message,
+                    },
+                }
+            )
+
+        # ── Merge and sort by occurred_at ──────────────────────────────────
+        all_events = lifecycle_events + step_events
+        all_events.sort(
+            key=lambda e: e["occurred_at"] or "0000",
+        )
+
+        return {
+            "run_id": str(run.id),
+            "correlation_id": getattr(run, "correlation_id", None),
+            "events": all_events,
+        }
+
+    except Exception as exc:
+        logger.warning("[AgentRuntime] get_run_events failed for %s: %s", run_id, exc)
         return None

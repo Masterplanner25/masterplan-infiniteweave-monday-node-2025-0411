@@ -6,11 +6,50 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.database import get_db
+from db.models.background_task_lease import BackgroundTaskLease
 from db.models.request_metric import RequestMetric
 from services.auth_service import get_current_user
+import services.scheduler_service as scheduler_service
+import services.task_services as task_services
 
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
+
+
+@router.get("/scheduler/status")
+def get_scheduler_status(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Return current APScheduler state and background lease info."""
+    # Scheduler running state
+    try:
+        sched = scheduler_service.get_scheduler()
+        scheduler_running = sched.running
+    except RuntimeError:
+        scheduler_running = False
+
+    # Lease row
+    lease_row = (
+        db.query(BackgroundTaskLease)
+        .filter(BackgroundTaskLease.name == task_services._BACKGROUND_LEASE_NAME)
+        .first()
+    )
+
+    lease = None
+    if lease_row:
+        lease = {
+            "owner_id": lease_row.owner_id,
+            "acquired_at": lease_row.acquired_at.isoformat() if lease_row.acquired_at else None,
+            "heartbeat_at": lease_row.heartbeat_at.isoformat() if lease_row.heartbeat_at else None,
+            "expires_at": lease_row.expires_at.isoformat() if lease_row.expires_at else None,
+        }
+
+    return {
+        "scheduler_running": scheduler_running,
+        "is_leader": task_services.is_background_leader(),
+        "lease": lease,
+    }
 
 
 @router.get("/requests")

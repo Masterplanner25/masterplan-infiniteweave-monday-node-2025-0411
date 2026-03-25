@@ -369,10 +369,11 @@ class TestTaskServicesNoDaemonThreads:
         source = inspect.getsource(task_services.start_background_tasks)
         assert "daemon=True" not in source
 
-    def test_start_background_tasks_returns_none_when_disabled(self):
+    def test_start_background_tasks_returns_false_when_disabled(self):
+        # N+9: start_background_tasks() now returns bool (False = no lease / disabled)
         from services.task_services import start_background_tasks
         result = start_background_tasks(enable=False)
-        assert result is None
+        assert result is False
 
     def test_stop_background_tasks_importable(self):
         from services.task_services import stop_background_tasks

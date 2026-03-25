@@ -48,7 +48,7 @@ Primary source docs:
 
 ## 4. Current Implementation (Reality)
 
-**Implemented in A.I.N.D.Y. (Sprints N+4 through N+7):**
+**Implemented in A.I.N.D.Y. (Sprints N+4 through N+8):**
 - ✅ Agent plan/dry‑run/approve/execute loop (`services/agent_runtime.py`)
 - ✅ GPT-4o planner with JSON mode + overall_risk enforcement
 - ✅ 9-tool registry with risk levels (`services/agent_tools.py`)
@@ -64,8 +64,13 @@ Primary source docs:
 - ✅ `suggest_tools()` — KPI-driven tool recommendations
 - ✅ Stuck-run recovery: startup scan + `POST /recover` + `POST /replay`
 - ✅ `replayed_from_run_id` lineage tracking on `AgentRun`
-- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips
-- ✅ 12 agent API endpoints
+- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips, Timeline tab, pending-approval badge
+- ✅ 13 agent API endpoints (added `GET /agent/runs/{run_id}/events`)
+- ✅ Structured event log (`AgentEvent` table) — PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED
+- ✅ `correlation_id` (`run_<uuid4>`) on `AgentRun` + `AgentStep` + `AgentEvent` — propagated through full lifecycle
+- ✅ `emit_event()` — non-fatal lifecycle event emitter (`services/agent_event_service.py`)
+- ✅ `GET /agent/runs/{run_id}/events` — unified timeline: lifecycle events + synthesised step events
+- ✅ `new_plan` replay mode in `replay_run()` — re-calls GPT-4o for fresh plan on same goal
 
 **Implemented in A.I.N.D.Y. (pre-N+4):**
 - Memory Bridge (persistence + recall + feedback)
@@ -79,8 +84,7 @@ The installed `nodus` pip package is a separate scripting-language VM (`.nd` fil
 
 **Still Missing from A.I.N.D.Y.:**
 - Capability issuance + enforcement (scoped tokens, egress control) — Agentics Phase 4
-- Full audit viewer UI (approval inbox, execution trace browser)
-- `new_plan` replay mode (re-calls GPT-4o for fresh plan on replay)
+- Full audit viewer UI (dedicated approval inbox, execution trace browser)
 
 ---
 
@@ -106,8 +110,8 @@ The installed `nodus` pip package is a separate scripting-language VM (`.nd` fil
 | Gap | Impact | Files to Update |
 | --- | --- | --- |
 | No capability issuance/enforcement | Unsafe execution for high-privilege tools | New: `services/capability_service.py`, `db/models/capability.py` |
-| No approval inbox UI | Pending runs not surfaced in a dedicated view | `client/src/components/AgentConsole.jsx` (extend) |
-| No `new_plan` replay mode | Replay always re-uses stale plan | `services/agent_runtime.py::replay_run()` |
+| No dedicated approval inbox UI | Pending runs badge added (N+8) but no standalone inbox view | New: `client/src/components/AgentApprovalInbox.jsx` |
+| ~~No `new_plan` replay mode~~  | ✅ RESOLVED (N+8) — `replay_run(mode="new_plan")` re-calls GPT-4o for fresh plan | `services/agent_runtime.py::replay_run()` |
 | No egress/sandbox control | Tools can call external APIs without constraint | New policy layer |
 
 ---
@@ -116,11 +120,11 @@ The installed `nodus` pip package is a separate scripting-language VM (`.nd` fil
 
 | Risk | Type | Failure Mode | Impact | Likely? |
 | --- | --- | --- | --- | --- |
-| Agentics assumed implemented | Docs drift | Team expects agent runtime | High | High |
-| No deterministic execution | Runtime | Actions remain brittle/manual | High | High |
+| ~~Agentics assumed implemented~~ | ~~Docs drift~~ | ~~Team expects agent runtime~~ | ~~High~~ | ✅ Resolved N+4 |
+| ~~No deterministic execution~~ | ~~Runtime~~ | ~~Actions remain brittle/manual~~ | ~~High~~ | ✅ Resolved N+6 |
 | No capability enforcement | Security | Over‑privileged execution risk | High | Medium |
-| No approvals layer | Governance | No human control for risky steps | High | Medium |
-| Nodus integration not wired | Architecture | Orchestration remains ad‑hoc | Medium | High |
+| No approvals layer (UI) | Governance | Pending runs not surfaced proactively | Low | Low (badge added N+8) |
+| ~~Nodus integration not wired~~ | ~~Architecture~~ | ~~Orchestration remains ad‑hoc~~ | ~~Medium~~ | ✅ Resolved N+6 (PersistentFlowRunner) |
 
 ---
 
@@ -163,14 +167,18 @@ plans through it. No major rewrites required.
 
 ## 10. Summary (Operational Truth)
 
-As of 2026-03-25, Agentics Phases 1–3 and the core of Phase 5 are **live and tested**.
-The execution loop is operational: a user submits a goal, GPT-4o generates a plan,
-the trust gate applies, the plan executes deterministically via `PersistentFlowRunner`,
-per-step retries are enforced, and the full run is checkpointed and linked to Memory Bridge.
-Observability (stuck-run recovery, replay, serializer unification) is also live.
+As of 2026-03-25 (Sprint N+8), Agentics Phases 1–3, Phase 5, and the core of Phase 6 are
+**live and tested**. The full lifecycle is operational: a user submits a goal, GPT-4o
+generates a KPI-aware plan, the trust gate applies, the plan executes deterministically via
+`PersistentFlowRunner`, per-step retries are enforced, the full run is checkpointed and
+linked to Memory Bridge, and every lifecycle transition emits a structured `AgentEvent`
+with `correlation_id` threading through `AgentRun`, `AgentStep`, and `AgentEvent`.
+A `new_plan` replay mode re-calls GPT-4o for a fresh plan on the same goal.
+The `AgentConsole.jsx` Timeline tab renders the full event history with colored badges,
+and a pending-approval badge surfaces runs awaiting review.
 
 What remains is the **authority layer** (Phase 4: capability tokens + egress control)
-and an **approval inbox UI** (Phase 7).
+and a **dedicated approval inbox UI** (Phase 7 — standalone `AgentApprovalInbox.jsx`).
 
 ---
 
@@ -201,12 +209,16 @@ and an **approval inbox UI** (Phase 7).
 - Token model (scoped execution tokens, expiry)
 - **Output:** bounded authority per agent run
 
-### ✅ Phase 5 — Observability + Audit — DONE (Sprint N+7, 2026-03-25)
+### ✅ Phase 5 — Observability + Audit — DONE (Sprint N+7 + N+8, 2026-03-25)
 - `agent_runs` + `agent_steps` tables with full audit data ✅ (N+4)
 - `flow_run_id` correlation: every run links to its `FlowRun` ✅ (N+6)
 - Stuck-run startup scan + manual `/recover` endpoint ✅ (N+7)
 - `/replay` endpoint with `replayed_from_run_id` lineage ✅ (N+7)
-- Unified serializer: all 12 endpoints return consistent run shape ✅ (N+7)
+- Unified serializer: all 13 endpoints return consistent run shape ✅ (N+7)
+- `AgentEvent` table — 8 lifecycle event types, `correlation_id` threading ✅ (N+8)
+- `emit_event()` — always non-fatal lifecycle event emitter ✅ (N+8)
+- `GET /agent/runs/{run_id}/events` — merged timeline: lifecycle + step events ✅ (N+8)
+- `new_plan` replay mode — re-calls GPT-4o for fresh plan on same goal ✅ (N+8)
 
 ### ✅ Phase 6 (partial) — System Integration — DONE (Sprint N+5, 2026-03-24)
 - Memory Bridge: `FlowHistory → Memory Bridge` capture on run completion ✅
@@ -215,23 +227,26 @@ and an **approval inbox UI** (Phase 7).
 - Remaining: RippleTrace signal → plan trigger (deferred)
 
 ### Phase 7 — UI Layer — Partial
-- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips
-- ❌ Dedicated approval inbox (pending runs not surfaced in a standalone view)
+- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips, Timeline tab, pending-approval badge (N+8)
+- ❌ Dedicated approval inbox (`AgentApprovalInbox.jsx`) — pending runs not surfaced in a standalone view
 - ❌ Execution trace browser / visual FlowRun inspector
 
-### Current State (2026-03-25)
+### Current State (Sprint N+9, 2026-03-25)
 ```
 User/Trigger
-→ AgentConsole.jsx (goal input + suggestion chips)
+→ AgentConsole.jsx (goal input + suggestion chips + pending-approval badge)
 → POST /agent/run → generate_plan() [GPT-4o, KPI-aware]
+→ emit_event(PLAN_CREATED, correlation_id=run_<uuid4>)
 → Trust gate → pending_approval | approved
-→ POST /agent/runs/{id}/approve
-→ NodusAgentAdapter.execute_with_flow()
+→ POST /agent/runs/{id}/approve → emit_event(APPROVED)
+→ emit_event(EXECUTION_STARTED)
+→ NodusAgentAdapter.execute_with_flow(correlation_id=...)
    └─ PersistentFlowRunner(AGENT_FLOW)
         ├─ agent_validate_steps
-        ├─ agent_execute_step (loop, per-step retry)
-        └─ agent_finalize_run → Memory Bridge capture
+        ├─ agent_execute_step (loop, per-step retry, correlation_id on AgentStep)
+        └─ agent_finalize_run → Memory Bridge capture → emit_event(COMPLETED)
 → AgentRun.status = "completed" | "failed"
-→ POST /agent/runs/{id}/recover  (stuck recovery)
-→ POST /agent/runs/{id}/replay   (lineage-tracked re-run)
+→ POST /agent/runs/{id}/recover  (stuck recovery → emit_event(RECOVERED))
+→ POST /agent/runs/{id}/replay   (lineage-tracked → emit_event(REPLAY_CREATED))
+→ GET  /agent/runs/{id}/events   (merged lifecycle + step timeline)
 ```

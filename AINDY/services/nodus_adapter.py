@@ -30,6 +30,7 @@ integration path with AINDY's PostgreSQL stack and is NOT imported here.
 import logging
 import time
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -156,6 +157,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         error_message=tool_result.get("error"),
         execution_ms=exec_ms,
         executed_at=datetime.now(timezone.utc),
+        correlation_id=state.get("correlation_id"),
     )
     db.add(agent_step)
 
@@ -233,6 +235,17 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
             len(step_results),
         )
 
+    # Emit COMPLETED lifecycle event
+    from services.agent_event_service import emit_event
+    emit_event(
+        run_id=agent_run_id,
+        user_id=state.get("user_id", ""),
+        event_type="COMPLETED",
+        db=db,
+        correlation_id=state.get("correlation_id"),
+        payload={"steps_completed": len(step_results)},
+    )
+
     return {
         "status": "SUCCESS",
         "output_patch": {"finalized": True},
@@ -278,6 +291,7 @@ class NodusAgentAdapter:
         plan: dict,
         user_id: str,
         db: Session,
+        correlation_id: Optional[str] = None,
     ) -> dict:
         """
         Execute an agent plan as a PersistentFlowRunner workflow.
@@ -303,6 +317,7 @@ class NodusAgentAdapter:
                 "steps": steps,
                 "current_step_index": 0,
                 "step_results": [],
+                "correlation_id": correlation_id,
             }
 
             runner = PersistentFlowRunner(
@@ -360,6 +375,16 @@ class NodusAgentAdapter:
                         run_id,
                         agent_run.error_message,
                     )
+                    # Emit EXECUTION_FAILED lifecycle event
+                    from services.agent_event_service import emit_event
+                    emit_event(
+                        run_id=run_id,
+                        user_id=user_id,
+                        event_type="EXECUTION_FAILED",
+                        db=db,
+                        correlation_id=correlation_id,
+                        payload={"error": agent_run.error_message},
+                    )
 
             return flow_result
 
@@ -377,6 +402,15 @@ class NodusAgentAdapter:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     agent_run.error_message = f"Adapter error: {exc}"
                     db.commit()
+                    from services.agent_event_service import emit_event
+                    emit_event(
+                        run_id=run_id,
+                        user_id=user_id,
+                        event_type="EXECUTION_FAILED",
+                        db=db,
+                        correlation_id=correlation_id,
+                        payload={"error": f"Adapter error: {exc}"},
+                    )
             except Exception:
                 pass
             return {"status": "FAILED", "error": str(exc)}

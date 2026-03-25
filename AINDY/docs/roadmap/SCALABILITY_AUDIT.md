@@ -30,10 +30,10 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 - Status: Acceptable.
 
 5) Background task runner isolation
-- Location: `AINDY/services/task_services.py` + DB lease
-- Risk: Lease prevents duplicate task runner start, but other background work (if added later) could still run without lease checks.
-- Impact: Duplicate background execution if other services spawn threads without leases.
-- Status: Partially mitigated.
+- Location: `AINDY/services/task_services.py` + `AINDY/services/scheduler_service.py` + `AINDY/main.py`
+- Risk: Previously — APScheduler started unconditionally on every instance regardless of DB lease; `start_background_tasks()` returned None and the lease check only gated a log message, not scheduler startup.
+- Resolution (Sprint N+9, 2026-03-25): `start_background_tasks()` now returns `bool` (True = lease acquired). `main.py` lifespan calls `start_background_tasks()` first; `scheduler_service.start()` is only called when it returns True. A `background_lease_heartbeat` APScheduler job (60s interval) keeps the lease alive so it does not expire (TTL=120s) while the leader is running. `is_background_leader()` public helper + `GET /observability/scheduler/status` endpoint expose current state.
+- Status: ✅ Resolved (Sprint N+9).
 
 6) Gateway state persistence
 - Location: `AINDY/server.js` + `/network_bridge/authors`

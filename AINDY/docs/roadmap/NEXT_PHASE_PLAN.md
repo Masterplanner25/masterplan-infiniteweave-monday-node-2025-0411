@@ -9,15 +9,15 @@ Based on: docs/roadmap/*.md + docs/architecture/SYSTEM_SPEC.md + docs/architectu
 
 | Metric                   | Value                                                     |
 |--------------------------|-----------------------------------------------------------|
-| Tests                    | **1,256 passing, 5 pre-existing failures, 1 error** (as of Sprint N+7) |
-| Coverage                 | **69.24%** (threshold: 69%)                               |
+| Tests                    | **1,326 passing, 5 pre-existing failures, 1 error** (as of Sprint N+9) |
+| Coverage                 | **69.65%** (threshold: 69%)                               |
 | Ruff lint errors         | 0 (prototype files excluded from lint)                    |
-| API endpoints            | **~146** (+12 agent endpoints since N+4)                  |
-| Frontend components      | **~43 JSX files** (AgentConsole + suggestion chips added) |
-| DB tables                | ~40 (agent_runs, agent_steps, agent_trust_settings, user_scores, score_history, watcher_signals added) |
+| API endpoints            | **~147** (+13 agent endpoints + 1 scheduler/status since N+4) |
+| Frontend components      | **~43 JSX files** (AgentConsole + Timeline tab + pending-approval badge added N+8) |
+| DB tables                | ~41 (agent_events table added N+8; agent_runs/agent_steps/agent_trust_settings/user_scores/score_history/watcher_signals added in earlier sprints) |
 | Flow nodes registered    | **15** (agent_validate_steps, agent_execute_step, agent_finalize_run added in N+6) |
 | Flows registered         | **5** (agent_execution added in N+6)                      |
-| Agent endpoints          | **12** (POST /run, GET /runs, GET /runs/{id}, approve, reject, recover, replay, steps, tools, trust ×2, suggestions) |
+| Agent endpoints          | **13** (POST /run, GET /runs, GET /runs/{id}, approve, reject, recover, replay, steps, events, tools, trust ×2, suggestions) |
 
 ---
 
@@ -110,7 +110,11 @@ Items that are documented in roadmap files but have no implementation.
 | ~~Agentics Phase 2 — dry-run preview + approval gate~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 3 — deterministic execution (PersistentFlowRunner)~~ | AGENTICS.md | **DONE Sprint N+6** |
 | ~~Agentics Phase 5 — agent_runs/agent_steps observability + replay~~ | AGENTICS.md | **DONE Sprint N+7** |
-| Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 |
+| ~~AgentEvent table + correlation_id threading + Timeline UI~~ | AGENTICS.md | **DONE Sprint N+8** |
+| ~~`new_plan` replay mode~~ | AGENTICS.md §16.2 | **DONE Sprint N+8** |
+| ~~APScheduler lease-gated startup + heartbeat~~ | TECH_DEBT.md §5 | **DONE Sprint N+9** |
+| ~~Request-id context propagation (ContextVar + RequestContextFilter)~~ | TECH_DEBT.md §7 | **DONE Sprint N+9** |
+| Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 — Open |
 | RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
 | RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
 | RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
@@ -140,10 +144,10 @@ Items still open in TECH_DEBT.md, annotated with risk level.
 | §12.3 | Embedding generation is synchronous on write path | **MEDIUM** | Open |
 | §1 | ARM config updates are process-local | **MEDIUM** | Open |
 | §7 | Infinity Algorithm open-loop — Watcher missing, feedback not enforced | **MEDIUM** | ✅ Watcher done N+2; loop done N+3 |
-| §5/§1 | No distributed-safe scheduler | **MEDIUM** | Open |
+| §5/§1 | No distributed-safe scheduler | **MEDIUM** | ✅ Resolved N+9 — APScheduler lease-gated; heartbeat job prevents TTL expiry |
 | §16.3 | No agent capability/policy system — any approved run can invoke any tool | **MEDIUM** | Open (Agentics Phase 4) |
-| §16.2 | `replay_run()` only supports `same_plan` — `new_plan` mode deferred | **LOW** | Open |
-| §16.5 | Agent approval inbox has no dedicated UI — pending runs not surfaced | **LOW** | Open |
+| §16.2 | `replay_run()` only supports `same_plan` — `new_plan` mode deferred | **LOW** | ✅ Resolved N+8 — `new_plan` mode re-calls GPT-4o for fresh plan |
+| §16.5 | Agent approval inbox has no dedicated UI — pending runs not surfaced | **LOW** | ⚠️ Partial N+8 — badge added to AgentConsole; standalone inbox still missing |
 | §15.16 | RippleTrace viewer has no frontend UI | **LOW** | Open |
 | §15.17 | Observability dashboard has no frontend UI | **LOW** | Open |
 | §12.2 | `node_type="generic"` legacy rows | **LOW** | Open |
@@ -259,6 +263,38 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 **Tech debt closed:** INFINITY_ALGORITHM §Phase v4, INFINITY_ALGORITHM_SUPPORT §Phase v3
 
 **Known open (deferred to N+4):** `WatcherSignal.user_id` missing — focus_quality returns neutral until per-user association added
+
+---
+
+### ✅ Sprint N+9: "Phase 4 Completion + Request Context" — COMPLETE (2026-03-25)
+
+**Delivered:**
+- ✅ `start_background_tasks()` now returns `bool` (True = lease acquired, False = follower/disabled) — `scheduler_service.start()` only called by the lease holder (`main.py` startup order corrected)
+- ✅ `_heartbeat_lease_job()` in `task_services.py` + `_refresh_lease_heartbeat()` APScheduler job (60s interval) — prevents lease TTL expiry on the leader instance
+- ✅ `is_background_leader()` public helper in `task_services.py`
+- ✅ `_request_id_ctx: ContextVar[str]` at `main.py` module level; `RequestContextFilter` injects `request_id` into every `LogRecord`
+- ✅ All root-logger handlers upgraded in-place: format now includes `[%(request_id)s]`; `log_requests` middleware sets ContextVar before `call_next()`
+- ✅ `GET /observability/scheduler/status` (JWT-gated) — returns `{scheduler_running, is_leader, lease: {owner_id, acquired_at, heartbeat_at, expires_at}}`
+- ✅ 30 new tests (1,326 total passing, 69.65% coverage)
+
+**Tech debt closed:** TECH_DEBT.md §5 (Concurrency — APScheduler multi-instance), §7 (Observability — request_id context propagation)
+
+---
+
+### ✅ Sprint N+8: "Agent Event Log" — COMPLETE (2026-03-25)
+
+**Delivered:**
+- ✅ `db/models/agent_event.py` — `AgentEvent` ORM model, `agent_events` table, 8 event types: PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED
+- ✅ Alembic migration `c9d8e7f6a5b4` — `agent_events` table + `correlation_id VARCHAR(72)` on `agent_runs` + `agent_steps`
+- ✅ `services/agent_event_service.py` — `emit_event()` — always non-fatal, logs failures at WARNING, never raises
+- ✅ `correlation_id = f"run_{uuid4()}"` generated at `create_run()`; propagated through `AgentRun` → `NodusAgentAdapter` → `AgentStep` → `AgentEvent`
+- ✅ Lifecycle events emitted at every transition: PLAN_CREATED, APPROVED/REJECTED, EXECUTION_STARTED, COMPLETED/EXECUTION_FAILED, RECOVERED, REPLAY_CREATED
+- ✅ `GET /agent/runs/{run_id}/events` (13th agent endpoint) — unified timeline: lifecycle events + synthesised step events, sorted by `occurred_at ASC`
+- ✅ `new_plan` replay mode in `replay_run()` — re-calls GPT-4o for fresh plan on same goal
+- ✅ `AgentConsole.jsx` — Timeline tab with colored event-type badges; pending-approval badge (amber) on runs section header
+- ✅ 40 new tests in `tests/test_agent_events.py` (1,296 total passing, 69.48% coverage)
+
+**Tech debt closed:** TECH_DEBT.md §16.2 (`new_plan` mode), AGENTICS.md §3/§9 (event log requirement)
 
 ---
 

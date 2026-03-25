@@ -141,6 +141,16 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         replace_existing=True,
     )
 
+    # Lease heartbeat — refresh background task lease every 60 seconds so it
+    # doesn't expire (TTL=120s) while the leader is running.
+    scheduler.add_job(
+        _refresh_lease_heartbeat,
+        trigger=IntervalTrigger(seconds=60),
+        id="background_lease_heartbeat",
+        name="Background task lease heartbeat",
+        replace_existing=True,
+    )
+
 
 def _recalculate_all_scores() -> None:
     """Daily job: recalculate Infinity scores for all users."""
@@ -231,6 +241,15 @@ def _check_task_recurrence() -> None:
         handle_recurrence()
     except Exception as exc:
         logger.warning("Task recurrence check failed: %s", exc)
+
+
+def _refresh_lease_heartbeat() -> None:
+    """Refresh background task DB lease — prevents expiry on the leader instance."""
+    try:
+        from services.task_services import _heartbeat_lease_job
+        _heartbeat_lease_job()
+    except Exception as exc:
+        logger.warning("Lease heartbeat job raised unexpectedly: %s", exc)
 
 
 # ── Task execution ──────────────────────────────────────────────────────────

@@ -62,6 +62,9 @@ Exit criteria (policy-aligned):
 Sign-off required: Human approval of Phase 2 completion and operational readiness.
 
 ## 4. Phase 3 – Observability and Resilience
+
+**Status:** Complete (2026-03-22)
+
 Focus areas:
 - Implement structured logging consistently across services and routes.
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 7 (Observability Debt), Section 4 (Error Handling Debt).
@@ -81,6 +84,9 @@ Exit criteria (policy-aligned):
 Sign-off required: Human approval of Phase 3 completion and observability readiness.
 
 ## 5. Phase 4 – Scalability Readiness
+
+**Status:** Complete (2026-03-25, Sprint N+9)
+
 Focus areas:
 - Background task isolation to reduce duplicate work in multi-instance deployments.
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 5 (Concurrency Debt).
@@ -92,15 +98,17 @@ Focus areas:
 - Links to debt: `docs/roadmap/TECH_DEBT.md` → Section 5 (Concurrency Debt).
 
 Execution checklist:
-1. Background task lease prevents duplicate runners across instances.
-2. Gateway state persistence eliminates in-memory-only user state.
-3. Concurrency guards for shared singletons are in place.
-4. Startup schema drift guard blocks mismatched DB revisions.
+1. ✅ Background task lease prevents duplicate runners across instances — `start_background_tasks()` returns `bool`; `scheduler_service.start()` only called on lease-holding instance (Sprint N+9).
+2. ✅ Gateway state persistence eliminates in-memory-only user state — completed in Phase 6.
+3. ✅ Concurrency guards for shared singletons are in place — completed 2026-03-22.
+4. ✅ Startup schema drift guard blocks mismatched DB revisions — `tests/test_migrations.py` added Phase 8.
+5. ✅ Lease heartbeat job (`background_lease_heartbeat`, 60s) prevents TTL expiry while leader is running (Sprint N+9).
+6. ✅ `GET /observability/scheduler/status` exposes `{scheduler_running, is_leader, lease}` for ops visibility (Sprint N+9).
 
 Exit criteria (policy-aligned):
-- Background task execution is isolated to avoid duplicate work in multi-instance deployments.
-- Gateway no longer relies on in-memory-only state for critical flows.
-- Horizontal deployment does not violate invariants or session isolation (per `docs/governance/INVARIANTS.md`).
+- ✅ Background task execution is isolated to avoid duplicate work in multi-instance deployments.
+- ✅ Gateway no longer relies on in-memory-only state for critical flows.
+- ✅ Horizontal deployment does not violate invariants or session isolation (per `docs/governance/INVARIANTS.md`).
 Sign-off required: Human approval of Phase 4 completion and scalability readiness.
 
 ## 6. Phase 6 – Ownership Cleanup + Observability Hardening

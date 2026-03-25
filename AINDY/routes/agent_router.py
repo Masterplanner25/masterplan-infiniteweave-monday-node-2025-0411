@@ -257,6 +257,39 @@ def get_run_steps(
     ]
 
 
+@router.get("/runs/{run_id}/events")
+def get_run_events(
+    run_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the unified event timeline for a run (Sprint N+8).
+
+    Merges lifecycle events (PLAN_CREATED, APPROVED, EXECUTION_STARTED,
+    COMPLETED, etc.) with synthesised step events (STEP_EXECUTED, STEP_FAILED)
+    from AgentStep, sorted chronologically.
+
+    Returns the complete execution story from plan creation to final outcome.
+    Pre-N+8 runs (no correlation_id) return correlation_id: null and an
+    empty events list gracefully.
+    """
+    from services.agent_runtime import get_run_events
+
+    user_id = str(current_user["sub"])
+    result = get_run_events(run_id=run_id, user_id=user_id, db=db)
+
+    if result is None:
+        # Distinguish not-found from auth error by re-querying just for existence
+        from db.models.agent_run import AgentRun
+        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return result
+
+
 @router.get("/tools")
 def list_tools(current_user=Depends(get_current_user)):
     """List all registered tools with risk levels and descriptions."""
