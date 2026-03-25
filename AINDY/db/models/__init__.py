@@ -30,6 +30,7 @@ from .learning_threshold import LearningThresholdDB
 from .strategy import StrategyDB
 from .playbook import PlaybookDB
 from .user_score import UserScore, ScoreHistory
+from .agent_run import AgentRun, AgentStep, AgentTrustSettings
 
 
 __all__ = [
@@ -72,4 +73,7 @@ __all__ = [
     "PlaybookDB",
     "UserScore",
     "ScoreHistory",
+    "AgentRun",
+    "AgentStep",
+    "AgentTrustSettings",
 ]

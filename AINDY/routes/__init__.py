@@ -27,6 +27,7 @@ from routes.automation_router import router as automation_router
 from routes.flow_router import router as flow_router
 from routes.watcher_router import router as watcher_router
 from routes.score_router import router as score_router
+from routes.agent_router import router as agent_router
 
 
 ROUTERS = [
@@ -59,6 +60,7 @@ ROUTERS = [
     flow_router,
     watcher_router,
     score_router,
+    agent_router,
 ]
 
 

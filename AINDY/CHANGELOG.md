@@ -1,3 +1,63 @@
+## [Unreleased] — feat/flow-engine-console-ui
+
+### Added (2026-03-24 - Sprint N+4 "First Agent — Agentics Phase 1+2")
+
+**Agentics Phase 1+2: goal → plan → approve → execute lifecycle**
+
+Closes AGENTICS.md §Phase 1 (Minimal Runtime) and §Phase 2 (Dry-Run + Approval).
+
+**DB models + migration (db/models/agent_run.py, alembic a1b2c3d4e5f6):**
+- `agent_runs` table: goal, GPT-4o plan JSON, executive_summary, overall_risk, status, step tracking, result
+- `agent_steps` table: per-step audit log (tool_name, args, risk_level, result, execution_ms)
+- `agent_trust_settings` table: per-user auto-execute flags (auto_execute_low, auto_execute_medium)
+- Status lifecycle: pending_approval → approved → executing → completed | failed | rejected
+
+**Tool registry (services/agent_tools.py):**
+- `@register_tool` decorator — name, risk, description, callable
+- 9 tools: task.create (low), task.complete (medium), memory.recall (low), memory.write (low),
+  arm.analyze (medium), arm.generate (medium), leadgen.search (medium), research.query (low),
+  genesis.message (high)
+- `execute_tool()` — never raises; returns {success, result, error}
+
+**Agent runtime (services/agent_runtime.py):**
+- `generate_plan()` — GPT-4o JSON mode; enforces overall_risk invariant (max of step risks)
+- `create_run()` — generates plan, applies trust gate, persists AgentRun
+- `execute_run()` — sequential tool dispatch, per-step AgentStep persistence, memory write on completion
+- `approve_run()` / `reject_run()` — approval/rejection lifecycle
+- Trust gate: high risk → ALWAYS requires approval (hardcoded invariant)
+  medium/low → requires approval unless trust settings allow auto-execute
+
+**Agent API (routes/agent_router.py):**
+- POST /agent/run — submit goal, get plan + status
+- GET /agent/runs — list runs
+- GET /agent/runs/{run_id} — run detail
+- POST /agent/runs/{run_id}/approve — approve + execute
+- POST /agent/runs/{run_id}/reject — reject
+- GET /agent/runs/{run_id}/steps — execution steps audit
+- GET /agent/tools — tool registry
+- GET /agent/trust — trust settings
+- PUT /agent/trust — update trust settings
+
+**Agent Console UI (client/src/components/AgentConsole.jsx):**
+- Goal input + "Run Agent" button
+- Pending approval banner
+- Run list with RunCard (risk badge, status badge, approve/reject buttons)
+- Plan preview: executive summary, expandable step rows with result detail
+- Tools tab: all 9 tools with risk badges
+- Trust tab: per-user auto-execute toggle
+- Route: /agent (App.jsx), Sidebar link under System section
+
+**Tests (tests/test_agentics_phase1.py): 70 tests**
+- ORM column coverage for all 3 new tables
+- Tool registry: all 9 tools present, correct risk levels, callable
+- Risk invariants: genesis.message=high, no bypass via trust flags
+- Trust gate logic: _requires_approval for all risk/trust combinations
+- Plan schema + step field validation
+- Router: 9 endpoint presence + auth gates
+- api.js + AgentConsole.jsx + Sidebar + App.jsx integration
+
+---
+
 ## [Unreleased] — feat/infinity-algorithm-loop
 
 ### Added (2026-03-24 - Sprint N+3 "Infinity Algorithm Loop")

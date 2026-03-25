@@ -46,6 +46,19 @@ focus KPI equally, reducing scoring accuracy.
 `SignalPayload` to accept optional `user_id`, (c) update `_trigger_eta_update` to pass
 `user_id` when known. This is a Sprint N+4 agentics prerequisite.
 
-### ⏳ Sprint N+4 — First Agent (agentics)
-Score-driven agent suggestions, autonomous task prioritization, and agent loop.
-Closes INFINITY_ALGORITHM §Phase v5 (decision engine + ranking).
+### ✅ Sprint N+4 — First Agent (agentics Phase 1+2) (closed 2026-03-24)
+`services/agent_tools.py`, `services/agent_runtime.py`, `routes/agent_router.py`,
+`client/src/components/AgentConsole.jsx`. Goal → GPT-4o plan → trust gate → execute.
+9 tools, 3 DB tables, 9 endpoints, 70 tests.
+
+---
+
+## Open (continued)
+
+### ⏳ Sprint N+5 — Agentics Phase 3: Nodus Integration (Determinism)
+Replace Python execution loop in agent_runtime.py with PersistentFlowRunner-backed
+deterministic execution. Wire A.I.N.D.Y. tools as Nodus tasks for retries + checkpoints.
+
+### ⏳ Score-driven agent suggestions (INFINITY_ALGORITHM §Phase v5)
+Use Infinity score KPI data to influence agent plan prioritization and tool selection.
+Requires agent runtime to be stable (Phase 1+2 complete ✅).

@@ -105,8 +105,8 @@ Items that are documented in roadmap files but have no implementation.
 | Watcher service (focus, distraction, session tracking) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v2 |
 | Watcher signals fed into TWR/scoring | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v3 |
 | User feedback capture (explicit + implicit) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v5 |
-| Agentics runtime Phase 1 (agent_runtime.py — goal→plan→execute) | AGENTICS.md | Phase 1 |
-| Agentics Phase 2 — dry-run preview + approval gate | AGENTICS.md | Phase 2 |
+| ~~Agentics runtime Phase 1 (agent_runtime.py — goal→plan→execute)~~ | AGENTICS.md | **DONE Sprint N+4** |
+| ~~Agentics Phase 2 — dry-run preview + approval gate~~ | AGENTICS.md | **DONE Sprint N+4** |
 | Agentics Phase 3 — Nodus integration (deterministic execution) | AGENTICS.md | Phase 3 |
 | Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 |
 | Agentics Phase 5 — agent_runs/agent_steps observability | AGENTICS.md | Phase 5 |
