@@ -127,19 +127,64 @@ def _requires_approval(overall_risk: str, user_id: str, db: Session) -> bool:
 
 # ── Planner ───────────────────────────────────────────────────────────────────
 
+def _build_kpi_context_block(user_id: str, db: Session) -> str:
+    """
+    Build a KPI context block for the planner prompt.
+
+    Returns a formatted string if scores exist, empty string otherwise.
+    Guides the planner toward appropriate tool choices based on current KPI state.
+    Never raises.
+    """
+    try:
+        from services.infinity_service import get_user_kpi_snapshot
+        snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+        if not snapshot:
+            return ""
+
+        lines = [
+            "",
+            "## User Performance Context (Infinity Score)",
+            f"Overall score: {snapshot['master_score']:.1f}/100 (confidence: {snapshot['confidence']})",
+            f"- Execution speed:      {snapshot['execution_speed']:.1f}",
+            f"- Decision efficiency:  {snapshot['decision_efficiency']:.1f}",
+            f"- AI productivity:      {snapshot['ai_productivity_boost']:.1f}",
+            f"- Focus quality:        {snapshot['focus_quality']:.1f}",
+            f"- Masterplan progress:  {snapshot['masterplan_progress']:.1f}",
+            "",
+            "Scoring guidance:",
+        ]
+
+        if snapshot["focus_quality"] < 40:
+            lines.append("- Focus quality is low — prefer memory.recall and research.query over intensive tasks")
+        if snapshot["execution_speed"] < 40:
+            lines.append("- Execution speed is low — bias toward task.create to rebuild momentum")
+        if snapshot["ai_productivity_boost"] < 40:
+            lines.append("- ARM usage is low — consider arm.analyze to improve code quality")
+        if snapshot["master_score"] >= 70:
+            lines.append("- High overall score — medium-risk tools are appropriate given strong performance")
+
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     Generate a structured execution plan from a plain-English goal.
 
+    Injects the user's live KPI snapshot into the system prompt when available.
     Returns the parsed plan dict or None on failure.
     Never raises.
     """
     try:
+        kpi_block = _build_kpi_context_block(user_id=user_id, db=db)
+        system_prompt = PLANNER_SYSTEM_PROMPT + kpi_block
+
         client = _get_client()
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Goal: {goal}"},
             ],
             temperature=0.3,

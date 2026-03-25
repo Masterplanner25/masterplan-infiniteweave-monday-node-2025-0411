@@ -43,6 +43,7 @@ class SignalPayload(BaseModel):
     window_title: str = Field(default="", description="Active window title")
     activity_type: str = Field(..., description="work | communication | distraction | idle | unknown")
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    user_id: Optional[str] = Field(default=None, description="User ID to associate with this signal batch")
 
 
 class SignalBatch(BaseModel):
@@ -174,6 +175,7 @@ def receive_signals(
         row = WatcherSignal(
             signal_type=sig.signal_type,
             session_id=sig.session_id,
+            user_id=sig.user_id or None,
             app_name=sig.app_name,
             window_title=sig.window_title or None,
             activity_type=sig.activity_type,
@@ -193,7 +195,9 @@ def receive_signals(
 
     # ETA recalculation on any session_ended signal
     if session_ended_count > 0:
-        _trigger_eta_update(db)
+        # Use user_id from first signal in batch that has one
+        batch_user_id = next((s.user_id for s in batch.signals if s.user_id), None)
+        _trigger_eta_update(db, user_id=batch_user_id)
 
     return {"accepted": persisted, "session_ended_count": session_ended_count}
 

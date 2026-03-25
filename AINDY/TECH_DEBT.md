@@ -36,15 +36,10 @@ that need the test client fail with `ModuleNotFoundError: No module named 'apsch
 **To close:** Add `apscheduler` to `requirements.txt` / test environment, or lazy-import it
 inside functions rather than at module level.
 
-### ⏳ WatcherSignal lacks user_id — focus_quality scores are system-wide
-`WatcherSignal` has no `user_id` column. The watcher uses API-key auth, so signals
-are not associated with individual users. `calculate_focus_quality()` currently scores
-system-wide sessions (returns neutral 50.0 when no session data). This affects all users'
-focus KPI equally, reducing scoring accuracy.
-
-**To close:** (a) Add `user_id` (nullable) to `watcher_signals` table, (b) update
-`SignalPayload` to accept optional `user_id`, (c) update `_trigger_eta_update` to pass
-`user_id` when known. This is a Sprint N+4 agentics prerequisite.
+### ✅ WatcherSignal user_id — focus_quality per-user (closed 2026-03-24)
+`user_id` (nullable, indexed) added to `watcher_signals`. `SignalPayload` accepts
+optional `user_id`. `calculate_focus_quality()` filters by `user_id` — real per-user
+focus scores. Migration: b1c2d3e4f5a6 (Sprint N+5 Phase 1).
 
 ### ✅ Sprint N+4 — First Agent (agentics Phase 1+2) (closed 2026-03-24)
 `services/agent_tools.py`, `services/agent_runtime.py`, `routes/agent_router.py`,
@@ -59,6 +54,12 @@ focus KPI equally, reducing scoring accuracy.
 Replace Python execution loop in agent_runtime.py with PersistentFlowRunner-backed
 deterministic execution. Wire A.I.N.D.Y. tools as Nodus tasks for retries + checkpoints.
 
-### ⏳ Score-driven agent suggestions (INFINITY_ALGORITHM §Phase v5)
-Use Infinity score KPI data to influence agent plan prioritization and tool selection.
-Requires agent runtime to be stable (Phase 1+2 complete ✅).
+### ✅ Score-driven agent suggestions — Phase v5 Phase 1+2 (closed 2026-03-24)
+`get_user_kpi_snapshot()` in infinity_service + `_build_kpi_context_block()` in
+agent_runtime. GPT-4o planner now receives live KPI scores and scoring guidance
+on every plan generation call (Sprint N+5 Phase 2).
+
+### ⏳ Sprint N+5 Phase 3 — Tool suggestions endpoint + AgentConsole chips
+`GET /agent/suggestions` returning top recommended tools based on KPI scores.
+`suggest_tools(kpi_snapshot)` rule-based mapping in agent_tools.py.
+AgentConsole "Suggested Actions" chips pre-filling goal textarea.
