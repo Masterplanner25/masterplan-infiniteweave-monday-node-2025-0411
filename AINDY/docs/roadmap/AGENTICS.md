@@ -48,25 +48,39 @@ Primary source docs:
 
 ## 4. Current Implementation (Reality)
 
-**Implemented in A.I.N.D.Y.:**
+**Implemented in A.I.N.D.Y. (Sprints N+4 through N+7):**
+- ✅ Agent plan/dry‑run/approve/execute loop (`services/agent_runtime.py`)
+- ✅ GPT-4o planner with JSON mode + overall_risk enforcement
+- ✅ 9-tool registry with risk levels (`services/agent_tools.py`)
+- ✅ Trust gate: high-risk always approval-gated; low/medium configurable via `AgentTrustSettings`
+- ✅ `AgentRun` / `AgentStep` / `AgentTrustSettings` ORM models + migrations
+- ✅ Deterministic execution via `PersistentFlowRunner` (`services/nodus_adapter.py`)
+  - `AGENT_FLOW`: validate → execute_step (self-loop) → finalize
+  - Per-step retry: low/medium 3x; high-risk 1 attempt (no silent replay)
+  - DB checkpointing after each node via `PersistentFlowRunner`
+  - `FlowHistory → Memory Bridge` capture on completion
+- ✅ `flow_run_id` on `AgentRun` — audit trail to `FlowRun`
+- ✅ KPI-aware planner injection (Infinity Score snapshot in system prompt)
+- ✅ `suggest_tools()` — KPI-driven tool recommendations
+- ✅ Stuck-run recovery: startup scan + `POST /recover` + `POST /replay`
+- ✅ `replayed_from_run_id` lineage tracking on `AgentRun`
+- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips
+- ✅ 12 agent API endpoints
+
+**Implemented in A.I.N.D.Y. (pre-N+4):**
 - Memory Bridge (persistence + recall + feedback)
 - JWT/API‑key auth gates
 - Task tracking + analytics ingestion
 - Genesis + MasterPlan lifecycle
 - ARM (analysis + generation)
 
-**Implemented in Nodus (external runtime):**
-- Workflow/goal DSL → task graphs
-- Persistent graph snapshots + checkpoints
-- Scheduler + worker dispatch
-- Runtime event bus + tracing
-- HTTP runtime service
+**Note on Nodus pip package:**
+The installed `nodus` pip package is a separate scripting-language VM (`.nd` files, filesystem JSON checkpoints, requires Nodus VM closures). It has zero integration path with AINDY's PostgreSQL stack and is NOT used. `PersistentFlowRunner` in `services/flow_engine.py` is the deterministic execution substrate.
 
-**Missing from A.I.N.D.Y.:**
-- Agent plan/dry‑run/approve/execute loop
-- Capability issuance + enforcement
-- Approval inbox + audit viewer
-- Deterministic execution substrate wired into core flows
+**Still Missing from A.I.N.D.Y.:**
+- Capability issuance + enforcement (scoped tokens, egress control) — Agentics Phase 4
+- Full audit viewer UI (approval inbox, execution trace browser)
+- `new_plan` replay mode (re-calls GPT-4o for fresh plan on replay)
 
 ---
 
@@ -74,14 +88,16 @@ Primary source docs:
 
 | Documented Capability | Implementation Reality | Status | Primary Files |
 | --- | --- | --- | --- |
-| Plan → Dry‑Run → Approve → Execute → Verify | Concept only | Missing | N/A |
-| Capability descriptors + scoped tokens | Concept only | Missing | N/A |
-| Approval gates (risk policy) | Concept only | Missing | N/A |
-| Deterministic workflow engine | Exists in Nodus, not wired | Partial | `C:\dev\Coding Language\src\nodus\*` |
-| Audit/event log for agents | Not implemented | Missing | N/A |
-| Sandbox + egress control | Concept only | Missing | N/A |
-| LLM planner/executor/verifier separation | Concept only | Missing | N/A |
-| Memory integration | Implemented (Memory Bridge) | Implemented | `AINDY/bridge`, `AINDY/db/dao/memory_node_dao.py` |
+| Plan → Dry‑Run → Approve → Execute | Fully implemented | ✅ Done (N+4) | `services/agent_runtime.py`, `routes/agent_router.py` |
+| Approval gates (risk policy) | Trust gate + high-risk invariant | ✅ Done (N+4) | `services/agent_runtime.py::_requires_approval()` |
+| Deterministic workflow engine | PersistentFlowRunner wired | ✅ Done (N+6) | `services/nodus_adapter.py`, `services/flow_engine.py` |
+| Audit/event log for agents | `AgentRun` + `AgentStep` tables | ✅ Done (N+4) | `db/models/agent_run.py` |
+| Replay + traceability | `/recover` + `/replay` + `flow_run_id` | ✅ Done (N+7) | `services/stuck_run_service.py`, `services/agent_runtime.py` |
+| Memory integration | FlowHistory → Memory Bridge | ✅ Done (N+6) | `services/flow_engine.py::_capture_flow_completion()` |
+| KPI → plan adaptation | Infinity Score injected into planner | ✅ Done (N+5) | `services/agent_runtime.py::_build_kpi_context_block()` |
+| Capability descriptors + scoped tokens | Concept only | ❌ Missing | N/A — Agentics Phase 4 |
+| Sandbox + egress control | Concept only | ❌ Missing | N/A — Agentics Phase 4 |
+| LLM verifier separation | Concept only | ❌ Missing | N/A — Agentics Phase 4+ |
 
 ---
 
@@ -89,11 +105,10 @@ Primary source docs:
 
 | Gap | Impact | Files to Update |
 | --- | --- | --- |
-| No agent runtime loop | No deterministic execution | N/A (new layer required) |
-| No capability issuance/enforcement | Unsafe execution | N/A |
-| No approvals UI | No human‑in‑the‑loop control | `client/src/components/*` |
-| Nodus not integrated | Execution remains ad‑hoc | N/A |
-| No audit/event stream | No replay or traceability | `db/models/*`, `routes/*` |
+| No capability issuance/enforcement | Unsafe execution for high-privilege tools | New: `services/capability_service.py`, `db/models/capability.py` |
+| No approval inbox UI | Pending runs not surfaced in a dedicated view | `client/src/components/AgentConsole.jsx` (extend) |
+| No `new_plan` replay mode | Replay always re-uses stale plan | `services/agent_runtime.py::replay_run()` |
+| No egress/sandbox control | Tools can call external APIs without constraint | New policy layer |
 
 ---
 
@@ -148,82 +163,75 @@ plans through it. No major rewrites required.
 
 ## 10. Summary (Operational Truth)
 
-Agentics is currently **conceptual only** within A.I.N.D.Y. The execution
-substrate exists in Nodus, but the runtime loop, policy gates, and approvals
-are not integrated into the A.I.N.D.Y. stack.
+As of 2026-03-25, Agentics Phases 1–3 and the core of Phase 5 are **live and tested**.
+The execution loop is operational: a user submits a goal, GPT-4o generates a plan,
+the trust gate applies, the plan executes deterministically via `PersistentFlowRunner`,
+per-step retries are enforced, and the full run is checkpointed and linked to Memory Bridge.
+Observability (stuck-run recovery, replay, serializer unification) is also live.
 
-
-
-## 10. Roadmap to Completion
-
-### Phase 1 ? Minimal Runtime
-**Goal:** one end-to-end agent loop  
-**Build:**
-- `services/agent_runtime.py` wrapper (accept request ? call planner ? structured plan ? execute)
-- Basic plan schema (`goal`, `steps`, `risk_level`)
-- Tool registry (wrap: task.create/update, memory.write/recall, arm.analyze)
-**Output:** User ? Plan ? Execute (tools) ? Memory updated  
-**Not yet:** approvals, Nodus, policies
-
-### Phase 2 ? Dry-Run + Approval
-**Goal:** control + visibility  
-**Build:**
-- Dry-run preview ("Here?s what I will do")
-- Approval gate for high-risk plans
-- `POST /agent/approve`
-**Output:** Plan ? Preview ? Approve ? Execute
-
-### Phase 3 ? Nodus Integration (Determinism)
-**Goal:** deterministic execution  
-**Build:**
-- `services/nodus_adapter.py` mapping A.I.N.D.Y. tools ? Nodus tasks
-- Replace Python loop with Nodus workflow graph
-- Use `plan ? nodus.plan`, `execute ? nodus.run`, `resume ? nodus.resume`
-**Output:** retries + checkpoints + replay
-
-### Phase 4 ? Policy + Capability System
-**Goal:** safe, controlled execution  
-**Build:**
-- Capability model (e.g., `task.create` allowed, `external.api.call` restricted)
-- Policy engine enforcing approvals on restricted tools
-- Token model (scoped execution tokens, expiry)
-**Output:** bounded authority
-
-### Phase 5 ? Observability + Audit
-**Goal:** full traceability  
-**Build:**
-- Agent execution tables (`agent_runs`, `agent_steps`, `agent_events`)
-- Event logging: PLAN_CREATED, STEP_EXECUTED, STEP_FAILED, APPROVED, COMPLETED
-- Correlation IDs for every run
-**Output:** replayable execution history
-
-### Phase 6 ? Full Loop Integration
-**Goal:** connect all systems  
-**Connect:**
-- Memory Bridge (recall before plan, write after execution)
-- Infinity Algorithm (scoring influences plan decisions)
-- Support System (signals feed plans)
-- RippleTrace (external impact tracking)
-**Output:** signal ? plan ? execute ? feedback ? memory ? better plan
-
-### Phase 7 ? UI Layer (Optional)
-**Goal:** usable interface  
-**Build:**
-- Approval inbox
-- Execution timeline viewer
-- Agent run inspector
-
-### Final State (Agentics Complete)
-User/Trigger  
-? Agent Runtime (Agentics)  
-? Plan ? Dry-Run ? Approve ? Execute (Nodus)  
-? Verify ? Observe ? Memory Bridge  
-? Feedback ? Next Plan
+What remains is the **authority layer** (Phase 4: capability tokens + egress control)
+and an **approval inbox UI** (Phase 7).
 
 ---
 
-## 11. Summary (Operational Truth)
+## 10. Roadmap to Completion
 
-Agentics is currently **conceptual only** within A.I.N.D.Y. The execution
-substrate exists in Nodus, but the runtime loop, policy gates, and approvals
-are not integrated into the A.I.N.D.Y. stack.
+### ✅ Phase 1 — Minimal Runtime — DONE (Sprint N+4, 2026-03-24)
+- `services/agent_runtime.py` — goal → GPT-4o plan → execute → memory
+- 9-tool registry (`services/agent_tools.py`)
+- `AgentRun` / `AgentStep` ORM models + migrations
+- `POST /agent/run`, `GET /agent/runs`, `GET /agent/runs/{id}/steps`
+
+### ✅ Phase 2 — Dry-Run + Approval — DONE (Sprint N+4, 2026-03-24)
+- Plan returned as preview before execution
+- Trust gate: high-risk always gates; low/medium configurable via `AgentTrustSettings`
+- `POST /agent/runs/{id}/approve`, `POST /agent/runs/{id}/reject`
+- `AgentConsole.jsx` — plan preview, risk badge, approve/reject controls
+
+### ✅ Phase 3 — Deterministic Execution — DONE (Sprint N+6, 2026-03-25)
+- `services/nodus_adapter.py` — `NodusAgentAdapter` + `AGENT_FLOW`
+- `PersistentFlowRunner` replaces N+4 for-loop
+- Per-step retry (low/medium: 3x; high: halt immediately, no silent replay)
+- DB checkpointing after each node; `FlowHistory → Memory Bridge` on completion
+- `flow_run_id` on `AgentRun` for audit trail
+
+### Phase 4 — Policy + Capability System — TODO
+- Capability model (scoped tool permissions)
+- Policy engine enforcing approval on restricted tools
+- Token model (scoped execution tokens, expiry)
+- **Output:** bounded authority per agent run
+
+### ✅ Phase 5 — Observability + Audit — DONE (Sprint N+7, 2026-03-25)
+- `agent_runs` + `agent_steps` tables with full audit data ✅ (N+4)
+- `flow_run_id` correlation: every run links to its `FlowRun` ✅ (N+6)
+- Stuck-run startup scan + manual `/recover` endpoint ✅ (N+7)
+- `/replay` endpoint with `replayed_from_run_id` lineage ✅ (N+7)
+- Unified serializer: all 12 endpoints return consistent run shape ✅ (N+7)
+
+### ✅ Phase 6 (partial) — System Integration — DONE (Sprint N+5, 2026-03-24)
+- Memory Bridge: `FlowHistory → Memory Bridge` capture on run completion ✅
+- Infinity Algorithm: live KPI snapshot injected into planner system prompt ✅
+- `suggest_tools()`: KPI-driven tool suggestions surfaced in `AgentConsole.jsx` ✅
+- Remaining: RippleTrace signal → plan trigger (deferred)
+
+### Phase 7 — UI Layer — Partial
+- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips
+- ❌ Dedicated approval inbox (pending runs not surfaced in a standalone view)
+- ❌ Execution trace browser / visual FlowRun inspector
+
+### Current State (2026-03-25)
+```
+User/Trigger
+→ AgentConsole.jsx (goal input + suggestion chips)
+→ POST /agent/run → generate_plan() [GPT-4o, KPI-aware]
+→ Trust gate → pending_approval | approved
+→ POST /agent/runs/{id}/approve
+→ NodusAgentAdapter.execute_with_flow()
+   └─ PersistentFlowRunner(AGENT_FLOW)
+        ├─ agent_validate_steps
+        ├─ agent_execute_step (loop, per-step retry)
+        └─ agent_finalize_run → Memory Bridge capture
+→ AgentRun.status = "completed" | "failed"
+→ POST /agent/runs/{id}/recover  (stuck recovery)
+→ POST /agent/runs/{id}/replay   (lineage-tracked re-run)
+```

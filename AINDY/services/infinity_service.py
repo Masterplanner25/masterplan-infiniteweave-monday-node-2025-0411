@@ -276,11 +276,10 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
 
     Measures: watcher session data — duration, distractions, focus achievement.
 
-    Note: WatcherSignal does not have a user_id column (watcher uses API-key
-    auth). This calculator returns neutral (50.0, 0) until user-session
-    association is available.
+    Filters by user_id when available; falls back to neutral (50.0) when the
+    user has no associated watcher signals.
 
-    Formula (when data available):
+    Formula:
       avg_duration_score = sigmoid(avg_session_minutes, midpoint=30, steepness=0.1)
       distraction_score = 100 - (avg_distractions_per_session × 10)
       achievement_rate = focus_achieved_signals / session_ended_signals
@@ -297,10 +296,9 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
 
-        # WatcherSignal has no user_id — query returns all sessions.
-        # Until per-user association is added, return neutral.
         sessions = db.query(WatcherSignal).filter(
             WatcherSignal.signal_type == "session_ended",
+            WatcherSignal.user_id == user_id,
             WatcherSignal.received_at >= window_start,
         ).all()
 
@@ -315,6 +313,7 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         # Average distractions: count distraction_detected signals per session
         distraction_signals = db.query(WatcherSignal).filter(
             WatcherSignal.signal_type == "distraction_detected",
+            WatcherSignal.user_id == user_id,
             WatcherSignal.received_at >= window_start,
         ).count()
 
@@ -324,6 +323,7 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         # Focus achievement rate
         focus_achieved = db.query(WatcherSignal).filter(
             WatcherSignal.signal_type == "focus_achieved",
+            WatcherSignal.user_id == user_id,
             WatcherSignal.received_at >= window_start,
         ).count()
 
@@ -393,6 +393,42 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
     except Exception as e:
         logger.warning("masterplan_progress calc failed: %s", e)
         return 50.0, 0
+
+
+# ── KPI Snapshot ─────────────────────────────────────────────────────────────
+
+def get_user_kpi_snapshot(user_id: str, db: Session) -> Optional[dict]:
+    """
+    Return the latest KPI snapshot for a user from user_scores.
+
+    Returns a dict with master_score + individual KPI scores, or None
+    if the user has no computed scores yet.
+
+    Used by the agent planner to inject live context into the system prompt.
+    Never raises.
+    """
+    try:
+        from db.models.user_score import UserScore
+
+        score = db.query(UserScore).filter(
+            UserScore.user_id == user_id
+        ).first()
+
+        if not score:
+            return None
+
+        return {
+            "master_score": score.master_score,
+            "execution_speed": score.execution_speed_score,
+            "decision_efficiency": score.decision_efficiency_score,
+            "ai_productivity_boost": score.ai_productivity_boost_score,
+            "focus_quality": score.focus_quality_score,
+            "masterplan_progress": score.masterplan_progress_score,
+            "confidence": score.confidence,
+        }
+    except Exception as exc:
+        logger.warning("get_user_kpi_snapshot failed for %s: %s", user_id, exc)
+        return None
 
 
 # ── Master Calculator ────────────────────────────────────────────────────────

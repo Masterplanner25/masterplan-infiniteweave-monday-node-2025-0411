@@ -7,16 +7,17 @@ Based on: docs/roadmap/*.md + docs/architecture/SYSTEM_SPEC.md + docs/architectu
 
 ## System State Summary
 
-| Metric                   | Value                                         |
-|--------------------------|-----------------------------------------------|
-| Tests                    | **850 passing, 0 failing, 4 skipped** (42 new in Sprint N+1) |
-| Coverage                 | ≥69% (threshold: 69%)                         |
-| Ruff lint errors         | 0 (prototype files excluded from lint)        |
-| API endpoints            | **134**                                       |
-| Frontend components      | **40 JSX files**                              |
-| DB tables                | ~35 (Postgres offline; derived from ORM models) |
-| Flow nodes registered    | **12**                                        |
-| Flows registered         | **4** (arm_analysis, task_completion, leadgen_search, genesis_conversation) |
+| Metric                   | Value                                                     |
+|--------------------------|-----------------------------------------------------------|
+| Tests                    | **1,256 passing, 5 pre-existing failures, 1 error** (as of Sprint N+7) |
+| Coverage                 | **69.24%** (threshold: 69%)                               |
+| Ruff lint errors         | 0 (prototype files excluded from lint)                    |
+| API endpoints            | **~146** (+12 agent endpoints since N+4)                  |
+| Frontend components      | **~43 JSX files** (AgentConsole + suggestion chips added) |
+| DB tables                | ~40 (agent_runs, agent_steps, agent_trust_settings, user_scores, score_history, watcher_signals added) |
+| Flow nodes registered    | **15** (agent_validate_steps, agent_execute_step, agent_finalize_run added in N+6) |
+| Flows registered         | **5** (agent_execution added in N+6)                      |
+| Agent endpoints          | **12** (POST /run, GET /runs, GET /runs/{id}, approve, reject, recover, replay, steps, tools, trust ×2, suggestions) |
 
 ---
 
@@ -107,9 +108,9 @@ Items that are documented in roadmap files but have no implementation.
 | User feedback capture (explicit + implicit) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v5 |
 | ~~Agentics runtime Phase 1 (agent_runtime.py — goal→plan→execute)~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 2 — dry-run preview + approval gate~~ | AGENTICS.md | **DONE Sprint N+4** |
-| Agentics Phase 3 — Nodus integration (deterministic execution) | AGENTICS.md | Phase 3 |
+| ~~Agentics Phase 3 — deterministic execution (PersistentFlowRunner)~~ | AGENTICS.md | **DONE Sprint N+6** |
+| ~~Agentics Phase 5 — agent_runs/agent_steps observability + replay~~ | AGENTICS.md | **DONE Sprint N+7** |
 | Agentics Phase 4 — capability/policy system | AGENTICS.md | Phase 4 |
-| Agentics Phase 5 — agent_runs/agent_steps observability | AGENTICS.md | Phase 5 |
 | RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
 | RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
 | RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
@@ -131,27 +132,30 @@ Items that are documented in roadmap files but have no implementation.
 
 Items still open in TECH_DEBT.md, annotated with risk level.
 
-| § | Item | Risk |
-|---|------|------|
-| §15.8 | `SECRET_KEY` has hardcoded default `"dev-secret-change-in-production"` — JWT forgery if `.env` absent | **HIGH** |
-| §15.5 | Dual DAO implementations for `memory_nodes` — `bridge_router.py` imports legacy path; `POST /bridge/link` breaks if swapped | **MEDIUM** |
-| §10.1 | `MemoryNode.children` never persisted — recursive trace trees are silently dropped on process exit | **MEDIUM** |
-| §12.3 | Embedding generation is synchronous on write path — OpenAI latency blocks every memory save | **MEDIUM** |
-| §1 | ARM config updates are process-local — multi-instance deployment loses config changes | **MEDIUM** |
-| §7 | Infinity Algorithm Support System is open-loop — Watcher missing, feedback not enforced | **MEDIUM** |
-| §5/§1 | No distributed-safe scheduler — multi-instance APScheduler risks duplicated jobs beyond lease guard | **MEDIUM** |
-| §15.16 | RippleTrace viewer has no frontend UI — signals captured but never surfaced | **LOW** |
-| §15.17 | Observability dashboard has no frontend UI — request metrics and memory metrics not visible | **LOW** |
-| §12.2 | `node_type="generic"` legacy rows — strict UPDATE enforcement would reject them | **LOW** |
-| §10.9 | C++→Rust→PyO3 FFI chain for 2 math functions — high build friction, release build blocked by AppControl | **LOW** |
-| §11.6 | ARM auto-approve low-risk config changes — still requires manual `PUT /arm/config` call | **LOW** |
-| §14 | Pattern detection for recurring memory motifs — open conceptual gap in Memory Bridge | **LOW** |
-| §14 | SYLVA agent reserved but inactive — namespace exists, no implementation | **LOW** |
-| §14 | Embedding-based deduplication in capture engine (`_is_duplicate` is tag-only) | **LOW** |
-| §15.11 | MongoDB credentials not validated at startup — silent failure if Mongo unavailable | **LOW** |
-| §15.12 | Mixed cpython-311 / cpython-314 pycache — import resolution ambiguity | **LOW** |
-| §4 | `print()` statements remain in some services — structured logging not fully consistent | **LOW** |
-| §6 | No documented secret rotation policy | **LOW** |
+| § | Item | Risk | Status |
+|---|------|------|--------|
+| §15.8 | `SECRET_KEY` has hardcoded default — JWT forgery if `.env` absent | **HIGH** | ✅ Fixed N+1 |
+| §15.5 | Dual DAO implementations for `memory_nodes` | **MEDIUM** | ✅ Fixed N+1 |
+| §10.1 | `MemoryNode.children` never persisted | **MEDIUM** | ✅ Fixed N+1 |
+| §12.3 | Embedding generation is synchronous on write path | **MEDIUM** | Open |
+| §1 | ARM config updates are process-local | **MEDIUM** | Open |
+| §7 | Infinity Algorithm open-loop — Watcher missing, feedback not enforced | **MEDIUM** | ✅ Watcher done N+2; loop done N+3 |
+| §5/§1 | No distributed-safe scheduler | **MEDIUM** | Open |
+| §16.3 | No agent capability/policy system — any approved run can invoke any tool | **MEDIUM** | Open (Agentics Phase 4) |
+| §16.2 | `replay_run()` only supports `same_plan` — `new_plan` mode deferred | **LOW** | Open |
+| §16.5 | Agent approval inbox has no dedicated UI — pending runs not surfaced | **LOW** | Open |
+| §15.16 | RippleTrace viewer has no frontend UI | **LOW** | Open |
+| §15.17 | Observability dashboard has no frontend UI | **LOW** | Open |
+| §12.2 | `node_type="generic"` legacy rows | **LOW** | Open |
+| §10.9 | C++→Rust→PyO3 FFI chain — release build blocked | **LOW** | Open |
+| §11.6 | ARM auto-approve low-risk config changes | **LOW** | Open |
+| §14 | Pattern detection for recurring memory motifs | **LOW** | Open |
+| §14 | SYLVA agent reserved but inactive | **LOW** | Open |
+| §14 | Embedding-based deduplication is tag-only | **LOW** | Open |
+| §15.11 | MongoDB credentials not validated at startup | **LOW** | Open |
+| §15.12 | Mixed cpython-311 / cpython-314 pycache | **LOW** | Open |
+| §4 | `print()` statements remain in some services | **LOW** | Open |
+| §6 | No documented secret rotation policy | **LOW** | Open |
 
 ---
 
@@ -258,7 +262,62 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ---
 
-### Sprint N+4: "First Agent"
+### ✅ Sprint N+7: "Agent Observability" — COMPLETE (2026-03-25)
+
+**Delivered:**
+- ✅ `services/stuck_run_service.py` — `scan_and_recover_stuck_runs()` startup scan; marks stranded `FlowRun` + `AgentRun` rows as failed; per-run try/except; never blocks startup
+- ✅ `AINDY_STUCK_RUN_THRESHOLD_MINUTES` env var (default 10)
+- ✅ `recover_stuck_agent_run()` — manual recovery with distinct 409 codes (`wrong_status` vs `too_recent`); `?force=true` bypasses age guard only
+- ✅ `POST /agent/runs/{id}/recover`
+- ✅ `replay_run()` + `_create_run_from_plan()` — trust gate re-applied; prior approval does not carry forward
+- ✅ `POST /agent/runs/{id}/replay`
+- ✅ Migration `d3e4f5a6b7c8` — `replayed_from_run_id` on `agent_runs`, chains off `c2d3e4f5a6b7`
+- ✅ Serializer unified: `_run_to_response()` in router → `_run_to_dict()` from service; all 12 endpoints return `flow_run_id` + `replayed_from_run_id`
+- ✅ 55 new tests (1,256 total passing, 69.24% coverage)
+
+---
+
+### ✅ Sprint N+6: "Deterministic Agent" — COMPLETE (2026-03-25)
+
+**Delivered:**
+- ✅ `services/nodus_adapter.py` — `NodusAgentAdapter` + `AGENT_FLOW` + 3 registered nodes
+- ✅ `execute_run()` N+4 for-loop replaced by `NodusAgentAdapter.execute_with_flow()`
+- ✅ Per-step retry: low/medium 3x; high-risk 1 attempt (no retry, prevents `genesis.message` silent replay)
+- ✅ `FlowRun` checkpointing after each node; `FlowHistory → Memory Bridge` on completion
+- ✅ `AgentRun.flow_run_id` column + migration `c2d3e4f5a6b7`
+- ✅ Nodus pip package confirmed NOT usable (separate scripting-language VM; no PostgreSQL integration path)
+- ✅ 81 new tests (1,201 total passing, 69.18% coverage)
+
+---
+
+### ✅ Sprint N+5: "Score-Aware Agent" — COMPLETE (2026-03-24)
+
+**Delivered:**
+- ✅ `WatcherSignal.user_id` column + migration `b1c2d3e4f5a6` — per-user focus quality now calculated
+- ✅ `_build_kpi_context_block()` — live Infinity Score snapshot injected into planner system prompt
+- ✅ `suggest_tools(kpi_snapshot)` — up to 3 KPI-driven tool suggestions with pre-filled goal strings
+- ✅ `GET /agent/suggestions`
+- ✅ `AgentConsole.jsx` — suggestion chips below goal input
+- ✅ 55 new tests (1,120 total passing, ≥69% coverage)
+
+---
+
+### ✅ Sprint N+4: "First Agent" — COMPLETE (2026-03-24)
+
+**Delivered:**
+- ✅ `services/agent_runtime.py` — full lifecycle: generate_plan → trust gate → create_run → execute_run → approve_run → reject_run
+- ✅ GPT-4o planner (JSON mode, `overall_risk` invariant enforcement)
+- ✅ 9-tool registry (`services/agent_tools.py`): task.create/complete, memory.recall/write, arm.analyze/generate, leadgen.search, research.query, genesis.message
+- ✅ `AgentRun` / `AgentStep` / `AgentTrustSettings` ORM models + migrations
+- ✅ 10 agent API endpoints
+- ✅ `AgentConsole.jsx` — goal input, plan preview with risk badge, step timeline, approve/reject
+- ✅ 70 new tests (1,065 total passing, ≥69% coverage)
+
+**Tech debt closed:** AGENTICS Phase 1, AGENTICS Phase 2
+
+---
+
+### Sprint N+4: "First Agent" (original scope — superseded above)
 
 **Goal:** Launch the Agentics runtime Phase 1–2, and expose the system's invisible signals as visible surfaces.
 

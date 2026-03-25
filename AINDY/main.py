@@ -169,6 +169,17 @@ async def lifespan(app: FastAPI):
     from services.flow_definitions import register_all_flows
     register_all_flows()
 
+    # Sprint N+7: Recover any FlowRun/AgentRun rows stranded by prior crash
+    if enable_background and not os.getenv("PYTEST_CURRENT_TEST"):
+        from services.stuck_run_service import scan_and_recover_stuck_runs
+        _scan_db = SessionLocal()
+        try:
+            scan_and_recover_stuck_runs(_scan_db)
+        except Exception as _scan_exc:
+            logger.warning("Stuck-run startup scan failed (non-fatal): %s", _scan_exc)
+        finally:
+            _scan_db.close()
+
     # Seed system identity
     from db.models.author_model import AuthorDB
     from datetime import datetime

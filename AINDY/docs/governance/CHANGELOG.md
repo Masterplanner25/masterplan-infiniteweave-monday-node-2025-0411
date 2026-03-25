@@ -10,6 +10,96 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Sprint N+7: Agent Observability — 2026-03-25
+
+### Added
+* **`services/stuck_run_service.py`** — `scan_and_recover_stuck_runs(db, staleness_minutes)` startup scan. Queries `FlowRun.status="running"` rows older than `AINDY_STUCK_RUN_THRESHOLD_MINUTES` (default 10). For `workflow_type="agent_execution"`: marks both `FlowRun` and linked `AgentRun` as failed, reconstructs `AgentRun.result` from committed `AgentStep` rows. Non-agent types: mark `FlowRun` failed silently. Per-run try/except + outer try/except; never raises.
+* **`recover_stuck_agent_run(run_id, user_id, db, force=False)`** in `stuck_run_service.py` — manual recovery with distinct 409 error codes: `wrong_status` ("Run is not in executing state") and `too_recent` ("Run started less than N minutes ago (use ?force=true to override)"). `force=True` bypasses age guard only.
+* **`POST /agent/runs/{run_id}/recover`** — manual recovery endpoint.
+* **`replay_run(run_id, user_id, db, mode="same_plan")`** in `agent_runtime.py` — creates new `AgentRun` from original plan; trust gate re-applied; prior approval does not carry forward.
+* **`_create_run_from_plan(..., replayed_from_run_id=None)`** in `agent_runtime.py` — internal helper that persists a new run from an existing plan dict, skipping GPT-4o.
+* **`POST /agent/runs/{run_id}/replay`** — replay endpoint.
+* **Migration `d3e4f5a6b7c8`** — `replayed_from_run_id` nullable VARCHAR on `agent_runs`, chains off `c2d3e4f5a6b7`.
+* **`AgentRun.replayed_from_run_id`** — nullable column tracking replay lineage.
+* **`main.py` lifespan** — startup scan hook after `register_all_flows()`, gated behind `enable_background` and `not PYTEST_CURRENT_TEST`.
+* **`tests/test_agent_observability.py`** — 55 tests across Phase 1 (scan), Phase 2 (recover), and Phase 3 (replay, migration, serializer unification).
+
+### Changed
+* **`_run_to_response()` in `routes/agent_router.py`** — now delegates to `_run_to_dict()` from `services/agent_runtime.py`. All 12 agent endpoints now return a consistent shape including `flow_run_id` and `replayed_from_run_id`.
+* **`_run_to_dict()` in `services/agent_runtime.py`** — includes `replayed_from_run_id`.
+* Agent router docstring updated with 12-endpoint list.
+
+### Results
+* Tests: 1,256 passing (+55), 5 pre-existing failures, 1 pre-existing error
+* Coverage: 69.24% (threshold: 69%)
+
+---
+
+## Sprint N+6: Deterministic Agent — 2026-03-25
+
+### Added
+* **`services/nodus_adapter.py`** — `NodusAgentAdapter` with 3 registered flow nodes:
+  - `agent_validate_steps`: validates plan, initialises iteration state
+  - `agent_execute_step`: executes one step with internal for-loop retry (low/medium: 3x; high: 1 attempt, no retry)
+  - `agent_finalize_run`: marks `AgentRun.status="completed"`, writes step results
+* **`AGENT_FLOW`** — DAG with self-loop: `agent_validate_steps → agent_execute_step` (loops via `_more_steps()`) `→ agent_finalize_run`.
+* **`NodusAgentAdapter.execute_with_flow()`** — links `FlowRun.id → AgentRun.flow_run_id`; on FAILURE reconstructs `AgentRun.result` from committed `AgentStep` rows; never raises.
+* **Migration `c2d3e4f5a6b7`** — `flow_run_id` nullable VARCHAR on `agent_runs`, chains off `b1c2d3e4f5a6`.
+* **`AgentRun.flow_run_id`** — nullable column linking to `FlowRun.id`.
+* **`tests/test_deterministic_agent.py`** — 81 tests across 15 classes covering model column, migration, 3 nodes, flow graph, adapter, exception recovery, approve/reject, and serializer.
+
+### Changed
+* **`execute_run()` in `services/agent_runtime.py`** — N+4 sequential for-loop fully removed; now marks `"executing"` then delegates entirely to `NodusAgentAdapter.execute_with_flow()`.
+* **`_run_to_dict()`** — includes `flow_run_id`.
+
+### Key Notes
+* Nodus pip package (`venv/Lib/site-packages/nodus/`) is a separate scripting-language VM requiring Nodus VM closures and filesystem JSON checkpoints — NOT used. `PersistentFlowRunner` is the execution substrate.
+* High-risk no-retry rule: `genesis.message` and other `risk_level="high"` steps halt immediately on first failure.
+
+### Results
+* Tests: 1,201 passing (+81), 5 pre-existing failures, 1 pre-existing error
+* Coverage: 69.18% (threshold: 69%)
+
+---
+
+## Sprint N+5: Score-Aware Agent — 2026-03-24
+
+### Added
+* **`WatcherSignal.user_id`** column + migration `b1c2d3e4f5a6` — enables per-user focus quality calculation.
+* **`calculate_focus_quality()`** updated — now queries `watcher_signals` filtered by `user_id`; returns neutral 50.0 when no data.
+* **`_build_kpi_context_block()`** in `agent_runtime.py` — injects live Infinity Score snapshot into planner system prompt (focus guidance, execution speed bias, ARM suggestion, high-score unlock).
+* **`suggest_tools(kpi_snapshot)`** in `agent_tools.py` — returns up to 3 KPI-driven tool suggestions with pre-filled goal strings; returns `[]` when no snapshot.
+* **`GET /agent/suggestions`** — KPI-based tool suggestions endpoint.
+* **`AgentConsole.jsx`** — suggestion chips rendered below goal input; clicking a chip pre-fills the goal field.
+* **`tests/test_score_aware_agent.py`** — 55 tests across all 3 phases.
+
+### Results
+* Tests: 1,120 passing (+55), 5 pre-existing failures, 1 pre-existing error
+* Coverage: 69% (threshold: 69%)
+
+---
+
+## Sprint N+4: First Agent (Agentics Phase 1+2) — 2026-03-24
+
+### Added
+* **`services/agent_runtime.py`** — full agent lifecycle: `generate_plan()` (GPT-4o JSON mode), `_requires_approval()` trust gate, `create_run()`, `execute_run()`, `approve_run()`, `reject_run()`, `_run_to_dict()`.
+* **`services/agent_tools.py`** — 9-tool registry: `task.create`, `task.complete`, `memory.recall`, `memory.write`, `arm.analyze`, `arm.generate`, `leadgen.search`, `research.query`, `genesis.message`. Each entry has risk level, description, executor.
+* **`db/models/agent_run.py`** — `AgentRun`, `AgentStep`, `AgentTrustSettings` ORM models.
+* **Migrations** — `agent_runs`, `agent_steps`, `agent_trust_settings` tables.
+* **`routes/agent_router.py`** — 10 endpoints: `POST /agent/run`, `GET /agent/runs`, `GET /agent/runs/{id}`, `POST /agent/runs/{id}/approve`, `POST /agent/runs/{id}/reject`, `GET /agent/runs/{id}/steps`, `GET /agent/tools`, `GET /agent/trust`, `PUT /agent/trust`, `GET /agent/suggestions`.
+* **`AgentConsole.jsx`** — goal input, plan preview with risk badge, step timeline, approve/reject controls.
+* **`tests/test_first_agent.py`** — 70 tests.
+
+### Tech Debt Closed
+* AGENTICS.md Phase 1 (Minimal Runtime) — **DONE**
+* AGENTICS.md Phase 2 (Dry-Run + Approval) — **DONE**
+
+### Results
+* Tests: 1,065 passing (+70), 5 pre-existing failures
+* Coverage: ≥69% (threshold: 69%)
+
+---
+
 ## Migration Policy — Schema Sync (Additive) — 2026-03-22
 
 ### Changed

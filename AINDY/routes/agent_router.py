@@ -1,16 +1,19 @@
 """
-Agent Router — Sprint N+4 Agentics Phase 1+2
+Agent Router — Sprint N+4 Agentics Phase 1+2 / Sprint N+5 Phase 3 / Sprint N+7 Observability
 
 Endpoints:
-  POST   /agent/run                     — create a new agent run (goal → plan)
-  GET    /agent/runs                    — list user's runs
-  GET    /agent/runs/{run_id}           — get run detail
-  POST   /agent/runs/{run_id}/approve   — approve + execute a pending run
-  POST   /agent/runs/{run_id}/reject    — reject a pending run
-  GET    /agent/runs/{run_id}/steps     — list steps for a run
-  GET    /agent/tools                   — list available tools
-  GET    /agent/trust                   — get trust settings
-  PUT    /agent/trust                   — update trust settings
+  POST   /agent/run                       — create a new agent run (goal → plan)
+  GET    /agent/runs                      — list user's runs
+  GET    /agent/runs/{run_id}             — get run detail
+  POST   /agent/runs/{run_id}/approve     — approve + execute a pending run
+  POST   /agent/runs/{run_id}/reject      — reject a pending run
+  POST   /agent/runs/{run_id}/recover     — manually recover a stuck run (N+7)
+  POST   /agent/runs/{run_id}/replay      — replay a run with same plan (N+7)
+  GET    /agent/runs/{run_id}/steps       — list steps for a run
+  GET    /agent/tools                     — list available tools
+  GET    /agent/trust                     — get trust settings
+  PUT    /agent/trust                     — update trust settings
+  GET    /agent/suggestions               — KPI-based tool suggestions (Phase 3)
 """
 import logging
 from typing import Optional
@@ -51,22 +54,9 @@ def _get_run_or_404(run_id: str, user_id: str, db: Session):
 
 
 def _run_to_response(run) -> dict:
-    return {
-        "run_id": str(run.id),
-        "goal": run.goal,
-        "executive_summary": run.executive_summary,
-        "overall_risk": run.overall_risk,
-        "status": run.status,
-        "steps_total": run.steps_total,
-        "steps_completed": run.steps_completed,
-        "plan": run.plan,
-        "result": run.result,
-        "error_message": run.error_message,
-        "created_at": run.created_at.isoformat() if run.created_at else None,
-        "approved_at": run.approved_at.isoformat() if run.approved_at else None,
-        "started_at": run.started_at.isoformat() if run.started_at else None,
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-    }
+    """Unified serializer — delegates to the service layer (Sprint N+7)."""
+    from services.agent_runtime import _run_to_dict
+    return _run_to_dict(run)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -171,6 +161,67 @@ def reject_agent_run(
     return run
 
 
+@router.post("/runs/{run_id}/recover")
+def recover_agent_run(
+    run_id: str,
+    force: bool = False,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually recover a stuck AgentRun (Sprint N+7).
+
+    The run must be in status="executing".  By default, the run must also
+    have been started at least AINDY_STUCK_RUN_THRESHOLD_MINUTES ago.
+    Pass ?force=true to bypass the age guard.
+
+    Returns 409 with a distinct message for each blocking condition:
+      - "Run is not in executing state"
+      - "Run started less than N minutes ago (use ?force=true to override)"
+    """
+    from services.stuck_run_service import recover_stuck_agent_run
+
+    user_id = str(current_user["sub"])
+    result = recover_stuck_agent_run(run_id=run_id, user_id=user_id, db=db, force=force)
+
+    if result["ok"]:
+        return result["run"]
+
+    error_code = result.get("error_code", "internal_error")
+    if error_code == "not_found":
+        raise HTTPException(status_code=404, detail="Run not found")
+    if error_code == "forbidden":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if error_code in ("wrong_status", "too_recent"):
+        raise HTTPException(status_code=409, detail=result.get("detail", error_code))
+    raise HTTPException(status_code=500, detail="Recovery failed")
+
+
+@router.post("/runs/{run_id}/replay")
+def replay_agent_run(
+    run_id: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Replay an existing run using the same plan (Sprint N+7).
+
+    Creates a new AgentRun with the original plan.  Trust gate is
+    re-applied — prior approval does not carry forward.
+
+    Returns the new run dict (status pending_approval or approved).
+    """
+    from services.agent_runtime import replay_run
+
+    user_id = str(current_user["sub"])
+    new_run = replay_run(run_id=run_id, user_id=user_id, db=db)
+
+    if not new_run:
+        raise HTTPException(status_code=404, detail="Run not found or not replayable")
+
+    return new_run
+
+
 @router.get("/runs/{run_id}/steps")
 def get_run_steps(
     run_id: str,
@@ -240,6 +291,27 @@ def get_trust_settings(
         "auto_execute_medium": trust.auto_execute_medium if trust else False,
         "note": "High-risk plans always require approval regardless of trust settings.",
     }
+
+
+@router.get("/suggestions")
+def get_tool_suggestions(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return up to 3 KPI-driven tool suggestions for the current user.
+
+    Reads the user's latest Infinity score snapshot and maps low KPIs to
+    recommended tools + pre-filled goal strings.
+
+    Returns [] when the user has no score history yet.
+    """
+    from services.agent_tools import suggest_tools
+    from services.infinity_service import get_user_kpi_snapshot
+
+    user_id = str(current_user["sub"])
+    snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+    return suggest_tools(kpi_snapshot=snapshot)
 
 
 @router.put("/trust")

@@ -1,5 +1,5 @@
 """
-Agent Run models — Sprint N+4 Agentics Phase 1+2
+Agent Run models — Sprint N+4 Agentics Phase 1+2 / Sprint N+6 Deterministic Agent / Sprint N+7 Observability
 
 AgentRun: persists one goal→plan→approve→execute lifecycle.
 AgentStep: each tool call within a run (append-only audit log).
@@ -28,6 +28,14 @@ class AgentRun(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, nullable=False, index=True)
+
+    # N+6: links to the FlowRun that executed this agent run (nullable for
+    # backward-compatibility with runs created before the deterministic adapter)
+    flow_run_id = Column(String, nullable=True, index=False)
+
+    # N+7: records the original run_id when this run was created via /replay
+    # (nullable — only set on replayed runs; absent on originals)
+    replayed_from_run_id = Column(String, nullable=True, index=False)
 
     # Goal and plan
     goal = Column(Text, nullable=False)

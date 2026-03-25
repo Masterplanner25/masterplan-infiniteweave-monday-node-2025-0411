@@ -1,5 +1,39 @@
 ## [Unreleased] — feat/flow-engine-console-ui
 
+### Added (2026-03-24 - Sprint N+5 Phase 1+2 "Score-Aware Agent")
+
+**Phase 1: WatcherSignal user_id — per-user focus quality**
+
+- `db/models/watcher_signal.py`: added `user_id` (nullable, indexed) column
+- `alembic/versions/b1c2d3e4f5a6_watcher_signal_user_id.py`: migration (chains off a1b2c3d4e5f6)
+- `routes/watcher_router.py`: `SignalPayload.user_id` optional field; populated on signal write;
+  extracted from batch for `_trigger_eta_update()`
+- `services/infinity_service.py` → `calculate_focus_quality()`: all three WatcherSignal queries
+  now filter by `user_id` — real per-user focus scores instead of neutral 50.0
+
+**Phase 2: KPI context injection into agent planner**
+
+- `services/infinity_service.py`: `get_user_kpi_snapshot(user_id, db)` — returns latest
+  UserScore KPI dict or None; never raises
+- `services/agent_runtime.py`: `_build_kpi_context_block(user_id, db)` — builds scored guidance
+  block (focus guidance for low KPIs, momentum hints, high-score unlock hints); degrades to ""
+  when no scores exist
+- `services/agent_runtime.py` → `generate_plan()`: appends KPI block to system prompt before
+  every GPT-4o call; plan schema and signature unchanged
+
+**Tests (tests/test_score_aware_agent.py): 33 new tests**
+- `TestWatcherSignalUserIdColumn` (4) — model column, nullable, indexed, regression
+- `TestWatcherSignalMigration` (4) — file exists, revision ID, chain, upgrade/downgrade
+- `TestSignalPayloadUserIdField` (3) — accepts, optional, in fields
+- `TestFocusQualityPerUser` (5) — neutral fallback, per-user score, user_id filter verified
+- `TestGetUserKpiSnapshot` (4) — None when absent, shape, values, never raises
+- `TestBuildKpiContextBlock` (8) — empty when no snapshot, KPI block present, per-KPI guidance lines
+- `TestGeneratePlanKpiInjection` (5) — block injected in prompt, graceful degradation, plan schema unchanged
+
+**Test count:** 1,098 passing (+33), 5 pre-existing failures (scheduler), 1 pre-existing error (psutil)
+
+---
+
 ### Added (2026-03-24 - Sprint N+4 "First Agent — Agentics Phase 1+2")
 
 **Agentics Phase 1+2: goal → plan → approve → execute lifecycle**

@@ -634,3 +634,7 @@ export function updateAgentTrust(payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function getAgentSuggestions() {
+  return authRequest("/agent/suggestions", { method: "GET" });
+}
