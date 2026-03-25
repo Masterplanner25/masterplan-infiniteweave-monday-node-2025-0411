@@ -1,5 +1,5 @@
 """
-Agent Runtime — Sprint N+4 Agentics Phase 1+2
+Agent Runtime — Sprint N+4 Agentics Phase 1+2 / Sprint N+6 Deterministic Agent / Sprint N+7 Observability
 
 Lifecycle: goal → plan → dry-run preview → approve → execute → memory
 
@@ -12,6 +12,15 @@ Phase 2: Dry-Run + Approval
   - Plan returned as preview before execution
   - Trust gate: auto-execute low/medium if trust settings allow
   - High-risk plans ALWAYS require explicit approval
+
+Sprint N+6: Deterministic execution via NodusAgentAdapter
+  - execute_run() delegates entirely to NodusAgentAdapter.execute_with_flow()
+  - Per-step retry (low/medium: 3x; high: halt immediately)
+  - FlowRun checkpointing + FlowHistory → Memory Bridge capture
+
+Sprint N+7: Agent Observability
+  - replay_run() creates a new AgentRun from original plan; trust gate re-applied
+  - replayed_from_run_id tracks lineage in _run_to_dict()
 
 Plan schema (JSON mode):
   {
@@ -264,14 +273,22 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
 
 def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """
-    Execute an approved AgentRun — run all steps sequentially.
+    Execute an approved AgentRun via the NodusAgentAdapter (Sprint N+6).
 
     Requires run.status == "approved".
+    Marks the run as "executing", then delegates entirely to
+    NodusAgentAdapter.execute_with_flow() which handles:
+      - Per-step retry (low/medium: 3x; high-risk: halt immediately)
+      - AgentStep persistence after each step
+      - AgentRun finalisation (completed / failed)
+      - FlowRun checkpointing + FlowHistory → Memory Bridge capture
+
     Returns updated run dict or None on failure.
     Never raises.
     """
     try:
-        from db.models.agent_run import AgentRun, AgentStep
+        from db.models.agent_run import AgentRun
+        from services.nodus_adapter import NodusAgentAdapter
 
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if not run:
@@ -293,96 +310,19 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.started_at = datetime.now(timezone.utc)
         db.commit()
 
-        steps = (run.plan or {}).get("steps", [])
-        step_results = []
-        run_success = True
+        # Delegate entirely to the deterministic adapter
+        NodusAgentAdapter.execute_with_flow(
+            run_id=str(run.id),
+            plan=run.plan,
+            user_id=user_id,
+            db=db,
+        )
 
-        for idx, step in enumerate(steps):
-            tool_name = step.get("tool", "")
-            tool_args = step.get("args", {})
-            risk_level = step.get("risk_level", "high")
-            description = step.get("description", "")
-
-            start_ms = int(time.time() * 1000)
-
-            tool_result = execute_tool(
-                tool_name=tool_name,
-                args=tool_args,
-                user_id=user_id,
-                db=db,
-            )
-
-            exec_ms = int(time.time() * 1000) - start_ms
-            step_status = "success" if tool_result["success"] else "failed"
-
-            # Persist step
-            agent_step = AgentStep(
-                run_id=run.id,
-                step_index=idx,
-                tool_name=tool_name,
-                tool_args=tool_args,
-                risk_level=risk_level,
-                description=description,
-                status=step_status,
-                result=tool_result.get("result"),
-                error_message=tool_result.get("error"),
-                execution_ms=exec_ms,
-                executed_at=datetime.now(timezone.utc),
-            )
-            db.add(agent_step)
-
-            run.steps_completed = idx + 1
-            run.current_step = idx + 1
-            db.commit()
-
-            step_results.append({
-                "step_index": idx,
-                "tool": tool_name,
-                "status": step_status,
-                "result": tool_result.get("result"),
-                "error": tool_result.get("error"),
-            })
-
-            if not tool_result["success"]:
-                logger.warning(
-                    "[AgentRuntime] Step %d (%s) failed: %s",
-                    idx, tool_name, tool_result.get("error"),
-                )
-                run_success = False
-                # Continue remaining steps (non-blocking failure)
-
-        # Finalize run
-        run.status = "completed" if run_success else "failed"
-        run.completed_at = datetime.now(timezone.utc)
-        run.result = {"steps": step_results}
-        if not run_success:
-            failed = [s for s in step_results if s["status"] == "failed"]
-            run.error_message = f"{len(failed)} step(s) failed"
-        db.commit()
-
+        db.refresh(run)
         logger.info(
             "[AgentRuntime] Run %s %s (%d/%d steps)",
             run_id, run.status, run.steps_completed, run.steps_total,
         )
-
-        # Write execution summary to memory (fire-and-forget)
-        try:
-            from bridge.bridge import create_memory_node
-            create_memory_node(
-                content=(
-                    f"Agent run completed: '{run.goal[:100]}'. "
-                    f"Steps: {run.steps_completed}/{run.steps_total}. "
-                    f"Status: {run.status}."
-                ),
-                source="agent_runtime",
-                tags=["agent", "execution", run.status],
-                user_id=user_id,
-                db=db,
-                node_type="outcome",
-            )
-        except Exception:
-            pass
-
         return _run_to_dict(run)
 
     except Exception as exc:
@@ -456,8 +396,113 @@ def _run_to_dict(run) -> dict:
         "plan": run.plan,
         "result": run.result,
         "error_message": run.error_message,
+        "flow_run_id": str(run.flow_run_id) if getattr(run, "flow_run_id", None) else None,
+        "replayed_from_run_id": (
+            str(run.replayed_from_run_id)
+            if getattr(run, "replayed_from_run_id", None)
+            else None
+        ),
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "approved_at": run.approved_at.isoformat() if run.approved_at else None,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
     }
+
+
+# ── Replay ────────────────────────────────────────────────────────────────────
+
+def _create_run_from_plan(
+    goal: str,
+    plan: dict,
+    user_id: str,
+    db: Session,
+    replayed_from_run_id: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Persist a new AgentRun from an existing plan dict (skips GPT-4o).
+
+    Trust gate is re-applied — prior approval does not carry forward.
+    Returns the new run dict or None on failure.
+    Never raises.
+    """
+    try:
+        from db.models.agent_run import AgentRun
+
+        overall_risk = plan.get("overall_risk", "high")
+        needs_approval = _requires_approval(overall_risk, user_id, db)
+        status = "pending_approval" if needs_approval else "approved"
+
+        run = AgentRun(
+            user_id=user_id,
+            goal=goal,
+            plan=plan,
+            executive_summary=plan.get("executive_summary", ""),
+            overall_risk=overall_risk,
+            status=status,
+            steps_total=len(plan.get("steps", [])),
+            replayed_from_run_id=replayed_from_run_id,
+        )
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
+        logger.info(
+            "[AgentRuntime] Replay run created: %s (origin=%s, risk=%s, status=%s)",
+            run.id,
+            replayed_from_run_id,
+            overall_risk,
+            status,
+        )
+        return _run_to_dict(run)
+
+    except Exception as exc:
+        logger.warning("[AgentRuntime] _create_run_from_plan failed: %s", exc)
+        return None
+
+
+def replay_run(
+    run_id: str,
+    user_id: str,
+    db: Session,
+    mode: str = "same_plan",
+) -> Optional[dict]:
+    """
+    Create a new AgentRun by replaying an existing run's plan (Sprint N+7).
+
+    Only ``mode="same_plan"`` is supported this sprint — the original plan
+    is re-used verbatim without re-calling GPT-4o.
+
+    Trust gate is re-applied on the new run; prior approval does not carry
+    forward.
+
+    Returns:
+      dict  — new run dict on success
+      None  — original run not found or user mismatch
+
+    Never raises.
+    """
+    try:
+        from db.models.agent_run import AgentRun
+
+        original = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        if not original:
+            logger.warning("[AgentRuntime] replay_run: run %s not found", run_id)
+            return None
+
+        if original.user_id != user_id:
+            logger.warning("[AgentRuntime] replay_run: owner mismatch for %s", run_id)
+            return None
+
+        plan = original.plan or {}
+        new_run = _create_run_from_plan(
+            goal=original.goal,
+            plan=plan,
+            user_id=user_id,
+            db=db,
+            replayed_from_run_id=str(original.id),
+        )
+        return new_run
+
+    except Exception as exc:
+        logger.warning("[AgentRuntime] replay_run failed for %s: %s", run_id, exc)
+        return None

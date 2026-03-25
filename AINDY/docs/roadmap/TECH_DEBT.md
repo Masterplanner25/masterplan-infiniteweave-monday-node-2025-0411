@@ -499,3 +499,33 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 **ORM declarations missing from DB (low-priority, non-critical):**
 - `ix_request_metrics_id` — ORM declares `index=True` on PK `id`. Primary key is always indexed by PostgreSQL; the named index is redundant. Deferred.
 
+---
+
+## 16. Sprint N+4–N+7 Audit — 2026-03-25
+
+### §16.1 Agentics Phase 1–3 + Observability — RESOLVED
+- ✅ **RESOLVED (Sprint N+4, 2026-03-24):** Agent runtime Phase 1 (goal→plan→execute) and Phase 2 (dry-run preview + approval gate) implemented. `services/agent_runtime.py`, `services/agent_tools.py`, `db/models/agent_run.py`, `routes/agent_router.py`.
+- ✅ **RESOLVED (Sprint N+6, 2026-03-25):** Agentics Phase 3 (deterministic execution). `NodusAgentAdapter` + `AGENT_FLOW` wired to `PersistentFlowRunner`. Per-step retry policy. `flow_run_id` linkage. Nodus pip package confirmed NOT usable (separate scripting-language VM).
+- ✅ **RESOLVED (Sprint N+7, 2026-03-25):** Agentics Phase 5 (observability). Stuck-run startup scan, `/recover` and `/replay` endpoints, `replayed_from_run_id` lineage, serializer unification.
+
+### §16.2 `new_plan` replay mode not implemented — Open
+- **`replay_run()` only supports `mode="same_plan"`** — re-uses the original plan verbatim without calling GPT-4o. A `mode="new_plan"` path (re-generate plan from same goal) was explicitly deferred to a future sprint.
+  - Location: `AINDY/services/agent_runtime.py::replay_run()`
+  - Fix: Add `elif mode == "new_plan": return create_run(goal=original.goal, ...)` branch.
+  - Status: Open. Low effort.
+
+### §16.3 Agent capability/policy system missing — Open
+- **No scoped capability enforcement exists.** Any approved agent run can invoke any tool in `TOOL_REGISTRY` regardless of user permissions or run context. High-risk tools (`genesis.message`) are rate-limited only by the trust gate and per-step no-retry rule; they are not capability-gated.
+  - Location: `AINDY/services/agent_tools.py`, `AINDY/services/agent_runtime.py`
+  - Fix: Agentics Phase 4 — capability descriptor model, policy engine, scoped execution tokens.
+  - Status: Open. Medium effort, High impact.
+
+### §16.4 `WatcherSignal.user_id` migration not chained cleanly — Low priority
+- **Migration `b1c2d3e4f5a6` adds `user_id` to `watcher_signals`** but the column is `String` (not UUID with FK to `users.id`) for consistency with the watcher's HTTP-posted signal flow. This is intentional but creates a heterogeneous `user_id` type pattern across tables. Future user FK normalization work would need to include this table.
+  - Status: Documented. Not blocking.
+
+### §16.5 Agent approval inbox has no dedicated UI — Open
+- **Pending-approval runs are visible in `AgentConsole.jsx` only when the user navigates to that page.** There is no notification surface, inbox view, or badge count for runs awaiting approval.
+  - Location: `AINDY/client/src/components/AgentConsole.jsx`
+  - Fix: Add a pending-runs badge to the Sidebar nav item; optionally add a dedicated `AgentApprovalInbox.jsx` component.
+  - Status: Open. Low effort, Medium UX impact.
