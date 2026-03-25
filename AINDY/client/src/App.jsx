@@ -27,6 +27,9 @@ import ARMConfig from "./components/ARMConfig";
 import ProfileView from "./components/ProfileView";
 import Feed from "./components/Feed";
 
+// Agent
+import AgentConsole from "./components/AgentConsole";
+
 // Memory Layer
 import MemoryBrowser from "./components/MemoryBrowser";
 import IdentityDashboard from "./components/IdentityDashboard";
@@ -93,6 +96,9 @@ export default function App() {
               <Route path="/memory" element={<MemoryBrowser />} />
               <Route path="/identity" element={<IdentityDashboard />} />
               <Route path="/agents" element={<AgentRegistry />} />
+
+              {/* Agent */}
+              <Route path="/agent" element={<AgentConsole />} />
 
               {/* Catch-all Redirect */}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

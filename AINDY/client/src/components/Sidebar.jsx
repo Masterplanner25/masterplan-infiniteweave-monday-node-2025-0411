@@ -108,11 +108,12 @@ export default function Sidebar() {
           icon="⚙️" 
           isOpen={openSection === "System"} 
           toggle={() => toggleSection("System")}
-          isAnyChildActive={isActive("/masterplan") || isActive("/tasks") || isActive("/console")}
+          isAnyChildActive={isActive("/masterplan") || isActive("/tasks") || isActive("/console") || isActive("/agent")}
         >
           <SubNavItem to="/masterplan" active={isActive("/masterplan")}>Master Plan</SubNavItem>
           <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
           <SubNavItem to="/console" active={isActive("/console")}>Console</SubNavItem>
+          <SubNavItem to="/agent" active={isActive("/agent")}>Agent Console</SubNavItem>
           <SubNavItem to="/freelance/dashboard" active={isActive("/freelance/dashboard")}>Freelance Hub</SubNavItem>
         </NavSection>
 

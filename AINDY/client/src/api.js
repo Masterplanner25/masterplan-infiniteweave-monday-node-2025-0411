@@ -574,3 +574,63 @@ export function replayAutomationLog(logId) {
 export function getSchedulerStatus() {
   return authRequest("/automation/scheduler/status", { method: "GET" });
 }
+
+// ── Infinity Score ────────────────────────────────────────────────────────────
+
+export function getMyScore() {
+  return authRequest("/scores/me", { method: "GET" });
+}
+
+export function recalculateScore() {
+  return authRequest("/scores/me/recalculate", { method: "POST" });
+}
+
+export function getScoreHistory(limit = 30) {
+  return authRequest(`/scores/me/history?limit=${limit}`, { method: "GET" });
+}
+
+// ── Agent ─────────────────────────────────────────────────────────────────────
+
+export function createAgentRun(payload) {
+  return authRequest("/agent/run", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAgentRuns(status = null, limit = 20) {
+  const params = new URLSearchParams({ limit });
+  if (status) params.append("status", status);
+  return authRequest(`/agent/runs?${params.toString()}`, { method: "GET" });
+}
+
+export function getAgentRun(runId) {
+  return authRequest(`/agent/runs/${runId}`, { method: "GET" });
+}
+
+export function approveAgentRun(runId) {
+  return authRequest(`/agent/runs/${runId}/approve`, { method: "POST" });
+}
+
+export function rejectAgentRun(runId) {
+  return authRequest(`/agent/runs/${runId}/reject`, { method: "POST" });
+}
+
+export function getAgentRunSteps(runId) {
+  return authRequest(`/agent/runs/${runId}/steps`, { method: "GET" });
+}
+
+export function getAgentTools() {
+  return authRequest("/agent/tools", { method: "GET" });
+}
+
+export function getAgentTrust() {
+  return authRequest("/agent/trust", { method: "GET" });
+}
+
+export function updateAgentTrust(payload) {
+  return authRequest("/agent/trust", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}

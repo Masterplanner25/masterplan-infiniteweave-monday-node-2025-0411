@@ -316,6 +316,18 @@ def complete_task(db: Session, name: str, user_id: str = None):
         except Exception:
             pass
 
+    # Trigger Infinity score recalculation (fire-and-forget)
+    if user_id:
+        try:
+            from services.infinity_service import calculate_infinity_score
+            calculate_infinity_score(
+                user_id=str(user_id),
+                db=db,
+                trigger_event="task_completion",
+            )
+        except Exception as e:
+            logger.warning("Infinity score after task failed: %s", e)
+
     return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
 
 # ----------------------------

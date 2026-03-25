@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getDashboardOverview } from "../api";
+import { getDashboardOverview, getMyScore, recalculateScore, getScoreHistory } from "../api";
 import FlowEngineConsole from "./FlowEngineConsole";
 import GraphView from "./GraphView";
 
@@ -11,6 +11,186 @@ const C = {
   text1: "#8b949e",
   accent: "#6cf",
 };
+
+const KPI_META = {
+  execution_speed:       { label: "Execution Speed",  weight: "25%" },
+  decision_efficiency:   { label: "Decision Quality", weight: "25%" },
+  ai_productivity_boost: { label: "AI Leverage",      weight: "20%" },
+  focus_quality:         { label: "Focus Quality",    weight: "15%" },
+  masterplan_progress:   { label: "Plan Progress",    weight: "15%" },
+};
+
+function scoreColor(score) {
+  if (score >= 70) return "#4caf50";
+  if (score >= 40) return "#ffc107";
+  return "#f44336";
+}
+
+function ScoreRing({ score }) {
+  const radius = 44;
+  const circumference = 2 * Math.PI * radius;
+  const filled = (score / 100) * circumference;
+  const color = scoreColor(score);
+  return (
+    <svg width={110} height={110} style={{ display: "block", margin: "0 auto" }}>
+      <circle cx={55} cy={55} r={radius} fill="none" stroke="#21262d" strokeWidth={10} />
+      <circle
+        cx={55} cy={55} r={radius}
+        fill="none"
+        stroke={color}
+        strokeWidth={10}
+        strokeDasharray={`${filled} ${circumference}`}
+        strokeLinecap="round"
+        transform="rotate(-90 55 55)"
+        style={{ transition: "stroke-dasharray 0.6s ease" }}
+      />
+      <text x={55} y={60} textAnchor="middle" fill={color} fontSize={22} fontWeight="bold">
+        {score.toFixed(1)}
+      </text>
+    </svg>
+  );
+}
+
+function InfinityScorePanel() {
+  const [score, setScore] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [recalculating, setRecalculating] = useState(false);
+
+  const loadScore = () => {
+    getMyScore().then(setScore).catch(() => setScore(null));
+    getScoreHistory(14).then(d => setHistory(d?.history || [])).catch(() => setHistory([]));
+  };
+
+  useEffect(() => { loadScore(); }, []);
+
+  const handleRecalculate = async () => {
+    setRecalculating(true);
+    try {
+      const result = await recalculateScore();
+      setScore(result);
+      getScoreHistory(14).then(d => setHistory(d?.history || [])).catch(() => {});
+    } catch (e) {
+      console.error("Recalculate failed", e);
+    } finally {
+      setRecalculating(false);
+    }
+  };
+
+  const masterScore = score?.master_score ?? 0;
+  const kpis = score?.kpis ?? {};
+  const meta = score?.metadata ?? {};
+
+  return (
+    <div style={{
+      background: "#0d1117",
+      border: "1px solid #21262d",
+      borderRadius: 10,
+      padding: "20px 24px",
+      marginBottom: 24,
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ margin: 0, color: "#6cf", fontSize: 16 }}>Infinity Score</h2>
+        <button
+          onClick={handleRecalculate}
+          disabled={recalculating}
+          style={{
+            background: "#21262d",
+            border: "1px solid #30363d",
+            color: "#c9d1d9",
+            borderRadius: 6,
+            padding: "4px 12px",
+            cursor: recalculating ? "not-allowed" : "pointer",
+            fontSize: 12,
+          }}
+        >
+          {recalculating ? "Calculating..." : "Recalculate"}
+        </button>
+      </div>
+
+      {/* Master Score Ring */}
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <ScoreRing score={masterScore} />
+        <div style={{ marginTop: 6, fontSize: 12, color: "#8b949e" }}>
+          {meta.confidence && (
+            <span style={{
+              background: meta.confidence === "high" ? "#1a3a1a" : meta.confidence === "medium" ? "#3a2a00" : "#2a1a1a",
+              color: meta.confidence === "high" ? "#4caf50" : meta.confidence === "medium" ? "#ffc107" : "#f44336",
+              borderRadius: 4, padding: "2px 8px", marginRight: 8, fontSize: 11,
+            }}>
+              {meta.confidence} confidence
+            </span>
+          )}
+          {meta.calculated_at && `Updated ${new Date(meta.calculated_at).toLocaleTimeString()}`}
+        </div>
+        {score?.message && (
+          <p style={{ color: "#8b949e", fontSize: 12, marginTop: 8 }}>{score.message}</p>
+        )}
+      </div>
+
+      {/* KPI Grid */}
+      {Object.keys(kpis).length > 0 && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+          gap: 10,
+          marginBottom: 20,
+        }}>
+          {Object.entries(KPI_META).map(([key, { label, weight }]) => {
+            const val = kpis[key] ?? 0;
+            const color = scoreColor(val);
+            return (
+              <div key={key} style={{
+                background: "#161b22",
+                border: "1px solid #21262d",
+                borderRadius: 8,
+                padding: "10px 12px",
+              }}>
+                <div style={{ fontSize: 11, color: "#8b949e", marginBottom: 4 }}>{label}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <div style={{
+                    flex: 1, height: 4, background: "#21262d", borderRadius: 2, overflow: "hidden",
+                  }}>
+                    <div style={{
+                      width: `${val}%`, height: "100%", background: color,
+                      borderRadius: 2, transition: "width 0.4s ease",
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 12, color, fontWeight: "bold", minWidth: 36 }}>
+                    {val.toFixed(1)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10, color: "#6e7681" }}>{weight} of total</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Score History Sparkline */}
+      {history.length > 1 && (
+        <div>
+          <div style={{ fontSize: 11, color: "#8b949e", marginBottom: 6 }}>Score History</div>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 40 }}>
+            {history.slice().reverse().map((h, i) => {
+              const barH = Math.max(4, (h.master_score / 100) * 40);
+              const delta = h.score_delta;
+              const barColor = delta === null ? "#6cf" : delta >= 0 ? "#4caf50" : "#f44336";
+              return (
+                <div key={i} title={`${h.master_score.toFixed(1)} (${delta !== null ? (delta >= 0 ? "+" : "") + delta.toFixed(1) : "—"})`}
+                  style={{
+                    flex: 1, height: barH, background: barColor,
+                    borderRadius: 2, cursor: "default", transition: "height 0.3s ease",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function OverviewTab({ data }) {
   if (!data) return <p>Loading dashboard...</p>;
@@ -109,7 +289,12 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {activeTab === "overview" && <OverviewTab data={data} />}
+      {activeTab === "overview" && (
+        <>
+          <InfinityScorePanel />
+          <OverviewTab data={data} />
+        </>
+      )}
       {activeTab === "execution" && <FlowEngineConsole />}
       {activeTab === "graph" && <GraphView />}
     </div>

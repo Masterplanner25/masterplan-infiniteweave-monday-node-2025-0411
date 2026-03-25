@@ -1,3 +1,117 @@
+## [Unreleased] — feat/flow-engine-console-ui
+
+### Added (2026-03-24 - Sprint N+4 "First Agent — Agentics Phase 1+2")
+
+**Agentics Phase 1+2: goal → plan → approve → execute lifecycle**
+
+Closes AGENTICS.md §Phase 1 (Minimal Runtime) and §Phase 2 (Dry-Run + Approval).
+
+**DB models + migration (db/models/agent_run.py, alembic a1b2c3d4e5f6):**
+- `agent_runs` table: goal, GPT-4o plan JSON, executive_summary, overall_risk, status, step tracking, result
+- `agent_steps` table: per-step audit log (tool_name, args, risk_level, result, execution_ms)
+- `agent_trust_settings` table: per-user auto-execute flags (auto_execute_low, auto_execute_medium)
+- Status lifecycle: pending_approval → approved → executing → completed | failed | rejected
+
+**Tool registry (services/agent_tools.py):**
+- `@register_tool` decorator — name, risk, description, callable
+- 9 tools: task.create (low), task.complete (medium), memory.recall (low), memory.write (low),
+  arm.analyze (medium), arm.generate (medium), leadgen.search (medium), research.query (low),
+  genesis.message (high)
+- `execute_tool()` — never raises; returns {success, result, error}
+
+**Agent runtime (services/agent_runtime.py):**
+- `generate_plan()` — GPT-4o JSON mode; enforces overall_risk invariant (max of step risks)
+- `create_run()` — generates plan, applies trust gate, persists AgentRun
+- `execute_run()` — sequential tool dispatch, per-step AgentStep persistence, memory write on completion
+- `approve_run()` / `reject_run()` — approval/rejection lifecycle
+- Trust gate: high risk → ALWAYS requires approval (hardcoded invariant)
+  medium/low → requires approval unless trust settings allow auto-execute
+
+**Agent API (routes/agent_router.py):**
+- POST /agent/run — submit goal, get plan + status
+- GET /agent/runs — list runs
+- GET /agent/runs/{run_id} — run detail
+- POST /agent/runs/{run_id}/approve — approve + execute
+- POST /agent/runs/{run_id}/reject — reject
+- GET /agent/runs/{run_id}/steps — execution steps audit
+- GET /agent/tools — tool registry
+- GET /agent/trust — trust settings
+- PUT /agent/trust — update trust settings
+
+**Agent Console UI (client/src/components/AgentConsole.jsx):**
+- Goal input + "Run Agent" button
+- Pending approval banner
+- Run list with RunCard (risk badge, status badge, approve/reject buttons)
+- Plan preview: executive summary, expandable step rows with result detail
+- Tools tab: all 9 tools with risk badges
+- Trust tab: per-user auto-execute toggle
+- Route: /agent (App.jsx), Sidebar link under System section
+
+**Tests (tests/test_agentics_phase1.py): 70 tests**
+- ORM column coverage for all 3 new tables
+- Tool registry: all 9 tools present, correct risk levels, callable
+- Risk invariants: genesis.message=high, no bypass via trust flags
+- Trust gate logic: _requires_approval for all risk/trust combinations
+- Plan schema + step field validation
+- Router: 9 endpoint presence + auth gates
+- api.js + AgentConsole.jsx + Sidebar + App.jsx integration
+
+---
+
+## [Unreleased] — feat/infinity-algorithm-loop
+
+### Added (2026-03-24 - Sprint N+3 "Infinity Algorithm Loop")
+
+**Infinity Algorithm Event-Driven Loop — execution scoring engine**
+
+Closes INFINITY_ALGORITHM.md §Phase v4 (unified loop) and
+INFINITY_ALGORITHM_SUPPORT_SYSTEM.md §Phase v3 (watcher signals fed into scoring).
+
+**Score storage (db/models/user_score.py + migration):**
+- `user_scores` table: latest cached score per user (upserted on recalculation)
+- `score_history` table: append-only time series of all score snapshots
+- `KPI_WEIGHTS` dict: hard-invariant (asserts sum == 1.0 at import time)
+- 5 KPI component scores (0-100) + master score (0-100)
+- confidence: "high" / "medium" / "low" based on data density
+
+**KPI calculators (services/infinity_service.py):**
+- `calculate_execution_speed`: task velocity vs 14-day historical baseline (sigmoid scoring)
+- `calculate_decision_efficiency`: task completion rate + ARM analysis quality trend
+- `calculate_ai_productivity_boost`: ARM usage frequency + code quality improvement trend
+- `calculate_focus_quality`: watcher session duration, distraction ratio, focus achievement rate (returns neutral 50.0 until user_id added to watcher_signals)
+- `calculate_masterplan_progress`: task completion % + days ahead/behind target
+- `calculate_infinity_score`: weighted KPI average (0.25+0.25+0.20+0.15+0.15=1.0); never raises; returns None on failure
+
+**Event triggers (fire-and-forget, wrapped in try/except):**
+- Task completion → score recalculation (task_services.py complete_task)
+- Watcher session_ended → score recalculation (watcher_router.py _trigger_eta_update)
+- ARM analysis complete → score recalculation (deepseek_code_analyzer.py run_analysis)
+- APScheduler 7am daily job → recalculate all users (scheduler_service.py)
+
+**Social feed ranking (social_router.py):**
+- New: `_compute_infinity_ranked_score()` — recency(0.4) + author_score(0.4) + trust(0.2)
+- get_feed() batch-loads author UserScore from PostgreSQL, incorporates into ranking
+- Fallback: author_score defaults to 50.0 if no score exists
+
+**Score API (routes/score_router.py):**
+- GET /scores/me — latest score + 5 KPI breakdown + weights + metadata
+- POST /scores/me/recalculate — force refresh
+- GET /scores/me/history — time series (reverse chronological)
+
+**Dashboard UI:**
+- `InfinityScorePanel` component: SVG score ring (color-coded 0-40 red / 40-70 yellow / 70-100 green), 5 KPI cards with progress bars + weight labels, history sparkline
+- `ScoreRing` SVG component with animated stroke-dasharray
+- api.js: `getMyScore`, `recalculateScore`, `getScoreHistory`
+
+**Tests (tests/test_infinity_algorithm.py):**
+- 55 new tests: models, KPI helpers, calculators, master score formula, event triggers, social ranking, API endpoints, frontend presence
+
+**TECH DEBT CLOSED:**
+- INFINITY_ALGORITHM.md §Phase v4: unified execution loop
+- INFINITY_ALGORITHM_SUPPORT_SYSTEM.md §Phase v3: watcher signals → scoring
+
+---
+
 ## [Unreleased] — feat/watcher-agent
 
 ### Added (2026-03-24 - Sprint N+2 "The Watcher")
