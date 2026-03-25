@@ -124,13 +124,16 @@ def _trigger_eta_update(db: Session, user_id: str = None) -> None:
     # Trigger Infinity score recalculation (fire-and-forget)
     try:
         from services.infinity_service import calculate_infinity_score
+        from services.infinity_loop import run_loop
         # WatcherSignal has no user_id; when user_id is provided by caller, recalculate
         if user_id:
-            calculate_infinity_score(
+            result = calculate_infinity_score(
                 user_id=user_id,
                 db=db,
                 trigger_event="session_ended",
             )
+            if result:
+                run_loop(user_id=user_id, trigger_event="session_ended", db=db)
     except Exception as exc:
         logger.warning("Infinity score after session failed: %s", exc)
 

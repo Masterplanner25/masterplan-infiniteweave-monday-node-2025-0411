@@ -26,6 +26,18 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+AGENT_EVENT_TYPES = {
+    "PLAN_CREATED",
+    "APPROVED",
+    "REJECTED",
+    "EXECUTION_STARTED",
+    "COMPLETED",
+    "EXECUTION_FAILED",
+    "CAPABILITY_DENIED",
+    "RECOVERED",
+    "REPLAY_CREATED",
+}
+
 
 def emit_event(
     run_id: str,
@@ -52,6 +64,13 @@ def emit_event(
     try:
         from db.models.agent_event import AgentEvent
         import uuid
+
+        if event_type not in AGENT_EVENT_TYPES:
+            logger.warning(
+                "[AgentEventService] Unknown event type %s for run %s",
+                event_type,
+                run_id,
+            )
 
         event = AgentEvent(
             id=uuid.uuid4(),

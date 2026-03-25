@@ -60,6 +60,9 @@ class AgentRun(Base):
     result = Column(JSONB, nullable=True)
     error_message = Column(Text, nullable=True)
 
+    # Sprint N+10: per-run scoped authority token minted at approval time.
+    capability_token = Column(JSONB, nullable=True)
+
     # Timestamps
     created_at = Column(
         DateTime(timezone=True),
@@ -109,8 +112,15 @@ class AgentStep(Base):
 class AgentTrustSettings(Base):
     """Per-user opt-in autonomy flags.
 
+    Deprecated fallback:
     auto_execute_low    — run low-risk plans without approval
     auto_execute_medium — run medium-risk plans without approval
+
+    Preferred policy:
+    allowed_auto_grant_tools — explicit list of low/medium tools that may be
+    auto-granted on auto-approved runs. High-risk tools such as genesis.message
+    are structurally excluded.
+
     High risk ALWAYS requires approval regardless of these flags.
     """
     __tablename__ = "agent_trust_settings"
@@ -120,6 +130,7 @@ class AgentTrustSettings(Base):
 
     auto_execute_low = Column(Boolean, default=False, nullable=False)
     auto_execute_medium = Column(Boolean, default=False, nullable=False)
+    allowed_auto_grant_tools = Column(JSONB, nullable=True)
 
     updated_at = Column(
         DateTime(timezone=True),

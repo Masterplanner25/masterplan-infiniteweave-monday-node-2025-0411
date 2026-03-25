@@ -10,6 +10,7 @@ import {
   updateAgentTrust,
   getAgentSuggestions,
   fetchRunEvents,
+  postScoreFeedback,
 } from "../api";
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
@@ -150,6 +151,53 @@ const RunCard = ({ run, onApprove, onReject, onSelect, isSelected }) => {
 
 // ── Plan preview panel ────────────────────────────────────────────────────────
 
+const RunOutcomeFeedback = ({ runId }) => {
+  const [feedbackValue, setFeedbackValue] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const submitFeedback = async (value) => {
+    setSaving(true);
+    try {
+      await postScoreFeedback({
+        source_type: "agent",
+        source_id: runId,
+        feedback_value: value,
+      });
+      setFeedbackValue(value);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 flex items-center gap-2">
+      <span className="text-[10px] uppercase tracking-wider text-zinc-500">Run Outcome</span>
+      <button
+        onClick={() => submitFeedback(1)}
+        disabled={saving}
+        className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+          feedbackValue === 1
+            ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+            : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+        }`}
+      >
+        Helpful
+      </button>
+      <button
+        onClick={() => submitFeedback(-1)}
+        disabled={saving}
+        className={`px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+          feedbackValue === -1
+            ? "border-red-500 bg-red-500/20 text-red-300"
+            : "border-zinc-700 text-zinc-400 hover:bg-zinc-800"
+        }`}
+      >
+        Not Helpful
+      </button>
+    </div>
+  );
+};
+
 const PlanPreview = ({ run, steps, loading }) => {
   if (!run) return null;
   const planSteps = run.plan?.steps || [];
@@ -204,6 +252,10 @@ const PlanPreview = ({ run, steps, loading }) => {
             </pre>
           </div>
         )}
+
+        {(run.status === "completed" || run.status === "failed") && (
+          <RunOutcomeFeedback runId={run.run_id} />
+        )}
       </div>
     </div>
   );
@@ -211,20 +263,41 @@ const PlanPreview = ({ run, steps, loading }) => {
 
 // ── Trust settings panel ──────────────────────────────────────────────────────
 
-const TrustPanel = ({ trust, onUpdate }) => {
+const TrustPanel = ({ trust, onUpdate, tools }) => {
   const [low, setLow] = useState(trust?.auto_execute_low || false);
   const [medium, setMedium] = useState(trust?.auto_execute_medium || false);
+  const [allowedTools, setAllowedTools] = useState(trust?.allowed_auto_grant_tools || []);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setLow(trust?.auto_execute_low || false);
     setMedium(trust?.auto_execute_medium || false);
+    setAllowedTools(trust?.allowed_auto_grant_tools || []);
   }, [trust]);
+
+  const autoGrantableTools = (tools || [])
+    .filter((tool) => tool.risk === "low" || tool.risk === "medium")
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const lockedTools = (tools || [])
+    .filter((tool) => tool.name === "genesis.message");
+
+  const toggleTool = (toolName) => {
+    setAllowedTools((current) => (
+      current.includes(toolName)
+        ? current.filter((name) => name !== toolName)
+        : [...current, toolName].sort()
+    ));
+  };
 
   const save = async () => {
     setSaving(true);
     try {
-      await onUpdate({ auto_execute_low: low, auto_execute_medium: medium });
+      await onUpdate({
+        auto_execute_low: low,
+        auto_execute_medium: medium,
+        allowed_auto_grant_tools: allowedTools,
+      });
     } finally {
       setSaving(false);
     }
@@ -255,6 +328,55 @@ const TrustPanel = ({ trust, onUpdate }) => {
             className="accent-yellow-400"
           />
         </label>
+      </div>
+      <div className="mt-5">
+        <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">
+          Tool-Level Auto-Grant Policy
+        </p>
+        <div className="space-y-2">
+          {autoGrantableTools.map((tool) => (
+            <label
+              key={tool.name}
+              className="flex items-center justify-between gap-3 border border-zinc-800/60 rounded-lg px-3 py-2"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-200 font-mono">{tool.name}</span>
+                  <RiskBadge risk={tool.risk} />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">{tool.description}</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={allowedTools.includes(tool.name)}
+                onChange={() => toggleTool(tool.name)}
+                className="accent-[#00ffaa]"
+              />
+            </label>
+          ))}
+          {lockedTools.map((tool) => (
+            <label
+              key={tool.name}
+              className="flex items-center justify-between gap-3 border border-red-500/20 rounded-lg px-3 py-2 opacity-80"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-200 font-mono">{tool.name}</span>
+                  <RiskBadge risk={tool.risk} />
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">
+                  Locked. High-risk tools cannot be auto-granted.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={false}
+                disabled
+                className="accent-red-500"
+              />
+            </label>
+          ))}
+        </div>
       </div>
       <button
         onClick={save}
@@ -310,6 +432,7 @@ function eventTypeColor(eventType) {
     EXECUTION_STARTED: "#3b82f6",
     COMPLETED: "#059669",
     EXECUTION_FAILED: "#dc2626",
+    CAPABILITY_DENIED: "#ea580c",
     RECOVERED: "#f59e0b",
     REPLAY_CREATED: "#8b5cf6",
     STEP_EXECUTED: "#64748b",
@@ -576,7 +699,7 @@ export default function AgentConsole() {
 
           {/* Trust settings */}
           {activeTab === "trust" && (
-            <TrustPanel trust={trust} onUpdate={handleTrustUpdate} />
+            <TrustPanel trust={trust} onUpdate={handleTrustUpdate} tools={tools} />
           )}
         </div>
 

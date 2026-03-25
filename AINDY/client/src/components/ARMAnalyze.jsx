@@ -1,6 +1,6 @@
 // src/components/ARMAnalyze.jsx
 import React, { useState } from "react";
-import { runARMAnalysis } from "../api";
+import { postScoreFeedback, runARMAnalysis } from "../api";
 
 const SEVERITY_COLORS = {
   critical: "#ff4444",
@@ -40,6 +40,7 @@ export default function ARMAnalyze() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [feedbackState, setFeedbackState] = useState(null);
 
   const inputStyle = {
     width: "60%",
@@ -69,10 +70,25 @@ export default function ARMAnalyze() {
     try {
       const res = await runARMAnalysis(filePath);
       setResult(res);
+      setFeedbackState(null);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitFeedback = async (feedbackValue) => {
+    if (!result?.analysis_id) return;
+    try {
+      await postScoreFeedback({
+        source_type: "arm",
+        source_id: result.analysis_id,
+        feedback_value: feedbackValue,
+      });
+      setFeedbackState(feedbackValue);
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -160,6 +176,38 @@ export default function ARMAnalyze() {
             <div style={{ background: "#0d1117", border: "1px solid #21262d", borderRadius: "8px", padding: "12px 16px" }}>
               <div style={{ fontSize: 11, color: "#51cf66", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Overall Recommendation</div>
               <p style={{ margin: 0, color: "#c9d1d9", fontSize: 13 }}>{result.overall_recommendation}</p>
+            </div>
+          )}
+
+          {result.analysis_id && (
+            <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 12, color: "#8b949e" }}>Was this analysis useful?</span>
+              <button
+                onClick={() => submitFeedback(1)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "999px",
+                  border: "1px solid #238636",
+                  background: feedbackState === 1 ? "#238636" : "transparent",
+                  color: "#c9d1d9",
+                  cursor: "pointer",
+                }}
+              >
+                Thumb Up
+              </button>
+              <button
+                onClick={() => submitFeedback(-1)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: "999px",
+                  border: "1px solid #da3633",
+                  background: feedbackState === -1 ? "#da3633" : "transparent",
+                  color: "#c9d1d9",
+                  cursor: "pointer",
+                }}
+              >
+                Thumb Down
+              </button>
             </div>
           )}
         </div>

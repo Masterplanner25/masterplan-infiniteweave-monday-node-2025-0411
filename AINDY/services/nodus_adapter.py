@@ -34,6 +34,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from services.capability_service import check_tool_capability
 from services.agent_tools import execute_tool
 from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -112,7 +113,74 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     description = step.get("description", "")
     agent_run_id = state["agent_run_id"]
     user_id = state["user_id"]
+    capability_token = state.get("capability_token")
     db: Session = context["db"]
+
+    capability_check = {"ok": True, "error": None, "granted_tools": []}
+    if "capability_token" in state:
+        capability_check = check_tool_capability(
+            token=capability_token,
+            run_id=agent_run_id,
+            user_id=user_id,
+            tool_name=tool_name,
+        )
+    if not capability_check["ok"]:
+        error_msg = (
+            f"Capability denied for step {idx} ({tool_name}): "
+            f"{capability_check['error']}"
+        )
+
+        agent_step = AgentStep(
+            run_id=agent_run_id,
+            step_index=idx,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            risk_level=risk_level,
+            description=description,
+            status="failed",
+            result=None,
+            error_message=error_msg,
+            execution_ms=0,
+            executed_at=datetime.now(timezone.utc),
+            correlation_id=state.get("correlation_id"),
+        )
+        db.add(agent_step)
+
+        agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_id).first()
+        if agent_run:
+            agent_run.steps_completed = idx + 1
+            agent_run.current_step = idx + 1
+        db.commit()
+
+        from services.agent_event_service import emit_event
+        emit_event(
+            run_id=agent_run_id,
+            user_id=user_id,
+            event_type="CAPABILITY_DENIED",
+            db=db,
+            correlation_id=state.get("correlation_id"),
+            payload={
+                "step_index": idx,
+                "tool_name": tool_name,
+                "error": capability_check["error"],
+                "granted_tools": capability_check.get("granted_tools", []),
+            },
+        )
+
+        step_result_dict = {
+            "step_index": idx,
+            "tool": tool_name,
+            "status": "failed",
+            "result": None,
+            "error": error_msg,
+        }
+        new_step_results = list(state.get("step_results", [])) + [step_result_dict]
+        logger.warning("[NodusAdapter] %s", error_msg)
+        return {
+            "status": "FAILURE",
+            "error": error_msg,
+            "output_patch": {"step_results": new_step_results},
+        }
 
     # Execute with per-step retry
     max_attempts = 1 if risk_level == "high" else MAX_STEP_RETRIES
@@ -292,6 +360,7 @@ class NodusAgentAdapter:
         user_id: str,
         db: Session,
         correlation_id: Optional[str] = None,
+        capability_token: Optional[dict] = None,
     ) -> dict:
         """
         Execute an agent plan as a PersistentFlowRunner workflow.
@@ -318,6 +387,7 @@ class NodusAgentAdapter:
                 "current_step_index": 0,
                 "step_results": [],
                 "correlation_id": correlation_id,
+                "capability_token": capability_token,
             }
 
             runner = PersistentFlowRunner(

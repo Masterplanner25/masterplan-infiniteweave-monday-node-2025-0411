@@ -12,6 +12,7 @@ Event types:
   EXECUTION_STARTED  — Execution handed to NodusAgentAdapter
   COMPLETED          — All steps succeeded, run finalised
   EXECUTION_FAILED   — Run failed during execution
+  CAPABILITY_DENIED  — Run blocked by scoped capability enforcement
   RECOVERED          — Stuck run recovered via /recover
   REPLAY_CREATED     — New run created via /replay
 
@@ -34,6 +35,7 @@ AGENT_EVENT_TYPES = {
     "EXECUTION_STARTED",
     "COMPLETED",
     "EXECUTION_FAILED",
+    "CAPABILITY_DENIED",
     "RECOVERED",
     "REPLAY_CREATED",
 }

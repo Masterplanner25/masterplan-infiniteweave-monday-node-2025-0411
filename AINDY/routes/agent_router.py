@@ -39,6 +39,7 @@ class RunRequest(BaseModel):
 class TrustSettingsUpdate(BaseModel):
     auto_execute_low: Optional[bool] = None
     auto_execute_medium: Optional[bool] = None
+    allowed_auto_grant_tools: Optional[list[str]] = None
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -300,6 +301,9 @@ def list_tools(current_user=Depends(get_current_user)):
             "name": name,
             "risk": entry["risk"],
             "description": entry["description"],
+            "capability": entry.get("capability"),
+            "category": entry.get("category"),
+            "egress_scope": entry.get("egress_scope"),
         }
         for name, entry in TOOL_REGISTRY.items()
     ]
@@ -312,6 +316,7 @@ def get_trust_settings(
 ):
     """Get the current user's agent trust settings."""
     from db.models.agent_run import AgentTrustSettings
+    from services.capability_service import get_auto_grantable_tools
 
     user_id = str(current_user["sub"])
     trust = db.query(AgentTrustSettings).filter(
@@ -322,6 +327,11 @@ def get_trust_settings(
         "user_id": user_id,
         "auto_execute_low": trust.auto_execute_low if trust else False,
         "auto_execute_medium": trust.auto_execute_medium if trust else False,
+        "allowed_auto_grant_tools": (
+            trust.allowed_auto_grant_tools
+            if trust and trust.allowed_auto_grant_tools is not None
+            else get_auto_grantable_tools(user_id=user_id, db=db)
+        ),
         "note": "High-risk plans always require approval regardless of trust settings.",
     }
 
@@ -344,7 +354,7 @@ def get_tool_suggestions(
 
     user_id = str(current_user["sub"])
     snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
-    return suggest_tools(kpi_snapshot=snapshot)
+    return suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
 
 
 @router.put("/trust")
@@ -357,6 +367,7 @@ def update_trust_settings(
     from datetime import datetime, timezone
 
     from db.models.agent_run import AgentTrustSettings
+    from services.agent_tools import TOOL_REGISTRY
 
     user_id = str(current_user["sub"])
     trust = db.query(AgentTrustSettings).filter(
@@ -371,6 +382,16 @@ def update_trust_settings(
         trust.auto_execute_low = body.auto_execute_low
     if body.auto_execute_medium is not None:
         trust.auto_execute_medium = body.auto_execute_medium
+    if body.allowed_auto_grant_tools is not None:
+        trust.allowed_auto_grant_tools = sorted(
+            {
+                tool_name
+                for tool_name in body.allowed_auto_grant_tools
+                if tool_name in TOOL_REGISTRY
+                and TOOL_REGISTRY[tool_name]["risk"] in {"low", "medium"}
+                and tool_name != "genesis.message"
+            }
+        )
 
     trust.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -380,5 +401,6 @@ def update_trust_settings(
         "user_id": user_id,
         "auto_execute_low": trust.auto_execute_low,
         "auto_execute_medium": trust.auto_execute_medium,
+        "allowed_auto_grant_tools": trust.allowed_auto_grant_tools or [],
         "note": "High-risk plans always require approval regardless of trust settings.",
     }

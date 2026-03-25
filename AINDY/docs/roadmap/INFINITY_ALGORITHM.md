@@ -130,8 +130,10 @@ score → feedback → behavioral adjustment → re-score
 
 ### Execution Loop
 
-* Currently **request-driven**
-* No enforced global loop
+* Event-driven score recalculation is implemented
+* `services/infinity_loop.py` enforces post-score decisions
+* The loop now persists `LoopAdjustment` state and explicit `UserFeedback`
+* Remaining gap: ranking / optimization intelligence is still not implemented
 
 ---
 
@@ -184,27 +186,34 @@ It is NOT yet:
 
 ### Phase v3 — Feedback Integration
 
-**Goal:** Close the feedback loop
+**Status:** Implemented
 
-* Connect metrics → behavior adjustments
-* Integrate ARM outputs into scoring
-* Begin adaptive tuning
+* Metrics now feed deterministic behavior adjustments via `run_loop()`
+* ARM analysis completion participates in the event-driven loop
+* Adaptive tuning exists at the rule level; model-driven optimization remains future work
 
 ---
 
 ### Phase v4 — Unified Execution Loop (CRITICAL)
 
-**Goal:** Implement the actual algorithm
+**Status:** Implemented in Sprint N+11
 
-Create:
+Created:
 
 * `services/infinity_loop.py`
+* `db/models/infinity_loop.py`
 
-Enforce:
+Enforced loop:
 
 ```
 input → score → decision → execution → feedback → update state
 ```
+
+Current execution surfaces:
+
+* task reprioritization on low execution speed / decision efficiency
+* persisted suggestion refresh on low focus quality / low AI productivity boost
+* explicit feedback capture via `POST /scores/feedback`
 
 ---
 
@@ -241,7 +250,7 @@ input → score → decision → execution → feedback → update state
 
 * Expanded TWR not implemented
 * No ranking system
-* Feedback loop not enforced
+* Watcher-derived focus does not yet modify the standalone TWR endpoint directly
 
 ---
 
@@ -258,10 +267,10 @@ input → score → decision → execution → feedback → update state
 | ----- | ------------------ | ----------- | ----------------- |
 | v1    | Scoring Engine     | Implemented | Normalize         |
 | v2    | Expanded TWR       | Missing     | Implement         |
-| v3    | Feedback Loop      | Partial     | Integrate         |
-| v4    | Execution Loop     | Missing     | Build             |
+| v3    | Feedback Loop      | Implemented | Extend weighting  |
+| v4    | Execution Loop     | Implemented | Refine decisions  |
 | v5    | Ranking System     | Missing     | Add               |
-| v6    | System Integration | Partial     | Connect to Memory |
+| v6    | System Integration | Partial     | Connect ranking + memory weighting |
 
 ---
 

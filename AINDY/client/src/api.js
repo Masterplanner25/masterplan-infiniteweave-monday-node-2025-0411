@@ -589,6 +589,17 @@ export function getScoreHistory(limit = 30) {
   return authRequest(`/scores/me/history?limit=${limit}`, { method: "GET" });
 }
 
+export function postScoreFeedback(payload) {
+  return authRequest("/scores/feedback", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getScoreFeedback(limit = 50) {
+  return authRequest(`/scores/feedback?limit=${limit}`, { method: "GET" });
+}
+
 // ── Agent ─────────────────────────────────────────────────────────────────────
 
 export function createAgentRun(payload) {
@@ -629,6 +640,11 @@ export function getAgentTrust() {
 }
 
 export function updateAgentTrust(payload) {
+  // payload: {
+  //   auto_execute_low?: boolean,
+  //   auto_execute_medium?: boolean,
+  //   allowed_auto_grant_tools?: string[],
+  // }
   return authRequest("/agent/trust", {
     method: "PUT",
     body: JSON.stringify(payload),
