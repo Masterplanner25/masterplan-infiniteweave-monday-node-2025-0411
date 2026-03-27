@@ -21,6 +21,8 @@ _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 def async_heavy_execution_enabled() -> bool:
     if os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}:
         return False
+    if os.getenv("TEST_MODE", "false").lower() in {"1", "true", "yes"}:
+        return False
     return os.getenv("AINDY_ASYNC_HEAVY_EXECUTION", "false").lower() in {"1", "true", "yes"}
 
 

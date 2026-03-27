@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from services.system_event_service import emit_system_event, SystemEventEmissionError
 from utils.trace_context import get_current_trace_id
+from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +81,11 @@ def emit_event(
             except ValueError:
                 parsed_run_id = run_id
 
-        event = AgentEvent(
-            id=uuid.uuid4(),
-            run_id=parsed_run_id,
-            correlation_id=correlation_id,
-            user_id=user_id,
+            event = AgentEvent(
+                id=uuid.uuid4(),
+                run_id=parsed_run_id,
+                correlation_id=correlation_id,
+                user_id=parse_user_id(user_id) or user_id,
             event_type=event_type,
             payload=payload or {},
             occurred_at=datetime.now(timezone.utc),

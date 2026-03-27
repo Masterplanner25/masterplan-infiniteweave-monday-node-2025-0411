@@ -38,11 +38,17 @@ from services.capability_service import check_execution_capability, check_tool_c
 from services.agent_tools import execute_tool
 from services.flow_engine import PersistentFlowRunner, register_node
 from services.system_event_service import emit_error_event, emit_system_event
+from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 from services.observability_events import emit_observability_event
 
 MAX_STEP_RETRIES = 3
+
+
+def _db_run_id(run_id):
+    parsed = parse_user_id(run_id)
+    return parsed if parsed is not None else run_id
 
 
 # ── Node: agent_validate_steps ────────────────────────────────────────────────
@@ -114,6 +120,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     risk_level = step.get("risk_level", "high")
     description = step.get("description", "")
     agent_run_id = state["agent_run_id"]
+    agent_run_db_id = _db_run_id(agent_run_id)
     user_id = state["user_id"]
     execution_token = state.get("execution_token") or state.get("capability_token")
     db: Session = context["db"]
@@ -133,7 +140,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         )
 
         agent_step = AgentStep(
-            run_id=agent_run_id,
+            run_id=agent_run_db_id,
             step_index=idx,
             tool_name=tool_name,
             tool_args=tool_args,
@@ -148,7 +155,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         )
         db.add(agent_step)
 
-        agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_id).first()
+        agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_db_id).first()
         if agent_run:
             agent_run.steps_completed = idx + 1
             agent_run.current_step = idx + 1
@@ -232,7 +239,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
 
     # Persist AgentStep audit record
     agent_step = AgentStep(
-        run_id=agent_run_id,
+        run_id=agent_run_db_id,
         step_index=idx,
         tool_name=tool_name,
         tool_args=tool_args,
@@ -248,7 +255,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     db.add(agent_step)
 
     # Update AgentRun progress counters
-    agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_id).first()
+    agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_db_id).first()
     if agent_run:
         agent_run.steps_completed = idx + 1
         agent_run.current_step = idx + 1
@@ -320,10 +327,11 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
     from db.models.agent_run import AgentRun
 
     agent_run_id = state["agent_run_id"]
+    agent_run_db_id = _db_run_id(agent_run_id)
     step_results = state.get("step_results", [])
     db: Session = context["db"]
 
-    agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_id).first()
+    agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_db_id).first()
 
     result_payload = {"steps": step_results}
     if agent_run and state.get("user_id"):
@@ -443,7 +451,7 @@ class NodusAgentAdapter:
                 from db.models.agent_run import AgentRun
                 from services.agent_event_service import emit_event
 
-                agent_run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+                agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
                 if agent_run and agent_run.status == "executing":
                     agent_run.status = "failed"
                     agent_run.completed_at = datetime.now(timezone.utc)
@@ -499,19 +507,19 @@ class NodusAgentAdapter:
             # Link FlowRun ID back to AgentRun for audit trail
             flow_run_id = flow_result.get("run_id")
             if flow_run_id:
-                agent_run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+                agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
                 if agent_run:
                     agent_run.flow_run_id = str(flow_run_id)
                     db.commit()
 
             # On FAILURE: agent_finalize_run never ran — finalise AgentRun here
             if flow_result.get("status") != "SUCCESS":
-                agent_run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+                agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
                 if agent_run and agent_run.status == "executing":
                     # Load all AgentStep rows written before the failure
                     completed_steps = (
                         db.query(AgentStep)
-                        .filter(AgentStep.run_id == run_id)
+                        .filter(AgentStep.run_id == _db_run_id(run_id))
                         .order_by(AgentStep.step_index.asc())
                         .all()
                     )
@@ -559,7 +567,7 @@ class NodusAgentAdapter:
             )
             # Best-effort failure finalisation
             try:
-                agent_run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+                agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
                 if agent_run and agent_run.status == "executing":
                     agent_run.status = "failed"
                     agent_run.completed_at = datetime.now(timezone.utc)

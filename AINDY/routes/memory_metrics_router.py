@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from runtime.memory.metrics_store import MemoryMetricsStore
 from services.auth_service import get_current_user
+from utils.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def get_memory_metrics(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    user_id = str(current_user["sub"])
+    user_id = require_user_id(current_user["sub"])
     store = MemoryMetricsStore()
     summary = store.get_summary(user_id=user_id, db=db)
     return summary
@@ -30,7 +31,7 @@ def get_memory_metrics_detail(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    user_id = str(current_user["sub"])
+    user_id = require_user_id(current_user["sub"])
     store = MemoryMetricsStore()
     return store.get_recent(user_id=user_id, db=db, limit=20)
 
@@ -40,7 +41,7 @@ def get_memory_metrics_dashboard(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    user_id = str(current_user["sub"])
+    user_id = require_user_id(current_user["sub"])
     store = MemoryMetricsStore()
     summary = store.get_summary(user_id=user_id, db=db)
     recent = store.get_recent(user_id=user_id, db=db, limit=10)

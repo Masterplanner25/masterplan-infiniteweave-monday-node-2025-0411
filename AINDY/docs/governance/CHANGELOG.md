@@ -18,6 +18,20 @@ Changes that have been implemented but are not yet part of a tagged release.
 * **`routes/auth_router.py`** — successful auth routes now emit `auth.register.completed` and `auth.login.completed`.
 * **`routes/health_router.py`** — successful health routes now emit `health.liveness.completed` and `health.readiness.completed` as best-effort observability events.
 * **`services/task_services.py`** — background lease timestamps normalized to timezone-aware UTC; naive DB values are coerced before comparison. Live worker startup warning `can't compare offset-naive and offset-aware datetimes` eliminated.
+* **`services/agent_runtime.py`** — UUID-backed agent run lookups now normalize `run_id` consistently across execution, replay, and event timeline paths.
+* **`services/nodus_adapter.py`** — UUID-backed agent-step persistence and agent-run lookups now normalize runtime IDs before querying or writing.
+* **`services/capability_service.py`** — capability mappings now persist UUID-safe `agent_run_id` values instead of leaking string IDs into UUID columns.
+* **`services/agent_event_service.py`** and **`services/system_event_service.py`** — user IDs and payloads are normalized for UUID-backed persistence; `SystemEvent` payloads now serialize UUID values safely.
+* **`routes/agent_router.py`** — `/agent/runs/{run_id}/events` fallback lookup now uses UUID-safe run ID parsing.
+
+### Added
+* **`tests/system/test_invariants.py`** — new DB-backed system invariant suite covering:
+  - execution emits durable events
+  - cross-user isolation
+  - capability denial changes execution outcome
+  - memory create/read consistency
+  - request metrics and dashboard visibility
+* **`tests/system/test_agent_events.py`**, **`tests/system/test_deterministic_agent.py`**, and **`tests/system/test_capability_system.py`** were rebuilt around the real SQLite-backed fixture stack. The old `MockSession` / fake-query-chain patterns were removed from these files in favor of persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with boundary-only mocks.
 
 ### Verified
 * Live compose validation confirmed durable `system_events` rows for successful:
@@ -25,6 +39,7 @@ Changes that have been implemented but are not yet part of a tagged release.
   - readiness
   - auth register/login
   - async heavy execution
+* `pytest tests/system/test_invariants.py tests/system/test_agent_events.py tests/system/test_deterministic_agent.py tests/system/test_capability_system.py --no-cov -q` → `22 passed`
 
 ## Sprint N+7: Agent Observability — 2026-03-25
 
