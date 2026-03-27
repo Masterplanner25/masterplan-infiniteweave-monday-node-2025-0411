@@ -52,7 +52,7 @@ class TrustSettingsUpdate(BaseModel):
 
 def _get_run_or_404(run_id: str, user_id: str, db: Session):
     from db.models.agent_run import AgentRun
-    run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+    run = db.query(AgentRun).filter(AgentRun.id == UUID(str(run_id))).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     if run.user_id != UUID(str(user_id)):
@@ -331,7 +331,7 @@ def get_run_events(
     if result is None:
         # Distinguish not-found from auth error by re-querying just for existence
         from db.models.agent_run import AgentRun
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        run = db.query(AgentRun).filter(AgentRun.id == UUID(str(run_id))).first()
         if not run:
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=403, detail="Not authorized")

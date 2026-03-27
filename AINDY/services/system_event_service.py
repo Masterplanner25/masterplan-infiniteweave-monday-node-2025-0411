@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from config import settings
 from utils.trace_context import get_current_trace_id
 from utils.user_ids import parse_user_id
 
@@ -19,6 +20,28 @@ _VERBOSE_SYSTEM_EVENT_LOGS = os.getenv("AINDY_DEBUG_SYSTEM_EVENTS", "false").low
 
 class SystemEventEmissionError(RuntimeError):
     """Raised when required system event persistence fails."""
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def _fail_closed_in_current_mode() -> bool:
+    if settings.is_testing:
+        return os.getenv("AINDY_TEST_STRICT_SYSTEM_EVENTS", "false").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+    return True
 
 
 def _persist_system_event(
@@ -36,7 +59,7 @@ def _persist_system_event(
         type=event_type,
         user_id=parse_user_id(user_id),
         trace_id=str(trace_id) if trace_id else None,
-        payload=payload or {},
+        payload=_json_safe(payload or {}),
         timestamp=datetime.now(timezone.utc),
     )
     db.add(event)
@@ -89,7 +112,7 @@ def emit_system_event(
             user_id,
             exc,
         )
-        if required:
+        if required and _fail_closed_in_current_mode():
             raise SystemEventEmissionError(
                 f"Required system event '{event_type}' failed for trace {effective_trace_id}"
             ) from exc

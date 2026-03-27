@@ -65,6 +65,11 @@ def _db_user_id(user_id: str):
     return parsed if parsed is not None else user_id
 
 
+def _db_run_id(run_id):
+    parsed = parse_user_id(run_id)
+    return parsed if parsed is not None else run_id
+
+
 def _user_matches(left, right) -> bool:
     left_uuid = parse_user_id(left)
     right_uuid = parse_user_id(right)
@@ -373,7 +378,8 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         from services.nodus_adapter import NodusAgentAdapter
         user_db_id = _db_user_id(user_id)
 
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        db_run_id = _db_run_id(run_id)
+        run = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
         if not run:
             logger.warning("[AgentRuntime] Run %s not found", run_id)
             return None
@@ -399,7 +405,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             run.error_message = "Missing scoped capability token."
             db.commit()
             emit_event(
-                run_id=run_id,
+                run_id=str(run.id),
                 user_id=user_db_id,
                 event_type="CAPABILITY_DENIED",
                 db=db,
@@ -418,7 +424,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         # Emit EXECUTION_STARTED lifecycle event
         emit_event(
-            run_id=run_id,
+            run_id=str(run.id),
             user_id=user_db_id,
             event_type="EXECUTION_STARTED",
             db=db,
@@ -496,7 +502,8 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         from db.models.agent_run import AgentRun
         user_db_id = _db_user_id(user_id)
 
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        db_run_id = _db_run_id(run_id)
+        run = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
         if not run or not _user_matches(run.user_id, user_db_id):
             return None
 
@@ -530,7 +537,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         # Emit APPROVED lifecycle event
         emit_event(
-            run_id=run_id,
+            run_id=str(run.id),
             user_id=user_db_id,
             event_type="APPROVED",
             db=db,
@@ -539,7 +546,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             required=True,
         )
 
-        return execute_run(run_id=run_id, user_id=user_db_id, db=db)
+        return execute_run(run_id=run.id, user_id=user_db_id, db=db)
 
     except Exception as exc:
         logger.warning("[AgentRuntime] approve_run failed for %s: %s", run_id, exc)
@@ -552,7 +559,8 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         from db.models.agent_run import AgentRun
         user_db_id = _db_user_id(user_id)
 
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        db_run_id = _db_run_id(run_id)
+        run = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
         if not run or not _user_matches(run.user_id, user_db_id):
             return None
 
@@ -565,7 +573,7 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         # Emit REJECTED lifecycle event
         emit_event(
-            run_id=run_id,
+            run_id=str(run.id),
             user_id=user_db_id,
             event_type="REJECTED",
             db=db,
@@ -768,12 +776,13 @@ def replay_run(
     try:
         from db.models.agent_run import AgentRun
 
-        original = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        db_run_id = _db_run_id(run_id)
+        original = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
         if not original:
             logger.warning("[AgentRuntime] replay_run: run %s not found", run_id)
             return None
 
-        if original.user_id != user_id:
+        if not _user_matches(original.user_id, user_id):
             logger.warning("[AgentRuntime] replay_run: owner mismatch for %s", run_id)
             return None
 
@@ -846,16 +855,17 @@ def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         from db.models.agent_run import AgentRun, AgentStep
         from db.models.agent_event import AgentEvent
 
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+        db_run_id = _db_run_id(run_id)
+        run = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
         if not run:
             return None
-        if run.user_id != user_id:
+        if not _user_matches(run.user_id, user_id):
             return None
 
         # ── Lifecycle events from agent_events ────────────────────────────
         lifecycle_rows = (
             db.query(AgentEvent)
-            .filter(AgentEvent.run_id == run_id)
+            .filter(AgentEvent.run_id == run.id)
             .order_by(AgentEvent.occurred_at.asc())
             .all()
         )
@@ -872,7 +882,7 @@ def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         # ── Step events synthesised from agent_steps ──────────────────────
         step_rows = (
             db.query(AgentStep)
-            .filter(AgentStep.run_id == run_id)
+            .filter(AgentStep.run_id == run.id)
             .order_by(AgentStep.step_index.asc())
             .all()
         )

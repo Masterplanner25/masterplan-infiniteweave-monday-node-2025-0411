@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from services.agent_tools import TOOL_REGISTRY
-from utils.user_ids import require_user_id
+from utils.user_ids import parse_user_id, require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +192,8 @@ def create_run_capability_mappings(
         if not rows:
             return
 
+        run_uuid = parse_user_id(run_id)
+
         existing = db.query(AgentCapabilityMapping).all()
         existing_keys = {
             (str(row.capability_id), str(row.agent_type or ""), str(row.agent_run_id or ""))
@@ -218,7 +220,7 @@ def create_run_capability_mappings(
                 db.add(
                     AgentCapabilityMapping(
                         capability_id=capability_row.id,
-                        agent_run_id=run_id,
+                        agent_run_id=run_uuid or run_id,
                     )
                 )
                 existing_keys.add(run_key)

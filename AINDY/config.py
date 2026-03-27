@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # --- Core runtime variables ---
     ENV: str = "development"
     TESTING: bool = False
+    TEST_MODE: bool = False
     DATABASE_URL: str
     PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
     OPENAI_API_KEY: str
@@ -60,6 +61,8 @@ class Settings(BaseSettings):
             "true",
             "yes",
         }
+        if os.getenv("TEST_MODE", "0").lower() in {"1", "true", "yes"}:
+            allow_sqlite = True
         if allow_sqlite:
             return v
         if not v.startswith("postgres"):
@@ -77,7 +80,7 @@ class Settings(BaseSettings):
 
     @property
     def is_testing(self) -> bool:
-        return self.TESTING or self.ENV.lower() == "test"
+        return self.TESTING or self.TEST_MODE or self.ENV.lower() == "test"
 
 
 # --------------------------------------------------------------------

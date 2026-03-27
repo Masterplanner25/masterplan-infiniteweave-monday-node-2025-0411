@@ -8,6 +8,34 @@ This document distinguishes current testing reality from required policy going f
 
 The historical breakdown below is preserved, but the current validated baseline has moved substantially since the early CI rollout.
 
+**Current test architecture**
+- Pytest runs in `TEST_MODE=true` by default.
+- The primary test runtime is a real SQLite-backed SQLAlchemy session, not `MockSession`.
+- Shared fixtures live under `tests/fixtures/` and provide:
+  - `db_session`
+  - `client`
+  - `test_user`
+  - `auth_headers`
+- Async heavy execution is off by default in tests and is enabled only per-test when the `202` queueing contract is under test.
+- Root-level legacy `tests/test_*.py` files have been removed; active tests live under:
+  - `tests/unit/`
+  - `tests/integration/`
+  - `tests/api/`
+  - `tests/system/`
+
+**Current system-level invariant coverage**
+- `tests/system/test_invariants.py` validates:
+  - execution emits durable events
+  - cross-user isolation holds across core routes
+  - capability denial changes the real execution path
+  - memory create/read consistency holds
+  - request metrics and dashboard summaries reflect executed actions
+- Agent runtime invariants are additionally covered in:
+  - `tests/system/test_agent_events.py`
+  - `tests/system/test_deterministic_agent.py`
+  - `tests/system/test_capability_system.py`
+- These suites use real persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with only boundary mocks for external planners/executors.
+
 **Current validated baseline** — local `pytest -q --tb=short` after Sprint N+11:
 - **1,424 passed**
 - **5 failed**
@@ -50,10 +78,8 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 
 **CI enforcement (current):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage threshold is 69%, and the current validated baseline is 70.22%. Ruff lint is enforced in a separate job. `tests/validate_memory_loop.py` remains excluded from CI because it requires live OpenAI + a real DB.
 
-**Root test files** (legacy, minimal scope):
-- `test_calculations.py` — FastAPI TestClient calls for calculation endpoints
-- `test_routes.py` — FastAPI TestClient calls for calculation endpoints (duplicate test names — see §8)
-- `test_import.py` — simple import check
+**Root test files**
+- Legacy root-level test files have been migrated out of `tests/` and replaced by the structured layout above.
 
 **Phase 2 security tests** — all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth → 401) and the acceptance path (valid JWT → expected status). No intentional failures remain in the test suite.
 
@@ -81,6 +107,10 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 - Background loop functions must be tested in isolation.
 - Infinite loops must be testable via controlled iteration or injection.
 - Thread behavior must not require real daemon threads in tests.
+
+### E. Invariant Tests
+- Cross-domain guarantees belong in `tests/system/test_invariants.py` or another `tests/system/` file.
+- These tests should use real persisted state and assert durable side effects, not just response codes.
 
 ## 3. Mocking Policy for External Model Providers
 
@@ -131,6 +161,8 @@ A change cannot be merged if:
 - **CI checks fail** — every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 64%.
 
 ## 8. Known Gaps
+- Some structured tests still retain targeted mocks for external boundaries, especially older memory-bridge and model-provider coverage. That is acceptable only where the boundary is truly external or nondeterministic.
+- The historical counts below are preserved for traceability, but they do not describe the current suite layout anymore.
 - ✅ **Resolved (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured — `pytest-cov`, `.coveragerc`, and `--cov-fail-under=64` in `pytest.ini`. Baseline: 69%.
 - ✅ **Resolved (2026-03-18 CI/CD Sprint):** CI enforcement live — GitHub Actions `ci.yml` enforces lint + test + coverage on every push/PR.
 - No migration validation tests (`AINDY/alembic/` has no test harness).

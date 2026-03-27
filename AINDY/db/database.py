@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 import logging
 import threading
 from config import settings
@@ -21,12 +22,25 @@ DATABASE_URL = settings.DATABASE_URL
 Base = declarative_base()
 
 # Engine + Session Factory
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,        # Reconnect dropped sessions
-    pool_size=10,              # Handle concurrent async calls
-    max_overflow=20,           # Burst allowance
-)
+_engine_kwargs = {
+    "pool_pre_ping": True,
+}
+if DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs.update(
+        {
+            "connect_args": {"check_same_thread": False},
+            "poolclass": StaticPool,
+        }
+    )
+else:
+    _engine_kwargs.update(
+        {
+            "pool_size": 10,
+            "max_overflow": 20,
+        }
+    )
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = logging.getLogger(__name__)
@@ -44,6 +58,8 @@ def set_utc(dbapi_connection, connection_record):
     """Ensure all DB connections operate in UTC."""
     cursor = dbapi_connection.cursor()
     try:
+        if DATABASE_URL.startswith("sqlite"):
+            return
         cursor.execute("SET TIME ZONE 'UTC';")
     except Exception as exc:
         emit_observability_event(
