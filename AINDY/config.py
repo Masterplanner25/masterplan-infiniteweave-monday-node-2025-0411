@@ -19,6 +19,7 @@ utcnow = lambda: datetime.now(timezone.utc)
 class Settings(BaseSettings):
     # --- Core runtime variables ---
     ENV: str = "development"
+    TESTING: bool = False
     DATABASE_URL: str
     PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
     OPENAI_API_KEY: str
@@ -73,6 +74,10 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.ENV.lower() in ("prod", "production")
+
+    @property
+    def is_testing(self) -> bool:
+        return self.TESTING or self.ENV.lower() == "test"
 
 
 # --------------------------------------------------------------------

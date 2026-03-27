@@ -19,7 +19,17 @@ _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 
 
 def async_heavy_execution_enabled() -> bool:
+    if os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}:
+        return False
     return os.getenv("AINDY_ASYNC_HEAVY_EXECUTION", "false").lower() in {"1", "true", "yes"}
+
+
+def shutdown_async_jobs(*, wait: bool = True) -> None:
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is not None:
+            _EXECUTOR.shutdown(wait=wait, cancel_futures=True)
+            _EXECUTOR = None
 
 
 def _get_executor() -> ThreadPoolExecutor:

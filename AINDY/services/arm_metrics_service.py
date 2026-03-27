@@ -19,7 +19,7 @@ Gap notes:
   for result quality (richer JSON responses = more output tokens).
 """
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -62,7 +62,7 @@ class ARMMetricsService:
     # ── DB queries ────────────────────────────────────────────────────────────
 
     def _get_recent_analyses(self, window_days: int) -> list:
-        cutoff = datetime.utcnow() - timedelta(days=window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
         return (
             self.db.query(AnalysisResult)
             .filter(
@@ -74,7 +74,7 @@ class ARMMetricsService:
         )
 
     def _get_recent_generations(self, window_days: int) -> list:
-        cutoff = datetime.utcnow() - timedelta(days=window_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
         return (
             self.db.query(CodeGeneration)
             .filter(

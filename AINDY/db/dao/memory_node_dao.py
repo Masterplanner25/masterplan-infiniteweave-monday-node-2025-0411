@@ -7,6 +7,7 @@ routed through services.memory_persistence.MemoryNodeDAO for backward compat).
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import uuid
 from typing import List, Optional
 
@@ -24,6 +25,16 @@ class MemoryNodeDAO:
 
     def __init__(self, db: Session):
         self.db = db
+
+    @staticmethod
+    def _utcnow() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _normalize_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -396,7 +407,6 @@ class MemoryNodeDAO:
         At least one of query or tags required.
         """
         from services.embedding_service import generate_query_embedding
-        from datetime import datetime
         import math
 
         candidates = []
@@ -431,7 +441,7 @@ class MemoryNodeDAO:
                     node_dict["semantic_score"] = 0.0
                     candidates.append(node_dict)
 
-        now = datetime.utcnow()
+        now = self._utcnow()
         scored = []
 
         for c in candidates:
@@ -453,9 +463,10 @@ class MemoryNodeDAO:
                     if isinstance(created_str, str):
                         created = datetime.fromisoformat(
                             created_str.replace("Z", "+00:00")
-                        ).replace(tzinfo=None)
+                        )
                     else:
                         created = created_str
+                    created = self._normalize_datetime(created)
                     age_days = (now - created).days
                     recency_score = math.exp(-age_days / 30.0)
                 except Exception:
@@ -700,7 +711,6 @@ class MemoryNodeDAO:
         Returns updated node or None if not found.
         """
         from db.models.memory_node_history import MemoryNodeHistory
-        from datetime import datetime
 
         node = self._get_model_by_id(node_id, user_id=user_id)
         if not node:
@@ -743,7 +753,7 @@ class MemoryNodeDAO:
             **previous,
         )
 
-        node.updated_at = datetime.utcnow()
+        node.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if "content" in changes and regenerate_embedding:
             try:
@@ -818,13 +828,11 @@ class MemoryNodeDAO:
           - Automatic: ARM analysis score, task completion,
                        Genesis lock
         """
-        from datetime import datetime
-
         node = self._get_model_by_id(node_id, user_id=user_id)
         if not node:
             return None
 
-        now = datetime.utcnow()
+        now = self._utcnow()
         node.usage_count = (node.usage_count or 0) + 1
         node.last_used_at = now
         node.last_outcome = outcome

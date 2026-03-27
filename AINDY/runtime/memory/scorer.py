@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable, List
 import math
 
@@ -10,7 +10,7 @@ from .types import MemoryItem, RecallRequest
 class MemoryScorer:
     def score(self, nodes: Iterable[dict], request: RecallRequest | None) -> List[MemoryItem]:
         scored: List[MemoryItem] = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         trace_node_ids = set()
         if request and request.metadata:
             trace_node_ids = set(request.metadata.get("trace_node_ids", []))
@@ -87,9 +87,11 @@ def _compute_recency(created_at, now: datetime) -> float:
         return 0.5
     try:
         if isinstance(created_at, str):
-            created = datetime.fromisoformat(created_at.replace("Z", "+00:00")).replace(tzinfo=None)
+            created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         else:
             created = created_at
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
         age_days = max(0, (now - created).days)
         return math.exp(-age_days / 30.0)
     except Exception:

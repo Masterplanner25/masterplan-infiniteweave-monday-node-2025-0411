@@ -359,19 +359,21 @@ class TestAutomationEndpoints:
         assert r.status_code != 401
 
     def test_replay_rejects_invalid_execution_token(self):
+        import uuid
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routes.automation_router import router
         from services.auth_service import get_current_user
         from db.database import get_db
 
+        user_id = str(uuid.uuid4())
         app = FastAPI()
         app.include_router(router)
-        app.dependency_overrides[get_current_user] = lambda: {"sub": "u1"}
+        app.dependency_overrides[get_current_user] = lambda: {"sub": user_id}
 
         log = MagicMock()
         log.id = "log-1"
-        log.user_id = "u1"
+        log.user_id = user_id
         log.status = "failed"
         log.payload = {
             "run_id": "run-1",

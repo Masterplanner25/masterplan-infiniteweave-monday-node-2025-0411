@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from fastapi import APIRouter, Depends, Query
@@ -18,6 +18,10 @@ import services.task_services as task_services
 
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _serialize_request_metric(row: RequestMetric) -> dict:
@@ -146,7 +150,8 @@ def get_observability_dashboard(
     health_limit: int = Query(20, ge=1, le=100),
 ):
     user_id = uuid.UUID(str(current_user["sub"]))
-    window_start = datetime.utcnow() - timedelta(hours=window_hours)
+    request_window_start = datetime.utcnow() - timedelta(hours=window_hours)
+    event_window_start = _utcnow() - timedelta(hours=window_hours)
 
     request_query = db.query(RequestMetric).filter(RequestMetric.user_id == user_id)
     recent_requests = (
@@ -162,18 +167,18 @@ def get_observability_dashboard(
         db.query(func.avg(RequestMetric.duration_ms))
         .filter(
             RequestMetric.user_id == user_id,
-            RequestMetric.created_at >= window_start,
+            RequestMetric.created_at >= request_window_start,
         )
         .scalar()
     )
-    window_requests = request_query.filter(RequestMetric.created_at >= window_start).count()
+    window_requests = request_query.filter(RequestMetric.created_at >= request_window_start).count()
     window_errors = request_query.filter(
-        RequestMetric.created_at >= window_start,
+        RequestMetric.created_at >= request_window_start,
         RequestMetric.status_code >= 500,
     ).count()
 
     error_points_rows = (
-        request_query.filter(RequestMetric.created_at >= window_start)
+        request_query.filter(RequestMetric.created_at >= request_window_start)
         .order_by(RequestMetric.created_at.asc())
         .all()
     )
@@ -193,7 +198,7 @@ def get_observability_dashboard(
         db.query(SystemEvent)
         .filter(
             SystemEvent.user_id == user_id,
-            SystemEvent.timestamp >= window_start,
+            SystemEvent.timestamp >= event_window_start,
         )
         .order_by(SystemEvent.timestamp.desc())
         .limit(event_limit)
@@ -244,7 +249,7 @@ def get_observability_dashboard(
         db.query(FlowRun)
         .filter(
             FlowRun.user_id == user_id,
-            FlowRun.created_at >= window_start,
+            FlowRun.created_at >= event_window_start,
         )
         .order_by(FlowRun.created_at.desc())
         .limit(100)
