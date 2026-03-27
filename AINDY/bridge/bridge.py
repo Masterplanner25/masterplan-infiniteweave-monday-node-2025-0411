@@ -101,6 +101,7 @@ def create_memory_node(
     """
     import logging
     from db.dao.memory_node_dao import MemoryNodeDAO
+    from services.system_event_service import emit_system_event
 
     logger = logging.getLogger(__name__)
 
@@ -121,6 +122,19 @@ def create_memory_node(
         tags=tags,
         user_id=user_id,
         node_type=node_type,
+    )
+    emit_system_event(
+        db=db,
+        event_type="memory.write",
+        user_id=user_id,
+        trace_id=str(result.get("id")) if isinstance(result, dict) else None,
+        payload={
+            "node_id": result.get("id") if isinstance(result, dict) else None,
+            "source": source,
+            "node_type": node_type,
+            "tags": tags,
+            "origin": "bridge.create_memory_node",
+        },
     )
     logger.info("[Bridge] Memory node persisted: id=%s source=%s", result.get("id"), source)
     return result

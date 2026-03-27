@@ -1,7 +1,13 @@
+import logging
 from datetime import datetime, timedelta
+from uuid import UUID
 from sqlalchemy.orm import Session
 from db.models import MasterPlan, GenesisSessionDB
 from services.posture import determine_posture  # adjust import if needed
+from services.observability_events import emit_observability_event
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, user_id: str = None):
@@ -22,7 +28,8 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
 
     # Version label scoped per-user to avoid global numbering pollution
     if user_id:
-        user_plans = db.query(MasterPlan).filter(MasterPlan.user_id == user_id).order_by(MasterPlan.id).all()
+        user_uuid = UUID(str(user_id))
+        user_plans = db.query(MasterPlan).filter(MasterPlan.user_id == user_uuid).order_by(MasterPlan.id).all()
     else:
         user_plans = db.query(MasterPlan).order_by(MasterPlan.id).all()
 
@@ -48,7 +55,7 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
             version_label=version_label,
             is_origin=is_origin,
             is_active=False,
-            user_id=user_id,
+            user_id=UUID(str(user_id)) if user_id else None,
             status="locked",
             structure_json=draft_to_use,
             posture=posture,
@@ -97,7 +104,14 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
                 force=True,
             )
         except Exception:
-            pass
+            emit_observability_event(
+                logger,
+                event="masterplan_lock_memory_capture_failed",
+                session_id=session_id,
+                user_id=user_id,
+                masterplan_id=getattr(masterplan, "id", None),
+            )
+            raise
 
     # Observe for identity inference (non-blocking)
     if user_id:
@@ -109,7 +123,14 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
                 context={"posture": masterplan.posture},
             )
         except Exception:
-            pass
+            emit_observability_event(
+                logger,
+                event="masterplan_identity_observation_failed",
+                session_id=session_id,
+                user_id=user_id,
+                masterplan_id=getattr(masterplan, "id", None),
+            )
+            raise
 
     return masterplan
 

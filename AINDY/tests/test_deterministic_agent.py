@@ -388,7 +388,7 @@ class TestAgentFinalizeRunNode:
     def test_writes_step_results_to_result(self):
         steps = [{"step_index": 0, "tool": "task.create", "status": "success"}]
         _, mock_run, _ = self._call(step_results=steps)
-        assert mock_run.result == {"steps": steps}
+        assert mock_run.result["steps"] == steps
 
     def test_commits_to_db(self):
         _, _, db = self._call()

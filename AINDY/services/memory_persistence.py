@@ -10,6 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from pgvector.sqlalchemy import Vector
 from utils import prepare_input_text
+from utils.trace_context import get_current_trace_id
+from utils.user_ids import parse_user_id
 
 # import your project's Base (must exist)
 from db.database import Base
@@ -25,7 +27,7 @@ class MemoryNodeModel(Base):
     source = Column(String(255), nullable=True)
     source_agent = Column(String, nullable=True, index=True)
     is_shared = Column(Boolean, nullable=False, default=False)
-    user_id = Column(String(255), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
@@ -85,7 +87,15 @@ class MemoryNodeDAO:
                 node_type=getattr(memory_node, "node_type", None),
                 source=getattr(memory_node, "source", None),
                 user_id=getattr(memory_node, "user_id", None),
-                extra=getattr(memory_node, "extra", {}),
+                extra={
+                    **(getattr(memory_node, "extra", {}) or {}),
+                    **(
+                        {"trace_id": get_current_trace_id()}
+                        if get_current_trace_id()
+                        and not (getattr(memory_node, "extra", {}) or {}).get("trace_id")
+                        else {}
+                    ),
+                },
             )
             self.db.add(db_node)
             self.db.commit()
@@ -109,7 +119,7 @@ class MemoryNodeDAO:
             "tags": db_node.tags,
             "node_type": db_node.node_type,
             "source": db_node.source,
-            "user_id": db_node.user_id,
+            "user_id": str(db_node.user_id) if db_node.user_id else None,
             "extra": db_node.extra,
             "created_at": db_node.created_at,
             "updated_at": db_node.updated_at,
@@ -117,8 +127,9 @@ class MemoryNodeDAO:
 
     def find_by_tags(self, tags: List[str], limit: int = 100, mode: str = "AND", user_id: Optional[str] = None):
         query = self.db.query(MemoryNodeModel)
-        if user_id:
-            query = query.filter(MemoryNodeModel.user_id == user_id)
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
         tags = [t for t in (tags or []) if t]
         if tags:
             if mode.upper() == "OR":
@@ -134,7 +145,7 @@ class MemoryNodeDAO:
                 "tags": n.tags,
                 "node_type": n.node_type,
                 "source": n.source,
-                "user_id": n.user_id,
+                "user_id": str(n.user_id) if n.user_id else None,
                 "extra": n.extra,
                 "created_at": n.created_at,
                 "updated_at": n.updated_at,

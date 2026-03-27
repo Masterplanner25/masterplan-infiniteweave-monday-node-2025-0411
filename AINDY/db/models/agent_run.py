@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    ForeignKey,
     Boolean,
     Column,
     DateTime,
@@ -27,7 +28,8 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    agent_type = Column(String(64), nullable=False, default="default", index=True)
 
     # N+6: links to the FlowRun that executed this agent run (nullable for
     # backward-compatibility with runs created before the deterministic adapter)
@@ -41,6 +43,7 @@ class AgentRun(Base):
     # Format: run_<uuid4> — generated at create_run() time
     # Nullable: pre-N+8 runs have no correlation_id
     correlation_id = Column(String(72), nullable=True, index=True)
+    trace_id = Column(String(128), nullable=True, index=True)
 
     # Goal and plan
     goal = Column(Text, nullable=False)
@@ -61,6 +64,7 @@ class AgentRun(Base):
     error_message = Column(Text, nullable=True)
 
     # Sprint N+10: per-run scoped authority token minted at approval time.
+    execution_token = Column(String(128), nullable=True)
     capability_token = Column(JSONB, nullable=True)
 
     # Timestamps
@@ -126,7 +130,7 @@ class AgentTrustSettings(Base):
     __tablename__ = "agent_trust_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False, unique=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
 
     auto_execute_low = Column(Boolean, default=False, nullable=False)
     auto_execute_medium = Column(Boolean, default=False, nullable=False)

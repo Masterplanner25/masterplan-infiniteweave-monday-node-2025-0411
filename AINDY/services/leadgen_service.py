@@ -19,9 +19,8 @@ from openai import OpenAI
 
 from bridge.bridge import create_memory_node
 from db.models.leadgen_model import LeadGenResult
-from dotenv import load_dotenv
+from services.external_call_service import perform_external_call
 import os
-load_dotenv()
 
 # Initialize the OpenAI client (ensure API key is set in environment)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -211,12 +210,19 @@ Each score must be a number between 0 and 100.
     logger.info("[LeadGen] Scoring lead: %s", lead_data["company"])
 
     try:
-        completion = client.chat.completions.create(
+        completion = perform_external_call(
+            service_name="openai",
+            endpoint="chat.completions.create",
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt.strip()},
-                {"role": "user", "content": lead_summary},
-            ],
+            method="openai.chat",
+            extra={"purpose": "lead_scoring", "company": lead_data["company"]},
+            operation=lambda: client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt.strip()},
+                    {"role": "user", "content": lead_summary},
+                ],
+            ),
         )
 
         text_output = (completion.choices[0].message.content or "").strip()

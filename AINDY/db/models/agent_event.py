@@ -22,7 +22,7 @@ pattern. Nullable columns allow graceful handling of pre-N+8 runs.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Index, String
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from db.database import Base
@@ -53,7 +53,7 @@ class AgentEvent(Base):
     # Nullable: pre-N+8 runs have no correlation_id
     correlation_id = Column(String(72), nullable=True, index=True)
 
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
 
     # One of AGENT_EVENT_TYPES
     event_type = Column(String(32), nullable=False, index=True)

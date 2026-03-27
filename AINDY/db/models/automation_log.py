@@ -11,7 +11,8 @@ Status flow:
                     → failed (max attempts reached)
 """
 import uuid
-from sqlalchemy import Column, String, Integer, Text, DateTime, JSON
+from sqlalchemy import Column, String, Integer, Text, DateTime, JSON, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from db.database import Base
 
@@ -29,7 +30,7 @@ class AutomationLog(Base):
     attempt_count = Column(Integer, nullable=False, default=0)
     max_attempts = Column(Integer, nullable=False, default=3)
     error_message = Column(Text, nullable=True)
-    user_id = Column(String, nullable=True)  # Nullable — system jobs have no user context
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     result = Column(JSON, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)

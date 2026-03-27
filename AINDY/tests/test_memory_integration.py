@@ -126,8 +126,60 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
 
     assert result["status"] == "executed"
     assert "recall_tool" in fake_runtime.registered
+    assert "remember" not in fake_runtime.registered
     assert fake_runtime.run_kwargs["initial_globals"]["memory_context"]
-    assert fake_runtime.run_kwargs["host_globals"]["memory_bridge"]
+    assert fake_runtime.run_kwargs["host_globals"]["allowed_operations"] == [
+        "recall",
+        "recall_all",
+        "recall_from",
+        "recall_tool",
+        "suggest",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_nodus_execution_blocks_restricted_source(monkeypatch):
+    from fastapi import HTTPException
+    from routes.memory_router import NodusTaskRequest, execute_nodus_task
+
+    body = NodusTaskRequest(
+        task_name="blocked",
+        task_code="import os\n task blocked { }",
+        session_tags=["unit"],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await execute_nodus_task(
+            body=body,
+            db=SimpleNamespace(),
+            current_user={"sub": "00000000-0000-0000-0000-000000000003"},
+        )
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail["error"] == "nodus_security_violation"
+
+
+@pytest.mark.asyncio
+async def test_nodus_execution_blocks_write_ops_without_token(monkeypatch):
+    from fastapi import HTTPException
+    from routes.memory_router import NodusTaskRequest, execute_nodus_task
+
+    body = NodusTaskRequest(
+        task_name="blocked-write",
+        task_code="remember(\"x\")",
+        allowed_operations=["remember"],
+        session_tags=["unit"],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await execute_nodus_task(
+            body=body,
+            db=SimpleNamespace(),
+            current_user={"sub": "00000000-0000-0000-0000-000000000003"},
+        )
+
+    assert exc.value.status_code == 403
+    assert "scoped capability token" in exc.value.detail["message"]
 
 
 def test_memory_feedback_updates_counts():

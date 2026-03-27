@@ -358,6 +358,36 @@ class TestAutomationEndpoints:
         # 404 (not found) or 400 (wrong status) — both acceptable; 401 is not
         assert r.status_code != 401
 
+    def test_replay_rejects_invalid_execution_token(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from routes.automation_router import router
+        from services.auth_service import get_current_user
+        from db.database import get_db
+
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_current_user] = lambda: {"sub": "u1"}
+
+        log = MagicMock()
+        log.id = "log-1"
+        log.user_id = "u1"
+        log.status = "failed"
+        log.payload = {
+            "run_id": "run-1",
+            "execution_token": {"execution_token": "bad"},
+        }
+
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = log
+        app.dependency_overrides[get_db] = lambda: db
+
+        client = TestClient(app)
+        with patch("services.capability_service.validate_token", return_value={"ok": False, "error": "token mismatch"}):
+            resp = client.post("/automation/logs/log-1/replay")
+
+        assert resp.status_code == 403
+
 
 # ── TestTaskServicesNoDaemonThreads ─────────────────────────────────────────
 

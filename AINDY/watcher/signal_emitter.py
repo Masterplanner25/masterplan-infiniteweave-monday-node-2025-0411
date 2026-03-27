@@ -22,6 +22,7 @@ from collections import deque
 from dataclasses import asdict
 from typing import List, Optional
 
+from services.external_call_service import perform_external_call
 from watcher.session_tracker import SessionEvent
 
 logger = logging.getLogger(__name__)
@@ -167,10 +168,19 @@ class SignalEmitter:
             try:
                 import httpx
                 with httpx.Client(timeout=10.0) as client:
-                    resp = client.post(
-                        self._api_url,
-                        json={"signals": payload},
-                        headers={"X-API-Key": self._api_key},
+                    resp = perform_external_call(
+                        service_name="watcher",
+                        endpoint=self._api_url,
+                        method="POST",
+                        extra={
+                            "purpose": "watcher_signal_emit",
+                            "batch_size": len(batch),
+                        },
+                        operation=lambda: client.post(
+                            self._api_url,
+                            json={"signals": payload},
+                            headers={"X-API-Key": self._api_key},
+                        ),
                     )
                 if resp.status_code < 400:
                     logger.debug(

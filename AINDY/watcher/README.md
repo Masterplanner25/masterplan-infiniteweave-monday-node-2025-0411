@@ -59,7 +59,7 @@ pip install -r watcher/requirements_watcher.txt
 
 ### 2. Configure environment
 
-Create or update `.env` in the `AINDY/` directory:
+Set environment variables in your shell or deployment environment:
 
 ```env
 AINDY_API_KEY=your-api-key-here
@@ -142,11 +142,25 @@ Receive a batch of signals from the Watcher process.
 
 Response: `{"accepted": 1, "session_ended_count": 0}`
 
+Actual response shape:
+
+```json
+{
+  "accepted": 1,
+  "session_ended_count": 0,
+  "orchestration": {
+    "eta_recalculated": false,
+    "score_orchestrated": false,
+    "next_action": null
+  }
+}
+```
+
 ### GET /watcher/signals
 
 Query stored signals.
 
-Parameters: `session_id`, `signal_type`, `limit` (1–500, default 50), `offset`.
+Parameters: `session_id`, `signal_type`, `user_id`, `limit` (1–500, default 50), `offset`.
 
 ---
 

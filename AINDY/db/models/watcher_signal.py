@@ -7,7 +7,8 @@ Append-only. One row per signal emitted by the A.I.N.D.Y. Watcher process.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.postgresql import JSONB
 
 from db.database import Base
@@ -23,7 +24,7 @@ class WatcherSignal(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # User association (nullable — watcher uses API-key auth; populated when known)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
 
     # Signal identity
     signal_type = Column(String(64), nullable=False, index=True)

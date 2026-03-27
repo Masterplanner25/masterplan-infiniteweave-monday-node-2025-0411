@@ -10,6 +10,22 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Current Workspace
+
+### Fixed
+* **`services/system_event_service.py`** — successful-path `SystemEvent` persistence diagnostics improved. Emit attempts and persistence success/failure are now logged; persistence uses `flush()` before commit and logs a stable `event_id`.
+* **`services/async_job_service.py`** — async heavy-execution jobs now emit `execution.started`, `execution.completed`, and `execution.failed` / `error.async_job_execution` with `trace_id == automation_log_id`.
+* **`routes/auth_router.py`** — successful auth routes now emit `auth.register.completed` and `auth.login.completed`.
+* **`routes/health_router.py`** — successful health routes now emit `health.liveness.completed` and `health.readiness.completed` as best-effort observability events.
+* **`services/task_services.py`** — background lease timestamps normalized to timezone-aware UTC; naive DB values are coerced before comparison. Live worker startup warning `can't compare offset-naive and offset-aware datetimes` eliminated.
+
+### Verified
+* Live compose validation confirmed durable `system_events` rows for successful:
+  - health
+  - readiness
+  - auth register/login
+  - async heavy execution
+
 ## Sprint N+7: Agent Observability — 2026-03-25
 
 ### Added

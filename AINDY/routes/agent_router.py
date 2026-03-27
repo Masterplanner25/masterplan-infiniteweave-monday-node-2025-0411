@@ -17,8 +17,10 @@ Endpoints:
 """
 import logging
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,10 @@ from db.database import get_db
 from services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
+
+
+def _current_user_id(current_user) -> UUID:
+    return UUID(str(current_user["sub"]))
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -49,7 +55,7 @@ def _get_run_or_404(run_id: str, user_id: str, db: Session):
     run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.user_id != user_id:
+    if run.user_id != UUID(str(user_id)):
         raise HTTPException(status_code=403, detail="Not authorized")
     return run
 
@@ -73,12 +79,33 @@ def create_agent_run(
     Returns the generated plan + status (pending_approval or approved).
     If auto-execute applies, execution begins immediately.
     """
-    from services.agent_runtime import create_run, execute_run
+    from services.agent_runtime import create_run, execute_run, to_execution_response
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
 
     if not body.goal or not body.goal.strip():
         raise HTTPException(status_code=400, detail="goal is required")
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="agent.create_run",
+            payload={"goal": body.goal.strip(), "user_id": str(user_id)},
+            user_id=user_id,
+            source="agent_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="agent.create_run",
+                source="agent_router",
+            ),
+        )
+
     run = create_run(goal=body.goal.strip(), user_id=user_id, db=db)
 
     if not run:
@@ -88,7 +115,7 @@ def create_agent_run(
     if run["status"] == "approved":
         run = execute_run(run_id=run["run_id"], user_id=user_id, db=db) or run
 
-    return run
+    return to_execution_response(run, db)
 
 
 @router.get("/runs")
@@ -101,7 +128,7 @@ def list_agent_runs(
     """List the current user's agent runs, newest first."""
     from db.models.agent_run import AgentRun
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     query = db.query(AgentRun).filter(AgentRun.user_id == user_id)
 
     if status:
@@ -118,7 +145,7 @@ def get_agent_run(
     db: Session = Depends(get_db),
 ):
     """Get a single agent run by ID."""
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     run = _get_run_or_404(run_id, user_id, db)
     return _run_to_response(run)
 
@@ -133,15 +160,36 @@ def approve_agent_run(
     Approve a pending_approval run.
     Immediately executes the plan and returns the final run state.
     """
-    from services.agent_runtime import approve_run
+    from services.agent_runtime import approve_run, to_execution_response
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="agent.approve_run",
+            payload={"run_id": run_id, "user_id": str(user_id)},
+            user_id=user_id,
+            source="agent_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="agent.approve_run",
+                source="agent_router",
+            ),
+        )
+
     run = approve_run(run_id=run_id, user_id=user_id, db=db)
 
     if not run:
         raise HTTPException(status_code=404, detail="Run not found or not approvable")
 
-    return run
+    return to_execution_response(run, db)
 
 
 @router.post("/runs/{run_id}/reject")
@@ -153,7 +201,7 @@ def reject_agent_run(
     """Reject a pending_approval run without executing it."""
     from services.agent_runtime import reject_run
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     run = reject_run(run_id=run_id, user_id=user_id, db=db)
 
     if not run:
@@ -182,7 +230,7 @@ def recover_agent_run(
     """
     from services.stuck_run_service import recover_stuck_agent_run
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     result = recover_stuck_agent_run(run_id=run_id, user_id=user_id, db=db, force=force)
 
     if result["ok"]:
@@ -214,7 +262,7 @@ def replay_agent_run(
     """
     from services.agent_runtime import replay_run
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     new_run = replay_run(run_id=run_id, user_id=user_id, db=db)
 
     if not new_run:
@@ -232,7 +280,7 @@ def get_run_steps(
     """Return execution steps for a completed run."""
     from db.models.agent_run import AgentStep
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     _get_run_or_404(run_id, user_id, db)  # auth check
 
     steps = (
@@ -277,7 +325,7 @@ def get_run_events(
     """
     from services.agent_runtime import get_run_events
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     result = get_run_events(run_id=run_id, user_id=user_id, db=db)
 
     if result is None:
@@ -302,6 +350,7 @@ def list_tools(current_user=Depends(get_current_user)):
             "risk": entry["risk"],
             "description": entry["description"],
             "capability": entry.get("capability"),
+            "required_capability": entry.get("required_capability"),
             "category": entry.get("category"),
             "egress_scope": entry.get("egress_scope"),
         }
@@ -318,13 +367,13 @@ def get_trust_settings(
     from db.models.agent_run import AgentTrustSettings
     from services.capability_service import get_auto_grantable_tools
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     trust = db.query(AgentTrustSettings).filter(
         AgentTrustSettings.user_id == user_id
     ).first()
 
     return {
-        "user_id": user_id,
+        "user_id": str(user_id),
         "auto_execute_low": trust.auto_execute_low if trust else False,
         "auto_execute_medium": trust.auto_execute_medium if trust else False,
         "allowed_auto_grant_tools": (
@@ -352,7 +401,7 @@ def get_tool_suggestions(
     from services.agent_tools import suggest_tools
     from services.infinity_service import get_user_kpi_snapshot
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
     return suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
 
@@ -369,7 +418,7 @@ def update_trust_settings(
     from db.models.agent_run import AgentTrustSettings
     from services.agent_tools import TOOL_REGISTRY
 
-    user_id = str(current_user["sub"])
+    user_id = _current_user_id(current_user)
     trust = db.query(AgentTrustSettings).filter(
         AgentTrustSettings.user_id == user_id
     ).first()
@@ -398,7 +447,7 @@ def update_trust_settings(
     db.refresh(trust)
 
     return {
-        "user_id": user_id,
+        "user_id": str(user_id),
         "auto_execute_low": trust.auto_execute_low,
         "auto_execute_medium": trust.auto_execute_medium,
         "allowed_auto_grant_tools": trust.allowed_auto_grant_tools or [],

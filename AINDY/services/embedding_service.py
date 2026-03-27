@@ -15,6 +15,7 @@ import threading
 from openai import OpenAI
 
 from config import settings
+from services.external_call_service import perform_external_call
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
@@ -45,9 +46,16 @@ def generate_embedding(text: str) -> list:
 
     for attempt in range(3):
         try:
-            response = client.embeddings.create(
+            response = perform_external_call(
+                service_name="openai",
+                endpoint="embeddings.create",
                 model=EMBEDDING_MODEL,
-                input=text
+                method="openai.embeddings",
+                extra={"purpose": "embedding_generation"},
+                operation=lambda: client.embeddings.create(
+                    model=EMBEDDING_MODEL,
+                    input=text
+                ),
             )
             embedding = response.data[0].embedding
             assert len(embedding) == EMBEDDING_DIMENSIONS

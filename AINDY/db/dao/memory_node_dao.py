@@ -15,6 +15,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from services.memory_persistence import MemoryNodeModel, MemoryLinkModel
+from utils.trace_context import get_current_trace_id
+from utils.user_ids import parse_user_id, require_user_id
 
 
 class MemoryNodeDAO:
@@ -36,7 +38,7 @@ class MemoryNodeDAO:
             "source": n.source,
             "source_agent": getattr(n, "source_agent", None),
             "is_shared": getattr(n, "is_shared", None),
-            "user_id": n.user_id,
+            "user_id": str(n.user_id) if n.user_id else None,
             "extra": n.extra,
             "created_at": n.created_at.isoformat() if n.created_at else None,
             "updated_at": n.updated_at.isoformat() if n.updated_at else None,
@@ -48,8 +50,9 @@ class MemoryNodeDAO:
         except ValueError:
             return None
         query = self.db.query(MemoryNodeModel).filter(MemoryNodeModel.id == node_uuid)
-        if user_id:
-            query = query.filter(MemoryNodeModel.user_id == user_id)
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
         return query.first()
 
     def _strength_value(self, strength) -> float:
@@ -84,13 +87,18 @@ class MemoryNodeDAO:
         """Insert a new memory node and return its dict representation."""
         from services.embedding_service import generate_embedding as gen_emb
 
+        node_extra = dict(extra or {})
+        trace_id = get_current_trace_id()
+        if trace_id and not node_extra.get("trace_id"):
+            node_extra["trace_id"] = trace_id
+
         db_node = MemoryNodeModel(
             content=content,
             tags=tags or [],
             node_type=node_type,
             source=source,
-            user_id=user_id,
-            extra=extra or {},
+            user_id=parse_user_id(user_id),
+            extra=node_extra,
         )
 
         if generate_embedding:
@@ -106,7 +114,7 @@ class MemoryNodeDAO:
 
         # Persist children references from extra dict as MemoryLink rows.
         # Without this, any child IDs passed via extra["children"] are silently dropped.
-        children = (extra or {}).get("children") if extra else None
+        children = node_extra.get("children")
         if children:
             for child_id in children:
                 try:
@@ -124,8 +132,8 @@ class MemoryNodeDAO:
                             weight=1.0,
                         )
                         self.db.add(link)
-                except (ValueError, SQLAlchemyError):
-                    pass
+                except (ValueError, SQLAlchemyError) as exc:
+                    logger.warning("[MemoryNodeDAO] child link creation skipped: %s", exc)
             try:
                 self.db.commit()
             except SQLAlchemyError:
@@ -159,8 +167,8 @@ class MemoryNodeDAO:
             source=source,
             source_agent=agent_namespace,
             is_shared=is_shared,
-            user_id=user_id,
-            extra={},
+            user_id=parse_user_id(user_id),
+            extra={"trace_id": get_current_trace_id()} if get_current_trace_id() else {},
         )
 
         if generate_embedding:
@@ -209,8 +217,9 @@ class MemoryNodeDAO:
         mode='OR'   - any tag must be present.
         """
         query = self.db.query(MemoryNodeModel)
-        if user_id:
-            query = query.filter(MemoryNodeModel.user_id == user_id)
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
         clean_tags = [t for t in (tags or []) if t]
         if clean_tags:
             if mode.upper() == "OR":
@@ -267,8 +276,9 @@ class MemoryNodeDAO:
             MemoryNodeModel.embedding.isnot(None)
         )
 
-        if user_id:
-            query = query.filter(MemoryNodeModel.user_id == user_id)
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
         if node_type:
             query = query.filter(MemoryNodeModel.node_type == node_type)
 
@@ -332,8 +342,9 @@ class MemoryNodeDAO:
             target_ids = [lnk.target_node_id for lnk in links]
             if target_ids:
                 query = self.db.query(MemoryNodeModel).filter(MemoryNodeModel.id.in_(target_ids))
-                if user_id:
-                    query = query.filter(MemoryNodeModel.user_id == user_id)
+                owner_user_id = parse_user_id(user_id)
+                if owner_user_id:
+                    query = query.filter(MemoryNodeModel.user_id == owner_user_id)
                 if limit:
                     query = query.limit(limit)
                 nodes = query.all()
@@ -350,8 +361,9 @@ class MemoryNodeDAO:
                 # deduplicate against already-added nodes
                 seen_ids = {d["id"] for d in linked}
                 query = self.db.query(MemoryNodeModel).filter(MemoryNodeModel.id.in_(source_ids))
-                if user_id:
-                    query = query.filter(MemoryNodeModel.user_id == user_id)
+                owner_user_id = parse_user_id(user_id)
+                if owner_user_id:
+                    query = query.filter(MemoryNodeModel.user_id == owner_user_id)
                 if limit:
                     query = query.limit(limit)
                 nodes = query.all()

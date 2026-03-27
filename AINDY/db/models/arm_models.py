@@ -1,4 +1,3 @@
-# db/models/arm_models.py
 import uuid
 from sqlalchemy import Column, Integer, String, Float, Text, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -19,7 +18,7 @@ class AnalysisResult(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     file_path = Column(String)
     file_type = Column(String)
     analysis_type = Column(String, default="analyze")   # analyze | generate | audit
@@ -54,7 +53,7 @@ class CodeGeneration(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     analysis_id = Column(
         UUID(as_uuid=True),
         ForeignKey("analysis_results.id", ondelete="SET NULL"),

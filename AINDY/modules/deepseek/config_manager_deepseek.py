@@ -8,9 +8,12 @@ Supports runtime updates via PUT /arm/config.
 Phase 2 will add self-tuning via Infinity Algorithm feedback loop.
 """
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_CONFIG = {
@@ -65,8 +68,8 @@ class ConfigManager:
                     loaded = json.load(f)
                 # Loaded values override defaults
                 return {**DEFAULT_CONFIG, **loaded}
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("[ARMConfig] Config load failed for %s: %s", self.config_path, exc)
         return DEFAULT_CONFIG.copy()
 
     def _persist(self) -> None:

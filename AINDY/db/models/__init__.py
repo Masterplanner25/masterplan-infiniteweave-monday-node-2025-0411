@@ -32,7 +32,9 @@ from .playbook import PlaybookDB
 from .user_score import UserScore, ScoreHistory
 from .agent_run import AgentRun, AgentStep, AgentTrustSettings
 from .agent_event import AgentEvent
+from .capability import Capability, AgentCapabilityMapping
 from .infinity_loop import LoopAdjustment, UserFeedback
+from .system_event import SystemEvent
 
 
 __all__ = [
@@ -81,4 +83,7 @@ __all__ = [
     "AgentStep",
     "AgentTrustSettings",
     "AgentEvent",
+    "Capability",
+    "AgentCapabilityMapping",
+    "SystemEvent",
 ]

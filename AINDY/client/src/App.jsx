@@ -16,6 +16,9 @@ import MasterPlanDashboard from "./components/MasterPlanDashboard";
 import ExecutionConsole from "./components/ExecutionConsole";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import Genesis from "./components/Genesis";
+import AgentApprovalInbox from "./components/AgentApprovalInbox";
+import ObservabilityDashboard from "./components/ObservabilityDashboard";
+import RippleTraceViewer from "./components/RippleTraceViewer";
 
 // ARM Components
 import ARMAnalyze from "./components/ARMAnalyze";
@@ -99,6 +102,11 @@ export default function App() {
 
               {/* Agent */}
               <Route path="/agent" element={<AgentConsole />} />
+              <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
+
+              {/* Product Surfaces */}
+              <Route path="/observability" element={<ObservabilityDashboard />} />
+              <Route path="/rippletrace" element={<RippleTraceViewer />} />
 
               {/* Catch-all Redirect */}
               <Route path="*" element={<Navigate to="/dashboard" replace />} />

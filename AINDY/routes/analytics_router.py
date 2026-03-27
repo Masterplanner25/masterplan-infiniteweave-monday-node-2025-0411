@@ -22,7 +22,7 @@ def ingest_linkedin_manual(
 
     plan = db.query(MasterPlan).filter(
         MasterPlan.id == data.masterplan_id,
-        MasterPlan.user_id == str(current_user["sub"]),
+        MasterPlan.user_id == uuid.UUID(str(current_user["sub"])),
     ).first()
     if not plan:
         raise HTTPException(
@@ -66,7 +66,7 @@ def get_masterplan_analytics(
 ):
     plan = db.query(MasterPlan).filter(
         MasterPlan.id == masterplan_id,
-        MasterPlan.user_id == str(current_user["sub"]),
+        MasterPlan.user_id == uuid.UUID(str(current_user["sub"])),
     ).first()
     if not plan:
         raise HTTPException(
@@ -100,7 +100,7 @@ def get_masterplan_summary(
 ):
     plan = db.query(MasterPlan).filter(
         MasterPlan.id == masterplan_id,
-        MasterPlan.user_id == str(current_user["sub"]),
+        MasterPlan.user_id == uuid.UUID(str(current_user["sub"])),
     ).first()
     if not plan:
         raise HTTPException(

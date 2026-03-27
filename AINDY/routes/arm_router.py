@@ -13,10 +13,12 @@ Endpoints:
   PUT  /arm/config   — update ARM configuration
 """
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 import threading
+from uuid import UUID
 
 from db.database import get_db
 from services.auth_service import get_current_user
@@ -25,7 +27,6 @@ from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 from modules.deepseek.config_manager_deepseek import ConfigManager
 from services.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
 from db.models.arm_models import AnalysisResult, CodeGeneration
-from db.models.user import User
 
 
 router = APIRouter(
@@ -80,7 +81,7 @@ async def analyze_code(
     request: Request,
     body: AnalyzeRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Analyze a code or logic file.
@@ -91,10 +92,38 @@ async def analyze_code(
     Task Priority is calculated per request via the Infinity Algorithm:
         TP = (Complexity × Urgency) / Resource Cost
     """
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="arm.analyze",
+            payload={
+                "file_path": body.file_path,
+                "user_id": str(current_user["sub"]),
+                "complexity": body.complexity,
+                "urgency": body.urgency,
+                "context": body.context,
+            },
+            user_id=current_user["sub"],
+            source="arm_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="arm.analyze",
+                source="arm_router",
+            ),
+        )
+
     analyzer = get_analyzer()
     return analyzer.run_analysis(
         file_path=body.file_path,
-        user_id=str(current_user.id),
+        user_id=current_user["sub"],
         db=db,
         complexity=body.complexity,
         urgency=body.urgency,
@@ -108,16 +137,47 @@ async def generate_code(
     request: Request,
     body: GenerateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Generate or refactor code based on a prompt.
     Optionally link to a previous analysis session via analysis_id.
     """
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="arm.generate",
+            payload={
+                "prompt": body.prompt,
+                "user_id": str(current_user["sub"]),
+                "original_code": body.original_code,
+                "language": body.language,
+                "generation_type": body.generation_type,
+                "analysis_id": body.analysis_id,
+                "complexity": body.complexity,
+                "urgency": body.urgency,
+            },
+            user_id=current_user["sub"],
+            source="arm_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="arm.generate",
+                source="arm_router",
+            ),
+        )
+
     analyzer = get_analyzer()
     return analyzer.generate_code(
         prompt=body.prompt,
-        user_id=str(current_user.id),
+        user_id=current_user["sub"],
         db=db,
         original_code=body.original_code,
         language=body.language,
@@ -132,7 +192,7 @@ async def generate_code(
 async def get_arm_logs(
     limit: int = 20,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Fetch reasoning session logs for the current user.
@@ -142,14 +202,14 @@ async def get_arm_logs(
     """
     analyses = (
         db.query(AnalysisResult)
-        .filter(AnalysisResult.user_id == str(current_user.id))
+        .filter(AnalysisResult.user_id == UUID(str(current_user["sub"])))
         .order_by(AnalysisResult.created_at.desc())
         .limit(limit)
         .all()
     )
     generations = (
         db.query(CodeGeneration)
-        .filter(CodeGeneration.user_id == str(current_user.id))
+        .filter(CodeGeneration.user_id == UUID(str(current_user["sub"])))
         .order_by(CodeGeneration.created_at.desc())
         .limit(limit)
         .all()
@@ -202,7 +262,7 @@ async def get_arm_logs(
 
 @router.get("/config")
 async def get_config(
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """Read current ARM configuration."""
     return ConfigManager().get_all()
@@ -211,7 +271,7 @@ async def get_config(
 @router.put("/config")
 async def update_config(
     body: ConfigUpdateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Update ARM configuration parameters.
@@ -232,7 +292,7 @@ async def update_config(
 async def get_arm_metrics(
     window: int = 30,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get the full Thinking KPI report for this user's ARM sessions.
@@ -246,7 +306,7 @@ async def get_arm_metrics(
 
     window: lookback period in days (default 30)
     """
-    metrics_service = ARMMetricsService(db=db, user_id=str(current_user.id))
+    metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
     return metrics_service.get_all_metrics(window=window)
 
 
@@ -254,7 +314,7 @@ async def get_arm_metrics(
 async def get_config_suggestions(
     window: int = 30,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Analyze ARM performance metrics and suggest configuration
@@ -271,7 +331,7 @@ async def get_config_suggestions(
     Medium/high-risk suggestions require explicit approval.
     """
     # Get current metrics
-    metrics_service = ARMMetricsService(db=db, user_id=str(current_user.id))
+    metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
     metrics = metrics_service.get_all_metrics(window=window)
 
     # Get current config

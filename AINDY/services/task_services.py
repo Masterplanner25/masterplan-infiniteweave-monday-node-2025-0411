@@ -5,7 +5,7 @@ import logging
 import os
 import socket
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from db.database import SessionLocal
 from db.models.task import Task
 from db.models.background_task_lease import BackgroundTaskLease
@@ -13,6 +13,24 @@ from services.calculation_services import save_calculation, calculate_twr, TaskI
 from db.mongo_setup import get_mongo_client
 
 logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _user_uuid(user_id: str | uuid.UUID | None) -> uuid.UUID | None:
+    if not user_id:
+        return None
+    return uuid.UUID(str(user_id))
 
 # Lease constants kept for _acquire/_release helpers used during startup
 _BACKGROUND_LEASE_NAME = "task_background_runner"
@@ -32,7 +50,7 @@ def _get_instance_id() -> str:
 def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
     log = log or logger
     instance_id = _get_instance_id()
-    now = datetime.utcnow()
+    now = _utcnow()
     expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
     db = SessionLocal()
     try:
@@ -43,11 +61,12 @@ def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
             .first()
         )
         if lease:
-            if lease.expires_at and lease.expires_at > now and lease.owner_id != instance_id:
+            lease_expires_at = _ensure_aware_utc(lease.expires_at)
+            if lease_expires_at and lease_expires_at > now and lease.owner_id != instance_id:
                 log.warning(
                     "Background task lease held by %s (expires_at=%s).",
                     lease.owner_id,
-                    lease.expires_at.isoformat(),
+                    lease_expires_at.isoformat(),
                 )
                 return False
             lease.owner_id = instance_id
@@ -79,7 +98,7 @@ def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
 def _refresh_background_lease(log: logging.Logger | None = None) -> bool:
     log = log or logger
     instance_id = _BACKGROUND_OWNER_ID or _get_instance_id()
-    now = datetime.utcnow()
+    now = _utcnow()
     expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
     db = SessionLocal()
     try:
@@ -115,8 +134,9 @@ def _release_background_lease(log: logging.Logger | None = None) -> None:
             .first()
         )
         if lease and lease.owner_id == instance_id:
-            lease.expires_at = datetime.utcnow()
-            lease.heartbeat_at = datetime.utcnow()
+            current_time = _utcnow()
+            lease.expires_at = current_time
+            lease.heartbeat_at = current_time
             db.commit()
             log.info("Background task lease released by %s.", instance_id)
     except Exception as exc:
@@ -134,7 +154,8 @@ def _release_background_lease(log: logging.Logger | None = None) -> None:
 def create_task(db: Session, name: str, category="general", priority="medium", due_date=None, 
                 dependencies=None, scheduled_time=None, reminder_time=None, recurrence=None, user_id: str | uuid.UUID | None = None):
     """Creates a new task entry in the database."""
-    if not user_id:
+    owner_user_id = _user_uuid(user_id)
+    if not owner_user_id:
         raise ValueError("user_id is required to create a task")
     if dependencies is None:
         dependencies = []
@@ -146,7 +167,7 @@ def create_task(db: Session, name: str, category="general", priority="medium", d
         scheduled_time=scheduled_time,
         reminder_time=reminder_time,
         recurrence=recurrence,
-        user_id=uuid.UUID(str(user_id)),
+        user_id=owner_user_id,
         time_spent=0,
         task_complexity=1,
         skill_level=1,
@@ -166,7 +187,7 @@ def find_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     # ✅ Fixed column name here too
     if not user_id:
         return None
-    return db.query(Task).filter(Task.name == name, Task.user_id == uuid.UUID(str(user_id))).first()
+    return db.query(Task).filter(Task.name == name, Task.user_id == _user_uuid(user_id)).first()
 
 
 def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
@@ -201,8 +222,9 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
 
 def complete_task(db: Session, name: str, user_id: str = None):
     """
-    Mark task complete, log duration, AND update Social Velocity.
+    Mark task complete and persist the primary domain mutation.
     """
+    owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
     if not task:
         return "❌ Task not found."
@@ -215,56 +237,6 @@ def complete_task(db: Session, name: str, user_id: str = None):
     task.end_time = now
     db.commit()
 
-    # Write task completion to memory (fire-and-forget)
-    if user_id:
-        try:
-            from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(
-                db=db,
-                user_id=user_id,
-                agent_namespace="user",
-            )
-            engine.evaluate_and_capture(
-                event_type="task_completed",
-                content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",
-                source="task_service",
-                tags=["task", "completion"],
-                context={"time_spent_seconds": task.time_spent},
-            )
-        except Exception:
-            pass
-
-    # Auto-feedback: task completion reinforces related decision memories
-    try:
-        if db and user_id:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator
-
-            task_title = getattr(task, "name", "")
-            orchestrator = MemoryOrchestrator(MemoryNodeDAO)
-            context = orchestrator.get_context(
-                user_id=str(user_id),
-                query=task_title,
-                task_type="analysis",
-                db=db,
-                max_tokens=400,
-                metadata={
-                    "tags": ["decision", "task"],
-                    "node_type": "decision",
-                    "limit": 2,
-                },
-            )
-
-            feedback_dao = MemoryNodeDAO(db)
-            for memory_id in context.ids:
-                feedback_dao.record_feedback(
-                    node_id=memory_id,
-                    outcome="success",
-                    user_id=str(user_id),
-                )
-    except Exception:
-        pass
-
     # Calculate TWR
     task_input = TaskInput(
         task_name=task.name, # Pydantic model uses 'task_name', DB uses 'name'
@@ -276,63 +248,150 @@ def complete_task(db: Session, name: str, user_id: str = None):
     )
     twr_score = calculate_twr(task_input)
     
-    save_calculation(db, "Time-to-Wealth Ratio", twr_score, user_id=str(user_id))
-    save_calculation(db, "Execution Speed", task.time_spent, user_id=str(user_id))
+    save_calculation(db, "Time-to-Wealth Ratio", twr_score, user_id=str(owner_user_id))
+    save_calculation(db, "Execution Speed", task.time_spent, user_id=str(owner_user_id))
 
-    # Update Social Velocity
+    return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
+
+
+def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
+    owner_user_id = _user_uuid(user_id)
+    task = find_task(db, name, user_id=user_id)
+    if not task or not owner_user_id:
+        return {
+            "memory_captured": False,
+            "feedback_recorded": 0,
+            "social_sync": False,
+            "eta_recalculated": False,
+            "score_orchestrated": False,
+            "next_action": None,
+        }
+
+    memory_captured = False
+    feedback_recorded = 0
+    social_sync = False
+    eta_recalculated = False
+
+    try:
+        from services.memory_capture_engine import MemoryCaptureEngine
+
+        engine = MemoryCaptureEngine(
+            db=db,
+            user_id=str(owner_user_id),
+            agent_namespace="user",
+        )
+        node = engine.evaluate_and_capture(
+            event_type="task_completed",
+            content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",
+            source="task_service",
+            tags=["task", "completion"],
+            context={"time_spent_seconds": task.time_spent},
+        )
+        memory_captured = node is not None
+    except Exception as exc:
+        logger.warning("Task completion memory capture failed: %s", exc)
+
+    try:
+        from db.dao.memory_node_dao import MemoryNodeDAO
+        from runtime.memory import MemoryOrchestrator
+
+        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+        memory_context = orchestrator.get_context(
+            user_id=str(owner_user_id),
+            query=task.name,
+            task_type="analysis",
+            db=db,
+            max_tokens=400,
+            metadata={
+                "tags": ["decision", "task"],
+                "node_type": "decision",
+                "limit": 2,
+            },
+        )
+
+        feedback_dao = MemoryNodeDAO(db)
+        for memory_id in memory_context.ids:
+            feedback_dao.record_feedback(
+                node_id=memory_id,
+                outcome="success",
+                user_id=str(owner_user_id),
+            )
+            feedback_recorded += 1
+    except Exception as exc:
+        logger.warning("Task completion feedback failed: %s", exc)
+
     try:
         mongo = get_mongo_client()
         db_mongo = mongo["aindy_social_layer"]
         profiles = db_mongo["profiles"]
-        
+        twr_score = calculate_twr(
+            TaskInput(
+                task_name=task.name,
+                time_spent=task.time_spent / 3600,
+                task_complexity=task.task_complexity,
+                skill_level=task.skill_level,
+                ai_utilization=task.ai_utilization,
+                task_difficulty=task.task_difficulty,
+            )
+        )
         profiles.update_one(
-            {"user_id": str(user_id)},
+            {"user_id": str(owner_user_id)},
             {
                 "$inc": {
-                    "metrics_snapshot.execution_velocity": 1, 
-                    "metrics_snapshot.twr_score": twr_score * 0.1 
+                    "metrics_snapshot.execution_velocity": 1,
+                    "metrics_snapshot.twr_score": twr_score * 0.1,
                 },
-                "$set": {
-                    "updated_at": datetime.utcnow()
-                }
-            }
+                "$set": {"updated_at": datetime.utcnow()},
+            },
         )
-        logger.info("[Velocity Engine] Profile updated. TWR impact: %s", twr_score)
-    except Exception as e:
-        logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", e)
+        social_sync = True
+    except Exception as exc:
+        logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", exc)
 
-    # Recalculate ETA for active masterplan (fire-and-forget)
-    if user_id:
-        try:
-            from services.eta_service import calculate_eta
-            from db.models.masterplan import MasterPlan
-            active_plan = (
-                db.query(MasterPlan)
-                .filter(MasterPlan.user_id == str(user_id), MasterPlan.is_active.is_(True))
-                .first()
-            )
-            if active_plan and active_plan.anchor_date:
-                calculate_eta(db=db, masterplan_id=active_plan.id, user_id=str(user_id))
-        except Exception:
-            pass
+    try:
+        from db.models.masterplan import MasterPlan
+        from services.eta_service import calculate_eta
 
-    # Trigger Infinity score recalculation (fire-and-forget)
-    if user_id:
-        try:
-            from services.infinity_service import calculate_infinity_score
-            from services.infinity_loop import run_loop
+        active_plan = (
+            db.query(MasterPlan)
+            .filter(MasterPlan.user_id == owner_user_id, MasterPlan.is_active.is_(True))
+            .first()
+        )
+        if active_plan and active_plan.anchor_date:
+            calculate_eta(db=db, masterplan_id=active_plan.id, user_id=str(owner_user_id))
+            eta_recalculated = True
+    except Exception as exc:
+        logger.warning("Task completion ETA recalculation failed: %s", exc)
 
-            result = calculate_infinity_score(
-                user_id=str(user_id),
-                db=db,
-                trigger_event="task_completion",
-            )
-            if result:
-                run_loop(user_id=str(user_id), trigger_event="task_completed", db=db)
-        except Exception as e:
-            logger.warning("Infinity score after task failed: %s", e)
+    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-    return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
+    orchestration = execute_infinity_orchestrator(
+        user_id=owner_user_id,
+        trigger_event="task_completion",
+        db=db,
+    )
+
+    return {
+        "memory_captured": memory_captured,
+        "feedback_recorded": feedback_recorded,
+        "social_sync": social_sync,
+        "eta_recalculated": eta_recalculated,
+        "score_orchestrated": True,
+        "next_action": orchestration["next_action"],
+    }
+
+
+def execute_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
+    from services.flow_engine import execute_intent
+
+    return execute_intent(
+        intent_data={
+            "workflow_type": "task_completion",
+            "task_name": name,
+        },
+        db=db,
+        user_id=str(user_id) if user_id is not None else None,
+    )
 
 # ----------------------------
 # Background / Recurrence Logic

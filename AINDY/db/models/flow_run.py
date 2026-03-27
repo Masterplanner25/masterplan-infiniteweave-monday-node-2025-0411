@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 from db.database import Base
@@ -34,7 +35,8 @@ class FlowRun(Base):
     current_node = Column(String, nullable=True)
     status = Column(String, nullable=False, default="running")
     waiting_for = Column(String, nullable=True)
-    user_id = Column(String, nullable=True, index=True)
+    trace_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     automation_log_id = Column(
         String,
         ForeignKey("automation_logs.id"),
@@ -78,7 +80,7 @@ class EventOutcome(Base):
     workflow_type = Column(String, nullable=True)
     success = Column(Boolean, nullable=False)
     execution_time_ms = Column(Integer, nullable=True)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     event_metadata = Column("metadata", JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -93,6 +95,6 @@ class Strategy(Base):
     usage_count = Column(Integer, default=0)
     success_count = Column(Integer, default=0)
     failure_count = Column(Integer, default=0)
-    user_id = Column(String, nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())

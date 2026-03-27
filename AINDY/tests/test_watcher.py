@@ -11,6 +11,7 @@ Coverage:
 import os
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -342,6 +343,24 @@ _VALID_SIGNAL = {
 }
 
 
+def _successful_ingest_response(accepted=1, session_ended_count=0, next_action=None):
+    return {
+        "status": "SUCCESS",
+        "result": {
+            "accepted": accepted,
+            "session_ended_count": session_ended_count,
+            "orchestration": {
+                "eta_recalculated": session_ended_count > 0,
+                "score_orchestrated": session_ended_count > 0,
+                "next_action": next_action,
+            },
+        },
+        "events": [],
+        "next_action": next_action,
+        "trace_id": "trace-watcher-test",
+    }
+
+
 class TestWatcherRouterAuth:
     """API key auth is required for all watcher endpoints."""
 
@@ -366,19 +385,21 @@ class TestWatcherRouterPost:
     """POST /watcher/signals — persistence and validation."""
 
     def test_post_valid_signal_returns_201(self, client, watcher_mock_db, api_key_headers):
-        resp = client.post(
-            "/watcher/signals",
-            json={"signals": [_VALID_SIGNAL]},
-            headers=api_key_headers,
-        )
+        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+            resp = client.post(
+                "/watcher/signals",
+                json={"signals": [_VALID_SIGNAL]},
+                headers=api_key_headers,
+            )
         assert resp.status_code == 201
 
     def test_post_returns_accepted_count(self, client, watcher_mock_db, api_key_headers):
-        resp = client.post(
-            "/watcher/signals",
-            json={"signals": [_VALID_SIGNAL]},
-            headers=api_key_headers,
-        )
+        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+            resp = client.post(
+                "/watcher/signals",
+                json={"signals": [_VALID_SIGNAL]},
+                headers=api_key_headers,
+            )
         body = resp.json()
         assert "accepted" in body
         assert body["accepted"] == 1
@@ -386,11 +407,15 @@ class TestWatcherRouterPost:
     def test_post_multiple_signals(self, client, watcher_mock_db, api_key_headers):
         signals = [dict(_VALID_SIGNAL), dict(_VALID_SIGNAL)]
         signals[1]["signal_type"] = "heartbeat"
-        resp = client.post(
-            "/watcher/signals",
-            json={"signals": signals},
-            headers=api_key_headers,
-        )
+        with patch(
+            "routes.watcher_router.execute_intent",
+            return_value=_successful_ingest_response(accepted=2),
+        ):
+            resp = client.post(
+                "/watcher/signals",
+                json={"signals": signals},
+                headers=api_key_headers,
+            )
         assert resp.status_code == 201
         assert resp.json()["accepted"] == 2
 
@@ -430,26 +455,39 @@ class TestWatcherRouterPost:
         assert resp.status_code == 422
 
     def test_post_session_ended_triggers_eta(self, client, watcher_mock_db, api_key_headers):
-        """session_ended signals trigger ETA recalculation (non-fatal)."""
+        """session_ended batches surface orchestration metadata in the response."""
         ended = dict(_VALID_SIGNAL, signal_type="session_ended")
-        with patch("routes.watcher_router._trigger_eta_update") as mock_eta:
+        with patch(
+            "routes.watcher_router.execute_intent",
+            return_value=_successful_ingest_response(
+                session_ended_count=1,
+                next_action="review_focus_session",
+            ),
+        ):
             resp = client.post(
                 "/watcher/signals",
                 json={"signals": [ended]},
                 headers=api_key_headers,
             )
         assert resp.status_code == 201
-        mock_eta.assert_called_once()
+        body = resp.json()
+        assert body["session_ended_count"] == 1
+        assert body["orchestration"]["eta_recalculated"] is True
+        assert body["orchestration"]["next_action"] == "review_focus_session"
 
     def test_post_non_session_ended_does_not_trigger_eta(self, client, watcher_mock_db, api_key_headers):
-        with patch("routes.watcher_router._trigger_eta_update") as mock_eta:
+        with patch(
+            "routes.watcher_router.execute_intent",
+            return_value=_successful_ingest_response(session_ended_count=0),
+        ):
             resp = client.post(
                 "/watcher/signals",
                 json={"signals": [_VALID_SIGNAL]},  # session_started
                 headers=api_key_headers,
             )
         assert resp.status_code == 201
-        mock_eta.assert_not_called()
+        body = resp.json()
+        assert body["orchestration"]["eta_recalculated"] is False
 
     def test_all_valid_signal_types_accepted(self, client, watcher_mock_db, api_key_headers):
         valid_types = [
@@ -462,12 +500,38 @@ class TestWatcherRouterPost:
         ]
         for st in valid_types:
             sig = dict(_VALID_SIGNAL, signal_type=st)
+            with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+                resp = client.post(
+                    "/watcher/signals",
+                    json={"signals": [sig]},
+                    headers=api_key_headers,
+                )
+            assert resp.status_code == 201, f"Failed for signal_type={st!r}: {resp.json()}"
+
+    def test_post_passes_batch_to_flow_engine(self, client, watcher_mock_db, api_key_headers):
+        with patch(
+            "routes.watcher_router.execute_intent",
+            return_value=_successful_ingest_response(),
+        ) as mock_execute:
             resp = client.post(
                 "/watcher/signals",
-                json={"signals": [sig]},
+                json={"signals": [_VALID_SIGNAL]},
                 headers=api_key_headers,
             )
-            assert resp.status_code == 201, f"Failed for signal_type={st!r}: {resp.json()}"
+        assert resp.status_code == 201
+        kwargs = mock_execute.call_args.kwargs
+        assert kwargs["intent_data"]["workflow_type"] == "watcher_ingest"
+        assert kwargs["intent_data"]["signals"][0]["signal_type"] == "session_started"
+
+    def test_post_returns_explicit_response_shape(self, client, watcher_mock_db, api_key_headers):
+        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+            resp = client.post(
+                "/watcher/signals",
+                json={"signals": [_VALID_SIGNAL]},
+                headers=api_key_headers,
+            )
+        body = resp.json()
+        assert set(body.keys()) == {"accepted", "session_ended_count", "orchestration"}
 
 
 class TestWatcherRouterGet:
@@ -493,6 +557,22 @@ class TestWatcherRouterGet:
             headers=api_key_headers,
         )
         assert resp.status_code == 200
+
+    def test_get_signals_user_id_filter_accepted(self, client, watcher_mock_db, api_key_headers):
+        user_id = str(uuid4())
+        watcher_mock_db.all.return_value = []
+        resp = client.get(
+            f"/watcher/signals?user_id={user_id}",
+            headers=api_key_headers,
+        )
+        assert resp.status_code == 200
+
+    def test_get_signals_invalid_user_id_filter_rejected(self, client, watcher_mock_db, api_key_headers):
+        resp = client.get(
+            "/watcher/signals?user_id=not-a-uuid",
+            headers=api_key_headers,
+        )
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------

@@ -17,13 +17,14 @@ Registration:
         risk="low|medium|high",
         description="...",
         capability="tool:name",
+        required_capability="capability_name",
         category="...",
         egress_scope="none|internal|external_*",
     )
     def my_tool(args: dict, user_id: str, db) -> dict: ...
 
 The TOOL_REGISTRY dict maps tool_name →
-{fn, risk, description, capability, category, egress_scope}.
+{fn, risk, description, capability, required_capability, category, egress_scope}.
 """
 import logging
 from typing import Callable
@@ -40,6 +41,7 @@ def register_tool(
     risk: str,
     description: str,
     capability: str,
+    required_capability: str,
     category: str,
     egress_scope: str,
 ):
@@ -52,6 +54,7 @@ def register_tool(
             risk="low",
             description="Create a new task",
             capability="tool:task.create",
+            required_capability="manage_tasks",
             category="task",
             egress_scope="internal",
         )
@@ -64,6 +67,7 @@ def register_tool(
             "risk": risk,
             "description": description,
             "capability": capability,
+            "required_capability": required_capability,
             "category": category,
             "egress_scope": egress_scope,
         }
@@ -76,6 +80,8 @@ def execute_tool(
     args: dict,
     user_id: str,
     db,
+    run_id: str = None,
+    execution_token: dict = None,
 ) -> dict:
     """
     Execute a registered tool by name.
@@ -90,6 +96,41 @@ def execute_tool(
             "result": None,
             "error": f"Tool '{tool_name}' not found in registry",
         }
+    if run_id and execution_token is None:
+        return {
+            "success": False,
+            "result": None,
+            "error": "capability token is required for agent run tool execution",
+        }
+    if execution_token is not None:
+        if not run_id:
+            return {
+                "success": False,
+                "result": None,
+                "error": "run_id is required when execution_token is supplied",
+            }
+        try:
+            from services.capability_service import check_tool_capability
+
+            capability_check = check_tool_capability(
+                token=execution_token,
+                run_id=run_id,
+                user_id=user_id,
+                tool_name=tool_name,
+            )
+            if not capability_check["ok"]:
+                return {
+                    "success": False,
+                    "result": None,
+                    "error": capability_check["error"],
+                }
+        except Exception as exc:
+            logger.warning("[AgentTool] %s capability check failed: %s", tool_name, exc)
+            return {
+                "success": False,
+                "result": None,
+                "error": "capability enforcement failed",
+            }
     try:
         result = entry["fn"](args=args, user_id=user_id, db=db)
         return {"success": True, "result": result, "error": None}
@@ -192,6 +233,7 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
     risk="low",
     description="Create a new task in the user's task list",
     capability="tool:task.create",
+    required_capability="manage_tasks",
     category="task",
     egress_scope="internal",
 )
@@ -218,18 +260,18 @@ def task_create(args: dict, user_id: str, db) -> dict:
     risk="medium",
     description="Mark a task as complete by name",
     capability="tool:task.complete",
+    required_capability="manage_tasks",
     category="task",
     egress_scope="internal",
 )
 def task_complete(args: dict, user_id: str, db) -> dict:
-    from services.task_services import complete_task
+    from services.task_services import execute_task_completion
 
     name = args.get("name") or args.get("task_name")
     if not name:
         raise ValueError("task.complete requires 'name'")
 
-    result = complete_task(db=db, name=name, user_id=user_id)
-    return {"message": result}
+    return execute_task_completion(db=db, name=name, user_id=user_id)
 
 
 @register_tool(
@@ -237,6 +279,7 @@ def task_complete(args: dict, user_id: str, db) -> dict:
     risk="low",
     description="Recall relevant memory nodes for a given query",
     capability="tool:memory.recall",
+    required_capability="read_memory",
     category="memory",
     egress_scope="internal",
 )
@@ -262,6 +305,7 @@ def memory_recall(args: dict, user_id: str, db) -> dict:
     risk="low",
     description="Write a memory node with content and tags",
     capability="tool:memory.write",
+    required_capability="write_memory",
     category="memory",
     egress_scope="internal",
 )
@@ -288,6 +332,7 @@ def memory_write(args: dict, user_id: str, db) -> dict:
     risk="medium",
     description="Analyze code or a topic using the ARM reasoning engine",
     capability="tool:arm.analyze",
+    required_capability="external_api_call",
     category="arm",
     egress_scope="external_llm",
 )
@@ -321,6 +366,7 @@ def arm_analyze(args: dict, user_id: str, db) -> dict:
     risk="medium",
     description="Generate or refactor code using the ARM code generation engine",
     capability="tool:arm.generate",
+    required_capability="external_api_call",
     category="arm",
     egress_scope="external_llm",
 )
@@ -351,6 +397,7 @@ def arm_generate(args: dict, user_id: str, db) -> dict:
     risk="medium",
     description="Search for B2B leads matching a query",
     capability="tool:leadgen.search",
+    required_capability="external_api_call",
     category="leadgen",
     egress_scope="external_web",
 )
@@ -370,6 +417,7 @@ def leadgen_search(args: dict, user_id: str, db) -> dict:
     risk="low",
     description="Query external sources for research on a topic",
     capability="tool:research.query",
+    required_capability="external_api_call",
     category="research",
     egress_scope="external_web",
 )
@@ -389,25 +437,27 @@ def research_query(args: dict, user_id: str, db) -> dict:
     risk="high",
     description="Send a message to the Genesis strategic planning session (modifies MasterPlan state)",
     capability="tool:genesis.message",
+    required_capability="strategic_planning",
     category="genesis",
     egress_scope="external_llm",
 )
 def genesis_message(args: dict, user_id: str, db) -> dict:
-    from services.genesis_ai import call_genesis_llm
+    from services.flow_engine import execute_intent
 
     message = args.get("message")
+    session_id = args.get("session_id")
     if not message:
         raise ValueError("genesis.message requires 'message'")
+    if not session_id:
+        raise ValueError("genesis.message requires 'session_id'")
 
-    current_state = args.get("current_state") or {}
-    result = call_genesis_llm(
-        message=message,
-        current_state=current_state,
-        user_id=user_id,
+    result = execute_intent(
+        intent_data={
+            "workflow_type": "genesis_message",
+            "session_id": session_id,
+            "message": message,
+        },
         db=db,
+        user_id=user_id,
     )
-    return {
-        "reply": result.get("reply", ""),
-        "synthesis_ready": result.get("synthesis_ready", False),
-        "state_update": result.get("state_update", {}),
-    }
+    return result

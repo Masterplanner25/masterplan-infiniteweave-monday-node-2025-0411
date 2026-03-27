@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from utils.user_ids import require_user_id
 
 from db.models.masterplan import MasterPlan
 from db.models.task import Task
@@ -27,11 +28,12 @@ CONFIDENCE_MEDIUM_MIN_TASKS = 2
 
 def _compute_velocity(db: Session, user_id: str) -> float:
     """Return tasks/day completed in the last VELOCITY_WINDOW_DAYS days."""
+    owner_user_id = require_user_id(user_id)
     cutoff = datetime.utcnow() - timedelta(days=VELOCITY_WINDOW_DAYS)
     count = (
         db.query(Task)
         .filter(
-            Task.user_id == user_id,
+            Task.user_id == owner_user_id,
             Task.status == "completed",
             Task.end_time >= cutoff,
         )
@@ -51,13 +53,13 @@ def _confidence_label(velocity: float, completed_in_window: int) -> str:
 
 
 def _total_tasks_for_user(db: Session, user_id: str) -> int:
-    return db.query(Task).filter(Task.user_id == user_id).count()
+    return db.query(Task).filter(Task.user_id == require_user_id(user_id)).count()
 
 
 def _completed_tasks_for_user(db: Session, user_id: str) -> int:
     return (
         db.query(Task)
-        .filter(Task.user_id == user_id, Task.status == "completed")
+        .filter(Task.user_id == require_user_id(user_id), Task.status == "completed")
         .count()
     )
 
@@ -70,9 +72,10 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         dict with keys: velocity, projected_completion_date, days_ahead_behind,
         eta_confidence, anchor_date, total_tasks, completed_tasks, remaining_tasks
     """
+    owner_user_id = require_user_id(user_id)
     plan = (
         db.query(MasterPlan)
-        .filter(MasterPlan.id == masterplan_id, MasterPlan.user_id == user_id)
+        .filter(MasterPlan.id == masterplan_id, MasterPlan.user_id == owner_user_id)
         .first()
     )
     if not plan:
@@ -82,7 +85,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
     tasks_in_window = (
         db.query(Task)
         .filter(
-            Task.user_id == user_id,
+            Task.user_id == owner_user_id,
             Task.status == "completed",
             Task.end_time >= cutoff,
         )
@@ -90,8 +93,8 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
     )
     velocity = tasks_in_window / VELOCITY_WINDOW_DAYS
 
-    total = _total_tasks_for_user(db, user_id)
-    completed = _completed_tasks_for_user(db, user_id)
+    total = _total_tasks_for_user(db, owner_user_id)
+    completed = _completed_tasks_for_user(db, owner_user_id)
     remaining = max(total - completed, 0)
 
     projected: Optional[date] = None

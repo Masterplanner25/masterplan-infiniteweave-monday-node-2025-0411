@@ -1,2 +1,6 @@
 
 # ci trigger
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+bridge/memory_bridge_rs/target/

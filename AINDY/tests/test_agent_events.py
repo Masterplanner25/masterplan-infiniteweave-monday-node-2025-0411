@@ -167,7 +167,8 @@ class TestEmitEventWritesRow:
         with patch("db.models.agent_event.AgentEvent") as MockEvent:
             fake_evt = MagicMock()
             MockEvent.return_value = fake_evt
-            emit_event(run_id=run_id, user_id="user-1", event_type="PLAN_CREATED", db=db)
+            with patch("services.agent_event_service.emit_system_event"):
+                emit_event(run_id=run_id, user_id="user-1", event_type="PLAN_CREATED", db=db)
 
         db.add.assert_called_once_with(fake_evt)
         db.commit.assert_called_once()
@@ -265,12 +266,13 @@ class TestEmitEventWritesRow:
 
         db = MagicMock()
         with patch("db.models.agent_event.AgentEvent"):
-            emit_event(
-                run_id=str(uuid.uuid4()),
-                user_id="user-1",
-                event_type="EXECUTION_STARTED",
-                db=db,
-            )
+            with patch("services.agent_event_service.emit_system_event"):
+                emit_event(
+                    run_id=str(uuid.uuid4()),
+                    user_id="user-1",
+                    event_type="EXECUTION_STARTED",
+                    db=db,
+                )
         db.add.assert_called_once()
         db.commit.assert_called_once()
 

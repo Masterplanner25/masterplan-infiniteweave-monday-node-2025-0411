@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { authRequestExternal } from "../api";
 
+const NETWORK_API_URL = (
+  import.meta.env.VITE_NETWORK_API_URL || "/api/users"
+);
+
 function App() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState({ name: "", tagline: "" });
@@ -8,7 +12,7 @@ function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    authRequestExternal("http://localhost:5000/api/users")
+    authRequestExternal(NETWORK_API_URL)
       .then((data) => setUsers(data))
       .catch((err) => {
         console.error("⚠️ Error fetching users:", err);
@@ -22,7 +26,7 @@ function App() {
     setLoading(true);
     setError("");
     try {
-      const data = await authRequestExternal("http://localhost:5000/api/users", {
+      const data = await authRequestExternal(NETWORK_API_URL, {
         method: "POST",
         body: JSON.stringify(form),
       });

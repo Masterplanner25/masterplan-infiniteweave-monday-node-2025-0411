@@ -47,13 +47,30 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from config import settings
-from services.agent_tools import TOOL_REGISTRY, execute_tool, get_tool_risk
+from services.agent_tools import TOOL_REGISTRY
 from services.capability_service import mint_token
 from services.agent_event_service import emit_event
+from services.external_call_service import perform_external_call
+from services.system_event_service import emit_error_event
+from utils.trace_context import get_current_trace_id
+from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
 _client: Optional[OpenAI] = None
+
+
+def _db_user_id(user_id: str):
+    parsed = parse_user_id(user_id)
+    return parsed if parsed is not None else user_id
+
+
+def _user_matches(left, right) -> bool:
+    left_uuid = parse_user_id(left)
+    right_uuid = parse_user_id(right)
+    if left_uuid is not None and right_uuid is not None:
+        return left_uuid == right_uuid
+    return str(left) == str(right)
 
 
 def _get_client() -> OpenAI:
@@ -120,9 +137,11 @@ def _requires_approval(overall_risk: str, user_id: str, db: Session) -> bool:
         return True
 
     from db.models.agent_run import AgentTrustSettings
+    owner_user_id = parse_user_id(user_id)
+    owner_filter_value = owner_user_id if owner_user_id is not None else user_id
 
     trust = db.query(AgentTrustSettings).filter(
-        AgentTrustSettings.user_id == user_id
+        AgentTrustSettings.user_id == owner_filter_value
     ).first()
 
     if not trust:
@@ -148,7 +167,7 @@ def _build_kpi_context_block(user_id: str, db: Session) -> str:
     """
     try:
         from services.infinity_service import get_user_kpi_snapshot
-        snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+        snapshot = get_user_kpi_snapshot(user_id=_db_user_id(user_id), db=db)
         if not snapshot:
             return ""
 
@@ -192,14 +211,23 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
         system_prompt = PLANNER_SYSTEM_PROMPT + kpi_block
 
         client = _get_client()
-        response = client.chat.completions.create(
+        response = perform_external_call(
+            service_name="openai",
+            db=db,
+            user_id=user_id,
+            endpoint="chat.completions.create",
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Goal: {goal}"},
-            ],
-            temperature=0.3,
-            response_format={"type": "json_object"},
+            method="openai.chat",
+            extra={"purpose": "agent_plan_generation"},
+            operation=lambda: client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Goal: {goal}"},
+                ],
+                temperature=0.3,
+                response_format={"type": "json_object"},
+            ),
         )
         content = response.choices[0].message.content
         plan = json.loads(content)
@@ -237,20 +265,23 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         from db.models.agent_run import AgentRun
+        user_db_id = _db_user_id(user_id)
 
-        plan = generate_plan(goal=goal, user_id=user_id, db=db)
+        plan = generate_plan(goal=goal, user_id=user_db_id, db=db)
         if not plan:
             return None
 
         overall_risk = plan.get("overall_risk", "high")
-        needs_approval = _requires_approval(overall_risk, user_id, db)
+        needs_approval = _requires_approval(overall_risk, user_db_id, db)
         status = "pending_approval" if needs_approval else "approved"
 
         # Generate correlation token — propagated through all child records
         correlation_id = f"run_{uuid.uuid4()}"
 
         run = AgentRun(
-            user_id=user_id,
+            user_id=user_db_id,
+            agent_type="default",
+            trace_id=get_current_trace_id(),
             goal=goal,
             plan=plan,
             executive_summary=plan.get("executive_summary", ""),
@@ -266,12 +297,14 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         if status == "approved":
             token = mint_token(
                 run_id=str(run.id),
-                user_id=user_id,
+                user_id=user_db_id,
                 plan=plan,
                 db=db,
                 approval_mode="auto",
+                agent_type=getattr(run, "agent_type", "default"),
             )
             if token:
+                run.execution_token = token.get("execution_token")
                 run.capability_token = token
                 db.commit()
                 db.refresh(run)
@@ -297,7 +330,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         auto_executed = status == "approved"
         emit_event(
             run_id=str(run.id),
-            user_id=user_id,
+            user_id=user_db_id,
             event_type="PLAN_CREATED",
             db=db,
             correlation_id=correlation_id,
@@ -308,6 +341,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
                 "goal_preview": goal[:120],
                 "requires_approval": not auto_executed,
             },
+            required=True,
         )
 
         return _run_to_dict(run)
@@ -337,6 +371,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     try:
         from db.models.agent_run import AgentRun
         from services.nodus_adapter import NodusAgentAdapter
+        user_db_id = _db_user_id(user_id)
 
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if not run:
@@ -349,11 +384,34 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             )
             return _run_to_dict(run)
 
-        if run.user_id != user_id:
+        if not _user_matches(run.user_id, user_db_id):
             logger.warning("[AgentRuntime] Run %s owner mismatch", run_id)
             return None
 
+        capability_token = getattr(run, "capability_token", None)
+        if not isinstance(capability_token, dict):
+            logger.warning(
+                "[AgentRuntime] Run %s cannot execute without scoped capability token",
+                run_id,
+            )
+            run.status = "failed"
+            run.completed_at = datetime.now(timezone.utc)
+            run.error_message = "Missing scoped capability token."
+            db.commit()
+            emit_event(
+                run_id=run_id,
+                user_id=user_db_id,
+                event_type="CAPABILITY_DENIED",
+                db=db,
+                correlation_id=getattr(run, "correlation_id", None),
+                payload={"error": "missing scoped capability token"},
+                required=True,
+            )
+            return _run_to_dict(run)
+
         # Mark as executing
+        if not getattr(run, "trace_id", None) and get_current_trace_id():
+            run.trace_id = get_current_trace_id()
         run.status = "executing"
         run.started_at = datetime.now(timezone.utc)
         db.commit()
@@ -361,11 +419,12 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         # Emit EXECUTION_STARTED lifecycle event
         emit_event(
             run_id=run_id,
-            user_id=user_id,
+            user_id=user_db_id,
             event_type="EXECUTION_STARTED",
             db=db,
             correlation_id=getattr(run, "correlation_id", None),
             payload={},
+            required=True,
         )
 
         # Delegate entirely to the deterministic adapter
@@ -375,10 +434,34 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             user_id=user_id,
             db=db,
             correlation_id=getattr(run, "correlation_id", None),
-            capability_token=getattr(run, "capability_token", None),
+            execution_token=capability_token,
         )
 
         db.refresh(run)
+        if run.status == "completed":
+            result_payload = run.result if isinstance(run.result, dict) else {}
+            if not result_payload.get("loop_enforced"):
+                try:
+                    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+
+                    orchestration = execute_infinity_orchestrator(
+                        user_id=user_db_id,
+                        trigger_event="agent_completed",
+                        db=db,
+                    )
+                    run.result = {
+                        **result_payload,
+                        "loop_enforced": True,
+                        "next_action": orchestration["next_action"],
+                    }
+                    db.commit()
+                    db.refresh(run)
+                except Exception as loop_exc:
+                    logger.warning(
+                        "[AgentRuntime] Agent completion orchestrator failed for %s: %s",
+                        run_id,
+                        loop_exc,
+                    )
         logger.info(
             "[AgentRuntime] Run %s %s (%d/%d steps)",
             run_id, run.status, run.steps_completed, run.steps_total,
@@ -387,6 +470,18 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
     except Exception as exc:
         logger.warning("[AgentRuntime] execute_run failed for %s: %s", run_id, exc)
+        try:
+            emit_error_event(
+                db=db,
+                error_type="agent_execution",
+                message=str(exc),
+                user_id=user_id,
+                trace_id=get_current_trace_id(),
+                payload={"run_id": run_id},
+                required=True,
+            )
+        except Exception:
+            logger.exception("[AgentRuntime] failed to emit required error event for %s", run_id)
         return None
 
 
@@ -399,9 +494,10 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         from db.models.agent_run import AgentRun
+        user_db_id = _db_user_id(user_id)
 
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
-        if not run or run.user_id != user_id:
+        if not run or not _user_matches(run.user_id, user_db_id):
             return None
 
         if run.status != "pending_approval":
@@ -411,10 +507,11 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.approved_at = datetime.now(timezone.utc)
         token = mint_token(
             run_id=str(run.id),
-            user_id=user_id,
+            user_id=user_db_id,
             plan=run.plan,
             db=db,
             approval_mode="manual",
+            agent_type=getattr(run, "agent_type", "default"),
         )
         if not token:
             db.rollback()
@@ -426,6 +523,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
                 return _run_to_dict(run)
             return None
 
+        run.execution_token = token.get("execution_token")
         run.capability_token = token
         run.error_message = None
         db.commit()
@@ -433,14 +531,15 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         # Emit APPROVED lifecycle event
         emit_event(
             run_id=run_id,
-            user_id=user_id,
+            user_id=user_db_id,
             event_type="APPROVED",
             db=db,
             correlation_id=getattr(run, "correlation_id", None),
             payload={"auto_executed": False},
+            required=True,
         )
 
-        return execute_run(run_id=run_id, user_id=user_id, db=db)
+        return execute_run(run_id=run_id, user_id=user_db_id, db=db)
 
     except Exception as exc:
         logger.warning("[AgentRuntime] approve_run failed for %s: %s", run_id, exc)
@@ -451,9 +550,10 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """Reject a pending_approval run. Returns updated run dict or None."""
     try:
         from db.models.agent_run import AgentRun
+        user_db_id = _db_user_id(user_id)
 
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
-        if not run or run.user_id != user_id:
+        if not run or not _user_matches(run.user_id, user_db_id):
             return None
 
         if run.status != "pending_approval":
@@ -466,11 +566,12 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         # Emit REJECTED lifecycle event
         emit_event(
             run_id=run_id,
-            user_id=user_id,
+            user_id=user_db_id,
             event_type="REJECTED",
             db=db,
             correlation_id=getattr(run, "correlation_id", None),
             payload={},
+            required=True,
         )
 
         return _run_to_dict(run)
@@ -486,9 +587,16 @@ def _run_to_dict(run) -> dict:
     capability_token = getattr(run, "capability_token", None)
     if not isinstance(capability_token, dict):
         capability_token = {}
+    agent_type = getattr(run, "agent_type", None)
+    if not isinstance(agent_type, str) or not agent_type:
+        agent_type = "default"
+    execution_token = getattr(run, "execution_token", None)
+    if not isinstance(execution_token, str):
+        execution_token = None
     return {
         "run_id": str(run.id),
         "user_id": run.user_id,
+        "agent_type": agent_type,
         "goal": run.goal,
         "executive_summary": run.executive_summary,
         "overall_risk": run.overall_risk,
@@ -504,12 +612,55 @@ def _run_to_dict(run) -> dict:
             if getattr(run, "replayed_from_run_id", None)
             else None
         ),
+        "execution_token": execution_token,
         "granted_tools": capability_token.get("granted_tools", []),
+        "allowed_capabilities": capability_token.get("allowed_capabilities", []),
         "correlation_id": getattr(run, "correlation_id", None),
+        "trace_id": getattr(run, "trace_id", None),
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "approved_at": run.approved_at.isoformat() if run.approved_at else None,
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+def _normalize_agent_events(timeline: Optional[dict]) -> list[dict]:
+    if not timeline or not isinstance(timeline.get("events"), list):
+        return []
+    return [
+        {
+            "type": "agent.event",
+            "event_type": event.get("event_type"),
+            "timestamp": event.get("occurred_at"),
+            "payload": event.get("payload", {}),
+        }
+        for event in timeline["events"]
+    ]
+
+
+def to_execution_response(run: dict, db: Session) -> dict:
+    run_id = run.get("run_id")
+    user_id = run.get("user_id")
+    timeline = get_run_events(run_id=run_id, user_id=user_id, db=db) if run_id and user_id else None
+
+    result_payload = run.get("result")
+    if result_payload is None:
+        result_payload = {
+            "goal": run.get("goal"),
+            "plan": run.get("plan"),
+            "overall_risk": run.get("overall_risk"),
+        }
+
+    next_action = None
+    if isinstance(result_payload, dict):
+        next_action = result_payload.get("next_action")
+
+    return {
+        "status": str(run.get("status", "unknown")).upper(),
+        "result": result_payload,
+        "events": _normalize_agent_events(timeline),
+        "next_action": next_action,
+        "trace_id": run.get("trace_id") or run.get("correlation_id") or run_id,
     }
 
 
@@ -541,6 +692,8 @@ def _create_run_from_plan(
 
         run = AgentRun(
             user_id=user_id,
+            agent_type="default",
+            trace_id=get_current_trace_id(),
             goal=goal,
             plan=plan,
             executive_summary=plan.get("executive_summary", ""),
@@ -561,8 +714,10 @@ def _create_run_from_plan(
                 plan=plan,
                 db=db,
                 approval_mode="auto",
+                agent_type=getattr(run, "agent_type", "default"),
             )
             if token:
+                run.execution_token = token.get("execution_token")
                 run.capability_token = token
                 db.commit()
                 db.refresh(run)
@@ -654,6 +809,7 @@ def replay_run(
                     "original_run_id": str(original.id),
                     "mode": mode,
                 },
+                required=True,
             )
 
         return new_run

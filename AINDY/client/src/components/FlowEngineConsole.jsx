@@ -1,6 +1,7 @@
 // src/components/FlowEngineConsole.jsx
 import React, { useState, useCallback, useEffect } from "react";
 import {
+  buildApiUrl,
   getFlowRuns,
   getFlowRunHistory,
   resumeFlowRun,
@@ -1468,7 +1469,7 @@ function StrategiesPanel({ triggerRefresh }) {
     setLoading(true);
     setError(null);
     // Attempt to call strategies endpoint; gracefully handle 404/not-implemented
-    fetch("http://127.0.0.1:8000/flows/strategies", {
+    fetch(buildApiUrl("/flows/strategies"), {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("aindy_token") || ""}`,
       },

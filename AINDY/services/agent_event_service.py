@@ -1,11 +1,8 @@
 """
 AgentEventService — thin helper for emitting lifecycle events (Sprint N+8).
 
-emit_event() is the single entry point. It is always non-fatal:
-  - Wrapped in try/except
-  - Logs failures at WARNING level
-  - Never raises to caller
-  - Caller does not need to handle any return value
+emit_event() is the single entry point for agent lifecycle persistence.
+Critical execution paths pass required=True so missing audit events fail closed.
 
 Usage:
     from services.agent_event_service import emit_event
@@ -23,6 +20,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
+
+from services.system_event_service import emit_system_event, SystemEventEmissionError
+from utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +46,13 @@ def emit_event(
     db: Session,
     correlation_id: Optional[str] = None,
     payload: Optional[dict] = None,
+    required: bool = False,
 ) -> None:
     """
     Persist one AgentEvent lifecycle row.
 
-    Always non-fatal — exceptions are caught, logged, and swallowed.
-    Never raises to caller.
+    Raises when required=True and either the AgentEvent row or matching
+    SystemEvent cannot be persisted.
 
     Args:
         run_id:         UUID string of the AgentRun
@@ -72,9 +73,16 @@ def emit_event(
                 run_id,
             )
 
+        parsed_run_id = run_id
+        if isinstance(run_id, str):
+            try:
+                parsed_run_id = uuid.UUID(run_id)
+            except ValueError:
+                parsed_run_id = run_id
+
         event = AgentEvent(
             id=uuid.uuid4(),
-            run_id=uuid.UUID(run_id) if isinstance(run_id, str) else run_id,
+            run_id=parsed_run_id,
             correlation_id=correlation_id,
             user_id=user_id,
             event_type=event_type,
@@ -83,6 +91,20 @@ def emit_event(
         )
         db.add(event)
         db.commit()
+
+        emit_system_event(
+            db=db,
+            event_type=f"agent.{str(event_type).lower()}",
+            user_id=user_id,
+            trace_id=get_current_trace_id() or correlation_id or run_id,
+            payload={
+                "run_id": run_id,
+                "correlation_id": correlation_id,
+                "event_type": event_type,
+                **(payload or {}),
+            },
+            required=required,
+        )
 
         logger.debug(
             "[AgentEventService] Emitted %s for run %s (correlation=%s)",
@@ -98,3 +120,7 @@ def emit_event(
             run_id,
             exc,
         )
+        if required:
+            raise SystemEventEmissionError(
+                f"Required agent event '{event_type}' failed for run {run_id}"
+            ) from exc

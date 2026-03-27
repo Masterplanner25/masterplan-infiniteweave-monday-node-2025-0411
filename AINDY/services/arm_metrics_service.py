@@ -25,13 +25,14 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from db.models.arm_models import AnalysisResult, CodeGeneration
+from utils.user_ids import require_user_id
 
 
 class ARMMetricsService:
 
     def __init__(self, db: Session, user_id: str):
         self.db = db
-        self.user_id = user_id
+        self.user_id = require_user_id(user_id)
 
     def get_all_metrics(self, window: int = 30) -> dict:
         """

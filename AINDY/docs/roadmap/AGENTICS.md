@@ -177,8 +177,12 @@ A `new_plan` replay mode re-calls GPT-4o for a fresh plan on the same goal.
 The `AgentConsole.jsx` Timeline tab renders the full event history with colored badges,
 and a pending-approval badge surfaces runs awaiting review.
 
-What remains is the **authority layer** (Phase 4: capability tokens + egress control)
-and a **dedicated approval inbox UI** (Phase 7 — standalone `AgentApprovalInbox.jsx`).
+The core **authority layer** is now live: scoped capability tokens gate
+run-level execution and tool-level access, and agent execution fails closed when
+the token is missing, invalid, or does not grant `execute_flow` / the required
+tool capability. What remains is tighter egress standardization across every
+non-agent executor surface and a **dedicated approval inbox UI** (Phase 7 —
+standalone `AgentApprovalInbox.jsx`).
 
 ---
 

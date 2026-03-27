@@ -18,8 +18,9 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/arm_router.py` (prefix `/arm`) **[JWT auth required]**
 - `AINDY/routes/leadgen_router.py` (prefix `/leadgen`) **[JWT auth required]**
 - `AINDY/routes/dashboard_router.py` (prefix `/dashboard`) **[JWT auth required]**
+- `AINDY/routes/legacy_surface_router.py` (no prefix) **[compatibility surface; auth depends on underlying service behavior]**
 - `AINDY/routes/health_router.py` (prefix `/health`) **[public]**
-- `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`) **[public]**
+- `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`) **[JWT auth required]**
 - `AINDY/routes/social_router.py` (prefix `/social`) **[JWT auth required]**
 - `AINDY/routes/analytics_router.py` (prefix `/analytics`) **[JWT auth required]**
 - `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
@@ -29,12 +30,18 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `AINDY/routes/memory_metrics_router.py` (prefix `/memory`) **[JWT auth required]**
 - `AINDY/routes/memory_trace_router.py` (prefix `/memory`) **[JWT auth required]**
 - `AINDY/routes/identity_router.py` (prefix `/identity`) **[JWT auth required]**
+- `AINDY/routes/observability_router.py` (prefix `/observability`) **[JWT auth required]**
+- `AINDY/routes/automation_router.py` (prefix `/automation`) **[JWT auth required]**
+- `AINDY/routes/flow_router.py` (prefix `/flows`) **[JWT auth required]**
+- `AINDY/routes/watcher_router.py` (prefix `/watcher`) **[API key required]**
+- `AINDY/routes/score_router.py` (prefix `/score`) **[JWT auth required]**
+- `AINDY/routes/agent_router.py` (prefix `/agent`) **[JWT auth required]**
 
 **Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
 - **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
 - **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection), `/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
 - **HMAC permission** — deprecated. `/bridge` write routes rely on JWT; `permission` is ignored if provided.
-- **Public routes** (no auth): `/auth/*`, `/health/*`, `/dashboard/health`, `GET /`.
+- **Public routes** (no auth): `/auth/*`, `/health/*`, `GET /`.
 - Zero unprotected non-public routes as of Sprint 4 (2026-03-18).
 
 **Sprint 5 User Isolation (2026-03-18):**
@@ -61,6 +68,30 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - Research: `POST /research/`, `POST /research/query`, `GET /research/`.
 - Memory search: `POST /memory/nodes/search`, `POST /memory/recall`.
 - Note: LeadGen uses external retrieval with structured parsing; research routes now invoke `modules/research_engine.web_search()` + `ai_analyze()`.
+
+**External interaction contract (current implementation):**
+- Outbound OpenAI/LLM, HTTP, watcher-delivery, and health-probe calls are wrapped by `services/external_call_service.py`.
+- Required `SystemEvent` types:
+  - `external.call.started`
+  - `external.call.completed`
+  - `external.call.failed`
+  - `error.external_call`
+- Event payload includes:
+  - `service_name`
+  - `endpoint`
+  - `model` when applicable
+  - `method`
+  - `status`
+  - `latency_ms`
+  - `error` when applicable
+- Event persistence is fail-closed for the outbound interaction: a required event-emission failure raises rather than silently continuing.
+
+**Successful operational-path eventing (current implementation):**
+- `POST /auth/register` emits `auth.register.completed`
+- `POST /auth/login` emits `auth.login.completed`
+- `GET /health` and `GET /health/` emit `health.liveness.completed`
+- `GET /ready` emits `health.readiness.completed`
+- Async heavy-execution jobs emit `execution.started` and `execution.completed` using the `automation_log_id` as `trace_id`
 
 **Freelancing summary (current implementation):**
 - Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
@@ -117,9 +148,11 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `GET /memory/traces/{trace_id}` ? JWT required. Returns trace metadata.
 - `GET /memory/traces/{trace_id}/nodes` ? JWT required. Returns ordered trace nodes.
 
-**Memory Bridge v5 Phase 6 additions (2026-03-21):**
-- `POST /memory/execute` ? JWT required. Runs execution loop (recall ? execute ? capture ? feedback) and returns result + memory context. Registered workflows include `leadgen` and `genesis_message` (via execution registry).
-- `POST /memory/execute/complete` ? JWT required. Completes loop with outcome + feedback.
+**Memory Bridge execution contract (current):**
+- `POST /memory/execute` — JWT required. Runs through the canonical flow/observability pipeline and returns the standardized execution envelope.
+- `POST /memory/execute/complete` — deprecated compatibility path and no longer part of the active contract.
+- `POST /memory/nodus/execute` — JWT required. Restricted executor surface with source validation, allowed-operation registration, and scoped capability-token enforcement for write-capable operations.
+- When `AINDY_ASYNC_HEAVY_EXECUTION=true`, `POST /memory/nodus/execute` returns `202` and the background job emits `execution.started` / `execution.completed` or `execution.failed` with `trace_id == automation_log_id`.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,
@@ -133,6 +166,35 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 Root route registered directly in `AINDY/main.py`:
 - `GET /`
 
+Legacy compatibility routes are registered in `AINDY/routes/legacy_surface_router.py` and include:
+- `/dashboard`
+- `/top_drop_points`
+- `/analyze_ripple/{drop_point_id}`
+- `/ripple_deltas/{drop_point_id}`
+- `/emerging_drops`
+- `/predict/{drop_point_id}`
+- `/prediction_summary`
+- `/recommend/{drop_point_id}`
+- `/recommendations_summary`
+- `/influence_graph`
+- `/influence_chain/{drop_point_id}`
+- `/causal_graph`
+- `/causal_chain/{drop_point_id}`
+- `/narrative/{drop_point_id}`
+- `/narrative_summary`
+- `/strategies`
+- `/strategy/{strategy_id}`
+- `/strategy_match/{drop_point_id}`
+- `/build_playbook/{strategy_id}`
+- `/playbooks`
+- `/playbook/{playbook_id}`
+- `/playbook_match/{drop_point_id}`
+- `/generate_content/{playbook_id}`
+- `/generate_content_for_drop/{drop_point_id}`
+- `/generate_variations/{playbook_id}`
+- `/learning_stats`
+- `/evaluate/{drop_point_id}`
+
 ## 2. Per-Route Contract Definition (Current Implementation)
 
 ### Auth Routes (`AINDY/routes/auth_router.py`) — PUBLIC
@@ -144,6 +206,7 @@ Response: `{ "access_token": str, "token_type": "bearer" }`
 Status Codes: 200, 401
 Errors: 401 if credentials invalid.
 Auth: None (public endpoint — use this to obtain a token)
+Observability: emits `auth.login.completed` on success.
 
 `POST /auth/register`
 Method: POST
@@ -153,6 +216,7 @@ Response: `{ "access_token": str, "token_type": "bearer" }`
 Status Codes: 201, 409
 Errors: 409 if email already registered.
 Auth: None (public endpoint)
+Observability: emits `auth.register.completed` on success.
 
 ### Root Route (`AINDY/main.py`)
 `GET /`
@@ -872,14 +936,30 @@ Response: `{ "status": "ok", "overview": { "system_timestamp": str, "author_coun
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Health Routes (`AINDY/routes/health_router.py`, prefix `/health`)
-`GET /health/`
+### Health Routes (`AINDY/routes/health_router.py`)
+`GET /health` and `GET /health/`
 Method: GET
 Request Body: None
 Query Params: None
-Response: Status dict with `timestamp`, `version`, `components`, `api_endpoints`, `status`, `avg_latency_ms`.
+Response: `{ "status": "ok", "service": "aindy-api", "timestamp": str, "components": { "api": "alive" } }`
 Status Codes: 200
-Errors: Not explicitly defined; failures are embedded in response fields.
+Observability: emits `health.liveness.completed` on success. Event persistence is best-effort so liveness remains a liveness check.
+
+`GET /ready`
+Method: GET
+Request Body: None
+Query Params: None
+Response: `{ "status": "ready", "timestamp": str, "components": { "database": "ready", ... } }`
+Status Codes: 200, 503
+Observability: emits `health.readiness.completed` on success. Event persistence is best-effort so readiness remains a readiness check.
+
+`GET /health/details`
+Method: GET
+Request Body: None
+Query Params: None
+Auth: API key required
+Response: detailed component status object
+Status Codes: 200
 
 ### Health Dashboard Routes (`AINDY/routes/health_dashboard_router.py`, prefix `/dashboard`)
 `GET /dashboard/health`
@@ -888,6 +968,7 @@ Request Body: None
 Query Params: `limit` (default 20)
 Response: `{ "count": int, "logs": [ {timestamp, status, avg_latency_ms, components, api_endpoints} ] }`
 Status Codes: 200
+Auth: JWT required
 Errors: Not explicitly defined.
 
 ### Social Routes (`AINDY/routes/social_router.py`, prefix `/social`)
@@ -959,7 +1040,7 @@ Status Codes: 200
 Method: POST
 Request Body: `dict` with `session_id` (int) and `message` (str)
 Auth: JWT Bearer
-Response: `{ "reply": str, "synthesis_ready": bool }`
+Response: standardized execution envelope from the canonical execution pipeline, with Genesis reply data contained in `result`.
 Status Codes: 200, 400 on missing fields, 404 if session not found or not owned by user.
 Notes: `synthesis_ready` is a one-way flag — once True, never reverts to False.
 
@@ -1111,11 +1192,12 @@ Status Codes: 200, 401.
 - ARM DB persistence: `analysis_results` table records every call (including failures) for audit trail; `code_generations` table records every generation. Both use UUID PKs.
 - ARM runtime uses OpenAI GPT-4o via `modules/deepseek/deepseek_code_analyzer.py` (legacy "DeepSeek" namespace; `services/deepseek_arm_service.py` is not used by the router).
 - Research endpoints are synchronous and persist results; they do not implement async or background execution.
+- ARM, Genesis, Research, LeadGen, Embedding, YouTube, Watcher delivery, and Health probe outbound calls now emit required external-call `SystemEvent` records.
 
 ## 7. Error Response Shape (Current Implementation)
-- Errors raised with `HTTPException` return JSON of the form `{ "detail": <message> }` (FastAPI default).
-- Many routes do not handle errors explicitly; unhandled exceptions propagate to FastAPI default 500 responses.
-- Structured error JSON is not consistently implemented.
+- Core app-level exception handlers normalize errors into JSON with `error`, `message`, and `details`.
+- Route-level `HTTPException(detail=...)` payloads still vary by endpoint, but they no longer rely purely on FastAPI default string handling at the app boundary.
+- Unhandled exceptions are converted to a structured 500 response by `main.py`.
 
 ## 8. Response Consistency Rules (Policy Requirements)
 - All API responses must be JSON (no HTML error pages).
@@ -1127,9 +1209,10 @@ Status Codes: 200, 401.
 
 ## 9. Known Gaps
 - Many routes do not declare response models and return ORM objects or dicts without schema enforcement.
-- Error handling is inconsistent; many routes do not catch exceptions.
+- Error handling is still not perfectly uniform at the route level, but silent-failure `pass` blocks have been removed from active production execution paths.
 - Some endpoints accept query parameters where request bodies might be expected (e.g., `/authorship/reclaim`, `/freelance/deliver/{order_id}`).
 - Masterplan SaaS provides Genesis and MasterPlan lifecycle endpoints only; no API exists for masterplan anchors, ETA projection, or dependency cascade outputs.
+- Not every domain has a first-class `ExecutionRecord` table yet; external-call event coverage is broader than full execution-envelope coverage.
 
 ## Appendix: Route-to-Schema Map
 This appendix lists request schemas where they are explicitly defined.
@@ -1180,3 +1263,48 @@ Serialization note (current behavior):
 - `MasterPlan.parent` (self-referential) in `AINDY/db/models/masterplan.py`; same risk surface as above.
 - `ARMRun.logs` and `ARMLog.run` in `AINDY/db/models/arm_models.py` (legacy models, no longer used by ARM router); `AnalysisResult.generations` and `CodeGeneration.analysis` (Phase 1 models); ARM routes return dicts, not ORM objects.
 - `ClientFeedback.order` in `AINDY/db/models/freelance.py`; freelance routes use `response_model` schemas that do not expose the relationship.
+### Watcher Routes (`AINDY/routes/watcher_router.py`, prefix `/watcher`)
+`POST /watcher/signals`
+Method: POST
+Request Body:
+```json
+{
+  "signals": [
+    {
+      "signal_type": "session_started|session_ended|distraction_detected|focus_achieved|context_switch|heartbeat",
+      "session_id": "uuid-string",
+      "timestamp": "ISO-8601 timestamp",
+      "app_name": "string",
+      "window_title": "string",
+      "activity_type": "work|communication|distraction|idle|unknown",
+      "metadata": {},
+      "user_id": "optional user UUID"
+    }
+  ]
+}
+```
+Auth: API key required
+Response:
+```json
+{
+  "accepted": 1,
+  "session_ended_count": 0,
+  "orchestration": {
+    "eta_recalculated": false,
+    "score_orchestrated": false,
+    "next_action": null
+  }
+}
+```
+Status Codes: 201, 401, 422, 500
+Notes:
+- The route validates signal type, activity type, timestamp, and optional `user_id` before execution.
+- Persistence and orchestration run through the canonical `watcher_ingest` flow internally.
+- Public response shape is an explicit ingestion contract, not the generic execution envelope.
+
+`GET /watcher/signals`
+Method: GET
+Query Params: `session_id`, `signal_type`, `user_id`, `limit`, `offset`
+Auth: API key required
+Response: `SignalResponse[]`
+Status Codes: 200, 401, 422

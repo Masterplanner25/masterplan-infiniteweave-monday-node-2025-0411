@@ -1,8 +1,12 @@
 import os
 import json
+import logging
 from openai import OpenAI
+from services.external_call_service import perform_external_call
+from services.observability_events import emit_observability_event
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+logger = logging.getLogger(__name__)
 
 MODEL = "gpt-4o-mini"  # efficient + structured
 
@@ -88,8 +92,13 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
                         for m in arm_memories
                     )
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        emit_observability_event(
+            logger=logger,
+            event="genesis_llm_arm_context_lookup_failed",
+            user_id=user_id,
+            error=str(exc),
+        )
 
     # Step 2: Build prompt with injected memory + identity context
     identity_context = ""
@@ -98,19 +107,32 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
             from services.identity_service import IdentityService
             id_service = IdentityService(db=db, user_id=user_id)
             identity_context = id_service.get_context_for_prompt()
-    except Exception:
-        pass
+    except Exception as exc:
+        emit_observability_event(
+            logger=logger,
+            event="genesis_llm_identity_context_failed",
+            user_id=user_id,
+            error=str(exc),
+        )
 
     system_content = (
         GENESIS_SYSTEM_PROMPT + prior_context + arm_context + identity_context
     )
-    response = client.chat.completions.create(
+    response = perform_external_call(
+        service_name="openai",
+        db=db,
+        user_id=user_id,
+        endpoint="chat.completions.create",
         model=MODEL,
-        messages=[
-            {"role": "system", "content": system_content},
-            {
-                "role": "user",
-                "content": f"""
+        method="openai.chat",
+        extra={"purpose": "genesis_message"},
+        operation=lambda: client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {"role": "system", "content": system_content},
+                {
+                    "role": "user",
+                    "content": f"""
 Current Structured State:
 {json.dumps(current_state)}
 
@@ -120,9 +142,10 @@ New User Message:
 Update the structured state incrementally.
 Return only valid JSON.
 """
-            }
-        ],
-        temperature=0.4,
+                }
+            ],
+            temperature=0.4,
+        ),
     )
 
     content = response.choices[0].message.content
@@ -234,27 +257,41 @@ def call_genesis_synthesis_llm(
                         for m in arm_memories
                     )
                 )
-    except Exception:
-        pass
+    except Exception as exc:
+        emit_observability_event(
+            logger=logger,
+            event="genesis_synthesis_arm_context_lookup_failed",
+            user_id=user_id,
+            error=str(exc),
+        )
 
     system_prompt = SYNTHESIS_SYSTEM_PROMPT + arm_insights
-    response = client.chat.completions.create(
+    response = perform_external_call(
+        service_name="openai",
+        db=db,
+        user_id=user_id,
+        endpoint="chat.completions.create",
         model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"""
+        method="openai.chat",
+        extra={"purpose": "genesis_synthesis"},
+        operation=lambda: client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"""
 Session State:
 {json.dumps(current_state, indent=2)}
 
 Synthesize this into a complete MasterPlan draft.
 Return only valid JSON.
 """
-            }
-        ],
-        temperature=0.3,
-        response_format={"type": "json_object"},
+                }
+            ],
+            temperature=0.3,
+            response_format={"type": "json_object"},
+        ),
     )
 
     content = response.choices[0].message.content
@@ -313,7 +350,7 @@ Rules:
 """
 
 
-def validate_draft_integrity(draft: dict) -> dict:
+def validate_draft_integrity(draft: dict, user_id: str = None, db=None) -> dict:
     """
     GPT-4o strategic integrity audit for a synthesis draft.
     Returns audit result dict with findings, audit_passed, overall_confidence.
@@ -324,23 +361,32 @@ def validate_draft_integrity(draft: dict) -> dict:
 
     for attempt in range(retry_limit):
         try:
-            response = client.chat.completions.create(
+            response = perform_external_call(
+                service_name="openai",
+                db=db,
+                user_id=user_id,
+                endpoint="chat.completions.create",
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": f"""
+                method="openai.chat",
+                extra={"purpose": "genesis_draft_audit", "attempt": attempt + 1},
+                operation=lambda: client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
+                        {
+                            "role": "user",
+                            "content": f"""
 MasterPlan Draft:
 {json.dumps(draft, indent=2)}
 
 Audit this draft for structural integrity.
 Return only valid JSON.
 """
-                    }
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"},
+                        }
+                    ],
+                    temperature=0.2,
+                    response_format={"type": "json_object"},
+                ),
             )
             content = response.choices[0].message.content
             return json.loads(content)
