@@ -1,18 +1,15 @@
 """
-config.py – Centralized environment and configuration management for A.I.N.D.Y.
-Implements clean separation between development and production via .env files.
+config.py - Centralized environment configuration for A.I.N.D.Y.
 
-Usage:
-    from config import settings
-    engine = create_engine(settings.DATABASE_URL)
+All runtime settings are sourced from process environment variables.
 """
 
-from pathlib import Path
 import logging
 import os
 from datetime import datetime, timezone
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator
+from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
 
@@ -30,6 +27,7 @@ class Settings(BaseSettings):
     # --- Auth ---
     SECRET_KEY: str = "dev-secret-change-in-production"
     AINDY_API_KEY: str | None = None
+    AINDY_SERVICE_KEY: str | None = None
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -38,7 +36,7 @@ class Settings(BaseSettings):
             import logging as _logging
             _logging.getLogger(__name__).warning(
                 "SECRET_KEY is using the insecure default placeholder. "
-                "Set SECRET_KEY in your .env file before deploying to production."
+                "Set SECRET_KEY in the environment before deploying to production."
             )
         return v
 
@@ -49,8 +47,6 @@ class Settings(BaseSettings):
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         extra="ignore"
     )
 
@@ -99,6 +95,9 @@ logging.basicConfig(
     ],
 )
 
-logging.getLogger(__name__).info(f"Loaded {settings.ENV} environment from .env")
+logging.getLogger(__name__).info(
+    "Loaded %s environment from process environment variables",
+    settings.ENV,
+)
 
 

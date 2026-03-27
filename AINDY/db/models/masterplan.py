@@ -14,8 +14,7 @@ class MasterPlan(Base):
     duration_years = Column(Float, nullable=False)
     target_date = Column(DateTime, nullable=False)
 
-    # User ownership (UUID string from User.id)
-    user_id = Column(String, nullable=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     # Lifecycle status: draft | locked | active | archived
     status = Column(String, nullable=True, default="draft")
 

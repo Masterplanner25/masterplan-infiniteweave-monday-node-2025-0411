@@ -52,3 +52,36 @@ class TestObservabilityRoutes:
                 assert key in summary, f"Missing summary key '{key}' in {summary}"
         finally:
             app.dependency_overrides.pop(get_db, None)
+
+    def test_observability_dashboard_returns_shape(self, app, client, auth_headers):
+        mock_db = _build_mock_db()
+        app.dependency_overrides[get_db] = lambda: mock_db
+        try:
+            response = client.get("/observability/dashboard", headers=auth_headers)
+            assert response.status_code == 200, (
+                f"Expected 200 but got {response.status_code}: {response.text[:200]}"
+            )
+            payload = response.json()
+            for key in [
+                "summary",
+                "request_metrics",
+                "loop_activity",
+                "agent_timeline",
+                "system_events",
+                "system_health",
+                "flows",
+            ]:
+                assert key in payload, f"Missing key '{key}' in response: {payload}"
+            summary = payload["summary"]
+            for key in [
+                "avg_latency_ms",
+                "window_requests",
+                "window_errors",
+                "error_rate_pct",
+                "loop_events",
+                "agent_events",
+                "health_status",
+            ]:
+                assert key in summary, f"Missing summary key '{key}' in {summary}"
+        finally:
+            app.dependency_overrides.pop(get_db, None)

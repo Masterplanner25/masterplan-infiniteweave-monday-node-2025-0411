@@ -8,6 +8,7 @@ from sqlalchemy import func
 
 from db.models.memory_trace import MemoryTrace
 from db.models.memory_trace_node import MemoryTraceNode
+from utils.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ class MemoryTraceDAO:
         extra: Optional[dict] = None,
     ) -> dict:
         trace = MemoryTrace(
-            user_id=user_id,
+            user_id=require_user_id(user_id),
             title=title,
             description=description,
             source=source,
@@ -76,7 +77,7 @@ class MemoryTraceDAO:
     def list_traces(self, *, user_id: str, limit: int = 50) -> list[dict]:
         rows = (
             self.db.query(MemoryTrace)
-            .filter(MemoryTrace.user_id == user_id)
+            .filter(MemoryTrace.user_id == require_user_id(user_id))
             .order_by(MemoryTrace.created_at.desc())
             .limit(limit)
             .all()
@@ -126,14 +127,14 @@ class MemoryTraceDAO:
             return None
         return (
             self.db.query(MemoryTrace)
-            .filter(MemoryTrace.id == trace_uuid, MemoryTrace.user_id == user_id)
+            .filter(MemoryTrace.id == trace_uuid, MemoryTrace.user_id == require_user_id(user_id))
             .first()
         )
 
     def _trace_to_dict(self, trace: MemoryTrace) -> dict:
         return {
             "id": str(trace.id),
-            "user_id": trace.user_id,
+            "user_id": str(trace.user_id) if trace.user_id else None,
             "title": trace.title,
             "description": trace.description,
             "source": trace.source,

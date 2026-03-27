@@ -1,0 +1,17 @@
+.git
+.pytest_cache
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+logs
+*.log
+.env
+.env.*
+AINDY/.env
+AINDY/.env.*
+AINDY/client/node_modules
+AINDY/client/dist

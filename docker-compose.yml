@@ -1,24 +1,109 @@
-version: '3.8'
-
 services:
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: aindy-pgvector
+  api:
+    build:
+      context: ./AINDY
+      dockerfile: Dockerfile
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-140671a}
-      POSTGRES_DB: base
+      ENV: ${ENV:-production}
+      DATABASE_URL: ${DATABASE_URL}
+      MONGO_URL: ${MONGO_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY}
+      AINDY_API_KEY: ${AINDY_API_KEY}
+      AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
+      AINDY_ENABLE_BACKGROUND_TASKS: "false"
+      AINDY_ENABLE_LEGACY_SURFACE: "false"
+      AINDY_ASYNC_HEAVY_EXECUTION: ${AINDY_ASYNC_HEAVY_EXECUTION:-true}
+      AINDY_ASYNC_JOB_WORKERS: ${AINDY_ASYNC_JOB_WORKERS:-4}
+      AINDY_ENFORCE_SCHEMA: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_started
     ports:
-      - "5433:5432"
+      - "8000:8000"
+
+  worker:
+    build:
+      context: ./AINDY
+      dockerfile: Dockerfile
+    command: python worker.py
+    environment:
+      ENV: ${ENV:-production}
+      DATABASE_URL: ${DATABASE_URL}
+      MONGO_URL: ${MONGO_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY}
+      AINDY_API_KEY: ${AINDY_API_KEY}
+      AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
+      AINDY_ENABLE_BACKGROUND_TASKS: "true"
+      AINDY_ENABLE_LEGACY_SURFACE: "false"
+      AINDY_ASYNC_HEAVY_EXECUTION: "false"
+      AINDY_ENFORCE_SCHEMA: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongo:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./AINDY/client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_NETWORK_API_URL: ${VITE_NETWORK_API_URL:-/api/users}
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "8080:80"
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aindy}
+      POSTGRES_USER: ${POSTGRES_USER:-aindy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
     volumes:
-      - aindy_pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d base"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aindy} -d ${POSTGRES_DB:-aindy}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-aindy}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
 
 volumes:
-  aindy_pgdata:
-    driver: local
+  postgres_data:
+  mongo_data:

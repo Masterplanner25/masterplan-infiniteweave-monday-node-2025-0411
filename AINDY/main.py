@@ -1,11 +1,10 @@
 import json
 import logging
-import threading
 import os
+import sys
 import time
 import uuid
-from contextvars import ContextVar
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -18,70 +17,51 @@ from slowapi.middleware import SlowAPIMiddleware
 from services.rate_limiter import limiter
 from services import scheduler_service
 from services import task_services
-from services.threadweaver import (
-    analyze_drop_point,
-    get_dashboard_snapshot,
-    get_top_drop_points,
-)
-from services.delta_engine import (
-    compute_deltas,
-    find_momentum_leaders,
-    emerging_drops as compute_emerging_drops,
-)
-from services.prediction_engine import (
-    predict_drop_point,
-    prediction_summary,
-    scan_drop_point_predictions,
-)
-from services.recommendation_engine import (
-    recommend_for_drop_point,
-    recommendations_summary,
-)
-from services.influence_graph import build_influence_graph, influence_chain
-from services.causal_engine import build_causal_graph, get_causal_chain
-from services.narrative_engine import generate_narrative, narrative_summary
-from services.learning_engine import (
-    evaluate_outcome,
-    adjust_thresholds,
-    learning_stats,
-)
-from services.strategy_engine import (
-    build_strategies,
-    list_strategies,
-    get_strategy,
-    match_strategies,
-)
-from services.playbook_engine import (
-    build_playbook,
-    list_playbooks,
-    get_playbook,
-    match_playbooks,
-)
-from services.content_generator import (
-    generate_content,
-    generate_content_for_drop,
-    generate_variations,
-)
-from db.database import SessionLocal, get_db
-from sqlalchemy.orm import Session
-try:
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-    from alembic.runtime.migration import MigrationContext
-except Exception:
-    Config = None
-    ScriptDirectory = None
-    MigrationContext = None
+from services.observability_events import emit_observability_event
+from services.system_event_service import emit_error_event
+from db.database import SessionLocal
 from routes import ROUTERS
 from config import settings
 from db.models.metrics_models import *
 from db.models.request_metric import RequestMetric
+from utils.trace_context import (
+    _trace_id_ctx,
+    reset_current_trace_id,
+    set_current_trace_id,
+)
 
 # --- Ensure root path is importable ---
-import sys, os
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
+
+
+def _import_installed_alembic():
+    """
+    Import the site-packages Alembic package even though this repo also has
+    /app/alembic for migration scripts, which otherwise shadows the package.
+    """
+    app_dir = os.path.abspath(os.path.dirname(__file__))
+    removed: list[tuple[int, str]] = []
+    for index in range(len(sys.path) - 1, -1, -1):
+        path = sys.path[index]
+        normalized = os.path.abspath(path or os.getcwd())
+        if normalized in {app_dir, ROOT_DIR}:
+            removed.append((index, path))
+            sys.path.pop(index)
+    try:
+        from alembic.config import Config  # type: ignore
+        from alembic.script import ScriptDirectory  # type: ignore
+        from alembic.runtime.migration import MigrationContext  # type: ignore
+        return Config, ScriptDirectory, MigrationContext
+    except Exception:
+        return None, None, None
+    finally:
+        for index, path in sorted(removed, key=lambda item: item[0]):
+            sys.path.insert(index, path)
+
+
+Config, ScriptDirectory, MigrationContext = _import_installed_alembic()
 
 
 # For in-memory caching
@@ -91,23 +71,24 @@ if ROOT_DIR not in sys.path:
 
 
 # ── Request-scoped logging context ──────────────────────────────────────────
-# ContextVar carries the current request_id through async call stacks.
-# Default "-" appears in log lines that originate outside a request context.
-_request_id_ctx: ContextVar[str] = ContextVar("request_id", default="-")
+# Backward-compatible alias: older tests and code still reference _request_id_ctx.
+_request_id_ctx = _trace_id_ctx
 
 
 class RequestContextFilter(logging.Filter):
-    """Inject request_id from ContextVar into every LogRecord."""
+    """Inject request/trace IDs from ContextVar into every LogRecord."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.request_id = _request_id_ctx.get()
+        trace_id = _trace_id_ctx.get()
+        record.trace_id = trace_id
+        record.request_id = trace_id
         return True
 
 
 # config.py already called logging.basicConfig (FileHandler + StreamHandler).
 # Upgrade all root-logger handlers in-place: attach the filter and apply the
 # new format that includes [request_id].  No duplicate basicConfig call needed.
-_REQUEST_LOG_FORMAT = "%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s"
+_REQUEST_LOG_FORMAT = "%(asctime)s - %(levelname)s - [trace=%(trace_id)s] - %(message)s"
 _ctx_filter = RequestContextFilter()
 for _handler in logging.root.handlers:
     _handler.addFilter(_ctx_filter)
@@ -292,6 +273,23 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled error: %s", exc)
+    db = None
+    try:
+        db = SessionLocal()
+        emit_error_event(
+            db=db,
+            error_type="unhandled_request",
+            message=str(exc),
+            user_id=_extract_user_id_from_request(request),
+            trace_id=getattr(getattr(request, "state", None), "trace_id", None),
+            payload={"path": request.url.path, "method": request.method},
+            required=True,
+        )
+    except Exception:
+        logger.exception("Failed to emit required unhandled request error event")
+    finally:
+        if db is not None:
+            db.close()
     return JSONResponse(
         status_code=500,
         content={
@@ -320,218 +318,62 @@ def _extract_user_id_from_request(request: Request):
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    request_id = str(uuid.uuid4())
-    _request_id_ctx.set(request_id)  # propagate through async call stack
+    trace_id = str(uuid.uuid4())
+    trace_token = set_current_trace_id(trace_id)
+    request.state.trace_id = trace_id
     start_time = time.time()
-
-    response = await call_next(request)
-
-    duration_ms = round((time.time() - start_time) * 1000, 2)
-    response.headers["X-Request-ID"] = request_id
-
-    user_id = _extract_user_id_from_request(request)
-    log_payload = {
-        "event": "request_complete",
-        "request_id": request_id,
-        "method": request.method,
-        "path": request.url.path,
-        "status_code": response.status_code,
-        "duration_ms": duration_ms,
-        "user_id": str(user_id) if user_id else None,
-    }
-    logger.info(json.dumps(log_payload, ensure_ascii=False))
-
-    db = None
     try:
-        db = SessionLocal()
-        db.add(
-            RequestMetric(
-                request_id=request_id,
-                user_id=user_id,
-                method=request.method,
-                path=request.url.path,
-                status_code=response.status_code,
-                duration_ms=duration_ms,
-            )
-        )
-        db.commit()
-    except Exception as exc:
-        logger.warning("Failed to record request metric: %s", exc)
-    finally:
-        if db is not None:
-            try:
-                db.close()
-            except Exception:
-                pass
+        response = await call_next(request)
+        duration_ms = round((time.time() - start_time) * 1000, 2)
+        response.headers["X-Trace-ID"] = trace_id
+        response.headers["X-Request-ID"] = trace_id
 
-    return response
+        user_id = _extract_user_id_from_request(request)
+        log_payload = {
+            "event": "request_complete",
+            "trace_id": trace_id,
+            "request_id": trace_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+            "user_id": str(user_id) if user_id else None,
+        }
+        logger.info(json.dumps(log_payload, ensure_ascii=False))
+
+        db = None
+        try:
+            db = SessionLocal()
+            db.add(
+                RequestMetric(
+                    request_id=trace_id,
+                    trace_id=trace_id,
+                    user_id=user_id,
+                    method=request.method,
+                    path=request.url.path,
+                    status_code=response.status_code,
+                    duration_ms=duration_ms,
+                )
+            )
+            db.commit()
+        except Exception as exc:
+            logger.warning("Failed to record request metric: %s", exc)
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception as exc:
+                    emit_observability_event(
+                        logger,
+                        event="request_metric_session_close_failed",
+                        trace_id=trace_id,
+                        request_id=trace_id,
+                        error=str(exc),
+                    )
+        return response
+    finally:
+        reset_current_trace_id(trace_token)
 
 @app.get("/")
 def home():
     return {"message": "A.I.N.D.Y. API is running!"}
-
-
-@app.get("/analyze_ripple/{drop_point_id}")
-def analyze_ripple(
-    drop_point_id: str,
-    db: Session = Depends(get_db),
-):
-    metrics = analyze_drop_point(drop_point_id, db)
-    if not metrics:
-        raise HTTPException(status_code=404, detail="Drop point not found")
-    return metrics
-
-
-@app.get("/dashboard")
-def proofboard_dashboard(db: Session = Depends(get_db)):
-    snapshot = get_dashboard_snapshot(db)
-    leaders = find_momentum_leaders(db)
-    predictions = scan_drop_point_predictions(db, limit=20)
-    snapshot.update(
-        {
-            "fastest_accelerating_drop": leaders.get("fastest_accelerating"),
-            "biggest_spike_drop": leaders.get("biggest_spike"),
-            "predicted_spike_candidates": [
-                p for p in predictions if p["prediction"] == "likely_to_spike"
-            ],
-            "declining_drops": [
-                p for p in predictions if p["prediction"] == "declining"
-            ],
-            "recommendations_summary": recommendations_summary(db, limit=10),
-        }
-    )
-    return snapshot
-
-
-@app.get("/top_drop_points")
-def top_drop_points(db: Session = Depends(get_db)):
-    return {"top_drop_points": get_top_drop_points(db)}
-
-
-@app.get("/ripple_deltas/{drop_point_id}")
-def ripple_deltas(drop_point_id: str, db: Session = Depends(get_db)):
-    return compute_deltas(drop_point_id, db)
-
-
-@app.get("/emerging_drops")
-def emerging_drops(db: Session = Depends(get_db)):
-    return {"emerging_drops": compute_emerging_drops(db)}
-
-
-@app.get("/predict/{drop_point_id}")
-def predict_drop_point_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return predict_drop_point(drop_point_id, db)
-
-
-@app.get("/prediction_summary")
-def prediction_summary_view(db: Session = Depends(get_db)):
-    return prediction_summary(db)
-
-
-@app.get("/recommend/{drop_point_id}")
-def recommend_drop_point(drop_point_id: str, db: Session = Depends(get_db)):
-    return recommend_for_drop_point(drop_point_id, db)
-
-
-@app.get("/recommendations_summary")
-def recommendations_summary_view(db: Session = Depends(get_db)):
-    return recommendations_summary(db)
-
-
-@app.get("/influence_graph")
-def influence_graph_view(db: Session = Depends(get_db)):
-    return build_influence_graph(db)
-
-
-@app.get("/influence_chain/{drop_point_id}")
-def influence_chain_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return influence_chain(drop_point_id, db)
-
-
-@app.get("/causal_graph")
-def causal_graph_view(db: Session = Depends(get_db)):
-    return build_causal_graph(db)
-
-
-@app.get("/causal_chain/{drop_point_id}")
-def causal_chain_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return get_causal_chain(drop_point_id, db)
-
-
-@app.get("/narrative/{drop_point_id}")
-def narrative_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return generate_narrative(drop_point_id, db)
-
-
-@app.get("/narrative_summary")
-def narrative_summary_view(db: Session = Depends(get_db)):
-    return {"stories": narrative_summary(db)}
-
-
-@app.get("/strategies")
-def strategies_view(db: Session = Depends(get_db)):
-    build_strategies(db)
-    return {"strategies": list_strategies(db)}
-
-
-@app.get("/strategy/{strategy_id}")
-def strategy_view(strategy_id: str, db: Session = Depends(get_db)):
-    strategy = get_strategy(strategy_id, db)
-    if not strategy:
-        raise HTTPException(status_code=404, detail="Strategy not found")
-    return strategy
-
-
-@app.get("/strategy_match/{drop_point_id}")
-def strategy_match_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return {"matches": match_strategies(drop_point_id, db)}
-
-
-@app.post("/build_playbook/{strategy_id}")
-def build_playbook_view(strategy_id: str, db: Session = Depends(get_db)):
-    return build_playbook(strategy_id, db)
-
-
-@app.get("/playbooks")
-def playbooks_view(db: Session = Depends(get_db)):
-    return {"playbooks": list_playbooks(db)}
-
-
-@app.get("/playbook/{playbook_id}")
-def playbook_view(playbook_id: str, db: Session = Depends(get_db)):
-    playbook = get_playbook(playbook_id, db)
-    if not playbook:
-        raise HTTPException(status_code=404, detail="Playbook not found")
-    return playbook
-
-
-@app.get("/playbook_match/{drop_point_id}")
-def playbook_match_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return {"matches": match_playbooks(drop_point_id, db)}
-
-
-@app.get("/generate_content/{playbook_id}")
-def generate_content_view(playbook_id: str, db: Session = Depends(get_db)):
-    return generate_content(playbook_id, db)
-
-
-@app.post("/generate_content_for_drop/{drop_point_id}")
-def generate_content_for_drop_view(drop_point_id: str, db: Session = Depends(get_db)):
-    return generate_content_for_drop(drop_point_id, db)
-
-
-@app.get("/generate_variations/{playbook_id}")
-def generate_variations_view(playbook_id: str, db: Session = Depends(get_db)):
-    return generate_variations(playbook_id, db)
-
-
-@app.get("/learning_stats")
-def learning_stats_view(db: Session = Depends(get_db)):
-    return learning_stats(db)
-
-
-@app.post("/evaluate/{drop_point_id}")
-def evaluate_drop_point(drop_point_id: str, db: Session = Depends(get_db)):
-    result = evaluate_outcome(drop_point_id, db)
-    adjust_thresholds(db)
-    return result

@@ -14,6 +14,9 @@ Covers:
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+OTHER_USER_ID = "00000000-0000-0000-0000-000000000002"
+
 
 VALID_PLAN = {
     "executive_summary": "Do two safe things.",
@@ -59,6 +62,11 @@ class TestToolRegistryCapabilityMetadata:
         for entry in TOOL_REGISTRY.values():
             assert entry["category"]
 
+    def test_all_tools_have_required_capability(self):
+        from services.agent_tools import TOOL_REGISTRY
+        for entry in TOOL_REGISTRY.values():
+            assert entry["required_capability"]
+
     def test_all_tools_have_egress_scope(self):
         from services.agent_tools import TOOL_REGISTRY
         for entry in TOOL_REGISTRY.values():
@@ -82,11 +90,29 @@ class TestCapabilityOrmFields:
         from db.models.agent_run import AgentRun
         assert "capability_token" in {c.name for c in AgentRun.__table__.columns}
 
+    def test_agent_run_has_execution_token_column(self):
+        from db.models.agent_run import AgentRun
+        assert "execution_token" in {c.name for c in AgentRun.__table__.columns}
+
+    def test_agent_run_has_agent_type_column(self):
+        from db.models.agent_run import AgentRun
+        assert "agent_type" in {c.name for c in AgentRun.__table__.columns}
+
     def test_agent_trust_has_allowed_auto_grant_tools_column(self):
         from db.models.agent_run import AgentTrustSettings
         assert "allowed_auto_grant_tools" in {
             c.name for c in AgentTrustSettings.__table__.columns
         }
+
+    def test_capability_model_exists(self):
+        from db.models.capability import Capability
+        cols = {c.name for c in Capability.__table__.columns}
+        assert {"id", "name", "description", "risk_level"}.issubset(cols)
+
+    def test_agent_capability_mapping_model_exists(self):
+        from db.models.capability import AgentCapabilityMapping
+        cols = {c.name for c in AgentCapabilityMapping.__table__.columns}
+        assert {"id", "capability_id", "agent_type", "agent_run_id"}.issubset(cols)
 
 
 class TestCapabilityServiceAutoGrantPolicy:
@@ -95,7 +121,7 @@ class TestCapabilityServiceAutoGrantPolicy:
         from services.capability_service import get_auto_grantable_tools
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
-        assert get_auto_grantable_tools("u1", db) == []
+        assert get_auto_grantable_tools(TEST_USER_ID, db) == []
 
     def test_get_auto_grantable_tools_uses_explicit_list_when_present(self):
         from services.capability_service import get_auto_grantable_tools
@@ -105,7 +131,7 @@ class TestCapabilityServiceAutoGrantPolicy:
             medium=False,
             allowed_auto_grant_tools=["task.complete", "task.create"],
         )
-        assert get_auto_grantable_tools("u1", db) == ["task.complete", "task.create"]
+        assert get_auto_grantable_tools(TEST_USER_ID, db) == ["task.create"]
 
     def test_get_auto_grantable_tools_strips_genesis_from_explicit_list(self):
         from services.capability_service import get_auto_grantable_tools
@@ -113,13 +139,13 @@ class TestCapabilityServiceAutoGrantPolicy:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["genesis.message", "task.create"],
         )
-        assert get_auto_grantable_tools("u1", db) == ["task.create"]
+        assert get_auto_grantable_tools(TEST_USER_ID, db) == ["task.create"]
 
     def test_get_auto_grantable_tools_falls_back_to_old_low_flag(self):
         from services.capability_service import get_auto_grantable_tools
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = _trust(low=True)
-        allowed = get_auto_grantable_tools("u1", db)
+        allowed = get_auto_grantable_tools(TEST_USER_ID, db)
         assert "task.create" in allowed
         assert "memory.recall" in allowed
         assert "task.complete" not in allowed
@@ -128,7 +154,7 @@ class TestCapabilityServiceAutoGrantPolicy:
         from services.capability_service import get_auto_grantable_tools
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = _trust(medium=True)
-        allowed = get_auto_grantable_tools("u1", db)
+        allowed = get_auto_grantable_tools(TEST_USER_ID, db)
         assert "task.complete" in allowed
         assert "arm.analyze" in allowed
         assert "genesis.message" not in allowed
@@ -136,7 +162,7 @@ class TestCapabilityServiceAutoGrantPolicy:
     def test_get_grantable_tools_manual_allows_known_plan_tools(self):
         from services.capability_service import get_grantable_tools
         db = MagicMock()
-        assert get_grantable_tools(VALID_PLAN, "u1", db, "manual") == [
+        assert get_grantable_tools(VALID_PLAN, TEST_USER_ID, db, "manual") == [
             "research.query",
             "task.create",
         ]
@@ -145,7 +171,7 @@ class TestCapabilityServiceAutoGrantPolicy:
         from services.capability_service import get_grantable_tools
         db = MagicMock()
         plan = {"steps": [{"tool": "nope.tool"}]}
-        assert get_grantable_tools(plan, "u1", db, "manual") == []
+        assert get_grantable_tools(plan, TEST_USER_ID, db, "manual") == []
 
     def test_get_grantable_tools_auto_requires_all_tools_in_allowlist(self):
         from services.capability_service import get_grantable_tools
@@ -153,7 +179,7 @@ class TestCapabilityServiceAutoGrantPolicy:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["task.create"],
         )
-        assert get_grantable_tools(VALID_PLAN, "u1", db, "auto") == []
+        assert get_grantable_tools(VALID_PLAN, TEST_USER_ID, db, "auto") == []
 
     def test_get_grantable_tools_auto_passes_when_all_tools_allowed(self):
         from services.capability_service import get_grantable_tools
@@ -161,7 +187,7 @@ class TestCapabilityServiceAutoGrantPolicy:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["task.create", "research.query"],
         )
-        assert get_grantable_tools(VALID_PLAN, "u1", db, "auto") == [
+        assert get_grantable_tools(VALID_PLAN, TEST_USER_ID, db, "auto") == [
             "research.query",
             "task.create",
         ]
@@ -172,12 +198,18 @@ class TestCapabilityTokens:
     def test_mint_token_returns_expected_fields(self):
         from services.capability_service import mint_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
         assert token is not None
         assert token["run_id"] == "run-1"
-        assert token["user_id"] == "u1"
+        assert token["user_id"] == TEST_USER_ID
         assert token["approval_mode"] == "manual"
+        assert token["execution_token"]
         assert sorted(token["granted_tools"]) == ["research.query", "task.create"]
+        assert sorted(token["allowed_capabilities"]) == [
+            "execute_flow",
+            "external_api_call",
+            "manage_tasks",
+        ]
         assert token["token_hash"]
 
     def test_mint_token_auto_returns_none_when_plan_not_grantable(self):
@@ -186,7 +218,7 @@ class TestCapabilityTokens:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["task.create"],
         )
-        assert mint_token("run-1", "u1", VALID_PLAN, db, "auto") is None
+        assert mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "auto") is None
 
     def test_mint_token_auto_succeeds_when_plan_grantable(self):
         from services.capability_service import mint_token
@@ -194,66 +226,79 @@ class TestCapabilityTokens:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["task.create", "research.query"],
         )
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "auto")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "auto")
         assert token is not None
         assert token["approval_mode"] == "auto"
 
     def test_validate_token_accepts_fresh_valid_token(self):
         from services.capability_service import mint_token, validate_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        result = validate_token(token, "run-1", "u1")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = validate_token(token, "run-1", TEST_USER_ID)
         assert result["ok"] is True
 
     def test_validate_token_rejects_missing_token(self):
         from services.capability_service import validate_token
-        result = validate_token(None, "run-1", "u1")
+        result = validate_token(None, "run-1", TEST_USER_ID)
         assert result["ok"] is False
 
     def test_validate_token_rejects_run_mismatch(self):
         from services.capability_service import mint_token, validate_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        result = validate_token(token, "run-2", "u1")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = validate_token(token, "run-2", TEST_USER_ID)
         assert result["ok"] is False
 
     def test_validate_token_rejects_user_mismatch(self):
         from services.capability_service import mint_token, validate_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        result = validate_token(token, "run-1", "u2")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = validate_token(token, "run-1", OTHER_USER_ID)
         assert result["ok"] is False
 
     def test_validate_token_rejects_expired_token(self):
         from services.capability_service import mint_token, validate_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
         token["expires_at"] = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-        result = validate_token(token, "run-1", "u1")
+        result = validate_token(token, "run-1", TEST_USER_ID)
         assert result["ok"] is False
 
     def test_validate_token_rejects_hash_mismatch(self):
         from services.capability_service import mint_token, validate_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
         token["token_hash"] = "bad-hash"
-        result = validate_token(token, "run-1", "u1")
+        result = validate_token(token, "run-1", TEST_USER_ID)
         assert result["ok"] is False
 
     def test_check_tool_capability_allows_granted_tool(self):
         from services.capability_service import check_tool_capability, mint_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        result = check_tool_capability(token, "run-1", "u1", "task.create")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = check_tool_capability(token, "run-1", TEST_USER_ID, "task.create")
         assert result["ok"] is True
 
     def test_check_tool_capability_denies_ungranted_tool(self):
         from services.capability_service import check_tool_capability, mint_token
         db = MagicMock()
-        token = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        result = check_tool_capability(token, "run-1", "u1", "arm.generate")
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = check_tool_capability(token, "run-1", TEST_USER_ID, "arm.generate")
         assert result["ok"] is False
         assert "not granted" in result["error"]
+
+    def test_check_execution_capability_allows_execute_flow(self):
+        from services.capability_service import check_execution_capability, mint_token
+        db = MagicMock()
+        token = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        result = check_execution_capability(token, "run-1", TEST_USER_ID, "execute_flow")
+        assert result["ok"] is True
+
+    def test_policy_engine_maps_risk_levels(self):
+        from services.capability_service import get_policy_for_risk
+        assert get_policy_for_risk("low") == "auto_allowed"
+        assert get_policy_for_risk("medium") == "requires_approval"
+        assert get_policy_for_risk("high") == "gated"
 
     def test_manual_and_auto_tokens_use_different_hashes(self):
         from services.capability_service import mint_token
@@ -261,15 +306,15 @@ class TestCapabilityTokens:
         db.query.return_value.filter.return_value.first.return_value = _trust(
             allowed_auto_grant_tools=["task.create", "research.query"],
         )
-        manual = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        auto = mint_token("run-1", "u1", VALID_PLAN, db, "auto")
+        manual = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        auto = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "auto")
         assert manual["token_hash"] != auto["token_hash"]
 
     def test_replay_style_fresh_run_id_mints_different_hash(self):
         from services.capability_service import mint_token
         db = MagicMock()
-        first = mint_token("run-1", "u1", VALID_PLAN, db, "manual")
-        second = mint_token("run-2", "u1", VALID_PLAN, db, "manual")
+        first = mint_token("run-1", TEST_USER_ID, VALID_PLAN, db, "manual")
+        second = mint_token("run-2", TEST_USER_ID, VALID_PLAN, db, "manual")
         assert first["token_hash"] != second["token_hash"]
 
 
@@ -278,7 +323,8 @@ class TestRuntimeCapabilityIssuance:
     def _fake_run(self, status="approved"):
         run = MagicMock()
         run.id = "run-1"
-        run.user_id = "u1"
+        run.user_id = TEST_USER_ID
+        run.agent_type = "default"
         run.goal = "goal"
         run.executive_summary = "summary"
         run.overall_risk = "low"
@@ -291,6 +337,7 @@ class TestRuntimeCapabilityIssuance:
         run.flow_run_id = None
         run.replayed_from_run_id = None
         run.correlation_id = "run_corr"
+        run.execution_token = None
         run.capability_token = None
         run.created_at = datetime.now(timezone.utc)
         run.approved_at = None
@@ -306,10 +353,11 @@ class TestRuntimeCapabilityIssuance:
         with patch("services.agent_runtime.generate_plan", return_value=VALID_PLAN), \
              patch("services.agent_runtime._requires_approval", return_value=False), \
              patch("db.models.agent_run.AgentRun", return_value=fake_run), \
-             patch("services.agent_runtime.mint_token", return_value={"granted_tools": ["task.create"]}):
-            result = create_run("goal", "u1", db)
+             patch("services.agent_runtime.mint_token", return_value={"execution_token": "tok-1", "granted_tools": ["task.create"], "allowed_capabilities": ["execute_flow", "manage_tasks"]}):
+            result = create_run("goal", TEST_USER_ID, db)
 
-        assert fake_run.capability_token == {"granted_tools": ["task.create"]}
+        assert fake_run.execution_token == "tok-1"
+        assert fake_run.capability_token["granted_tools"] == ["task.create"]
         assert result["granted_tools"] == ["task.create"]
 
     def test_create_run_auto_preflight_failure_reverts_to_pending(self):
@@ -321,7 +369,7 @@ class TestRuntimeCapabilityIssuance:
              patch("services.agent_runtime._requires_approval", return_value=False), \
              patch("db.models.agent_run.AgentRun", return_value=fake_run), \
              patch("services.agent_runtime.mint_token", return_value=None):
-            result = create_run("goal", "u1", db)
+            result = create_run("goal", TEST_USER_ID, db)
 
         assert fake_run.status == "pending_approval"
         assert "Capability preflight failed" in fake_run.error_message
@@ -333,31 +381,52 @@ class TestRuntimeCapabilityIssuance:
         db = MagicMock()
         run = self._fake_run(status="pending_approval")
         db.query.return_value.filter.return_value.first.return_value = run
-        with patch("services.agent_runtime.mint_token", return_value={"granted_tools": ["task.create"]}), \
+        with patch("services.agent_runtime.mint_token", return_value={"execution_token": "tok-1", "granted_tools": ["task.create"], "allowed_capabilities": ["execute_flow", "manage_tasks"]}), \
              patch("services.agent_runtime.execute_run", return_value={"run_id": "run-1", "status": "completed"}) as mock_execute:
-            approve_run("run-1", "u1", db)
+            approve_run("run-1", TEST_USER_ID, db)
 
-        assert run.capability_token == {"granted_tools": ["task.create"]}
+        assert run.execution_token == "tok-1"
+        assert run.capability_token["granted_tools"] == ["task.create"]
         mock_execute.assert_called_once()
 
     def test_run_to_dict_exposes_granted_tools(self):
         from services.agent_runtime import _run_to_dict
         run = self._fake_run(status="approved")
-        run.capability_token = {"granted_tools": ["task.create", "research.query"]}
+        run.execution_token = "tok-1"
+        run.capability_token = {"granted_tools": ["task.create", "research.query"], "allowed_capabilities": ["execute_flow", "external_api_call", "manage_tasks"]}
         payload = _run_to_dict(run)
         assert payload["granted_tools"] == ["task.create", "research.query"]
+        assert payload["execution_token"] == "tok-1"
+        assert payload["allowed_capabilities"] == ["execute_flow", "external_api_call", "manage_tasks"]
 
     def test_execute_run_passes_capability_token_to_adapter(self):
         from services.agent_runtime import execute_run
 
         db = MagicMock()
         run = self._fake_run(status="approved")
-        run.capability_token = {"granted_tools": ["task.create"]}
+        run.capability_token = {"execution_token": "tok-1", "granted_tools": ["task.create"], "allowed_capabilities": ["execute_flow", "manage_tasks"]}
         db.query.return_value.filter.return_value.first.return_value = run
         with patch("services.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS"}) as mock_exec:
-            execute_run("run-1", "u1", db)
+            execute_run("run-1", TEST_USER_ID, db)
 
-        assert mock_exec.call_args.kwargs["capability_token"] == {"granted_tools": ["task.create"]}
+        assert mock_exec.call_args.kwargs["execution_token"]["granted_tools"] == ["task.create"]
+
+    def test_execute_run_fails_closed_without_capability_token(self):
+        from services.agent_runtime import execute_run
+
+        db = MagicMock()
+        run = self._fake_run(status="approved")
+        run.capability_token = None
+        db.query.return_value.filter.return_value.first.return_value = run
+
+        with patch("services.agent_runtime.emit_event") as mock_emit, \
+             patch("services.nodus_adapter.NodusAgentAdapter.execute_with_flow") as mock_exec:
+            result = execute_run("run-1", TEST_USER_ID, db)
+
+        assert result["status"] == "failed"
+        assert "Missing scoped capability token" in result["error_message"]
+        mock_exec.assert_not_called()
+        assert mock_emit.call_args.kwargs["event_type"] == "CAPABILITY_DENIED"
 
 
 class TestStepTimeCapabilityChecks:
@@ -374,7 +443,7 @@ class TestStepTimeCapabilityChecks:
     def _state(self):
         return {
             "agent_run_id": "run-1",
-            "user_id": "u1",
+            "user_id": TEST_USER_ID,
             "steps": [
                 {
                     "tool": "task.create",
@@ -386,7 +455,7 @@ class TestStepTimeCapabilityChecks:
             "current_step_index": 0,
             "step_results": [],
             "correlation_id": "run_corr",
-            "capability_token": {"granted_tools": []},
+            "execution_token": {"execution_token": "tok-1", "granted_tools": [], "allowed_capabilities": []},
         }
 
     def test_agent_execute_step_denies_when_capability_check_fails(self):
@@ -419,7 +488,7 @@ class TestStepTimeCapabilityChecks:
         with patch("services.nodus_adapter.check_tool_capability", return_value={"ok": False, "error": "nope", "granted_tools": []}):
             agent_execute_step(self._state(), {"db": db})
 
-        db.add.assert_called_once()
+        assert db.add.call_count >= 1
         db.commit.assert_called()
 
     def test_execute_with_flow_passes_capability_token_into_initial_state(self):
@@ -429,18 +498,57 @@ class TestStepTimeCapabilityChecks:
         run = MagicMock()
         run.status = "executing"
         db.query.return_value.filter.return_value.first.return_value = run
-        with patch("services.nodus_adapter.PersistentFlowRunner") as MockRunner:
+        with patch("services.nodus_adapter.check_execution_capability", return_value={"ok": True, "error": None}), \
+             patch("services.nodus_adapter.PersistentFlowRunner") as MockRunner:
             MockRunner.return_value.start.return_value = {"status": "SUCCESS", "run_id": "flow-1"}
             NodusAgentAdapter.execute_with_flow(
                 run_id="run-1",
                 plan=VALID_PLAN,
-                user_id="u1",
+                user_id=TEST_USER_ID,
                 db=db,
-                capability_token={"granted_tools": ["task.create"]},
+                execution_token={"execution_token": "tok-1", "granted_tools": ["task.create"], "allowed_capabilities": ["execute_flow", "manage_tasks"]},
             )
 
         initial_state = MockRunner.return_value.start.call_args.args[0]
-        assert initial_state["capability_token"] == {"granted_tools": ["task.create"]}
+        assert initial_state["execution_token"]["granted_tools"] == ["task.create"]
+
+    def test_execute_with_flow_denies_when_execute_flow_missing(self):
+        from services.nodus_adapter import NodusAgentAdapter
+
+        db = MagicMock()
+        run = MagicMock()
+        run.status = "executing"
+        db.query.return_value.filter.return_value.first.return_value = run
+        with patch("services.nodus_adapter.check_execution_capability", return_value={"ok": False, "error": "missing execute_flow"}):
+            result = NodusAgentAdapter.execute_with_flow(
+                run_id="run-1",
+                plan=VALID_PLAN,
+                user_id=TEST_USER_ID,
+                db=db,
+                execution_token={"execution_token": "tok-1", "granted_tools": ["task.create"], "allowed_capabilities": ["manage_tasks"]},
+            )
+
+        assert result["status"] == "FAILED"
+        assert "missing execute_flow" in result["error"]
+
+    def test_execute_with_flow_denies_when_token_missing(self):
+        from services.nodus_adapter import NodusAgentAdapter
+
+        db = MagicMock()
+        run = MagicMock()
+        run.status = "executing"
+        db.query.return_value.filter.return_value.first.return_value = run
+
+        result = NodusAgentAdapter.execute_with_flow(
+            run_id="run-1",
+            plan=VALID_PLAN,
+            user_id=TEST_USER_ID,
+            db=db,
+            execution_token=None,
+        )
+
+        assert result["status"] == "FAILED"
+        assert "missing scoped capability token" in result["error"]
 
 
 class TestCapabilityDeniedEvents:
@@ -461,6 +569,7 @@ class TestAgentRouterCapabilitySurface:
         assert resp.status_code == 200
         first = resp.json()[0]
         assert "capability" in first
+        assert "required_capability" in first
         assert "category" in first
         assert "egress_scope" in first
 

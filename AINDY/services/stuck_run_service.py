@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+from services.observability_events import emit_observability_event
 
 _RECOVERY_ERROR_MSG = "Stuck run recovery: process terminated before completion"
 
@@ -239,8 +240,13 @@ def recover_stuck_agent_run(
         )
         try:
             db.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_exc:
+            emit_observability_event(
+                logger,
+                event="stuck_agent_recovery_rollback_failed",
+                run_id=run_id,
+                error=str(rollback_exc),
+            )
         return {"ok": False, "error_code": "internal_error", "detail": str(exc)}
 
 
@@ -308,8 +314,13 @@ def scan_and_recover_stuck_runs(
                 )
                 try:
                     db.rollback()
-                except Exception:
-                    pass
+                except Exception as rollback_exc:
+                    emit_observability_event(
+                        logger,
+                        event="stuck_run_scan_rollback_failed",
+                        flow_run_id=str(flow_run.id),
+                        error=str(rollback_exc),
+                    )
 
     except Exception as exc:
         logger.error(

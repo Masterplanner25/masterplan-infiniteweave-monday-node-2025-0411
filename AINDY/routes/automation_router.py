@@ -7,6 +7,7 @@ task execution.
 """
 import logging
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -37,7 +38,7 @@ async def get_automation_logs(
     This replaces silent daemon thread execution with full observability.
     """
     query = db.query(AutomationLog).filter(
-        AutomationLog.user_id == str(current_user["sub"])
+        AutomationLog.user_id == UUID(str(current_user["sub"]))
     )
 
     if status:
@@ -81,7 +82,7 @@ async def get_automation_log(
         db.query(AutomationLog)
         .filter(
             AutomationLog.id == log_id,
-            AutomationLog.user_id == str(current_user["sub"]),
+            AutomationLog.user_id == UUID(str(current_user["sub"])),
         )
         .first()
     )
@@ -122,7 +123,7 @@ async def replay_automation_log(
         db.query(AutomationLog)
         .filter(
             AutomationLog.id == log_id,
-            AutomationLog.user_id == str(current_user["sub"]),
+            AutomationLog.user_id == UUID(str(current_user["sub"])),
         )
         .first()
     )
@@ -138,6 +139,21 @@ async def replay_automation_log(
                 "Only failed or retrying logs can be replayed."
             ),
         )
+
+    payload = log.payload or {}
+    if isinstance(payload, dict) and payload.get("execution_token"):
+        from services.capability_service import validate_token
+
+        validation = validate_token(
+            token=payload.get("execution_token"),
+            run_id=str(payload.get("run_id", "")),
+            user_id=UUID(str(current_user["sub"])),
+        )
+        if not validation["ok"]:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Execution token invalid for replay: {validation['error']}",
+            )
 
     from services.scheduler_service import replay_task
 

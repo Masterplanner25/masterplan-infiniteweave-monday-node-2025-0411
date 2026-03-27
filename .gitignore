@@ -1,21 +1,16 @@
-"node_modules/" 
-"node_modules/" 
-
-# Backend
+node_modules/
 venv/
 __pycache__/
 *.pyc
-
-# Frontend
-node_modules/
 dist/
 build/
-
-# Misc
 code_analysis.db
-.env
 .DS_Store
 Thumbs.db
-.env.dev
-.env.prod
-.env.pg18
+.env
+.env.*
+!.env.example
+AINDY/.env
+AINDY/.env.*
+AINDY/venv/
+AINDY/logs/

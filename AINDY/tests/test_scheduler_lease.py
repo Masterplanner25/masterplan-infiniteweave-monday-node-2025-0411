@@ -9,6 +9,8 @@ Groups:
 """
 import logging
 import pytest
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
 
@@ -41,6 +43,44 @@ class TestStartBackgroundTasksReturnValue:
         with patch.object(task_services, "_acquire_background_lease", return_value=True):
             result = task_services.start_background_tasks(enable=True)
         assert isinstance(result, bool)
+
+    def test_acquire_background_lease_handles_naive_db_timestamp(self):
+        from services import task_services
+
+        lease = SimpleNamespace(
+            name="task_background_runner",
+            owner_id="other-instance",
+            acquired_at=None,
+            heartbeat_at=None,
+            expires_at=datetime.utcnow() + timedelta(seconds=60),
+        )
+
+        class _Query:
+            def filter(self, *args, **kwargs):
+                return self
+
+            def with_for_update(self, **kwargs):
+                return self
+
+            def first(self):
+                return lease
+
+        class _DB:
+            def query(self, model):
+                return _Query()
+
+            def rollback(self):
+                return None
+
+            def close(self):
+                return None
+
+        with patch.object(task_services, "SessionLocal", return_value=_DB()), \
+             patch.object(task_services, "_get_instance_id", return_value="current-instance"):
+            result = task_services._acquire_background_lease()
+
+        assert result is False
+        assert lease.expires_at.tzinfo is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

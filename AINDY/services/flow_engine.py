@@ -43,6 +43,9 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
+from services.system_event_service import emit_error_event, emit_system_event
+from utils.trace_context import ensure_trace_id, get_current_trace_id
+from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,87 @@ def register_node(name: str):
 # Populated at startup via register_flow().
 
 FLOW_REGISTRY: dict[str, dict] = {}
+
+
+def _serialize_flow_events(db: Session, run_id) -> list[dict]:
+    from db.models.flow_run import FlowHistory
+
+    history = (
+        db.query(FlowHistory)
+        .filter(FlowHistory.flow_run_id == run_id)
+        .order_by(FlowHistory.created_at.asc(), FlowHistory.id.asc())
+        .all()
+    )
+    return [
+        {
+            "type": "flow.node",
+            "node": item.node_name,
+            "status": item.status,
+            "execution_time_ms": item.execution_time_ms,
+            "error": item.error_message,
+            "timestamp": item.created_at.isoformat() if item.created_at else None,
+        }
+        for item in history
+    ]
+
+
+def _extract_execution_result(workflow_type: str | None, state: dict) -> object:
+    if not isinstance(state, dict):
+        return state
+
+    if workflow_type == "task_completion":
+        return {
+            "task_result": state.get("task_result"),
+            "orchestration": state.get("task_orchestration"),
+        }
+
+    workflow_key_map = {
+        "genesis_message": "genesis_response",
+        "memory_execution": "memory_execution_response",
+        "watcher_ingest": "watcher_ingest_result",
+        "arm_analysis": "analysis_result",
+    }
+    result_key = workflow_key_map.get(workflow_type or "")
+    if result_key and result_key in state:
+        return state.get(result_key)
+    return state
+
+
+def _extract_next_action(result: object) -> Optional[str]:
+    if not isinstance(result, dict):
+        return None
+
+    direct = result.get("next_action")
+    if direct:
+        return direct
+
+    orchestration = result.get("orchestration")
+    if isinstance(orchestration, dict):
+        nested = orchestration.get("next_action")
+        if nested:
+            return nested
+    return None
+
+
+def _format_execution_response(
+    *,
+    status: str,
+    trace_id: str,
+    result: object = None,
+    events: Optional[list[dict]] = None,
+    next_action: Optional[str] = None,
+    run_id: object = None,
+    state: Optional[dict] = None,
+) -> dict:
+    return {
+        "status": status,
+        "result": result,
+        "events": events or [],
+        "next_action": next_action,
+        "trace_id": trace_id,
+        "run_id": str(run_id) if run_id is not None else None,
+        "state": state if isinstance(state, dict) else None,
+    }
 
 
 def register_flow(name: str, flow: dict) -> None:
@@ -237,18 +321,41 @@ class PersistentFlowRunner:
             state=initial_state,
             current_node=self.flow["start"],
             status="running",
+            trace_id=ensure_trace_id(
+                initial_state.get("trace_id") if isinstance(initial_state, dict) else None
+            ),
             user_id=self.user_id,
             automation_log_id=self.automation_log_id,
         )
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
+        if isinstance(initial_state, dict):
+            if not initial_state.get("trace_id"):
+                initial_state["trace_id"] = run.trace_id or str(run.id)
+            run.state = initial_state
+            if not run.trace_id:
+                run.trace_id = initial_state.get("trace_id") or str(run.id)
+            self.db.commit()
 
         logger.info(
             "FlowRun started: %s (%s/%s)",
             run.id,
             flow_name,
             self.workflow_type,
+        )
+        emit_system_event(
+            db=self.db,
+            event_type="execution.started",
+            user_id=self.user_id,
+            trace_id=run.trace_id or str(run.id),
+            payload={
+                "run_id": str(run.id),
+                "flow_name": flow_name,
+                "workflow_type": self.workflow_type,
+                "current_node": self.flow["start"],
+            },
+            required=True,
         )
 
         return self.resume(run.id)
@@ -269,12 +376,26 @@ class PersistentFlowRunner:
         run = self.db.query(FlowRun).filter(FlowRun.id == run_id).first()
 
         if not run:
-            return {"status": "ERROR", "error": f"FlowRun {run_id} not found"}
+            return _format_execution_response(
+                status="FAILED",
+                trace_id=str(run_id),
+                result={"error": f"FlowRun {run_id} not found"},
+                events=[],
+                next_action=None,
+                run_id=run_id,
+            )
 
         state = run.state or {}
+        if isinstance(state, dict) and not state.get("trace_id"):
+            state["trace_id"] = run.trace_id or get_current_trace_id() or str(run.id)
+            run.state = state
+            if not run.trace_id:
+                run.trace_id = state["trace_id"]
+            self.db.commit()
         current_node = run.current_node
         context = {
             "run_id": run.id,
+            "trace_id": run.trace_id or (state.get("trace_id") if isinstance(state, dict) else None),
             "user_id": self.user_id,
             "workflow_type": self.workflow_type,
             "attempts": {},
@@ -291,14 +412,82 @@ class PersistentFlowRunner:
                 run.error_message = str(e)
                 run.completed_at = datetime.now(timezone.utc)
                 self.db.commit()
-                return {"status": "FAILED", "error": str(e), "run_id": run.id}
+                emit_system_event(
+                    db=self.db,
+                    event_type="execution.failed",
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                        "error": str(e),
+                    },
+                    required=True,
+                )
+                emit_error_event(
+                    db=self.db,
+                    error_type="execution",
+                    message=str(e),
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                    },
+                    required=True,
+                )
+                return _format_execution_response(
+                    status="FAILED",
+                    trace_id=str(run.id),
+                    result={"error": str(e), "failed_node": current_node},
+                    events=_serialize_flow_events(self.db, run.id),
+                    next_action=None,
+                    run_id=run.id,
+                    state=state,
+                )
             except Exception as e:
                 logger.error("Node %s raised exception: %s", current_node, e)
                 run.status = "failed"
                 run.error_message = str(e)
                 run.completed_at = datetime.now(timezone.utc)
                 self.db.commit()
-                return {"status": "FAILED", "error": str(e), "run_id": run.id}
+                emit_system_event(
+                    db=self.db,
+                    event_type="execution.failed",
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                        "error": str(e),
+                    },
+                    required=True,
+                )
+                emit_error_event(
+                    db=self.db,
+                    error_type="execution",
+                    message=str(e),
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                    },
+                    required=True,
+                )
+                return _format_execution_response(
+                    status="FAILED",
+                    trace_id=str(run.id),
+                    result={"error": str(e), "failed_node": current_node},
+                    events=_serialize_flow_events(self.db, run.id),
+                    next_action=None,
+                    run_id=run.id,
+                    state=state,
+                )
 
             node_status = result["status"]
             patch = result.get("output_patch", {})
@@ -336,11 +525,44 @@ class PersistentFlowRunner:
                     )
                     run.completed_at = datetime.now(timezone.utc)
                     self.db.commit()
-                    return {
-                        "status": "FAILED",
-                        "run_id": run.id,
-                        "failed_node": current_node,
-                    }
+                    emit_system_event(
+                        db=self.db,
+                        event_type="execution.failed",
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                            "error": run.error_message,
+                        },
+                        required=True,
+                    )
+                    emit_error_event(
+                        db=self.db,
+                        error_type="execution",
+                        message=run.error_message,
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                        },
+                        required=True,
+                    )
+                    return _format_execution_response(
+                        status="FAILED",
+                        trace_id=str(run.id),
+                        result={
+                            "error": run.error_message,
+                            "failed_node": current_node,
+                        },
+                        events=_serialize_flow_events(self.db, run.id),
+                        next_action=None,
+                        run_id=run.id,
+                        state=state,
+                    )
 
             elif node_status == "FAILURE":
                 run.status = "failed"
@@ -349,11 +571,44 @@ class PersistentFlowRunner:
                 )
                 run.completed_at = datetime.now(timezone.utc)
                 self.db.commit()
-                return {
-                    "status": "FAILED",
-                    "run_id": run.id,
-                    "failed_node": current_node,
-                }
+                emit_system_event(
+                    db=self.db,
+                    event_type="execution.failed",
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                        "error": run.error_message,
+                    },
+                    required=True,
+                )
+                emit_error_event(
+                    db=self.db,
+                    error_type="execution",
+                    message=run.error_message,
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                    },
+                    required=True,
+                )
+                return _format_execution_response(
+                    status="FAILED",
+                    trace_id=str(run.id),
+                    result={
+                        "error": run.error_message,
+                        "failed_node": current_node,
+                    },
+                    events=_serialize_flow_events(self.db, run.id),
+                    next_action=None,
+                    run_id=run.id,
+                    state=state,
+                )
 
             elif node_status == "WAIT":
                 wait_for = result.get("wait_for")
@@ -364,11 +619,44 @@ class PersistentFlowRunner:
                     )
                     run.completed_at = datetime.now(timezone.utc)
                     self.db.commit()
-                    return {
-                        "status": "FAILED",
-                        "run_id": run.id,
-                        "failed_node": current_node,
-                    }
+                    emit_system_event(
+                        db=self.db,
+                        event_type="execution.failed",
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                            "error": run.error_message,
+                        },
+                        required=True,
+                    )
+                    emit_error_event(
+                        db=self.db,
+                        error_type="execution",
+                        message=run.error_message,
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                        },
+                        required=True,
+                    )
+                    return _format_execution_response(
+                        status="FAILED",
+                        trace_id=run.trace_id or str(run.id),
+                        result={
+                            "error": run.error_message,
+                            "failed_node": current_node,
+                        },
+                        events=_serialize_flow_events(self.db, run.id),
+                        next_action=None,
+                        run_id=run.id,
+                        state=state,
+                    )
                 run.status = "waiting"
                 run.waiting_for = wait_for
                 run.state = state
@@ -377,21 +665,87 @@ class PersistentFlowRunner:
                 logger.info(
                     "FlowRun %s waiting for: %s", run.id, run.waiting_for
                 )
-                return {
-                    "status": "WAITING",
-                    "run_id": run.id,
-                    "waiting_for": run.waiting_for,
-                }
+                return _format_execution_response(
+                    status="WAITING",
+                    trace_id=run.trace_id or str(run.id),
+                    result={"waiting_for": run.waiting_for},
+                    events=_serialize_flow_events(self.db, run.id),
+                    next_action=None,
+                    run_id=run.id,
+                    state=state,
+                )
 
             # Check if this is an end node
             if current_node in self.flow.get("end", []):
-                run.status = "success"
-                run.state = state
-                run.completed_at = datetime.now(timezone.utc)
-                self.db.commit()
-                logger.info("FlowRun %s completed successfully", run.id)
-                self._capture_flow_completion(run, state)  # Phase D
-                return {"status": "SUCCESS", "run_id": run.id, "state": state}
+                try:
+                    self._capture_flow_completion(run, state)  # Phase D
+                    execution_result = _extract_execution_result(self.workflow_type, state)
+                    run.status = "success"
+                    run.state = state
+                    run.completed_at = datetime.now(timezone.utc)
+                    self.db.commit()
+                    logger.info("FlowRun %s completed successfully", run.id)
+                    emit_system_event(
+                        db=self.db,
+                        event_type="execution.completed",
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "result": execution_result,
+                        },
+                        required=True,
+                    )
+                    return _format_execution_response(
+                        status="SUCCESS",
+                        trace_id=run.trace_id or str(run.id),
+                        result=execution_result,
+                        events=_serialize_flow_events(self.db, run.id),
+                        next_action=_extract_next_action(execution_result),
+                        run_id=run.id,
+                        state=state,
+                    )
+                except Exception as exc:
+                    run.status = "failed"
+                    run.error_message = f"Completion finalization failed: {exc}"
+                    run.completed_at = datetime.now(timezone.utc)
+                    self.db.commit()
+                    emit_system_event(
+                        db=self.db,
+                        event_type="execution.failed",
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                            "error": run.error_message,
+                        },
+                        required=True,
+                    )
+                    emit_error_event(
+                        db=self.db,
+                        error_type="execution",
+                        message=run.error_message,
+                        user_id=self.user_id,
+                        trace_id=run.trace_id or str(run.id),
+                        payload={
+                            "run_id": str(run.id),
+                            "workflow_type": self.workflow_type,
+                            "failed_node": current_node,
+                        },
+                        required=True,
+                    )
+                    return _format_execution_response(
+                        status="FAILED",
+                        trace_id=run.trace_id or str(run.id),
+                        result={"error": run.error_message},
+                        events=_serialize_flow_events(self.db, run.id),
+                        next_action=None,
+                        run_id=run.id,
+                        state=state,
+                    )
 
             # Advance to next node
             next_node = resolve_next_node(current_node, state, self.flow)
@@ -403,11 +757,41 @@ class PersistentFlowRunner:
                 )
                 run.completed_at = datetime.now(timezone.utc)
                 self.db.commit()
-                return {
-                    "status": "FAILED",
-                    "run_id": run.id,
-                    "error": run.error_message,
-                }
+                emit_system_event(
+                    db=self.db,
+                    event_type="execution.failed",
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                        "error": run.error_message,
+                    },
+                    required=True,
+                )
+                emit_error_event(
+                    db=self.db,
+                    error_type="execution",
+                    message=run.error_message,
+                    user_id=self.user_id,
+                    trace_id=run.trace_id or str(run.id),
+                    payload={
+                        "run_id": str(run.id),
+                        "workflow_type": self.workflow_type,
+                        "failed_node": current_node,
+                    },
+                    required=True,
+                )
+                return _format_execution_response(
+                    status="FAILED",
+                    trace_id=run.trace_id or str(run.id),
+                    result={"error": run.error_message},
+                    events=_serialize_flow_events(self.db, run.id),
+                    next_action=None,
+                    run_id=run.id,
+                    state=state,
+                )
 
             run.current_node = next_node
             run.state = state
@@ -480,7 +864,17 @@ class PersistentFlowRunner:
                 context={"run_id": run.id, "total_ms": total_ms},
             )
         except Exception as e:
-            logger.warning("FlowHistory → Memory Bridge capture failed: %s", e)
+            logger.warning("FlowHistory -> Memory Bridge capture failed: %s", e)
+            emit_error_event(
+                db=self.db,
+                error_type="memory_capture",
+                message=str(e),
+                user_id=self.user_id,
+                trace_id=get_current_trace_id() or getattr(run, "trace_id", None),
+                payload={"run_id": str(run.id), "workflow_type": self.workflow_type},
+                required=True,
+            )
+            raise
 
 
 # ── Event Router ───────────────────────────────────────────────────────────────
@@ -507,8 +901,9 @@ def route_event(
         FlowRun.status == "waiting",
     )
 
-    if user_id:
-        query = query.filter(FlowRun.user_id == user_id)
+    owner_user_id = parse_user_id(user_id)
+    if owner_user_id:
+        query = query.filter(FlowRun.user_id == owner_user_id)
 
     runs = query.all()
     results = []
@@ -569,7 +964,7 @@ def record_outcome(
             workflow_type=workflow_type,
             success=success,
             execution_time_ms=execution_time_ms,
-            user_id=user_id,
+            user_id=parse_user_id(user_id),
             event_metadata=metadata or {},
         )
         db.add(outcome)
@@ -597,12 +992,13 @@ def select_strategy(
     from db.models.flow_run import Strategy
 
     # Try user-specific strategy first
-    if user_id:
+    owner_user_id = parse_user_id(user_id)
+    if owner_user_id:
         user_strategy = (
             db.query(Strategy)
             .filter(
                 Strategy.intent_type == intent_type,
-                Strategy.user_id == user_id,
+                Strategy.user_id == owner_user_id,
             )
             .order_by(Strategy.score.desc())
             .first()
@@ -648,8 +1044,9 @@ def update_strategy_score(
     from db.models.flow_run import Strategy
 
     query = db.query(Strategy).filter(Strategy.intent_type == intent_type)
-    if user_id:
-        query = query.filter(Strategy.user_id == user_id)
+    owner_user_id = parse_user_id(user_id)
+    if owner_user_id:
+        query = query.filter(Strategy.user_id == owner_user_id)
 
     strategy = query.order_by(Strategy.score.desc()).first()
 
@@ -687,11 +1084,32 @@ def generate_plan_from_intent(intent: dict) -> dict:
         "genesis_conversation": {
             "steps": ["process_message", "store_insight"]
         },
+        "genesis_message": {
+            "steps": [
+                "genesis_message_validate",
+                "genesis_message_execute",
+                "genesis_message_orchestrate",
+            ]
+        },
         "genesis_lock": {
             "steps": ["validate_draft", "lock_masterplan", "store_decision"]
         },
         "task_completion": {
-            "steps": ["task_validate", "task_complete", "task_store_outcome"]
+            "steps": ["task_validate", "task_complete", "task_orchestrate"]
+        },
+        "memory_execution": {
+            "steps": [
+                "memory_execution_validate",
+                "memory_execution_run",
+                "memory_execution_orchestrate",
+            ]
+        },
+        "watcher_ingest": {
+            "steps": [
+                "watcher_ingest_validate",
+                "watcher_ingest_persist",
+                "watcher_ingest_orchestrate",
+            ]
         },
         "leadgen_search": {
             "steps": ["leadgen_validate", "leadgen_search", "leadgen_store"]

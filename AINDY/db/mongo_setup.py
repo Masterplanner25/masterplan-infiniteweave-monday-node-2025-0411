@@ -1,13 +1,11 @@
 import os
+import logging
 from pymongo import MongoClient
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Configuration (Defaults to local if not set in .env)
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+# Configuration
+MONGO_URL = os.getenv("MONGO_URL")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_social_layer")
+logger = logging.getLogger(__name__)
 
 _client = None
 
@@ -18,15 +16,14 @@ def get_mongo_client():
     """
     global _client
     if _client is None:
+        if not MONGO_URL:
+            raise RuntimeError("MONGO_URL is not configured")
         try:
-            # Create client with a 5-second timeout so it doesn't hang if Mongo is down
             _client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
-            
-            # The 'server_info' call forces a connection check
             _client.server_info()
-            print(f"✅ [MongoDB] Connected to database: {MONGO_DB_NAME}")
+            logger.info("Connected to MongoDB database %s", MONGO_DB_NAME)
         except Exception as e:
-            print(f"❌ [MongoDB] Connection failed: {e}")
+            logger.error("MongoDB connection failed: %s", e)
             _client = None
     return _client
 

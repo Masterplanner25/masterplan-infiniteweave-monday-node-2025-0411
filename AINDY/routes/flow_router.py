@@ -7,6 +7,7 @@ makes those runs inspectable and controllable.
 """
 import logging
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -34,7 +35,7 @@ async def list_flow_runs(
     Shows all workflow executions — running, waiting, succeeded, failed.
     """
     query = db.query(FlowRun).filter(
-        FlowRun.user_id == str(current_user["sub"])
+        FlowRun.user_id == UUID(str(current_user["sub"]))
     )
     if status:
         query = query.filter(FlowRun.status == status)
@@ -50,6 +51,7 @@ async def list_flow_runs(
                 "flow_name": r.flow_name,
                 "workflow_type": r.workflow_type,
                 "status": r.status,
+                "trace_id": r.trace_id,
                 "current_node": r.current_node,
                 "waiting_for": r.waiting_for,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -75,7 +77,7 @@ async def get_flow_run(
         db.query(FlowRun)
         .filter(
             FlowRun.id == run_id,
-            FlowRun.user_id == str(current_user["sub"]),
+            FlowRun.user_id == UUID(str(current_user["sub"])),
         )
         .first()
     )
@@ -88,6 +90,7 @@ async def get_flow_run(
         "flow_name": run.flow_name,
         "workflow_type": run.workflow_type,
         "status": run.status,
+        "trace_id": run.trace_id,
         "current_node": run.current_node,
         "waiting_for": run.waiting_for,
         "state": run.state,
@@ -113,7 +116,7 @@ async def get_flow_run_history(
         db.query(FlowRun)
         .filter(
             FlowRun.id == run_id,
-            FlowRun.user_id == str(current_user["sub"]),
+            FlowRun.user_id == UUID(str(current_user["sub"])),
         )
         .first()
     )
@@ -130,6 +133,7 @@ async def get_flow_run_history(
 
     return {
         "run_id": run_id,
+        "trace_id": run.trace_id,
         "flow_name": run.flow_name,
         "workflow_type": run.workflow_type,
         "history": [
@@ -170,7 +174,7 @@ async def resume_flow_run(
         db.query(FlowRun)
         .filter(
             FlowRun.id == run_id,
-            FlowRun.user_id == str(current_user["sub"]),
+            FlowRun.user_id == UUID(str(current_user["sub"])),
         )
         .first()
     )
@@ -196,7 +200,7 @@ async def resume_flow_run(
         event_type=body.event_type,
         payload=body.payload,
         db=db,
-        user_id=str(current_user["sub"]),
+        user_id=UUID(str(current_user["sub"])),
     )
 
     return {"run_id": run_id, "resumed": True, "results": results}

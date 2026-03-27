@@ -52,6 +52,7 @@ class TestRequestContextFilter:
         finally:
             _request_id_ctx.reset(token)
         assert record.request_id == "abc-123"
+        assert record.trace_id == "abc-123"
 
     def test_filter_uses_default_when_no_request(self):
         from main import RequestContextFilter, _request_id_ctx
@@ -125,6 +126,7 @@ class TestLogRequestsMiddleware:
 
         response = await log_requests(mock_request, fake_call_next)
         assert "X-Request-ID" in response.headers
+        assert response.headers["X-Trace-ID"] == response.headers["X-Request-ID"]
 
     @pytest.mark.asyncio
     async def test_request_id_is_uuid_format(self):

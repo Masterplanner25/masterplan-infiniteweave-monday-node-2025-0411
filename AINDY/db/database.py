@@ -30,6 +30,7 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = logging.getLogger(__name__)
+from services.observability_events import emit_observability_event
 _session_guard_lock = threading.Lock()
 _active_sessions: set[int] = set()
 
@@ -44,8 +45,14 @@ def set_utc(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     try:
         cursor.execute("SET TIME ZONE 'UTC';")
-    except Exception:
-        pass
+    except Exception as exc:
+        emit_observability_event(
+            logger,
+            event="db_set_utc_failed",
+            level="error",
+            error=str(exc),
+        )
+        raise
     finally:
         cursor.close()
 

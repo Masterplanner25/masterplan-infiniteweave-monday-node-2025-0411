@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from services.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
+from services.observability_events import emit_observability_event
 
 
 class MemoryFeedbackEngine:
@@ -52,7 +53,11 @@ class MemoryFeedbackEngine:
             logger.warning("[MemoryFeedback] update failed: %s", exc)
             try:
                 db.rollback()
-            except Exception:
-                pass
+            except Exception as rollback_exc:
+                emit_observability_event(
+                    logger,
+                    event="memory_feedback_rollback_failed",
+                    error=str(rollback_exc),
+                )
         except Exception as exc:
             logger.warning("[MemoryFeedback] update failed: %s", exc)

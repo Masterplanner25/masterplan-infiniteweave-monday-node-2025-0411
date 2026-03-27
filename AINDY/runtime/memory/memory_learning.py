@@ -7,6 +7,7 @@ import uuid
 from services.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
+from services.observability_events import emit_observability_event
 
 
 class MemoryLearningEngine:
@@ -71,8 +72,12 @@ class MemoryLearningEngine:
             logger.warning("[MemoryLearning] update failed: %s", exc)
             try:
                 db.rollback()
-            except Exception:
-                pass
+            except Exception as rollback_exc:
+                emit_observability_event(
+                    logger,
+                    event="memory_learning_rollback_failed",
+                    error=str(rollback_exc),
+                )
 
     def _get_success_rate(self, node: MemoryNodeModel) -> float:
         extra = node.extra or {}

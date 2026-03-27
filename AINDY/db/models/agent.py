@@ -8,7 +8,8 @@ that tags all memory nodes it creates.
 System agents: ARM, Genesis, Nodus, LeadGen, SYLVA
 Custom agents: user-defined (future)
 """
-from sqlalchemy import Column, String, Text, Boolean, DateTime
+from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 from db.database import Base
@@ -37,7 +38,7 @@ class Agent(Base):
     name = Column(String, nullable=False, unique=True)
     agent_type = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    owner_user_id = Column(String, nullable=True)
+    owner_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     is_active = Column(Boolean, nullable=False, default=True)
     memory_namespace = Column(String, nullable=False, unique=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Literal, Optional
 from pydantic import BaseModel
@@ -7,6 +8,13 @@ import logging
 from db.database import get_db
 from db.dao.memory_node_dao import MemoryNodeDAO
 from services.auth_service import get_current_user
+from services.flow_engine import execute_intent
+from services.observability_events import emit_observability_event
+from services.nodus_security import (
+    ALLOWED_OPERATION_CAPABILITIES,
+    NodusSecurityError,
+    authorize_nodus_execution,
+)
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 logger = logging.getLogger(__name__)
@@ -94,6 +102,9 @@ class NodusTaskRequest(BaseModel):
     task_code: str  # The Nodus task block code
     session_tags: Optional[list[str]] = []
     context: Optional[dict] = {}
+    allowed_operations: Optional[list[str]] = None
+    execution_id: Optional[str] = None
+    capability_token: Optional[dict] = None
 
 
 class ExecutionLoopRequest(BaseModel):
@@ -818,119 +829,61 @@ async def execute_nodus_task(
     current_user=Depends(get_current_user),
 ):
     """
-    Execute a Nodus task block with full Memory Bridge access.
+    Execute a Nodus task block with restricted Memory Bridge access.
     """
-    from bridge.nodus_memory_bridge import create_nodus_bridge
-
-    bridge = create_nodus_bridge(
-        db=db,
-        user_id=str(current_user["sub"]),
-        session_tags=body.session_tags,
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
     )
+    from services.nodus_execution_service import execute_nodus_task_payload
+    from utils.user_ids import require_user_id
+
+    user_id = str(require_user_id(current_user["sub"]))
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="memory.nodus.execute",
+            payload={
+                "task_name": body.task_name,
+                "task_code": body.task_code,
+                "user_id": user_id,
+                "session_tags": body.session_tags,
+                "allowed_operations": body.allowed_operations,
+                "execution_id": body.execution_id,
+                "capability_token": body.capability_token,
+            },
+            user_id=user_id,
+            source="memory_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="memory.nodus.execute",
+                source="memory_router",
+            ),
+        )
 
     try:
-        import os
-        import sys
-
-        nodus_path = os.environ.get(
-            "NODUS_SOURCE_PATH",
-            r"C:\dev\Coding Language\src",  # local dev fallback
-        )
-        if nodus_path not in sys.path:
-            sys.path.insert(0, nodus_path)
-
-        from nodus.runtime.embedding import NodusRuntime
-
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator
-        from runtime.memory.memory_feedback import MemoryFeedbackEngine
-        from bridge import create_memory_node
-
-        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
-        feedback_engine = MemoryFeedbackEngine()
-
-        memory_context = orchestrator.get_context(
-            user_id=str(current_user["sub"]),
-            query=body.task_name or "",
-            task_type="nodus_execution",
+        return execute_nodus_task_payload(
+            task_name=body.task_name,
+            task_code=body.task_code,
             db=db,
-            max_tokens=800,
-            metadata={
-                "tags": body.session_tags or [],
-                "node_types": [],
-                "limit": 3,
+            user_id=user_id,
+            session_tags=body.session_tags,
+            allowed_operations=body.allowed_operations,
+            execution_id=body.execution_id,
+            capability_token=body.capability_token,
+            logger=logger,
+        )
+    except NodusSecurityError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "nodus_security_violation",
+                "message": str(exc),
             },
         )
-
-        runtime = NodusRuntime()
-        # Pattern C: host-builtins registered per-session via embedding API.
-        runtime.register_function("recall", bridge.recall, arity=(0, 1, 2, 3, 4))
-        runtime.register_function("recall_tool", bridge.recall_tool, arity=(0, 1, 2, 3))
-        runtime.register_function("remember", bridge.remember, arity=(1, 2, 3, 4, 5))
-        runtime.register_function("suggest", bridge.get_suggestions, arity=(0, 1, 2, 3))
-        runtime.register_function("record_outcome", bridge.record_outcome, arity=2)
-        runtime.register_function("recall_from", bridge.recall_from, arity=(1, 2, 3, 4))
-        runtime.register_function("recall_all", bridge.recall_all_agents, arity=(0, 1, 2, 3))
-        runtime.register_function("share", bridge.share, arity=1)
-
-        result = runtime.run_source(
-            body.task_code,
-            filename=f"<nodus:{body.task_name}>",
-            initial_globals={
-                "memory_context": memory_context.formatted,
-                "memory_ids": memory_context.ids,
-            },
-            host_globals={
-                "memory_bridge": bridge,
-                "memory_context": memory_context.formatted,
-                "memory_ids": memory_context.ids,
-            },
-        )
-
-        try:
-            create_memory_node(
-                content=f"Nodus task '{body.task_name}' executed: {result.get('stdout', '')[:500]}",
-                source="nodus_task",
-                tags=(body.session_tags or []) + ["nodus", "task_execution"],
-                user_id=str(current_user["sub"]),
-                db=db,
-                node_type="outcome",
-            )
-        except Exception:
-            pass
-
-        try:
-            success_score = 1.0 if result.get("ok") else 0.0
-            feedback_engine.record_usage(
-                memory_ids=memory_context.ids,
-                success_score=success_score,
-                db=db,
-            )
-        except Exception:
-            pass
-
-        return {
-            "task_name": body.task_name,
-            "status": "executed" if result.get("ok") else "failed",
-            "memory_bridge": "active",
-            "session_tags": body.session_tags,
-            "result": result,
-        }
-
-    except ImportError:
-        return {
-            "task_name": body.task_name,
-            "status": "bridge_ready",
-            "message": (
-                "Nodus runtime not found. Memory Bridge is available for "
-                "direct API calls."
-            ),
-            "available_operations": [
-                "POST /memory/recall/v3",
-                "POST /memory/suggest",
-                "POST /memory/nodes/{id}/feedback",
-            ],
-        }
 
     except Exception as exc:
         raise HTTPException(
@@ -948,74 +901,19 @@ async def execute_with_memory(
     """
     Execute any workflow with the full v5 memory loop.
     """
-    user_id = str(current_user["sub"])
-
-    from types import SimpleNamespace
-
-    from db.dao.memory_node_dao import MemoryNodeDAO
-    from runtime.execution_loop import ExecutionLoop
-    from runtime.execution_registry import REGISTRY
-    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-
-    orchestrator = MemoryOrchestrator(MemoryNodeDAO)
-    loop = ExecutionLoop(orchestrator)
-
-    from services.genesis_ai import call_genesis_llm
-    from services.leadgen_service import create_lead_results
-
-    def leadgen_handler(payload, user_id, db):
-        query = payload.get("query") or payload.get("input") or payload.get("message")
-        if not query:
-            return {"error": "missing_query", "message": "missing query"}
-        return create_lead_results(db=db, query=str(query), user_id=user_id)
-
-    def genesis_handler(payload, user_id, db):
-        message = payload.get("message") or payload.get("query") or payload.get("input")
-        current_state = payload.get("current_state") or payload.get("state") or {}
-        if not message:
-            return {"error": "missing_message", "message": "missing message"}
-        return call_genesis_llm(message=str(message), current_state=current_state, user_id=user_id, db=db)
-
-    REGISTRY.register("leadgen", leadgen_handler)
-    REGISTRY.register("genesis_message", genesis_handler)
-
-    def executor(task, context):
-        return REGISTRY.execute(
-            workflow=task.type,
-            payload=task.input,
-            user_id=user_id,
-            db=db,
-        )
-
-    loop.executor = executor
-
-    task = SimpleNamespace(
-        type=body.workflow,
-        input=body.input,
-        source=f"execution_loop:{body.workflow}",
-        tags=body.session_tags,
-        metadata={
-            "trace_enabled": True,
-            "trace_title": body.workflow,
-            "trace_description": None,
-            "trace_extra": body.input or {},
+    result = execute_intent(
+        intent_data={
+            "workflow_type": "memory_execution",
+            "original_workflow": body.workflow,
+            "execution_input": body.input,
+            "session_tags": body.session_tags,
         },
+        db=db,
+        user_id=str(current_user["sub"]),
     )
-
-    result, context = loop.run_with_context(task, user_id, db)
-    recalled_memories = memory_items_to_dicts(context.items) if context else []
-
-    return {
-        "workflow": body.workflow,
-        "user_id": user_id,
-        "session_tags": body.session_tags,
-        "result": result,
-        "recalled_memories": recalled_memories,
-        "recall_count": len(recalled_memories),
-        "memory_bridge_version": "v5",
-        "trace_id": task.metadata.get("trace_id"),
-        "memory_context": context.formatted if context else "",
-    }
+    if result.get("status") != "SUCCESS":
+        raise HTTPException(status_code=500, detail="Memory execution failed")
+    return result
 
 
 @router.post("/execute/complete")
@@ -1027,6 +925,13 @@ async def complete_execution_loop(
     """
     Complete the v5 execution loop after workflow finishes.
     """
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "memory_execute_complete_deprecated",
+            "message": "Execution completion is now handled inside POST /memory/execute via the canonical flow pipeline.",
+        },
+    )
     user_id = str(current_user["sub"])
 
     from services.memory_capture_engine import (

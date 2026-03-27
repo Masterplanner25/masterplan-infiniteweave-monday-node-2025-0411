@@ -29,6 +29,7 @@ from modules.deepseek.file_processor_deepseek import FileProcessor
 from modules.deepseek.config_manager_deepseek import ConfigManager
 from db.models.arm_models import AnalysisResult, CodeGeneration
 from config import settings
+from services.external_call_service import perform_external_call
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -107,6 +108,8 @@ class DeepSeekCodeAnalyzer:
         self,
         system_prompt: str,
         user_prompt: str,
+        db: Session,
+        user_id: str,
         model: str = None,
         temperature: float = None,
     ) -> tuple:
@@ -125,15 +128,24 @@ class DeepSeekCodeAnalyzer:
         last_exc = None
         for attempt in range(retry_limit):
             try:
-                response = self.client.chat.completions.create(
+                response = perform_external_call(
+                    service_name="openai",
+                    db=db,
+                    user_id=user_id,
+                    endpoint="chat.completions.create",
                     model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format={"type": "json_object"},
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
+                    method="openai.chat",
+                    extra={"purpose": "arm_openai_call", "attempt": attempt + 1},
+                    operation=lambda: self.client.chat.completions.create(
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object"},
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                    ),
                 )
                 content = response.choices[0].message.content
                 usage = response.usage
@@ -216,7 +228,7 @@ class DeepSeekCodeAnalyzer:
                     },
                 )
             except Exception:
-                pass
+                logger.warning("[ARM] Identity context injection failed")
 
             # Step 3 — Build prompt
             context_section = (
@@ -250,6 +262,8 @@ class DeepSeekCodeAnalyzer:
             result_text, input_tokens, output_tokens = self._call_openai(
                 system_prompt=ANALYSIS_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                db=db,
+                user_id=user_id,
                 model=self.config.get("analysis_model", "gpt-4o"),
                 temperature=self.config.get("temperature", 0.2),
             )
@@ -289,16 +303,13 @@ class DeepSeekCodeAnalyzer:
             # Trigger Infinity score recalculation (fire-and-forget)
             try:
                 if user_id and db:
-                    from services.infinity_service import calculate_infinity_score
-                    from services.infinity_loop import run_loop
+                    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-                    score_result = calculate_infinity_score(
+                    execute_infinity_orchestrator(
                         user_id=str(user_id),
                         db=db,
                         trigger_event="arm_analysis",
                     )
-                    if score_result:
-                        run_loop(user_id=str(user_id), trigger_event="arm_analyzed", db=db)
             except Exception as e:
                 logger.warning("[ARM] Infinity score after ARM failed: %s", e)
 
@@ -379,7 +390,7 @@ class DeepSeekCodeAnalyzer:
                 )
                 db.commit()
             except Exception:
-                pass
+                logger.warning("[ARM] Failed analysis persistence fallback failed")
             raise
 
     # ── Generation ───────────────────────────────────────────────────────────
@@ -432,6 +443,8 @@ class DeepSeekCodeAnalyzer:
             result_text, input_tokens, output_tokens = self._call_openai(
                 system_prompt=GENERATION_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
+                db=db,
+                user_id=user_id,
                 model=self.config.get("generation_model", "gpt-4o"),
                 temperature=self.config.get("generation_temperature", 0.4),
             )
@@ -454,8 +467,8 @@ class DeepSeekCodeAnalyzer:
             if analysis_id:
                 try:
                     analysis_uuid = uuid.UUID(analysis_id)
-                except ValueError:
-                    pass
+                except ValueError as exc:
+                    logger.warning("[ARM] Invalid analysis_id '%s': %s", analysis_id, exc)
 
             # Persist to DB
             db_record = CodeGeneration(

@@ -43,12 +43,41 @@ score failure never crashes parent workflows.
 import json
 import logging
 import math
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
+from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
+
+_ORCHESTRATOR_ACTIVE: ContextVar[bool] = ContextVar(
+    "infinity_orchestrator_active",
+    default=False,
+)
+
+
+def _db_user_id(user_id: str):
+    parsed = parse_user_id(user_id)
+    return parsed if parsed is not None else user_id
+
+
+@contextmanager
+def orchestrator_score_context():
+    token = _ORCHESTRATOR_ACTIVE.set(True)
+    try:
+        yield
+    finally:
+        _ORCHESTRATOR_ACTIVE.reset(token)
+
+
+def _ensure_orchestrated() -> None:
+    if not _ORCHESTRATOR_ACTIVE.get():
+        raise RuntimeError(
+            "Infinity score updates must be executed via services.infinity_orchestrator.execute()"
+        )
 
 # ── KPI Weights ──────────────────────────────────────────────────────────────
 from db.models.user_score import KPI_WEIGHTS
@@ -408,10 +437,11 @@ def get_user_kpi_snapshot(user_id: str, db: Session) -> Optional[dict]:
     Never raises.
     """
     try:
+        user_db_id = _db_user_id(user_id)
         from db.models.user_score import UserScore
 
         score = db.query(UserScore).filter(
-            UserScore.user_id == user_id
+            UserScore.user_id == user_db_id
         ).first()
 
         if not score:
@@ -450,7 +480,9 @@ def calculate_infinity_score(
                    "arm_analysis" | "scheduled" | "manual"
     """
     try:
+        _ensure_orchestrated()
         from db.models.user_score import UserScore, ScoreHistory
+        user_db_id = _db_user_id(user_id)
 
         now = datetime.now(timezone.utc)
 
@@ -483,7 +515,7 @@ def calculate_infinity_score(
 
         # Upsert user_scores
         existing = db.query(UserScore).filter(
-            UserScore.user_id == user_id
+            UserScore.user_id == user_db_id
         ).first()
 
         previous_master = existing.master_score if existing else 0.0
@@ -504,7 +536,7 @@ def calculate_infinity_score(
             db.add(existing)
         else:
             new_score = UserScore(
-                user_id=user_id,
+                user_id=user_db_id,
                 master_score=master,
                 execution_speed_score=exec_speed,
                 decision_efficiency_score=decision_eff,
@@ -520,7 +552,7 @@ def calculate_infinity_score(
 
         # Append to score_history
         history_entry = ScoreHistory(
-            user_id=user_id,
+            user_id=user_db_id,
             master_score=master,
             execution_speed_score=exec_speed,
             decision_efficiency_score=decision_eff,

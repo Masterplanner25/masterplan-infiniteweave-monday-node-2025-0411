@@ -1,15 +1,23 @@
 import logging
 import os
 import uuid
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from db.database import get_db
 from db.models import GenesisSessionDB, MasterPlan
-from pydantic import BaseModel
-from services.genesis_ai import call_genesis_llm, call_genesis_synthesis_llm, validate_draft_integrity
-from services.masterplan_factory import create_masterplan_from_genesis
-from datetime import datetime
 from services.auth_service import get_current_user
+from services.flow_engine import execute_intent
+from services.observability_events import emit_observability_event
+from services.genesis_ai import (
+    call_genesis_synthesis_llm,
+    validate_draft_integrity,
+)
+from services.masterplan_factory import create_masterplan_from_genesis
 from services.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
@@ -48,8 +56,8 @@ def create_genesis_session(
             "assets_summary": None,
             "inferred_domains": [],
             "inferred_phases": [],
-            "confidence": 0.0
-        }
+            "confidence": 0.0,
+        },
     )
 
     db.add(session)
@@ -67,6 +75,12 @@ def genesis_message(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+
     user_id = uuid.UUID(str(current_user["sub"]))
     session_id = payload.get("session_id")
     user_message = payload.get("message")
@@ -82,84 +96,39 @@ def genesis_message(
             detail={"error": "message_required", "message": "message is required"},
         )
 
-    session = _get_user_session(session_id, user_id, db)
-
-    current_state = session.summarized_state or {}
-
-    llm_output = call_genesis_llm(
-        message=user_message,
-        current_state=current_state,
-        user_id=str(user_id),
-        db=db,
-    )
-
-    reply = llm_output.get("reply", "")
-    state_update = llm_output.get("state_update", {})
-    synthesis_ready_flag = llm_output.get("synthesis_ready", False)
-
-    # Merge state safely
-    for key, value in state_update.items():
-        if key in current_state and value is not None:
-            current_state[key] = value
-
-    # Clamp confidence between 0 and 1
-    if "confidence" in current_state:
-        current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
-
-    session.summarized_state = current_state
-
-    # One-way flag: once True, never reverts to False
-    if synthesis_ready_flag and not session.synthesis_ready:
-        session.synthesis_ready = True
-
-    db.commit()
-
-    # ── Phase C: co-run genesis FlowRun for observability (non-fatal) ──────────
-    # Does not modify the response or existing session logic.
-    # Manages a genesis_conversation FlowRun alongside each message.
-    try:
-        from services.flow_engine import (
-            FLOW_REGISTRY,
-            PersistentFlowRunner,
-            route_event as _flow_route_event,
+    _get_user_session(session_id, user_id, db)
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="genesis.message",
+            payload={
+                "session_id": session_id,
+                "message": user_message,
+                "user_id": str(user_id),
+            },
+            user_id=user_id,
+            source="genesis_router",
         )
-        _flow_run_id = current_state.get("_genesis_flow_run_id")
-        _synthesis_ready = bool(session.synthesis_ready)
-        if _flow_run_id:
-            _flow_route_event(
-                event_type="genesis_user_message",
-                payload={"synthesis_ready": _synthesis_ready},
-                db=db,
-                user_id=str(user_id),
-            )
-        else:
-            _flow = FLOW_REGISTRY.get("genesis_conversation")
-            if _flow:
-                _runner = PersistentFlowRunner(
-                    flow=_flow,
-                    db=db,
-                    user_id=str(user_id),
-                    workflow_type="genesis_conversation",
-                )
-                _result = _runner.start(
-                    initial_state={
-                        "session_id": session_id,
-                        "synthesis_ready": _synthesis_ready,
-                    },
-                    flow_name="genesis_conversation",
-                )
-                _rid = _result.get("run_id")
-                if _rid:
-                    current_state["_genesis_flow_run_id"] = _rid
-                    session.summarized_state = current_state
-                    db.commit()
-    except Exception:
-        pass  # flow engine integration is non-fatal
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="genesis.message",
+                source="genesis_router",
+            ),
+        )
 
-    return {
-        "reply": reply,
-        "synthesis_ready": session.synthesis_ready
-    }
+    result = execute_intent(
+        intent_data={
+            "workflow_type": "genesis_message",
+            "session_id": session_id,
+            "message": user_message,
+        },
+        db=db,
+        user_id=str(user_id),
+    )
+    if result.get("status") != "SUCCESS":
+        raise HTTPException(status_code=500, detail="Genesis message execution failed")
+    return result
 
 
 @router.get("/session/{session_id}")
@@ -195,7 +164,7 @@ def get_genesis_draft(
             status_code=404,
             detail={
                 "error": "draft_not_available",
-                "message": "No draft available yet — run /genesis/synthesize first",
+                "message": "No draft available yet - run /genesis/synthesize first",
             },
         )
 
@@ -214,6 +183,12 @@ def synthesize_genesis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+
     user_id = uuid.UUID(str(current_user["sub"]))
     session_id = payload.get("session_id")
 
@@ -230,8 +205,24 @@ def synthesize_genesis(
             status_code=422,
             detail={
                 "error": "synthesis_not_ready",
-                "message": "Session is not ready for synthesis yet — continue the conversation until synthesis_ready is true",
+                "message": "Session is not ready for synthesis yet - continue the conversation until synthesis_ready is true",
             },
+        )
+
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="genesis.synthesize",
+            payload={"session_id": session_id, "user_id": str(user_id)},
+            user_id=user_id,
+            source="genesis_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="genesis.synthesize",
+                source="genesis_router",
+            ),
         )
 
     current_state = session.summarized_state or {}
@@ -241,7 +232,6 @@ def synthesize_genesis(
         db=db,
     )
 
-    # Persist draft to session
     session.draft_json = draft
     db.commit()
 
@@ -261,7 +251,12 @@ def audit_genesis_draft(
     current_user: dict = Depends(get_current_user),
 ):
     """Run a strategic integrity audit on the persisted draft for a genesis session."""
-    # NOTE: returns 422 when no draft_json is available.
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+
     user_id = uuid.UUID(str(current_user["sub"]))
     try:
         session = _get_user_session(body.session_id, user_id, db)
@@ -278,8 +273,24 @@ def audit_genesis_draft(
             status_code=422,
             detail={
                 "error": "draft_not_available",
-                "message": "No draft available — run /genesis/synthesize first",
+                "message": "No draft available - run /genesis/synthesize first",
             },
+        )
+
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="genesis.audit",
+            payload={"session_id": body.session_id, "user_id": str(user_id)},
+            user_id=user_id,
+            source="genesis_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="genesis.audit",
+                source="genesis_router",
+            ),
         )
 
     audit_result = validate_draft_integrity(session.draft_json)
@@ -302,7 +313,6 @@ def lock_masterplan(
             detail={"error": "missing_session_or_draft", "message": "Missing session or draft"},
         )
 
-    # Validate session ownership before locking
     _get_user_session(session_id, user_id, db)
 
     try:
@@ -318,12 +328,12 @@ def lock_masterplan(
             detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
         )
 
-    # Write lock event to memory (fire-and-forget)
     try:
         from services.memory_capture_engine import MemoryCaptureEngine
-        _vision = ""
+
+        vision = ""
         if isinstance(draft, dict):
-            _vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
+            vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
         engine = MemoryCaptureEngine(
             db=db,
             user_id=str(user_id),
@@ -334,7 +344,7 @@ def lock_masterplan(
             content=(
                 f"Masterplan locked: {masterplan.version_label} "
                 f"(posture: {masterplan.posture}, session: {session_id}). "
-                f"Vision: {str(_vision)[:200]}"
+                f"Vision: {vision[:200]}"
             ),
             source="genesis_lock",
             tags=["genesis", "masterplan", "decision"],
@@ -342,12 +352,19 @@ def lock_masterplan(
             force=True,
         )
     except Exception:
-        pass
+        emit_observability_event(
+            logger,
+            event="genesis_lock_memory_capture_failed",
+            route="/genesis/lock",
+            session_id=session_id,
+            user_id=user_id,
+        )
+        raise
 
     return {
         "masterplan_id": masterplan.id,
         "version": masterplan.version_label,
-        "posture": masterplan.posture
+        "posture": masterplan.posture,
     }
 
 
@@ -361,7 +378,7 @@ def activate_masterplan(
 
     plan = (
         db.query(MasterPlan)
-        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == str(user_id))
+        .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id)
         .first()
     )
 
@@ -371,19 +388,17 @@ def activate_masterplan(
             detail={"error": "masterplan_not_found", "message": "Plan not found"},
         )
 
-    # Deactivate all plans owned by this user
-    db.query(MasterPlan).filter(MasterPlan.user_id == str(user_id)).update({"is_active": False})
+    db.query(MasterPlan).filter(MasterPlan.user_id == user_id).update({"is_active": False})
 
-    # Activate selected
     plan.is_active = True
     plan.status = "active"
     plan.activated_at = datetime.utcnow()
 
     db.commit()
 
-    # Write activation event to memory (fire-and-forget)
     try:
         from services.memory_capture_engine import MemoryCaptureEngine
+
         engine = MemoryCaptureEngine(
             db=db,
             user_id=str(user_id),
@@ -398,6 +413,13 @@ def activate_masterplan(
             force=True,
         )
     except Exception:
-        pass
+        emit_observability_event(
+            logger,
+            event="genesis_activate_memory_capture_failed",
+            route="/genesis/{plan_id}/activate",
+            plan_id=plan_id,
+            user_id=user_id,
+        )
+        raise
 
     return {"status": "activated"}

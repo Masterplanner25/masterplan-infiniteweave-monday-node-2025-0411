@@ -3,6 +3,7 @@ from pymongo.database import Database
 from typing import List, Optional
 import math
 from datetime import datetime
+from uuid import UUID
 from sqlalchemy.orm import Session
 import logging
 
@@ -245,10 +246,11 @@ def get_feed(
     author_scores: dict = {}
     try:
         if author_ids:
+            author_uuid_ids = [UUID(str(author_id)) for author_id in author_ids]
             score_rows = sql_db.query(UserScore).filter(
-                UserScore.user_id.in_(author_ids)
+                UserScore.user_id.in_(author_uuid_ids)
             ).all()
-            author_scores = {row.user_id: row.master_score for row in score_rows}
+            author_scores = {str(row.user_id): row.master_score for row in score_rows}
     except Exception as exc:
         logger.warning("Author score lookup failed (non-fatal): %s", exc)
 

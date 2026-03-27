@@ -80,23 +80,21 @@ async def get_my_score(
     Returns latest cached score with all 5 KPIs.
     If no score exists, calculates one on the fly.
     """
-    user_id = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
 
     score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
 
     if not score:
-        from services.infinity_service import calculate_infinity_score
-        from services.infinity_loop import run_loop
+        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-        result = calculate_infinity_score(
+        result = execute_infinity_orchestrator(
             user_id=user_id, db=db, trigger_event="manual"
         )
         if result:
-            run_loop(user_id=user_id, trigger_event="manual", db=db)
-            result["latest_adjustment"] = _latest_adjustment_payload(user_id=user_id, db=db)
-            return result
+            result["score"]["latest_adjustment"] = _latest_adjustment_payload(user_id=user_id, db=db)
+            return result["score"]
         return {
-            "user_id": user_id,
+            "user_id": str(user_id),
             "master_score": 0.0,
             "kpis": {
                 "execution_speed": 0.0,
@@ -124,11 +122,10 @@ async def recalculate_my_score(
     Force recalculation of the current user's Infinity score.
     Use after significant activity to refresh immediately.
     """
-    from services.infinity_service import calculate_infinity_score
-    from services.infinity_loop import run_loop
+    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-    result = calculate_infinity_score(
-        user_id=str(current_user["sub"]),
+    result = execute_infinity_orchestrator(
+        user_id=uuid.UUID(str(current_user["sub"])),
         db=db,
         trigger_event="manual",
     )
@@ -136,12 +133,11 @@ async def recalculate_my_score(
     if not result:
         raise HTTPException(status_code=500, detail="Score calculation failed")
 
-    run_loop(user_id=str(current_user["sub"]), trigger_event="manual", db=db)
-    result["latest_adjustment"] = _latest_adjustment_payload(
-        user_id=str(current_user["sub"]),
+    result["score"]["latest_adjustment"] = _latest_adjustment_payload(
+        user_id=uuid.UUID(str(current_user["sub"])),
         db=db,
     )
-    return result
+    return result["score"]
 
 
 @router.get("/me/history")
@@ -154,7 +150,7 @@ async def get_score_history(
     Get score history for the current user.
     Returns entries in reverse chronological order.
     """
-    user_id = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
 
     history = (
         db.query(ScoreHistory)
@@ -165,7 +161,7 @@ async def get_score_history(
     )
 
     return {
-        "user_id": user_id,
+        "user_id": str(user_id),
         "history": [
             {
                 "master_score": h.master_score,
@@ -198,7 +194,7 @@ async def record_score_feedback(
 
     from db.models.infinity_loop import LoopAdjustment, UserFeedback
 
-    user_id = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     feedback = UserFeedback(
         user_id=user_id,
         source_type=body.source_type,
@@ -232,7 +228,7 @@ async def record_score_feedback(
 
     return {
         "id": str(feedback.id),
-        "user_id": feedback.user_id,
+        "user_id": str(feedback.user_id),
         "source_type": feedback.source_type,
         "source_id": feedback.source_id,
         "feedback_value": feedback.feedback_value,
@@ -250,7 +246,7 @@ async def get_score_feedback(
 ):
     from db.models.infinity_loop import UserFeedback
 
-    user_id = str(current_user["sub"])
+    user_id = uuid.UUID(str(current_user["sub"]))
     history = (
         db.query(UserFeedback)
         .filter(UserFeedback.user_id == user_id)
@@ -260,7 +256,7 @@ async def get_score_feedback(
     )
 
     return {
-        "user_id": user_id,
+        "user_id": str(user_id),
         "feedback": [
             {
                 "id": str(item.id),

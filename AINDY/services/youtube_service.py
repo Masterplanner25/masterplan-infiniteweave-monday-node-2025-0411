@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime
 from typing import List, Dict
+from services.external_call_service import perform_external_call
 
 class YouTubeService:
 
@@ -18,7 +19,13 @@ class YouTubeService:
             "id": self.channel_id,
             "key": self.api_key
         }
-        r = requests.get(url, params=params)
+        r = perform_external_call(
+            service_name="http",
+            endpoint=url,
+            method="GET",
+            extra={"purpose": "youtube_channel_data", "provider": "youtube"},
+            operation=lambda: requests.get(url, params=params),
+        )
         return r.json()
 
     # 2️⃣ Fetch Uploads Playlist Videos
@@ -30,7 +37,13 @@ class YouTubeService:
             "maxResults": 50,
             "key": self.api_key
         }
-        r = requests.get(url, params=params)
+        r = perform_external_call(
+            service_name="http",
+            endpoint=url,
+            method="GET",
+            extra={"purpose": "youtube_playlist_videos", "provider": "youtube"},
+            operation=lambda: requests.get(url, params=params),
+        )
         return r.json()
 
     # 3️⃣ Fetch Video Stats
@@ -41,5 +54,11 @@ class YouTubeService:
             "id": ",".join(video_ids),
             "key": self.api_key
         }
-        r = requests.get(url, params=params)
+        r = perform_external_call(
+            service_name="http",
+            endpoint=url,
+            method="GET",
+            extra={"purpose": "youtube_video_stats", "provider": "youtube"},
+            operation=lambda: requests.get(url, params=params),
+        )
         return r.json()

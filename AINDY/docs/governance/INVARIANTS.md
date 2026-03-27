@@ -16,7 +16,15 @@ This document lists invariants enforced by the current implementation. Each inva
 - Enforcement Location: `AINDY/db/database.py: set_utc` (SQLAlchemy `event.listens_for(engine, "connect")`)
 - Enforcement Mechanism: Executes `SET TIME ZONE 'UTC';` on connection. Exceptions are swallowed.
 - What Would Break If Violated: Timestamps could be stored in non-UTC timezone; time-based logic may drift.
-- Enforcement Type: Application-enforced (best-effort); DB-enforced only if the SQL succeeds.
+- Enforcement Type: Application-enforced (fail-closed for required `SystemEvent` emission on core execution and outbound external interactions); DB-enforced only if the SQL succeeds.
+
+## 2.1 Background Lease Timestamps Use Aware UTC
+- Invariant Name: Background task lease timestamps are compared as aware UTC datetimes
+- Description: The background lease path normalizes Python-side timestamps to timezone-aware UTC before persistence and before any `expires_at` comparisons.
+- Enforcement Location: `AINDY/services/task_services.py` (`_utcnow()`, `_ensure_aware_utc()`, lease acquire/refresh/release helpers)
+- Enforcement Mechanism: Lease code uses `datetime.now(timezone.utc)` and coerces loaded lease timestamps to aware UTC if they are naive.
+- What Would Break If Violated: Worker startup and heartbeat can fail with naive-vs-aware datetime comparison errors, preventing scheduler leadership acquisition.
+- Enforcement Type: Application-enforced.
 
 ## 3. Memory Bridge Mutation Auth (JWT)
 - Invariant Name: Memory Bridge mutations require JWT

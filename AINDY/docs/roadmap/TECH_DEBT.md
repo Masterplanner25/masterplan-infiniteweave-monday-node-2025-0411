@@ -70,8 +70,8 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** CI pipeline live. GitHub Actions `ci.yml` runs lint (ruff) + tests (pytest + coverage) on every push and PR to `main`. Coverage threshold: 64% (baseline: 69%). Coverage XML uploaded to Codecov. PR template, CODEOWNERS, SECRETS.md, and `.env.example` added.
 - ✅ **FIXED (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured. `pytest-cov==7.0.0` + `.coveragerc` added. Baseline: 69%. CI threshold: 64% (`--cov-fail-under=64`). XML report generated and uploaded to Codecov on every push/PR.
 - ✅ **RESOLVED (2026-03-22):** Duplicate test names in `test_routes.py` removed (unique identifiers added).
-- ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/smoke_memory.py` imports fixed and project root path corrected (`db.dao.memory_node_dao.MemoryNodeDAO` + proper root resolution).
-- ✅ **RESOLVED (2026-03-22):** `AINDY/bridge/Bridgeimport.py` wrapped in a `__main__` guard to prevent import-time execution.
+- ✅ **RESOLVED (2026-03-22):** `AINDY/legacy/bridge_tools/smoke_memory.py` imports fixed and project root path corrected (`db.dao.memory_node_dao.MemoryNodeDAO` + proper root resolution).
+- ✅ **RESOLVED (2026-03-22):** `AINDY/legacy/bridge_tools/Bridgeimport.py` wrapped in a `__main__` guard to prevent import-time execution.
 
 ## 3.1 RippleTrace Intelligence Debt (Priority Queue)
 
@@ -97,15 +97,18 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** Error classification consistency improved across core routes with structured `detail` payloads for 5xx failures.
 - ✅ **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ✅ **RESOLVED (2026-03-22):** Structured JSON error responses standardized across remaining core routes (analytics, masterplan, genesis, memory, memory_trace, freelance, bridge, social).
+- ✅ **RESOLVED (current workspace):** Silent `except ...: pass` blocks removed from production code under `routes/`, `services/`, `runtime/`, `db/`, `modules/`, and `watcher/`. Replacement behavior is structured logging, observability events, or explicit propagation depending on callsite criticality.
+- ✅ **RESOLVED (current workspace):** Outbound OpenAI/HTTP/watcher/health-probe calls are wrapped by `services/external_call_service.py` and now emit required `SystemEvent` lifecycle records (`external.call.started|completed|failed`, `error.external_call`).
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~ — **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
 - ✅ **RESOLVED (2026-03-25 Sprint N+9):** Background task runner uses a DB lease (`background_task_leases`) to gate APScheduler startup — `start_background_tasks()` returns `bool`; `scheduler_service.start()` only called by the leader. Heartbeat job (`background_lease_heartbeat`, 60s interval) keeps the lease alive so it doesn't expire (TTL=120s). `is_background_leader()` public helper + `GET /observability/scheduler/status` endpoint expose current state. APScheduler no longer starts on follower instances.
+- ✅ **RESOLVED (current workspace):** Lease timestamps in `services/task_services.py` now use timezone-aware UTC and normalize loaded DB values before comparison. The worker startup warning `can't compare offset-naive and offset-aware datetimes` is eliminated in live compose startup.
 - ✅ **RESOLVED (2026-03-22):** Process-level singletons in ARM analyzer and embedding client now use thread-safe initialization guards.
 - ✅ **RESOLVED (2026-03-22):** Per-request session reuse warning added to `db/database.py`.
 - ✅ **RESOLVED (2026-03-22):** Daemon threads eliminated — APScheduler replaces all `threading.Thread(daemon=True)` patterns.
-- No explicit controls for thread lifecycle or shutdown coordination (`AINDY/main.py`).
+- Explicit startup/shutdown coordination now exists in `main.py` via lifespan, but execution still remains in-process and not externally supervised.
 
 ## 6. Security Debt
 - ✅ **FIXED (2026-03-17 Phase 2):** Rate limiting added — `SlowAPIMiddleware` registered in `main.py` with per-IP limiting via `slowapi`. AI endpoints (genesis, leadgen) can be rate-limited with `@limiter.limit()` decorator.
@@ -129,6 +132,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-21):** `leadgen_results.user_id` added and `GET /leadgen/` is user-scoped.
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** `GET /memory/nodes/{node_id}` now enforces ownership — returns 404 if `node.user_id != current_user["sub"]`. Cross-user node reads blocked.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `.env` orphan bare Google API key on line 7 removed. `.env` now parses cleanly with no floating values.
+- ✅ **RESOLVED (current workspace):** `/memory/nodus/execute` is no longer an unrestricted host-embedding path. Route-level source validation blocks system/file/network primitives, only allowlisted operations are registered, and write-capable operations require a scoped capability token plus execution ID.
 - ✅ **RESOLVED (2026-03-21):** `task_services.complete_task()` now updates MongoDB profile by `user_id` (no hardcoded username).
 - ✅ **FIXED (2026-03-20 Security Sprint):** Memory tag search, link traversal, and link creation are user-scoped. `GET /memory/nodes` and `GET /memory/nodes/{id}/links` filter by `user_id`, and `POST /memory/links` verifies ownership before linking.
 - ✅ **FIXED (2026-03-20 Security Sprint):** `/bridge/nodes` now uses `MemoryCaptureEngine` and sets `user_id` (when provided) plus `source_agent` for federation tagging.
@@ -147,6 +151,7 @@ This document inventories current technical debt based strictly on the existing 
 - ✅ **RESOLVED (2026-03-22):** Structured request logging added via middleware with per-request IDs and latency.
 - ✅ **RESOLVED (2026-03-22):** Request metrics persisted to `request_metrics` (basic baseline store).
 - ✅ **RESOLVED (2026-03-22):** Basic observability query endpoint added (`GET /observability/requests`).
+- ✅ **RESOLVED (current workspace):** targeted observability-event logging added for previously silent execution and rollback failures (`services/observability_events.py`).
 - ✅ **RESOLVED (2026-03-25 Sprint N+8):** Agent lifecycle tracing implemented — `AgentEvent` table captures PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED with `correlation_id` (`run_<uuid4>`) threading through `AgentRun`, `AgentStep`, and `AgentEvent`. `GET /agent/runs/{run_id}/events` merges lifecycle + step events into a chronological timeline.
 - ✅ **RESOLVED (2026-03-25 Sprint N+9):** Request-scoped `request_id` now propagates through async call stacks via `contextvars.ContextVar`. `RequestContextFilter` injects `request_id` into every `LogRecord`; all root-logger handlers upgraded to format `%(asctime)s - %(levelname)s - [%(request_id)s] - %(message)s`. Non-request code paths log `[-]`.
 - No system-wide centralized tracing or log aggregation pipeline (OpenTelemetry / external aggregator).
@@ -156,7 +161,7 @@ This document inventories current technical debt based strictly on the existing 
 
 The C++ semantic similarity kernel (`bridge/memory_bridge_rs/`) was added in `feature/cpp-semantic-engine`. The following items must be resolved before the kernel is production-ready.
 
-- **Release build blocked by Windows AppControl.** The kernel was built in debug mode because AppControl policy blocks writes to `target/release/`. Debug benchmark (dim=1536, 10k iters): Python 2.753s vs C++ 3.844s — FFI overhead dominates in debug. Release build is expected to show 10–50x improvement. Action: run `maturin develop --release` in an environment without AppControl restrictions (deployment server or CI) and record results (`AINDY/bridge/benchmark_similarity.py`, `AINDY/bridge/memory_bridge_rs/Cargo.toml`).
+- **Release build blocked by Windows AppControl.** The kernel was built in debug mode because AppControl policy blocks writes to `target/release/`. Debug benchmark (dim=1536, 10k iters): Python 2.753s vs C++ 3.844s — FFI overhead dominates in debug. Release build is expected to show 10–50x improvement. Action: run `maturin develop --release` in an environment without AppControl restrictions (deployment server or CI) and record results (`AINDY/legacy/bridge_tools/benchmark_similarity.py`, `AINDY/bridge/memory_bridge_rs/Cargo.toml`).
 - ~~**No vector embeddings on `MemoryNode`.**~~ ✅ **RESOLVED (2026-03-18 Memory Bridge Phase 2):** `embedding VECTOR(1536)` column added to `MemoryNodeModel` (`services/memory_persistence.py`) and DB via migration `mb2embed0001`. `services/embedding_service.py` generates OpenAI `text-embedding-ada-002` embeddings on every `MemoryNodeDAO.save()` call. C++ kernel (`memory_bridge_rs.semantic_similarity`) wired for cosine similarity with Python fallback. `find_similar()` uses pgvector `<=>` operator. Endpoints: `POST /memory/nodes/search`, `POST /memory/recall`.
 - ✅ **RESOLVED (2026-03-21):** HMAC permissions removed from bridge write path; `PERMISSION_SECRET` no longer used.
 
@@ -379,7 +384,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 | **MB §10.9 — FFI chain depth** | **Low** | 3-layer foreign function boundary for 2 math functions; high build friction | **Phase 3** |
 
 ### Line References (Highest-Risk Items)
-- Background daemon threads: `AINDY/main.py:70`
+- Historical note only: background daemon-thread references in `main.py` are obsolete; scheduler leadership now lives in `task_services.start_background_tasks()` and `scheduler_service.start()`.
 - Genesis session lock enforcement: `AINDY/services/masterplan_factory.py:15`
 - Memory Bridge HMAC validation: removed (JWT-only)
 - Canonical metrics unique constraint migration: `AINDY/alembic/versions/97ef6237e153_structure_integrity_check.py:24`
@@ -412,7 +417,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/services/memory_persistence.py`, `AINDY/db/dao/memory_node_dao.py`, `AINDY/routes/bridge_router.py:13`
 
 ### §15.6 Runtime execution loop has 0% test coverage
-- **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop is the core runtime for the memory execution system and is called by the `/memory/execute` and `/memory/execute/complete` endpoints. This is not a dev tool — untested production runtime code is a reliability risk.
+- **`runtime/execution_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The execution loop was the original runtime for the memory execution system and is still relevant as compatibility/runtime residue. This is not a dev tool — untested execution code is a reliability risk.
   - Location: `AINDY/runtime/execution_loop.py`, `AINDY/runtime/execution_registry.py`
   - Fix: Add unit tests for the execution loop state machine and registry. Minimum: test state transitions, error handling, and session lifecycle.
   - Status: ✅ **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` (PersistentFlowRunner) is the new canonical execution backbone, fully covered by `tests/test_flow_engine_phase_b.py` (62 tests). `runtime/execution_loop.py` and `runtime/execution_registry.py` now re-export from `flow_engine` for backward compatibility. Existing `ExecutionLoop` class and `REGISTRY` singleton preserved intact.
@@ -468,9 +473,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 
 ### §15.17 Observability dashboard — no frontend UI
 - **Request metrics (`/observability/requests*`) and memory metrics (`/memory/metrics*`) have no frontend dashboard.** System health data is only accessible via raw API or logs.
-  - Location: `AINDY/routes/memory_router.py`, `AINDY/routes/observability_router.py`
-  - Fix: Build an `ObservabilityDashboard.jsx` component with request latency, memory node counts, and coverage sparklines.
-  - Status: Open.
+  - Status: ✅ **RESOLVED (current workspace):** `ObservabilityDashboard.jsx` now renders request/error metrics, flow status, loop activity, agent execution timeline, system health metrics, and recent `SystemEvent` feed from `GET /observability/dashboard`.
 
 ### §15.18 Flow Engine Phase B — Single File Engine integration
 - **Flow Engine Phase A replaces daemon threads with APScheduler. Phase B integrates the Nodus Single File Engine** — tasks defined in `.nodus` files should be parseable and executable by the scheduler via `run_task_now()`.
@@ -525,6 +528,12 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
   - learn from `UserFeedback` to change decision thresholds or KPI weights
   - implement recommendation ranking or expected-vs-actual scoring
   - Status: Open. Medium effort, Medium impact.
+
+### §16.7 SystemEvent coverage is broader, but execution-envelope coverage is still incomplete
+- ✅ **PARTIALLY RESOLVED (current workspace):** `SystemEvent` is now the canonical durable activity ledger for core execution plus outbound external interactions. External OpenAI/HTTP/watcher/health-probe calls fail closed on missing required event emission.
+- ✅ **Further resolved (current workspace):** successful health/auth/async heavy-execution paths now also emit durable success events (`health.liveness.completed`, `health.readiness.completed`, `auth.register.completed`, `auth.login.completed`, `execution.started`, `execution.completed`) and were verified against a live compose deployment.
+- **Still open:** not every domain has a first-class execution record model, so event coverage is stronger than full execution normalization.
+  - Status: Open. Structural follow-through still required.
 
 ### §16.4 `WatcherSignal.user_id` migration not chained cleanly — Low priority
 - **Migration `b1c2d3e4f5a6` adds `user_id` to `watcher_signals`** but the column is `String` (not UUID with FK to `users.id`) for consistency with the watcher's HTTP-posted signal flow. This is intentional but creates a heterogeneous `user_id` type pattern across tables. Future user FK normalization work would need to include this table.

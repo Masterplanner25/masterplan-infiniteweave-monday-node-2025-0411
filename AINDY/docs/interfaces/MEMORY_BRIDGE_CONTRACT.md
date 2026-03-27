@@ -338,19 +338,39 @@ Added in Memory Bridge v5 Phase 5 (2026-03-21). Authentication: JWT Bearer (`Dep
 - Query params: `limit` (default 200), `include_nodes` (default false)
 - Response: `{trace_id, nodes, count}` with ordered nodes.
 
-## 13. Memory Router ? v5 Phase 6 Execution Loop (`/memory/*`)
+## 13. Memory Router - Execution (`/memory/*`)
 
 Added in Memory Bridge v5 Phase 6 (2026-03-21). Authentication: JWT Bearer (`Depends(get_current_user)`).
 
 ### `POST /memory/execute`
 - Auth: JWT required.
 - Request body: `ExecutionLoopRequest {workflow, input, session_tags?, recall_before?, remember_after?, auto_feedback?}`
-- Response: `{workflow, user_id, session_tags, result, recalled_memories, recall_count, memory_context, trace_id}`
+- Execution path: canonical flow/orchestrator-backed execution path
+- Response: standardized execution envelope
+  - `status`
+  - `result`
+  - `events`
+  - `next_action`
+  - `trace_id`
 
 ### `POST /memory/execute/complete`
+- Status: deprecated compatibility path
+- Not part of the current canonical execution contract
+
+### `POST /memory/nodus/execute`
 - Auth: JWT required.
-- Request body: `ExecutionCompleteRequest {workflow, outcome_content, outcome, recalled_node_ids?, session_tags?, context?}`
-- Response: loop completion status + feedback summary.
+- Request body: `NodusTaskRequest {task_name, task_code, session_tags?, context?, allowed_operations?, execution_id?, capability_token?}`
+- Security model:
+  - source validation blocks import, eval/exec, subprocess/system access, file access, and network primitives
+  - only explicitly allowed operations are registered into the runtime
+  - default operation set is read-only memory access
+  - write-capable operations (`remember`, `record_outcome`, `share`) require a scoped capability token plus execution ID
+- Response includes:
+  - `status`
+  - `result`
+  - `allowed_operations`
+  - `required_capabilities`
+  - `restricted_operations`
 
 ### Endpoint Model Map (Phase 2 additions)
 | Endpoint | Request Model | Response |

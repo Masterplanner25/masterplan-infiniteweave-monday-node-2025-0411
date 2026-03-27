@@ -1,8 +1,7 @@
 """
-config.py — Environment-variable configuration for A.I.N.D.Y. Watcher.
+config.py - Environment-variable configuration for A.I.N.D.Y. Watcher.
 
-All settings are read from environment variables (or a .env file in the
-working directory if python-dotenv is installed).
+All settings are read from process environment variables.
 
 Environment variables:
   AINDY_WATCHER_API_URL           Required. Base URL of A.I.N.D.Y. API.
@@ -68,16 +67,9 @@ class WatcherConfig:
 def load() -> WatcherConfig:
     """
     Load and return WatcherConfig from environment variables.
-    Attempts to load .env file if python-dotenv is available.
     Does NOT raise — missing required values are replaced with safe defaults
     that will trigger validation errors via validate().
     """
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass
-
     api_url = os.getenv("AINDY_WATCHER_API_URL", "http://localhost:8000").rstrip("/")
     api_key = os.getenv("AINDY_API_KEY", "")
 

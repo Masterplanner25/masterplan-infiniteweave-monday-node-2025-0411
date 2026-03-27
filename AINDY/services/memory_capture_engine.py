@@ -17,6 +17,9 @@ import logging
 from typing import Optional
 
 from sqlalchemy import text
+from services.observability_events import emit_observability_event
+from services.system_event_service import emit_error_event, emit_system_event
+from utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -120,13 +123,17 @@ class MemoryCaptureEngine:
             )
 
             # Step 5: Create memory node
+            request_trace_id = get_current_trace_id()
+            memory_extra = dict(extra or {})
+            if request_trace_id and not memory_extra.get("trace_id"):
+                memory_extra["trace_id"] = request_trace_id
             node = self.dao.save(
                 content=content,
                 source=source,
                 tags=enriched_tags,
                 user_id=self.user_id,
                 node_type=node_type,
-                extra=extra or {},
+                extra=memory_extra,
                 generate_embedding=True,
             )
 
@@ -148,7 +155,14 @@ class MemoryCaptureEngine:
                         node["source_agent"] = db_node.source_agent
                         node["is_shared"] = db_node.is_shared
             except Exception:
-                pass
+                emit_observability_event(
+                    logger,
+                    event="memory_capture_namespace_update_failed",
+                    user_id=self.user_id,
+                    namespace=namespace,
+                    node_id=node_id,
+                )
+                raise
 
             # Step 6: Auto-link to related memories
             self._auto_link(node, enriched_tags)
@@ -160,12 +174,38 @@ class MemoryCaptureEngine:
                 score,
                 content[:50],
             )
+            emit_system_event(
+                db=self.db,
+                event_type="memory.write",
+                user_id=self.user_id,
+                trace_id=request_trace_id or (str(node.get("id")) if isinstance(node, dict) else None),
+                payload={
+                    "node_id": node.get("id") if isinstance(node, dict) else None,
+                    "event_type": event_type,
+                    "source": source,
+                    "node_type": node_type,
+                    "tags": enriched_tags,
+                },
+                required=True,
+            )
 
             return node
 
         except Exception as exc:
             logger.warning("Memory capture failed for %s: %s", event_type, exc)
-            return None
+            try:
+                emit_error_event(
+                    db=self.db,
+                    error_type="memory_write",
+                    message=str(exc),
+                    user_id=self.user_id,
+                    trace_id=get_current_trace_id(),
+                    payload={"event_type": event_type, "source": source},
+                    required=True,
+                )
+            except Exception:
+                logger.exception("Failed to emit required memory error event for %s", event_type)
+            raise
 
     def _score_significance(
         self,

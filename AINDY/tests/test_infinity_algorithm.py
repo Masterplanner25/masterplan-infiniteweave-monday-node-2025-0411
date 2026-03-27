@@ -7,7 +7,7 @@ Covers:
   - KPI calculator helpers (_normalize, _sigmoid_score)
   - KPI calculators: neutral fallback on empty data
   - Master score weighted-average formula
-  - calculate_infinity_score() return shape + failure safety
+  - orchestrated calculate_infinity_score() return shape + failure safety
   - Score API endpoints auth gates
   - Event trigger wiring (source inspection)
   - api.js + Dashboard.jsx presence checks
@@ -283,7 +283,7 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_returns_dict(self, mocker):
         """calculate_infinity_score returns expected shape."""
-        from services.infinity_service import calculate_infinity_score
+        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
             "services.infinity_service.calculate_execution_speed",
@@ -311,11 +311,12 @@ class TestMasterScoreCalculation:
         mock_db.add = MagicMock()
         mock_db.commit = MagicMock()
 
-        result = calculate_infinity_score(
-            user_id="test-user",
-            db=mock_db,
-            trigger_event="test",
-        )
+        with orchestrator_score_context():
+            result = calculate_infinity_score(
+                user_id="test-user",
+                db=mock_db,
+                trigger_event="test",
+            )
 
         assert result is not None
         assert "master_score" in result
@@ -340,7 +341,7 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_trigger_event_stored(self, mocker):
         """trigger_event is passed through to result."""
-        from services.infinity_service import calculate_infinity_score
+        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         for kpi in [
             "calculate_execution_speed",
@@ -354,12 +355,13 @@ class TestMasterScoreCalculation:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        result = calculate_infinity_score("u1", mock_db, trigger_event="task_completion")
+        with orchestrator_score_context():
+            result = calculate_infinity_score("u1", mock_db, trigger_event="task_completion")
         assert result["metadata"]["trigger_event"] == "task_completion"
 
     def test_calculate_infinity_score_never_raises(self, mocker):
         """calculate_infinity_score returns None on exception, never raises."""
-        from services.infinity_service import calculate_infinity_score
+        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
             "services.infinity_service.calculate_execution_speed",
@@ -367,12 +369,13 @@ class TestMasterScoreCalculation:
         )
 
         mock_db = MagicMock()
-        result = calculate_infinity_score(user_id="test-user", db=mock_db)
+        with orchestrator_score_context():
+            result = calculate_infinity_score(user_id="test-user", db=mock_db)
         assert result is None
 
     def test_calculate_infinity_score_master_in_range(self, mocker):
         """Master score is always 0-100."""
-        from services.infinity_service import calculate_infinity_score
+        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         for kpi in [
             "calculate_execution_speed", "calculate_decision_efficiency",
@@ -384,13 +387,14 @@ class TestMasterScoreCalculation:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        result = calculate_infinity_score("u", mock_db)
+        with orchestrator_score_context():
+            result = calculate_infinity_score("u", mock_db)
         assert result is not None
         assert 0.0 <= result["master_score"] <= 100.0
 
     def test_score_delta_computed(self, mocker):
         """score_delta = new master - previous master."""
-        from services.infinity_service import calculate_infinity_score
+        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
         from db.models.user_score import UserScore
 
         for kpi in [
@@ -406,13 +410,19 @@ class TestMasterScoreCalculation:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = prev
 
-        result = calculate_infinity_score("u", mock_db)
+        with orchestrator_score_context():
+            result = calculate_infinity_score("u", mock_db)
         assert result is not None
         expected_master = sum(
             80.0 * w for w in [0.25, 0.25, 0.20, 0.15, 0.15]
         )
         expected_delta = round(expected_master - 70.0, 2)
         assert abs(result["metadata"]["score_delta"] - expected_delta) < 0.1
+
+    def test_calculate_infinity_score_raises_outside_orchestrator(self):
+        from services.infinity_service import calculate_infinity_score
+
+        assert calculate_infinity_score("u1", MagicMock()) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -439,7 +449,7 @@ class TestScoreEndpoints:
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         mocker.patch(
-            "services.infinity_service.calculate_infinity_score",
+            "services.infinity_orchestrator.execute",
             return_value=None,
         )
 
@@ -483,15 +493,14 @@ class TestScoreEndpoints:
 class TestEventTriggers:
 
     def test_task_services_triggers_score(self):
-        """task_services.py calls infinity_service on task completion."""
+        """task_services.py calls the Infinity orchestrator on task completion."""
         import inspect
         from services import task_services
         src = inspect.getsource(task_services)
-        assert "infinity_service" in src or "calculate_infinity_score" in src, \
-            "task_services not triggering Infinity score"
+        assert "infinity_orchestrator" in src, "task_services not using Infinity orchestrator"
 
     def test_watcher_router_triggers_score(self):
-        """watcher_router.py references infinity_service."""
+        """watcher_router.py references the Infinity orchestrator."""
         import sys
         import inspect
         # routes/__init__.py exports the APIRouter object as watcher_router;
@@ -499,16 +508,14 @@ class TestEventTriggers:
         mod = sys.modules.get("routes.watcher_router")
         assert mod is not None, "routes.watcher_router module not loaded"
         src = inspect.getsource(mod)
-        assert "infinity_service" in src or "calculate_infinity_score" in src, \
-            "watcher_router not triggering Infinity score"
+        assert "infinity_orchestrator" in src, "watcher_router not using Infinity orchestrator"
 
     def test_arm_analyzer_triggers_score(self):
-        """ARM analyzer calls infinity_service after analysis."""
+        """ARM analyzer calls the Infinity orchestrator after analysis."""
         import inspect
         from modules.deepseek import deepseek_code_analyzer
         src = inspect.getsource(deepseek_code_analyzer)
-        assert "infinity_service" in src or "calculate_infinity_score" in src, \
-            "ARM analyzer not triggering Infinity score"
+        assert "infinity_orchestrator" in src, "ARM analyzer not using Infinity orchestrator"
 
     def test_daily_score_job_registered(self):
         """Daily Infinity score job is wired in _register_system_jobs."""

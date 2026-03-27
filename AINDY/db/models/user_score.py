@@ -15,7 +15,8 @@ Each KPI is 0-100. Master score is 0-100.
 """
 import uuid
 
-from sqlalchemy import Column, String, Float, Integer, DateTime
+from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 from db.database import Base
@@ -36,7 +37,7 @@ class UserScore(Base):
     __tablename__ = "user_scores"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, nullable=False, unique=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
 
     master_score = Column(Float, default=0.0)
     execution_speed_score = Column(Float, default=0.0)
@@ -59,7 +60,7 @@ class ScoreHistory(Base):
     __tablename__ = "score_history"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
 
     master_score = Column(Float, nullable=False)
     execution_speed_score = Column(Float, nullable=False)

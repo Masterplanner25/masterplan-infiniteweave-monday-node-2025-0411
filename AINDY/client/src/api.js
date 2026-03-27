@@ -1,9 +1,16 @@
 // client/src/api.js
-const API_BASE = "http://127.0.0.1:8000"; // your FastAPI backend
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+export function buildApiUrl(path) {
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  return API_BASE ? `${API_BASE}${path}` : path;
+}
 
 // ✅ Helper function to handle all requests consistently
 async function request(path, opts = {}) {
-  const url = `${API_BASE}${path}`; // FIXED: Changed BASE_URL to API_BASE
+  const url = buildApiUrl(path);
 
   const res = await fetch(url, {
     ...opts,
@@ -575,6 +582,27 @@ export function getSchedulerStatus() {
   return authRequest("/automation/scheduler/status", { method: "GET" });
 }
 
+/* --- Observability Endpoints --- */
+export function getObservabilityRequests(windowHours = 24, limit = 50, errorLimit = 25) {
+  const params = new URLSearchParams({
+    window_hours: String(windowHours),
+    limit: String(limit),
+    error_limit: String(errorLimit),
+  });
+  return authRequest(`/observability/requests?${params.toString()}`, { method: "GET" });
+}
+
+export function getObservabilityDashboard(windowHours = 24) {
+  const params = new URLSearchParams({
+    window_hours: String(windowHours),
+  });
+  return authRequest(`/observability/dashboard?${params.toString()}`, { method: "GET" });
+}
+
+export function getMemoryMetricsDashboard() {
+  return authRequest("/memory/metrics/dashboard", { method: "GET" });
+}
+
 // ── Infinity Score ────────────────────────────────────────────────────────────
 
 export function getMyScore() {
@@ -657,4 +685,21 @@ export function getAgentSuggestions() {
 
 export async function fetchRunEvents(runId) {
   return authRequest(`/agent/runs/${runId}/events`);
+}
+
+/* --- RippleTrace Endpoints --- */
+export function getRippleDropPoints() {
+  return authRequest("/rippletrace/drop_points", { method: "GET" });
+}
+
+export function getRipplePings() {
+  return authRequest("/rippletrace/pings", { method: "GET" });
+}
+
+export function getRecentRippleEvents(limit = 20) {
+  return authRequest(`/rippletrace/recent?limit=${limit}`, { method: "GET" });
+}
+
+export function getRippleTrace(dropPointId) {
+  return authRequest(`/rippletrace/ripples/${dropPointId}`, { method: "GET" });
 }

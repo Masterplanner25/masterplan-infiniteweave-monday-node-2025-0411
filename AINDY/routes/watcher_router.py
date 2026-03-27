@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -21,6 +22,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models.watcher_signal import WatcherSignal
 from services.auth_service import verify_api_key
+from services.flow_engine import execute_intent
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +64,12 @@ class SignalResponse(BaseModel):
     duration_seconds: Optional[float]
     focus_score: Optional[float]
     metadata: Optional[Dict[str, Any]]
+
+
+class WatcherIngestResponse(BaseModel):
+    accepted: int
+    session_ended_count: int
+    orchestration: Optional[Dict[str, Any]] = None
 
 
 _VALID_SIGNAL_TYPES = frozenset(
@@ -111,104 +119,76 @@ def _signal_to_response(s: WatcherSignal) -> SignalResponse:
     )
 
 
-def _trigger_eta_update(db: Session, user_id: str = None) -> None:
-    """Fire-and-forget ETA + Infinity score recalculation on session_ended. Never propagates."""
+def _validate_signal(sig: SignalPayload, idx: int) -> None:
+    if sig.signal_type not in _VALID_SIGNAL_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Signal [{idx}]: unknown signal_type {sig.signal_type!r}",
+        )
+    if sig.activity_type not in _VALID_ACTIVITY_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Signal [{idx}]: unknown activity_type {sig.activity_type!r}",
+        )
     try:
-        from db.models.masterplan import MasterPlan
-        from services.eta_service import recalculate_all_etas
-        recalculate_all_etas(db=db)
-        logger.debug("ETA recalculation triggered by watcher session_ended")
-    except Exception as exc:
-        logger.debug("ETA recalculation skipped (non-fatal): %s", exc)
+        _parse_timestamp(sig.timestamp)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if sig.user_id:
+        try:
+            UUID(str(sig.user_id))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Signal [{idx}]: invalid user_id {sig.user_id!r}",
+            ) from exc
 
-    # Trigger Infinity score recalculation (fire-and-forget)
-    try:
-        from services.infinity_service import calculate_infinity_score
-        from services.infinity_loop import run_loop
-        # WatcherSignal has no user_id; when user_id is provided by caller, recalculate
-        if user_id:
-            result = calculate_infinity_score(
-                user_id=user_id,
-                db=db,
-                trigger_event="session_ended",
-            )
-            if result:
-                run_loop(user_id=user_id, trigger_event="session_ended", db=db)
-    except Exception as exc:
-        logger.warning("Infinity score after session failed: %s", exc)
+
+def _extract_ingest_result(result: Dict[str, Any]) -> WatcherIngestResponse:
+    if result.get("status") != "SUCCESS":
+        raise HTTPException(status_code=500, detail="Watcher ingest failed")
+
+    payload = result.get("result") or {}
+    return WatcherIngestResponse(
+        accepted=int(payload.get("accepted") or 0),
+        session_ended_count=int(payload.get("session_ended_count") or 0),
+        orchestration=payload.get("orchestration"),
+    )
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/signals", status_code=201)
+@router.post("/signals", status_code=201, response_model=WatcherIngestResponse)
 def receive_signals(
     batch: SignalBatch,
     db: Session = Depends(get_db),
-) -> Dict[str, Any]:
+) -> WatcherIngestResponse:
     """
     Receive a batch of watcher signals. Validates, persists, and returns counts.
     Invalid signals are rejected wholesale (entire batch) if any signal has
     an unknown signal_type — partial persistence is not supported.
     """
-    # Validate all signals before persisting any
-    for i, sig in enumerate(batch.signals):
-        if sig.signal_type not in _VALID_SIGNAL_TYPES:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Signal [{i}]: unknown signal_type {sig.signal_type!r}",
-            )
-        if sig.activity_type not in _VALID_ACTIVITY_TYPES:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Signal [{i}]: unknown activity_type {sig.activity_type!r}",
-            )
+    for idx, sig in enumerate(batch.signals):
+        _validate_signal(sig, idx)
 
-    persisted = 0
-    session_ended_count = 0
-
-    for sig in batch.signals:
-        try:
-            ts = _parse_timestamp(sig.timestamp)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-        meta = sig.metadata or {}
-        row = WatcherSignal(
-            signal_type=sig.signal_type,
-            session_id=sig.session_id,
-            user_id=sig.user_id or None,
-            app_name=sig.app_name,
-            window_title=sig.window_title or None,
-            activity_type=sig.activity_type,
-            signal_timestamp=ts,
-            received_at=datetime.now(timezone.utc),
-            duration_seconds=meta.get("duration_seconds"),
-            focus_score=meta.get("focus_score"),
-            signal_metadata=meta if meta else None,
-        )
-        db.add(row)
-        if sig.signal_type == "session_ended":
-            session_ended_count += 1
-        persisted += 1
-
-    db.commit()
-    logger.info("Watcher: persisted %d signals (%d session_ended)", persisted, session_ended_count)
-
-    # ETA recalculation on any session_ended signal
-    if session_ended_count > 0:
-        # Use user_id from first signal in batch that has one
-        batch_user_id = next((s.user_id for s in batch.signals if s.user_id), None)
-        _trigger_eta_update(db, user_id=batch_user_id)
-
-    return {"accepted": persisted, "session_ended_count": session_ended_count}
+    result = execute_intent(
+        intent_data={
+            "workflow_type": "watcher_ingest",
+            "signals": [sig.model_dump() for sig in batch.signals],
+        },
+        db=db,
+        user_id=None,
+    )
+    return _extract_ingest_result(result)
 
 
 @router.get("/signals", response_model=List[SignalResponse])
 def list_signals(
     session_id: Optional[str] = Query(default=None, description="Filter by session UUID"),
     signal_type: Optional[str] = Query(default=None, description="Filter by signal type"),
+    user_id: Optional[str] = Query(default=None, description="Filter by user UUID"),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -220,6 +200,14 @@ def list_signals(
     q = db.query(WatcherSignal)
     if session_id:
         q = q.filter(WatcherSignal.session_id == session_id)
+    if user_id:
+        try:
+            q = q.filter(WatcherSignal.user_id == UUID(str(user_id)))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid user_id filter: {user_id!r}",
+            ) from exc
     if signal_type:
         if signal_type not in _VALID_SIGNAL_TYPES:
             raise HTTPException(

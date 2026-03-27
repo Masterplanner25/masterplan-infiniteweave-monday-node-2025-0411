@@ -15,6 +15,7 @@ alongside the user.
 """
 import logging
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -35,13 +36,13 @@ class IdentityService:
 
         identity = (
             self.db.query(UserIdentity)
-            .filter(UserIdentity.user_id == self.user_id)
+            .filter(UserIdentity.user_id == UUID(str(self.user_id)))
             .first()
         )
 
         if not identity:
             identity = UserIdentity(
-                user_id=self.user_id,
+                user_id=UUID(str(self.user_id)),
                 preferred_languages=[],
                 preferred_tools=[],
                 avoided_tools=[],

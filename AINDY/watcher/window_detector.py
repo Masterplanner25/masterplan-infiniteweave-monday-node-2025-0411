@@ -134,7 +134,7 @@ def _macos_window_title(pid: int) -> str:
                 if w.get("kCGWindowOwnerPID") == pid and w.get("kCGWindowLayer") == 0:
                     return str(w.get("kCGWindowName") or "")
     except Exception:
-        pass
+        logger.debug("macOS Quartz window-title lookup failed for pid=%s", pid)
     return ""
 
 
@@ -192,8 +192,8 @@ def _detect_psutil_fallback() -> Optional[WindowInfo]:
                 info = p.info
                 if info.get("cpu_percent", 0) is not None:
                     procs.append(info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+                logger.debug("psutil process skipped during fallback detection: %s", exc)
 
         if not procs:
             return None

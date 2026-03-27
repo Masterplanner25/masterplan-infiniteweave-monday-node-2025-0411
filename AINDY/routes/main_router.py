@@ -323,7 +323,7 @@ async def get_results(
     current_user: dict = Depends(get_current_user),
 ):
     results = db.query(CalculationResult).filter(
-        CalculationResult.user_id == str(current_user["sub"])
+        CalculationResult.user_id == uuid.UUID(str(current_user["sub"]))
     ).all()
     return results
 
@@ -334,7 +334,7 @@ async def get_masterplans(
 ):
     # Legacy unauthenticated endpoint ? kept for backward compatibility
     plans = db.query(MasterPlan).filter(
-        MasterPlan.user_id == str(current_user["sub"])
+        MasterPlan.user_id == uuid.UUID(str(current_user["sub"]))
     ).all()
     return plans
 
@@ -345,7 +345,7 @@ async def create_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     plan = MasterPlan(**data.dict())
-    plan.user_id = str(current_user["sub"])
+    plan.user_id = uuid.UUID(str(current_user["sub"]))
     db.add(plan)
     db.commit()
     db.refresh(plan)

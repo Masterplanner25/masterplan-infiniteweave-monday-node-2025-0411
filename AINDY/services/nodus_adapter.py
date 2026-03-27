@@ -34,11 +34,13 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from services.capability_service import check_tool_capability
+from services.capability_service import check_execution_capability, check_tool_capability
 from services.agent_tools import execute_tool
 from services.flow_engine import PersistentFlowRunner, register_node
+from services.system_event_service import emit_error_event, emit_system_event
 
 logger = logging.getLogger(__name__)
+from services.observability_events import emit_observability_event
 
 MAX_STEP_RETRIES = 3
 
@@ -113,13 +115,13 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     description = step.get("description", "")
     agent_run_id = state["agent_run_id"]
     user_id = state["user_id"]
-    capability_token = state.get("capability_token")
+    execution_token = state.get("execution_token") or state.get("capability_token")
     db: Session = context["db"]
 
     capability_check = {"ok": True, "error": None, "granted_tools": []}
-    if "capability_token" in state:
+    if "execution_token" in state or "capability_token" in state:
         capability_check = check_tool_capability(
-            token=capability_token,
+            token=execution_token,
             run_id=agent_run_id,
             user_id=user_id,
             tool_name=tool_name,
@@ -165,6 +167,20 @@ def agent_execute_step(state: dict, context: dict) -> dict:
                 "error": capability_check["error"],
                 "granted_tools": capability_check.get("granted_tools", []),
             },
+            required=True,
+        )
+        emit_system_event(
+            db=db,
+            event_type="agent.step.failed",
+            user_id=user_id,
+            trace_id=state.get("correlation_id") or context.get("trace_id"),
+            payload={
+                "run_id": str(agent_run_id),
+                "step_index": idx,
+                "tool_name": tool_name,
+                "error": error_msg,
+            },
+            required=True,
         )
 
         step_result_dict = {
@@ -194,6 +210,8 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             args=tool_args,
             user_id=user_id,
             db=db,
+            run_id=agent_run_id,
+            execution_token=execution_token,
         )
         exec_ms = int(time.time() * 1000) - start_ms
 
@@ -235,6 +253,20 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         agent_run.steps_completed = idx + 1
         agent_run.current_step = idx + 1
     db.commit()
+    emit_system_event(
+        db=db,
+        event_type="agent.step.completed" if step_status == "success" else "agent.step.failed",
+        user_id=user_id,
+        trace_id=state.get("correlation_id") or context.get("trace_id"),
+        payload={
+            "run_id": str(agent_run_id),
+            "step_index": idx,
+            "tool_name": tool_name,
+            "status": step_status,
+            "error": tool_result.get("error"),
+        },
+        required=True,
+    )
 
     step_result_dict = {
         "step_index": idx,
@@ -292,10 +324,26 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
     db: Session = context["db"]
 
     agent_run = db.query(AgentRun).filter(AgentRun.id == agent_run_id).first()
+
+    result_payload = {"steps": step_results}
+    if agent_run and state.get("user_id"):
+        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+
+        orchestration = execute_infinity_orchestrator(
+            user_id=state["user_id"],
+            trigger_event="agent_completed",
+            db=db,
+        )
+        result_payload = {
+            "steps": step_results,
+            "loop_enforced": True,
+            "next_action": orchestration["next_action"],
+        }
+
     if agent_run:
         agent_run.status = "completed"
         agent_run.completed_at = datetime.now(timezone.utc)
-        agent_run.result = {"steps": step_results}
+        agent_run.result = result_payload
         db.commit()
         logger.info(
             "[NodusAdapter] AgentRun %s finalised as completed (%d steps)",
@@ -311,7 +359,8 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
         event_type="COMPLETED",
         db=db,
         correlation_id=state.get("correlation_id"),
-        payload={"steps_completed": len(step_results)},
+        payload={"steps_completed": len(step_results), "loop_enforced": bool(result_payload.get("loop_enforced"))},
+        required=True,
     )
 
     return {
@@ -360,6 +409,7 @@ class NodusAgentAdapter:
         user_id: str,
         db: Session,
         correlation_id: Optional[str] = None,
+        execution_token: Optional[dict] = None,
         capability_token: Optional[dict] = None,
     ) -> dict:
         """
@@ -380,6 +430,48 @@ class NodusAgentAdapter:
 
         try:
             steps = (plan or {}).get("steps", [])
+            scoped_token = execution_token or capability_token
+            flow_capability_check = {"ok": False, "error": "missing scoped capability token"}
+            if scoped_token is not None:
+                flow_capability_check = check_execution_capability(
+                    token=scoped_token,
+                    run_id=run_id,
+                    user_id=user_id,
+                    capability_name="execute_flow",
+                )
+            if not flow_capability_check["ok"]:
+                from db.models.agent_run import AgentRun
+                from services.agent_event_service import emit_event
+
+                agent_run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
+                if agent_run and agent_run.status == "executing":
+                    agent_run.status = "failed"
+                    agent_run.completed_at = datetime.now(timezone.utc)
+                    agent_run.error_message = flow_capability_check["error"]
+                    agent_run.result = {"steps": []}
+                    db.commit()
+                emit_event(
+                    run_id=run_id,
+                    user_id=user_id,
+                    event_type="CAPABILITY_DENIED",
+                    db=db,
+                    correlation_id=correlation_id,
+                    payload={
+                        "capability": "execute_flow",
+                        "error": flow_capability_check["error"],
+                    },
+                    required=True,
+                )
+                logger.warning(
+                    "[NodusAdapter] Flow capability denied for AgentRun %s: %s",
+                    run_id,
+                    flow_capability_check["error"],
+                )
+                return {
+                    "status": "FAILED",
+                    "error": flow_capability_check["error"],
+                }
+
             initial_state = {
                 "agent_run_id": run_id,
                 "user_id": user_id,
@@ -387,7 +479,7 @@ class NodusAgentAdapter:
                 "current_step_index": 0,
                 "step_results": [],
                 "correlation_id": correlation_id,
-                "capability_token": capability_token,
+                "execution_token": scoped_token,
             }
 
             runner = PersistentFlowRunner(
@@ -454,6 +546,7 @@ class NodusAgentAdapter:
                         db=db,
                         correlation_id=correlation_id,
                         payload={"error": agent_run.error_message},
+                        required=True,
                     )
 
             return flow_result
@@ -480,7 +573,25 @@ class NodusAgentAdapter:
                         db=db,
                         correlation_id=correlation_id,
                         payload={"error": f"Adapter error: {exc}"},
+                        required=True,
                     )
             except Exception:
-                pass
+                try:
+                    emit_error_event(
+                        db=db,
+                        error_type="agent_adapter",
+                        message=str(exc),
+                        user_id=user_id,
+                        trace_id=correlation_id,
+                        payload={"run_id": run_id},
+                        required=True,
+                    )
+                except Exception:
+                    logger.exception("[NodusAdapter] required adapter error event failed for %s", run_id)
+                emit_observability_event(
+                    logger,
+                    event="nodus_adapter_failure_finalization_failed",
+                    run_id=run_id,
+                    error=str(exc),
+                )
             return {"status": "FAILED", "error": str(exc)}

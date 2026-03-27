@@ -1,3 +1,5 @@
+import os
+
 from .seo_routes import router as seo_router
 from .task_router import router as task_router
 from .bridge_router import router as bridge_router
@@ -11,6 +13,7 @@ from .freelance_router import router as freelance_router
 from .arm_router import router as arm_router
 from .leadgen_router import router as leadgen_router
 from .dashboard_router import router as dashboard_router
+from .legacy_surface_router import router as legacy_surface_router
 from .health_router import router as health_router
 from .health_dashboard_router import router as health_dashboard_router
 from .social_router import router as social_router
@@ -62,5 +65,8 @@ ROUTERS = [
     score_router,
     agent_router,
 ]
+
+if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
+    ROUTERS.insert(13, legacy_surface_router)
 
 

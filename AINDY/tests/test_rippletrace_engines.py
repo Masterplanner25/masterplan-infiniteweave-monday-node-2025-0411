@@ -1,4 +1,5 @@
 import json
+import importlib
 import sys
 from datetime import datetime, timedelta
 from types import ModuleType
@@ -545,25 +546,26 @@ def test_learning_engine_stats_reports_rates():
         (
             "/dashboard",
             [
-                ("main.get_dashboard_snapshot", lambda db: {"overview": {"foo": "bar"}}),
-                ("main.find_momentum_leaders", lambda db: {"fastest_accelerating": None, "biggest_spike": None}),
-                ("main.scan_drop_point_predictions", lambda db, limit=20: []),
-                ("main.recommendations_summary", lambda db, limit=10: {"high_priority_actions": [], "medium_priority_actions": [], "low_priority_actions": []}),
+                ("get_dashboard_snapshot", lambda db: {"overview": {"foo": "bar"}}),
+                ("find_momentum_leaders", lambda db: {"fastest_accelerating": None, "biggest_spike": None}),
+                ("scan_drop_point_predictions", lambda db, limit=20: []),
+                ("recommendations_summary", lambda db, limit=10: {"high_priority_actions": [], "medium_priority_actions": [], "low_priority_actions": []}),
             ],
         ),
-        ("/ripple_deltas/fake", [("main.compute_deltas", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "rates": {"velocity_rate": 0.1}})]),
-        ("/predict/fake", [("main.predict_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "prediction": "stable"})]),
-        ("/recommend/fake", [("main.recommend_for_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "action": "monitor", "priority": "low"})]),
-        ("/influence_graph", [("main.build_influence_graph", lambda db: {"nodes": [], "edges": []})]),
-        ("/causal_graph", [("main.build_causal_graph", lambda db: {"nodes": [], "causal_edges": []})]),
-        ("/narrative/fake", [("main.generate_narrative", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "timeline": []})]),
-        ("/strategies", [("main.build_strategies", lambda db: []), ("main.list_strategies", lambda db: [])]),
-        ("/playbooks", [("main.list_playbooks", lambda db: [])]),
-        ("/generate_content/play-1", [("main.generate_content", lambda playbook_id, db: {"playbook_id": playbook_id, "content": {}})]),
+        ("/ripple_deltas/fake", [("compute_deltas", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "rates": {"velocity_rate": 0.1}})]),
+        ("/predict/fake", [("predict_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "prediction": "stable"})]),
+        ("/recommend/fake", [("recommend_for_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "action": "monitor", "priority": "low"})]),
+        ("/influence_graph", [("build_influence_graph", lambda db: {"nodes": [], "edges": []})]),
+        ("/causal_graph", [("build_causal_graph", lambda db: {"nodes": [], "causal_edges": []})]),
+        ("/narrative/fake", [("generate_narrative", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "timeline": []})]),
+        ("/strategies", [("build_strategies", lambda db: []), ("list_strategies", lambda db: [])]),
+        ("/playbooks", [("list_playbooks", lambda db: [])]),
+        ("/generate_content/play-1", [("generate_content", lambda playbook_id, db: {"playbook_id": playbook_id, "content": {}})]),
     ],
 )
 def test_endpoints_return_success(client, monkeypatch, endpoint, patches):
-    for path, fn in patches:
-        monkeypatch.setattr(path, fn)
+    legacy_surface_module = importlib.import_module("routes.legacy_surface_router")
+    for attr_name, fn in patches:
+        monkeypatch.setattr(legacy_surface_module, attr_name, fn)
     response = client.get(endpoint)
     assert response.status_code == 200

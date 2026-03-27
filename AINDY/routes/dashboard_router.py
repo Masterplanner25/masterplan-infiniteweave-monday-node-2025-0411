@@ -40,7 +40,7 @@ async def get_system_overview(
 
     # 🌊 2. RippleTrace summary
     ripples = db.query(PingDB).filter(
-        PingDB.user_id == str(current_user["sub"])
+        PingDB.user_id == uuid.UUID(str(current_user["sub"]))
     ).order_by(PingDB.date_detected.desc()).limit(10).all()
     ripple_list = [
         {

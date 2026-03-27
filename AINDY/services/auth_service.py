@@ -6,7 +6,6 @@ Provides:
 - API key validation (service-to-service auth)
 - Password hashing utilities
 """
-import os
 from datetime import datetime, timedelta
 from typing import Optional, TYPE_CHECKING
 
@@ -20,11 +19,13 @@ from fastapi.security import (
 )
 from sqlalchemy.orm import Session
 
+from config import settings
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT config — read at import time (env is set by conftest before import)
-SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
+# JWT config
+SECRET_KEY: str = settings.SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 
@@ -143,8 +144,8 @@ def verify_api_key(
     Used for service-to-service calls (bridge, internal).
     """
     valid_keys = set(filter(None, [
-        os.getenv("AINDY_API_KEY"),
-        os.getenv("AINDY_SERVICE_KEY"),
+        settings.AINDY_API_KEY,
+        getattr(settings, "AINDY_SERVICE_KEY", None),
     ]))
     if not valid_keys:
         raise HTTPException(
