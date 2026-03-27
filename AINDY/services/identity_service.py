@@ -14,12 +14,16 @@ changed, why, and when. The identity layer evolves
 alongside the user.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class IdentityService:
@@ -122,7 +126,7 @@ class IdentityService:
 
         identity = self.get_or_create()
         changes = []
-        now = datetime.utcnow()
+        now = _utcnow()
 
         def record_change(dimension, old, new, trigger="explicit"):
             if old != new and new is not None:
@@ -226,7 +230,7 @@ class IdentityService:
         try:
             identity = self.get_or_create()
             changes = []
-            now = datetime.utcnow()
+            now = _utcnow()
 
             def maybe_add_to_list(
                 field_name: str, current_list: list, value: str

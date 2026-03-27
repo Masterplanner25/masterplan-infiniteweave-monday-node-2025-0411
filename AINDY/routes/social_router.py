@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.database import Database
 from typing import List, Optional
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy.orm import Session
 import logging
@@ -29,6 +29,16 @@ TRUST_TIER_WEIGHTS = {
 }
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _compute_visibility_score(post: SocialPost) -> float:
     trust_weight = TRUST_TIER_WEIGHTS.get(post.trust_tier_required, 1.0)
     engagement_total = max(post.likes, 0) + max(post.boosts, 0) * 2 + max(post.comments_count, 0)
@@ -53,7 +63,7 @@ def _compute_infinity_ranked_score(
 
     # Recency: exp(-age_hours / 24), so a 24h-old post scores ~0.37
     try:
-        age_hours = (datetime.utcnow() - post.created_at).total_seconds() / 3600
+        age_hours = (_utcnow() - _ensure_aware_utc(post.created_at)).total_seconds() / 3600
         recency_score = _math.exp(-age_hours / 24)
     except Exception:
         recency_score = 0.5
@@ -118,7 +128,7 @@ def upsert_profile(
     
     if existing:
         update_data = profile_data.dict(exclude={"id", "joined_at"})
-        update_data["updated_at"] = datetime.utcnow()
+        update_data["updated_at"] = _utcnow()
         update_data["user_id"] = user_id
         try:
             profiles.update_one(
