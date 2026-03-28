@@ -13,11 +13,19 @@ aps_bg.BackgroundScheduler = type(
     "BackgroundScheduler",
     (),
     {
-        "__init__": lambda self, **kwargs: None,
-        "add_job": lambda *args, **kwargs: None,
-        "remove_job": lambda *args, **kwargs: None,
+        "__init__": lambda self, **kwargs: setattr(self, "_jobs", []),
+        "add_job": lambda self, *args, **kwargs: self._jobs.append(
+            type("Job", (), {"id": kwargs.get("id")})()
+        ),
+        "remove_job": lambda self, job_id=None, **kwargs: setattr(
+            self,
+            "_jobs",
+            [job for job in self._jobs if getattr(job, "id", None) != job_id],
+        ),
+        "get_jobs": lambda self: list(getattr(self, "_jobs", [])),
         "start": lambda self, **kwargs: None,
         "shutdown": lambda self, **kwargs: None,
+        "running": False,
     },
 )
 aps_singleton = ModuleType("apscheduler.schedulers.background")
@@ -563,9 +571,9 @@ def test_learning_engine_stats_reports_rates():
         ("/generate_content/play-1", [("generate_content", lambda playbook_id, db: {"playbook_id": playbook_id, "content": {}})]),
     ],
 )
-def test_endpoints_return_success(client, monkeypatch, endpoint, patches):
+def test_endpoints_return_success(client, monkeypatch, endpoint, patches, api_key_headers):
     legacy_surface_module = importlib.import_module("routes.legacy_surface_router")
     for attr_name, fn in patches:
         monkeypatch.setattr(legacy_surface_module, attr_name, fn)
-    response = client.get(endpoint)
+    response = client.get(endpoint, headers=api_key_headers)
     assert response.status_code == 200

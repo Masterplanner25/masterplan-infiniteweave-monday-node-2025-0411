@@ -17,6 +17,11 @@ The historical breakdown below is preserved, but the current validated baseline 
   - `test_user`
   - `auth_headers`
 - Async heavy execution is off by default in tests and is enabled only per-test when the `202` queueing contract is under test.
+- Test env defaults are injected in `tests/conftest.py`, including:
+  - `SECRET_KEY`
+  - `AINDY_API_KEY`
+  - `PERMISSION_SECRET`
+  - `AINDY_ENABLE_LEGACY_SURFACE=true`
 - Root-level legacy `tests/test_*.py` files have been removed; active tests live under:
   - `tests/unit/`
   - `tests/integration/`
@@ -37,13 +42,17 @@ The historical breakdown below is preserved, but the current validated baseline 
 - These suites use real persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with only boundary mocks for external planners/executors.
 
 **Current validated baseline** — local `pytest -q --tb=short` after Sprint N+11:
-- **1,424 passed**
-- **5 failed**
-- **3 skipped**
-- **1 error**
-- **70.22% coverage**
+- **1,290 passed**
+- **4 skipped**
+- **0 failed**
+- full suite green under `pytest -q --no-cov`
 
-**Diagnostic suite** (`AINDY/tests/`) — 453 tests across 17 files. Final result: **453 passing, 0 failing**.
+**Current runtime guarantees validated by the green suite**
+- UUID identity normalization holds across route/service/system paths.
+- TEST_MODE auth stays deterministic without collapsing all users onto one identity.
+- Legacy compatibility endpoints are tested through their real API-key protection, not as public routes.
+- Memory recall strategies are request-isolated; no shared mutable strategy state leaks between tests or executions.
+- Successful and failed execution paths both persist `SystemEvent` rows under the DB-backed fixture stack.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -76,7 +85,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 |------|-------|----------|
 | `tests/test_sprint6_sprint7.py` | 24 | SQLAlchemy 2.0 import path (4), Genesis memory hook signature/behavior (9), LeadGen memory hook signature/behavior (11) |
 
-**CI enforcement (current):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage threshold is 69%, and the current validated baseline is 70.22%. Ruff lint is enforced in a separate job. `tests/validate_memory_loop.py` remains excluded from CI because it requires live OpenAI + a real DB.
+**CI enforcement (current):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage threshold is 69%. Ruff lint is enforced in a separate job. `tests/validate_memory_loop.py` remains excluded from CI because it requires live OpenAI + a real DB.
 
 **Root test files**
 - Legacy root-level test files have been migrated out of `tests/` and replaced by the structured layout above.
@@ -158,7 +167,7 @@ A change cannot be merged if:
 - It alters invariants without validation tests.
 - It changes API contract without route-level test updates.
 - The `Last updated` date in `docs/GOVERNANCE_INDEX.md` is not refreshed after doc changes.
-- **CI checks fail** — every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 64%.
+- **CI checks fail** — every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 69%.
 
 ## 8. Known Gaps
 - Some structured tests still retain targeted mocks for external boundaries, especially older memory-bridge and model-provider coverage. That is acceptable only where the boundary is truly external or nondeterministic.

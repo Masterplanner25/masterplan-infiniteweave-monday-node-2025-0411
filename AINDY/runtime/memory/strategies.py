@@ -11,6 +11,13 @@ class Strategy:
         self.initial_pool_size = initial_pool_size
         self.diversity_factor = diversity_factor
 
+    def clone(self) -> "Strategy":
+        return Strategy(
+            node_types=list(self.node_types),
+            initial_pool_size=self.initial_pool_size,
+            diversity_factor=self.diversity_factor,
+        )
+
 
 STRATEGIES: Dict[str, Strategy] = {
     "analysis": Strategy(
@@ -38,7 +45,7 @@ STRATEGIES: Dict[str, Strategy] = {
 
 class StrategySelector:
     def select(self, request: RecallRequest) -> Strategy:
-        return STRATEGIES.get(
-            request.task_type,
-            Strategy(["outcome"], 10, 0.2),
-        )
+        strategy = STRATEGIES.get(request.task_type)
+        if strategy is not None:
+            return strategy.clone()
+        return Strategy(["outcome"], 10, 0.2)

@@ -19,6 +19,7 @@ Phase 2: KPI context injection into planner
 """
 import sys
 import os
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -532,7 +533,7 @@ class TestSuggestionsEndpoint:
     def test_suggestions_endpoint_returns_list(self):
         """With a mocked KPI snapshot, endpoint returns a list."""
         from routes.agent_router import get_tool_suggestions
-        mock_user = {"sub": "user-123"}
+        mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
         with patch("routes.agent_router.get_current_user", return_value=mock_user), \
@@ -544,7 +545,7 @@ class TestSuggestionsEndpoint:
     def test_suggestions_endpoint_returns_suggestions_when_scores_low(self):
         """Low focus score → endpoint returns at least one suggestion."""
         from routes.agent_router import get_tool_suggestions
-        mock_user = {"sub": "user-abc"}
+        mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
         snap = {
             "master_score": 40.0,
@@ -566,7 +567,7 @@ class TestSuggestionsEndpoint:
     def test_suggestions_endpoint_empty_when_no_scores(self):
         """User with no score history → empty list."""
         from routes.agent_router import get_tool_suggestions
-        mock_user = {"sub": "new-user"}
+        mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
         with patch("routes.agent_router.get_current_user", return_value=mock_user), \

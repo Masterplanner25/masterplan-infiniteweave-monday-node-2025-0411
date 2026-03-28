@@ -41,6 +41,10 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+OTHER_USER_ID = "00000000-0000-0000-0000-000000000002"
+ORIGIN_RUN_ID = "00000000-0000-0000-0000-0000000000aa"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -440,7 +444,7 @@ def _make_recover_db(*, agent_run=None, flow_run=None, agent_steps=None):
 def _executing_run(
     *,
     run_id=None,
-    user_id="user-1",
+    user_id=TEST_USER_ID,
     flow_run_id=None,
     started_minutes_ago=20,
 ):
@@ -470,7 +474,7 @@ class TestRecoverNotFound:
         from services.stuck_run_service import recover_stuck_agent_run
 
         db = _make_recover_db(agent_run=None)
-        result = recover_stuck_agent_run("unknown-id", "user-1", db)
+        result = recover_stuck_agent_run("unknown-id", TEST_USER_ID, db)
         assert result["ok"] is False
         assert result["error_code"] == "not_found"
 
@@ -479,9 +483,9 @@ class TestRecoverForbidden:
     def test_returns_forbidden_on_owner_mismatch(self):
         from services.stuck_run_service import recover_stuck_agent_run
 
-        ar = _executing_run(user_id="other-user")
+        ar = _executing_run(user_id=OTHER_USER_ID)
         db = _make_recover_db(agent_run=ar)
-        result = recover_stuck_agent_run(str(ar.id), "user-1", db)
+        result = recover_stuck_agent_run(str(ar.id), TEST_USER_ID, db)
         assert result["ok"] is False
         assert result["error_code"] == "forbidden"
 
@@ -590,7 +594,7 @@ class TestRecoverInternalError:
 
         db = MagicMock()
         db.query.side_effect = RuntimeError("DB exploded")
-        result = recover_stuck_agent_run("some-id", "user-1", db)
+        result = recover_stuck_agent_run("some-id", TEST_USER_ID, db)
         assert result["ok"] is False
         assert result["error_code"] == "internal_error"
 
@@ -609,7 +613,7 @@ class TestReplayRunNotFound:
         q.first.return_value = None
         db.query.return_value = q
 
-        result = replay_run("nonexistent-id", "user-1", db)
+        result = replay_run("nonexistent-id", TEST_USER_ID, db)
         assert result is None
 
 
@@ -618,7 +622,7 @@ class TestReplayRunForbidden:
         from services.agent_runtime import replay_run
 
         original = MagicMock()
-        original.user_id = "other-user"
+        original.user_id = OTHER_USER_ID
         original.id = uuid.uuid4()
         original.plan = {}
         original.goal = "test"
@@ -629,7 +633,7 @@ class TestReplayRunForbidden:
         q.first.return_value = original
         db.query.return_value = q
 
-        result = replay_run(str(original.id), "user-1", db)
+        result = replay_run(str(original.id), TEST_USER_ID, db)
         assert result is None
 
 
@@ -644,7 +648,7 @@ class TestReplayRunCreatesNewRun:
             "executive_summary": "test",
         }
         original = MagicMock()
-        original.user_id = "user-1"
+        original.user_id = TEST_USER_ID
         original.id = uuid.uuid4()
         original.plan = plan
         original.goal = "original goal"
@@ -664,7 +668,7 @@ class TestReplayRunCreatesNewRun:
 
         with patch("services.agent_runtime._create_run_from_plan",
                    return_value=new_run_dict) as mock_create:
-            result = replay_run(str(original.id), "user-1", db)
+            result = replay_run(str(original.id), TEST_USER_ID, db)
 
         assert result is not None
         assert result["goal"] == "original goal"
@@ -678,7 +682,7 @@ class TestReplayRunSetsLineage:
 
         plan = {"steps": [], "overall_risk": "low", "executive_summary": ""}
         original = MagicMock()
-        original.user_id = "user-1"
+        original.user_id = TEST_USER_ID
         original.id = uuid.uuid4()
         original.plan = plan
         original.goal = "g"
@@ -697,7 +701,7 @@ class TestReplayRunSetsLineage:
         db.query.return_value = q
 
         with patch("services.agent_runtime._create_run_from_plan", side_effect=_fake_create):
-            replay_run(str(original.id), "user-1", db)
+            replay_run(str(original.id), TEST_USER_ID, db)
 
         assert captured["replayed_from_run_id"] == str(original.id)
 
@@ -714,7 +718,7 @@ class TestReplayRunTrustGateReapplied:
             "executive_summary": "",
         }
         original = MagicMock()
-        original.user_id = "user-1"
+        original.user_id = TEST_USER_ID
         original.id = uuid.uuid4()
         original.plan = plan
         original.goal = "high-risk goal"
@@ -729,7 +733,7 @@ class TestReplayRunTrustGateReapplied:
         with patch("services.agent_runtime._create_run_from_plan",
                    return_value={"run_id": "new", "status": "pending_approval",
                                  "goal": "high-risk goal", "replayed_from_run_id": None}) as mock_c:
-            result = replay_run(str(original.id), "user-1", db)
+            result = replay_run(str(original.id), TEST_USER_ID, db)
 
         assert result["status"] == "pending_approval"
 
@@ -740,7 +744,7 @@ class TestRunToDictReplayedFromRunId:
 
         run = MagicMock()
         run.id = uuid.uuid4()
-        run.user_id = "u"
+        run.user_id = TEST_USER_ID
         run.goal = "g"
         run.executive_summary = ""
         run.overall_risk = "low"
@@ -751,21 +755,21 @@ class TestRunToDictReplayedFromRunId:
         run.result = None
         run.error_message = None
         run.flow_run_id = None
-        run.replayed_from_run_id = "origin-uuid"
+        run.replayed_from_run_id = ORIGIN_RUN_ID
         run.created_at = datetime.now(timezone.utc)
         run.approved_at = None
         run.started_at = None
         run.completed_at = None
 
         d = _run_to_dict(run)
-        assert d["replayed_from_run_id"] == "origin-uuid"
+        assert d["replayed_from_run_id"] == ORIGIN_RUN_ID
 
     def test_replayed_from_run_id_none_when_not_set(self):
         from services.agent_runtime import _run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()
-        run.user_id = "u"
+        run.user_id = TEST_USER_ID
         run.goal = "g"
         run.executive_summary = ""
         run.overall_risk = "low"
@@ -836,7 +840,7 @@ class TestSerializerUnification:
 
         run = MagicMock()
         run.id = uuid.uuid4()
-        run.user_id = "u"
+        run.user_id = TEST_USER_ID
         run.goal = "g"
         run.executive_summary = ""
         run.overall_risk = "low"
@@ -862,7 +866,7 @@ class TestSerializerUnification:
 
         run = MagicMock()
         run.id = uuid.uuid4()
-        run.user_id = "u"
+        run.user_id = TEST_USER_ID
         run.goal = "g"
         run.executive_summary = ""
         run.overall_risk = "low"
@@ -873,7 +877,7 @@ class TestSerializerUnification:
         run.result = None
         run.error_message = None
         run.flow_run_id = None
-        run.replayed_from_run_id = "origin-id"
+        run.replayed_from_run_id = ORIGIN_RUN_ID
         run.created_at = datetime.now(timezone.utc)
         run.approved_at = None
         run.started_at = None
@@ -881,4 +885,4 @@ class TestSerializerUnification:
 
         response = _run_to_response(run)
         assert "replayed_from_run_id" in response
-        assert response["replayed_from_run_id"] == "origin-id"
+        assert response["replayed_from_run_id"] == ORIGIN_RUN_ID

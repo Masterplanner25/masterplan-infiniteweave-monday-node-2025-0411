@@ -22,6 +22,7 @@ Phase D — FlowHistory → Memory Bridge
   - called automatically on flow SUCCESS in PersistentFlowRunner.resume()
 """
 import pytest
+import uuid
 from unittest.mock import MagicMock, patch, call
 
 
@@ -32,10 +33,49 @@ def _make_mock_run(run_id="test-run-id", state=None, current_node="node_a"):
     run.id = run_id
     run.state = state or {}
     run.current_node = current_node
-    run.user_id = "test-user"
+    run.user_id = "00000000-0000-0000-0000-000000000001"
     run.flow_name = "test_flow"
     run.workflow_type = "test"
     return run
+
+
+def _seed_flow_history(db_session, flow_run_id, entries=None):
+    from db.models.flow_run import FlowHistory, FlowRun
+
+    entries = entries or [
+        {
+            "node_name": "node_a",
+            "status": "SUCCESS",
+            "execution_time_ms": 200,
+        }
+    ]
+    existing_run = db_session.query(FlowRun).filter(FlowRun.id == flow_run_id).first()
+    if existing_run is None:
+        db_session.add(
+            FlowRun(
+                id=flow_run_id,
+                flow_name="test_flow",
+                workflow_type="arm_analysis",
+                state={},
+                current_node="node_a",
+                status="running",
+                trace_id=str(uuid.uuid4()),
+            )
+        )
+        db_session.commit()
+    for entry in entries:
+        db_session.add(
+            FlowHistory(
+                id=str(uuid.uuid4()),
+                flow_run_id=flow_run_id,
+                node_name=entry["node_name"],
+                status=entry["status"],
+                execution_time_ms=entry.get("execution_time_ms"),
+                input_state=entry.get("input_state"),
+                output_patch=entry.get("output_patch"),
+            )
+        )
+    db_session.commit()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -188,12 +228,10 @@ class TestGenesisRouterIntegration:
     """Verify genesis_router.py has Phase C fire-and-forget block."""
 
     def _router_source(self):
-        import os
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "routes", "genesis_router.py"
-        )
-        with open(os.path.abspath(path), encoding="utf-8") as f:
-            return f.read()
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parents[2] / "routes" / "genesis_router.py"
+        return path.read_text(encoding="utf-8")
 
     def test_router_imports_logger(self):
         src = self._router_source()
@@ -201,31 +239,32 @@ class TestGenesisRouterIntegration:
 
     def test_router_has_flow_engine_integration(self):
         src = self._router_source()
-        assert "genesis_conversation" in src, (
-            "genesis_router.py must reference genesis_conversation flow"
+        assert "genesis_message" in src, (
+            "genesis_router.py must reference genesis_message flow"
         )
 
-    def test_router_has_route_event_call(self):
+    def test_router_uses_execute_intent(self):
         src = self._router_source()
-        assert "route_event" in src or "_flow_route_event" in src, (
-            "genesis_router.py must call route_event for resumed flows"
+        assert "execute_intent" in src, (
+            "genesis_router.py must execute through execute_intent"
         )
 
-    def test_router_has_persistent_flow_runner_start(self):
+    def test_router_sets_genesis_message_workflow_type(self):
         src = self._router_source()
-        assert "PersistentFlowRunner" in src, (
-            "genesis_router.py must use PersistentFlowRunner"
+        assert '"workflow_type": "genesis_message"' in src, (
+            "genesis_router.py must set workflow_type to genesis_message"
         )
 
-    def test_router_integration_is_non_fatal(self):
-        """The flow engine block must be wrapped in try/except."""
+    def test_router_integration_fails_closed_on_flow_error(self):
+        """Genesis message execution must fail closed if the canonical flow fails."""
         src = self._router_source()
-        # Find the genesis_conversation block and search a wider window
-        idx = src.index("genesis_conversation")
-        # Search 2000 chars after the genesis_conversation reference
+        idx = src.index("genesis_message")
         block_area = src[max(0, idx - 200):idx + 2000]
-        assert "except" in block_area, (
-            "genesis_router.py flow engine block must be non-fatal (try/except)"
+        assert 'result.get("status") != "SUCCESS"' in block_area, (
+            "genesis_router.py must enforce successful flow execution"
+        )
+        assert 'HTTPException(status_code=500, detail="Genesis message execution failed")' in block_area, (
+            "genesis_router.py must fail closed on canonical flow failure"
         )
 
     def test_router_genesis_message_endpoint_still_returns_reply(
@@ -243,7 +282,26 @@ class TestGenesisRouterIntegration:
 class TestGenesisWaitResumeRoundTrip:
     """WAIT/RESUME round-trip for genesis_conversation via mock DB."""
 
-    def test_genesis_flow_starts_in_wait_state(self, mock_db):
+    @staticmethod
+    def _create_flow_run(db_session, user_id, state, current_node):
+        from db.models.flow_run import FlowRun
+
+        run = FlowRun(
+            id=str(uuid.uuid4()),
+            flow_name="genesis_conversation",
+            workflow_type="genesis_conversation",
+            state=state,
+            current_node=current_node,
+            status="running",
+            trace_id=str(uuid.uuid4()),
+            user_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    def test_genesis_flow_starts_in_wait_state(self, db_session, test_user):
         """
         First message starts a genesis_conversation FlowRun.
         synthesis_ready=False → flow enters WAIT.
@@ -252,41 +310,26 @@ class TestGenesisWaitResumeRoundTrip:
         from services.flow_definitions import register_all_flows
         register_all_flows()
 
-        mock_run = _make_mock_run(
+        run = self._create_flow_run(
+            db_session,
+            user_id=test_user.id,
             state={"session_id": 1, "synthesis_ready": False},
             current_node="genesis_validate_session",
-        )
-        # start() creates FlowRun then calls resume()
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
-        mock_db.refresh = MagicMock()
-
-        # start() path: add FlowRun, commit, refresh, then resume()
-        created_run = _make_mock_run(
-            run_id="genesis-run-1",
-            state={"session_id": 1, "synthesis_ready": False},
-            current_node="genesis_validate_session",
-        )
-        # resume() path: query returns the run
-        mock_db.query.return_value.filter.return_value.first.return_value = (
-            created_run
         )
 
         flow = FLOW_REGISTRY["genesis_conversation"]
         runner = PersistentFlowRunner(
             flow=flow,
-            db=mock_db,
-            user_id="test-user",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="genesis_conversation",
         )
-        result = runner.resume("genesis-run-1")
+        result = runner.resume(run.id)
 
-        # Should be WAITING (validate_session succeeds, record_exchange returns WAIT)
-        assert result["status"] in ("WAITING", "SUCCESS", "FAILED")
-        # At minimum it must not raise
-        assert "run_id" in result or "error" in result
+        assert result["status"] == "WAITING"
+        assert result["result"]["waiting_for"] == "genesis_user_message"
 
-    def test_genesis_flow_completes_when_synthesis_ready(self, mock_db):
+    def test_genesis_flow_completes_when_synthesis_ready(self, db_session, test_user):
         """
         When synthesis_ready=True in state, genesis_record_exchange returns SUCCESS
         and the flow advances to genesis_store_synthesis (end node → SUCCESS).
@@ -295,27 +338,24 @@ class TestGenesisWaitResumeRoundTrip:
         from services.flow_definitions import register_all_flows
         register_all_flows()
 
-        mock_run = _make_mock_run(
-            run_id="genesis-run-2",
+        run = self._create_flow_run(
+            db_session,
+            user_id=test_user.id,
             state={"session_id": 1, "synthesis_ready": True},
             current_node="genesis_validate_session",
         )
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
 
         flow = FLOW_REGISTRY["genesis_conversation"]
         runner = PersistentFlowRunner(
             flow=flow,
-            db=mock_db,
-            user_id="test-user",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="genesis_conversation",
         )
 
         # genesis_record_exchange sees synthesis_ready=True → SUCCESS → store → end
-        result = runner.resume("genesis-run-2")
-        assert result["status"] in ("SUCCESS", "WAITING", "FAILED")
+        result = runner.resume(run.id)
+        assert result["status"] == "SUCCESS"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -341,87 +381,76 @@ class TestFlowCompletionEventSignificance:
 
 class TestCaptureFlowCompletionMethod:
 
-    def test_method_exists_on_runner(self, mock_db):
+    def test_method_exists_on_runner(self, db_session, test_user):
         from services.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="arm_analysis",
         )
         assert hasattr(runner, "_capture_flow_completion"), (
             "PersistentFlowRunner must have _capture_flow_completion() method"
         )
 
-    def test_skipped_when_no_user_id(self, mock_db):
+    def test_skipped_when_no_user_id(self, db_session):
         """No user_id → capture skipped, no exception."""
         from services.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
+            db=db_session,
             user_id=None,
             workflow_type="arm_analysis",
         )
         mock_run = _make_mock_run()
-        # Must not raise
         runner._capture_flow_completion(mock_run, {})
-        # DB not queried
-        mock_db.query.assert_not_called()
 
-    def test_skipped_when_no_workflow_type(self, mock_db):
+    def test_skipped_when_no_workflow_type(self, db_session, test_user):
         """No workflow_type → capture skipped, no exception."""
         from services.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type=None,
         )
         mock_run = _make_mock_run()
         runner._capture_flow_completion(mock_run, {})
-        mock_db.query.assert_not_called()
 
-    def test_non_fatal_when_memory_capture_raises(self, mock_db):
+    def test_non_fatal_when_memory_capture_raises(self, db_session, test_user):
         """Exception in MemoryCaptureEngine must not propagate."""
         from services.flow_engine import PersistentFlowRunner
 
-        mock_history = MagicMock()
-        mock_history.node_name = "test_node"
-        mock_history.execution_time_ms = 100
-        mock_history.status = "SUCCESS"
-        mock_history.created_at = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
-            mock_history
-        ]
-
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="arm_analysis",
         )
-        mock_run = _make_mock_run()
+        mock_run = _make_mock_run(run_id=str(uuid.uuid4()))
+        _seed_flow_history(
+            db_session,
+            mock_run.id,
+            entries=[{"node_name": "test_node", "status": "SUCCESS", "execution_time_ms": 100}],
+        )
 
         with patch(
             "services.memory_capture_engine.MemoryCaptureEngine",
             side_effect=Exception("capture failed"),
         ):
-            # Must not raise
             runner._capture_flow_completion(mock_run, {})
 
-    def test_skipped_when_no_history(self, mock_db):
+    def test_skipped_when_no_history(self, db_session, test_user):
         """Empty FlowHistory → capture skipped gracefully."""
         from services.flow_engine import PersistentFlowRunner
 
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
-
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="arm_analysis",
         )
-        mock_run = _make_mock_run()
+        mock_run = _make_mock_run(run_id=str(uuid.uuid4()))
 
         with patch("services.memory_capture_engine.MemoryCaptureEngine") as mock_engine:
             runner._capture_flow_completion(mock_run, {})
@@ -431,26 +460,22 @@ class TestCaptureFlowCompletionMethod:
 class TestCaptureFlowCompletionEventTypeMapping:
     """Correct event_type is passed to MemoryCaptureEngine for each workflow."""
 
-    def _run_capture(self, workflow_type, mock_db):
+    def _run_capture(self, workflow_type, db_session, test_user):
         from services.flow_engine import PersistentFlowRunner
-
-        mock_history = MagicMock()
-        mock_history.node_name = "node_a"
-        mock_history.execution_time_ms = 200
-        mock_history.status = "SUCCESS"
-        mock_history.created_at = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
-            mock_history
-        ]
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type=workflow_type,
         )
-        mock_run = _make_mock_run(run_id="r1")
+        mock_run = _make_mock_run(run_id=str(uuid.uuid4()))
         mock_run.flow_name = "test_flow"
+        _seed_flow_history(
+            db_session,
+            mock_run.id,
+            entries=[{"node_name": "node_a", "status": "SUCCESS", "execution_time_ms": 200}],
+        )
 
         captured_calls = []
 
@@ -468,45 +493,45 @@ class TestCaptureFlowCompletionEventTypeMapping:
 
         return captured_calls
 
-    def test_arm_analysis_maps_to_arm_analysis_complete(self, mock_db):
-        calls = self._run_capture("arm_analysis", mock_db)
+    def test_arm_analysis_maps_to_arm_analysis_complete(self, db_session, test_user):
+        calls = self._run_capture("arm_analysis", db_session, test_user)
         assert calls, "MemoryCaptureEngine.evaluate_and_capture not called"
         assert calls[0]["event_type"] == "arm_analysis_complete"
 
-    def test_task_completion_maps_to_task_completed(self, mock_db):
-        calls = self._run_capture("task_completion", mock_db)
+    def test_task_completion_maps_to_task_completed(self, db_session, test_user):
+        calls = self._run_capture("task_completion", db_session, test_user)
         assert calls
         assert calls[0]["event_type"] == "task_completed"
 
-    def test_leadgen_search_maps_to_leadgen_search(self, mock_db):
-        calls = self._run_capture("leadgen_search", mock_db)
+    def test_leadgen_search_maps_to_leadgen_search(self, db_session, test_user):
+        calls = self._run_capture("leadgen_search", db_session, test_user)
         assert calls
         assert calls[0]["event_type"] == "leadgen_search"
 
-    def test_genesis_conversation_maps_to_genesis_synthesized(self, mock_db):
-        calls = self._run_capture("genesis_conversation", mock_db)
+    def test_genesis_conversation_maps_to_genesis_synthesized(self, db_session, test_user):
+        calls = self._run_capture("genesis_conversation", db_session, test_user)
         assert calls
         assert calls[0]["event_type"] == "genesis_synthesized"
 
-    def test_unknown_workflow_maps_to_flow_completion(self, mock_db):
-        calls = self._run_capture("custom_workflow", mock_db)
+    def test_unknown_workflow_maps_to_flow_completion(self, db_session, test_user):
+        calls = self._run_capture("custom_workflow", db_session, test_user)
         assert calls
         assert calls[0]["event_type"] == "flow_completion"
 
-    def test_capture_includes_flow_history_tags(self, mock_db):
-        calls = self._run_capture("arm_analysis", mock_db)
+    def test_capture_includes_flow_history_tags(self, db_session, test_user):
+        calls = self._run_capture("arm_analysis", db_session, test_user)
         assert calls
         tags = calls[0]["tags"]
         assert "flow_history" in tags
         assert "execution_pattern" in tags
 
-    def test_capture_source_includes_flow_name(self, mock_db):
-        calls = self._run_capture("arm_analysis", mock_db)
+    def test_capture_source_includes_flow_name(self, db_session, test_user):
+        calls = self._run_capture("arm_analysis", db_session, test_user)
         assert calls
         assert "flow_history:" in calls[0]["source"]
 
-    def test_content_includes_node_summary(self, mock_db):
-        calls = self._run_capture("arm_analysis", mock_db)
+    def test_content_includes_node_summary(self, db_session, test_user):
+        calls = self._run_capture("arm_analysis", db_session, test_user)
         assert calls
         content = calls[0]["content"]
         assert "node_a" in content
@@ -516,7 +541,26 @@ class TestCaptureFlowCompletionEventTypeMapping:
 class TestPhaseDAuto:
     """Phase D fires automatically on flow SUCCESS in PersistentFlowRunner."""
 
-    def test_capture_called_on_success(self, mock_db):
+    @staticmethod
+    def _create_run(db_session, user_id, current_node):
+        from db.models.flow_run import FlowRun
+
+        run = FlowRun(
+            id=str(uuid.uuid4()),
+            flow_name="test_flow",
+            workflow_type="arm_analysis",
+            state={},
+            current_node=current_node,
+            status="running",
+            trace_id=str(uuid.uuid4()),
+            user_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    def test_capture_called_on_success(self, db_session, test_user):
         """_capture_flow_completion must be called when flow reaches end node."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -524,16 +568,7 @@ class TestPhaseDAuto:
         def success_node(state, context):
             return {"status": "SUCCESS", "output_patch": {}}
 
-        mock_run = _make_mock_run(
-            run_id="pd-test-1",
-            state={},
-            current_node="phase_d_success_node",
-        )
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        # For _capture_flow_completion history query
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
+        run = self._create_run(db_session, test_user.id, "phase_d_success_node")
 
         flow = {
             "start": "phase_d_success_node",
@@ -542,20 +577,20 @@ class TestPhaseDAuto:
         }
         runner = PersistentFlowRunner(
             flow=flow,
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="arm_analysis",
         )
 
         with patch.object(
             runner, "_capture_flow_completion", wraps=runner._capture_flow_completion
         ) as mock_capture:
-            result = runner.resume("pd-test-1")
+            result = runner.resume(run.id)
 
         assert result["status"] == "SUCCESS"
         mock_capture.assert_called_once()
 
-    def test_capture_not_called_on_failure(self, mock_db):
+    def test_capture_not_called_on_failure(self, db_session, test_user):
         """_capture_flow_completion must NOT be called when flow fails."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -563,14 +598,7 @@ class TestPhaseDAuto:
         def fail_node(state, context):
             return {"status": "FAILURE", "error": "intentional"}
 
-        mock_run = _make_mock_run(
-            run_id="pd-test-2",
-            state={},
-            current_node="phase_d_fail_node",
-        )
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
+        run = self._create_run(db_session, test_user.id, "phase_d_fail_node")
 
         flow = {
             "start": "phase_d_fail_node",
@@ -579,13 +607,13 @@ class TestPhaseDAuto:
         }
         runner = PersistentFlowRunner(
             flow=flow,
-            db=mock_db,
-            user_id="u1",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="arm_analysis",
         )
 
         with patch.object(runner, "_capture_flow_completion") as mock_capture:
-            result = runner.resume("pd-test-2")
+            result = runner.resume(run.id)
 
         assert result["status"] == "FAILED"
         mock_capture.assert_not_called()

@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import case, func
 
 from db.models.memory_metrics import MemoryMetric
+from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class MemoryMetricsStore:
     ) -> None:
         try:
             metric = MemoryMetric(
-                user_id=user_id,
+                user_id=normalize_uuid(user_id) if user_id is not None else None,
                 task_type=task_type,
                 impact_score=float(impact_score),
                 memory_count=int(memory_count),
@@ -32,6 +33,7 @@ class MemoryMetricsStore:
             db.add(metric)
             db.commit()
         except Exception as exc:
+            db.rollback()
             logger.warning("[MemoryMetricsStore] record failed: %s", exc)
 
     def get_summary(self, *, user_id: str, db) -> dict:
@@ -59,7 +61,10 @@ class MemoryMetricsStore:
                     ),
                     func.count(MemoryMetric.id),
                 )
-                .filter(MemoryMetric.user_id == user_id)
+                .filter(
+                    MemoryMetric.user_id
+                    == (normalize_uuid(user_id) if user_id is not None else None)
+                )
                 .one()
             )
 
@@ -87,7 +92,10 @@ class MemoryMetricsStore:
         try:
             rows = (
                 db.query(MemoryMetric)
-                .filter(MemoryMetric.user_id == user_id)
+                .filter(
+                    MemoryMetric.user_id
+                    == (normalize_uuid(user_id) if user_id is not None else None)
+                )
                 .order_by(MemoryMetric.created_at.desc())
                 .limit(limit)
                 .all()

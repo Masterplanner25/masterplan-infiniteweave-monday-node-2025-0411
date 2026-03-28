@@ -13,8 +13,12 @@ Current foundation:
 
 - shared SQLite-backed fixtures live under `tests/fixtures/`
 - `TEST_MODE=true` is the default pytest runtime
+- test env defaults are injected from `tests/conftest.py`
+- API-key protected routes use `api_key_headers`
+- the legacy compatibility surface is enabled in tests and remains API-key protected
 - async heavy execution is disabled by default unless a test explicitly enables it
 - `SystemEvent` remains active in tests; the DB-backed fixtures are expected to persist it successfully
+- `PERMISSION_SECRET` is set to a non-placeholder test value so security checks validate the real config contract
 
 Current invariant coverage:
 

@@ -120,7 +120,6 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         log.status = "running"
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
-        db.commit()
         emit_system_event(
             db=db,
             event_type="execution.started",
@@ -140,7 +139,6 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         log.status = "success"
         log.result = _normalize_result(result)
         log.completed_at = datetime.now(timezone.utc)
-        db.commit()
         emit_system_event(
             db=db,
             event_type="execution.completed",
@@ -161,7 +159,6 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
             log.status = "failed"
             log.error_message = str(exc)
             log.completed_at = datetime.now(timezone.utc)
-            db.commit()
             emit_system_event(
                 db=db,
                 event_type="execution.failed",

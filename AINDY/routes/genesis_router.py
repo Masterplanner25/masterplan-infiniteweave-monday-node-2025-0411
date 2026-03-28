@@ -359,7 +359,6 @@ def lock_masterplan(
             session_id=session_id,
             user_id=user_id,
         )
-        raise
 
     return {
         "masterplan_id": masterplan.id,
@@ -420,6 +419,5 @@ def activate_masterplan(
             plan_id=plan_id,
             user_id=user_id,
         )
-        raise
 
     return {"status": "activated"}

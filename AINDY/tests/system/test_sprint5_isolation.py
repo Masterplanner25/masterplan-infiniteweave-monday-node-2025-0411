@@ -8,9 +8,10 @@ write/read operations are user-scoped in route handlers.
 import os
 import pytest
 import inspect
+from pathlib import Path
 
-_ROUTES_DIR = os.path.join(os.path.dirname(__file__), '..', 'routes')
-_SERVICES_DIR = os.path.join(os.path.dirname(__file__), '..', 'services')
+_ROUTES_DIR = str(Path(__file__).resolve().parents[2] / "routes")
+_SERVICES_DIR = str(Path(__file__).resolve().parents[2] / "services")
 
 
 def _read_source(path: str) -> str:

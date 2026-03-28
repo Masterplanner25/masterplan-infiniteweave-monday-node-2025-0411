@@ -31,10 +31,8 @@ class TestAgentRunModels:
         assert AgentTrustSettings.__tablename__ == "agent_trust_settings"
 
     def test_tables_in_orm_metadata(self):
-        from db.database import Base
-        # Ensure models are imported so they register with metadata
         from db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
-        table_names = set(Base.metadata.tables)
+        table_names = set(AgentRun.metadata.tables)
         assert "agent_runs" in table_names
         assert "agent_steps" in table_names
         assert "agent_trust_settings" in table_names

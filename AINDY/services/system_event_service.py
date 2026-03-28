@@ -8,7 +8,7 @@ from typing import Any, Optional
 
 from config import settings
 from utils.trace_context import get_current_trace_id
-from utils.user_ids import parse_user_id
+from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 _VERBOSE_SYSTEM_EVENT_LOGS = os.getenv("AINDY_DEBUG_SYSTEM_EVENTS", "false").lower() in {
@@ -57,7 +57,7 @@ def _persist_system_event(
     event = SystemEvent(
         id=uuid.uuid4(),
         type=event_type,
-        user_id=parse_user_id(user_id),
+        user_id=normalize_uuid(user_id) if user_id is not None else None,
         trace_id=str(trace_id) if trace_id else None,
         payload=_json_safe(payload or {}),
         timestamp=datetime.now(timezone.utc),

@@ -342,11 +342,8 @@ class TestFeedbackEndpoints:
         assert r.status_code == 422
 
     def test_feedback_valid_outcomes_accepted(
-        self, client, auth_headers, mock_db
+        self, client, auth_headers
     ):
-        mock_db.query.return_value.filter.return_value\
-            .first.return_value = None
-
         for outcome in ["success", "failure", "neutral"]:
             r = client.post(
                 "/memory/nodes/nonexistent/feedback",

@@ -2,6 +2,8 @@
 Memory Bridge v5 Phase 3 Tests — Multi-Agent Memory
 """
 import pytest
+import sqlalchemy
+from uuid import uuid4
 from unittest.mock import MagicMock, patch
 
 
@@ -14,26 +16,13 @@ class TestAgentModel:
         assert "genesis" in SYSTEM_AGENTS
         assert "nodus" in SYSTEM_AGENTS
 
-    def test_agents_table_in_db(self, mocker):
-        import sqlalchemy
-        from db.database import engine
-        fake_insp = MagicMock()
-        fake_insp.get_table_names.return_value = ["agents"]
-        mocker.patch.object(sqlalchemy, "inspect", return_value=fake_insp)
-        insp = sqlalchemy.inspect(engine)
-        assert "agents" in insp.get_table_names()
+    def test_agents_table_in_db(self):
+        from db.models.agent import Agent
+        assert Agent.__tablename__ in Agent.metadata.tables
 
-    def test_source_agent_column_on_memory_nodes(self, mocker):
-        import sqlalchemy
-        from db.database import engine
-        fake_insp = MagicMock()
-        fake_insp.get_columns.return_value = [
-            {"name": "source_agent"},
-            {"name": "is_shared"},
-        ]
-        mocker.patch.object(sqlalchemy, "inspect", return_value=fake_insp)
-        insp = sqlalchemy.inspect(engine)
-        cols = [c["name"] for c in insp.get_columns("memory_nodes")]
+    def test_source_agent_column_on_memory_nodes(self):
+        from services.memory_persistence import MemoryNodeModel
+        cols = list(MemoryNodeModel.__table__.columns.keys())
         assert "source_agent" in cols
         assert "is_shared" in cols
 
@@ -43,13 +32,23 @@ class TestAgentModel:
             Agent, AGENT_ARM, AGENT_GENESIS,
             AGENT_NODUS, AGENT_LEADGEN
         )
-        mock_agents = [
-            MagicMock(memory_namespace=ns)
-            for ns in [AGENT_ARM, AGENT_GENESIS, AGENT_NODUS, AGENT_LEADGEN]
-        ]
-        mock_db.query.return_value.filter.return_value.all.return_value = mock_agents
+        for namespace in [AGENT_ARM, AGENT_GENESIS, AGENT_NODUS, AGENT_LEADGEN]:
+            mock_db.add(
+                Agent(
+                    id=f"system-{namespace}",
+                    name=namespace.upper(),
+                    agent_type="system",
+                    description=f"{namespace} agent",
+                    memory_namespace=namespace,
+                    is_active=True,
+                )
+            )
+        mock_db.commit()
 
-        namespaces = [a.memory_namespace for a in mock_agents]
+        namespaces = [
+            agent.memory_namespace
+            for agent in mock_db.query(Agent).filter(Agent.is_active.is_(True)).all()
+        ]
         assert AGENT_ARM in namespaces
         assert AGENT_GENESIS in namespaces
 
@@ -215,10 +214,34 @@ class TestFederationEndpoints:
             assert "merged_results" in data
             assert "federation_summary" in data
 
-    def test_list_agents_with_auth(self, client, auth_headers, mock_db):
+    def test_list_agents_with_auth(self, client, auth_headers, mock_db, test_user):
         from db.models.agent import Agent
-        mock_db.query.return_value.filter.return_value.all.return_value = []
-        mock_db.query.return_value.filter.return_value.count.return_value = 0
+        from services.memory_persistence import MemoryNodeModel
+
+        mock_db.add(
+            Agent(
+                id=f"agent-{uuid4()}",
+                name="ARM",
+                agent_type="system",
+                description="ARM agent",
+                memory_namespace="arm",
+                is_active=True,
+            )
+        )
+        mock_db.flush()
+        mock_db.add(
+            MemoryNodeModel(
+                content="shared arm memory",
+                tags=["arm", "shared"],
+                node_type="insight",
+                source="test",
+                source_agent="arm",
+                is_shared=True,
+                user_id=test_user.id,
+                extra={},
+            )
+        )
+        mock_db.commit()
 
         r = client.get(
             "/memory/agents",
@@ -226,3 +249,13 @@ class TestFederationEndpoints:
         )
         assert r.status_code in [200, 422]
         assert r.status_code != 401
+        if r.status_code == 200:
+            data = r.json()
+            assert data["total"] >= 1
+            arm_agent = next(
+                agent_data
+                for agent_data in data["agents"]
+                if agent_data["memory_namespace"] == "arm"
+            )
+            assert arm_agent["memory_stats"]["total_nodes"] >= 1
+            assert arm_agent["memory_stats"]["shared_nodes"] >= 1

@@ -212,7 +212,11 @@ def test_execution_loop_runs_and_feedback(monkeypatch):
     monkeypatch.setattr("runtime.execution_loop.create_memory_node", lambda *args, **kwargs: None)
 
     task = SimpleNamespace(type="analysis", input="alpha", tags=["t"])
-    result = loop.run(task, user_id="user-1", db=object())
+    result = loop.run(
+        task,
+        user_id="00000000-0000-0000-0000-000000000001",
+        db=object(),
+    )
 
     assert result["result"] == "ok"
     assert called["ids"] == ["mem-1"]

@@ -2,6 +2,7 @@
 Flow Engine Phase B Tests — PersistentFlowRunner
 """
 import pytest
+from uuid import uuid4
 from unittest.mock import MagicMock, patch
 
 
@@ -119,31 +120,48 @@ class TestFlowEngineCore:
 
 class TestPersistentFlowRunner:
 
-    def test_runner_instantiates(self, mock_db):
+    @staticmethod
+    def _create_run(db_session, current_node, user_id, state=None):
+        from db.models.flow_run import FlowRun
+
+        run = FlowRun(
+            id=str(uuid4()),
+            flow_name="test_flow_phase_b",
+            workflow_type="test",
+            state=state or {},
+            current_node=current_node,
+            status="running",
+            trace_id=str(uuid4()),
+            user_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    def test_runner_instantiates(self, db_session, test_user):
         from services.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "node_a", "edges": {}, "end": ["node_a"]},
-            db=mock_db,
-            user_id="test-user",
+            db=db_session,
+            user_id=test_user.id,
             workflow_type="test",
         )
         assert runner is not None
 
-    def test_runner_handles_missing_run(self, mock_db):
-        """resume() returns ERROR if run not found."""
+    def test_runner_handles_missing_run(self, db_session):
+        """resume() returns FAILED if run not found."""
         from services.flow_engine import PersistentFlowRunner
-
-        mock_db.query.return_value.filter.return_value.first.return_value = None
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
-            db=mock_db,
+            db=db_session,
         )
         result = runner.resume("nonexistent-run-id")
-        assert result["status"] == "ERROR"
+        assert result["status"] == "FAILED"
 
-    def test_flow_success_path(self, mock_db):
+    def test_flow_success_path(self, db_session, test_user):
         """Single-node flow completes successfully."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -151,15 +169,12 @@ class TestPersistentFlowRunner:
         def success_node(state, context):
             return {"status": "SUCCESS", "output_patch": {"result": "done"}}
 
-        mock_run = MagicMock()
-        mock_run.id = "test-run-id"
-        mock_run.state = {"input": "data"}
-        mock_run.current_node = "test_success_node_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_success_node_b",
+            user_id=test_user.id,
+            state={"input": "data"},
+        )
 
         flow = {
             "start": "test_success_node_b",
@@ -167,12 +182,12 @@ class TestPersistentFlowRunner:
             "end": ["test_success_node_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db, user_id="test-user")
-        result = runner.resume("test-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "SUCCESS"
 
-    def test_flow_failure_path(self, mock_db):
+    def test_flow_failure_path(self, db_session, test_user):
         """Node returning FAILURE fails the run."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -180,15 +195,11 @@ class TestPersistentFlowRunner:
         def failure_node(state, context):
             return {"status": "FAILURE", "error": "intentional failure"}
 
-        mock_run = MagicMock()
-        mock_run.id = "fail-run-id"
-        mock_run.state = {}
-        mock_run.current_node = "test_failure_node_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_failure_node_b",
+            user_id=test_user.id,
+        )
 
         flow = {
             "start": "test_failure_node_b",
@@ -196,12 +207,12 @@ class TestPersistentFlowRunner:
             "end": ["test_failure_node_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db)
-        result = runner.resume("fail-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "FAILED"
 
-    def test_flow_wait_path(self, mock_db):
+    def test_flow_wait_path(self, db_session, test_user):
         """Node returning WAIT suspends the run."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -209,15 +220,11 @@ class TestPersistentFlowRunner:
         def wait_node(state, context):
             return {"status": "WAIT", "wait_for": "user_approval"}
 
-        mock_run = MagicMock()
-        mock_run.id = "wait-run-id"
-        mock_run.state = {}
-        mock_run.current_node = "test_wait_node_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_wait_node_b",
+            user_id=test_user.id,
+        )
 
         flow = {
             "start": "test_wait_node_b",
@@ -225,13 +232,13 @@ class TestPersistentFlowRunner:
             "end": ["test_wait_node_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db)
-        result = runner.resume("wait-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "WAITING"
-        assert result["waiting_for"] == "user_approval"
+        assert result["result"]["waiting_for"] == "user_approval"
 
-    def test_flow_wait_without_wait_for_is_failure(self, mock_db):
+    def test_flow_wait_without_wait_for_is_failure(self, db_session, test_user):
         """Node returning WAIT without wait_for treats as FAILURE."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -239,15 +246,11 @@ class TestPersistentFlowRunner:
         def bad_wait_node(state, context):
             return {"status": "WAIT"}  # missing wait_for
 
-        mock_run = MagicMock()
-        mock_run.id = "bad-wait-run-id"
-        mock_run.state = {}
-        mock_run.current_node = "test_wait_no_event_node_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_wait_no_event_node_b",
+            user_id=test_user.id,
+        )
 
         flow = {
             "start": "test_wait_no_event_node_b",
@@ -255,12 +258,12 @@ class TestPersistentFlowRunner:
             "end": ["test_wait_no_event_node_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db)
-        result = runner.resume("bad-wait-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "FAILED"
 
-    def test_flow_exception_in_node_fails_run(self, mock_db):
+    def test_flow_exception_in_node_fails_run(self, db_session, test_user):
         """Unhandled exception in node fn fails the run."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -268,15 +271,11 @@ class TestPersistentFlowRunner:
         def exploding_node(state, context):
             raise RuntimeError("boom")
 
-        mock_run = MagicMock()
-        mock_run.id = "exc-run-id"
-        mock_run.state = {}
-        mock_run.current_node = "test_exception_node_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_exception_node_b",
+            user_id=test_user.id,
+        )
 
         flow = {
             "start": "test_exception_node_b",
@@ -284,13 +283,13 @@ class TestPersistentFlowRunner:
             "end": ["test_exception_node_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db)
-        result = runner.resume("exc-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "FAILED"
-        assert "boom" in result.get("error", "")
+        assert "boom" in result.get("result", {}).get("error", "")
 
-    def test_multi_node_flow_advances(self, mock_db):
+    def test_multi_node_flow_advances(self, db_session, test_user):
         """Two-node flow: node_a → node_b (end)."""
         from services.flow_engine import PersistentFlowRunner, register_node
 
@@ -306,16 +305,11 @@ class TestPersistentFlowRunner:
             call_order.append("b")
             return {"status": "SUCCESS", "output_patch": {"b": True}}
 
-        # First call returns node_a, second call returns node_b (after advancing)
-        mock_run = MagicMock()
-        mock_run.id = "multi-run-id"
-        mock_run.state = {}
-        mock_run.current_node = "test_node_a_phase_b"
-        mock_run.user_id = "test-user"
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_run
-        mock_db.add = MagicMock()
-        mock_db.commit = MagicMock()
+        run = self._create_run(
+            db_session,
+            current_node="test_node_a_phase_b",
+            user_id=test_user.id,
+        )
 
         flow = {
             "start": "test_node_a_phase_b",
@@ -323,8 +317,8 @@ class TestPersistentFlowRunner:
             "end": ["test_node_b_phase_b"],
         }
 
-        runner = PersistentFlowRunner(flow=flow, db=mock_db)
-        result = runner.resume("multi-run-id")
+        runner = PersistentFlowRunner(flow=flow, db=db_session, user_id=test_user.id)
+        result = runner.resume(run.id)
 
         assert result["status"] == "SUCCESS"
         assert call_order == ["a", "b"]
@@ -354,7 +348,7 @@ class TestFlowDefinitions:
             "arm_store_result",
             "task_validate",
             "task_complete",
-            "task_store_outcome",
+            "task_orchestrate",
             "leadgen_validate",
             "leadgen_search",
             "leadgen_store",
@@ -440,9 +434,13 @@ class TestFlowDefinitions:
         bad_db = MagicMock()
         bad_db.add.side_effect = RuntimeError("DB down")
 
-        context = {"db": bad_db, "user_id": "test-user", "attempts": {}}
+        context = {
+            "db": bad_db,
+            "user_id": "00000000-0000-0000-0000-000000000001",
+            "attempts": {},
+        }
 
-        for store_node in ["arm_store_result", "task_store_outcome", "leadgen_store"]:
+        for store_node in ["arm_store_result", "leadgen_store"]:
             node_fn = NODE_REGISTRY[store_node]
             result = node_fn({}, context)
             assert result["status"] == "SUCCESS", (
@@ -516,115 +514,137 @@ class TestFlowRouterEndpoints:
 
 class TestStrategySelection:
 
-    def test_select_strategy_no_strategies(self, mock_db):
+    def test_select_strategy_no_strategies(self, db_session, test_user):
         from services.flow_engine import select_strategy
 
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
-
         result = select_strategy(
-            intent_type="unknown_intent", db=mock_db, user_id="test-user"
+            intent_type="unknown_intent", db=db_session, user_id=test_user.id
         )
         assert result is None
 
-    def test_update_strategy_score_success(self, mock_db):
+    def test_update_strategy_score_success(self, db_session, test_user):
         from db.models.flow_run import Strategy
         from services.flow_engine import update_strategy_score
 
-        mock_strategy = MagicMock(spec=Strategy)
-        mock_strategy.score = 1.0
-        mock_strategy.success_count = 0
-        mock_strategy.failure_count = 0
-
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_strategy
+        strategy = Strategy(
+            id=str(uuid4()),
+            intent_type="test_intent",
+            flow={"start": "a", "edges": {}, "end": ["a"]},
+            score=1.0,
+            success_count=0,
+            failure_count=0,
+            user_id=test_user.id,
         )
+        db_session.add(strategy)
+        db_session.commit()
 
         update_strategy_score(
             intent_type="test_intent",
             flow_name="test_flow",
             success=True,
-            db=mock_db,
+            db=db_session,
+            user_id=test_user.id,
         )
 
-        assert mock_strategy.score == pytest.approx(1.1, abs=1e-9)
-        assert mock_strategy.success_count == 1
+        db_session.refresh(strategy)
+        assert strategy.score == pytest.approx(1.1, abs=1e-9)
+        assert strategy.success_count == 1
 
-    def test_update_strategy_score_failure(self, mock_db):
+    def test_update_strategy_score_failure(self, db_session, test_user):
         from db.models.flow_run import Strategy
         from services.flow_engine import update_strategy_score
 
-        mock_strategy = MagicMock(spec=Strategy)
-        mock_strategy.score = 1.0
-        mock_strategy.success_count = 0
-        mock_strategy.failure_count = 0
-
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_strategy
+        strategy = Strategy(
+            id=str(uuid4()),
+            intent_type="test_intent",
+            flow={"start": "a", "edges": {}, "end": ["a"]},
+            score=1.0,
+            success_count=0,
+            failure_count=0,
+            user_id=test_user.id,
         )
+        db_session.add(strategy)
+        db_session.commit()
 
         update_strategy_score(
             intent_type="test_intent",
             flow_name="test_flow",
             success=False,
-            db=mock_db,
+            db=db_session,
+            user_id=test_user.id,
         )
 
-        assert mock_strategy.score == pytest.approx(0.85, abs=1e-9)
-        assert mock_strategy.failure_count == 1
+        db_session.refresh(strategy)
+        assert strategy.score == pytest.approx(0.85, abs=1e-9)
+        assert strategy.failure_count == 1
 
-    def test_strategy_score_floor(self, mock_db):
+    def test_strategy_score_floor(self, db_session, test_user):
         """Score cannot go below 0.1."""
         from db.models.flow_run import Strategy
         from services.flow_engine import update_strategy_score
 
-        mock_strategy = MagicMock(spec=Strategy)
-        mock_strategy.score = 0.15
-        mock_strategy.success_count = 0
-        mock_strategy.failure_count = 0
-
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_strategy
+        strategy = Strategy(
+            id=str(uuid4()),
+            intent_type="test",
+            flow={"start": "a", "edges": {}, "end": ["a"]},
+            score=0.15,
+            success_count=0,
+            failure_count=0,
+            user_id=test_user.id,
         )
+        db_session.add(strategy)
+        db_session.commit()
 
         update_strategy_score(
-            intent_type="test", flow_name="test", success=False, db=mock_db
+            intent_type="test",
+            flow_name="test",
+            success=False,
+            db=db_session,
+            user_id=test_user.id,
         )
 
-        assert mock_strategy.score >= 0.1
+        db_session.refresh(strategy)
+        assert strategy.score >= 0.1
 
-    def test_strategy_score_ceiling(self, mock_db):
+    def test_strategy_score_ceiling(self, db_session, test_user):
         """Score cannot exceed 2.0."""
         from db.models.flow_run import Strategy
         from services.flow_engine import update_strategy_score
 
-        mock_strategy = MagicMock(spec=Strategy)
-        mock_strategy.score = 1.95
-        mock_strategy.success_count = 0
-        mock_strategy.failure_count = 0
-
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            mock_strategy
+        strategy = Strategy(
+            id=str(uuid4()),
+            intent_type="test",
+            flow={"start": "a", "edges": {}, "end": ["a"]},
+            score=1.95,
+            success_count=0,
+            failure_count=0,
+            user_id=test_user.id,
         )
+        db_session.add(strategy)
+        db_session.commit()
 
         update_strategy_score(
-            intent_type="test", flow_name="test", success=True, db=mock_db
+            intent_type="test",
+            flow_name="test",
+            success=True,
+            db=db_session,
+            user_id=test_user.id,
         )
 
-        assert mock_strategy.score <= 2.0
+        db_session.refresh(strategy)
+        assert strategy.score <= 2.0
 
-    def test_update_strategy_score_no_strategy_is_noop(self, mock_db):
+    def test_update_strategy_score_no_strategy_is_noop(self, db_session, test_user):
         """update_strategy_score is a no-op when no strategy found."""
         from services.flow_engine import update_strategy_score
 
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
-
         # Should not raise
         update_strategy_score(
-            intent_type="missing", flow_name="test", success=True, db=mock_db
+            intent_type="missing",
+            flow_name="test",
+            success=True,
+            db=db_session,
+            user_id=test_user.id,
         )
 
 

@@ -23,6 +23,7 @@ _DAO_PATH = "db.dao.memory_node_dao.MemoryNodeDAO"
 # ---------------------------------------------------------------------------
 
 MOCK_EMBEDDING = [1.0] + [0.0] * 1535
+TEST_USER_ID = "00000000-0000-0000-0000-000000000042"
 
 MOCK_NODE_DICT = {
     "id": "test-uuid-1234",
@@ -30,7 +31,7 @@ MOCK_NODE_DICT = {
     "tags": ["arm", "analysis"],
     "node_type": "outcome",
     "source": "arm_analysis",
-    "user_id": "user-42",
+    "user_id": TEST_USER_ID,
     "extra": {},
     "created_at": "2026-03-18T00:00:00",
     "updated_at": "2026-03-18T00:00:00",
@@ -84,7 +85,7 @@ class TestRecallMemoriesBridge:
                 query="test query",
                 tags=["arm"],
                 limit=3,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
                 db=mock_db,
             )
 
@@ -142,7 +143,7 @@ class TestCreateMemoryNodeBridge:
                 content="ARM analysis of app.py",
                 source="arm_analysis",
                 tags=["arm", "analysis"],
-                user_id="user-42",
+                user_id=TEST_USER_ID,
                 db=mock_db,
                 node_type="outcome",
             )
@@ -152,7 +153,7 @@ class TestCreateMemoryNodeBridge:
             content="ARM analysis of app.py",
             source="arm_analysis",
             tags=["arm", "analysis"],
-            user_id="user-42",
+            user_id=TEST_USER_ID,
             node_type="outcome",
         )
 
@@ -227,7 +228,7 @@ class TestARMAnalysisMemoryHook:
             result = analyzer.run_analysis(
                 file_path="/fake/app.py",
                 db=mock_db,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
             )
 
         save_calls = mock_dao_instance.save.call_args_list
@@ -255,7 +256,7 @@ class TestARMAnalysisMemoryHook:
             analyzer.run_analysis(
                 file_path="/fake/app.py",
                 db=mock_db,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
             )
 
         recall_calls = mock_dao_instance.recall.call_args_list
@@ -299,7 +300,7 @@ class TestARMAnalysisMemoryHook:
             result = analyzer.run_analysis(
                 file_path="/fake/app.py",
                 db=mock_db,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
             )
 
         assert "session_id" in result or "summary" in result
@@ -348,7 +349,7 @@ class TestARMCodegenMemoryHook:
                 prompt="Write a Python function to add two numbers",
                 language="python",
                 db=mock_db,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
             )
 
         save_calls = mock_dao_instance.save.call_args_list
@@ -372,7 +373,7 @@ class TestARMCodegenMemoryHook:
                 prompt="test prompt",
                 language="python",
                 db=mock_db,
-                user_id="user-42",
+                user_id=TEST_USER_ID,
             )
 
         assert "session_id" in result
@@ -402,7 +403,7 @@ class TestARMCodegenMemoryHook:
 # ---------------------------------------------------------------------------
 
 class TestTaskCompletionMemoryHook:
-    """Tests for memory write hook in task_services.complete_task()"""
+    """Tests for memory write hook in task_services.orchestrate_task_completion()."""
 
     def _make_task(self, name="Test Task"):
         task = MagicMock()
@@ -416,7 +417,7 @@ class TestTaskCompletionMemoryHook:
         task.task_difficulty = 1
         return task
 
-    def test_complete_task_writes_outcome_node(self):
+    def test_orchestrate_task_completion_writes_outcome_node(self):
         mock_db = MagicMock()
         mock_task = self._make_task()
 
@@ -424,25 +425,21 @@ class TestTaskCompletionMemoryHook:
              patch("services.task_services.calculate_twr", return_value=8.5), \
              patch("services.task_services.save_calculation"), \
              patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch(_DAO_PATH) as MockDAO:
+             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
+             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
+             patch(f"{_DAO_PATH}.record_feedback"):
 
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
-
-            from services.task_services import complete_task
-            result = complete_task(mock_db, "Test Task", user_id="user-42")
+            from services.task_services import orchestrate_task_completion
+            result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # returned something
-        save_calls = mock_dao_instance.save.call_args_list
-        assert len(save_calls) >= 1
-        write_kwargs = save_calls[0][1]
-        assert write_kwargs["node_type"] == "outcome"
+        write_kwargs = mock_capture.call_args.kwargs
+        assert write_kwargs["event_type"] == "task_completed"
         assert write_kwargs["source"] == "task_service"
         assert "task" in write_kwargs["tags"]
         assert "completion" in write_kwargs["tags"]
 
-    def test_complete_task_no_user_id_skips_memory(self):
+    def test_orchestrate_task_completion_no_user_id_skips_memory(self):
         mock_db = MagicMock()
         mock_task = self._make_task()
 
@@ -450,17 +447,14 @@ class TestTaskCompletionMemoryHook:
              patch("services.task_services.calculate_twr", return_value=5.0), \
              patch("services.task_services.save_calculation"), \
              patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch(_DAO_PATH) as MockDAO:
+             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
 
-            mock_dao_instance = MagicMock()
-            MockDAO.return_value = mock_dao_instance
+            from services.task_services import orchestrate_task_completion
+            orchestrate_task_completion(mock_db, "Test Task", None)
 
-            from services.task_services import complete_task
-            complete_task(mock_db, "Test Task")  # no user_id
+        mock_capture.assert_not_called()
 
-        mock_dao_instance.save.assert_not_called()
-
-    def test_complete_task_memory_failure_does_not_raise(self):
+    def test_orchestrate_task_completion_memory_failure_does_not_raise(self):
         mock_db = MagicMock()
         mock_task = self._make_task()
 
@@ -468,14 +462,12 @@ class TestTaskCompletionMemoryHook:
              patch("services.task_services.calculate_twr", return_value=5.0), \
              patch("services.task_services.save_calculation"), \
              patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch(_DAO_PATH) as MockDAO:
+             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
+             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
+             patch(f"{_DAO_PATH}.record_feedback"):
 
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.save.side_effect = Exception("memory failure")
-            MockDAO.return_value = mock_dao_instance
-
-            from services.task_services import complete_task
-            result = complete_task(mock_db, "Test Task", user_id="user-42")
+            from services.task_services import orchestrate_task_completion
+            result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # did not raise
 

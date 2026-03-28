@@ -444,10 +444,8 @@ class TestScoreEndpoints:
         assert r.status_code == 401
 
     def test_get_score_with_auth_returns_200(
-        self, client, auth_headers, mock_db, mocker
+        self, client, auth_headers, mocker
     ):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
-
         mocker.patch(
             "services.infinity_orchestrator.execute",
             return_value=None,
@@ -462,10 +460,7 @@ class TestScoreEndpoints:
             data = r.json()
             assert "master_score" in data
 
-    def test_history_returns_list(self, client, auth_headers, mock_db):
-        mock_db.query.return_value.filter.return_value \
-            .order_by.return_value.limit.return_value.all.return_value = []
-
+    def test_history_returns_list(self, client, auth_headers):
         r = client.get("/scores/me/history", headers=auth_headers)
         if r.status_code == 200:
             data = r.json()
@@ -500,7 +495,7 @@ class TestEventTriggers:
         assert "infinity_orchestrator" in src, "task_services not using Infinity orchestrator"
 
     def test_watcher_router_triggers_score(self):
-        """watcher_router.py references the Infinity orchestrator."""
+        """watcher_router.py routes watcher ingest through the canonical flow."""
         import sys
         import inspect
         # routes/__init__.py exports the APIRouter object as watcher_router;
@@ -508,7 +503,8 @@ class TestEventTriggers:
         mod = sys.modules.get("routes.watcher_router")
         assert mod is not None, "routes.watcher_router module not loaded"
         src = inspect.getsource(mod)
-        assert "infinity_orchestrator" in src, "watcher_router not using Infinity orchestrator"
+        assert "execute_intent" in src, "watcher_router not using the canonical execution flow"
+        assert "watcher_ingest" in src, "watcher_router must target watcher_ingest workflow"
 
     def test_arm_analyzer_triggers_score(self):
         """ARM analyzer calls the Infinity orchestrator after analysis."""
@@ -529,11 +525,11 @@ class TestEventTriggers:
             "_recalculate_all_scores not referenced in _register_system_jobs"
 
     def test_task_completion_trigger_is_fire_and_forget(self):
-        """The trigger block in task_services is wrapped in try/except."""
+        """Task completion orchestration is wrapped so side effects remain non-fatal."""
         import inspect
         from services import task_services
-        src = inspect.getsource(task_services.complete_task)
-        assert "except" in src, "complete_task missing exception handler"
+        src = inspect.getsource(task_services.orchestrate_task_completion)
+        assert "except" in src, "orchestrate_task_completion missing exception handler"
 
     def test_recalculate_all_scores_function_exists(self):
         """_recalculate_all_scores is defined in scheduler_service."""

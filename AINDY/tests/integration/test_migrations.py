@@ -14,10 +14,14 @@ mocked DB). Schema drift is also caught at startup by the guard in main.py.
 import shutil
 import subprocess
 import pytest
+from config import settings
 
 
 def test_alembic_current_matches_heads():
     """Verify alembic is at head — no pending migrations."""
+    if settings.TEST_MODE:
+        pytest.skip("Alembic drift check is skipped in TEST_MODE SQLite runs")
+
     alembic_cmd = shutil.which("alembic")
     if not alembic_cmd:
         pytest.skip("alembic CLI not found in PATH")
