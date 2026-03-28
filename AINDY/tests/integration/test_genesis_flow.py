@@ -11,17 +11,17 @@ Covers:
 import pytest
 import json
 import inspect
+import re
 from unittest.mock import MagicMock, patch
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _read_source(relative_path: str) -> str:
-    import os
-    base = os.path.join(os.path.dirname(__file__), "..")
-    full = os.path.abspath(os.path.join(base, relative_path))
-    with open(full, "r", encoding="utf-8") as f:
-        return f.read()
+    from pathlib import Path
+
+    full = Path(__file__).resolve().parents[2] / relative_path
+    return full.read_text(encoding="utf-8")
 
 
 SAMPLE_DRAFT = {
@@ -218,12 +218,13 @@ class TestGenesisAuditRoute:
         assert "validate_draft_integrity" in source, (
             "validate_draft_integrity not found in genesis_router.py"
         )
-        assert "from services.genesis_ai import" in source
-        import_line = [
-            line for line in source.split("\n")
-            if "from services.genesis_ai import" in line
-        ]
-        assert any("validate_draft_integrity" in line for line in import_line), (
+        assert re.search(
+            r"from\s+services\.genesis_ai\s+import\s*\([\s\S]*validate_draft_integrity",
+            source,
+        ) or re.search(
+            r"from\s+services\.genesis_ai\s+import\s+[\s\S]*validate_draft_integrity",
+            source,
+        ), (
             "validate_draft_integrity not imported from services.genesis_ai in genesis_router.py"
         )
 
@@ -231,7 +232,7 @@ class TestGenesisAuditRoute:
         """genesis_router audit endpoint must use session.draft_json, not caller-provided draft."""
         source = _read_source("routes/genesis_router.py")
         audit_start = source.index("def audit_genesis_draft(")
-        audit_body = source[audit_start:audit_start + 600]
+        audit_body = source[audit_start:audit_start + 1600]
         assert "draft_json" in audit_body, (
             "audit endpoint should use session.draft_json"
         )
@@ -240,7 +241,7 @@ class TestGenesisAuditRoute:
         """Audit endpoint logic should raise 422 when draft_json is None/missing."""
         source = _read_source("routes/genesis_router.py")
         audit_start = source.index("def audit_genesis_draft(")
-        audit_body = source[audit_start:audit_start + 600]
+        audit_body = source[audit_start:audit_start + 1600]
         assert "422" in audit_body, (
             "audit endpoint should raise 422 when no draft_json available"
         )
@@ -251,35 +252,55 @@ class TestGenesisAuditRoute:
 class TestMasterplanFactoryHardening:
     """Tests for the hardened create_masterplan_from_genesis() function."""
 
+    @staticmethod
+    def _seed_session(db_session, test_user, *, status="active", synthesis_ready=True, draft_json=None):
+        from db.models import GenesisSessionDB
+
+        session = GenesisSessionDB(
+            user_id=test_user.id,
+            status=status,
+            synthesis_ready=synthesis_ready,
+            draft_json=draft_json,
+        )
+        db_session.add(session)
+        db_session.commit()
+        db_session.refresh(session)
+        return session
+
     def test_factory_accepts_user_id(self):
         from services.masterplan_factory import create_masterplan_from_genesis
         sig = inspect.signature(create_masterplan_from_genesis)
         assert "user_id" in sig.parameters
 
-    def test_factory_raises_on_missing_session(self, mock_db):
+    def test_factory_raises_on_missing_session(self, db_session, test_user):
         from services.masterplan_factory import create_masterplan_from_genesis
-        mock_db.first.return_value = None
         with pytest.raises(Exception, match="not found"):
-            create_masterplan_from_genesis(999, {}, mock_db, user_id="u1")
+            create_masterplan_from_genesis(999, {}, db_session, user_id=test_user.id)
 
-    def test_factory_raises_on_already_locked(self, mock_db):
+    def test_factory_raises_on_already_locked(self, db_session, test_user):
         from services.masterplan_factory import create_masterplan_from_genesis
-        mock_session = MagicMock()
-        mock_session.status = "locked"
-        mock_session.synthesis_ready = True
-        mock_db.first.return_value = mock_session
+        session = self._seed_session(
+            db_session,
+            test_user,
+            status="locked",
+            synthesis_ready=True,
+            draft_json=SAMPLE_DRAFT,
+        )
         with pytest.raises(Exception, match="already locked"):
-            create_masterplan_from_genesis(1, {}, mock_db, user_id="u1")
+            create_masterplan_from_genesis(session.id, {}, db_session, user_id=test_user.id)
 
-    def test_factory_raises_if_not_synthesis_ready(self, mock_db):
+    def test_factory_raises_if_not_synthesis_ready(self, db_session, test_user):
         """Factory must gate on synthesis_ready — raise if False."""
         from services.masterplan_factory import create_masterplan_from_genesis
-        mock_session = MagicMock()
-        mock_session.status = "active"
-        mock_session.synthesis_ready = False
-        mock_db.first.return_value = mock_session
+        session = self._seed_session(
+            db_session,
+            test_user,
+            status="active",
+            synthesis_ready=False,
+            draft_json=SAMPLE_DRAFT,
+        )
         with pytest.raises((Exception, ValueError)) as exc_info:
-            create_masterplan_from_genesis(1, SAMPLE_DRAFT, mock_db, user_id="u1")
+            create_masterplan_from_genesis(session.id, SAMPLE_DRAFT, db_session, user_id=test_user.id)
         assert "synthesis" in str(exc_info.value).lower() or "ready" in str(exc_info.value).lower(), (
             "Factory should raise meaningful error when synthesis_ready is False"
         )
@@ -308,57 +329,70 @@ class TestMasterplanFactoryHardening:
             "Factory must call db.rollback() in exception handler"
         )
 
-    def test_factory_rollback_called_on_db_failure(self, mock_db):
+    def test_factory_rollback_called_on_db_failure(self, db_session, test_user, monkeypatch):
         """db.rollback() must be called when db.commit() raises."""
         from services.masterplan_factory import create_masterplan_from_genesis
-        mock_session = MagicMock()
-        mock_session.status = "active"
-        mock_session.synthesis_ready = True
-        mock_session.draft_json = SAMPLE_DRAFT
-        mock_db.filter_by.return_value.first.return_value = mock_session
-        mock_db.filter.return_value.order_by.return_value.all.return_value = []
-        mock_db.first.return_value = mock_session
-        mock_db.commit.side_effect = Exception("DB commit failed")
+        session = self._seed_session(
+            db_session,
+            test_user,
+            status="active",
+            synthesis_ready=True,
+            draft_json=SAMPLE_DRAFT,
+        )
+        rollback_called = {"value": False}
+        original_commit = db_session.commit
+        original_rollback = db_session.rollback
+
+        def _failing_commit():
+            raise Exception("DB commit failed")
+
+        def _tracking_rollback():
+            rollback_called["value"] = True
+            return original_rollback()
+
+        monkeypatch.setattr(db_session, "commit", _failing_commit)
+        monkeypatch.setattr(db_session, "rollback", _tracking_rollback)
 
         with pytest.raises(Exception):
-            create_masterplan_from_genesis(1, SAMPLE_DRAFT, mock_db, user_id="u1")
+            create_masterplan_from_genesis(session.id, SAMPLE_DRAFT, db_session, user_id=test_user.id)
 
-        mock_db.rollback.assert_called_once()
+        assert rollback_called["value"] is True
+        monkeypatch.setattr(db_session, "commit", original_commit)
 
-    def test_factory_returns_masterplan_object(self, mock_db):
+    def test_factory_returns_masterplan_object(self, db_session, test_user):
         """Factory must return a MasterPlan instance on success."""
         from services.masterplan_factory import create_masterplan_from_genesis
         from db.models import MasterPlan
+        session = self._seed_session(
+            db_session,
+            test_user,
+            status="active",
+            synthesis_ready=True,
+            draft_json=SAMPLE_DRAFT,
+        )
 
-        mock_session = MagicMock()
-        mock_session.status = "active"
-        mock_session.synthesis_ready = True
-        mock_session.draft_json = SAMPLE_DRAFT
-        mock_session.id = 1
+        with patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
+            "services.identity_service.IdentityService.observe"
+        ):
+            result = create_masterplan_from_genesis(session.id, SAMPLE_DRAFT, db_session, user_id=test_user.id)
 
-        mock_db.filter_by.return_value.first.return_value = mock_session
-        mock_db.filter.return_value.order_by.return_value.all.return_value = []
-
-        result = create_masterplan_from_genesis(1, SAMPLE_DRAFT, mock_db, user_id="u1")
-
-        assert mock_db.add.call_count >= 1
-        assert mock_db.commit.call_count >= 1
         assert isinstance(result, MasterPlan)
+        assert result.user_id == test_user.id
 
-    def test_factory_sets_posture_from_draft(self, mock_db):
+    def test_factory_sets_posture_from_draft(self, db_session, test_user):
         """Factory must set posture based on draft ambition/horizon."""
         from services.masterplan_factory import create_masterplan_from_genesis
-
-        mock_session = MagicMock()
-        mock_session.status = "active"
-        mock_session.synthesis_ready = True
-        mock_session.draft_json = {"time_horizon_years": 1, "ambition_score": 0.9}
-        mock_session.id = 1
-
-        mock_db.filter_by.return_value.first.return_value = mock_session
-        mock_db.filter.return_value.order_by.return_value.all.return_value = []
-
-        result = create_masterplan_from_genesis(1, {}, mock_db, user_id="u1")
+        session = self._seed_session(
+            db_session,
+            test_user,
+            status="active",
+            synthesis_ready=True,
+            draft_json={"time_horizon_years": 1, "ambition_score": 0.9},
+        )
+        with patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
+            "services.identity_service.IdentityService.observe"
+        ):
+            result = create_masterplan_from_genesis(session.id, {}, db_session, user_id=test_user.id)
         assert result.posture == "Aggressive"
 
 

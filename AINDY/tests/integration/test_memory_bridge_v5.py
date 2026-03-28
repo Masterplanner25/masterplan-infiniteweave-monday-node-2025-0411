@@ -257,14 +257,9 @@ class TestExecutionLoopEndpoints:
             assert "memory_bridge_version" in data
             assert data["memory_bridge_version"] == "v5"
 
-    def test_execute_complete_with_auth(
-        self, client, auth_headers, mock_db, mocker
+    def test_execute_complete_with_auth_returns_deprecation(
+        self, client, auth_headers
     ):
-        mocker.patch(
-            "services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture",
-            return_value=None,
-        )
-
         r = client.post(
             "/memory/execute/complete",
             json={
@@ -277,11 +272,10 @@ class TestExecutionLoopEndpoints:
             headers=auth_headers,
         )
 
-        assert r.status_code in [200, 422]
-        if r.status_code == 200:
-            data = r.json()
-            assert "loop_complete" in data
-            assert data["loop_complete"] is True
+        assert r.status_code == 410
+        data = r.json()
+        assert data["error"] == "http_error"
+        assert data["details"]["error"] == "memory_execute_complete_deprecated"
 
 
 class TestCaptureEngineIntegration:

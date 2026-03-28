@@ -45,6 +45,7 @@ from typing import Callable, Optional
 from sqlalchemy.orm import Session
 from services.system_event_service import emit_error_event, emit_system_event
 from utils.trace_context import ensure_trace_id, get_current_trace_id
+from utils.uuid_utils import normalize_uuid
 from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
@@ -87,6 +88,18 @@ def register_node(name: str):
 # Populated at startup via register_flow().
 
 FLOW_REGISTRY: dict[str, dict] = {}
+
+
+def _json_safe(value):
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _serialize_flow_events(db: Session, run_id) -> list[dict]:
@@ -303,7 +316,7 @@ class PersistentFlowRunner:
     ):
         self.flow = flow
         self.db = db
-        self.user_id = user_id
+        self.user_id = normalize_uuid(user_id) if user_id is not None else None
         self.workflow_type = workflow_type
         self.automation_log_id = automation_log_id
 
@@ -315,15 +328,18 @@ class PersistentFlowRunner:
         """
         from db.models.flow_run import FlowRun
 
+        trace_id = ensure_trace_id(
+            initial_state.get("trace_id") if isinstance(initial_state, dict) else None
+        ) or str(uuid.uuid4())
+
         run = FlowRun(
+            id=str(uuid.uuid4()),
             flow_name=flow_name,
             workflow_type=self.workflow_type,
-            state=initial_state,
+            state=_json_safe(initial_state),
             current_node=self.flow["start"],
             status="running",
-            trace_id=ensure_trace_id(
-                initial_state.get("trace_id") if isinstance(initial_state, dict) else None
-            ),
+            trace_id=str(trace_id),
             user_id=self.user_id,
             automation_log_id=self.automation_log_id,
         )
@@ -333,7 +349,7 @@ class PersistentFlowRunner:
         if isinstance(initial_state, dict):
             if not initial_state.get("trace_id"):
                 initial_state["trace_id"] = run.trace_id or str(run.id)
-            run.state = initial_state
+            run.state = _json_safe(initial_state)
             if not run.trace_id:
                 run.trace_id = initial_state.get("trace_id") or str(run.id)
             self.db.commit()
@@ -373,22 +389,23 @@ class PersistentFlowRunner:
         """
         from db.models.flow_run import FlowHistory, FlowRun
 
-        run = self.db.query(FlowRun).filter(FlowRun.id == run_id).first()
+        db_run_id = str(run_id)
+        run = self.db.query(FlowRun).filter(FlowRun.id == db_run_id).first()
 
         if not run:
             return _format_execution_response(
                 status="FAILED",
-                trace_id=str(run_id),
+                trace_id=db_run_id,
                 result={"error": f"FlowRun {run_id} not found"},
                 events=[],
                 next_action=None,
-                run_id=run_id,
+                run_id=db_run_id,
             )
 
         state = run.state or {}
         if isinstance(state, dict) and not state.get("trace_id"):
             state["trace_id"] = run.trace_id or get_current_trace_id() or str(run.id)
-            run.state = state
+            run.state = _json_safe(state)
             if not run.trace_id:
                 run.trace_id = state["trace_id"]
             self.db.commit()
@@ -499,8 +516,8 @@ class PersistentFlowRunner:
                     flow_run_id=run.id,
                     node_name=current_node,
                     status=node_status,
-                    input_state=input_snapshot,
-                    output_patch=patch,
+                    input_state=_json_safe(input_snapshot),
+                    output_patch=_json_safe(patch),
                     execution_time_ms=exec_ms,
                     error_message=result.get("error"),
                 )
@@ -659,7 +676,7 @@ class PersistentFlowRunner:
                     )
                 run.status = "waiting"
                 run.waiting_for = wait_for
-                run.state = state
+                run.state = _json_safe(state)
                 run.current_node = current_node
                 self.db.commit()
                 logger.info(
@@ -681,7 +698,7 @@ class PersistentFlowRunner:
                     self._capture_flow_completion(run, state)  # Phase D
                     execution_result = _extract_execution_result(self.workflow_type, state)
                     run.status = "success"
-                    run.state = state
+                    run.state = _json_safe(state)
                     run.completed_at = datetime.now(timezone.utc)
                     self.db.commit()
                     logger.info("FlowRun %s completed successfully", run.id)
@@ -794,7 +811,7 @@ class PersistentFlowRunner:
                 )
 
             run.current_node = next_node
-            run.state = state
+            run.state = _json_safe(state)
             self.db.commit()
             current_node = next_node
 
@@ -874,7 +891,7 @@ class PersistentFlowRunner:
                 payload={"run_id": str(run.id), "workflow_type": self.workflow_type},
                 required=True,
             )
-            raise
+            return
 
 
 # ── Event Router ───────────────────────────────────────────────────────────────
@@ -1172,10 +1189,12 @@ def execute_intent(
     # Register ephemeral flow
     FLOW_REGISTRY[flow_name] = flow
 
+    normalized_user_id = normalize_uuid(user_id) if user_id is not None else None
+
     runner = PersistentFlowRunner(
         flow=flow,
         db=db,
-        user_id=user_id,
+        user_id=normalized_user_id,
         workflow_type=intent_type,
     )
 

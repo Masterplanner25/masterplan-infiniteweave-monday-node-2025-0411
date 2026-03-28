@@ -47,60 +47,74 @@ class TestMemoryNodeHistory:
         from db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "get_history")
 
-    def test_update_no_change_returns_node(self, mock_db):
+    def test_update_no_change_returns_node(self, db_session, test_user):
         """Update with identical values creates no history."""
         from db.dao.memory_node_dao import MemoryNodeDAO
-        import uuid as _uuid
+        from db.models.memory_node_history import MemoryNodeHistory
+        from services.memory_persistence import MemoryNodeModel
 
-        mock_node = MagicMock()
-        mock_node_id = _uuid.uuid4()
-        mock_node.id = mock_node_id
-        mock_node.content = "original content"
-        mock_node.tags = ["tag1"]
-        mock_node.node_type = "insight"
-        mock_node.source = "test"
-        mock_node.user_id = "user-123"
+        node = MemoryNodeModel(
+            content="original content",
+            tags=["tag1"],
+            node_type="insight",
+            source="test",
+            user_id=test_user.id,
+            extra={},
+            embedding=[0.0] * 1536,
+        )
+        db_session.add(node)
+        db_session.commit()
+        db_session.refresh(node)
 
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_node
-
-        dao = MemoryNodeDAO(mock_db)
+        dao = MemoryNodeDAO(db_session)
         result = dao.update(
-            node_id=str(mock_node_id),
-            user_id="user-123",
+            node_id=str(node.id),
+            user_id=str(test_user.id),
             content="original content",
         )
         assert result is not None
+        assert result.id == node.id
+        assert db_session.query(MemoryNodeHistory).filter(MemoryNodeHistory.node_id == node.id).count() == 0
 
-    def test_update_creates_history_on_change(self, mock_db, mocker):
+    def test_update_creates_history_on_change(self, db_session, test_user, mocker):
         """Update with new content creates history entry."""
         from db.dao.memory_node_dao import MemoryNodeDAO
-        import uuid as _uuid
+        from db.models.memory_node_history import MemoryNodeHistory
+        from services.memory_persistence import MemoryNodeModel
 
         mocker.patch(
             "services.embedding_service.generate_embedding",
             return_value=[0.1] * 1536,
         )
 
-        mock_node = MagicMock()
-        mock_node_id = _uuid.uuid4()
-        mock_node.id = mock_node_id
-        mock_node.content = "original content"
-        mock_node.tags = ["tag1"]
-        mock_node.node_type = "insight"
-        mock_node.source = "test"
-        mock_node.user_id = "user-123"
-        mock_node.embedding = [0.0] * 1536
+        node = MemoryNodeModel(
+            content="original content",
+            tags=["tag1"],
+            node_type="insight",
+            source="test",
+            user_id=test_user.id,
+            extra={},
+            embedding=[0.0] * 1536,
+        )
+        db_session.add(node)
+        db_session.commit()
+        db_session.refresh(node)
 
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_node
-
-        dao = MemoryNodeDAO(mock_db)
+        dao = MemoryNodeDAO(db_session)
         result = dao.update(
-            node_id=str(mock_node_id),
-            user_id="user-123",
+            node_id=str(node.id),
+            user_id=str(test_user.id),
             content="NEW content",
         )
 
-        assert mock_db.add.called
+        assert result is not None
+        assert result.content == "NEW content"
+        history_rows = (
+            db_session.query(MemoryNodeHistory)
+            .filter(MemoryNodeHistory.node_id == node.id)
+            .all()
+        )
+        assert len(history_rows) == 1
 
     def test_history_endpoint_requires_auth(self, client):
         r = client.get("/memory/nodes/test-id/history")
@@ -121,10 +135,11 @@ class TestDFSTraversal:
         assert hasattr(MemoryNodeDAO, "traverse")
         assert callable(MemoryNodeDAO.traverse)
 
-    def test_traverse_returns_correct_structure(self, mock_db):
+    def test_traverse_returns_correct_structure(self):
         """traverse() returns expected dict structure."""
         from db.dao.memory_node_dao import MemoryNodeDAO
 
+        mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         dao = MemoryNodeDAO(mock_db)
@@ -138,11 +153,13 @@ class TestDFSTraversal:
         assert "nodes_visited" in result
         assert result["found"] is False
 
-    def test_traverse_cycle_prevention(self, mock_db):
+    def test_traverse_cycle_prevention(self):
         """DFS must not loop on A -> B -> A cycles."""
         from db.dao.memory_node_dao import MemoryNodeDAO
         from services.memory_persistence import MemoryLinkModel
         import uuid as _uuid
+
+        mock_db = MagicMock()
 
         node_a_id = str(_uuid.uuid4())
         node_a = MagicMock()
@@ -226,10 +243,11 @@ class TestDFSTraversal:
         assert result["found"] is True
         assert result["nodes_visited"] <= 2
 
-    def test_traverse_max_depth_respected(self, mock_db):
+    def test_traverse_max_depth_respected(self):
         """traverse() must not exceed max_depth."""
         from db.dao.memory_node_dao import MemoryNodeDAO
 
+        mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         dao = MemoryNodeDAO(mock_db)
@@ -247,28 +265,15 @@ class TestDFSTraversal:
         r = client.get("/memory/nodes/test-id/traverse")
         assert r.status_code == 401
 
-    def test_traverse_endpoint_with_auth(self, client, auth_headers, mock_db):
-        mock_db.query.return_value.filter.return_value.first.return_value = None
+    def test_traverse_endpoint_with_auth(self, client, auth_headers):
         r = client.get(
             "/memory/nodes/nonexistent/traverse",
             headers=auth_headers,
         )
         assert r.status_code == 404
 
-    def test_traverse_max_depth_capped_at_5(self, client, auth_headers, mock_db):
+    def test_traverse_max_depth_capped_at_5(self, client, auth_headers):
         """API caps max_depth at 5."""
-        mock_node = MagicMock()
-        mock_node.id = "node-1"
-        mock_node.content = "test"
-        mock_node.tags = []
-        mock_node.node_type = "insight"
-        mock_node.source = "test"
-        mock_node.user_id = "test-user-id-123"
-        mock_node.created_at = datetime.utcnow()
-
-        mock_db.query.return_value.filter.return_value.first.return_value = mock_node
-        mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
-
         r = client.get(
             "/memory/nodes/node-1/traverse?max_depth=99",
             headers=auth_headers,
@@ -284,9 +289,10 @@ class TestNodeExpansion:
         assert hasattr(MemoryNodeDAO, "expand")
         assert callable(MemoryNodeDAO.expand)
 
-    def test_expand_returns_correct_structure(self, mock_db):
+    def test_expand_returns_correct_structure(self):
         from db.dao.memory_node_dao import MemoryNodeDAO
 
+        mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
         dao = MemoryNodeDAO(mock_db)

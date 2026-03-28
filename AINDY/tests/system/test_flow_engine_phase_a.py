@@ -271,11 +271,13 @@ class TestAutomationLogModel:
         """Index definitions exist on the ORM table (checked via migration file)."""
         # Indexes are defined in the Alembic migration, not on the ORM Table
         # object itself. Verify the migration file contains all three index names.
-        import os
-        migration_path = os.path.join(
-            os.path.dirname(__file__),
-            "..", "alembic", "versions",
-            "37020d1c3951_automation_log_flow_engine_phase_a.py",
+        from pathlib import Path
+
+        migration_path = (
+            Path(__file__).resolve().parents[2]
+            / "alembic"
+            / "versions"
+            / "37020d1c3951_automation_log_flow_engine_phase_a.py"
         )
         with open(migration_path, "r") as f:
             content = f.read()

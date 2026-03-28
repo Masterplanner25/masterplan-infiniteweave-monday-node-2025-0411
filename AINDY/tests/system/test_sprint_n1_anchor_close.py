@@ -15,6 +15,8 @@ Covers:
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from uuid import uuid4
 
 
 @pytest.fixture
@@ -334,9 +336,8 @@ class TestMasterPlanAnchorColumns:
 
     def test_migration_file_exists(self):
         """Alembic migration for anchor columns must exist."""
-        import os
-        versions_dir = os.path.join(os.path.dirname(__file__), "..", "alembic", "versions")
-        files = os.listdir(versions_dir)
+        versions_dir = Path(__file__).resolve().parents[2] / "alembic" / "versions"
+        files = [path.name for path in versions_dir.iterdir()]
         assert any("anchor_eta" in f for f in files), (
             "No migration file with 'anchor_eta' found in alembic/versions/"
         )
@@ -438,10 +439,10 @@ class TestAnchorEndpoint:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestETAService:
-    def _make_plan(self, plan_id=1, user_id="u1", anchor_date=None):
+    def _make_plan(self, plan_id=1, user_id=None, anchor_date=None):
         plan = MagicMock()
         plan.id = plan_id
-        plan.user_id = user_id
+        plan.user_id = user_id or uuid4()
         plan.anchor_date = anchor_date
         plan.current_velocity = None
         plan.projected_completion_date = None
@@ -455,7 +456,7 @@ class TestETAService:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         with pytest.raises(ValueError, match="not found"):
-            calculate_eta(db=mock_db, masterplan_id=9999, user_id="u1")
+            calculate_eta(db=mock_db, masterplan_id=9999, user_id=uuid4())
 
     def test_calculate_eta_returns_dict_keys(self):
         from services.eta_service import calculate_eta
@@ -475,7 +476,7 @@ class TestETAService:
 
         mock_db.query.side_effect = mock_query
 
-        result = calculate_eta(db=mock_db, masterplan_id=1, user_id="u1")
+        result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         assert "velocity" in result
         assert "projected_completion_date" in result
         assert "eta_confidence" in result
@@ -503,7 +504,7 @@ class TestETAService:
 
         mock_db.query.side_effect = mock_query
 
-        result = calculate_eta(db=mock_db, masterplan_id=1, user_id="u1")
+        result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         assert result["velocity"] == 0
         assert result["projected_completion_date"] is None
         assert result["eta_confidence"] == "insufficient_data"
@@ -539,7 +540,7 @@ class TestETAService:
 
         mock_db.query.side_effect = mock_query
 
-        result = calculate_eta(db=mock_db, masterplan_id=1, user_id="u1")
+        result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         # velocity=5/day, remaining=50, days_needed=10 → projected ~10 days from now
         # anchor is 365 days out → days_ahead_behind should be very positive
         assert result["days_ahead_behind"] is not None
@@ -552,8 +553,8 @@ class TestETAService:
 
         mock_db = MagicMock()
 
-        plan1 = self._make_plan(plan_id=1, user_id="u1", anchor_date=datetime(2027, 1, 1))
-        plan2 = self._make_plan(plan_id=2, user_id="u2", anchor_date=datetime(2028, 6, 1))
+        plan1 = self._make_plan(plan_id=1, user_id=uuid4(), anchor_date=datetime(2027, 1, 1))
+        plan2 = self._make_plan(plan_id=2, user_id=uuid4(), anchor_date=datetime(2028, 6, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1, plan2]
 
         with patch("services.eta_service.calculate_eta") as mock_calc:
@@ -569,7 +570,7 @@ class TestETAService:
         from db.models.masterplan import MasterPlan
 
         mock_db = MagicMock()
-        plan1 = self._make_plan(plan_id=1, user_id="u1", anchor_date=datetime(2027, 1, 1))
+        plan1 = self._make_plan(plan_id=1, user_id=uuid4(), anchor_date=datetime(2027, 1, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1]
 
         with patch("services.eta_service.calculate_eta", side_effect=RuntimeError("DB down")):
@@ -652,8 +653,8 @@ class TestSchedulerETAJob:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCompleteTaskETAHook:
-    def test_complete_task_triggers_eta_for_active_plan_with_anchor(self):
-        """complete_task must call calculate_eta when active plan has anchor_date."""
+    def test_orchestrate_task_completion_triggers_eta_for_active_plan_with_anchor(self):
+        """orchestrate_task_completion must call calculate_eta when active plan has anchor_date."""
         from services import task_services
 
         mock_db = MagicMock()
@@ -670,20 +671,21 @@ class TestCompleteTaskETAHook:
         fake_plan = MagicMock()
         fake_plan.id = 1
         fake_plan.anchor_date = datetime(2027, 1, 1)
-
-        def find_side(*args, **kwargs):
-            return mock_task
+        fake_plan.user_id = "00000000-0000-0000-0000-000000000001"
 
         with patch("services.task_services.find_task", return_value=mock_task), \
-             patch("services.task_services.calculate_twr", return_value=1.5), \
-             patch("services.task_services.save_calculation"), \
              patch("services.task_services.get_mongo_client", return_value=None), \
-             patch("db.models.masterplan.MasterPlan") as MockPlan, \
+             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
+             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \
+             patch("services.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
              patch("services.eta_service.calculate_eta") as mock_eta:
-
+            mock_context.return_value.ids = []
             mock_db.query.return_value.filter.return_value.first.return_value = fake_plan
 
-            task_services.complete_task(mock_db, "test-task", user_id="u1")
+            task_services.orchestrate_task_completion(
+                mock_db,
+                "test-task",
+                user_id="00000000-0000-0000-0000-000000000001",
+            )
 
-            # ETA was called (fire-and-forget)
             mock_eta.assert_called_once()

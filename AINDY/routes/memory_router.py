@@ -15,6 +15,7 @@ from services.nodus_security import (
     NodusSecurityError,
     authorize_nodus_execution,
 )
+from utils.uuid_utils import normalize_uuid
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 logger = logging.getLogger(__name__)
@@ -157,8 +158,9 @@ def get_node(
 ):
     """Retrieve a memory node by UUID owned by the current user."""
     dao = MemoryNodeDAO(db)
-    node = dao.get_by_id(node_id)
-    if not node or node.get("user_id") != str(current_user["sub"]):
+    user_id = normalize_uuid(current_user["sub"])
+    node = dao.get_by_id(node_id, user_id=user_id)
+    if not node:
         raise HTTPException(
             status_code=404,
             detail={"error": "memory_node_not_found", "message": "Memory node not found"},
@@ -565,13 +567,14 @@ async def federated_recall(
             detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
         )
 
+    user_id = normalize_uuid(current_user["sub"])
     dao = MemoryNodeDAO(db)
     result = dao.recall_federated(
         query=body.query,
         tags=body.tags,
         agent_namespaces=body.agent_namespaces,
         limit=body.limit,
-        user_id=str(current_user["sub"]),
+        user_id=user_id,
     )
     return result
 
@@ -587,6 +590,7 @@ async def list_agents(
     from db.models.agent import Agent
     from services.memory_persistence import MemoryNodeModel
 
+    user_id = normalize_uuid(current_user["sub"])
     agents = db.query(Agent).filter(
         Agent.is_active.is_(True)
     ).all()
@@ -595,12 +599,12 @@ async def list_agents(
     for agent in agents:
         node_count = db.query(MemoryNodeModel).filter(
             MemoryNodeModel.source_agent == agent.memory_namespace,
-            MemoryNodeModel.user_id == str(current_user["sub"]),
+            MemoryNodeModel.user_id == user_id,
         ).count()
 
         shared_count = db.query(MemoryNodeModel).filter(
             MemoryNodeModel.source_agent == agent.memory_namespace,
-            MemoryNodeModel.user_id == str(current_user["sub"]),
+            MemoryNodeModel.user_id == user_id,
             MemoryNodeModel.is_shared.is_(True),
         ).count()
 
@@ -639,7 +643,7 @@ async def share_memory_node(
     dao = MemoryNodeDAO(db)
     node = dao.share_memory(
         node_id=node_id,
-        user_id=str(current_user["sub"]),
+        user_id=normalize_uuid(current_user["sub"]),
     )
     if not node:
         raise HTTPException(
@@ -671,7 +675,7 @@ async def recall_from_agent_endpoint(
         agent_namespace=namespace,
         query=query,
         limit=limit,
-        user_id=str(current_user["sub"]),
+        user_id=normalize_uuid(current_user["sub"]),
         include_private=False,
     )
 
@@ -884,6 +888,8 @@ async def execute_nodus_task(
                 "message": str(exc),
             },
         )
+    except HTTPException:
+        raise
 
     except Exception as exc:
         raise HTTPException(
@@ -901,6 +907,7 @@ async def execute_with_memory(
     """
     Execute any workflow with the full v5 memory loop.
     """
+    user_id = normalize_uuid(current_user["sub"])
     result = execute_intent(
         intent_data={
             "workflow_type": "memory_execution",
@@ -909,10 +916,22 @@ async def execute_with_memory(
             "session_tags": body.session_tags,
         },
         db=db,
-        user_id=str(current_user["sub"]),
+        user_id=user_id,
     )
     if result.get("status") != "SUCCESS":
         raise HTTPException(status_code=500, detail="Memory execution failed")
+    execution_result = result.get("result")
+    if isinstance(execution_result, dict):
+        for key in (
+            "recalled_memories",
+            "memory_context",
+            "recall_count",
+            "workflow",
+            "session_tags",
+            "memory_bridge_version",
+        ):
+            if key in execution_result:
+                result[key] = execution_result[key]
     return result
 
 

@@ -4,12 +4,13 @@ import logging
 from typing import Any, Callable, Optional
 
 from bridge import create_memory_node
+from db.dao.memory_trace_dao import MemoryTraceDAO
 from runtime.memory import MemoryOrchestrator
 from runtime.memory.memory_feedback import MemoryFeedbackEngine
 from runtime.memory.memory_learning import MemoryLearningEngine
 from runtime.memory.memory_metrics import MemoryMetricsEngine
 from runtime.memory.metrics_store import MemoryMetricsStore
-from db.dao.memory_trace_dao import MemoryTraceDAO
+from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,10 @@ class ExecutionLoop:
         return result
 
     def run_with_context(self, task: Any, user_id: str, db):
+        normalized_user_id = normalize_uuid(user_id) if user_id is not None else None
         trace_id = None
         try:
-            trace_id = self._resolve_trace_id(task, user_id, db)
+            trace_id = self._resolve_trace_id(task, normalized_user_id, db)
         except Exception as exc:
             logger.warning("[ExecutionLoop] trace resolution failed: %s", exc)
 
@@ -40,7 +42,7 @@ class ExecutionLoop:
         context = None
         try:
             context = self.orchestrator.get_context(
-                user_id=user_id,
+                user_id=normalized_user_id,
                 task_type=getattr(task, "type", "analysis"),
                 query=getattr(task, "input", ""),
                 db=db,
@@ -63,12 +65,13 @@ class ExecutionLoop:
                 content=str(result),
                 source=getattr(task, "source", "execution_loop"),
                 tags=getattr(task, "tags", []),
-                user_id=user_id,
+                user_id=normalized_user_id,
                 db=db,
-                node_type=getattr(task, "node_type", None),
+                node_type=getattr(task, "node_type", None) or "outcome",
             )
         except Exception as exc:
             logger.warning("[ExecutionLoop] memory write failed: %s", exc)
+            db.rollback()
 
         if trace_id and created_node and created_node.get("id"):
             try:
@@ -76,10 +79,11 @@ class ExecutionLoop:
                 trace_dao.append_node(
                     trace_id=trace_id,
                     node_id=created_node["id"],
-                    user_id=user_id,
+                    user_id=normalized_user_id,
                 )
             except Exception as exc:
                 logger.warning("[ExecutionLoop] trace append failed: %s", exc)
+                db.rollback()
 
         try:
             success_score = self._score(result)
@@ -91,11 +95,12 @@ class ExecutionLoop:
             self.learning.update_after_execution(
                 memory_ids=context.ids if context else [],
                 result=result,
-                user_id=user_id,
+                user_id=normalized_user_id,
                 db=db,
             )
         except Exception as exc:
             logger.warning("[ExecutionLoop] feedback failed: %s", exc)
+            db.rollback()
 
         try:
             baseline = self._get_baseline_result(task)
@@ -103,7 +108,7 @@ class ExecutionLoop:
             avg_similarity = self.metrics.compute_relevance(context)
             # Canonical persistence path for memory metrics.
             self.metrics_store.record(
-                user_id=user_id,
+                user_id=normalized_user_id,
                 task_type=getattr(task, "type", None),
                 impact_score=impact,
                 memory_count=len(context.items) if context else 0,
@@ -144,7 +149,7 @@ class ExecutionLoop:
 
         dao = MemoryTraceDAO(db)
         trace = dao.create_trace(
-            user_id=user_id,
+            user_id=normalize_uuid(user_id) if user_id is not None else None,
             title=trace_title or getattr(task, "type", "execution"),
             description=metadata.get("trace_description"),
             source=metadata.get("trace_source") or getattr(task, "source", "execution_loop"),

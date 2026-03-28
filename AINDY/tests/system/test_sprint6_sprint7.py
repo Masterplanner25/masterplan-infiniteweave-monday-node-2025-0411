@@ -5,12 +5,13 @@ Sprint 6: SQLAlchemy 2.0 — declarative_base import fix
 Sprint 7: Memory prompt injection hooks for genesis_ai and leadgen_service
 """
 import os
+from pathlib import Path
 import warnings
 import inspect
 import pytest
 from unittest.mock import MagicMock, patch
 
-_ROUTES_DIR = os.path.join(os.path.dirname(__file__), "..", "routes")
+_ROUTES_DIR = str(Path(__file__).resolve().parents[2] / "routes")
 
 
 def _read_source(path: str) -> str:

@@ -1,216 +1,220 @@
-"""
-Flow Engine Console UI — backend endpoint tests.
-Verifies all endpoints the console calls are
-protected and return correct response shapes.
-"""
-import pytest
-from unittest.mock import MagicMock
+from __future__ import annotations
+
+import pathlib
+import uuid
+from datetime import datetime, timezone
+from unittest.mock import patch
+
+from db.models.automation_log import AutomationLog
+from db.models.flow_run import FlowHistory, FlowRun
+
+
+def _seed_flow_run(db_session, *, user_id, status="running", waiting_for=None) -> FlowRun:
+    run = FlowRun(
+        id=str(uuid.uuid4()),
+        flow_name="generated_memory_execution",
+        workflow_type="memory_execution",
+        status=status,
+        state={"trace_id": str(uuid.uuid4())},
+        current_node="memory_execution_run",
+        waiting_for=waiting_for,
+        trace_id=str(uuid.uuid4()),
+        user_id=user_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_session.add(run)
+    db_session.commit()
+    db_session.refresh(run)
+    return run
+
+
+def _seed_automation_log(db_session, *, user_id, status="failed") -> AutomationLog:
+    log = AutomationLog(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        source="agent",
+        task_name="agent.run",
+        payload={"goal": "test"},
+        status=status,
+        result=None,
+    )
+    db_session.add(log)
+    db_session.commit()
+    db_session.refresh(log)
+    return log
 
 
 class TestFlowRunsEndpoints:
-
     def test_list_runs_requires_auth(self, client):
-        r = client.get("/flows/runs")
-        assert r.status_code == 401
+        assert client.get("/flows/runs").status_code == 401
 
     def test_get_run_requires_auth(self, client):
-        r = client.get("/flows/runs/test-id")
-        assert r.status_code == 401
+        assert client.get("/flows/runs/test-id").status_code == 401
 
     def test_history_requires_auth(self, client):
-        r = client.get(
-            "/flows/runs/test-id/history"
-        )
-        assert r.status_code == 401
+        assert client.get("/flows/runs/test-id/history").status_code == 401
 
     def test_resume_requires_auth(self, client):
-        r = client.post(
-            "/flows/runs/test-id/resume",
-            json={"event_type": "test"}
-        )
-        assert r.status_code == 401
+        assert client.post("/flows/runs/test-id/resume", json={"event_type": "test"}).status_code == 401
 
     def test_registry_requires_auth(self, client):
-        r = client.get("/flows/registry")
-        assert r.status_code == 401
+        assert client.get("/flows/registry").status_code == 401
 
-    def test_list_runs_returns_shape(
-        self, client, auth_headers, mock_db
-    ):
-        mock_db.query.return_value.filter.return_value\
-            .order_by.return_value.limit.return_value\
-            .all.return_value = []
+    def test_list_runs_returns_shape(self, client, auth_headers, db_session, test_user):
+        _seed_flow_run(db_session, user_id=test_user.id, status="success")
 
-        r = client.get(
-            "/flows/runs",
-            headers=auth_headers
+        response = client.get("/flows/runs", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "runs" in data
+        assert "count" in data
+        assert isinstance(data["runs"], list)
+        assert data["count"] == 1
+
+    def test_list_runs_status_filter(self, client, auth_headers, db_session, test_user):
+        _seed_flow_run(db_session, user_id=test_user.id, status="running")
+        _seed_flow_run(db_session, user_id=test_user.id, status="waiting", waiting_for="user_approval")
+
+        for status in ["running", "waiting", "success", "failed"]:
+            response = client.get(f"/flows/runs?status={status}", headers=auth_headers)
+            assert response.status_code == 200
+
+    def test_resume_wrong_event_type_rejected(self, client, auth_headers, db_session, test_user):
+        run = _seed_flow_run(
+            db_session,
+            user_id=test_user.id,
+            status="waiting",
+            waiting_for="user_approval",
         )
-        if r.status_code == 200:
-            data = r.json()
-            assert "runs" in data
-            assert "count" in data
-            assert isinstance(data["runs"], list)
 
-    def test_list_runs_status_filter(
-        self, client, auth_headers, mock_db
-    ):
-        mock_db.query.return_value.filter.return_value\
-            .order_by.return_value.limit.return_value\
-            .all.return_value = []
-
-        for status in ["running", "waiting",
-                       "success", "failed"]:
-            r = client.get(
-                f"/flows/runs?status={status}",
-                headers=auth_headers
-            )
-            assert r.status_code in [200, 422]
-            assert r.status_code != 401
-
-    def test_resume_wrong_event_type_rejected(
-        self, client, auth_headers, mock_db
-    ):
-        mock_run = MagicMock()
-        mock_run.status = "waiting"
-        mock_run.waiting_for = "user_approval"
-        mock_run.user_id = "test-user-id-123"
-
-        mock_db.query.return_value.filter.return_value\
-            .first.return_value = mock_run
-
-        r = client.post(
-            "/flows/runs/test-id/resume",
-            json={
-                "event_type": "wrong_event",
-                "payload": {}
-            },
-            headers=auth_headers
+        response = client.post(
+            f"/flows/runs/{run.id}/resume",
+            json={"event_type": "wrong_event", "payload": {}},
+            headers=auth_headers,
         )
-        assert r.status_code == 400
 
-    def test_resume_non_waiting_rejected(
-        self, client, auth_headers, mock_db
-    ):
-        mock_run = MagicMock()
-        mock_run.status = "success"
-        mock_run.user_id = "test-user-id-123"
+        assert response.status_code == 400
 
-        mock_db.query.return_value.filter.return_value\
-            .first.return_value = mock_run
+    def test_resume_non_waiting_rejected(self, client, auth_headers, db_session, test_user):
+        run = _seed_flow_run(db_session, user_id=test_user.id, status="success")
 
-        r = client.post(
-            "/flows/runs/test-id/resume",
+        response = client.post(
+            f"/flows/runs/{run.id}/resume",
             json={"event_type": "test"},
-            headers=auth_headers
+            headers=auth_headers,
         )
-        assert r.status_code == 400
 
-    def test_registry_returns_shape(
-        self, client, auth_headers
-    ):
-        r = client.get(
-            "/flows/registry",
-            headers=auth_headers
+        assert response.status_code == 400
+
+    def test_registry_returns_shape(self, client, auth_headers):
+        response = client.get("/flows/registry", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "flows" in data
+        assert "nodes" in data
+        assert "flow_count" in data
+        assert "node_count" in data
+
+    def test_get_run_returns_persisted_state(self, client, auth_headers, db_session, test_user):
+        run = _seed_flow_run(db_session, user_id=test_user.id, status="waiting", waiting_for="approval")
+
+        response = client.get(f"/flows/runs/{run.id}", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == run.id
+        assert data["status"] == "waiting"
+        assert data["waiting_for"] == "approval"
+
+    def test_history_returns_node_entries(self, client, auth_headers, db_session, test_user):
+        run = _seed_flow_run(db_session, user_id=test_user.id, status="success")
+        history = FlowHistory(
+            id=str(uuid.uuid4()),
+            flow_run_id=run.id,
+            node_name="memory_execution_run",
+            status="SUCCESS",
+            input_state={"workflow": "analysis"},
+            output_patch={"result": {"ok": True}},
+            execution_time_ms=10,
         )
-        if r.status_code == 200:
-            data = r.json()
-            assert "flows" in data
-            assert "nodes" in data
-            assert "flow_count" in data
-            assert "node_count" in data
+        db_session.add(history)
+        db_session.commit()
+
+        response = client.get(f"/flows/runs/{run.id}/history", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["run_id"] == run.id
+        assert data["node_count"] == 1
+        assert data["history"][0]["node_name"] == "memory_execution_run"
 
 
 class TestAutomationEndpoints:
-
     def test_logs_requires_auth(self, client):
-        r = client.get("/automation/logs")
-        assert r.status_code == 401
+        assert client.get("/automation/logs").status_code == 401
 
-    def test_scheduler_status_requires_auth(
-        self, client
-    ):
-        r = client.get(
-            "/automation/scheduler/status"
-        )
-        assert r.status_code == 401
+    def test_scheduler_status_requires_auth(self, client):
+        assert client.get("/automation/scheduler/status").status_code == 401
 
     def test_replay_requires_auth(self, client):
-        r = client.post(
-            "/automation/logs/test-id/replay"
-        )
-        assert r.status_code == 401
+        assert client.post("/automation/logs/test-id/replay").status_code == 401
 
-    def test_logs_returns_shape(
-        self, client, auth_headers, mock_db
-    ):
-        mock_db.query.return_value.filter.return_value\
-            .order_by.return_value.limit.return_value\
-            .all.return_value = []
+    def test_logs_returns_shape(self, client, auth_headers, db_session, test_user):
+        _seed_automation_log(db_session, user_id=test_user.id, status="failed")
 
-        r = client.get(
-            "/automation/logs",
-            headers=auth_headers
-        )
-        if r.status_code == 200:
-            data = r.json()
-            assert "logs" in data
-            assert "count" in data
+        response = client.get("/automation/logs", headers=auth_headers)
 
-    def test_logs_status_filter(
-        self, client, auth_headers, mock_db
-    ):
-        mock_db.query.return_value.filter.return_value\
-            .order_by.return_value.limit.return_value\
-            .all.return_value = []
+        assert response.status_code == 200
+        data = response.json()
+        assert "logs" in data
+        assert "count" in data
+        assert data["count"] == 1
 
-        for status in ["pending", "running",
-                       "success", "failed",
-                       "retrying"]:
-            r = client.get(
-                f"/automation/logs?status={status}",
-                headers=auth_headers
-            )
-            assert r.status_code in [200, 422]
-            assert r.status_code != 401
+    def test_logs_status_filter(self, client, auth_headers, db_session, test_user):
+        _seed_automation_log(db_session, user_id=test_user.id, status="failed")
+        _seed_automation_log(db_session, user_id=test_user.id, status="success")
 
-    def test_replay_success_log_rejected(
-        self, client, auth_headers, mock_db
-    ):
-        mock_log = MagicMock()
-        mock_log.status = "success"
-        mock_log.user_id = "test-user-id-123"
+        for status in ["pending", "running", "success", "failed", "retrying"]:
+            response = client.get(f"/automation/logs?status={status}", headers=auth_headers)
+            assert response.status_code == 200
 
-        mock_db.query.return_value.filter.return_value\
-            .first.return_value = mock_log
+    def test_replay_success_log_rejected(self, client, auth_headers, db_session, test_user):
+        log = _seed_automation_log(db_session, user_id=test_user.id, status="success")
 
-        r = client.post(
-            "/automation/logs/test-id/replay",
-            headers=auth_headers
-        )
-        assert r.status_code == 400
+        response = client.post(f"/automation/logs/{log.id}/replay", headers=auth_headers)
 
-    def test_scheduler_status_returns_shape(
-        self, client, auth_headers
-    ):
-        r = client.get(
-            "/automation/scheduler/status",
-            headers=auth_headers
-        )
-        if r.status_code == 200:
-            data = r.json()
-            assert "running" in data
-            assert "jobs" in data
-            assert "job_count" in data
+        assert response.status_code == 400
+
+    def test_scheduler_status_returns_shape(self, client, auth_headers):
+        class _Job:
+            id = "job-1"
+            name = "Heartbeat"
+            next_run_time = datetime.now(timezone.utc)
+            trigger = "interval[0:01:00]"
+
+        class _Scheduler:
+            running = False
+
+            @staticmethod
+            def get_jobs():
+                return [_Job()]
+
+        with patch("services.scheduler_service.get_scheduler", return_value=_Scheduler()):
+            response = client.get("/automation/scheduler/status", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "running" in data
+        assert "jobs" in data
+        assert "job_count" in data
+        assert data["job_count"] == 1
 
 
 class TestFlowConsoleAPIFunctions:
-    """Verify API functions exist in api.js."""
-
     def test_api_functions_present(self):
-        import pathlib
-        api_src = pathlib.Path(
-            "client/src/api.js"
-        ).read_text()
+        api_src = pathlib.Path("client/src/api.js").read_text(encoding="utf-8")
 
         required_fns = [
             "getFlowRuns",
@@ -221,21 +225,11 @@ class TestFlowConsoleAPIFunctions:
             "getAutomationLogs",
             "getAutomationLog",
             "replayAutomationLog",
-            "getSchedulerStatus"
+            "getSchedulerStatus",
         ]
 
         for fn in required_fns:
-            assert fn in api_src, \
-                f"Missing API function: {fn}"
+            assert fn in api_src, f"Missing API function: {fn}"
 
     def test_components_exist(self):
-        import pathlib
-
-        files = [
-            "client/src/components/"
-            "FlowEngineConsole.jsx"
-        ]
-
-        for f in files:
-            exists = pathlib.Path(f).exists()
-            assert exists, f"Missing component: {f}"
+        assert pathlib.Path("client/src/components/FlowEngineConsole.jsx").exists()

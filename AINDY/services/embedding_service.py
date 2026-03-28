@@ -19,6 +19,7 @@ from services.external_call_service import perform_external_call
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
+_DEFAULT_PERFORM_EXTERNAL_CALL = perform_external_call
 
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
@@ -39,6 +40,12 @@ def generate_embedding(text: str) -> list:
     Returns zero vector on failure — never crashes.
     """
     if not text or not text.strip():
+        return [0.0] * EMBEDDING_DIMENSIONS
+    if (
+        settings.is_testing
+        and perform_external_call is _DEFAULT_PERFORM_EXTERNAL_CALL
+        and _client is None
+    ):
         return [0.0] * EMBEDDING_DIMENSIONS
 
     text = text[:32000]

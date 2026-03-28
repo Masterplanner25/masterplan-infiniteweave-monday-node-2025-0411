@@ -16,6 +16,7 @@ Known bugs in genesis_router.py:
 3. /genesis/{plan_id}/activate references MasterPlan — NameError
 """
 import pytest
+import re
 from unittest.mock import MagicMock, patch
 
 
@@ -108,10 +109,10 @@ class TestGenesisMessageEndpoint:
 
 def _read_genesis_router_source():
     """Helper: read the genesis_router.py source as a string."""
-    import os
-    path = os.path.join(os.path.dirname(__file__), "..", "routes", "genesis_router.py")
-    with open(os.path.abspath(path), "r", encoding="utf-8") as f:
-        return f.read()
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "routes" / "genesis_router.py"
+    return path.read_text(encoding="utf-8")
 
 
 class TestGenesisSynthesizeEndpoint:
@@ -130,11 +131,14 @@ class TestGenesisSynthesizeEndpoint:
         )
 
         # Check that it IS now imported (fix verified)
-        has_any_import = (
-            "import call_genesis_synthesis_llm" in source or
-            (
-                "from services.genesis_ai import" in source and
-                "call_genesis_synthesis_llm" in source.split("from services.genesis_ai import")[-1].split("\n")[0]
+        has_any_import = bool(
+            re.search(
+                r"from\s+services\.genesis_ai\s+import\s*\([\s\S]*call_genesis_synthesis_llm",
+                source,
+            )
+            or re.search(
+                r"from\s+services\.genesis_ai\s+import\s+[\s\S]*call_genesis_synthesis_llm",
+                source,
             )
         )
 
@@ -170,14 +174,12 @@ class TestGenesisLockEndpoint:
         )
 
         # Check that it IS now imported (fix verified)
-        imported = False
-        for line in source.split("\n"):
-            if "import" in line and "create_masterplan_from_genesis" in line:
-                imported = True
-                break
-            if "import" in line and "masterplan_factory" in line:
-                imported = True
-                break
+        imported = bool(
+            re.search(
+                r"from\s+services\.masterplan_factory\s+import\s+create_masterplan_from_genesis",
+                source,
+            )
+        )
 
         assert imported, (
             "REGRESSION: create_masterplan_from_genesis is no longer imported in genesis_router.py. "

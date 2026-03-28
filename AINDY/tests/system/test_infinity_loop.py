@@ -440,19 +440,26 @@ class TestPersistedSuggestions:
 
 class TestScoreRouterLoopSurface:
 
-    def test_get_score_includes_latest_adjustment_when_score_exists(self, client, auth_headers, mock_db):
-        score = MagicMock()
-        score.master_score = 70.0
-        score.execution_speed_score = 60.0
-        score.decision_efficiency_score = 60.0
-        score.ai_productivity_boost_score = 60.0
-        score.focus_quality_score = 60.0
-        score.masterplan_progress_score = 60.0
-        score.confidence = "medium"
-        score.data_points_used = 12
-        score.trigger_event = "manual"
-        score.calculated_at = None
-        mock_db.query.return_value.filter.return_value.first.return_value = score
+    def test_get_score_includes_latest_adjustment_when_score_exists(
+        self, client, auth_headers, db_session, test_user
+    ):
+        from db.models.user_score import UserScore
+
+        db_session.add(
+            UserScore(
+                user_id=test_user.id,
+                master_score=70.0,
+                execution_speed_score=60.0,
+                decision_efficiency_score=60.0,
+                ai_productivity_boost_score=60.0,
+                focus_quality_score=60.0,
+                masterplan_progress_score=60.0,
+                confidence="medium",
+                data_points_used=12,
+                trigger_event="manual",
+            )
+        )
+        db_session.commit()
 
         with patch("routes.score_router._latest_adjustment_payload", return_value={
             "decision_type": "suggestion_refresh",
@@ -500,28 +507,8 @@ class TestScoreRouterLoopSurface:
         response = client.get("/scores/feedback")
         assert response.status_code == 401
 
-    def test_feedback_post_writes_row(self, client, auth_headers, mock_db):
-        feedback = MagicMock()
-        feedback.id = uuid.uuid4()
-        feedback.user_id = "00000000-0000-0000-0000-000000000001"
-        feedback.source_type = "arm"
-        feedback.source_id = "analysis-1"
-        feedback.feedback_value = 1
-        feedback.feedback_text = None
-        feedback.loop_adjustment_id = None
-        feedback.created_at = None
-
-        def fake_refresh(obj):
-            obj.id = feedback.id
-            obj.user_id = feedback.user_id
-            obj.source_type = feedback.source_type
-            obj.source_id = feedback.source_id
-            obj.feedback_value = feedback.feedback_value
-            obj.feedback_text = feedback.feedback_text
-            obj.loop_adjustment_id = feedback.loop_adjustment_id
-            obj.created_at = feedback.created_at
-
-        mock_db.refresh.side_effect = fake_refresh
+    def test_feedback_post_writes_row(self, client, auth_headers, db_session, test_user):
+        from db.models.infinity_loop import UserFeedback
 
         response = client.post(
             "/scores/feedback",
@@ -533,28 +520,43 @@ class TestScoreRouterLoopSurface:
             },
         )
         assert response.status_code == 200
-        mock_db.add.assert_called()
-        mock_db.commit.assert_called_once()
+        feedback = db_session.query(UserFeedback).filter(UserFeedback.user_id == test_user.id).first()
+        assert feedback is not None
+        assert feedback.source_type == "arm"
+        assert feedback.source_id == "analysis-1"
+        assert feedback.feedback_value == 1
 
-    def test_feedback_get_returns_history(self, client, auth_headers, mock_db):
-        item = MagicMock()
-        item.id = uuid.uuid4()
-        item.source_type = "agent"
-        item.source_id = "run-1"
-        item.feedback_value = -1
-        item.feedback_text = "bad"
-        item.loop_adjustment_id = None
-        item.created_at = None
+    def test_feedback_get_returns_history(self, client, auth_headers, db_session, test_user):
+        from db.models.infinity_loop import UserFeedback
 
-        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [item]
+        db_session.add(
+            UserFeedback(
+                user_id=test_user.id,
+                source_type="agent",
+                source_id="run-1",
+                feedback_value=-1,
+                feedback_text="bad",
+                loop_adjustment_id=None,
+            )
+        )
+        db_session.commit()
 
         response = client.get("/scores/feedback", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["count"] == 1
 
-    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, mock_db):
-        adjustment = MagicMock()
-        mock_db.query.return_value.filter.return_value.first.return_value = adjustment
+    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, db_session, test_user):
+        from db.models.infinity_loop import LoopAdjustment
+
+        adjustment = LoopAdjustment(
+            id=uuid.uuid4(),
+            user_id=test_user.id,
+            trigger_event="manual",
+            decision_type="review_plan",
+            adjustment_payload={"next_action": {"type": "review_plan"}},
+        )
+        db_session.add(adjustment)
+        db_session.commit()
 
         response = client.post(
             "/scores/feedback",
@@ -562,10 +564,11 @@ class TestScoreRouterLoopSurface:
             json={
                 "source_type": "manual",
                 "feedback_value": 1,
-                "loop_adjustment_id": str(uuid.uuid4()),
+                "loop_adjustment_id": str(adjustment.id),
             },
         )
         assert response.status_code == 200
+        db_session.refresh(adjustment)
         assert adjustment.evaluated_at is not None
 
     def test_feedback_post_rejects_invalid_value(self, client, auth_headers):
@@ -589,7 +592,8 @@ class TestLoopTriggerWiring:
 
     def test_watcher_calls_orchestrator(self):
         src = pathlib.Path("routes/watcher_router.py").read_text(encoding="utf-8")
-        assert "infinity_orchestrator" in src
+        assert "execute_intent" in src
+        assert "watcher_ingest" in src
 
     def test_task_services_calls_orchestrator(self):
         src = pathlib.Path("services/task_services.py").read_text(encoding="utf-8")

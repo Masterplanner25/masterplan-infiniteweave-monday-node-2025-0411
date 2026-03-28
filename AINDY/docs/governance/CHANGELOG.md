@@ -13,6 +13,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 ## Current Workspace
 
 ### Fixed
+* **`runtime/memory/strategies.py`** — `StrategySelector` now returns cloned strategy objects instead of mutating shared global strategy instances. This fixed cross-test and cross-request recall poisoning where one execution path could override `node_types` for later runs.
 * **`services/system_event_service.py`** — successful-path `SystemEvent` persistence diagnostics improved. Emit attempts and persistence success/failure are now logged; persistence uses `flush()` before commit and logs a stable `event_id`.
 * **`services/async_job_service.py`** — async heavy-execution jobs now emit `execution.started`, `execution.completed`, and `execution.failed` / `error.async_job_execution` with `trace_id == automation_log_id`.
 * **`routes/auth_router.py`** — successful auth routes now emit `auth.register.completed` and `auth.login.completed`.
@@ -23,6 +24,11 @@ Changes that have been implemented but are not yet part of a tagged release.
 * **`services/capability_service.py`** — capability mappings now persist UUID-safe `agent_run_id` values instead of leaking string IDs into UUID columns.
 * **`services/agent_event_service.py`** and **`services/system_event_service.py`** — user IDs and payloads are normalized for UUID-backed persistence; `SystemEvent` payloads now serialize UUID values safely.
 * **`routes/agent_router.py`** — `/agent/runs/{run_id}/events` fallback lookup now uses UUID-safe run ID parsing.
+* **`tests/conftest.py`** — pytest runtime now injects secure test env defaults for `PERMISSION_SECRET` and enables the legacy compatibility surface explicitly in `TEST_MODE`, keeping API-key coverage intact without relying on developer-local env files.
+* **Structured test suite** — remaining stale UUID, path, and side-effect assumptions were aligned to the current runtime contracts:
+  - legacy compatibility routes are exercised with `api_key_headers`
+  - anchor/ETA tests use UUID user IDs and repo-root Alembic path resolution
+  - agent ORM metadata assertions no longer depend on fragile `Base` import order
 
 ### Added
 * **`tests/system/test_invariants.py`** — new DB-backed system invariant suite covering:
@@ -39,6 +45,7 @@ Changes that have been implemented but are not yet part of a tagged release.
   - readiness
   - auth register/login
   - async heavy execution
+* `pytest -q --no-cov` → full suite green (`1290 passed, 4 skipped`)
 * `pytest tests/system/test_invariants.py tests/system/test_agent_events.py tests/system/test_deterministic_agent.py tests/system/test_capability_system.py --no-cov -q` → `22 passed`
 
 ## Sprint N+7: Agent Observability — 2026-03-25

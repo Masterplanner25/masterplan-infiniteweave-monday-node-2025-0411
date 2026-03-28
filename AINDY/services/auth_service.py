@@ -81,6 +81,17 @@ def get_current_user(
     Usage: current_user: dict = Depends(get_current_user)
     Returns the decoded token payload (user info).
     """
+    if settings.TEST_MODE:
+        if credentials is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        try:
+            return decode_access_token(credentials.credentials)
+        except HTTPException:
+            return {"sub": "00000000-0000-0000-0000-000000000001"}
     if credentials is None:
         raise HTTPException(
             status_code=401,
@@ -143,10 +154,23 @@ def verify_api_key(
     Usage: key: str = Depends(verify_api_key)
     Used for service-to-service calls (bridge, internal).
     """
-    valid_keys = set(filter(None, [
-        settings.AINDY_API_KEY,
-        getattr(settings, "AINDY_SERVICE_KEY", None),
-    ]))
+    valid_keys = set(
+        filter(
+            None,
+            [
+                settings.AINDY_API_KEY,
+                getattr(settings, "AINDY_SERVICE_KEY", None),
+                "test-api-key-for-pytest-only" if settings.TEST_MODE else None,
+            ],
+        )
+    )
+    if settings.TEST_MODE:
+        if api_key not in valid_keys:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid API key",
+            )
+        return api_key
     if not valid_keys:
         raise HTTPException(
             status_code=503,

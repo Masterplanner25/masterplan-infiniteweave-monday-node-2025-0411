@@ -45,10 +45,11 @@ def test_metrics_store_record_and_summary():
     MemoryMetric.__table__.create(bind=engine)
     Session = sessionmaker(bind=engine)
     db = Session()
+    user_id = "00000000-0000-0000-0000-000000000001"
 
     store = MemoryMetricsStore()
     store.record(
-        user_id="user-1",
+        user_id=user_id,
         task_type="analysis",
         impact_score=0.5,
         memory_count=3,
@@ -56,12 +57,12 @@ def test_metrics_store_record_and_summary():
         db=db,
     )
 
-    summary = store.get_summary(user_id="user-1", db=db)
+    summary = store.get_summary(user_id=user_id, db=db)
     assert summary["total_runs"] == 1
     assert summary["avg_impact_score"] > 0
     assert summary["positive_impact_rate"] == 1.0
 
-    recent = store.get_recent(user_id="user-1", db=db, limit=5)
+    recent = store.get_recent(user_id=user_id, db=db, limit=5)
     assert len(recent) == 1
     assert recent[0]["memory_count"] == 3
 

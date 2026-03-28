@@ -50,7 +50,7 @@ class InMemoryDAO:
     def recall(self, query=None, tags=None, limit=5, user_id=None, node_type=None):
         results = []
         for node in self.db.nodes.values():
-            if user_id and node.user_id != user_id:
+            if user_id and str(node.user_id) != str(user_id):
                 continue
             if node_type and node.node_type != node_type:
                 continue
@@ -116,7 +116,7 @@ def measure_difference(a: dict, b: dict) -> float:
 class TestMemoryLoopE2E:
     def test_memory_improves_execution(self, monkeypatch):
         db = InMemoryDB()
-        user_id = "test-user-e2e"
+        user_id = uuid.UUID("00000000-0000-0000-0000-0000000000e2")
         task = FakeTask("analysis", "optimize lead generation strategy")
 
         def fake_create_memory_node(content, source=None, tags=None, user_id=None, db=None, node_type=None):
@@ -188,7 +188,7 @@ class TestMemoryLoopE2E:
 
     def test_memory_failure_safe(self, monkeypatch):
         db = InMemoryDB()
-        user_id = "test-user-e2e"
+        user_id = uuid.UUID("00000000-0000-0000-0000-0000000000e2")
         task = FakeTask("analysis", "optimize lead generation strategy")
 
         def fake_create_memory_node(content, source=None, tags=None, user_id=None, db=None, node_type=None):
