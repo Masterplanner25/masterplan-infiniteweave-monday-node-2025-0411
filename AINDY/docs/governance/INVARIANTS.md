@@ -26,6 +26,14 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Worker startup and heartbeat can fail with naive-vs-aware datetime comparison errors, preventing scheduler leadership acquisition.
 - Enforcement Type: Application-enforced.
 
+## 2.2 Required SystemEvent Emission Fails Closed
+- Invariant Name: Required `SystemEvent` writes cannot fail silently
+- Description: Critical execution and external-interaction paths must either persist their required `SystemEvent` rows or fail the calling action.
+- Enforcement Location: `AINDY/services/system_event_service.py`, plus required call sites in execution, async job, and external call services
+- Enforcement Mechanism: `emit_system_event(..., required=True)` raises `SystemEventEmissionError` on persistence failure after attempting a fallback `error.system_event_failure` record.
+- What Would Break If Violated: The system could complete critical state transitions without a durable ledger entry, making observability incomplete and execution non-auditable.
+- Enforcement Type: Application-enforced.
+
 ## 3. Memory Bridge Mutation Auth (JWT)
 - Invariant Name: Memory Bridge mutations require JWT
 - Description: `/bridge/nodes` and `/bridge/link` require JWT authentication; legacy HMAC permission is deprecated and ignored.

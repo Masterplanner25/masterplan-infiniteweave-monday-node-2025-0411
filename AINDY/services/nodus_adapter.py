@@ -457,7 +457,18 @@ class NodusAgentAdapter:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     agent_run.error_message = flow_capability_check["error"]
                     agent_run.result = {"steps": []}
-                    db.commit()
+                emit_system_event(
+                    db=db,
+                    event_type="capability.denied",
+                    user_id=user_id,
+                    trace_id=correlation_id,
+                    payload={
+                        "run_id": str(run_id),
+                        "capability": "execute_flow",
+                        "error": flow_capability_check["error"],
+                    },
+                    required=True,
+                )
                 emit_event(
                     run_id=run_id,
                     user_id=user_id,
@@ -479,6 +490,17 @@ class NodusAgentAdapter:
                     "status": "FAILED",
                     "error": flow_capability_check["error"],
                 }
+            emit_system_event(
+                db=db,
+                event_type="capability.allowed",
+                user_id=user_id,
+                trace_id=correlation_id,
+                payload={
+                    "run_id": str(run_id),
+                    "capability": "execute_flow",
+                },
+                required=True,
+            )
 
             initial_state = {
                 "agent_run_id": run_id,

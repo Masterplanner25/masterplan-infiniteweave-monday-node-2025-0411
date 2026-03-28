@@ -39,6 +39,13 @@ The historical breakdown below is preserved, but the current validated baseline 
   - `tests/system/test_agent_events.py`
   - `tests/system/test_deterministic_agent.py`
   - `tests/system/test_capability_system.py`
+- Runtime hardening invariants are covered in:
+  - `tests/system/test_hardening.py`
+  - async jobs never disappear without an `AutomationLog` terminal state
+  - failed async jobs roll back partial DB writes before persisting failure state
+  - scheduler lease exclusivity holds across competing workers
+  - canonical execution event chains stay complete
+  - invalid agent run IDs fail cleanly as `400` instead of surfacing as `500`
 - These suites use real persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with only boundary mocks for external planners/executors.
 
 **Current validated baseline** — local `pytest -q --tb=short` after Sprint N+11:
@@ -53,6 +60,10 @@ The historical breakdown below is preserved, but the current validated baseline 
 - Legacy compatibility endpoints are tested through their real API-key protection, not as public routes.
 - Memory recall strategies are request-isolated; no shared mutable strategy state leaks between tests or executions.
 - Successful and failed execution paths both persist `SystemEvent` rows under the DB-backed fixture stack.
+- Queued async execution emits both queue-time and worker-time lifecycle events:
+  - `execution.started` at submission
+  - `async_job.started` / `async_job.completed` / `async_job.failed` for queued worker execution
+  - `execution.completed` / `execution.failed` as canonical ledger events
 
 | File | Tests | Coverage |
 |------|-------|----------|

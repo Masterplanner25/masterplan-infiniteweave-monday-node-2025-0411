@@ -29,6 +29,8 @@ The TOOL_REGISTRY dict maps tool_name →
 import logging
 from typing import Callable
 
+from services.system_event_service import emit_system_event
+
 logger = logging.getLogger(__name__)
 
 # ── Registry ─────────────────────────────────────────────────────────────────
@@ -119,11 +121,38 @@ def execute_tool(
                 tool_name=tool_name,
             )
             if not capability_check["ok"]:
+                emit_system_event(
+                    db=db,
+                    event_type="capability.denied",
+                    user_id=user_id,
+                    trace_id=str(run_id),
+                    payload={
+                        "run_id": str(run_id),
+                        "tool_name": tool_name,
+                        "error": capability_check["error"],
+                        "allowed_capabilities": capability_check.get("allowed_capabilities", []),
+                        "granted_tools": capability_check.get("granted_tools", []),
+                    },
+                    required=True,
+                )
                 return {
                     "success": False,
                     "result": None,
                     "error": capability_check["error"],
                 }
+            emit_system_event(
+                db=db,
+                event_type="capability.allowed",
+                user_id=user_id,
+                trace_id=str(run_id),
+                payload={
+                    "run_id": str(run_id),
+                    "tool_name": tool_name,
+                    "allowed_capabilities": capability_check.get("allowed_capabilities", []),
+                    "granted_tools": capability_check.get("granted_tools", []),
+                },
+                required=True,
+            )
         except Exception as exc:
             logger.warning("[AgentTool] %s capability check failed: %s", tool_name, exc)
             return {
