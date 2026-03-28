@@ -26,12 +26,23 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from services.auth_service import get_current_user
+from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
 
 def _current_user_id(current_user) -> UUID:
-    return UUID(str(current_user["sub"]))
+    try:
+        return normalize_uuid(current_user["sub"])
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid authenticated user id") from exc
+
+
+def _parse_run_id(run_id: str) -> UUID:
+    try:
+        return normalize_uuid(run_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid run_id") from exc
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -52,10 +63,11 @@ class TrustSettingsUpdate(BaseModel):
 
 def _get_run_or_404(run_id: str, user_id: str, db: Session):
     from db.models.agent_run import AgentRun
-    run = db.query(AgentRun).filter(AgentRun.id == UUID(str(run_id))).first()
+    run_uuid = _parse_run_id(run_id)
+    run = db.query(AgentRun).filter(AgentRun.id == run_uuid).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.user_id != UUID(str(user_id)):
+    if run.user_id != normalize_uuid(user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     return run
 
@@ -285,7 +297,7 @@ def get_run_steps(
 
     steps = (
         db.query(AgentStep)
-        .filter(AgentStep.run_id == run_id)
+        .filter(AgentStep.run_id == _parse_run_id(run_id))
         .order_by(AgentStep.step_index.asc())
         .all()
     )
@@ -331,7 +343,7 @@ def get_run_events(
     if result is None:
         # Distinguish not-found from auth error by re-querying just for existence
         from db.models.agent_run import AgentRun
-        run = db.query(AgentRun).filter(AgentRun.id == UUID(str(run_id))).first()
+        run = db.query(AgentRun).filter(AgentRun.id == _parse_run_id(run_id)).first()
         if not run:
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=403, detail="Not authorized")

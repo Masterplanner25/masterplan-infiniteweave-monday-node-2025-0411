@@ -7,8 +7,10 @@ from threading import Lock
 from typing import Any, Callable
 from uuid import UUID
 
+from config import settings
 from db.database import SessionLocal
 from db.models.automation_log import AutomationLog
+from db.models.system_event import SystemEvent
 from services.system_event_service import emit_error_event, emit_system_event
 from utils.trace_context import reset_current_trace_id, set_current_trace_id
 from utils.user_ids import parse_user_id
@@ -82,6 +84,7 @@ def submit_async_job(
 ) -> str:
     user_uuid = parse_user_id(user_id)
     db = SessionLocal()
+    log_id = None
     try:
         log = AutomationLog(
             source=source,
@@ -95,17 +98,90 @@ def submit_async_job(
         db.commit()
         db.refresh(log)
         log_id = log.id
+        emit_system_event(
+            db=db,
+            event_type="execution.started",
+            user_id=user_uuid,
+            trace_id=str(log_id),
+            payload={
+                "run_id": str(log_id),
+                "task_name": task_name,
+                "source": source,
+                "execution_mode": "async_job",
+                "dispatch_state": "queued" if not settings.TEST_MODE else "inline",
+            },
+            required=True,
+        )
+        if settings.TEST_MODE:
+            _execute_job(log_id, task_name, payload)
+            return log_id
+        future = _get_executor().submit(_execute_job, log_id, task_name, payload)
+        if future.cancelled():
+            raise RuntimeError(f"Async job '{task_name}' was cancelled before execution")
+        return log_id
+    except Exception as exc:
+        if log_id is not None:
+            try:
+                log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+                if log:
+                    log.status = "failed"
+                    log.error_message = str(exc)
+                    log.completed_at = datetime.now(timezone.utc)
+                    emit_system_event(
+                        db=db,
+                        event_type="execution.failed",
+                        user_id=log.user_id,
+                        trace_id=str(log_id),
+                        payload={
+                            "run_id": str(log_id),
+                            "task_name": task_name,
+                            "source": source,
+                            "execution_mode": "async_job",
+                            "error": str(exc),
+                        },
+                        required=True,
+                    )
+                    emit_error_event(
+                        db=db,
+                        error_type="async_job_submission",
+                        message=str(exc),
+                        user_id=log.user_id,
+                        trace_id=str(log_id),
+                        payload={
+                            "run_id": str(log_id),
+                            "task_name": task_name,
+                            "source": source,
+                        },
+                        required=True,
+                    )
+            finally:
+                db.rollback()
+        raise
     finally:
         db.close()
-
-    _get_executor().submit(_execute_job, log_id, task_name, payload)
-    return log_id
 
 
 def _normalize_result(result: Any) -> Any:
     if isinstance(result, (dict, list, str, int, float, bool)) or result is None:
         return result
     return {"result": str(result)}
+
+
+def _has_existing_execution_started(db, trace_id: str) -> bool:
+    if hasattr(db, "system_events"):
+        return any(
+            getattr(event, "trace_id", None) == trace_id and getattr(event, "type", None) == "execution.started"
+            for event in getattr(db, "system_events", [])
+        )
+    try:
+        return (
+            db.query(SystemEvent)
+            .filter(SystemEvent.trace_id == trace_id, SystemEvent.type == "execution.started")
+            .first()
+            is not None
+        )
+    except Exception:
+        return False
 
 
 def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
@@ -116,29 +192,63 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         if not log:
             return
 
-        handler = _JOB_REGISTRY[task_name]
+        handler = _JOB_REGISTRY.get(task_name)
+        if handler is None:
+            raise RuntimeError(f"Async job handler '{task_name}' is not registered")
+        queued_event_exists = _has_existing_execution_started(db, str(log_id))
         log.status = "running"
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
-        emit_system_event(
-            db=db,
-            event_type="execution.started",
-            user_id=log.user_id,
-            trace_id=str(log_id),
-            payload={
-                "run_id": str(log_id),
-                "task_name": task_name,
-                "source": log.source,
-                "execution_mode": "async_job",
-            },
-            required=True,
-        )
+        if queued_event_exists:
+            emit_system_event(
+                db=db,
+                event_type="async_job.started",
+                user_id=log.user_id,
+                trace_id=str(log_id),
+                payload={
+                    "run_id": str(log_id),
+                    "task_name": task_name,
+                    "source": log.source,
+                    "execution_mode": "async_job",
+                },
+                required=True,
+            )
+        else:
+            emit_system_event(
+                db=db,
+                event_type="execution.started",
+                user_id=log.user_id,
+                trace_id=str(log_id),
+                payload={
+                    "run_id": str(log_id),
+                    "task_name": task_name,
+                    "source": log.source,
+                    "execution_mode": "async_job",
+                    "dispatch_state": "direct",
+                },
+                required=True,
+            )
 
         result = handler(payload, db)
 
         log.status = "success"
         log.result = _normalize_result(result)
         log.completed_at = datetime.now(timezone.utc)
+        if queued_event_exists:
+            emit_system_event(
+                db=db,
+                event_type="async_job.completed",
+                user_id=log.user_id,
+                trace_id=str(log_id),
+                payload={
+                    "run_id": str(log_id),
+                    "task_name": task_name,
+                    "source": log.source,
+                    "execution_mode": "async_job",
+                    "result": _normalize_result(result),
+                },
+                required=True,
+            )
         emit_system_event(
             db=db,
             event_type="execution.completed",
@@ -153,12 +263,29 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
             },
             required=True,
         )
+        db.refresh(log)
     except Exception as exc:
+        db.rollback()
         log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
         if log:
             log.status = "failed"
             log.error_message = str(exc)
             log.completed_at = datetime.now(timezone.utc)
+            if _has_existing_execution_started(db, str(log_id)):
+                emit_system_event(
+                    db=db,
+                    event_type="async_job.failed",
+                    user_id=log.user_id,
+                    trace_id=str(log_id),
+                    payload={
+                        "run_id": str(log_id),
+                        "task_name": task_name,
+                        "source": log.source,
+                        "execution_mode": "async_job",
+                        "error": str(exc),
+                    },
+                    required=True,
+                )
             emit_system_event(
                 db=db,
                 event_type="execution.failed",
@@ -186,6 +313,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                 },
                 required=True,
             )
+            db.refresh(log)
     finally:
         reset_current_trace_id(trace_token)
         db.close()

@@ -13,6 +13,10 @@ Changes that have been implemented but are not yet part of a tagged release.
 ## Current Workspace
 
 ### Fixed
+* **`services/async_job_service.py`** — async submission and worker execution are now split cleanly. Jobs always persist `AutomationLog` before exit, emit `execution.started` at submission time, emit `async_job.started|completed|failed` during queued worker execution, and roll back handler-side partial writes before persisting terminal failure state.
+* **`services/system_event_service.py`** — required event failures now roll back the broken session, attempt a fallback `error.system_event_failure`, and then raise fail-closed instead of allowing the caller to continue with a dirty session.
+* **`services/agent_tools.py`** and **`services/nodus_adapter.py`** — capability decisions now emit explicit `capability.allowed` and `capability.denied` ledger events at the real execution boundary.
+* **`routes/agent_router.py`** — invalid agent `run_id` path inputs now fail cleanly as HTTP `400` instead of surfacing UUID parsing as a server error.
 * **`runtime/memory/strategies.py`** — `StrategySelector` now returns cloned strategy objects instead of mutating shared global strategy instances. This fixed cross-test and cross-request recall poisoning where one execution path could override `node_types` for later runs.
 * **`services/system_event_service.py`** — successful-path `SystemEvent` persistence diagnostics improved. Emit attempts and persistence success/failure are now logged; persistence uses `flush()` before commit and logs a stable `event_id`.
 * **`services/async_job_service.py`** — async heavy-execution jobs now emit `execution.started`, `execution.completed`, and `execution.failed` / `error.async_job_execution` with `trace_id == automation_log_id`.
@@ -31,6 +35,12 @@ Changes that have been implemented but are not yet part of a tagged release.
   - agent ORM metadata assertions no longer depend on fragile `Base` import order
 
 ### Added
+* **`tests/system/test_hardening.py`** — new DB-backed hardening suite covering:
+  - async job terminal-state guarantees
+  - rollback integrity on mid-job failure
+  - lease exclusivity and expired-lease reclaim
+  - canonical event-chain completeness
+  - clean invalid-UUID handling on agent execution routes
 * **`tests/system/test_invariants.py`** — new DB-backed system invariant suite covering:
   - execution emits durable events
   - cross-user isolation
@@ -40,6 +50,7 @@ Changes that have been implemented but are not yet part of a tagged release.
 * **`tests/system/test_agent_events.py`**, **`tests/system/test_deterministic_agent.py`**, and **`tests/system/test_capability_system.py`** were rebuilt around the real SQLite-backed fixture stack. The old `MockSession` / fake-query-chain patterns were removed from these files in favor of persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with boundary-only mocks.
 
 ### Verified
+* `pytest -q` → full suite green
 * Live compose validation confirmed durable `system_events` rows for successful:
   - health
   - readiness

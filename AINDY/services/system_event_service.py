@@ -69,6 +69,41 @@ def _persist_system_event(
     return event_id
 
 
+def _emit_system_event_failure_fallback(
+    *,
+    db,
+    original_event_type: str,
+    user_id: str | uuid.UUID | None,
+    trace_id: str | None,
+    error: Exception,
+) -> None:
+    try:
+        db.rollback()
+    except Exception:
+        logger.exception(
+            "[SystemEvent] rollback failed after emission failure for %s",
+            original_event_type,
+        )
+        return
+
+    try:
+        _persist_system_event(
+            db=db,
+            event_type="error.system_event_failure",
+            user_id=user_id,
+            trace_id=trace_id,
+            payload={
+                "failed_event_type": original_event_type,
+                "error": str(error),
+            },
+        )
+    except Exception:
+        logger.exception(
+            "[SystemEvent] fallback emission failed for %s",
+            original_event_type,
+        )
+
+
 def emit_system_event(
     *,
     db,
@@ -105,6 +140,13 @@ def emit_system_event(
             user_id,
         )
     except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            logger.exception(
+                "[SystemEvent] rollback failed after emit error for %s",
+                event_type,
+            )
         logger.warning(
             "[SystemEvent] Failed to emit %s trace=%s user=%s: %s",
             event_type,
@@ -113,6 +155,13 @@ def emit_system_event(
             exc,
         )
         if required and _fail_closed_in_current_mode():
+            _emit_system_event_failure_fallback(
+                db=db,
+                original_event_type=event_type,
+                user_id=user_id,
+                trace_id=effective_trace_id,
+                error=exc,
+            )
             raise SystemEventEmissionError(
                 f"Required system event '{event_type}' failed for trace {effective_trace_id}"
             ) from exc

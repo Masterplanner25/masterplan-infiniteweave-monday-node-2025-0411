@@ -91,7 +91,12 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `POST /auth/login` emits `auth.login.completed`
 - `GET /health` and `GET /health/` emit `health.liveness.completed`
 - `GET /ready` emits `health.readiness.completed`
-- Async heavy-execution jobs emit `execution.started` and `execution.completed` using the `automation_log_id` as `trace_id`
+- Async heavy-execution jobs use `automation_log_id` as `trace_id` and emit:
+  - `execution.started` on submission
+  - `async_job.started` when the queued worker begins
+  - `async_job.completed` or `async_job.failed` for queued-worker outcome
+  - `execution.completed` or `execution.failed` as the canonical execution result
+- Required event persistence failures attempt `error.system_event_failure` and then raise fail-closed.
 
 **Freelancing summary (current implementation):**
 - Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
@@ -153,6 +158,16 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - `POST /memory/execute/complete` — deprecated compatibility path and no longer part of the active contract.
 - `POST /memory/nodus/execute` — JWT required. Restricted executor surface with source validation, allowed-operation registration, and scoped capability-token enforcement for write-capable operations.
 - When `AINDY_ASYNC_HEAVY_EXECUTION=true`, `POST /memory/nodus/execute` returns `202` and the background job emits `execution.started` / `execution.completed` or `execution.failed` with `trace_id == automation_log_id`.
+
+**Agent route input validation (current):**
+- `GET /agent/runs/{run_id}`
+- `POST /agent/runs/{run_id}/approve`
+- `POST /agent/runs/{run_id}/reject`
+- `POST /agent/runs/{run_id}/recover`
+- `POST /agent/runs/{run_id}/replay`
+- `GET /agent/runs/{run_id}/steps`
+- `GET /agent/runs/{run_id}/events`
+- Invalid `run_id` values fail cleanly with HTTP `400` and do not fall through to a `500`.
 
 **Genesis Block 4-6 additions (2026-03-17):**
 - `POST /genesis/audit` — JWT required. Body: `{"session_id": int}`. Loads `session.draft_json`,

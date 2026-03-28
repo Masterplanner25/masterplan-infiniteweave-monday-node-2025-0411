@@ -59,7 +59,12 @@ This document describes the current runtime behavior of the FastAPI backend as i
   - `health.readiness.completed`
   - `auth.register.completed`
   - `auth.login.completed`
-- Async heavy-execution jobs now emit `execution.started` / `execution.completed` / `execution.failed` through `services/async_job_service.py`.
+- Async heavy-execution jobs now emit:
+  - `execution.started` immediately on submission
+  - `async_job.started` when the worker begins queued execution
+  - `async_job.completed` or `async_job.failed` for queued worker outcome
+  - `execution.completed` or `execution.failed` as the canonical execution ledger events
+- Required `SystemEvent` persistence failures now attempt a fallback `error.system_event_failure` record and then raise fail-closed.
 - Global exception handlers normalize responses for:
   - `HTTPException`
   - `RequestValidationError`
