@@ -3,8 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer 
 import {
   getFreelanceOrders,
   getFreelanceFeedback,
-  getFreelanceMetricsLatest,
-} from "../api";
+  getFreelanceMetricsLatest } from
+"../api";import { safeMap } from "../utils/safe";
 
 export default function FreelanceDashboard() {
   const [orders, setOrders] = useState([]);
@@ -33,19 +33,19 @@ export default function FreelanceDashboard() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    Promise.all([fetchOrders(), fetchFeedback(), fetchMetrics()])
-      .then(([o, f, m]) => {
-        if (!mounted) return;
-        setOrders(o || []);
-        setFeedback(f || []);
-        setMetrics(m || null);
-      })
-      .catch((err) => {
-        console.error(err);
-        if (mounted) setError(err.message);
-      })
-      .finally(() => mounted && setLoading(false));
-    return () => (mounted = false);
+    Promise.all([fetchOrders(), fetchFeedback(), fetchMetrics()]).
+    then(([o, f, m]) => {
+      if (!mounted) return;
+      setOrders(o || []);
+      setFeedback(f || []);
+      setMetrics(m || null);
+    }).
+    catch((err) => {
+      console.error(err);
+      if (mounted) setError(err.message);
+    }).
+    finally(() => mounted && setLoading(false));
+    return () => mounted = false;
   }, []);
 
   // --- Data Processing ---
@@ -55,7 +55,7 @@ export default function FreelanceDashboard() {
       const r = (f.rating || 0).toString();
       if (map[r] !== undefined) map[r]++;
     });
-    return Object.keys(map).map((k) => ({ rating: k, count: map[k] }));
+    return safeMap(Object.keys(map), (k) => ({ rating: k, count: map[k] }));
   })();
 
   const topOrders = orders.slice(0, 8);
@@ -70,19 +70,19 @@ export default function FreelanceDashboard() {
           <h1 className="text-3xl font-bold text-white">Freelance Hub</h1>
           <p className="text-zinc-500 text-sm">Automated delivery & feedback stream</p>
         </div>
-        <button 
+        <button
           onClick={() => window.location.reload()}
-          className="bg-zinc-100 text-black px-4 py-2 rounded-lg font-bold hover:bg-zinc-300 transition"
-        >
+          className="bg-zinc-100 text-black px-4 py-2 rounded-lg font-bold hover:bg-zinc-300 transition">
+          
           Refresh Data
         </button>
       </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-900/20 border border-red-500 text-red-400 rounded-lg">
+      {error &&
+      <div className="mb-6 p-4 bg-red-900/20 border border-red-500 text-red-400 rounded-lg">
           ⚠️ {error}
         </div>
-      )}
+      }
 
       {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -93,13 +93,13 @@ export default function FreelanceDashboard() {
         <div className={cardClass}>
           <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Delivered</div>
           <div className="text-3xl font-bold text-green-500">
-            {orders.filter(o => o.status === 'delivered').length}
+            {orders.filter((o) => o.status === 'delivered').length}
           </div>
         </div>
         <div className={cardClass}>
           <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">Avg Rating</div>
           <div className="text-3xl font-bold text-yellow-500">
-            {feedback.length ? ((feedback.reduce((s, f) => s + (f.rating || 0), 0) / feedback.length).toFixed(2)) : '—'}
+            {feedback.length ? (feedback.reduce((s, f) => s + (f.rating || 0), 0) / feedback.length).toFixed(2) : '—'}
           </div>
         </div>
         <div className={cardClass}>
@@ -126,20 +126,20 @@ export default function FreelanceDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {topOrders.map((o) => (
-                    <tr key={o.id} className="hover:bg-zinc-800/50 transition">
+                  {safeMap(topOrders, (o) =>
+                  <tr key={o.id} className="hover:bg-zinc-800/50 transition">
                       <td className="py-3 text-sm font-medium">{o.client_name}</td>
                       <td className="py-3 text-sm text-zinc-400">{o.service_type}</td>
                       <td className="py-3 text-sm text-blue-400">${o.price?.toFixed(2)}</td>
                       <td className="py-3">
                         <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
-                          o.status === 'delivered' ? 'bg-green-500/10 text-green-500' : 'bg-zinc-800 text-zinc-400'
-                        }`}>
+                      o.status === 'delivered' ? 'bg-green-500/10 text-green-500' : 'bg-zinc-800 text-zinc-400'}`
+                      }>
                           {o.status}
                         </span>
                       </td>
-                    </tr>
-                  ))}
+                    </tr>)
+                  }
                 </tbody>
               </table>
             </div>
@@ -155,10 +155,10 @@ export default function FreelanceDashboard() {
                 <BarChart data={ratingsDistribution}>
                   <XAxis dataKey="rating" stroke="#52525b" fontSize={12} />
                   <YAxis hide />
-                  <ReTooltip 
+                  <ReTooltip
                     contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46' }}
-                    itemStyle={{ color: '#fff' }}
-                  />
+                    itemStyle={{ color: '#fff' }} />
+                  
                   <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -168,19 +168,19 @@ export default function FreelanceDashboard() {
           <div className={cardClass}>
             <h3 className="text-sm font-bold text-zinc-400 mb-4 uppercase">Latest Feedback</h3>
             <div className="space-y-3">
-              {feedback.slice(0, 4).map((f) => (
-                <div key={f.id} className="p-3 bg-zinc-800/40 rounded-lg border border-zinc-700/50">
+              {safeMap(feedback.slice(0, 4), (f) =>
+              <div key={f.id} className="p-3 bg-zinc-800/40 rounded-lg border border-zinc-700/50">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-bold text-yellow-500">{f.rating}/5 Stars</span>
                     <span className="text-[10px] text-zinc-500">#{f.order_id}</span>
                   </div>
                   <div className="text-xs text-zinc-300 italic">"{f.feedback_text || 'No text provided.'}"</div>
-                </div>
-              ))}
+                </div>)
+              }
             </div>
           </div>
         </aside>
       </div>
-    </div>
-  );
+    </div>);
+
 }

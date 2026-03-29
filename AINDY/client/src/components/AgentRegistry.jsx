@@ -3,17 +3,17 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   getAgents,
   recallFromAgent,
-  getFederatedMemory,
-} from "../api";
+  getFederatedMemory } from
+"../api";
 
 // ── Constants ───────────────────────────────────────────────────────────────
-
+import { safeMap } from "../utils/safe";
 const AGENT_META = {
   arm: { icon: "🧠", color: "#a78bfa", label: "ARM" },
   genesis: { icon: "🌐", color: "#60a5fa", label: "Genesis" },
   nodus: { icon: "⚡", color: "#ffd93d", label: "Nodus" },
   leadgen: { icon: "🎯", color: "#34d399", label: "LeadGen" },
-  sylva: { icon: "🔮", color: "#94a3b8", label: "SYLVA" },
+  sylva: { icon: "🔮", color: "#94a3b8", label: "SYLVA" }
 };
 
 function agentMeta(namespace) {
@@ -31,13 +31,13 @@ function StatPill({ label, value, color }) {
         borderRadius: 6,
         padding: "6px 12px",
         textAlign: "center",
-        minWidth: 70,
-      }}
-    >
+        minWidth: 70
+      }}>
+
       <div style={{ color: color || "#e4e4e7", fontWeight: 700, fontSize: 18 }}>{value ?? 0}</div>
       <div style={{ color: "#52525b", fontSize: 10, marginTop: 1 }}>{label}</div>
-    </div>
-  );
+    </div>);
+
 }
 
 function AgentRecallPanel({ agent, onClose }) {
@@ -71,17 +71,17 @@ function AgentRecallPanel({ agent, onClose }) {
         border: `1px solid ${meta.color}44`,
         borderRadius: 10,
         padding: 20,
-        marginTop: 8,
-      }}
-    >
+        marginTop: 8
+      }}>
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <span style={{ color: meta.color, fontSize: 13, fontWeight: 600 }}>
           Recall from {agent.name}
         </span>
         <button
           onClick={onClose}
-          style={{ background: "transparent", border: "none", color: "#52525b", fontSize: 16, cursor: "pointer" }}
-        >
+          style={{ background: "transparent", border: "none", color: "#52525b", fontSize: 16, cursor: "pointer" }}>
+
           ✕
         </button>
       </div>
@@ -100,9 +100,9 @@ function AgentRecallPanel({ agent, onClose }) {
             color: "#e4e4e7",
             fontSize: 13,
             padding: "8px 12px",
-            outline: "none",
-          }}
-        />
+            outline: "none"
+          }} />
+
         <button
           onClick={handleRecall}
           disabled={loading || !query.trim()}
@@ -115,49 +115,49 @@ function AgentRecallPanel({ agent, onClose }) {
             fontSize: 13,
             padding: "8px 16px",
             cursor: loading || !query.trim() ? "not-allowed" : "pointer",
-            opacity: loading || !query.trim() ? 0.6 : 1,
-          }}
-        >
+            opacity: loading || !query.trim() ? 0.6 : 1
+          }}>
+
           {loading ? "…" : "Recall"}
         </button>
       </div>
 
-      {error && (
-        <div style={{ color: "#fca5a5", fontSize: 12, padding: "6px 0" }}>{error}</div>
-      )}
+      {error &&
+      <div style={{ color: "#fca5a5", fontSize: 12, padding: "6px 0" }}>{error}</div>
+      }
 
-      {nodes.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {nodes.map((node, i) => (
-            <div
-              key={node.id || i}
-              style={{
-                background: "#09090b",
-                borderRadius: 8,
-                padding: "10px 14px",
-                borderLeft: `3px solid ${meta.color}`,
-              }}
-            >
+      {nodes.length > 0 &&
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {safeMap(nodes, (node, i) =>
+        <div
+          key={node.id || i}
+          style={{
+            background: "#09090b",
+            borderRadius: 8,
+            padding: "10px 14px",
+            borderLeft: `3px solid ${meta.color}`
+          }}>
+
               <div style={{ color: "#e4e4e7", fontSize: 13, lineHeight: 1.5, marginBottom: 4 }}>
                 {node.content || node.text || JSON.stringify(node)}
               </div>
-              {node.resonance_score != null && (
-                <div style={{ color: "#52525b", fontSize: 11 }}>
+              {node.resonance_score != null &&
+          <div style={{ color: "#52525b", fontSize: 11 }}>
                   resonance {(node.resonance_score * 100).toFixed(0)}%
                 </div>
-              )}
-            </div>
-          ))}
+          }
+            </div>)
+        }
         </div>
-      )}
+      }
 
-      {results && nodes.length === 0 && (
-        <div style={{ color: "#52525b", fontSize: 12, textAlign: "center", padding: "10px 0" }}>
+      {results && nodes.length === 0 &&
+      <div style={{ color: "#52525b", fontSize: 12, textAlign: "center", padding: "10px 0" }}>
           No memories found for that query.
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }
 
 function AgentCard({ agent, isSelected, onSelect }) {
@@ -172,19 +172,19 @@ function AgentCard({ agent, isSelected, onSelect }) {
         borderRadius: 10,
         padding: 20,
         cursor: "pointer",
-        transition: "border-color 0.2s",
+        transition: "border-color 0.2s"
       }}
-      onClick={onSelect}
-    >
+      onClick={onSelect}>
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 28 }}>{meta.icon}</span>
           <div>
             <div style={{ color: meta.color, fontWeight: 700, fontSize: 15 }}>{agent.name}</div>
-            {agent.memory_namespace && (
-              <div style={{ color: "#52525b", fontSize: 11 }}>ns: {agent.memory_namespace}</div>
-            )}
+            {agent.memory_namespace &&
+            <div style={{ color: "#52525b", fontSize: 11 }}>ns: {agent.memory_namespace}</div>
+            }
           </div>
         </div>
         <span
@@ -195,19 +195,19 @@ function AgentCard({ agent, isSelected, onSelect }) {
             fontWeight: 600,
             background: agent.is_active ? "#00ffaa22" : "#27272a",
             color: agent.is_active ? "#00ffaa" : "#52525b",
-            border: `1px solid ${agent.is_active ? "#00ffaa44" : "#3f3f46"}`,
-          }}
-        >
+            border: `1px solid ${agent.is_active ? "#00ffaa44" : "#3f3f46"}`
+          }}>
+
           {agent.is_active ? "Active" : "Inactive"}
         </span>
       </div>
 
       {/* Description */}
-      {agent.description && (
-        <div style={{ color: "#71717a", fontSize: 12, lineHeight: 1.5, marginBottom: 14 }}>
+      {agent.description &&
+      <div style={{ color: "#71717a", fontSize: 12, lineHeight: 1.5, marginBottom: 14 }}>
           {agent.description}
         </div>
-      )}
+      }
 
       {/* Stats */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -230,14 +230,14 @@ function AgentCard({ agent, isSelected, onSelect }) {
             color: meta.color,
             fontSize: 12,
             padding: "5px 14px",
-            cursor: "pointer",
-          }}
-        >
+            cursor: "pointer"
+          }}>
+
           {isSelected ? "▲ Close Recall" : "▼ Recall Memory"}
         </button>
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
 function FederatedSearchPanel({ agents }) {
@@ -247,11 +247,11 @@ function FederatedSearchPanel({ agents }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const namespaces = agents.map((a) => a.memory_namespace || a.name).filter(Boolean);
+  const namespaces = safeMap(agents, (a) => a.memory_namespace || a.name).filter(Boolean);
 
   function toggleNs(ns) {
     setSelectedNs((prev) =>
-      prev.includes(ns) ? prev.filter((x) => x !== ns) : [...prev, ns]
+    prev.includes(ns) ? prev.filter((x) => x !== ns) : [...prev, ns]
     );
   }
 
@@ -280,9 +280,9 @@ function FederatedSearchPanel({ agents }) {
         border: "1px solid #27272a",
         borderRadius: 10,
         padding: 20,
-        marginBottom: 24,
-      }}
-    >
+        marginBottom: 24
+      }}>
+
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
         <span style={{ fontSize: 18 }}>🌐</span>
         <span style={{ color: "#e4e4e7", fontWeight: 700, fontSize: 15 }}>Federated Recall</span>
@@ -293,7 +293,7 @@ function FederatedSearchPanel({ agents }) {
 
       {/* Namespace filter chips */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-        {namespaces.map((ns) => {
+        {safeMap(namespaces, (ns) => {
           const meta = agentMeta(ns);
           const active = selectedNs.includes(ns);
           return (
@@ -307,29 +307,29 @@ function FederatedSearchPanel({ agents }) {
                 color: active ? meta.color : "#71717a",
                 fontSize: 12,
                 padding: "3px 10px",
-                cursor: "pointer",
-              }}
-            >
+                cursor: "pointer"
+              }}>
+
               {meta.icon} {ns}
-            </button>
-          );
+            </button>);
+
         })}
-        {selectedNs.length > 0 && (
-          <button
-            onClick={() => setSelectedNs([])}
-            style={{
-              background: "transparent",
-              border: "1px solid #3f3f46",
-              borderRadius: 6,
-              color: "#52525b",
-              fontSize: 11,
-              padding: "3px 10px",
-              cursor: "pointer",
-            }}
-          >
+        {selectedNs.length > 0 &&
+        <button
+          onClick={() => setSelectedNs([])}
+          style={{
+            background: "transparent",
+            border: "1px solid #3f3f46",
+            borderRadius: 6,
+            color: "#52525b",
+            fontSize: 11,
+            padding: "3px 10px",
+            cursor: "pointer"
+          }}>
+
             Clear filters
           </button>
-        )}
+        }
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -338,9 +338,9 @@ function FederatedSearchPanel({ agents }) {
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleFedSearch()}
           placeholder={
-            selectedNs.length > 0
-              ? `Search ${selectedNs.join(", ")}…`
-              : "Search all agents…"
+          selectedNs.length > 0 ?
+          `Search ${selectedNs.join(", ")}…` :
+          "Search all agents…"
           }
           style={{
             flex: 1,
@@ -350,9 +350,9 @@ function FederatedSearchPanel({ agents }) {
             color: "#e4e4e7",
             fontSize: 13,
             padding: "8px 12px",
-            outline: "none",
-          }}
-        />
+            outline: "none"
+          }} />
+
         <button
           onClick={handleFedSearch}
           disabled={loading || !query.trim()}
@@ -365,75 +365,75 @@ function FederatedSearchPanel({ agents }) {
             fontSize: 13,
             padding: "8px 16px",
             cursor: loading || !query.trim() ? "not-allowed" : "pointer",
-            opacity: loading || !query.trim() ? 0.6 : 1,
-          }}
-        >
+            opacity: loading || !query.trim() ? 0.6 : 1
+          }}>
+
           {loading ? "…" : "Search"}
         </button>
       </div>
 
-      {error && (
-        <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 8 }}>{error}</div>
-      )}
+      {error &&
+      <div style={{ color: "#fca5a5", fontSize: 12, marginBottom: 8 }}>{error}</div>
+      }
 
-      {nodes.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {nodes.map((node, i) => {
-            const srcMeta = agentMeta(node.source_agent || "");
-            return (
-              <div
-                key={node.id || i}
-                style={{
-                  background: "#09090b",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  borderLeft: `3px solid ${srcMeta.color}`,
-                  display: "flex",
-                  gap: 10,
-                }}
-              >
+      {nodes.length > 0 &&
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {safeMap(nodes, (node, i) => {
+          const srcMeta = agentMeta(node.source_agent || "");
+          return (
+            <div
+              key={node.id || i}
+              style={{
+                background: "#09090b",
+                borderRadius: 8,
+                padding: "10px 14px",
+                borderLeft: `3px solid ${srcMeta.color}`,
+                display: "flex",
+                gap: 10
+              }}>
+
                 <span style={{ fontSize: 16, marginTop: 1 }}>{srcMeta.icon}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                    {node.source_agent && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: srcMeta.color,
-                          background: `${srcMeta.color}22`,
-                          borderRadius: 4,
-                          padding: "1px 6px",
-                        }}
-                      >
+                    {node.source_agent &&
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: srcMeta.color,
+                      background: `${srcMeta.color}22`,
+                      borderRadius: 4,
+                      padding: "1px 6px"
+                    }}>
+
                         {node.source_agent}
                       </span>
-                    )}
-                    {node.node_type && (
-                      <span style={{ color: "#3f3f46", fontSize: 11 }}>{node.node_type}</span>
-                    )}
-                    {node.resonance_score != null && (
-                      <span style={{ color: "#52525b", fontSize: 11, marginLeft: "auto" }}>
+                  }
+                    {node.node_type &&
+                  <span style={{ color: "#3f3f46", fontSize: 11 }}>{node.node_type}</span>
+                  }
+                    {node.resonance_score != null &&
+                  <span style={{ color: "#52525b", fontSize: 11, marginLeft: "auto" }}>
                         {(node.resonance_score * 100).toFixed(0)}%
                       </span>
-                    )}
+                  }
                   </div>
                   <div style={{ color: "#e4e4e7", fontSize: 13, lineHeight: 1.5 }}>
                     {node.content || node.text || JSON.stringify(node)}
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              </div>);
 
-      {results && nodes.length === 0 && (
-        <div style={{ color: "#52525b", fontSize: 12, textAlign: "center", padding: "10px 0" }}>
+        })}
+        </div>
+      }
+
+      {results && nodes.length === 0 &&
+      <div style={{ color: "#52525b", fontSize: 12, textAlign: "center", padding: "10px 0" }}>
           No results across any agent.
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }
 
 // ── Main Component ──────────────────────────────────────────────────────────
@@ -468,7 +468,7 @@ export default function AgentRegistry() {
     fontFamily: "'Inter', 'Segoe UI', sans-serif",
     padding: "28px 32px",
     maxWidth: 860,
-    margin: "0 auto",
+    margin: "0 auto"
   };
 
   if (loading) {
@@ -478,8 +478,8 @@ export default function AgentRegistry() {
           <div style={{ fontSize: 32, marginBottom: 12 }}>🤖</div>
           <div>Loading agent registry…</div>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   if (error) {
@@ -493,9 +493,9 @@ export default function AgentRegistry() {
             color: "#fca5a5",
             display: "flex",
             alignItems: "center",
-            gap: 12,
-          }}
-        >
+            gap: 12
+          }}>
+
           <span style={{ fontSize: 20 }}>⚠️</span>
           <div>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Failed to load agents</div>
@@ -511,14 +511,14 @@ export default function AgentRegistry() {
               color: "#fca5a5",
               fontSize: 12,
               padding: "6px 14px",
-              cursor: "pointer",
-            }}
-          >
+              cursor: "pointer"
+            }}>
+
             Retry
           </button>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   const activeAgents = agents.filter((a) => a.is_active);
@@ -543,25 +543,25 @@ export default function AgentRegistry() {
               borderRadius: 6,
               color: "#00ffaa",
               fontSize: 12,
-              padding: "2px 10px",
-            }}
-          >
+              padding: "2px 10px"
+            }}>
+
             {activeAgents.length} active
           </span>
-          {inactiveAgents.length > 0 && (
-            <span
-              style={{
-                background: "#27272a",
-                border: "1px solid #3f3f46",
-                borderRadius: 6,
-                color: "#52525b",
-                fontSize: 12,
-                padding: "2px 10px",
-              }}
-            >
+          {inactiveAgents.length > 0 &&
+          <span
+            style={{
+              background: "#27272a",
+              border: "1px solid #3f3f46",
+              borderRadius: 6,
+              color: "#52525b",
+              fontSize: 12,
+              padding: "2px 10px"
+            }}>
+
               {inactiveAgents.length} inactive
             </span>
-          )}
+          }
         </div>
       </div>
 
@@ -569,14 +569,14 @@ export default function AgentRegistry() {
       {agents.length > 0 && <FederatedSearchPanel agents={agents} />}
 
       {/* Empty state */}
-      {agents.length === 0 && (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "60px 0",
-            color: "#52525b",
-          }}
-        >
+      {agents.length === 0 &&
+      <div
+        style={{
+          textAlign: "center",
+          padding: "60px 0",
+          color: "#52525b"
+        }}>
+
           <div style={{ fontSize: 40, marginBottom: 12 }}>🤖</div>
           <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8, color: "#71717a" }}>
             No agents registered
@@ -585,67 +585,67 @@ export default function AgentRegistry() {
             Agents register themselves when first used. Try running ARM or Genesis.
           </div>
         </div>
-      )}
+      }
 
       {/* Active agents */}
-      {activeAgents.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
+      {activeAgents.length > 0 &&
+      <div style={{ marginBottom: 24 }}>
           <div style={{ color: "#71717a", fontSize: 12, fontWeight: 600, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
             Active
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {activeAgents.map((agent) => {
-              const ns = agent.memory_namespace || agent.name;
-              const isSelected = selectedAgent === ns;
-              return (
-                <div key={agent.id || ns}>
+            {safeMap(activeAgents, (agent) => {
+            const ns = agent.memory_namespace || agent.name;
+            const isSelected = selectedAgent === ns;
+            return (
+              <div key={agent.id || ns}>
                   <AgentCard
-                    agent={agent}
-                    isSelected={isSelected}
-                    onSelect={() => setSelectedAgent(isSelected ? null : ns)}
-                  />
-                  {isSelected && (
-                    <AgentRecallPanel
-                      agent={agent}
-                      onClose={() => setSelectedAgent(null)}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                  agent={agent}
+                  isSelected={isSelected}
+                  onSelect={() => setSelectedAgent(isSelected ? null : ns)} />
+
+                  {isSelected &&
+                <AgentRecallPanel
+                  agent={agent}
+                  onClose={() => setSelectedAgent(null)} />
+
+                }
+                </div>);
+
+          })}
           </div>
         </div>
-      )}
+      }
 
       {/* Inactive agents */}
-      {inactiveAgents.length > 0 && (
-        <div>
+      {inactiveAgents.length > 0 &&
+      <div>
           <div style={{ color: "#3f3f46", fontSize: 12, fontWeight: 600, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
             Inactive
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {inactiveAgents.map((agent) => {
-              const ns = agent.memory_namespace || agent.name;
-              const isSelected = selectedAgent === ns;
-              return (
-                <div key={agent.id || ns}>
+            {safeMap(inactiveAgents, (agent) => {
+            const ns = agent.memory_namespace || agent.name;
+            const isSelected = selectedAgent === ns;
+            return (
+              <div key={agent.id || ns}>
                   <AgentCard
-                    agent={agent}
-                    isSelected={isSelected}
-                    onSelect={() => setSelectedAgent(isSelected ? null : ns)}
-                  />
-                  {isSelected && (
-                    <AgentRecallPanel
-                      agent={agent}
-                      onClose={() => setSelectedAgent(null)}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                  agent={agent}
+                  isSelected={isSelected}
+                  onSelect={() => setSelectedAgent(isSelected ? null : ns)} />
+
+                  {isSelected &&
+                <AgentRecallPanel
+                  agent={agent}
+                  onClose={() => setSelectedAgent(null)} />
+
+                }
+                </div>);
+
+          })}
           </div>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

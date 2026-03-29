@@ -17,7 +17,9 @@ This plan defines controlled evolution aligned with current architecture and gov
 - ARM evolution is defined in `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`.
 - Masterplan SaaS evolution is defined in `docs/roadmap/MASTERPLAN_SAAS.md`.
 - Implementation docs utility audit is defined in `docs/roadmap/IMPLEMENTATION_DOCS_AUDIT.md`.
-- Agentics conceptual layer audit and completion roadmap are defined in `docs/roadmap/AGENTICS.md` (Phases 1–7).
+- Agentics reality, corrected A.I.N.D.Y. + Nodus architecture, and completion roadmap are defined in `docs/roadmap/AGENTICS.md`.
+- Treat the current `PersistentFlowRunner` execution path as transitional infrastructure.
+- Treat real Nodus integration as a core infrastructure objective, not a completed milestone and not a deferred nice-to-have.
 
 ## Phase Entry Conditions
 - A phase may only begin after the prior phase’s exit criteria are met.
@@ -111,7 +113,31 @@ Exit criteria (policy-aligned):
 - ✅ Horizontal deployment does not violate invariants or session isolation (per `docs/governance/INVARIANTS.md`).
 Sign-off required: Human approval of Phase 4 completion and scalability readiness.
 
-## 6. Phase 6 – Ownership Cleanup + Observability Hardening
+## 6. Phase 5 – Agentics Completion + Nodus Convergence
+
+**Status:** In progress
+
+Focus areas:
+- Complete Agentics as an operational subsystem rather than a partial feature set.
+- Converge the current internal flow engine and the installed Nodus runtime toward one execution architecture.
+- Preserve the existing internal flow engine as the stable transitional path until real Nodus-backed execution is ready.
+- Links to debt: `docs/roadmap/TECH_DEBT.md` → §16.6 through §16.10.
+
+Execution checklist:
+1. Stabilize the current agent execution path across `agent_runtime`, `nodus_adapter`, `flow_engine`, async execution, replay, and recovery.
+2. Define the canonical Nodus integration contract: workflow source ownership, compile/load path, checkpoint model, and event emission contract.
+3. Introduce repo-managed Nodus workflow assets or a verified generation pipeline for agent plans.
+4. Make Nodus execution traces land in the same observability and audit surfaces as `FlowRun`, `AgentEvent`, and `SystemEvent`.
+5. Extend Agentics beyond single-agent runs by defining delegation, scoped sub-runs, and shared/private memory boundaries.
+6. Promote the Infinity loop from post-run suggestion logic to a bounded autonomous controller under explicit policy.
+
+Exit criteria (policy-aligned):
+- Agentics has one clearly documented primary execution path.
+- The relationship between A.I.N.D.Y. orchestration and Nodus execution is implemented, not implied.
+- Agent execution, flow execution, and embedded Nodus execution share a normalized observability model.
+- Multi-agent and autonomous execution boundaries are policy-enforced and auditable.
+
+## 7. Phase 6 – Ownership Cleanup + Observability Hardening
 Focus areas:
 - Backfill legacy `user_id` gaps where possible and confirm ownership consistency.
 - Normalize MasterPlan versioning to a single canonical field.
@@ -131,7 +157,7 @@ Exit criteria (policy-aligned):
 - Observability metrics can be queried without log scraping.
 - Health checks reflect active endpoints.
 
-## 7. Phase 8 – Data Integrity + Operational Hygiene
+## 8. Phase 7 – Data Integrity + Operational Hygiene
 Focus areas:
 - Normalize ownership columns to UUID with FK enforcement where feasible.
 - Remove dead code paths and legacy service stubs.
@@ -154,6 +180,7 @@ Focus areas:
 * Playbook auto-execution relies on the Strategy → Playbook → Content pipeline with scheduling hooks.
 * Recommendation → action loop captures system recommendations, executes or queues them, and feeds the results back into the Learning Engine.
 * Feedback is captured as learning records and delta analytics so thresholds improve as we observe outcomes.
+* Agentics Phase 5 is a prerequisite for any real autonomous intelligence layer; autonomous execution should build on the completed Agentics/Nodus execution contract rather than bypass it.
 
 Execution checklist:
 1. Playbook execution API wiring with scheduling/polling triggers is implemented.
@@ -221,6 +248,9 @@ The following are deferred unless explicitly prioritized:
 | Phase 2 – Operational Hardening | `TECH_DEBT.md` Sections 1, 4, 5, 6 |
 | Phase 3 – Observability and Resilience | `TECH_DEBT.md` Sections 2, 4, 7 |
 | Phase 4 – Scalability Readiness | `TECH_DEBT.md` Sections 1, 5 |
+| Phase 5 – Agentics Completion + Nodus Convergence | `TECH_DEBT.md` §16.6, §16.7, §16.8, §16.9, §16.10 |
+| Phase 6 – Ownership Cleanup + Observability Hardening | `TECH_DEBT.md` Sections 1, 2, 7 |
+| Phase 7 – Data Integrity + Operational Hygiene | `TECH_DEBT.md` Sections 2, 3 |
 
 ## Compliance Checklist (Per Phase)
 - Invariants remain intact and tested (`docs/governance/INVARIANTS.md`).

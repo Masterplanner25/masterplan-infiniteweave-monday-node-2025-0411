@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import GenesisSessionDB, MasterPlan
 from services.auth_service import get_current_user
+from services.execution_envelope import success
 from services.flow_engine import execute_intent
 from services.observability_events import emit_observability_event
 from services.genesis_ai import (
@@ -19,6 +20,7 @@ from services.genesis_ai import (
 )
 from services.masterplan_factory import create_masterplan_from_genesis
 from services.rate_limiter import limiter
+from utils.trace_context import ensure_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +66,7 @@ def create_genesis_session(
     db.commit()
     db.refresh(session)
 
-    return {"session_id": session.id}
+    return success({"session_id": session.id}, [], ensure_trace_id())
 
 
 @router.post("/message")
@@ -140,14 +142,18 @@ def get_genesis_session(
     user_id = uuid.UUID(str(current_user["sub"]))
     session = _get_user_session(session_id, user_id, db)
 
-    return {
-        "session_id": session.id,
-        "status": session.status,
-        "synthesis_ready": session.synthesis_ready,
-        "summarized_state": session.summarized_state,
-        "created_at": session.created_at,
-        "updated_at": session.updated_at,
-    }
+    return success(
+        {
+            "session_id": session.id,
+            "status": session.status,
+            "synthesis_ready": session.synthesis_ready,
+            "summarized_state": session.summarized_state,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+        },
+        [],
+        ensure_trace_id(),
+    )
 
 
 @router.get("/draft/{session_id}")
@@ -168,11 +174,15 @@ def get_genesis_draft(
             },
         )
 
-    return {
-        "session_id": session.id,
-        "draft": session.draft_json,
-        "synthesis_ready": session.synthesis_ready,
-    }
+    return success(
+        {
+            "session_id": session.id,
+            "draft": session.draft_json,
+            "synthesis_ready": session.synthesis_ready,
+        },
+        [],
+        ensure_trace_id(),
+    )
 
 
 @router.post("/synthesize")
@@ -235,7 +245,7 @@ def synthesize_genesis(
     session.draft_json = draft
     db.commit()
 
-    return {"draft": draft}
+    return success({"draft": draft}, [], ensure_trace_id())
 
 
 class AuditRequest(BaseModel):
@@ -294,7 +304,7 @@ def audit_genesis_draft(
         )
 
     audit_result = validate_draft_integrity(session.draft_json)
-    return audit_result
+    return success(audit_result, [], ensure_trace_id())
 
 
 @router.post("/lock")
@@ -360,11 +370,15 @@ def lock_masterplan(
             user_id=user_id,
         )
 
-    return {
-        "masterplan_id": masterplan.id,
-        "version": masterplan.version_label,
-        "posture": masterplan.posture,
-    }
+    return success(
+        {
+            "masterplan_id": masterplan.id,
+            "version": masterplan.version_label,
+            "posture": masterplan.posture,
+        },
+        [],
+        ensure_trace_id(),
+    )
 
 
 @router.post("/{plan_id}/activate")
@@ -420,4 +434,4 @@ def activate_masterplan(
             user_id=user_id,
         )
 
-    return {"status": "activated"}
+    return success({"activation_status": "activated"}, [], ensure_trace_id())

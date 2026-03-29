@@ -1,4 +1,4 @@
-# A.I.N.D.Y. Next Phase Plan
+# A.I.N.D.Y. Next Phase Plan(complete)
 
 Generated: 2026-03-23
 Based on: docs/roadmap/*.md + docs/architecture/SYSTEM_SPEC.md + docs/architecture/DATA_MODEL_MAP.md + TECH_DEBT.md + CHANGELOG.md
@@ -18,6 +18,20 @@ Based on: docs/roadmap/*.md + docs/architecture/SYSTEM_SPEC.md + docs/architectu
 | Flow nodes registered    | **15** (agent_validate_steps, agent_execute_step, agent_finalize_run added in N+6) |
 | Flows registered         | **5** (agent_execution added in N+6)                      |
 | Agent endpoints          | **13** (POST /run, GET /runs, GET /runs/{id}, approve, reject, recover, replay, steps, events, tools, trust ×2, suggestions) |
+
+---
+
+## Release Note
+
+The roadmap scope in this file is functionally complete in the current workspace.
+
+What remains open is release hardening rather than planned feature delivery:
+- final execution-model normalization across the remaining non-wrapped routes
+- cross-dialect cleanup in memory auto-link queries
+- live end-to-end validation that route-level learning signals are visible, not only test-proven
+- general release verification and environment hardening
+
+This means the next-phase feature plan is effectively done, but the system should not be treated as release-ready solely because this roadmap is complete.
 
 ---
 
@@ -96,16 +110,16 @@ Items that are documented in roadmap files but have no implementation.
 
 | Item | Source Document | Section |
 |------|----------------|---------|
-| Masterplan anchor (goal value / target date) | MASTERPLAN_SAAS.md | Phase v1 |
-| ETA projection / timeline compression output | MASTERPLAN_SAAS.md | Phase v2 |
-| Dependency cascade model for tasks | MASTERPLAN_SAAS.md | Phase v3 |
-| Execution automation layer (social/CRM/payments) | MASTERPLAN_SAAS.md | Phase v4 |
+| ~~Masterplan anchor (goal value / target date)~~ | MASTERPLAN_SAAS.md | **DONE Sprint N+1** |
+| ~~ETA projection / timeline compression output~~ | MASTERPLAN_SAAS.md | **DONE Sprint N+1** |
+| ~~Dependency cascade model for tasks~~ | MASTERPLAN_SAAS.md | **DONE current workspace** |
+| ~~Execution automation layer (social/CRM/payments)~~ | MASTERPLAN_SAAS.md | **DONE current workspace** |
 | ~~Infinity Algorithm unified execution loop (`infinity_loop.py`)~~ | INFINITY_ALGORITHM.md | **DONE Sprint N+11** |
-| Expanded TWR model (multi-variable: quality, risk, AI lift) | INFINITY_ALGORITHM.md | Phase v2 |
-| Ranking/Elo system (expected vs actual perf) | INFINITY_ALGORITHM.md | Phase v5 |
+| ~~Expanded TWR model (multi-variable: quality, risk, AI lift)~~ | INFINITY_ALGORITHM.md | **DONE current workspace via Infinity-backed compatibility route** |
+| ~~Ranking/Elo system (expected vs actual perf)~~ | INFINITY_ALGORITHM.md | **DONE current workspace** |
 | ~~Watcher service (focus, distraction, session tracking)~~ | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | **DONE Sprint N+2** |
-| Watcher signals fed into TWR/scoring | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v3 (partial remaining) |
-| User feedback capture (explicit + implicit) | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | Phase v5 (explicit done; implicit open) |
+| ~~Watcher signals fed into TWR/scoring~~ | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | **DONE current workspace through Infinity-backed scoring path** |
+| ~~User feedback capture (explicit + implicit)~~ | INFINITY_ALGORITHM_SUPPORT_SYSTEM.md | **DONE current workspace** |
 | ~~Agentics runtime Phase 1 (agent_runtime.py — goal→plan→execute)~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 2 — dry-run preview + approval gate~~ | AGENTICS.md | **DONE Sprint N+4** |
 | ~~Agentics Phase 3 — deterministic execution (PersistentFlowRunner)~~ | AGENTICS.md | **DONE Sprint N+6** |
@@ -117,20 +131,42 @@ Items that are documented in roadmap files but have no implementation.
 | ~~Agentics Phase 4 — capability/policy system~~ | AGENTICS.md | **DONE Sprint N+10** |
 | RippleTrace Pattern Engine (ThreadWeaver v1–v3) | RIPPLETRACE.md | Completed |
 | RippleTrace Graph Layer (Visibility Map + D3 UI) | RIPPLETRACE.md | Completed |
-| RippleTrace Insight Engine (Proofboard + Graph tab) | RIPPLETRACE.md | Completed |
-| Freelancing: AI generation pipeline for delivery | FREELANCING_SYSTEM.md | Phase v2 |
-| Freelancing: execution speed + income efficiency metrics | FREELANCING_SYSTEM.md | Phase v2 |
-| Freelancing: automation connectors (delivery/payment) | FREELANCING_SYSTEM.md | Phase v4 |
-| Search System: unified query processing layer | SEARCH_SYSTEM.md | Phase v1 |
-| Search System: SEO AI improvement suggestions (currently stubbed) | SEARCH_SYSTEM.md | Phase v1 |
+| ~~RippleTrace Insight Engine (Proofboard + Graph tab)~~ | RIPPLETRACE.md | **DONE current workspace** |
+| ~~Freelancing: AI generation pipeline for delivery~~ | FREELANCING_SYSTEM.md | **DONE current workspace** |
+| ~~Freelancing: execution speed + income efficiency metrics~~ | FREELANCING_SYSTEM.md | **DONE current workspace** |
+| ~~Freelancing: automation connectors (delivery/payment)~~ | FREELANCING_SYSTEM.md | **DONE current workspace (email/webhook live, payment trigger stubbed)** |
+| ~~Search System: unified query processing layer~~ | SEARCH_SYSTEM.md | **DONE current workspace** |
+| ~~Search System: SEO AI improvement suggestions (currently stubbed)~~ | SEARCH_SYSTEM.md | **DONE current workspace** |
 | Search System: result history views (UI) | SEARCH_SYSTEM.md | Phase v5 |
-| Social analytics dashboards | SOCIAL_LAYER.md | Phase v4 |
-| Social feedback loop → visibility scoring | SOCIAL_LAYER.md | Phase v5 |
-| Memory Engine Layer (Rust/C++ runtime scoring/traversal) | MEMORY_BRIDGE.md | Phase v5+ |
+| ~~Social analytics dashboards~~ | SOCIAL_LAYER.md | **DONE current workspace** |
+| ~~Social feedback loop → visibility scoring~~ | SOCIAL_LAYER.md | **DONE current workspace** |
+| ~~Memory Engine Layer (Rust/C++ runtime scoring/traversal)~~ | MEMORY_BRIDGE.md | **DONE current workspace** |
 | RippleTrace frontend viewer (RippleTraceViewer.jsx) | TECH_DEBT.md | §15.16 |
 | Observability frontend dashboard (ObservabilityDashboard.jsx) | TECH_DEBT.md | §15.17 |
 
 ---
+
+### Validated Corrections
+
+The following rows in `Completion Gaps` are now stale relative to the current workspace and should be read as completed:
+
+- Masterplan anchor (goal value / target date) — completed in Sprint N+1
+- ETA projection / timeline compression output — completed in Sprint N+1
+- RippleTrace Pattern Engine (`ThreadWeaver` v1-v3) — implemented in the current workspace
+- RippleTrace Graph Layer (Visibility Map + D3 UI) — implemented in the current workspace
+- RippleTrace frontend viewer (`RippleTraceViewer.jsx`) — implemented in the current workspace
+- Observability frontend dashboard (`ObservabilityDashboard.jsx`) — implemented in the current workspace
+- Task dependency cascade model — implemented in the current workspace
+- MasterPlan-linked execution automation — implemented in the current workspace
+- Expected-vs-actual Infinity scoring — implemented in the current workspace
+- Implicit feedback capture from retries, failures, latency spikes, and abandonment — implemented in the current workspace
+- Unified Search service + SEO suggestions backend compatibility — implemented in the current workspace
+- Legacy standalone TWR control path — retired in favor of Infinity-backed compatibility responses
+- Freelance AI delivery generation and execution metrics — implemented in the current workspace
+- Freelance external delivery connectors — implemented in the current workspace (email/webhook live, payment trigger stubbed)
+- Social analytics dashboards and visibility feedback loop — implemented in the current workspace
+- RippleTrace proofboard-style insight surface — implemented in the current workspace
+- Rust/C++ memory runtime scoring acceleration — implemented in the current workspace
 
 ## Open Tech Debt
 
@@ -146,13 +182,13 @@ Items still open in TECH_DEBT.md, annotated with risk level.
 | §7 | Infinity Algorithm open-loop — Watcher missing, feedback not enforced | **MEDIUM** | ✅ Closed through N+11 loop enforcement + feedback capture |
 | §5/§1 | No distributed-safe scheduler | **MEDIUM** | ✅ Resolved N+9 — APScheduler lease-gated; heartbeat job prevents TTL expiry |
 | §16.3 | No agent capability/policy system — any approved run can invoke any tool | **MEDIUM** | ✅ Closed N+10 |
-| §16.6 | Infinity loop optimization depth is rule-based; TWR/ranking still incomplete | **MEDIUM** | Open |
+| §16.6 | Infinity loop optimization depth is still heuristic even after expected-vs-actual and implicit feedback landed | **MEDIUM** | Partial |
 | §16.2 | `replay_run()` only supports `same_plan` — `new_plan` mode deferred | **LOW** | ✅ Resolved N+8 — `new_plan` mode re-calls GPT-4o for fresh plan |
 | §16.5 | Agent approval inbox has no dedicated UI — pending runs not surfaced | **LOW** | ⚠️ Partial N+8 — badge added to AgentConsole; standalone inbox still missing |
 | §15.16 | RippleTrace viewer has no frontend UI | **LOW** | Open |
 | §15.17 | Observability dashboard has no frontend UI | **LOW** | Open |
 | §12.2 | `node_type="generic"` legacy rows | **LOW** | Open |
-| §10.9 | C++→Rust→PyO3 FFI chain — release build blocked | **LOW** | Open |
+| §10.9 | C++→Rust→PyO3 FFI chain — runtime scoring integrated; release build still blocked | **LOW** | Partial |
 | §11.6 | ARM auto-approve low-risk config changes | **LOW** | Open |
 | §14 | Pattern detection for recurring memory motifs | **LOW** | Open |
 | §14 | SYLVA agent reserved but inactive | **LOW** | Open |
@@ -163,6 +199,13 @@ Items still open in TECH_DEBT.md, annotated with risk level.
 | §6 | No documented secret rotation policy | **LOW** | Open |
 
 ---
+
+### Validated Tech Debt Corrections
+
+These statuses are stale in the table above and are resolved in the current workspace:
+
+- Â§15.16 RippleTrace viewer has no frontend UI
+- Â§15.17 Observability dashboard has no frontend UI
 
 ## Leverage Matrix
 
@@ -376,13 +419,90 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 
 ---
 
+## 10 Steps To Finish This Plan
+
+These steps are limited to the original unfinished items above. No new scope is introduced.
+
+### Recommended Execution Order
+
+The original 10 steps are now mostly historical. Based on the current workspace, the remaining highest-leverage finish order is:
+
+1. **Search result history views (UI)**
+2. **Runtime release-build hardening for the Rust/C++ memory engine**
+3. **Freelance payment-provider hardening beyond the current stub**
+
+Rationale for this order:
+- The prior unfinished control-path items are now closed in the current workspace.
+- The remaining backlog is mostly application-layer completion and production hardening rather than missing core-system behavior.
+- The native scorer is integrated, so the remaining engine-layer work is deployment hardening rather than runtime-path integration.
+
+### Step 1 â€” Add real task dependency persistence and cascade usage
+
+**Files:** `db/models/task.py`, `schemas/task_schemas.py`, `services/task_services.py`, `services/eta_service.py`
+
+**Outcome:** Completed in the current workspace. The documented MasterPlan dependency cascade model now exists with persisted dependency metadata, DAG construction, blocked-task enforcement, and downstream unlock behavior.
+
+### Step 2 â€” Wire MasterPlan execution automation to existing automation surfaces
+
+**Files:** `routes/masterplan_router.py`, `routes/automation_router.py`, related automation services/models
+
+**Outcome:** Completed in the current workspace. MasterPlan now generates structured task DAGs, binds tasks to automation metadata, dispatches automation through async execution, and reports execution/automation status on the MasterPlan surface.
+
+### Step 3 â€” Expand standalone TWR and feed watcher data into it
+
+**Files:** `services/calculation_services.py`, `routes/main_router.py`, `db/models/watcher_signal.py`
+
+**Outcome:** Completed in the current workspace. The old standalone TWR control path is removed from canonical scoring; the compatibility route now delegates to Infinity, so watcher and other support signals feed the live control path instead of a duplicate metric controller.
+
+### Step 4 â€” Implement ranking / expected-vs-actual scoring in Infinity
+
+**Files:** `services/infinity_service.py`, `services/infinity_loop.py`, `db/models/user_score.py`
+
+**Outcome:** Completed in the current workspace. Infinity now stores expected outcomes and expected scores, compares them with actuals, persists prediction accuracy/deviation, and uses recent strategy accuracy to weight future decisions.
+
+### Step 5 â€” Finish implicit feedback capture
+
+**Files:** `services/system_event_service.py`, `services/agent_event_service.py`, `services/infinity_loop.py`
+
+**Outcome:** Completed in the current workspace. Behavioral signals from retries, failures, latency spikes, and abandonment now emit durable feedback events, auto-capture into memory, and influence future memory-weighted Infinity decisions.
+
+### Step 6 â€” Complete the remaining RippleTrace insight surface
+
+**Files:** `services/threadweaver.py`, `client/src/components/RippleTraceViewer.jsx`, relevant RippleTrace routes
+
+**Outcome:** Completed in the current workspace. RippleTrace now exposes a direct graph API and a proofboard-style viewer with root cause, dominant path, failure clusters, summary, and recommendations.
+
+### Step 7 â€” Finish the freelance layer where the plan left it
+
+**Files:** `services/freelance_service.py`, `routes/freelance_router.py`, `db/models/freelance.py`
+
+**Outcome:** Completed in the current workspace for the planned delivery-channel scope. AI-generated delivery, execution/income metrics, and external email/webhook connectors now exist; the payment path is currently a supervised Stripe stub rather than a live provider integration.
+
+### Step 8 â€” Close the Search System backlog
+
+**Files:** `services/search_service.py`, `services/leadgen_service.py`, `modules/research_engine.py`, `routes/seo_routes.py`, search UI components
+
+**Outcome:** Partially completed in the current workspace. Unified query processing and SEO suggestion/backend compatibility are implemented; result-history UI remains open.
+
+### Step 9 â€” Close the Social Layer backlog
+
+**Files:** `routes/social_router.py`, social UI components under `client/src/components`, `db/models/social_models.py`
+
+**Outcome:** Completed in the current workspace. Social analytics dashboards, tracked interactions, memory capture for performance signals, and Infinity-facing visibility feedback are now implemented.
+
+### Step 10 â€” Integrate the Rust/C++ memory engine into runtime memory scoring/traversal
+
+**Files:** `runtime/memory/scorer.py`, `db/dao/memory_node_dao.py`, compiled bridge/runtime files
+
+**Outcome:** Completed in the current workspace for runtime scoring. `runtime/memory/scorer.py` now routes the hot scoring path through the Rust/C++ bridge with an automatic Python fallback; release-build hardening remains separate deployment debt.
+
 ## Strategic Assessment
 
 A.I.N.D.Y. is now materially closer to the intended system shape: the Memory Bridge is instrumented, the Flow Engine is persistent, Agentics has bounded authority, and the Infinity loop is closed at the MVP level. Scores no longer stop at storage. A score recalculation can now trigger deterministic execution adjustments, persist loop state, and collect explicit user feedback on ARM and agent outcomes.
 
-The remaining gap is no longer “the loop does not exist.” The remaining gap is **optimization depth**. Watcher-derived focus signals influence `focus_quality` and loop decisions, but not the standalone TWR endpoint directly. Loop decisions are rule-based rather than learned. Ranking, expected-vs-actual performance comparison, and adaptive thresholding are still missing. The next phase should therefore shift from “close the loop” to “make the loop smarter.”
+The remaining gap is no longer “the loop does not exist.” The remaining gap is **optimization depth**. Watcher-derived focus signals, implicit feedback, system state, goals, and ranked memory now feed the live Infinity path, and expected-vs-actual comparison is implemented. What remains weak is learned policy depth, KPI-weight adaptation, and broader product-layer completion on top of the stronger control stack.
 
-The highest-leverage next work is: expanded TWR integration, ranking/decision intelligence, and broader system surfaces that consume persisted loop adjustments. That is the path from a functioning closed-loop control system to a genuinely optimizing one.
+The highest-leverage remaining work is now narrower: add search result history views, harden release-build deployment for the Rust/C++ memory engine, and productionize the freelance payment-provider path beyond the current stub. The system has moved from “close the loop” into “complete the remaining application surfaces and productionize the accelerated runtime path.”
 
 ---
 

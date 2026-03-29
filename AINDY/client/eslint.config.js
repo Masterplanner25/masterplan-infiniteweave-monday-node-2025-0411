@@ -24,6 +24,23 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='map']",
+          message: 'Use safeMap(...) instead of direct .map(...) calls.',
+        },
+        {
+          selector: "OptionalCallExpression[callee.type='OptionalMemberExpression'][callee.property.name='map']",
+          message: 'Use safeMap(...) instead of direct .map(...) calls.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['src/utils/safe.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 ])

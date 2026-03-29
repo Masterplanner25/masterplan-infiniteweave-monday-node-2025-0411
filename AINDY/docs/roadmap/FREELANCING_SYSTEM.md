@@ -1,325 +1,582 @@
-﻿# Freelancing System — Canonical Definition & Evolution Plan
+# FREELANCING SYSTEM
 
----
+## 1. System Reality
 
-## 1. System Definition (Canonical)
+### What this system is intended to be
 
-The Freelancing System is a **revenue automation layer** that turns client work into structured execution, feedback, and measurable outcomes inside A.I.N.D.Y.
+The Freelancing System is intended to be a revenue-oriented application built on
+top of A.I.N.D.Y.'s core layers.
 
-It is not a general search system.
+Its target role is:
 
-It is a **monetization execution system** designed to:
+- capture leads and client orders
+- convert opportunities into structured work
+- coordinate delivery workflows
+- capture client feedback and commercial outcomes
+- feed those outcomes back into memory, metrics, and future decisions
 
-* accept client orders
-* deliver work outputs
-* capture feedback
-* compute revenue metrics
-* log business activity into memory
+That makes it a business application layer, not core infrastructure.
 
----
+### What exists today
 
-## 2. Core Lifecycle (Canonical Pipeline)
+#### Implemented
 
+- `routes/freelance_router.py`
+  - authenticated CRUD-style routes for orders, delivery, feedback, and metrics
+
+- `services/freelance_service.py`
+  - order creation
+  - AI-generated delivery and manual delivery updates via `ai_output`
+  - external delivery dispatch through configured email, webhook, or payment-trigger channels
+  - feedback capture
+  - revenue aggregation
+  - execution/income metric calculation
+  - Memory Bridge logging for order, delivery, and feedback events
+
+- `db/models/freelance.py`
+  - `FreelanceOrder`
+  - `ClientFeedback`
+  - `RevenueMetrics`
+
+- `client/src/components/FreelanceDashboard.jsx`
+  - dashboard for orders, ratings, and latest revenue snapshot
+
+- `services/leadgen_service.py`
+  - separate but relevant lead discovery/scoring capability
+  - recalls prior leadgen memory, calls external search, scores leads, stores results, writes memory
+
+- `routes/leadgen_router.py`
+  - user-facing lead generation API
+
+#### Partially implemented
+
+- Lead intake
+  - lead generation exists
+  - freelance orders exist
+  - there is no unified lead -> client -> order pipeline
+
+- AI-assisted delivery
+  - orders support generated `ai_output`
+  - delivery generation can run through the automation system
+  - external delivery can run through email and webhook connectors
+  - payment triggering exists as a supervised Stripe stub
+
+- Metrics
+  - total delivered revenue is stored
+  - delivery quality, time-to-completion, and income efficiency are populated
+  - broader per-user revenue history and richer connector-specific metrics are still incomplete
+
+- Memory capture
+  - freelance and leadgen actions are written to memory
+  - those memories do not yet drive a dedicated commercial optimization loop
+
+#### Not implemented
+
+- client/project workflow automation
+- proposal generation, outreach, quoting, invoicing, and fully live payment-provider integration
+- freelance-specific agent execution flows
+- Nodus-backed freelance workflows
+- autonomous client prioritization or pricing decisions
+- full event-level observability for freelance operations through `SystemEvent`
+- a closed feedback loop that changes execution based on freelance outcomes
+
+## 2. Correct Classification
+
+The Freelancing System is:
+
+> an application layer built on top of A.I.N.D.Y. core services
+
+It is not:
+
+- a core execution subsystem
+- a foundational infrastructure layer
+- a complete autonomous business engine
+
+### Why
+
+- core system layers already exist elsewhere:
+  - Agentics for execution
+  - Memory Bridge for recall/capture
+  - Infinity loop for KPI-driven next-action logic
+  - `SystemEvent` for durable event persistence
+  - Nodus as the intended execution substrate
+
+- the current freelance implementation is domain-specific business logic:
+  - orders
+  - delivery
+  - feedback
+  - revenue
+
+- it does not provide reusable platform infrastructure
+- it should consume core services rather than duplicate them
+
+Verdict:
+
+- not a core subsystem
+- not completely disconnected either
+- currently a thin application layer with partial integrations and major automation gaps
+
+## 3. Current Code Reality
+
+### Freelancing-specific code that is real
+
+- `services/freelance_service.py`
+- `routes/freelance_router.py`
+- `db/models/freelance.py`
+- `schemas/freelance.py`
+- `client/src/components/FreelanceDashboard.jsx`
+
+This code now supports AI-assisted delivery generation, linked automation hooks, external email/webhook delivery, and memory logging, but it is still not a complete commercial automation layer.
+
+### Adjacent capabilities that could support it
+
+- `services/leadgen_service.py`
+- `modules/research_engine.py`
+- `services/agent_runtime.py`
+- `services/flow_engine.py`
+- `services/nodus_adapter.py`
+- `services/infinity_orchestrator.py`
+- `services/infinity_loop.py`
+- `services/memory_capture_engine.py`
+
+These are relevant, but they are not assembled into a true freelancing execution system today.
+
+### What the repo does not contain
+
+- no freelance-specific agent workflow in `services/flow_definitions.py`
+- no freelance-specific nodes in the flow engine
+- no freelance-specific tool surface in `services/agent_tools.py`
+- no `.nd` freelance workflows
+- no freelance-specific event schema beyond typed `SystemEvent` emission
+- no reasoning service for lead pursuit, pricing, or project strategy
+
+## 4. Integration Analysis
+
+### A. Agent Runtime
+
+#### Current reality
+
+- there is no direct freelance -> agent runtime integration
+- freelance orders are not created or delivered as `AgentRun`s
+- no freelance route calls `services/agent_runtime.py`
+
+- indirect support exists only through generic tools:
+  - `leadgen.search`
+  - `research.query`
+  - `arm.analyze`
+  - `arm.generate`
+
+#### Correct target
+
+- freelance workflows should be able to run as agent plans when work benefits from structured execution
+- examples:
+  - lead research
+  - proposal drafting
+  - delivery artifact generation
+  - client follow-up packaging
+
+- not every client/job should automatically be an agent run
+- the correct boundary is:
+  - Freelancing System owns commercial workflow state
+  - Agent Runtime executes bounded work units inside that workflow
+
+### B. Nodus Execution Layer
+
+#### Current reality
+
+- no freelance code executes through Nodus
+- no freelance `.nd` workflows exist
+- no freelance route calls `services/nodus_execution_service.py`
+
+#### Correct target
+
+- Nodus should eventually be the execution engine for repeatable freelance workflows
+- examples:
+  - lead qualification flow
+  - project kickoff flow
+  - delivery assembly flow
+  - follow-up flow
+
+- the Freelancing System should define business workflows
+- Nodus should execute them
+
+### C. Autonomous Reasoning
+
+#### Current reality
+
+- there is no freelance-specific reasoning layer
+- no service decides:
+  - which leads to pursue
+  - which clients to prioritize
+  - what strategy or pricing to use
+
+- lead scoring exists in `services/leadgen_service.py`, but that is isolated scoring logic, not a general reasoning loop
+
+#### Correct target
+
+Autonomous Reasoning should inform:
+
+- lead prioritization
+- next-best client action
+- delivery prioritization
+- pricing and packaging suggestions
+- escalation from manual handling to agent execution
+
+This should consume:
+
+- memory
+- KPIs
+- recent outcomes
+- feedback
+- revenue performance
+
+### D. Memory Bridge
+
+#### Current reality
+
+- freelance order, delivery, and feedback events are logged to memory via `MemoryCaptureEngine`
+- leadgen also logs search outcomes and discovered leads to memory
+
+#### Missing
+
+- no unified client memory model
+- no explicit memory summaries for account history or project history
+- no systematic use of client outcome memory to influence future commercial decisions
+
+#### Correct target
+
+- each client interaction should become retrievable context
+- outcomes should influence future recommendations and prioritization
+- memory should support:
+  - lead follow-up
+  - delivery continuity
+  - client preference recall
+  - postmortem learning
+
+### E. Infinity Loop
+
+#### Current reality
+
+- no freelance route or service directly triggers freelance-specific Infinity logic
+- the current Infinity loop reasons mostly about task state, focus, AI usage, and execution quality
+- leadgen and agent completion may indirectly affect score-related behavior elsewhere
+
+#### Correct target
+
+- freelance outcomes should influence the scoring/orchestration layer
+- examples:
+  - delivered work
+  - positive client feedback
+  - revenue conversion
+  - stalled client pipelines
+
+- the Infinity loop should eventually help decide:
+  - continue delivery
+  - follow up on a lead
+  - create a task for a client account
+  - review weak-performing revenue channels
+
+### F. RippleTrace / SystemEvent
+
+#### Current reality
+
+- freelance services use logging and memory capture
+- they do not emit a normalized freelance execution envelope through `SystemEvent`
+- leadgen likewise writes memory but is not consistently represented as durable business events
+
+#### Correct target
+
+all significant freelance actions should be observable events, including:
+
+- lead discovered
+- lead scored
+- order created
+- work package started
+- delivery completed
+- feedback received
+- revenue recorded
+
+This should make commercial workflows inspectable in the same way execution workflows are becoming inspectable.
+
+## 5. Gap Analysis
+
+### Missing components
+
+- client/account entity beyond raw order rows
+- pipeline state between leadgen and freelance order creation
+- freelance-specific agent tools and workflows
+- freelance flow definitions in `services/flow_definitions.py`
+- Nodus workflow representation for freelance operations
+- commercial metrics beyond raw revenue
+- evented observability for freelance actions
+- reasoning-driven optimization for outreach, prioritization, or pricing
+
+### Missing integrations
+
+- freelance -> agent runtime
+- freelance -> Nodus execution
+- freelance -> autonomous reasoning
+- freelance -> Infinity loop as a first-class signal source
+- freelance -> `SystemEvent` / RippleTrace observability
+
+### Duplicated or fragmented logic
+
+- lead qualification lives in `services/leadgen_service.py`
+- client order management lives separately in `services/freelance_service.py`
+- research capability lives in `modules/research_engine.py`
+- none of these are composed into one commercial workflow model
+
+### Misplaced responsibilities
+
+- the current roadmap frames Freelancing too much like a standalone subsystem
+- in reality, most automation it needs already belongs in lower layers:
+  - execution in Agentics/Nodus
+  - decision logic in Autonomous Reasoning
+  - recall and learning in Memory Bridge
+  - auditability in `SystemEvent`
+
+The Freelancing layer should orchestrate business intent, not re-implement those foundations.
+
+## 6. Correct Architecture
+
+```text
+A.I.N.D.Y. Core
+  -> Memory Bridge
+  -> SystemEvent / RippleTrace
+  -> Autonomous Reasoning
+  -> Agentics / Flow Engine / Nodus
+
+Freelancing Layer
+  -> lead intake
+  -> client/project state
+  -> commercial workflow rules
+  -> delivery coordination
+  -> revenue metrics
+
+Business Workflows
+  -> lead qualification
+  -> outreach / proposal prep
+  -> order execution
+  -> delivery follow-up
+  -> feedback learning
 ```
-Order → Delivery → Feedback → Metrics → Insight
-```
 
-### Order
+### Boundaries
 
-Client intake with structured metadata:
+#### A.I.N.D.Y. Core owns
 
-* client name/email
-* service type
-* project details
-* price
+- execution
+- reasoning
+- memory
+- eventing
+- policy and approvals
 
----
+#### Freelancing Layer owns
 
-### Delivery
+- client-facing commercial workflow state
+- domain rules for orders, delivery, and revenue
+- mapping business stages to execution requests
 
-Order fulfillment:
+#### Freelancing Layer should not own
 
-* AI-assisted or manual output
-* status update
-* timestamped completion
+- its own execution engine
+- its own reasoning engine
+- its own memory platform
+- its own observability substrate
 
----
+## 7. Implementation Plan
 
-### Feedback
+### Phase 1. Lead Intake + Storage
 
-Client feedback capture:
+Objective:
 
-* rating
-* feedback text
-* summarized feedback
+- unify lead discovery and freelance intake into one commercial entry path
 
----
+Files to modify:
 
-### Metrics
+- `services/leadgen_service.py`
+- `routes/leadgen_router.py`
+- `services/freelance_service.py`
+- `routes/freelance_router.py`
+- `db/models/leadgen_model.py`
+- `db/models/freelance.py`
 
-Revenue and efficiency tracking:
+Files to create:
 
-* total revenue
-* execution speed
-* income efficiency
-* AI productivity boost
+- `db/models/client_account.py` or equivalent commercial account model
+- `services/freelance/intake_service.py`
 
----
+Expected behavior:
 
-### Insight
+- leads, clients, and orders are linked instead of existing as separate isolated records
+- a lead can become a client/order without re-entry of core context
 
-Operational summaries and dashboards:
+Success criteria:
 
-* performance trends
-* feedback patterns
-* revenue snapshots
+- system can track lead -> client -> order lineage
+- user can query commercial state without joining unrelated ad hoc tables mentally
 
----
+### Phase 2. Agent-driven Task Execution
 
-## 3. Core Components
+Objective:
 
----
+- let the Freelancing layer request bounded work from Agentics rather than doing everything manually
 
-### 3.1 Orders
+Files to modify:
 
-**Implementation:**
+- `services/agent_runtime.py`
+- `services/agent_tools.py`
+- `services/freelance_service.py`
+- `routes/freelance_router.py`
+- `services/flow_definitions.py`
 
-* `db/models/freelance.py` (`FreelanceOrder`)
-* `routes/freelance_router.py`
-* `services/freelance_service.py`
+Files to create:
 
-**Current Capabilities:**
+- `services/freelance/execution_service.py`
+- freelance-oriented tool handlers or agent wrappers
 
-* create orders
-* list orders
-* ownership enforcement
+Expected behavior:
 
----
+- freelance workflows can launch agent runs for scoped tasks such as research, drafting, packaging, and delivery preparation
 
-### 3.2 Delivery
+Success criteria:
 
-**Implementation:**
+- at least one freelance workflow creates an auditable `AgentRun`
+- freelance layer references agent results rather than storing only manual output strings
 
-* `services/freelance_service.py::deliver_order`
-* `routes/freelance_router.py::POST /freelance/deliver/{id}`
+### Phase 3. Client Workflow Automation
 
-**Current Capabilities:**
+Objective:
 
-* attach output
-* mark delivered
+- define repeatable commercial workflows above the raw services
 
-**Missing:**
+Files to modify:
 
-* AI generation pipeline
-* automation connectors
+- `services/flow_definitions.py`
+- `services/flow_engine.py`
+- `services/nodus_adapter.py`
+- `services/freelance_service.py`
 
----
+Potential files to create:
 
-### 3.3 Feedback
+- `services/freelance/workflow_service.py`
+- freelance flow definitions
+- later: repo-managed freelance `.nd` workflows when Nodus becomes primary
 
-**Implementation:**
+Expected behavior:
 
-* `db/models/freelance.py` (`ClientFeedback`)
-* `services/freelance_service.py::collect_feedback`
-* `routes/freelance_router.py::POST /freelance/feedback`
+- client/job workflows move from manual API calls to structured execution paths
 
-**Current Capabilities:**
+Success criteria:
 
-* feedback storage
-* summary placeholder
+- at least one end-to-end freelance workflow is executable through the existing flow layer
+- workflow state is durable and inspectable
 
-**Missing:**
+### Phase 4. Revenue Tracking + Metrics
 
-* feedback-driven optimization
+Objective:
 
----
+- move from raw revenue snapshots to meaningful commercial performance metrics
 
-### 3.4 Metrics
+Files to modify:
 
-**Implementation:**
+- `services/freelance_service.py`
+- `db/models/freelance.py`
+- `routes/freelance_router.py`
+- `client/src/components/FreelanceDashboard.jsx`
 
-* `db/models/freelance.py` (`RevenueMetrics`)
-* `services/freelance_service.py::update_revenue_metrics`
-* `routes/freelance_router.py::/metrics/*`
+Expected behavior:
 
-**Current Capabilities:**
+- compute real metrics for delivery speed, conversion, and AI leverage
+- expose them in API and dashboard
 
-* total revenue aggregation
+Success criteria:
 
-**Missing:**
+- metrics fields are populated from real data
+- dashboard reflects workflow performance rather than only counts and revenue
 
-* execution speed
-* income efficiency
-* AI productivity boost
+### Phase 5. Autonomous Optimization
 
----
+Objective:
 
-### 3.5 Dashboard
+- connect commercial outcomes to reasoning, memory, and observability
 
-**Implementation:**
+Files to modify:
 
-* `client/src/components/FreelanceDashboard.jsx`
-* `client/src/App.jsx` route
+- `services/infinity_orchestrator.py`
+- `services/infinity_loop.py`
+- `services/system_event_service.py`
+- `services/memory_capture_engine.py`
+- future reasoning service files from `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`
 
-**Current Capabilities:**
+Potential files to create:
 
-* orders, feedback, metrics display
+- `services/freelance/recommendation_service.py`
+- `services/reasoning/` commercial evaluators when the reasoning layer is formalized
 
----
+Expected behavior:
 
-## 4. Architectural Layers
+- the system can recommend what lead to pursue, what client to follow up with, and what work to prioritize based on outcomes and memory
 
-### Orchestration Layer
+Success criteria:
 
-* FastAPI routes
-* service functions
+- freelance activity emits durable events
+- commercial outcomes influence future suggestions or task creation
+- no duplicate business-specific reasoning engine is created outside the main reasoning layer
 
-### Persistence Layer
+## 8. Relationship to Other Roadmaps
 
-* Postgres tables: `freelance_orders`, `client_feedback`, `revenue_metrics`
+### AGENTICS.md
 
-### Memory Layer
+This document depends on `docs/roadmap/AGENTICS.md`:
 
-* Memory Bridge logging on order/delivery/feedback (MemoryCaptureEngine + DB session)
+- Freelancing should consume Agentics for execution
+- it should not implement a separate execution runtime
 
----
+### AUTONOMOUS_REASONING_MODULE.md
 
-## 5. Current Implementation (Reality)
+This document depends on `docs/roadmap/AUTONOMOUS_REASONING_MODULE.md`:
 
-**Implemented:**
+- Freelancing should consume the shared reasoning layer for prioritization and adaptation
+- it should not implement a separate reasoning engine
 
-* order intake + delivery updates
-* feedback storage
-* basic revenue metrics
-* dashboard UI
+### EVOLUTION_PLAN.md
 
-**Missing:**
+This document aligns with `docs/roadmap/EVOLUTION_PLAN.md`:
 
-* AI generation pipeline
-* automation connectors (delivery/payment)
-* performance metrics beyond revenue
+- Freelancing should evolve after or alongside completion of shared execution, reasoning, and observability layers
+- it should not bypass the core architecture
 
----
+### TECH_DEBT.md
 
-## 6. System Classification
+This document aligns with `docs/roadmap/TECH_DEBT.md`:
 
-The Freelancing System is currently:
+- current debt is not just missing features
+- the bigger issue is incomplete integration with the platform layers it should sit on top of
 
-> A manual execution + revenue tracking module with partial memory logging.
+## 9. Final Assessment
 
-It is NOT:
+The Freelancing System is real, but only in a narrow form.
 
-* an autonomous delivery engine
-* a closed-loop optimization system
+What exists today:
 
----
+- order storage
+- manual delivery updates
+- feedback capture
+- basic revenue aggregation
+- memory logging
+- adjacent lead generation support
 
-## 7. Evolution Plan (System Roadmap)
+What it is today:
 
----
+- a partial application layer
 
-### Phase v1 — Stabilize Operations
+What it is not today:
 
-**Goal:** Ensure order and feedback flows are consistent
+- a core subsystem
+- an autonomous revenue engine
+- a true agent-driven or Nodus-driven business workflow system
 
-**Actions:**
-
-* normalize delivery input
-* harden feedback persistence
-* align dashboard with API responses
-
----
-
-### Phase v2 — Metrics Completion
-
-**Goal:** Populate intended metrics
-
-**Actions:**
-
-* compute execution speed
-* compute income efficiency
-* compute AI productivity boost
-
----
-
-### Phase v3 — Memory Bridge Alignment
-
-**Goal:** Use canonical memory capture
-
-**Actions:**
-
-* replace legacy DAO path ✅
-* include embeddings and user_id ✅
-
----
-
-### Phase v4 — Automation Integration
-
-**Goal:** Enable delivery and notification automation
-
-**Actions:**
-
-* integrate delivery hooks
-* connect payment/notification systems
-
----
-
-### Phase v5 — Feedback Loop
-
-**Goal:** Closed-loop optimization
-
-**Actions:**
-
-* feed feedback into recommendations
-* track improvement trends
-
----
-
-## 8. Technical Debt
-
-### Structural
-
-* no automation layer
-* delivery relies on manual output input
-
-### Functional
-
-* metrics incomplete
-* AI generation absent
-
-### Conceptual
-
-* feedback does not influence execution
-* memory logging lacks feedback-driven use
-
----
-
-## 9. Phase Mapping
-
-| Phase | Component         | Status      | Required Action |
-| ----- | ----------------- | ----------- | --------------- |
-| v1    | Core CRUD         | Implemented | Stabilize       |
-| v2    | Metrics           | Partial     | Complete        |
-| v3    | Memory Alignment  | Complete    | Maintenance only |
-| v4    | Automation        | Missing     | Integrate       |
-| v5    | Feedback Loop     | Missing     | Connect         |
-
----
-
-## 10. Governance Notes
-
-* This document is the **canonical reference** for the Freelancing System.
-* Any deviations must be recorded in:
-
-  * `docs/roadmap/TECH_DEBT.md`
-  * `docs/roadmap/EVOLUTION_PLAN.md`
-
----
-
-## 11. Summary (Operational Truth)
-
-The Freelancing System is not complete when orders are stored.
-
-It is complete when:
-
-> Orders trigger delivery, feedback refines execution, and revenue metrics reflect real operational performance.
+The correct path is to build Freelancing on top of A.I.N.D.Y.'s shared
+execution, reasoning, memory, and event layers rather than expanding it into a
+parallel infrastructure stack.

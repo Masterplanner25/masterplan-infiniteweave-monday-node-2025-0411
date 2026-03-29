@@ -3,14 +3,20 @@ Identity Router - v5 Phase 2
 
 API for viewing and managing user identity profiles.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
 from db.database import get_db
 from services.auth_service import get_current_user
+from services.identity_boot_service import boot_identity_context
 from services.identity_service import IdentityService
+from services.system_event_service import (
+    SystemEventEmissionError,
+    emit_system_event,
+)
+from utils.user_ids import require_user_id
 
 router = APIRouter(prefix="/identity", tags=["Identity Layer"])
 
@@ -27,6 +33,36 @@ class UpdateIdentityRequest(BaseModel):
     communication_notes: Optional[str] = None
     decision_notes: Optional[str] = None
     learning_notes: Optional[str] = None
+
+
+@router.get("/boot")
+async def boot_identity(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = require_user_id(current_user.get("sub"))
+    result = boot_identity_context(user_id, db)
+
+    try:
+        emit_system_event(
+            db=db,
+            event_type="identity.boot",
+            user_id=user_id,
+            payload={
+                "memory_loaded": len(result["memory"]),
+                "runs_loaded": len(result["runs"]),
+                "score": result["system_state"]["score"],
+                "active_flows": len(result["flows"]),
+            },
+            required=True,
+        )
+    except SystemEventEmissionError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Identity boot event emission failed",
+        ) from exc
+
+    return result
 
 
 @router.get("/")

@@ -1,13 +1,38 @@
 import os
 import logging
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+
+from config import settings
 
 # Configuration
-MONGO_URL = os.getenv("MONGO_URL")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_social_layer")
 logger = logging.getLogger(__name__)
 
 _client = None
+
+
+def init_mongo() -> MongoClient:
+    """Initialize and verify the singleton MongoDB client eagerly."""
+    global _client
+    if _client is not None:
+        return _client
+
+    mongo_url = settings.MONGO_URL
+    if not mongo_url:
+        raise RuntimeError("MONGO_URL is required for runtime")
+
+    try:
+        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+        client.admin.command("ping")
+        _client = client
+        logger.info("Mongo connected successfully")
+        return _client
+    except PyMongoError as exc:
+        _client = None
+        raise RuntimeError(
+            "Mongo connection failed. Verify MONGO_URL and that the MongoDB server is reachable."
+        ) from exc
 
 def get_mongo_client():
     """
@@ -16,15 +41,7 @@ def get_mongo_client():
     """
     global _client
     if _client is None:
-        if not MONGO_URL:
-            raise RuntimeError("MONGO_URL is not configured")
-        try:
-            _client = MongoClient(MONGO_URL, serverSelectionTimeoutMS=5000)
-            _client.server_info()
-            logger.info("Connected to MongoDB database %s", MONGO_DB_NAME)
-        except Exception as e:
-            logger.error("MongoDB connection failed: %s", e)
-            _client = None
+        return init_mongo()
     return _client
 
 def get_mongo_db():
@@ -35,7 +52,6 @@ def get_mongo_db():
     """
     client = get_mongo_client()
     if client:
-        # Return the specific database object
         yield client[MONGO_DB_NAME]
-    else:
-        raise RuntimeError("Could not connect to MongoDB.")
+        return
+    raise RuntimeError("Mongo connection failed. Could not access configured database.")

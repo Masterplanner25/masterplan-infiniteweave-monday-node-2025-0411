@@ -8,6 +8,7 @@ import logging
 from db.database import get_db
 from db.dao.memory_node_dao import MemoryNodeDAO
 from services.auth_service import get_current_user
+from services.execution_envelope import success
 from services.flow_engine import execute_intent
 from services.observability_events import emit_observability_event
 from services.nodus_security import (
@@ -15,6 +16,7 @@ from services.nodus_security import (
     NodusSecurityError,
     authorize_nodus_execution,
 )
+from utils.trace_context import ensure_trace_id
 from utils.uuid_utils import normalize_uuid
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
@@ -869,7 +871,7 @@ async def execute_nodus_task(
         )
 
     try:
-        return execute_nodus_task_payload(
+        result = execute_nodus_task_payload(
             task_name=body.task_name,
             task_code=body.task_code,
             db=db,
@@ -880,6 +882,15 @@ async def execute_nodus_task(
             capability_token=body.capability_token,
             logger=logger,
         )
+        if isinstance(result, dict) and {
+            "status",
+            "result",
+            "events",
+            "next_action",
+            "trace_id",
+        }.issubset(result.keys()):
+            return result
+        return success(result, [], ensure_trace_id())
     except NodusSecurityError as exc:
         raise HTTPException(
             status_code=403,

@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { runLeadGen } from "../api";
+import SearchHistory from "./SearchHistory";
+import { safeMap } from "../utils/safe";
 
 export default function LeadGen() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
+
+  function handleHistorySelect(item) {
+    setQuery(item.query || "");
+    setResults(item.result?.results || []);
+  }
 
   async function handleLeadGen() {
     if (!query.trim()) return;
@@ -78,30 +85,35 @@ export default function LeadGen() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="ex: 'hiring AI consultants'"
-          className="text-input"
-        />
-        <button 
-          onClick={handleLeadGen} 
+          className="text-input" />
+        
+        <button
+          onClick={handleLeadGen}
           className="primary-button"
-          disabled={loading}
-        >
+          disabled={loading}>
+          
           {loading ? "Searching..." : "Run LeadGen"}
         </button>
       </div>
 
-      <div className="results-section">
-        {results.length === 0 && !loading && (
-          <p className="empty-text">No leads yet — run a search above.</p>
-        )}
+      <SearchHistory
+        searchType="leadgen"
+        title="Recent Lead Searches"
+        onSelect={handleHistorySelect} />
 
-        {results.map((lead, i) => (
-          <div key={i} className="lead-card">
+      <div className="results-section">
+        {results.length === 0 && !loading &&
+        <p className="empty-text">No leads yet — run a search above.</p>
+        }
+
+        {safeMap(results, (lead, i) =>
+        <div key={i} className="lead-card">
             <h3>{lead.company}</h3>
             <p>{lead.reasoning}</p>
             <div className="lead-score">Match Score: {lead.overall_score}</div>
-          </div>
-        ))}
+          </div>)
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 }

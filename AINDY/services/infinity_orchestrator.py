@@ -7,20 +7,65 @@ System invariant:
 """
 from __future__ import annotations
 
-from services.infinity_loop import run_loop, serialize_adjustment
+from services.identity_boot_service import get_recent_memory, get_user_metrics
+from services.goal_service import rank_goals
+from services.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
 from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+from services.memory_scoring_service import get_relevant_memories
+from services.social_performance_service import get_social_performance_signals
+from services.system_state_service import compute_current_state
 from services.system_event_service import emit_system_event
+from services.task_services import get_task_graph_context
 from utils.trace_context import get_current_trace_id
 
 
 def execute(user_id: str, trigger_event: str, db):
     trace_id = get_current_trace_id() or f"loop:{trigger_event}"
+    memory_nodes = get_recent_memory(user_id, db, context="infinity_loop")
+    metrics = get_user_metrics(user_id, db)
+    memory_signals = get_relevant_memories(
+        {
+            "user_id": user_id,
+            "trigger_event": trigger_event,
+            "current_state": "infinity_loop",
+            "goal": "select next_action",
+            "constraints": [],
+        },
+        db=db,
+    )
+    system_state = compute_current_state(db)
+    goals = rank_goals(db, user_id, system_state=system_state)
+    task_graph = get_task_graph_context(db, user_id)
+    social_signals = get_social_performance_signals(user_id=str(user_id))
+    loop_context = {
+        "user_id": str(user_id),
+        "memory": memory_nodes,
+        "metrics": metrics,
+        "memory_signals": memory_signals,
+        "system_state": system_state,
+        "goals": goals,
+        "task_graph": task_graph,
+        "social_signals": social_signals,
+    }
     emit_system_event(
         db=db,
         event_type="loop.started",
         user_id=user_id,
         trace_id=trace_id,
-        payload={"trigger_event": trigger_event},
+        payload={
+            "trigger_event": trigger_event,
+            "loop_context": {
+                "user_id": str(user_id),
+                "memory_count": len(memory_nodes),
+                "memory_signal_count": len(memory_signals),
+                "health_status": system_state.get("health_status"),
+                "goal_count": len(goals),
+                "ready_task_count": len(task_graph.get("ready") or []),
+                "blocked_task_count": len(task_graph.get("blocked") or []),
+                "social_signal_count": len(social_signals),
+                "has_metrics": metrics is not None,
+            },
+        },
         required=True,
     )
     with orchestrator_score_context():
@@ -42,11 +87,18 @@ def execute(user_id: str, trigger_event: str, db):
         "masterplan_progress": score.get("kpis", {}).get("masterplan_progress"),
         "confidence": score.get("metadata", {}).get("confidence"),
     }
+    prior_evaluation = evaluate_pending_adjustment(
+        user_id=user_id,
+        trigger_event=trigger_event,
+        actual_score=score_snapshot.get("master_score"),
+        db=db,
+    )
     adjustment = run_loop(
         user_id=user_id,
         trigger_event=trigger_event,
         db=db,
         score_snapshot=score_snapshot,
+        loop_context=loop_context,
     )
     if not adjustment:
         raise RuntimeError("Infinity orchestrator failed to create loop adjustment")
@@ -68,6 +120,19 @@ def execute(user_id: str, trigger_event: str, db):
             "trigger_event": trigger_event,
             "adjustment_id": serialized.get("id"),
             "next_action": next_action,
+            "memory_signals": memory_signals,
+            "system_state": {
+                "health_status": system_state.get("health_status"),
+                "failure_rate": system_state.get("failure_rate"),
+                "system_load": system_state.get("system_load"),
+            },
+            "goals": goals[:3],
+            "social_signals": social_signals[:3],
+            "task_graph": {
+                "critical_path": task_graph.get("critical_path", [])[:5],
+                "blocked": task_graph.get("blocked", [])[:5],
+            },
+            "prior_evaluation": prior_evaluation,
             "adjustment": serialized,
         },
         required=True,
@@ -75,6 +140,7 @@ def execute(user_id: str, trigger_event: str, db):
 
     return {
         "score": score,
+        "prior_evaluation": prior_evaluation,
         "adjustment": serialized,
         "next_action": next_action,
     }

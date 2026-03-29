@@ -4,6 +4,7 @@ import os
 import sys
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("MONGO_URL", "mongodb://test-mongo:27017")
 os.environ.setdefault("AINDY_ALLOW_SQLITE", "1")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-fake-key-for-testing-only")
 os.environ.setdefault("DEEPSEEK_API_KEY", "fake-deepseek-key")

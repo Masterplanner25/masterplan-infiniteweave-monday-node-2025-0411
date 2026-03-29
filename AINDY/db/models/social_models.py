@@ -56,6 +56,10 @@ class SocialPost(BaseModel):
     likes: int = 0
     boosts: int = 0
     comments_count: int = 0
+    impressions: int = 0
+    clicks: int = 0
+    engagement_score: float = 0.0
+    conversion_signal: float = 0.0
     
     created_at: datetime = Field(default_factory=datetime.utcnow)
     

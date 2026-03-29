@@ -61,6 +61,9 @@ class AgentEvent(Base):
     # Event-specific structured data
     payload = Column(JSONB, nullable=True)
 
+    # Canonical ledger link back to SystemEvent
+    system_event_id = Column(UUID(as_uuid=True), ForeignKey("system_events.id"), nullable=True, index=True)
+
     # When the event occurred (set by emitter, not server_default)
     occurred_at = Column(DateTime(timezone=True), nullable=False)
 

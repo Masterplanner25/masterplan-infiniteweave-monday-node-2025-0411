@@ -23,7 +23,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from services.system_event_service import emit_system_event, SystemEventEmissionError
-from utils.trace_context import get_current_trace_id
+from services.trace_context import get_parent_event_id
+from services.trace_context import get_trace_id
 from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ def emit_event(
     correlation_id: Optional[str] = None,
     payload: Optional[dict] = None,
     required: bool = False,
-) -> None:
+) -> str | None:
     """
     Persist one AgentEvent lifecycle row.
 
@@ -83,23 +84,13 @@ def emit_event(
 
         normalized_user_id = normalize_uuid(user_id) if user_id is not None else None
 
-        event = AgentEvent(
-            id=uuid.uuid4(),
-            run_id=parsed_run_id,
-            correlation_id=correlation_id,
-            user_id=normalized_user_id,
-            event_type=event_type,
-            payload=payload or {},
-            occurred_at=datetime.now(timezone.utc),
-        )
-        db.add(event)
-        db.commit()
-
-        emit_system_event(
+        system_event_id = emit_system_event(
             db=db,
             event_type=f"agent.{str(event_type).lower()}",
             user_id=user_id,
-            trace_id=get_current_trace_id() or correlation_id or run_id,
+            trace_id=get_trace_id() or correlation_id or run_id,
+            parent_event_id=get_parent_event_id(),
+            source="agent",
             payload={
                 "run_id": run_id,
                 "correlation_id": correlation_id,
@@ -109,12 +100,26 @@ def emit_event(
             required=required,
         )
 
+        event = AgentEvent(
+            id=uuid.uuid4(),
+            run_id=parsed_run_id,
+            correlation_id=correlation_id,
+            user_id=normalized_user_id,
+            event_type=event_type,
+            payload=payload or {},
+            system_event_id=system_event_id,
+            occurred_at=datetime.now(timezone.utc),
+        )
+        db.add(event)
+        db.commit()
+
         logger.debug(
             "[AgentEventService] Emitted %s for run %s (correlation=%s)",
             event_type,
             run_id,
             correlation_id,
         )
+        return str(system_event_id) if system_event_id else None
 
     except Exception as exc:
         logger.warning(
@@ -127,3 +132,4 @@ def emit_event(
             raise SystemEventEmissionError(
                 f"Required agent event '{event_type}' failed for run {run_id}"
             ) from exc
+        return None

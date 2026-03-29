@@ -7,7 +7,7 @@ from .authorship_router import router as authorship_router
 from .rippletrace_router import router as rippletrace_router
 from .network_bridge_router import router as network_bridge_router
 from .db_verify_router import router as db_verify_router
-from .research_results_router import router as research_router
+from .research_results_router import router as research_router, search_history_router
 from .main_router import router as main_router
 from .freelance_router import router as freelance_router
 from .arm_router import router as arm_router
@@ -26,11 +26,15 @@ from routes.memory_metrics_router import router as memory_metrics_router
 from routes.memory_trace_router import router as memory_trace_router
 from routes.identity_router import router as identity_router
 from routes.observability_router import router as observability_router
+from routes.system_state_router import router as system_state_router
 from routes.automation_router import router as automation_router
 from routes.flow_router import router as flow_router
 from routes.watcher_router import router as watcher_router
 from routes.score_router import router as score_router
 from routes.agent_router import router as agent_router
+from routes.autonomy_router import router as autonomy_router
+from routes.goals_router import router as goals_router
+from routes.coordination_router import router as coordination_router
 
 
 ROUTERS = [
@@ -42,6 +46,7 @@ ROUTERS = [
     network_bridge_router,
     db_verify_router,
     research_router,
+    search_history_router,
     main_router,
     freelance_router,
     arm_router,
@@ -59,11 +64,15 @@ ROUTERS = [
     memory_trace_router,
     identity_router,
     observability_router,
+    system_state_router,
     automation_router,
     flow_router,
     watcher_router,
     score_router,
     agent_router,
+    autonomy_router,
+    goals_router,
+    coordination_router,
 ]
 
 if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:

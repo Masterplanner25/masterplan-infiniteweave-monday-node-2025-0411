@@ -49,15 +49,21 @@ from sqlalchemy.orm import Session
 from config import settings
 from services.agent_tools import TOOL_REGISTRY
 from services.capability_service import mint_token
+from services.agent_coordinator import decide_execution_mode
+from services.agent_coordinator import register_or_update_agent
 from services.agent_event_service import emit_event
 from services.external_call_service import perform_external_call
 from services.system_event_service import emit_error_event
-from utils.trace_context import get_current_trace_id
+from services.trace_context import get_parent_event_id
+from services.trace_context import get_trace_id
+from services.trace_context import reset_parent_event_id
+from services.trace_context import set_parent_event_id
 from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
 _client: Optional[OpenAI] = None
+LOCAL_AGENT_ID = "00000000-0000-0000-0000-000000000001"
 
 
 def _db_user_id(user_id: str):
@@ -274,6 +280,17 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
 
         plan = generate_plan(goal=goal, user_id=user_db_id, db=db)
         if not plan:
+            emit_error_event(
+                db=db,
+                error_type="agent_plan_generation",
+                message="Failed to generate agent plan",
+                user_id=user_db_id,
+                trace_id=get_trace_id(),
+                parent_event_id=get_parent_event_id(),
+                source="agent",
+                payload={"goal_preview": goal[:120]},
+                required=True,
+            )
             return None
 
         overall_risk = plan.get("overall_risk", "high")
@@ -286,7 +303,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         run = AgentRun(
             user_id=user_db_id,
             agent_type="default",
-            trace_id=get_current_trace_id(),
+            trace_id=get_trace_id(),
             goal=goal,
             plan=plan,
             executive_summary=plan.get("executive_summary", ""),
@@ -353,6 +370,17 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
 
     except Exception as exc:
         logger.warning("[AgentRuntime] create_run failed: %s", exc)
+        emit_error_event(
+            db=db,
+            error_type="agent_create_run",
+            message=str(exc),
+            user_id=user_id,
+            trace_id=get_trace_id(),
+            parent_event_id=get_parent_event_id(),
+            source="agent",
+            payload={"goal_preview": goal[:120]},
+            required=True,
+        )
         return None
 
 
@@ -415,15 +443,68 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             )
             return _run_to_dict(run)
 
+        register_or_update_agent(
+            db,
+            agent_id=LOCAL_AGENT_ID,
+            capabilities=["manage_tasks", "read_memory", "write_memory", "external_api_call", "strategic_planning"],
+            current_state={"run_id": str(run.id), "status": "executing"},
+            load=min(1.0, max(0.1, (run.steps_total or 1) / 10.0)),
+            health_status="healthy",
+        )
+        coordination = decide_execution_mode(
+            db,
+            local_agent_id=LOCAL_AGENT_ID,
+            task={
+                "name": run.goal,
+                "description": run.executive_summary,
+                "goal": run.goal,
+                "required_capabilities": capability_token.get("allowed_capabilities", []),
+            },
+            user_id=str(user_db_id),
+        )
+        if coordination["mode"] in {"delegate", "collaborate"}:
+            run.result = {
+                "coordination_mode": coordination["mode"],
+                "selected_agent": coordination["selected_agent"],
+                "candidates": coordination["candidates"],
+                "next_action": {
+                    "type": coordination["mode"],
+                    "selected_agent": coordination["selected_agent"],
+                },
+            }
+            run.status = "completed"
+            run.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            emit_event(
+                run_id=str(run.id),
+                user_id=user_db_id,
+                event_type="COMPLETED",
+                db=db,
+                correlation_id=getattr(run, "correlation_id", None),
+                payload={"coordination": coordination},
+                required=True,
+            )
+            return _run_to_dict(run)
+
         # Mark as executing
-        if not getattr(run, "trace_id", None) and get_current_trace_id():
-            run.trace_id = get_current_trace_id()
+        if not getattr(run, "trace_id", None) and get_trace_id():
+            run.trace_id = get_trace_id()
         run.status = "executing"
         run.started_at = datetime.now(timezone.utc)
+        execution_memory_context = _build_execution_memory_context(
+            goal=run.goal,
+            plan=run.plan or {},
+            user_id=user_db_id,
+            trace_id=run.trace_id or get_trace_id() or getattr(run, "correlation_id", None),
+            db=db,
+        )
+        execution_plan = dict(run.plan or {})
+        execution_plan["memory_context"] = execution_memory_context
+        run.plan = execution_plan
         db.commit()
 
         # Emit EXECUTION_STARTED lifecycle event
-        emit_event(
+        execution_started_event_id = emit_event(
             run_id=str(run.id),
             user_id=user_db_id,
             event_type="EXECUTION_STARTED",
@@ -434,14 +515,18 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         )
 
         # Delegate entirely to the deterministic adapter
-        NodusAgentAdapter.execute_with_flow(
-            run_id=str(run.id),
-            plan=run.plan,
-            user_id=user_id,
-            db=db,
-            correlation_id=getattr(run, "correlation_id", None),
-            execution_token=capability_token,
-        )
+        parent_token = set_parent_event_id(execution_started_event_id)
+        try:
+            NodusAgentAdapter.execute_with_flow(
+                run_id=str(run.id),
+                plan=execution_plan,
+                user_id=user_id,
+                db=db,
+                correlation_id=getattr(run, "correlation_id", None),
+                execution_token=capability_token,
+            )
+        finally:
+            reset_parent_event_id(parent_token)
 
         db.refresh(run)
         if run.status == "completed":
@@ -482,13 +567,71 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
                 error_type="agent_execution",
                 message=str(exc),
                 user_id=user_id,
-                trace_id=get_current_trace_id(),
+                trace_id=get_trace_id(),
+                parent_event_id=get_parent_event_id(),
+                source="agent",
                 payload={"run_id": run_id},
                 required=True,
             )
         except Exception:
             logger.exception("[AgentRuntime] failed to emit required error event for %s", run_id)
         return None
+
+
+def _build_execution_memory_context(
+    *,
+    goal: str,
+    plan: dict,
+    user_id: str,
+    trace_id: str | None,
+    db: Session,
+) -> dict:
+    try:
+        from db.dao.memory_node_dao import MemoryNodeDAO
+        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+
+        step_tools = [
+            step.get("tool")
+            for step in (plan or {}).get("steps", [])
+            if isinstance(step, dict) and step.get("tool")
+        ]
+        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
+        context = orchestrator.get_context(
+            user_id=user_id,
+            query=goal or "agent execution",
+            task_type="agent_execution",
+            db=db,
+            max_tokens=900,
+            metadata={
+                "tags": [tool.replace(".", "_") for tool in step_tools[:3]],
+                "limit": 9,
+                "trace_id": trace_id,
+                "node_types": ["outcome", "insight", "decision"],
+            },
+        )
+        items = memory_items_to_dicts(context.items)
+        similar_past_outcomes = [item for item in items if item.get("memory_type") == "outcome"][:3]
+        relevant_failures = [item for item in items if item.get("memory_type") == "failure"][:3]
+        successful_patterns = [
+            item
+            for item in items
+            if item.get("memory_type") in {"decision", "insight"}
+            and (item.get("success_rate", 0.0) or 0.0) >= 0.5
+        ][:3]
+        return {
+            "similar_past_outcomes": similar_past_outcomes,
+            "relevant_failures": relevant_failures,
+            "successful_patterns": successful_patterns,
+            "trace_id": trace_id,
+        }
+    except Exception as exc:
+        logger.warning("[AgentRuntime] execution memory context failed: %s", exc)
+        return {
+            "similar_past_outcomes": [],
+            "relevant_failures": [],
+            "successful_patterns": [],
+            "trace_id": trace_id,
+        }
 
 
 # ── Approval / Rejection ─────────────────────────────────────────────────────
@@ -550,6 +693,17 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
     except Exception as exc:
         logger.warning("[AgentRuntime] approve_run failed for %s: %s", run_id, exc)
+        emit_error_event(
+            db=db,
+            error_type="agent_approve_run",
+            message=str(exc),
+            user_id=user_id,
+            trace_id=get_trace_id(),
+            parent_event_id=get_parent_event_id(),
+            source="agent",
+            payload={"run_id": str(run_id)},
+            required=True,
+        )
         return None
 
 
@@ -586,6 +740,17 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
     except Exception as exc:
         logger.warning("[AgentRuntime] reject_run failed for %s: %s", run_id, exc)
+        emit_error_event(
+            db=db,
+            error_type="agent_reject_run",
+            message=str(exc),
+            user_id=user_id,
+            trace_id=get_trace_id(),
+            parent_event_id=get_parent_event_id(),
+            source="agent",
+            payload={"run_id": str(run_id)},
+            required=True,
+        )
         return None
 
 
@@ -701,7 +866,7 @@ def _create_run_from_plan(
         run = AgentRun(
             user_id=user_id,
             agent_type="default",
-            trace_id=get_current_trace_id(),
+            trace_id=get_trace_id(),
             goal=goal,
             plan=plan,
             executive_summary=plan.get("executive_summary", ""),
@@ -825,6 +990,17 @@ def replay_run(
 
     except Exception as exc:
         logger.warning("[AgentRuntime] replay_run failed for %s: %s", run_id, exc)
+        emit_error_event(
+            db=db,
+            error_type="agent_replay_run",
+            message=str(exc),
+            user_id=user_id,
+            trace_id=get_trace_id(),
+            parent_event_id=get_parent_event_id(),
+            source="agent",
+            payload={"run_id": str(run_id), "mode": mode},
+            required=True,
+        )
         return None
 
 

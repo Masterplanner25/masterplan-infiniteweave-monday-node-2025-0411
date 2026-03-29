@@ -15,8 +15,8 @@ import {
   SurfacePanel,
   MetricCard,
   statusTone,
-  surfacePalette,
-} from "./ops/SurfacePrimitives";
+  surfacePalette } from
+"./ops/SurfacePrimitives";import { safeMap } from "../utils/safe";
 
 const APPROVAL_EVENT = "agent-approval-count-changed";
 
@@ -27,10 +27,10 @@ function emitApprovalCountChanged() {
 function summarizePlan(run) {
   const steps = run?.plan?.steps || [];
   if (!steps.length) return "No plan steps were provided.";
-  return steps
-    .slice(0, 3)
-    .map((step) => step.description || step.tool || "Unnamed step")
-    .join(" • ");
+  return safeMap(steps.
+  slice(0, 3),
+  (step) => step.description || step.tool || "Unnamed step").
+  join(" • ");
 }
 
 function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
@@ -43,9 +43,9 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
       className="rounded-[22px] border p-5"
       style={{
         background: "rgba(255,255,255,0.02)",
-        borderColor: "rgba(255,255,255,0.08)",
-      }}
-    >
+        borderColor: "rgba(255,255,255,0.08)"
+      }}>
+
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -64,15 +64,15 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
         <div className="flex flex-wrap gap-2">
           <ActionButton
             onClick={() => onApprove(run.run_id)}
-            disabled={pendingAction === run.run_id}
-          >
+            disabled={pendingAction === run.run_id}>
+
             {pendingAction === run.run_id ? "Applying" : "Approve"}
           </ActionButton>
           <ActionButton
             tone="danger"
             onClick={() => onReject(run.run_id)}
-            disabled={pendingAction === run.run_id}
-          >
+            disabled={pendingAction === run.run_id}>
+
             Reject
           </ActionButton>
         </div>
@@ -84,8 +84,8 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
             Planned Steps
           </div>
           <div className="mt-3 space-y-3">
-            {steps.map((step, index) => (
-              <div key={`${run.run_id}-${index}`} className="rounded-2xl border p-3" style={{ borderColor: surfacePalette.border }}>
+            {safeMap(steps, (step, index) =>
+            <div key={`${run.run_id}-${index}`} className="rounded-2xl border p-3" style={{ borderColor: surfacePalette.border }}>
                 <div className="flex flex-wrap items-center gap-2">
                   <InlineBadge tone="info">Step {index + 1}</InlineBadge>
                   <InlineBadge>{step.tool}</InlineBadge>
@@ -94,19 +94,19 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
                 <div className="mt-3 text-sm font-medium" style={{ color: surfacePalette.text }}>
                   {step.description || "No description provided."}
                 </div>
-                {step.args ? (
-                  <pre
-                    className="mt-3 overflow-x-auto rounded-2xl p-3 text-xs"
-                    style={{
-                      background: "rgba(4, 17, 13, 0.9)",
-                      color: "#8fffd0",
-                    }}
-                  >
+                {step.args ?
+              <pre
+                className="mt-3 overflow-x-auto rounded-2xl p-3 text-xs"
+                style={{
+                  background: "rgba(4, 17, 13, 0.9)",
+                  color: "#8fffd0"
+                }}>
+
                     {JSON.stringify(step.args, null, 2)}
-                  </pre>
-                ) : null}
-              </div>
-            ))}
+                  </pre> :
+              null}
+              </div>)
+            }
           </div>
         </div>
 
@@ -138,11 +138,11 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
               Granted Capabilities
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {capabilities.length ? capabilities.map((capability) => (
-                <InlineBadge key={capability} tone="success">
+              {capabilities.length ? safeMap(capabilities, (capability) =>
+              <InlineBadge key={capability} tone="success">
                   {capability}
-                </InlineBadge>
-              )) : <span className="text-sm" style={{ color: surfacePalette.muted }}>No capabilities embedded yet.</span>}
+                </InlineBadge>) :
+              <span className="text-sm" style={{ color: surfacePalette.muted }}>No capabilities embedded yet.</span>}
             </div>
           </div>
 
@@ -151,15 +151,15 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
               Tool Access
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {grantedTools.length ? grantedTools.map((tool) => (
-                <InlineBadge key={tool}>{tool}</InlineBadge>
-              )) : <span className="text-sm" style={{ color: surfacePalette.muted }}>No tools auto-granted.</span>}
+              {grantedTools.length ? safeMap(grantedTools, (tool) =>
+              <InlineBadge key={tool}>{tool}</InlineBadge>) :
+              <span className="text-sm" style={{ color: surfacePalette.muted }}>No tools auto-granted.</span>}
             </div>
           </div>
         </div>
       </div>
-    </article>
-  );
+    </article>);
+
 }
 
 export default function AgentApprovalInbox() {
@@ -213,7 +213,7 @@ export default function AgentApprovalInbox() {
     return {
       total: runs.length,
       highRisk,
-      queuedCapabilities: capabilities,
+      queuedCapabilities: capabilities
     };
   }, [runs]);
 
@@ -223,18 +223,18 @@ export default function AgentApprovalInbox() {
       title="Approval Inbox"
       description="Review every queued agent run before execution. Risk, capability scope, and planned steps are visible inline so approval stays operational instead of ceremonial."
       actions={
-        <>
+      <>
           <ActionButton tone="ghost" onClick={loadRuns}>Refresh Queue</ActionButton>
           <Link
-            to="/agent"
-            className="rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
-            style={{ borderColor: surfacePalette.border, color: surfacePalette.text }}
-          >
+          to="/agent"
+          className="rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+          style={{ borderColor: surfacePalette.border, color: surfacePalette.text }}>
+
             Open Agent Console
           </Link>
         </>
-      }
-    >
+      }>
+
       <SurfaceGrid>
         <div className="lg:col-span-4">
           <MetricCard label="Pending Reviews" value={stats.total} hint="Runs waiting for a human decision." tone="warning" />
@@ -249,32 +249,32 @@ export default function AgentApprovalInbox() {
 
       <SurfacePanel
         title="Pending Agent Runs"
-        subtitle="Approval is required before these runs can execute. Approve to start execution immediately or reject to discard the plan."
-      >
+        subtitle="Approval is required before these runs can execute. Approve to start execution immediately or reject to discard the plan.">
+
         {loading ? <LoadingState label="Loading pending approvals" /> : null}
         {!loading && error ? <ErrorState message={error} onRetry={loadRuns} /> : null}
-        {!loading && !error && runs.length === 0 ? (
-          <EmptyState
-            title="Approval queue is clear"
-            description="No runs are currently waiting for review. New high-risk or gated plans will land here automatically."
-          />
-        ) : null}
-        {!loading && !error ? (
-          <div className="space-y-4">
-            {runs.map((run) => (
-              <ApprovalRow
-                key={run.run_id}
-                run={run}
-                pendingAction={pendingAction}
-                onApprove={(runId) => handleDecision(runId, "approve")}
-                onReject={(runId) => handleDecision(runId, "reject")}
-              />
-            ))}
-          </div>
-        ) : null}
+        {!loading && !error && runs.length === 0 ?
+        <EmptyState
+          title="Approval queue is clear"
+          description="No runs are currently waiting for review. New high-risk or gated plans will land here automatically." /> :
+
+        null}
+        {!loading && !error ?
+        <div className="space-y-4">
+            {safeMap(runs, (run) =>
+          <ApprovalRow
+            key={run.run_id}
+            run={run}
+            pendingAction={pendingAction}
+            onApprove={(runId) => handleDecision(runId, "approve")}
+            onReject={(runId) => handleDecision(runId, "reject")} />)
+
+          }
+          </div> :
+        null}
       </SurfacePanel>
-    </PageShell>
-  );
+    </PageShell>);
+
 }
 
 export { APPROVAL_EVENT, emitApprovalCountChanged };

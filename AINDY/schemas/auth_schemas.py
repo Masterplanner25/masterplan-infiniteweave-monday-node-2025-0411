@@ -9,7 +9,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: str
     password: str
-    username: str
+    username: str | None = None
 
 
 class TokenResponse(BaseModel):

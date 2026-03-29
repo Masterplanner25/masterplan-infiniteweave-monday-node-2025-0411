@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from services import rippletrace_services
 from services.auth_service import get_current_user
+from db.models.system_event import SystemEvent
+from services.rippletrace_service import build_trace_graph, calculate_ripple_span, detect_root_event, detect_terminal_events, generate_trace_insights
+from uuid import UUID
 
 router = APIRouter(prefix="/rippletrace", tags=["RippleTrace"], dependencies=[Depends(get_current_user)])
 
@@ -106,3 +109,43 @@ async def log_ripple_event(
         db, event.model_dump(), user_id=str(current_user["sub"])
     )
     return {"status": "logged", "event": event.model_dump()}
+
+
+@router.get("/{trace_id}")
+def get_trace_graph(
+    trace_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = UUID(str(current_user["sub"]))
+    events = (
+        db.query(SystemEvent)
+        .filter(SystemEvent.trace_id == trace_id, SystemEvent.user_id == user_id)
+        .count()
+    )
+    if events == 0:
+        return {
+            "trace_id": trace_id,
+            "nodes": [],
+            "edges": [],
+            "root_event": None,
+            "terminal_events": [],
+            "ripple_span": {"node_count": 0, "edge_count": 0, "depth": 0, "terminal_count": 0},
+            "insights": {
+                "root_cause": None,
+                "dominant_path": [],
+                "failure_clusters": [],
+                "summary": "No causal insight available for this trace.",
+                "recommendations": [],
+            },
+        }
+    graph = build_trace_graph(db, trace_id)
+    return {
+        "trace_id": trace_id,
+        "nodes": graph["nodes"],
+        "edges": graph["edges"],
+        "root_event": detect_root_event(db, trace_id),
+        "terminal_events": detect_terminal_events(db, trace_id),
+        "ripple_span": calculate_ripple_span(db, trace_id),
+        "insights": generate_trace_insights(db, trace_id),
+    }

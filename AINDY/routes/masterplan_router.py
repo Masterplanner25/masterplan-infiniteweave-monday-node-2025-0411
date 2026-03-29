@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from db.database import get_db
 from db.models import MasterPlan
 from services.auth_service import get_current_user
 from services.masterplan_factory import create_masterplan_from_genesis
+from services.masterplan_execution_service import get_masterplan_execution_status
+from services.masterplan_execution_service import sync_masterplan_tasks
 from services.posture import posture_description
 from datetime import datetime
 from typing import Optional
@@ -48,6 +51,7 @@ def lock_from_genesis(
             status_code=400,
             detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
         )
+    task_sync = sync_masterplan_tasks(db=db, masterplan=masterplan, user_id=user_id_str)
 
     return {
         "masterplan_id": masterplan.id,
@@ -55,6 +59,7 @@ def lock_from_genesis(
         "posture_description": posture_description(masterplan.posture),
         "posture": masterplan.posture,
         "status": masterplan.status,
+        "task_sync": task_sync,
     }
 
 
@@ -85,8 +90,9 @@ def lock_plan(
     plan.status = "locked"
     plan.locked_at = datetime.utcnow()
     db.commit()
+    task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id_str)
 
-    return {"plan_id": plan.id, "status": plan.status}
+    return {"plan_id": plan.id, "status": plan.status, "task_sync": task_sync}
 
 
 @router.get("/")
@@ -137,6 +143,7 @@ def get_masterplan(
             status_code=404,
             detail={"error": "masterplan_not_found", "message": "Plan not found"},
         )
+    execution_status = get_masterplan_execution_status(db=db, masterplan_id=plan.id, user_id=user_id_str)
     return {
         "id": plan.id,
         "version_label": plan.version_label,
@@ -148,6 +155,7 @@ def get_masterplan(
         "locked_at": plan.locked_at,
         "activated_at": plan.activated_at,
         "linked_genesis_session_id": plan.linked_genesis_session_id,
+        "execution_status": execution_status,
     }
 
 
@@ -260,5 +268,7 @@ def activate_masterplan(
     plan.status = "active"
     plan.activated_at = datetime.utcnow()
     db.commit()
+    task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id_str)
+    execution_status = get_masterplan_execution_status(db=db, masterplan_id=plan.id, user_id=user_id_str)
 
-    return {"status": "activated", "plan_id": plan.id}
+    return {"status": "activated", "plan_id": plan.id, "task_sync": task_sync, "execution_status": execution_status}

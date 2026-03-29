@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getTasks, createTask, completeTask, startTask } from "../api";
+import { getTasks, createTask, completeTask, startTask } from "../api";import { safeMap } from "../utils/safe";
 
 export default function TaskDashboard() {
   const [tasks, setTasks] = useState([]);
@@ -11,7 +11,7 @@ export default function TaskDashboard() {
     try {
       const data = await getTasks();
       // Sort: Pending first, then by ID
-      const sorted = data.sort((a, b) => (a.status === "completed" ? 1 : -1));
+      const sorted = data.sort((a, b) => a.status === "completed" ? 1 : -1);
       setTasks(sorted);
     } catch (err) {
       console.error("Failed to load tasks", err);
@@ -27,7 +27,7 @@ export default function TaskDashboard() {
   const handleCreate = async (e) => {
     e.preventDefault();
     if (!newTask.trim()) return;
-    
+
     try {
       await createTask({ name: newTask, priority: "medium" });
       setNewTask("");
@@ -41,9 +41,9 @@ export default function TaskDashboard() {
     try {
       const res = await completeTask(taskName);
       // Show the backend confirmation (contains TWR score)
-      setVelocityMessage(res); 
+      setVelocityMessage(res);
       fetchTasks();
-      
+
       // Clear message after 3s
       setTimeout(() => setVelocityMessage(""), 5000);
     } catch (err) {
@@ -61,58 +61,58 @@ export default function TaskDashboard() {
       <h2 style={styles.title}>🚀 Execution Engine</h2>
       
       {/* --- VELOCITY FEEDBACK --- */}
-      {velocityMessage && (
-        <div style={styles.successBanner}>
+      {velocityMessage &&
+      <div style={styles.successBanner}>
           {velocityMessage}
         </div>
-      )}
+      }
 
       {/* --- INPUT --- */}
       <form onSubmit={handleCreate} style={styles.form}>
-        <input 
-          style={styles.input} 
-          placeholder="Initialize new directive..." 
+        <input
+          style={styles.input}
+          placeholder="Initialize new directive..."
           value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-        />
+          onChange={(e) => setNewTask(e.target.value)} />
+        
         <button type="submit" style={styles.addButton}>ADD</button>
       </form>
 
       {/* --- TASK LIST --- */}
       <div style={styles.list}>
-        {loading ? <p>Syncing...</p> : tasks.map((task) => (
-          <div key={task.task_name} style={styles.taskCard(task.status)}>
+        {loading ? <p>Syncing...</p> : safeMap(tasks, (task) =>
+        <div key={task.task_name} style={styles.taskCard(task.status)}>
             <div>
               <div style={styles.taskName}>{task.task_name}</div>
               <div style={styles.taskMeta}>
-                Status: <span style={{color: getStatusColor(task.status)}}>{task.status.toUpperCase()}</span>
+                Status: <span style={{ color: getStatusColor(task.status) }}>{task.status.toUpperCase()}</span>
                 {task.time_spent > 0 && ` • Time: ${(task.time_spent / 60).toFixed(1)}m`}
               </div>
             </div>
             
             <div style={styles.actions}>
-              {task.status !== "completed" && (
-                <>
-                  {task.status !== "in_progress" && (
-                    <button onClick={() => handleStart(task.task_name)} style={styles.actionBtn}>
+              {task.status !== "completed" &&
+            <>
+                  {task.status !== "in_progress" &&
+              <button onClick={() => handleStart(task.task_name)} style={styles.actionBtn}>
                       ▶ Start
                     </button>
-                  )}
+              }
                   <button onClick={() => handleComplete(task.task_name)} style={styles.completeBtn}>
                     ✅ Done
                   </button>
                 </>
-              )}
+            }
             </div>
-          </div>
-        ))}
+          </div>)
+        }
         
-        {!loading && tasks.length === 0 && (
-          <p style={{color: "#666", textAlign: "center"}}>No active directives.</p>
-        )}
+        {!loading && tasks.length === 0 &&
+        <p style={{ color: "#666", textAlign: "center" }}>No active directives.</p>
+        }
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
 // --- HELPERS & STYLES ---

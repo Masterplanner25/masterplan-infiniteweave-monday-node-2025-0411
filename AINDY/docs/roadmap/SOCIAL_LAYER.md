@@ -103,6 +103,12 @@ Analytics + feedback:
 
 * create posts
 * fetch feed with trust-tier weighted relevance scoring
+* track impressions and interaction signals
+* expose social analytics summaries
+
+**Missing:**
+
+* comment/reply model
 
 --- 
 
@@ -143,6 +149,7 @@ Analytics + feedback:
 **Current Capabilities:**
 
 * UI surfaces for profiles + feed
+* analytics panel and top-performing content summaries
 
 ---
 
@@ -157,10 +164,11 @@ Analytics + feedback:
 * FastAPI routes
 * Node bridge (Express)
 
-### Analytics Layer (Planned)
+### Analytics Layer
 
 * visibility scoring
 * trust-tier influence
+* engagement and conversion summaries
 
 ---
 
@@ -168,14 +176,18 @@ Analytics + feedback:
 
 **Implemented:**
 
-* profile CRUD
+* profile upsert + fetch
 * post creation
 * feed listing + visibility scoring
 * Node → FastAPI bridge
+* analytics summaries and trend output
+* memory-backed performance feedback
+* Infinity-facing social performance signals
 
 **Missing:**
 
-* analytics dashboards
+* social narrative or event-driven feed surfaces
+* comment/reply model
 
 ---
 
@@ -183,13 +195,14 @@ Analytics + feedback:
 
 | Documented Capability | Evidence in Docs | Implementation Reality | Status | Primary Files |
 | --- | --- | --- | --- | --- |
-| Profile CRUD | Social layer notes | Profile create/update/read via MongoDB | Implemented | `routes/social_router.py`, `db/models/social_models.py` |
+| Profile CRUD | Social layer notes | Profile upsert + public fetch via MongoDB | Partial | `routes/social_router.py`, `db/models/social_models.py` |
 | Post creation | Social layer notes | Post insert + list | Implemented | `routes/social_router.py` |
-| Feed ranking | Roadmap intent | Trust-tier weighted ranking + engagement scoring | Implemented | `routes/social_router.py` |
+| Feed ranking | Roadmap intent | Trust-tier weighted ranking + Infinity score weighting | Implemented | `routes/social_router.py` |
 | Trust-tier weighting | Roadmap intent | Trust tier weighted relevance scoring in feed | Implemented | `routes/social_router.py` |
 | Bridge event persistence | Bridge integration notes | `/bridge/user_event` persists to `bridge_user_events` | Implemented | `routes/bridge_router.py`, `db/models/bridge_user_event.py` |
 | Memory logging | Social layer notes | Posts logged via `MemoryCaptureEngine` with DB session | Implemented | `routes/social_router.py` |
-| Analytics dashboard | Roadmap intent | Not implemented | Missing | N/A |
+| Interactions (likes/comments/boosts) | Social layer intent | Interaction tracking exists for views/clicks/engagement, but comment/reply flows are still absent | Partial | `db/models/social_models.py`, `routes/social_router.py` |
+| Analytics dashboard | Roadmap intent | Analytics summaries, trends, and top content are exposed in API/UI | Implemented | `routes/social_router.py`, `client/src/components/Feed.jsx` |
 
 ---
 
@@ -197,8 +210,8 @@ Analytics + feedback:
 
 | Gap | Impact | Files to Update |
 | --- | --- | --- |
-| No analytics output | No visibility metrics | `routes/social_router.py`, `client/src/components/*` |
-| No analytics output | No visibility metrics | `routes/social_router.py`, `client/src/components/*` |
+| No comment/reply model | Social layer still lacks threaded discussion | `routes/social_router.py`, `db/models/social_models.py`, `client/src/components/*` |
+| Identity split between social and system identity | Profile state can drift across Mongo social profiles and SQL identity profiles | `routes/social_router.py`, `routes/identity_router.py`, identity service/model files |
 
 ---
 
@@ -208,7 +221,7 @@ Analytics + feedback:
 | --- | --- | --- | --- | --- |
 | Heuristic scoring noise | Product | Visibility scores may not reflect true relevance | Medium engagement | Medium |
 | Divergent schemas | Technical | Social profile fields drift across code/docs | Inconsistent UI + data | Medium |
-| Cross-system mismatch | Integration | Social signals not linked to Memory Bridge | Broken feedback loop | Medium |
+| Cross-system mismatch | Integration | Social signals are linked to Memory Bridge, but identity/profile state can still drift across systems | Inconsistent behavior and analytics context | Medium |
 
 ---
 
@@ -216,13 +229,12 @@ Analytics + feedback:
 
 The Social Layer is currently:
 
-> A social CRUD layer backed by MongoDB with visibility scoring and bridge persistence, but without analytics dashboards.
+> A social interaction and analytics layer backed by MongoDB with visibility scoring, performance feedback, and bridge persistence, but without threaded discussion or broader narrative surfaces.
 
 It is NOT:
 
 * an influence graph
-* a visibility ranking system
-* a feedback-driven social intelligence layer
+* a complete narrative/event-driven social system
 
 ---
 
@@ -274,8 +286,8 @@ It is NOT:
 
 **Actions:**
 
-* dashboards
-* visibility metrics
+* dashboards ✅
+* visibility metrics ✅
 
 ---
 
@@ -285,8 +297,8 @@ It is NOT:
 
 **Actions:**
 
-* feed analytics into scoring
-* log visibility outcomes to Memory Bridge
+* feed analytics into scoring ✅
+* log visibility outcomes to Memory Bridge ✅
 
 ---
 
@@ -294,15 +306,15 @@ It is NOT:
 
 ### Structural
 
-* analytics persistence not defined for visibility metrics
+* analytics persistence is currently embedded in post documents rather than a separate history model
 
 ### Functional
 
-* analytics dashboards not implemented
+* comment/reply support is not implemented
 
 ### Conceptual
 
-* visibility graph and analytics absent
+* social profile and system identity remain separate layers
 
 ---
 
@@ -313,12 +325,40 @@ It is NOT:
 | v1    | CRUD + Feed         | Complete    | Maintenance only |
 | v2    | Bridge Persistence  | Complete    | Maintenance only |
 | v3    | Visibility Scoring  | Complete    | Maintenance only |
-| v4    | Analytics Layer     | Missing     | Build           |
-| v5    | Feedback Loop       | Missing     | Connect         |
+| v4    | Analytics Layer     | Complete    | Maintenance only |
+| v5    | Feedback Loop       | Complete    | Maintenance only |
 
 ---
 
-## 13. Governance Notes
+## 13. Next Steps
+
+### Step 1 - Add interaction endpoints
+**Files:** `routes/social_router.py`, `db/models/social_models.py`  
+**Outcome:** likes, boosts, and comments become real persisted interactions instead of dormant fields on posts.
+
+### Step 2 - Add a comment and reply model
+**Files:** `db/models/social_models.py`, `routes/social_router.py`, `client/src/components/Feed.jsx`  
+**Outcome:** the social layer supports actual discussion threads instead of one-way posting only.
+
+### Step 3 - Add a comment and reply model
+**Files:** `db/models/social_models.py`, `routes/social_router.py`, `client/src/components/Feed.jsx`  
+**Outcome:** the social layer supports threaded discussion instead of only post-level interactions.
+
+### Step 4 - Unify social profile with system identity
+**Files:** `routes/social_router.py`, `routes/identity_router.py`, identity service/model files  
+**Outcome:** Mongo social profiles and SQL identity profiles stop drifting as separate user identity systems.
+
+### Step 5 - Surface bridge and system-origin events where intended
+**Files:** `routes/bridge_router.py`, `routes/social_router.py`, `client/src/components/Feed.jsx`  
+**Outcome:** bridge-origin or system-origin events can appear in the social layer instead of remaining isolated audit rows.
+
+### Step 6 - Expand analytics history and retention
+**Files:** `db/models/social_models.py`, `routes/social_router.py`, analytics UI components  
+**Outcome:** trend analysis is based on durable history rather than only current post-document counters.
+
+---
+
+## 14. Governance Notes
 
 * This document is the **canonical reference** for the Social Layer.
 * Any deviations must be recorded in:
@@ -328,7 +368,7 @@ It is NOT:
 
 ---
 
-## 14. Summary (Operational Truth)
+## 15. Summary (Operational Truth)
 
 The Social Layer is not complete when posts are stored.
 

@@ -87,8 +87,10 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - Event persistence is fail-closed for the outbound interaction: a required event-emission failure raises rather than silently continuing.
 
 **Successful operational-path eventing (current implementation):**
+- `POST /auth/register` emits required `identity.created` during signup initialization
 - `POST /auth/register` emits `auth.register.completed`
 - `POST /auth/login` emits `auth.login.completed`
+- `GET /identity/boot` emits required `identity.boot`
 - `GET /health` and `GET /health/` emit `health.liveness.completed`
 - `GET /ready` emits `health.readiness.completed`
 - Async heavy-execution jobs use `automation_log_id` as `trace_id` and emit:
@@ -225,13 +227,22 @@ Observability: emits `auth.login.completed` on success.
 
 `POST /auth/register`
 Method: POST
-Request Body: `{ "email": str, "password": str, "username": str }`
+Request Body: `{ "email": str, "password": str, "username": str | null }`
 Query Params: None
 Response: `{ "access_token": str, "token_type": "bearer" }`
 Status Codes: 201, 409
 Errors: 409 if email already registered.
 Auth: None (public endpoint)
-Observability: emits `auth.register.completed` on success.
+Notes:
+- `username` is optional. When omitted, the backend derives a unique username from the email local-part.
+- Successful signup seeds:
+  - an initial memory node with `content = "User account created"` and `extra.context = "identity_init"`
+  - a baseline score row with `master_score = 0.0`
+  - an initialized execution placeholder via `AgentRun`
+  - a blank `UserIdentity` row when absent
+Observability:
+- emits required `identity.created` on successful signup initialization
+- emits `auth.register.completed` on success
 
 ### Root Route (`AINDY/main.py`)
 `GET /`
@@ -1124,6 +1135,54 @@ Notes: Deactivates all other user plans first.
 
 ### Identity Routes (`AINDY/routes/identity_router.py`, prefix `/identity`) **[JWT auth required]** — Memory Bridge v5 Phase 2 (2026-03-19)
 
+`GET /identity/boot`
+Method: GET
+Auth: JWT Bearer
+Response:
+```json
+{
+  "user_id": "uuid",
+  "memory": [
+    {
+      "id": "uuid",
+      "content": "string",
+      "tags": [],
+      "node_type": "decision|outcome|insight|relationship",
+      "source_agent": "string|null",
+      "extra": {
+        "context": "identity_boot"
+      },
+      "context": "identity_boot",
+      "created_at": "iso8601",
+      "updated_at": "iso8601"
+    }
+  ],
+  "runs": [ ...recent AgentRun summaries... ],
+  "metrics": {
+    "user_id": "uuid",
+    "score": 0.0,
+    "trajectory": "baseline",
+    "master_score": 0.0,
+    "kpis": { ... },
+    "metadata": { ... }
+  },
+  "flows": [ ...active FlowRun summaries... ],
+  "system_state": {
+    "memory_count": 0,
+    "active_runs": 0,
+    "score": 0.0,
+    "active_flows": 0
+  }
+}
+```
+Status Codes: 200, 401, 500.
+Notes:
+- This is the canonical post-auth hydration endpoint for the React app.
+- Memory is user-scoped, recent, and deterministically ordered by `created_at DESC, id DESC`.
+- Returned memory rows are tagged with `context = "identity_boot"`.
+- Immediately after signup, boot should include the seeded memory node, one initialized run, and baseline metrics.
+- A required `identity.boot` `SystemEvent` is emitted before success is returned; event-persistence failure is fail-closed.
+
 `GET /identity/`
 Method: GET
 Auth: JWT Bearer
@@ -1221,6 +1280,12 @@ Status Codes: 200, 401.
 - Update to this document.
 - Route-level integration test updates.
 - Human approval if breaking change.
+
+### Frontend Consumer Guardrails
+- The React client applies a defensive normalization pass in `client/src/api.js` after `JSON.parse(...)` succeeds.
+- Known array fields such as `items`, `results`, `runs`, `steps`, `nodes`, `logs`, `plans`, `suggestions`, `recent_*`, and related list payloads are coerced to `[]` when the server returns `null`, `undefined`, or another non-array shape.
+- This does not change the server contract. It is a frontend hardening layer to prevent `TypeError: .map is not a function` during rendering.
+- Frontend components are expected to use `safeMap(...)` from `client/src/utils/safe.js` rather than direct `.map(...)` calls on API-derived values.
 
 ## 9. Known Gaps
 - Many routes do not declare response models and return ORM objects or dicts without schema enforcement.

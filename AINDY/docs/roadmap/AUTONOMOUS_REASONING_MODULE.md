@@ -1,224 +1,638 @@
-# Autonomous Reasoning Module (ARM) — Canonical Definition & Evolution Plan
+# AUTONOMOUS REASONING MODULE (ARM)
 
----
+## 1. System Reality
 
-## 1. System Definition (Canonical)
+### What this document means now
 
-The Autonomous Reasoning Module (ARM) is A.I.N.D.Y.'s internal reasoning engine for
-code analysis and code generation. It is an API-exposed subsystem that:
+The existing codebase uses the name "ARM" for a code analysis and code generation subsystem exposed at `/arm/*` and implemented primarily in:
 
-- validates inputs (security + size)
-- executes structured analysis or generation via LLM
-- persists full audit records
-- feeds Memory Bridge with outcomes
-- produces Infinity Algorithm performance metrics
-
-ARM is not a memory system. It is a reasoning + audit engine with metrics feedback.
-
----
-
-## 2. Core Lifecycle (Canonical Pipeline)
-
-```
-Request → Validate → Analyze/Generate → Persist → Metrics → Memory Feedback
-```
-
----
-
-## 3. Core Components
-
-### 3.1 API Layer
-
-**Implementation:**
 - `routes/arm_router.py`
-
-**Current Capabilities:**
-- `/arm/analyze`
-- `/arm/generate`
-- `/arm/logs`
-- `/arm/config` (GET/PUT)
-- `/arm/metrics`
-- `/arm/config/suggest`
-
----
-
-### 3.2 Reasoning Engine
-
-**Implementation:**
 - `modules/deepseek/deepseek_code_analyzer.py`
-
-**Current Capabilities:**
-- OpenAI GPT-4o analysis + generation
-- structured JSON responses
-- retry handling
-- audit persistence
-
----
-
-### 3.3 Governance + Security
-
-**Implementation:**
-- `modules/deepseek/security_deepseek.py`
-- `modules/deepseek/file_processor_deepseek.py`
-- `modules/deepseek/config_manager_deepseek.py`
-
-**Current Capabilities:**
-- path/content validation
-- chunking for large files
-- config management + task priority formula
-
----
-
-### 3.4 Persistence Layer
-
-**Implementation:**
-- `db/models/arm_models.py`
-
-**Current Capabilities:**
-- `analysis_results`
-- `code_generations`
-
-**Legacy Models (unused by router):**
-- `ARMRun`, `ARMLog`, `ARMConfig`
-
----
-
-### 3.5 Metrics + Self-Tuning Suggestions
-
-**Implementation:**
 - `services/arm_metrics_service.py`
 
-**Current Capabilities:**
-- Thinking KPI system
-- config suggestion engine
+That subsystem is real, but it is **not** the full autonomous reasoning layer A.I.N.D.Y. would need in order to decide what to do next across the system.
 
----
+If "Autonomous Reasoning" is defined correctly as:
 
-### 3.6 Memory Bridge Feedback
+- evaluating system state
+- interpreting memory and metrics
+- selecting next actions
+- adapting strategy over time
 
-**Implementation:**
-- `modules/deepseek/deepseek_code_analyzer.py`
+then the current system only implements this **partially**.
+
+### What exists today
+
+#### Implemented
+
+- `services/infinity_orchestrator.py`
+  - collects recent memory and KPI state
+  - recalculates Infinity score
+  - executes the loop decision step
+  - emits `loop.started` and `loop.decision` events
+
+- `services/infinity_loop.py`
+  - contains the clearest existing system-level decision logic
+  - evaluates recent feedback, KPI thresholds, incomplete tasks, and cooldown windows
+  - outputs a `decision_type`, `adjustment_payload`, and `next_action`
+
+- `services/agent_runtime.py`
+  - generates plans for explicit user goals
+  - injects Infinity KPI context into planning
+  - triggers the Infinity orchestrator after successful completion
+
+- `services/flow_engine.py`
+  - contains lightweight strategy selection and strategy score updates for execution flows
+  - compiles intent into executable internal flows
+
+- `runtime/memory/orchestrator.py`
+  - performs memory retrieval strategy selection, scoring, and filtering
+  - this is meaningful reasoning for memory recall, but not a general decision layer
+
+- `services/system_event_service.py`
+  - provides durable event emission so some loop decisions are observable
+
+#### Partially implemented
+
+- Memory-informed decision making
+  - the Infinity orchestrator reads recent memory before making a loop decision
+  - the agent planner uses KPI context
+  - ARM analysis uses memory recall and writes memory back
+  - however, there is no dedicated reasoning service that treats memory as a first-class decision input across the platform
+
+- Adaptive strategy selection
+  - flow strategies and memory retrieval strategies exist
+  - they are local optimization mechanisms, not a unified system-level reasoning engine
+
+- Observability for decisions
+  - some decisions are emitted as `SystemEvent`s
+  - there is no dedicated reasoning event schema, no consistent explanation model, and no full trace of why decisions were made
+
+#### Not implemented
+
+- a dedicated autonomous reasoning service or module
+- a normalized system-state evaluator
+- a reusable decision engine that can choose actions for agents, loops, and workflows
+- structured strategy selection beyond hard-coded heuristics
+- reasoning output as a standard contract consumable by Agent Runtime and Nodus
+- reasoning-driven Nodus workflow selection or compilation
+- explicit reasoning events across all decision points
+
+## 2. What the Current "ARM" Actually Is
+
+The current `/arm` subsystem is best described as:
+
+- a code analysis and generation engine
+- backed by `DeepSeekCodeAnalyzer`
+- instrumented with ARM-specific metrics
+- connected to memory capture and Infinity score recalculation
+
+It is **not** the platform's general autonomous reasoning layer.
+
+That distinction matters:
+
+- ARM today: reason about source code and return analysis or generated code
+- Autonomous Reasoning target: reason about system state and choose what A.I.N.D.Y. should do next
+
+The name has drifted away from the actual architecture.
+
+## 3. Corrected Architecture
+
+### Layer boundaries
+
+#### Autonomous Reasoning Layer
+
+Purpose:
+
+- decide what should happen next
+- evaluate current state, memory, metrics, and feedback
+- choose next actions, priorities, and strategies
+
+Target components:
+
+- `state_evaluator`
+- `decision_engine`
+- `strategy_selector`
+- `feedback_analyzer`
+- `reasoning_event_emitter`
+
+#### Execution Layer
+
+Purpose:
+
+- perform the work chosen by reasoning
+
+Current execution components:
+
+- `services/agent_runtime.py`
+- `services/flow_engine.py`
+- `services/nodus_adapter.py`
+- `services/nodus_execution_service.py`
+
+#### Memory Layer
+
+Purpose:
+
+- provide recall, suggestions, outcomes, and learned signals
+
+Current memory components:
+
+- `runtime/memory/orchestrator.py`
+- `services/memory_capture_engine.py`
+- `bridge/nodus_memory_bridge.py`
+
+#### Event Layer / RippleTrace
+
+Purpose:
+
+- make decisions and execution visible as durable events
+
+Current event components:
+
+- `services/system_event_service.py`
+- `db.models.system_event`
+- `db.models.agent_run_event`
+
+### Integration map
+
+#### Autonomous Reasoning -> Agent Runtime
+
+Target:
+
+- reasoning selects or adjusts agent goals, priorities, and execution strategies
+
+Current reality:
+
+- limited
+- `agent_runtime.generate_plan()` uses Infinity KPI context
+- `agent_runtime.execute_run()` receives a post-execution `next_action` from the Infinity orchestrator
+- agents are still mostly goal executors, not reasoning-driven autonomous actors
+
+#### Autonomous Reasoning -> Nodus Execution Layer
+
+Target:
+
+- reasoning emits workflow intents or plans that compile into Nodus execution paths
+
+Current reality:
+
+- effectively absent
+- `services/nodus_adapter.py` is an internal flow adapter around `PersistentFlowRunner`, not primary Nodus VM orchestration
+- `services/nodus_execution_service.py` executes restricted embedded Nodus source, but this is isolated and not driven by a reasoning engine
+
+#### Autonomous Reasoning -> Infinity Loop
+
+Target:
+
+- Infinity loop becomes one consumer of a reusable reasoning engine
+
+Current reality:
+
+- the Infinity loop is the main place where system-level reasoning currently lives
+- its logic is rule-based and tightly coupled to loop execution and task adjustment
+
+#### Autonomous Reasoning -> Memory Bridge
+
+Target:
+
+- memory is a primary input into state evaluation and strategy selection
+
+Current reality:
+
+- partial
+- the Infinity orchestrator reads recent memory
+- ARM analysis uses memory recall heavily
+- memory retrieval itself has strategy selection
+- there is no platform-wide reasoning contract that consumes memory uniformly
+
+#### Autonomous Reasoning -> RippleTrace / SystemEvent
+
+Target:
+
+- every significant reasoning step emits observable, queryable decision events
+
+Current reality:
+
+- partial
+- loop start and loop decisions are emitted
+- many planning and selection decisions remain opaque or embedded in service-local logic
+
+## 4. Relationship to Major Systems
+
+### A. Agent Runtime
+
+Reasoning influences agent execution only indirectly.
+
+What is real:
+
+- planner prompts include KPI context from Infinity scores
+- approval and capability checks constrain execution
+- completed agent runs trigger the Infinity orchestrator, which may return a `next_action`
+
+What is missing:
+
+- no dedicated reasoning service selecting agent goals
+- no persistent strategy model influencing future agent plans
+- no standardized reasoning output attached to agent runs before execution starts
+
+### B. Nodus
+
+Nodus is currently an execution concern, not a reasoning consumer.
+
+What is real:
+
+- embedded Nodus execution exists through `services/nodus_execution_service.py`
+- memory bridge functions are exposed to Nodus runtime
+
+What is missing:
+
+- no reasoning-to-Nodus plan contract
+- no autonomous selection of `.nd` workflows
+- no Nodus-first execution path for reasoning outputs
+
+### C. Infinity Loop
+
+The Infinity loop is the current de facto reasoning layer.
+
+What is real:
+
+- threshold-based decision rules
+- feedback-aware branch selection
+- task reprioritization and next-action generation
+- throttling against repeated decisions
+
+What is missing:
+
+- modular reasoning components
+- explainable state evaluation beyond simple rules
+- reusable output for other orchestration paths
+
+### D. Memory Bridge
+
+Memory affects behavior, but not yet as a unified decision substrate.
+
+What is real:
+
+- recent memory is fed into the Infinity orchestrator
+- memory retrieval uses strategy and scoring
+- ARM recalls memory and records outcomes
+
+What is missing:
+
+- structured memory summaries for system-level decision making
+- explicit memory-derived features for planning and action selection
+- closed-loop learning from decision outcomes at the reasoning layer
+
+### E. RippleTrace / SystemEvent
+
+Decision observability exists, but only in fragments.
+
+What is real:
+
+- loop decisions are emitted as events
+- execution events and failures are durable
+
+What is missing:
+
+- a reasoning event vocabulary
+- decision explanation fields normalized across services
+- traceability from observed state -> chosen strategy -> chosen action -> outcome
+
+## 5. Gap Analysis
+
+### Missing reasoning components
+
+- dedicated autonomous reasoning service
+- normalized state evaluator
+- strategy selection service for system actions
+- feedback analyzer tied to future decision policy
+- reasoning output schema
+- reasoning event schema
+
+### Duplicated or scattered logic
+
+- next-action logic in `services/infinity_loop.py`
+- KPI-driven planning influence in `services/agent_runtime.py`
+- strategy selection in `services/flow_engine.py`
+- memory strategy selection in `runtime/memory/orchestrator.py`
+- ARM-specific suggestion logic in `services/arm_metrics_service.py`
+
+These all represent local reasoning fragments, but they are not composed into a single reasoning layer.
+
+### Implicit reasoning that is not formalized
+
+- threshold evaluation of KPI health
+- task reprioritization based on execution/focus conditions
+- memory retrieval strategy choice
+- strategy score updates in the flow engine
+- ARM configuration suggestions from performance data
+
+### Architectural inconsistencies
+
+- "ARM" refers to a code-analysis subsystem, not the real platform reasoning layer
+- the Infinity loop contains decision logic that should live in a reusable reasoning service
+- Nodus exists as execution infrastructure but is not integrated with reasoning outputs
+- reasoning decisions are only partially visible in RippleTrace/SystemEvent
+
+## 6. The True Autonomous Reasoning Layer
+
+The correct long-term design is a dedicated layer between state collection and execution.
+
+### Inputs
+
+- recent memory and memory summaries
+- Infinity KPI snapshots
+- task and workflow state
+- recent `SystemEvent` and `AgentEvent` history
+- execution outcomes and feedback
+- capability and approval constraints
+
+### Core components
+
+#### State Evaluator
+
+Responsibilities:
+
+- aggregate KPIs, memory summaries, recent outcomes, pending work, and event context
+- produce a normalized system-state snapshot
+
+Primary files to introduce or refactor toward:
+
+- `services/autonomous_reasoning_service.py`
+- `services/reasoning/state_evaluator.py`
+
+#### Decision Engine
+
+Responsibilities:
+
+- map state snapshots to a recommended next action
+- support both deterministic rules and later learned policies
+
+Primary files:
+
+- `services/reasoning/decision_engine.py`
+
+#### Strategy Selector
+
+Responsibilities:
+
+- choose execution strategy, workflow type, or escalation path
+- unify concepts currently split across flow strategies and memory retrieval strategies
+
+Primary files:
+
+- `services/reasoning/strategy_selector.py`
+
+#### Feedback Analyzer
+
+Responsibilities:
+
+- learn from outcomes, rejections, failures, task completion quality, and user feedback
+- update decision policy inputs without embedding that logic separately in each service
+
+Primary files:
+
+- `services/reasoning/feedback_analyzer.py`
+
+#### Reasoning Event Emitter
+
+Responsibilities:
+
+- emit observable reasoning records with:
+  - input summary
+  - chosen strategy
+  - chosen action
+  - explanation
+  - confidence
+
+Primary files:
+
+- `services/reasoning/reasoning_events.py`
+- `services/system_event_service.py`
+
+### Outputs
+
+- `next_action`
+- `decision_type`
+- `priority_changes`
+- `strategy_selection`
+- `execution_intent`
+- `explanation`
+- `confidence`
+
+## 7. Completion Plan
+
+### Phase 1. Extract reasoning from the Infinity loop
+
+Objective:
+
+- separate decision logic from loop orchestration and persistence
+
+Files to modify:
+
+- `services/infinity_loop.py`
+- `services/infinity_orchestrator.py`
+- `services/infinity_service.py`
+
+Files to create:
+
+- `services/reasoning/state_evaluator.py`
+- `services/reasoning/decision_engine.py`
+- `services/reasoning/types.py`
+
+Expected behavior:
+
+- the Infinity orchestrator gathers context and calls a reusable reasoning engine
+- `infinity_loop.py` becomes primarily loop execution, cooldown, and persistence orchestration
+
+Success criteria:
+
+- loop decisions are generated by shared reasoning code rather than service-local branching
+- output is a normalized reasoning result object
+
+### Phase 2. Create a dedicated reasoning service
+
+Objective:
+
+- establish Autonomous Reasoning as a first-class system layer
+
+Files to create:
+
+- `services/autonomous_reasoning_service.py`
+- `services/reasoning/strategy_selector.py`
+- `services/reasoning/feedback_analyzer.py`
+
+Files to modify:
+
+- `runtime/memory/orchestrator.py`
 - `services/memory_capture_engine.py`
 
-**Current Capabilities:**
-- recall hooks before analysis
-- capture hooks after analysis and generation
+Expected behavior:
 
----
+- reasoning service can evaluate current state without being tied only to the Infinity loop
+- memory-derived signals become standardized reasoning inputs
 
-## 4. Current Implementation (Reality)
+Success criteria:
 
-**Implemented:**
-- analysis/generation API endpoints
-- validation + chunking + config
-- full DB persistence (analysis_results + code_generations)
-- Thinking KPI metrics + suggestions
-- Memory Bridge recall + write hooks
-- frontend ARM pages (Analyze, Generate, Logs, Config, Metrics, Suggestions)
+- one service can answer "what should happen next?" for multiple callers
+- memory, score, and event summaries are consumed through a common interface
 
-**Missing or Drifted:**
-- DeepSeek engine is not used (OpenAI GPT-4o used under "DeepSeek" namespace)
-- DeepSeek SQLite and blockchain ledger are not implemented
-- legacy `services/deepseek_arm_service.py` is dead and incompatible
-- docs still reference legacy data models and service layer
+### Phase 3. Integrate with Agent Runtime
 
----
+Objective:
 
-## 5. Doc → Code Parity Table
+- make reasoning influence agent execution before and after runs
 
-| Documented Capability | Evidence in Docs | Implementation Reality | Status | Primary Files |
-| --- | --- | --- | --- | --- |
-| ARM analyze endpoint | ARM docs | Implemented | Implemented | `routes/arm_router.py`, `modules/deepseek/deepseek_code_analyzer.py` |
-| ARM generate endpoint | ARM docs | Implemented but payload differs | Partial | `routes/arm_router.py`, `client/src/api.js` |
-| ARM logs endpoint | ARM docs | Returns analysis + generation history (not ARMLog) | Partial | `routes/arm_router.py` |
-| Config GET/PUT | ARM docs | Implemented (JSON file storage only) | Partial | `modules/deepseek/config_manager_deepseek.py` |
-| Security validation | ARM docs | Implemented | Implemented | `modules/deepseek/security_deepseek.py` |
-| Task priority formula | ARM docs | Implemented | Implemented | `modules/deepseek/config_manager_deepseek.py` |
-| Thinking KPI metrics | ARM docs | Implemented | Implemented | `services/arm_metrics_service.py` |
-| Memory Bridge feedback | ARM docs | Implemented | Implemented | `modules/deepseek/deepseek_code_analyzer.py` |
-| DeepSeek SQLite ledger | ARM docs | Not present | Missing | N/A |
-| Blockchain logging | ARM docs | Not present | Missing | N/A |
+Files to modify:
 
----
+- `services/agent_runtime.py`
+- `services/capability_service.py`
+- `services/nodus_adapter.py`
+- `db/models/agent_run.py`
+- `db/models/agent_run_event.py`
 
-## 6. Gap → File Mapping
+Expected behavior:
 
-| Gap | Impact | Files to Update |
-| --- | --- | --- |
-| Docs assume DeepSeek engine | Conceptual mismatch with GPT-4o runtime | `Autonomus Reasoning Module/Autonomous Reasoning Module.md` |
-| Legacy service layer referenced | Dead code path + broken assumptions | `services/deepseek_arm_service.py`, `Autonomus Reasoning Module/STEP*.txt` |
-| `/arm/generate` payload mismatch | Client drift risk | `client/src/api.js`, `Autonomus Reasoning Module/ARM frontend module.txt` |
-| Config persistence not audited | No DB history of config changes | `modules/deepseek/config_manager_deepseek.py`, `db/models/arm_models.py` |
-| SQLite + blockchain ledger missing | Audit/traceability drift | `Autonomus Reasoning Module/Autonomous Reasoning Module.md` |
+- agent runs include a pre-execution reasoning result
+- plan generation and execution strategy selection use reasoning outputs
+- post-run feedback updates the reasoning layer
 
----
+Success criteria:
 
-## 7. Risk Register
+- agent runs record why they were launched, why a strategy was chosen, and what next action was derived afterward
 
-| Risk | Type | Failure Mode | Impact | Likely? |
-| --- | --- | --- | --- | --- |
-| Legacy service usage | Runtime | `deepseek_arm_service.py` calls incompatible analyzer | Hard error | Medium |
-| Generate endpoint mismatch | Contract | Older client payloads fail validation | User-visible failures | Medium |
-| DeepSeek naming drift | Product | Stakeholders believe DeepSeek model is active | Expectation mismatch | High |
-| Missing ledger | Audit | No unified ledger or hash trail | Governance gap | Medium |
-| Metrics skew | Analytics | KPI ignores generation success/failure | Misleading performance signals | Medium |
+### Phase 4. Integrate with Nodus workflows
 
----
+Objective:
 
-## 8. System Classification
+- make reasoning outputs drive Nodus-oriented execution rather than only internal flows
 
-ARM is currently:
+Files to modify:
 
-> A live reasoning engine with LLM analysis + generation, DB audit trails,
-> Memory Bridge hooks, and Infinity Algorithm metrics.
+- `services/nodus_adapter.py`
+- `services/nodus_execution_service.py`
+- `services/flow_engine.py`
+- `bridge/nodus_memory_bridge.py`
 
-It is not:
-- a DeepSeek-backed runtime in practice
-- a ledgered reasoning system
+Potential files to introduce:
 
----
+- `services/reasoning/nodus_compiler_adapter.py`
+- `runtime/nodus/` integration helpers if execution contracts need to be separated from existing services
 
-## 9. Evolution Plan (System Roadmap)
+Expected behavior:
 
-### Phase v1 — Stabilize Contracts
-**Goal:** remove payload drift and dead paths  
-**Actions:**
-- align `/arm/generate` input across docs + frontend + API
-- deprecate or remove `services/deepseek_arm_service.py`
+- reasoning can output an execution intent that selects a Nodus workflow or compiles into one
+- Nodus becomes a primary execution consumer of reasoning results rather than an isolated utility path
 
-### Phase v2 — Audit Consistency
-**Goal:** unify audit schema  
-**Actions:**
-- consolidate ARMRun/ARMLog legacy tables into analysis_results/code_generations
-- update docs and architecture references
+Success criteria:
 
-### Phase v3 — Ledger + Persistence
-**Goal:** decide on ledger model  
-**Actions:**
-- implement or remove DeepSeek SQLite + blockchain ledger references
+- at least one autonomous reasoning outcome can execute through a Nodus-first path with durable traceability
 
----
+### Phase 5. Add reasoning observability
 
-## 10. Technical Debt
+Objective:
 
-See:
-- `docs/roadmap/TECH_DEBT.md` → ARM Phase 3 (memory feedback loop and config auto-apply)
-- `docs/roadmap/TECH_DEBT.md` → deepseek_arm_service.py dead path
+- make reasoning decisions inspectable through RippleTrace / SystemEvent
 
----
+Files to modify:
 
-## 11. Governance Notes
+- `services/system_event_service.py`
+- `services/infinity_orchestrator.py`
+- `services/agent_runtime.py`
+- `services/nodus_adapter.py`
+- observability UI and routes that consume `SystemEvent`
 
-- This document is the canonical reference for ARM.
-- Any changes must also update:
-  - `docs/architecture/SYSTEM_SPEC.md`
-  - `docs/interfaces/API_CONTRACTS.md`
-  - `docs/roadmap/TECH_DEBT.md`
+Potential DB changes:
 
----
+- extend `SystemEvent` payload conventions or add a dedicated reasoning event model if current payload shape becomes too loose
 
-## 12. Summary (Operational Truth)
+Expected behavior:
 
-ARM is live and integrated, but its documentation still reflects an earlier
-DeepSeek-based design and legacy service layer. The runtime is GPT-4o based,
-API-driven, and fully instrumented for metrics and Memory Bridge feedback.
+- reasoning steps emit standard events such as:
+  - `reasoning.state_evaluated`
+  - `reasoning.strategy_selected`
+  - `reasoning.action_selected`
+  - `reasoning.feedback_applied`
+
+Success criteria:
+
+- operators can trace state -> decision -> execution -> outcome through events
+
+## 8. Distinction Between Reasoning, Execution, Memory, and Events
+
+### Reasoning
+
+Decides:
+
+- what to do next
+- why that action should be chosen
+- what strategy should be used
+
+### Execution
+
+Performs:
+
+- workflows
+- tool calls
+- step completion
+- task mutation
+
+### Memory
+
+Supplies:
+
+- context
+- prior outcomes
+- reusable patterns
+- recall candidates and suggestions
+
+### Events / RippleTrace
+
+Records:
+
+- what was evaluated
+- what was decided
+- what was executed
+- what happened afterward
+
+## 9. Alignment with Other Roadmaps
+
+### AGENTICS.md
+
+This document aligns with `docs/roadmap/AGENTICS.md`:
+
+- Agentics currently has execution infrastructure and a partial decision loop
+- the reasoning layer is not complete
+- Nodus is not yet the primary execution path for autonomous system behavior
+
+### EVOLUTION_PLAN.md
+
+This document aligns with `docs/roadmap/EVOLUTION_PLAN.md`:
+
+- the platform can progress toward autonomous operation only after a real reasoning layer exists
+- the reasoning layer should become the bridge between system state and execution
+
+### TECH_DEBT.md
+
+This document aligns with `docs/roadmap/TECH_DEBT.md`:
+
+- reasoning debt is currently architectural, not cosmetic
+- the main debt is fragmentation: decision logic is spread across loop logic, planner prompts, flow strategy code, and memory orchestration
+
+## 10. Final Assessment
+
+Autonomous Reasoning is **partially real**, but not as a formal module.
+
+What is real today:
+
+- a rule-based decision loop in `services/infinity_loop.py`
+- KPI-informed orchestration in `services/infinity_orchestrator.py`
+- local reasoning fragments in memory retrieval, flow strategy selection, and ARM-specific analytics
+
+What is not real today:
+
+- a dedicated, reusable autonomous reasoning layer
+- reasoning-driven Nodus workflow execution
+- full observability of decision rationale
+
+The current `/arm` subsystem should be treated as a specialized code reasoning product surface, not as proof that the broader Autonomous Reasoning layer already exists.

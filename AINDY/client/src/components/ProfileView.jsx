@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getProfile, upsertProfile } from "../api";
+import { getProfile, upsertProfile } from "../api";import { safeMap } from "../utils/safe";
 
 export default function ProfileView() {
   const { username } = useParams();
@@ -54,36 +54,36 @@ export default function ProfileView() {
       <div style={styles.container}>
         <h2 style={styles.sectionTitle}>👤 Initialize Identity</h2>
         <div style={styles.card}>
-          <div style={{marginBottom: 16}}>
+          <div style={{ marginBottom: 16 }}>
             <label style={styles.label}>Username</label>
-            <input 
-              style={styles.input} 
-              value={formData.username} 
-              onChange={e => setFormData({...formData, username: e.target.value})}
-            />
+            <input
+              style={styles.input}
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
+            
           </div>
-          <div style={{marginBottom: 16}}>
+          <div style={{ marginBottom: 16 }}>
             <label style={styles.label}>Tagline</label>
-            <input 
-              style={styles.input} 
-              value={formData.tagline} 
-              onChange={e => setFormData({...formData, tagline: e.target.value})}
-            />
+            <input
+              style={styles.input}
+              value={formData.tagline}
+              onChange={(e) => setFormData({ ...formData, tagline: e.target.value })} />
+            
           </div>
-          <div style={{marginBottom: 16}}>
+          <div style={{ marginBottom: 16 }}>
             <label style={styles.label}>Bio</label>
-            <textarea 
-              style={styles.textarea} 
-              value={formData.bio} 
-              onChange={e => setFormData({...formData, bio: e.target.value})}
-            />
+            <textarea
+              style={styles.textarea}
+              value={formData.bio}
+              onChange={(e) => setFormData({ ...formData, bio: e.target.value })} />
+            
           </div>
           <button style={styles.button} onClick={handleSave}>
             {profile ? "Save Changes" : "Create Identity Node"}
           </button>
         </div>
-      </div>
-    );
+      </div>);
+
   }
 
   // --- VIEW MODE (Existing Code) ---
@@ -99,9 +99,9 @@ export default function ProfileView() {
           <h1 style={styles.username}>{profile.username}</h1>
           <p style={styles.tagline}>{profile.tagline}</p>
           <div style={styles.tagsRow}>
-            {profile.tags?.map((tag, i) => (
-              <span key={i} style={styles.tag}>#{tag}</span>
-            ))}
+            {safeMap(profile.tags, (tag, i) =>
+            <span key={i} style={styles.tag}>#{tag}</span>)
+            }
           </div>
         </div>
         <button onClick={() => setIsEditing(true)} style={styles.editButton}>Edit</button>
@@ -120,19 +120,19 @@ export default function ProfileView() {
       </div>
 
       <div style={styles.bioBox}>
-        <h4 style={{color: "#888", marginBottom: "8px"}}>About</h4>
-        <p style={{lineHeight: "1.6"}}>{profile.bio}</p>
+        <h4 style={{ color: "#888", marginBottom: "8px" }}>About</h4>
+        <p style={{ lineHeight: "1.6" }}>{profile.bio}</p>
       </div>
-    </div>
-  );
+    </div>);
+
 }
 
-const MetricCard = ({ label, value, color }) => (
-  <div style={{...styles.card, borderTop: `3px solid ${color}`}}>
-    <div style={{fontSize: "24px", fontWeight: "bold", color: color}}>{value}</div>
-    <div style={{fontSize: "12px", color: "#888", textTransform: "uppercase"}}>{label}</div>
-  </div>
-);
+const MetricCard = ({ label, value, color }) =>
+<div style={{ ...styles.card, borderTop: `3px solid ${color}` }}>
+    <div style={{ fontSize: "24px", fontWeight: "bold", color: color }}>{value}</div>
+    <div style={{ fontSize: "12px", color: "#888", textTransform: "uppercase" }}>{label}</div>
+  </div>;
+
 
 const styles = {
   container: { padding: "2rem", color: "#eaeaea", maxWidth: "800px", margin: "0 auto" },

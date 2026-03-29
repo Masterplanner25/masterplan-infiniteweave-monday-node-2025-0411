@@ -17,6 +17,7 @@ from utils.user_ids import parse_user_id
 from db.database import Base
 
 VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}
+VALID_MEMORY_TYPES = {"decision", "outcome", "failure", "insight"}
 
 class MemoryNodeModel(Base):
     __tablename__ = "memory_nodes"
@@ -27,11 +28,18 @@ class MemoryNodeModel(Base):
     source = Column(String(255), nullable=True)
     source_agent = Column(String, nullable=True, index=True)
     is_shared = Column(Boolean, nullable=False, default=False)
+    visibility = Column(String(16), nullable=False, default="private", index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    source_event_id = Column(UUID(as_uuid=True), ForeignKey("system_events.id"), nullable=True, index=True)
+    root_event_id = Column(UUID(as_uuid=True), ForeignKey("system_events.id"), nullable=True, index=True)
+    causal_depth = Column(Integer, nullable=False, default=0)
+    impact_score = Column(Float, nullable=False, default=0.0)
+    memory_type = Column(String(32), nullable=False, default="insight", index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
     embedding = Column(Vector(1536), nullable=True)
+    embedding_status = Column(String(16), nullable=False, default="pending", index=True)
     success_count = Column(Integer, nullable=False, default=0)
     failure_count = Column(Integer, nullable=False, default=0)
     usage_count = Column(Integer, nullable=False, default=0)
@@ -50,6 +58,11 @@ def validate_node_type(mapper, connection, target):
         raise ValueError(
             f"Invalid node_type '{target.node_type}'. "
             f"Must be one of: {', '.join(sorted(VALID_NODE_TYPES))}"
+        )
+    if target.memory_type is not None and target.memory_type not in VALID_MEMORY_TYPES:
+        raise ValueError(
+            f"Invalid memory_type '{target.memory_type}'. "
+            f"Must be one of: {', '.join(sorted(VALID_MEMORY_TYPES))}"
         )
 
 
@@ -85,8 +98,17 @@ class MemoryNodeDAO:
                 content=str(getattr(memory_node, "content", "")),
                 tags=list(getattr(memory_node, "tags", [])),
                 node_type=getattr(memory_node, "node_type", None),
+                memory_type=getattr(memory_node, "memory_type", getattr(memory_node, "node_type", "insight")),
                 source=getattr(memory_node, "source", None),
+                source_agent=getattr(memory_node, "source_agent", None),
+                is_shared=bool(getattr(memory_node, "is_shared", False)),
+                visibility=str(getattr(memory_node, "visibility", "shared" if getattr(memory_node, "is_shared", False) else "private")),
                 user_id=getattr(memory_node, "user_id", None),
+                source_event_id=getattr(memory_node, "source_event_id", None),
+                root_event_id=getattr(memory_node, "root_event_id", None),
+                causal_depth=getattr(memory_node, "causal_depth", 0),
+                impact_score=getattr(memory_node, "impact_score", 0.0),
+                embedding_status=getattr(memory_node, "embedding_status", "pending"),
                 extra={
                     **(getattr(memory_node, "extra", {}) or {}),
                     **(
@@ -120,6 +142,12 @@ class MemoryNodeDAO:
             "node_type": db_node.node_type,
             "source": db_node.source,
             "user_id": str(db_node.user_id) if db_node.user_id else None,
+            "source_event_id": str(db_node.source_event_id) if db_node.source_event_id else None,
+            "root_event_id": str(db_node.root_event_id) if db_node.root_event_id else None,
+            "causal_depth": db_node.causal_depth,
+            "impact_score": db_node.impact_score,
+            "memory_type": db_node.memory_type,
+            "embedding_status": db_node.embedding_status,
             "extra": db_node.extra,
             "created_at": db_node.created_at,
             "updated_at": db_node.updated_at,
@@ -130,6 +158,8 @@ class MemoryNodeDAO:
         owner_user_id = parse_user_id(user_id)
         if owner_user_id:
             query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+        else:
+            query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
         tags = [t for t in (tags or []) if t]
         if tags:
             if mode.upper() == "OR":
@@ -146,6 +176,12 @@ class MemoryNodeDAO:
                 "node_type": n.node_type,
                 "source": n.source,
                 "user_id": str(n.user_id) if n.user_id else None,
+                "source_event_id": str(n.source_event_id) if n.source_event_id else None,
+                "root_event_id": str(n.root_event_id) if n.root_event_id else None,
+                "causal_depth": n.causal_depth,
+                "impact_score": n.impact_score,
+                "memory_type": n.memory_type,
+                "embedding_status": n.embedding_status,
                 "extra": n.extra,
                 "created_at": n.created_at,
                 "updated_at": n.updated_at,

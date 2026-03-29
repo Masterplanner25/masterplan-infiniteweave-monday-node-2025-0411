@@ -144,6 +144,14 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     # Lease heartbeat — refresh background task lease every 60 seconds so it
     # doesn't expire (TTL=120s) while the leader is running.
     scheduler.add_job(
+        _process_deferred_async_jobs,
+        trigger=IntervalTrigger(minutes=1),
+        id="deferred_async_job_retry",
+        name="Deferred async job retry",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
         _refresh_lease_heartbeat,
         trigger=IntervalTrigger(seconds=60),
         id="background_lease_heartbeat",
@@ -156,11 +164,19 @@ def _recalculate_all_scores() -> None:
     """Daily job: recalculate Infinity scores for all users."""
     try:
         from db.database import SessionLocal
+        from services.autonomous_controller import evaluate_live_trigger, record_decision
         from db.models.user import User
         from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = SessionLocal()
         try:
+            trigger = {"trigger_type": "schedule", "source": "scheduler.infinity_scores", "goal": "daily_infinity_score_recalculation"}
+            context = {"goal": "daily_infinity_score_recalculation", "importance": 0.60, "goal_alignment": 0.70}
+            decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+            record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
+            if decision["decision"] != "execute":
+                logger.info("[Infinity Scheduler] Deferred by autonomy controller: %s", decision["reason"])
+                return
             users = db.query(User).all()
             updated = 0
             for user in users:
@@ -185,10 +201,18 @@ def _recalculate_all_etas_job() -> None:
     """Daily job: recalculate ETA projections for all anchored MasterPlans."""
     try:
         from db.database import SessionLocal
+        from services.autonomous_controller import evaluate_live_trigger, record_decision
         from services.eta_service import recalculate_all_etas
 
         db = SessionLocal()
         try:
+            trigger = {"trigger_type": "schedule", "source": "scheduler.masterplan_eta", "goal": "daily_eta_recalculation"}
+            context = {"goal": "daily_eta_recalculation", "importance": 0.55, "goal_alignment": 0.65}
+            decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+            record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
+            if decision["decision"] != "execute":
+                logger.info("[ETA Scheduler] Deferred by autonomy controller: %s", decision["reason"])
+                return
             updated = recalculate_all_etas(db)
             logger.info("[ETA Scheduler] Recalculated ETAs for %d plans", updated)
         finally:
@@ -228,8 +252,19 @@ def _cleanup_stale_logs() -> None:
 def _check_reminders_job() -> None:
     """Check for overdue task reminders — replaces daemon thread."""
     try:
+        from db.database import SessionLocal
+        from services.autonomous_controller import evaluate_live_trigger, record_decision
         from services.task_services import check_reminders
-        check_reminders()
+        db = SessionLocal()
+        try:
+            trigger = {"trigger_type": "schedule", "source": "scheduler.reminders", "goal": "task_reminder_check"}
+            context = {"goal": "task_reminder_check", "importance": 0.45}
+            decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+            record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
+            if decision["decision"] == "execute":
+                check_reminders()
+        finally:
+            db.close()
     except Exception as exc:
         logger.warning("Task reminder check failed: %s", exc)
 
@@ -237,10 +272,32 @@ def _check_reminders_job() -> None:
 def _check_task_recurrence() -> None:
     """Trigger task recurrence check — replaces daemon thread."""
     try:
+        from db.database import SessionLocal
+        from services.autonomous_controller import evaluate_live_trigger, record_decision
         from services.task_services import handle_recurrence
-        handle_recurrence()
+        db = SessionLocal()
+        try:
+            trigger = {"trigger_type": "schedule", "source": "scheduler.recurrence", "goal": "task_recurrence_check"}
+            context = {"goal": "task_recurrence_check", "importance": 0.40}
+            decision = evaluate_live_trigger(db=db, trigger=trigger, context=context)
+            record_decision(db=db, trigger=trigger, evaluation=decision, trace_id=str(uuid.uuid4()), context=context)
+            if decision["decision"] == "execute":
+                handle_recurrence()
+        finally:
+            db.close()
     except Exception as exc:
         logger.warning("Task recurrence check failed: %s", exc)
+
+
+def _process_deferred_async_jobs() -> None:
+    try:
+        from services.async_job_service import process_deferred_jobs
+
+        resumed = process_deferred_jobs()
+        if resumed:
+            logger.info("Deferred async jobs resumed: %d", resumed)
+    except Exception as exc:
+        logger.warning("Deferred async job processing failed: %s", exc)
 
 
 def _refresh_lease_heartbeat() -> None:

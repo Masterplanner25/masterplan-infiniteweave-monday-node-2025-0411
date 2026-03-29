@@ -30,6 +30,9 @@ Atomic unit of memory:
 * tags (JSONB)
 * embeddings (pgvector)
 * node_type
+* causal references (`source_event_id`, `root_event_id`)
+* causal scoring (`causal_depth`, `impact_score`)
+* `memory_type` (`decision`, `outcome`, `failure`, `insight`)
 * feedback signals (usage, success rate, weight)
 
 ---
@@ -45,6 +48,9 @@ Defines:
 * narrative structure
 
 Trace is the **missing link between memory and meaning**.
+
+Current implementation note:
+* Trace continuity is now complemented by execution-side causality from RippleTrace/SystemEvent, so memory can store not just sequence but source event, root cause, and downstream impact.
 
 ---
 
@@ -67,6 +73,7 @@ Deterministic scoring pipeline combining:
 * trace context
 * recency
 * feedback signals
+* impact weighting from causal memory
 
 ---
 
@@ -137,7 +144,8 @@ Current implementation note:
 * `runtime/execution_loop.py` wraps recall -> execute -> capture -> feedback (pluggable executor).
 * `runtime/memory/memory_learning.py` updates per-execution success_rate and low-value flags to adapt recall quality.
 * `runtime/memory/memory_metrics.py` + `runtime/memory/metrics_store.py` compute and persist memory impact metrics.
-* `tests/test_memory_loop_e2e.py` validates the full loop (execution -> memory -> recall -> improved execution).
+* `tests/system/test_memory_loop_e2e.py` validates the full loop (execution -> memory -> recall -> improved execution).
+* `services/memory_capture_engine.py` can now auto-capture high-impact `SystemEvent` outcomes into causal memory records and link them back into RippleTrace.
 
 ---
 
@@ -183,11 +191,12 @@ Used for:
 
 At runtime, the system guarantees:
 
-* Every execution is memory-informed
-* Every execution produces memory
+* Memory-informed execution exists for selected execution paths
+* Memory-producing execution exists for selected execution paths
 * Feedback updates future recall
 * Traces preserve ordered continuity
 * Retrieval is explainable (resonance scoring)
+* High-impact execution outcomes can now be stored with explicit causal provenance
 
 ---
 
@@ -229,7 +238,7 @@ It is NOT:
 * Stable, predictable memory layer
 * No behavioral drift between pathways
 
-**Status:** Complete
+**Status:** Partial
 
 ---
 
@@ -298,12 +307,31 @@ It is NOT:
 
 * Implemented scoring and ranking in `runtime/memory/scorer.py`
 * Integrated into `runtime/memory/orchestrator.py` pipeline
-* Combines semantic, graph, trace, recency, and feedback signals
+* Combines semantic, graph, trace, recency, feedback, and impact signals
 
 **Outcome:**
 
 * Deterministic, explainable memory ranking
 * Improved recall quality
+
+**Status:** Complete
+
+### Phase v4.5 - Causal Memory Integration
+
+**Goal:** Attach meaning to memory via execution causality
+
+**Actions:**
+
+* add causal fields to `memory_nodes`
+* auto-capture high-impact `SystemEvent` outcomes into memory
+* compute `impact_score` from RippleTrace downstream span and depth
+* create `stored_as_memory` edges from event -> memory node
+* use impact-aware scoring during recall
+
+**Outcome:**
+
+* memory stores what happened, why it happened, and what it caused
+* causal memory can influence future execution decisions
 
 **Status:** Complete
 
@@ -324,7 +352,7 @@ It is NOT:
 * Memory becomes part of execution, not optional
 * Closed-loop learning system
 
-**Status:** Complete
+**Status:** Partial
 
 ---
 
@@ -359,7 +387,9 @@ It is NOT:
 * Legacy `node_type="generic"` cleanup on existing rows (migration to normalize)
 * Embedding generation is synchronous on write path (latency risk)
 * ✅ **Resolved:** HMAC removed from bridge write endpoints; JWT only.
-* Engine Layer (Rust/C++) not integrated into runtime scoring/traversal
+* Engine Layer (Rust/C++) now integrated into runtime scoring with Python fallback; traversal-side acceleration and release-build hardening remain open
+* Execution-loop enforcement is not universal across all runtime paths
+* End-to-end validation for the new RippleTrace -> Memory Bridge -> Infinity path is still missing
 
 ---
 
@@ -367,16 +397,41 @@ It is NOT:
 
 | Phase | Component            | Status   | Required Action        |
 | ----- | -------------------- | -------- | ---------------------- |
-| v1    | DAO + Schema         | Complete | Maintenance only       |
+| v1    | DAO + Schema         | Partial  | Finish canonical unification |
 | v2    | Trace Layer          | Complete | Maintenance only       |
 | v3    | Symbolic Integration | Complete | Maintenance only       |
 | v4    | Resonance Engine     | Complete | Tune/extend as needed  |
-| v5    | Execution Loop       | Complete | Expand workflow usage  |
-| v5+   | Engine Layer         | Partial  | Integrate Rust/C++     |
+| v4.5  | Causal Memory        | Complete | Add stronger scenario tests |
+| v5    | Execution Loop       | Partial  | Expand workflow usage  |
+| v5+   | Engine Layer         | Partial  | Runtime scoring integrated; traversal + release hardening remain |
 
 ---
 
-## 10. Governance Notes
+## 10. Next Steps
+
+### Step 1 - Finish canonical DAO unification
+**Files:** `services/memory_persistence.py`, `db/dao/memory_node_dao.py`, bridge memory helper paths  
+**Outcome:** all memory writes and queries use the canonical DAO without compatibility drift.
+
+### Step 2 - Expand trace usage in recall
+**Files:** `db/dao/memory_trace_dao.py`, `runtime/memory/orchestrator.py`, `runtime/memory/scorer.py`  
+**Outcome:** trace context affects recall more meaningfully than a flat bonus on matching nodes.
+
+### Step 3 - Route more execution through the memory loop
+**Files:** `runtime/execution_loop.py`, `services/flow_engine.py`, `services/agent_runtime.py`  
+**Outcome:** memory-informed execution becomes true for a larger share of runtime behavior.
+
+### Step 4 - Move embeddings off the synchronous write path
+**Files:** `services/embedding_service.py`, `db/dao/memory_node_dao.py`, async job plumbing if needed  
+**Outcome:** memory capture latency is reduced without removing semantic retrieval.
+
+### Step 5 - Add end-to-end causal-memory validation
+**Files:** tests around `services/memory_capture_engine.py`, `services/system_event_service.py`, `services/memory_scoring_service.py`, `services/infinity_orchestrator.py`  
+**Outcome:** a high-impact failure can be shown to become memory and influence a later decision path.
+
+---
+
+## 11. Governance Notes
 
 * This document is the **canonical reference** for Memory Bridge architecture
 * All future changes must align with:
@@ -388,7 +443,7 @@ It is NOT:
 
 ---
 
-## 11. Summary (Operational Truth)
+## 12. Summary (Operational Truth)
 
 The Memory Bridge is not complete when it stores memory.
 

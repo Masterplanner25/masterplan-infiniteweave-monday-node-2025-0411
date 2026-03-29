@@ -17,7 +17,7 @@ Node gateway (server.js) [optional]
         v
 FastAPI app (main.py)
   - lifespan startup/shutdown
-  - 31 routers
+  - ~30 routers by default, plus optional legacy surface routing
   - JWT auth, API key auth, rate limiting
   - request metrics + structured error handlers
         |
@@ -73,10 +73,11 @@ The codebase now documents this contract in:
 - `docs/architecture/EXECUTION_CONTRACT.md`
 - `docs/architecture/EXECUTION_AUDIT.md`
 
-Standard execution output shape:
+Standard execution output shape for canonical execution surfaces:
 ```json
 {
   "status": "...",
+  "data": "...",
   "result": "...",
   "events": [...],
   "next_action": "...",
@@ -85,8 +86,10 @@ Standard execution output shape:
 ```
 
 System-wide activity ledger:
-- `SystemEvent` is the canonical durable record of execution and observability activity.
-- Core execution paths emit required lifecycle events.
+- `SystemEvent` is the canonical durable record for core execution and observability activity, while some subsystems still retain domain-specific durable records such as agent events, flow history, and automation logs.
+- `SystemEvent` now carries `trace_id`, `parent_event_id`, and `source`, allowing causal reconstruction across core execution paths.
+- RippleTrace now structures execution causality on top of `SystemEvent` through `ripple_edges`, including event-to-event and event-to-memory links.
+- Core execution paths emit required lifecycle events, but not every route-level execution-adjacent surface is yet routed through the same centralized wrapper.
 - Successful health, auth, and async heavy-execution paths now emit durable success events in addition to core flow execution paths.
 - External interactions now also emit required lifecycle events through `services/external_call_service.py`.
 - Required outbound event types:
@@ -97,14 +100,18 @@ System-wide activity ledger:
 
 ## 7. Memory and Agentics
 - Memory APIs are split between legacy bridge compatibility (`/bridge/*`) and canonical memory APIs (`/memory/*`).
+- Memory nodes can now store causal execution context (`source_event_id`, `root_event_id`, `causal_depth`, `impact_score`, `memory_type`) in addition to content, embeddings, and feedback metadata.
+- High-impact execution outcomes (`execution.completed`, `execution.failed`, `capability.denied`) can now auto-materialize into Memory Bridge records through the `SystemEvent` path.
 - Agent execution is implemented, persisted, and observable; it is no longer a future-only concept.
 - Flow runs, agent runs, steps, and events are persisted and replayable to a meaningful degree.
 - Agent execution is now fail-closed on missing scoped capability tokens; an approved run without `capability_token` does not execute.
 - `/memory/nodus/execute` is no longer an unrestricted host embedding path. It is now route-gated by source validation, operation allowlists, and optional scoped capability enforcement for write-capable operations.
+- Agent execution now receives pre-run memory context shaped into `similar_past_outcomes`, `relevant_failures`, and `successful_patterns`.
 
 ## 8. RippleTrace
 - RippleTrace includes both canonical `/rippletrace/*` routes and a restored compatibility surface for older dashboard/graph endpoints.
 - Graph and narrative endpoints such as `/influence_graph`, `/causal_graph`, and `/narrative/{drop_point_id}` are now served through `routes/legacy_surface_router.py`.
+- Execution-side RippleTrace is now also represented in `routes/observability_router.py` via trace-graph APIs backed by `SystemEvent` + `ripple_edges`.
 
 ## 9. Invariants
 - PostgreSQL is required for primary app state.
@@ -112,7 +119,8 @@ System-wide activity ledger:
 - Schema drift can block startup.
 - Scheduler leadership is single-instance.
 - Background lease timestamps are compared and persisted as timezone-aware UTC values in the lease path.
-- Execution responses should be traceable and structured.
+- Canonical execution responses should be traceable and structured.
+- A `trace_id` should be present on all major route responses, but not every route yet uses the same centralized execution wrapper.
 - Agent/tool execution must be capability-scoped.
 - Silent `except ...: pass` behavior is not allowed in production execution paths.
 - External calls are not allowed to bypass `SystemEvent` emission.

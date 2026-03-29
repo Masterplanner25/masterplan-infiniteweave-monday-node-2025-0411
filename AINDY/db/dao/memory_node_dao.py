@@ -8,6 +8,7 @@ routed through services.memory_persistence.MemoryNodeDAO for backward compat).
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 import uuid
 from typing import List, Optional
 
@@ -18,6 +19,9 @@ from sqlalchemy.orm import Session
 from services.memory_persistence import MemoryNodeModel, MemoryLinkModel
 from utils.trace_context import get_current_trace_id
 from utils.user_ids import parse_user_id, require_user_id
+
+logger = logging.getLogger(__name__)
+VALID_MEMORY_TYPES = {"decision", "outcome", "failure", "insight"}
 
 
 class MemoryNodeDAO:
@@ -49,7 +53,14 @@ class MemoryNodeDAO:
             "source": n.source,
             "source_agent": getattr(n, "source_agent", None),
             "is_shared": getattr(n, "is_shared", None),
+            "visibility": getattr(n, "visibility", "private"),
             "user_id": str(n.user_id) if n.user_id else None,
+            "source_event_id": str(n.source_event_id) if getattr(n, "source_event_id", None) else None,
+            "root_event_id": str(n.root_event_id) if getattr(n, "root_event_id", None) else None,
+            "causal_depth": getattr(n, "causal_depth", 0),
+            "impact_score": getattr(n, "impact_score", 0.0),
+            "memory_type": getattr(n, "memory_type", None),
+            "embedding_status": getattr(n, "embedding_status", "pending"),
             "extra": n.extra,
             "created_at": n.created_at.isoformat() if n.created_at else None,
             "updated_at": n.updated_at.isoformat() if n.updated_at else None,
@@ -81,6 +92,15 @@ class MemoryNodeDAO:
                 "high": 0.9,
             }.get(normalized, 0.0)
 
+    @staticmethod
+    def _normalize_memory_type(memory_type: str | None, node_type: str | None = None) -> str:
+        candidate = str(memory_type or node_type or "insight").strip().lower()
+        if candidate == "relationship":
+            return "insight"
+        if candidate not in VALID_MEMORY_TYPES:
+            return "insight"
+        return candidate
+
     # ------------------------------------------------------------------
     # Node operations
     # ------------------------------------------------------------------
@@ -94,10 +114,15 @@ class MemoryNodeDAO:
         node_type: str = None,
         extra: dict = None,
         generate_embedding: bool = True,
+        source_event_id: str | uuid.UUID | None = None,
+        root_event_id: str | uuid.UUID | None = None,
+        causal_depth: int = 0,
+        impact_score: float = 0.0,
+        memory_type: str | None = None,
+        source_agent: str | None = None,
+        visibility: str = "private",
     ) -> dict:
         """Insert a new memory node and return its dict representation."""
-        from services.embedding_service import generate_embedding as gen_emb
-
         node_extra = dict(extra or {})
         trace_id = get_current_trace_id()
         if trace_id and not node_extra.get("trace_id"):
@@ -108,12 +133,18 @@ class MemoryNodeDAO:
             tags=tags or [],
             node_type=node_type,
             source=source,
+            source_agent=source_agent,
+            is_shared=visibility in {"shared", "global"},
+            visibility=visibility if visibility in {"private", "shared", "global"} else "private",
             user_id=parse_user_id(user_id),
+            source_event_id=(uuid.UUID(str(source_event_id)) if source_event_id else None),
+            root_event_id=(uuid.UUID(str(root_event_id)) if root_event_id else None),
+            causal_depth=max(0, int(causal_depth or 0)),
+            impact_score=max(0.0, float(impact_score or 0.0)),
+            memory_type=self._normalize_memory_type(memory_type, node_type),
+            embedding_status="pending",
             extra=node_extra,
         )
-
-        if generate_embedding:
-            db_node.embedding = gen_emb(content)
 
         try:
             self.db.add(db_node)
@@ -150,6 +181,9 @@ class MemoryNodeDAO:
             except SQLAlchemyError:
                 self.db.rollback()
 
+        if generate_embedding:
+            self._enqueue_embedding(db_node)
+
         return self._node_to_dict(db_node)
 
     def save_as_agent(
@@ -160,6 +194,7 @@ class MemoryNodeDAO:
         tags: list[str] = None,
         node_type: str = None,
         is_shared: bool = False,
+        visibility: str | None = None,
         user_id: str = None,
         generate_embedding: bool = True,
     ) -> MemoryNodeModel:
@@ -169,8 +204,6 @@ class MemoryNodeDAO:
         is_shared=True: visible to all agents for this user.
         is_shared=False: private to this agent's namespace.
         """
-        from services.embedding_service import generate_embedding as gen_emb
-
         db_node = MemoryNodeModel(
             content=content,
             tags=tags or [],
@@ -178,17 +211,18 @@ class MemoryNodeDAO:
             source=source,
             source_agent=agent_namespace,
             is_shared=is_shared,
+            visibility=visibility or ("shared" if is_shared else "private"),
             user_id=parse_user_id(user_id),
+            embedding_status="pending",
             extra={"trace_id": get_current_trace_id()} if get_current_trace_id() else {},
         )
-
-        if generate_embedding:
-            db_node.embedding = gen_emb(content)
 
         try:
             self.db.add(db_node)
             self.db.commit()
             self.db.refresh(db_node)
+            if generate_embedding:
+                self._enqueue_embedding(db_node)
             return db_node
         except SQLAlchemyError:
             self.db.rollback()
@@ -231,6 +265,8 @@ class MemoryNodeDAO:
         owner_user_id = parse_user_id(user_id)
         if owner_user_id:
             query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+        else:
+            query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
         clean_tags = [t for t in (tags or []) if t]
         if clean_tags:
             if mode.upper() == "OR":
@@ -279,6 +315,11 @@ class MemoryNodeDAO:
             MemoryNodeModel.source_agent,
             MemoryNodeModel.is_shared,
             MemoryNodeModel.user_id,
+            MemoryNodeModel.source_event_id,
+            MemoryNodeModel.root_event_id,
+            MemoryNodeModel.causal_depth,
+            MemoryNodeModel.impact_score,
+            MemoryNodeModel.memory_type,
             MemoryNodeModel.extra,
             MemoryNodeModel.created_at,
             MemoryNodeModel.updated_at,
@@ -290,6 +331,8 @@ class MemoryNodeDAO:
         owner_user_id = parse_user_id(user_id)
         if owner_user_id:
             query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+        else:
+            query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
         if node_type:
             query = query.filter(MemoryNodeModel.node_type == node_type)
 
@@ -308,7 +351,13 @@ class MemoryNodeDAO:
                     "source": row.source,
                     "source_agent": row.source_agent,
                     "is_shared": row.is_shared,
+                    "visibility": row.visibility,
                     "user_id": row.user_id,
+                    "source_event_id": str(row.source_event_id) if row.source_event_id else None,
+                    "root_event_id": str(row.root_event_id) if row.root_event_id else None,
+                    "causal_depth": row.causal_depth,
+                    "impact_score": row.impact_score,
+                    "memory_type": row.memory_type,
                     "extra": row.extra,
                     "created_at": row.created_at.isoformat() if row.created_at else None,
                     "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -356,6 +405,8 @@ class MemoryNodeDAO:
                 owner_user_id = parse_user_id(user_id)
                 if owner_user_id:
                     query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+                else:
+                    query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
                 if limit:
                     query = query.limit(limit)
                 nodes = query.all()
@@ -423,6 +474,16 @@ class MemoryNodeDAO:
             for item in similar:
                 item["semantic_score"] = item.get("similarity", 0.0)
                 candidates.append(item)
+            if not candidates:
+                text_matches = self._find_text_matches(
+                    query=query,
+                    limit=limit * 3,
+                    user_id=user_id,
+                    node_type=node_type,
+                )
+                for item in text_matches:
+                    item["semantic_score"] = 0.0
+                    candidates.append(item)
 
         # Tag path
         if tags:
@@ -496,12 +557,16 @@ class MemoryNodeDAO:
                 if query_tags:
                     tag_score = len(node_tags & query_tags) / len(query_tags)
 
+            impact_score = max(0.0, float(c.get("impact_score", 0.0) or 0.0))
+            impact_bonus = min(1.0, impact_score / 5.0) * 0.15
+
             resonance = (
                 (semantic * 0.40)
                 + (graph_score * 0.15)
                 + (recency_score * 0.15)
                 + (success_rate * 0.20)
                 + (usage_freq * 0.10)
+                + impact_bonus
             ) * adaptive_weight
 
             resonance = min(1.0, resonance)
@@ -514,6 +579,8 @@ class MemoryNodeDAO:
             c["success_rate"] = round(success_rate, 4)
             c["usage_frequency"] = round(usage_freq, 4)
             c["adaptive_weight"] = round(adaptive_weight, 4)
+            c["impact_score"] = round(impact_score, 4)
+            c["impact_bonus"] = round(impact_bonus, 4)
             c["resonance_score"] = round(resonance, 4)
             scored.append(c)
 
@@ -666,10 +733,26 @@ class MemoryNodeDAO:
 
         if not node.is_shared:
             node.is_shared = True
+            node.visibility = "shared"
             self.db.add(node)
             self.db.commit()
             self.db.refresh(node)
 
+        return node
+
+    def promote_to_global(
+        self,
+        node_id: str,
+        user_id: str,
+    ) -> Optional[MemoryNodeModel]:
+        node = self._get_model_by_id(node_id, user_id=user_id)
+        if not node:
+            return None
+        node.is_shared = True
+        node.visibility = "global"
+        self.db.add(node)
+        self.db.commit()
+        self.db.refresh(node)
         return node
 
     def recall_by_type(
@@ -756,18 +839,69 @@ class MemoryNodeDAO:
         node.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if "content" in changes and regenerate_embedding:
-            try:
-                from services.embedding_service import generate_embedding
-                node.embedding = generate_embedding(node.content)
-            except Exception as exc:
-                import logging
-                logging.warning("Embedding regeneration failed on update: %s", exc)
+            node.embedding = None
+            node.embedding_status = "pending"
 
         self.db.add(history)
         self.db.add(node)
         self.db.commit()
         self.db.refresh(node)
+        if "content" in changes and regenerate_embedding:
+            self._enqueue_embedding(node)
         return node
+
+    def _enqueue_embedding(self, node: MemoryNodeModel) -> None:
+        try:
+            from services.embedding_jobs import enqueue_embedding
+
+            enqueue_embedding(
+                memory_id=str(node.id),
+                user_id=str(node.user_id) if node.user_id else None,
+                trace_id=(node.extra or {}).get("trace_id"),
+            )
+        except Exception as exc:
+            logger.warning("[MemoryNodeDAO] embedding enqueue failed for %s: %s", node.id, exc)
+            try:
+                node.embedding_status = "failed"
+                self.db.add(node)
+                self.db.commit()
+                self.db.refresh(node)
+            except SQLAlchemyError:
+                self.db.rollback()
+
+    def _find_text_matches(
+        self,
+        *,
+        query: str,
+        limit: int,
+        user_id: str | None,
+        node_type: str | None,
+    ) -> list[dict]:
+        search_text = (query or "").strip()
+        if not search_text:
+            return []
+
+        like_pattern = f"%{search_text.lower()}%"
+        sql_query = self.db.query(MemoryNodeModel).filter(
+            MemoryNodeModel.content.ilike(like_pattern)
+        )
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            sql_query = sql_query.filter(MemoryNodeModel.user_id == owner_user_id)
+        else:
+            sql_query = sql_query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
+        if node_type:
+            sql_query = sql_query.filter(MemoryNodeModel.node_type == node_type)
+
+        rows = (
+            sql_query.order_by(
+                MemoryNodeModel.updated_at.desc().nullslast(),
+                MemoryNodeModel.created_at.desc(),
+            )
+            .limit(limit)
+            .all()
+        )
+        return [self._node_to_dict(row) for row in rows]
 
     def get_history(self, node_id: str, user_id: str, limit: int = 20) -> list[dict]:
         """
