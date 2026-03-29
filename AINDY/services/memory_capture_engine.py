@@ -14,11 +14,14 @@ No manual memory calls needed in v5+.
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Optional
 
 from sqlalchemy import text
 from services.observability_events import emit_observability_event
+from services.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
 from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_types import SystemEventTypes
 from utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
@@ -42,6 +45,28 @@ EVENT_SIGNIFICANCE = {
     "insight_detected": 0.7,
     "flow_completion": 0.5,  # Phase D: flow execution patterns
 }
+
+AUTO_MEMORY_EVENT_TYPES = {
+    SystemEventTypes.EXECUTION_COMPLETED,
+    SystemEventTypes.EXECUTION_FAILED,
+    "capability.denied",
+    SystemEventTypes.FEEDBACK_RETRY_DETECTED,
+    SystemEventTypes.FEEDBACK_LATENCY_SPIKE,
+    SystemEventTypes.FEEDBACK_ABANDONMENT_DETECTED,
+    SystemEventTypes.FEEDBACK_REPEATED_FAILURE,
+}
+
+
+def calculate_impact_score(db, event_id: str) -> float:
+    from db.models.system_event import SystemEvent
+
+    event_uuid = uuid.UUID(str(event_id))
+    event = db.query(SystemEvent).filter(SystemEvent.id == event_uuid).first()
+    downstream = get_downstream_effects(db, event_uuid)
+    ripple_depth = calculate_depth(db, event_uuid)
+    event_type = getattr(event, "type", "") if event else ""
+    failure_bonus = 1.5 if "failed" in str(event_type).lower() or event_type == "capability.denied" else 0.5
+    return round(len(downstream) + (ripple_depth * 0.75) + failure_bonus, 4)
 
 
 class MemoryCaptureEngine:
@@ -127,6 +152,15 @@ class MemoryCaptureEngine:
             memory_extra = dict(extra or {})
             if request_trace_id and not memory_extra.get("trace_id"):
                 memory_extra["trace_id"] = request_trace_id
+            memory_extra.setdefault("event_type", event_type)
+
+            source_event_id = memory_extra.get("source_event_id")
+            causal_context = self._build_causal_context(
+                trace_id=memory_extra.get("trace_id"),
+                source_event_id=source_event_id,
+                event_type=event_type,
+            )
+            memory_extra.update(causal_context["extra"])
             node = self.dao.save(
                 content=content,
                 source=source,
@@ -135,6 +169,11 @@ class MemoryCaptureEngine:
                 node_type=node_type,
                 extra=memory_extra,
                 generate_embedding=True,
+                source_event_id=causal_context["source_event_id"],
+                root_event_id=causal_context["root_event_id"],
+                causal_depth=causal_context["causal_depth"],
+                impact_score=causal_context["impact_score"],
+                memory_type=causal_context["memory_type"],
             )
 
             # Step 6: Tag with agent namespace (federation)
@@ -166,6 +205,14 @@ class MemoryCaptureEngine:
 
             # Step 6: Auto-link to related memories
             self._auto_link(node, enriched_tags)
+            if causal_context["source_event_id"] and isinstance(node, dict) and node.get("id"):
+                link_event_to_memory(
+                    db=self.db,
+                    source_event_id=causal_context["source_event_id"],
+                    memory_node_id=node["id"],
+                    relationship_type="stored_as_memory",
+                    weight=causal_context["impact_score"],
+                )
 
             logger.info(
                 "Captured memory [%s] from %s (significance=%.2f): %s...",
@@ -176,14 +223,18 @@ class MemoryCaptureEngine:
             )
             emit_system_event(
                 db=self.db,
-                event_type="memory.write",
+                event_type=SystemEventTypes.MEMORY_WRITE,
                 user_id=self.user_id,
-                trace_id=request_trace_id or (str(node.get("id")) if isinstance(node, dict) else None),
+                trace_id=request_trace_id or memory_extra.get("trace_id") or (str(node.get("id")) if isinstance(node, dict) else None),
+                parent_event_id=causal_context["source_event_id"],
+                source="memory",
                 payload={
                     "node_id": node.get("id") if isinstance(node, dict) else None,
                     "event_type": event_type,
                     "source": source,
                     "node_type": node_type,
+                    "memory_type": causal_context["memory_type"],
+                    "impact_score": causal_context["impact_score"],
                     "tags": enriched_tags,
                 },
                 required=True,
@@ -200,12 +251,71 @@ class MemoryCaptureEngine:
                     message=str(exc),
                     user_id=self.user_id,
                     trace_id=get_current_trace_id(),
+                    source="memory",
                     payload={"event_type": event_type, "source": source},
                     required=True,
                 )
             except Exception:
                 logger.exception("Failed to emit required memory error event for %s", event_type)
             raise
+
+    def _build_causal_context(
+        self,
+        *,
+        trace_id: str | None,
+        source_event_id: str | None,
+        event_type: str,
+    ) -> dict:
+        root_event_id = None
+        causal_depth = 0
+        downstream_count = 0
+        relationship_summary = None
+        impact_score = 0.0
+
+        if trace_id:
+            root_event = detect_root_event(self.db, trace_id)
+            if root_event:
+                root_event_id = root_event.get("id")
+        if source_event_id:
+            causal_depth = calculate_depth(self.db, source_event_id)
+            downstream_effects = get_downstream_effects(self.db, source_event_id)
+            downstream_count = len(downstream_effects)
+            impact_score = calculate_impact_score(self.db, source_event_id)
+            relationship_summary = (
+                f"Triggered by event {source_event_id}; "
+                f"root={root_event_id or source_event_id}; "
+                f"downstream_effects={downstream_count}; "
+                f"causal_depth={causal_depth}"
+            )
+
+        return {
+            "source_event_id": source_event_id,
+            "root_event_id": root_event_id or source_event_id,
+            "causal_depth": causal_depth,
+            "impact_score": impact_score,
+            "memory_type": self._classify_memory_type(event_type),
+            "extra": {
+                "relationship_summary": relationship_summary,
+                "downstream_effect_count": downstream_count,
+            },
+        }
+
+    def _classify_memory_type(self, event_type: str) -> str:
+        normalized = str(event_type or "").lower()
+        if normalized in {
+            "capability.denied",
+            SystemEventTypes.EXECUTION_FAILED,
+            SystemEventTypes.FEEDBACK_RETRY_DETECTED,
+            SystemEventTypes.FEEDBACK_LATENCY_SPIKE,
+            SystemEventTypes.FEEDBACK_ABANDONMENT_DETECTED,
+            SystemEventTypes.FEEDBACK_REPEATED_FAILURE,
+        } or "failed" in normalized:
+            return "failure"
+        if normalized == SystemEventTypes.EXECUTION_COMPLETED or "completed" in normalized:
+            return "outcome"
+        if "decision" in normalized or "masterplan" in normalized:
+            return "decision"
+        return "insight"
 
     def _score_significance(
         self,
@@ -385,3 +495,39 @@ class MemoryCaptureEngine:
 
         except Exception as exc:
             logger.warning("Auto-link failed: %s", exc)
+
+
+def capture_system_event_as_memory(db, event) -> Optional[dict]:
+    event_type = getattr(event, "type", None)
+    if event_type not in AUTO_MEMORY_EVENT_TYPES:
+        return None
+
+    payload = getattr(event, "payload", {}) or {}
+    user_id = getattr(event, "user_id", None)
+    event_id = str(getattr(event, "id", ""))
+    trace_id = getattr(event, "trace_id", None)
+    source = getattr(event, "source", None) or "system_event"
+
+    engine = MemoryCaptureEngine(db=db, user_id=str(user_id) if user_id else None, agent_namespace="system")
+    content = payload.get("message") or payload.get("error") or payload.get("description")
+    if not content:
+        content = f"{event_type} from {source}"
+
+    tags = [source, event_type.replace(".", "_"), "causal_memory"]
+    if "feedback." in str(event_type):
+        tags.append("behavior_signal")
+    return engine.evaluate_and_capture(
+        event_type=event_type,
+        content=content,
+        source=f"system_event:{source}",
+        tags=tags,
+        context={"significance": 1.0},
+        extra={
+            "trace_id": trace_id,
+            "source_event_id": event_id,
+            "event_type": event_type,
+            "event_payload": payload,
+        },
+        force=True,
+        agent_namespace="system",
+    )

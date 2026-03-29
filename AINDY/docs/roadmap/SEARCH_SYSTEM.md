@@ -167,7 +167,7 @@ This capability exists but is not wired into the Search System flows documented 
 
 ### Retrieval Layer
 
-* External search (planned)
+* External search (implemented in research + leadgen flows)
 * Internal search (Memory Bridge recall)
 
 ### Orchestration Layer
@@ -191,12 +191,13 @@ This capability exists but is not wired into the Search System flows documented 
 * research result storage
 * Memory Orchestrator recall used in LeadGen and Research query flow
 * semantic memory search (separate system)
-* live external retrieval in research flow
+* live external retrieval in research and leadgen flow
 
 **Missing:**
 
 * unified search pipeline
-* consistent ranking model across search surfaces (now shared scorer, still early)
+* reusable hybrid search orchestration across search surfaces
+* consistent ranking model across search surfaces (shared scorer exists, but ranking remains shallow and surface-specific)
 * UI integration for SEO and LeadGen
 
 ---
@@ -248,7 +249,7 @@ It is NOT:
 
 **Actions:**
 
-* unify relevance scoring across SEO, leadgen, research ✅
+* unify relevance scoring across SEO, leadgen, research (partial)
 
 ---
 
@@ -285,6 +286,7 @@ It is NOT:
 
 * ✅ leadgen search now uses real retrieval (orchestrator + provider)
 * ✅ research search executes via `/research/query`
+* ranking helpers are shared, but ranking remains surface-specific
 * SEO suggestions stubbed
 
 ### Conceptual
@@ -299,13 +301,41 @@ It is NOT:
 | ----- | -------------------- | ----------- | --------------- |
 | v1    | Surface Alignment    | Partial     | Normalize       |
 | v2    | Retrieval Integration| Complete    | Maintenance only |
-| v3    | Ranking Unification  | Complete    | Maintenance only |
+| v3    | Ranking Unification  | Partial     | Deepen shared ranking |
 | v4    | Feedback Loop        | Missing     | Persist + reuse |
 | v5    | UI Integration       | Missing     | Implement       |
 
 ---
 
-## 10. Governance Notes
+## 10. Next Steps
+
+### Step 1 - Create a unified search service
+**Files:** `services/search_service.py`  
+**Outcome:** external, internal, semantic, and hybrid search requests route through one reusable interface.
+
+### Step 2 - Standardize search request and result schemas
+**Files:** `schemas/`, `routes/leadgen_router.py`, `routes/research_results_router.py`  
+**Outcome:** leadgen and research return compatible ranked result structures instead of feature-specific payloads.
+
+### Step 3 - Move hybrid retrieval into the shared search layer
+**Files:** `services/leadgen_service.py`, `routes/research_results_router.py`, `services/search_service.py`  
+**Outcome:** memory recall plus external retrieval is implemented once and reused across search surfaces.
+
+### Step 4 - Add shared search history and reuse
+**Files:** `db/models/leadgen_model.py`, `db/models/research_results.py`, `services/research_results_service.py`, `services/search_service.py`  
+**Outcome:** search outcomes become reusable across the system instead of staying siloed by feature.
+
+### Step 5 - Integrate unified search into agent tools
+**Files:** `services/agent_tools.py`, `services/agent_runtime.py`  
+**Outcome:** agents use one search contract instead of separate ad-hoc wrappers for leadgen, research, and memory recall.
+
+### Step 6 - Expose unified search to workflow execution
+**Files:** `services/flow_definitions.py`, `services/nodus_execution_service.py`  
+**Outcome:** search becomes a reusable workflow capability rather than a research-only utility.
+
+---
+
+## 11. Governance Notes
 
 * This document is the **canonical reference** for Search System architecture.
 * Any changes must align with:
@@ -321,7 +351,7 @@ It is NOT:
 
 ---
 
-## 11. Summary (Operational Truth)
+## 12. Summary (Operational Truth)
 
 The Search System is not complete when it stores results.
 

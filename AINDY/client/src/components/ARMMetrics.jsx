@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { getARMMetrics } from "../api";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
+import { safeMap } from "../utils/safe";
 function efficiencyColor(score) {
   if (score >= 80) return "#22c55e"; // green
   if (score >= 60) return "#eab308"; // yellow
@@ -38,14 +38,14 @@ function MetricCard({ title, children }) {
       padding: "16px 20px",
       display: "flex",
       flexDirection: "column",
-      gap: 8,
+      gap: 8
     }}>
       <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>
         {title}
       </div>
       {children}
-    </div>
-  );
+    </div>);
+
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -59,10 +59,10 @@ export default function ARMMetrics() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getARMMetrics(window)
-      .then(setMetrics)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+    getARMMetrics(window).
+    then(setMetrics).
+    catch((e) => setError(e.message)).
+    finally(() => setLoading(false));
   }, [window]);
 
   return (
@@ -73,50 +73,50 @@ export default function ARMMetrics() {
           Thinking KPI System
         </h2>
         <div style={{ display: "flex", gap: 8 }}>
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setWindow(d)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: 4,
-                border: "1px solid #334155",
-                background: window === d ? "#3b82f6" : "#1e293b",
-                color: window === d ? "#fff" : "#94a3b8",
-                cursor: "pointer",
-                fontSize: 12,
-              }}
-            >
+          {safeMap([7, 30, 90], (d) =>
+          <button
+            key={d}
+            onClick={() => setWindow(d)}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 4,
+              border: "1px solid #334155",
+              background: window === d ? "#3b82f6" : "#1e293b",
+              color: window === d ? "#fff" : "#94a3b8",
+              cursor: "pointer",
+              fontSize: 12
+            }}>
+            
               {d}d
-            </button>
-          ))}
+            </button>)
+          }
         </div>
-        {metrics && (
-          <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
+        {metrics &&
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
             {metrics.total_sessions} sessions · {metrics.window_days}d window
           </span>
-        )}
+        }
       </div>
 
       {loading && <div style={{ color: "#64748b" }}>Loading metrics…</div>}
       {error && <div style={{ color: "#ef4444" }}>Error: {error}</div>}
 
-      {metrics && (
-        <>
+      {metrics &&
+      <>
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-            gap: 16,
-            marginBottom: 20,
-          }}>
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+          gap: 16,
+          marginBottom: 20
+        }}>
 
             {/* 1. Decision Efficiency */}
             <MetricCard title="Decision Efficiency">
               <div style={{
-                fontSize: 40,
-                fontWeight: 700,
-                color: efficiencyColor(metrics.decision_efficiency?.score ?? 0),
-              }}>
+              fontSize: 40,
+              fontWeight: 700,
+              color: efficiencyColor(metrics.decision_efficiency?.score ?? 0)
+            }}>
                 {metrics.decision_efficiency?.score ?? 0}%
               </div>
               <div style={{ fontSize: 12, color: "#94a3b8" }}>
@@ -148,14 +148,14 @@ export default function ARMMetrics() {
                 <span style={{ fontSize: 13, marginLeft: 6, color: "#64748b" }}>ratio</span>
               </div>
               <span style={{
-                display: "inline-block",
-                padding: "2px 10px",
-                borderRadius: 12,
-                background: "#1e3a5f",
-                color: "#93c5fd",
-                fontSize: 11,
-                width: "fit-content",
-              }}>
+              display: "inline-block",
+              padding: "2px 10px",
+              borderRadius: 12,
+              background: "#1e3a5f",
+              color: "#93c5fd",
+              fontSize: 11,
+              width: "fit-content"
+            }}>
                 {metrics.ai_productivity_boost?.rating ?? "—"}
               </span>
               <div style={{ fontSize: 12, color: "#64748b" }}>
@@ -167,10 +167,10 @@ export default function ARMMetrics() {
             {/* 4. Lost Potential */}
             <MetricCard title="Lost Potential">
               <div style={{
-                fontSize: 36,
-                fontWeight: 700,
-                color: wasteColor(metrics.lost_potential?.waste_percentage ?? 0),
-              }}>
+              fontSize: 36,
+              fontWeight: 700,
+              color: wasteColor(metrics.lost_potential?.waste_percentage ?? 0)
+            }}>
                 {metrics.lost_potential?.waste_percentage ?? 0}%
                 <span style={{ fontSize: 13, marginLeft: 6, color: "#64748b" }}>wasted</span>
               </div>
@@ -187,49 +187,49 @@ export default function ARMMetrics() {
             <MetricCard title="Learning Efficiency">
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{
-                  fontSize: 24,
-                  color: trendColor(metrics.learning_efficiency?.trend),
-                }}>
+                fontSize: 24,
+                color: trendColor(metrics.learning_efficiency?.trend)
+              }}>
                   {trendArrow(metrics.learning_efficiency?.trend)}
                 </span>
                 <span style={{
-                  padding: "4px 12px",
-                  borderRadius: 12,
-                  background: "#1e293b",
-                  border: `1px solid ${trendColor(metrics.learning_efficiency?.trend)}`,
-                  color: trendColor(metrics.learning_efficiency?.trend),
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}>
+                padding: "4px 12px",
+                borderRadius: 12,
+                background: "#1e293b",
+                border: `1px solid ${trendColor(metrics.learning_efficiency?.trend)}`,
+                color: trendColor(metrics.learning_efficiency?.trend),
+                fontSize: 13,
+                fontWeight: 600
+              }}>
                   {metrics.learning_efficiency?.trend ?? "—"}
                 </span>
               </div>
-              {metrics.learning_efficiency?.delta_percentage != null && (
-                <div style={{ fontSize: 12, color: "#94a3b8" }}>
+              {metrics.learning_efficiency?.delta_percentage != null &&
+            <div style={{ fontSize: 12, color: "#94a3b8" }}>
                   {metrics.learning_efficiency.delta_percentage > 0 ? "+" : ""}
                   {metrics.learning_efficiency.delta_percentage}% speed change
                 </div>
-              )}
+            }
               <div style={{ fontSize: 12, color: "#64748b" }}>
-                {metrics.learning_efficiency?.sessions_needed
-                  ? `${metrics.learning_efficiency.sessions_needed} more sessions needed`
-                  : `${metrics.decision_efficiency?.total ?? 0} sessions analyzed`}
+                {metrics.learning_efficiency?.sessions_needed ?
+              `${metrics.learning_efficiency.sessions_needed} more sessions needed` :
+              `${metrics.decision_efficiency?.total ?? 0} sessions analyzed`}
               </div>
             </MetricCard>
           </div>
 
           {/* Summary bar */}
           <div style={{
-            padding: "12px 16px",
-            background: "#0f172a",
-            borderRadius: 6,
-            fontSize: 13,
-            color: "#94a3b8",
-          }}>
+          padding: "12px 16px",
+          background: "#0f172a",
+          borderRadius: 6,
+          fontSize: 13,
+          color: "#94a3b8"
+        }}>
             {metrics.summary}
           </div>
         </>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

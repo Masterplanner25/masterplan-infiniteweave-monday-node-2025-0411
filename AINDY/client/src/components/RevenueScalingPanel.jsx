@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateRevenueScaling } from "../api";
+import { calculateRevenueScaling } from "../api";import { safeMap } from "../utils/safe";
 
 export default function RevenueScalingPanel() {
   const [aiLeverage, setAiLeverage] = useState(0);
@@ -13,26 +13,26 @@ export default function RevenueScalingPanel() {
     if (typeof val !== "number") return val;
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency: "USD"
     }).format(val);
   };
 
-  const panelStyle = { 
-    backgroundColor: "#141414", 
-    padding: "15px", 
-    borderRadius: "8px", 
-    border: "1px solid #222", 
-    marginBottom: "15px" 
+  const panelStyle = {
+    backgroundColor: "#141414",
+    padding: "15px",
+    borderRadius: "8px",
+    border: "1px solid #222",
+    marginBottom: "15px"
   };
-  
-  const inputStyle = { 
-    backgroundColor: "#222", 
-    color: "#fff", 
-    border: "1px solid #444", 
-    padding: "10px", 
-    borderRadius: "4px", 
-    width: "100%", 
-    boxSizing: "border-box" 
+
+  const inputStyle = {
+    backgroundColor: "#222",
+    color: "#fff",
+    border: "1px solid #444",
+    padding: "10px",
+    borderRadius: "4px",
+    width: "100%",
+    boxSizing: "border-box"
   };
 
   const handleSubmit = async () => {
@@ -56,49 +56,49 @@ export default function RevenueScalingPanel() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
         <div>
           <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>AI Leverage</label>
-          <input type="number" style={inputStyle} value={aiLeverage} onChange={(e)=>setAiLeverage(e.target.value)} />
+          <input type="number" style={inputStyle} value={aiLeverage} onChange={(e) => setAiLeverage(e.target.value)} />
         </div>
         <div>
           <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Content Distribution</label>
-          <input type="number" style={inputStyle} value={contentDistribution} onChange={(e)=>setContentDistribution(e.target.value)} />
+          <input type="number" style={inputStyle} value={contentDistribution} onChange={(e) => setContentDistribution(e.target.value)} />
         </div>
         <div>
           <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Time</label>
-          <input type="number" style={inputStyle} value={time} onChange={(e)=>setTime(e.target.value)} />
+          <input type="number" style={inputStyle} value={time} onChange={(e) => setTime(e.target.value)} />
         </div>
         <div>
           <label style={{ fontSize: "11px", color: "#888", display: "block", marginBottom: "4px" }}>Audience Engagement</label>
-          <input type="number" style={inputStyle} value={audienceEngagement} onChange={(e)=>setAudienceEngagement(e.target.value)} />
+          <input type="number" style={inputStyle} value={audienceEngagement} onChange={(e) => setAudienceEngagement(e.target.value)} />
         </div>
       </div>
 
-      <button 
-        style={{ backgroundColor: "#2ecc71", color: "#000", border: "none", padding: "12px", borderRadius: "6px", cursor: "pointer", width: "100%", fontWeight: "bold" }} 
-        onClick={handleSubmit}
-      >
+      <button
+        style={{ backgroundColor: "#2ecc71", color: "#000", border: "none", padding: "12px", borderRadius: "6px", cursor: "pointer", width: "100%", fontWeight: "bold" }}
+        onClick={handleSubmit}>
+        
         Calculate Revenue Scaling
       </button>
 
-      {result && (
-        <div style={{ 
-          marginTop: "15px", 
-          padding: "12px", 
-          background: "#000", 
-          borderRadius: "4px",
-          border: "1px solid #145a32"
-        }}>
+      {result &&
+      <div style={{
+        marginTop: "15px",
+        padding: "12px",
+        background: "#000",
+        borderRadius: "4px",
+        border: "1px solid #145a32"
+      }}>
           <h4 style={{ color: "#2ecc71", margin: "0 0 10px 0", fontSize: "12px" }}>FINANCIAL PROJECTION</h4>
           {/* Mapping through results to apply formatting to numbers */}
           <div style={{ fontFamily: "monospace", fontSize: "13px" }}>
-            {Object.entries(result).map(([key, val]) => (
-              <div key={key} style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+            {safeMap(Object.entries(result), ([key, val]) =>
+          <div key={key} style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                 <span style={{ color: "#888" }}>{key.replace(/_/g, " ")}:</span>
                 <span style={{ color: "#2ecc71" }}>{formatCurrency(val)}</span>
-              </div>
-            ))}
+              </div>)
+          }
           </div>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

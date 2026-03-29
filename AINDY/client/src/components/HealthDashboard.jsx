@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getDashboardHealth } from "../api";
+import { getDashboardHealth } from "../api";import { safeMap } from "../utils/safe";
 
 export default function HealthDashboard() {
   const [logs, setLogs] = useState([]);
@@ -24,7 +24,7 @@ export default function HealthDashboard() {
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   const uptime =
-    logs.filter((l) => l.status === "healthy").length / (logs.length || 1) * 100;
+  logs.filter((l) => l.status === "healthy").length / (logs.length || 1) * 100;
 
   return (
     <div style={{ padding: "1.5rem" }}>
@@ -36,9 +36,9 @@ export default function HealthDashboard() {
           width: "100%",
           marginTop: "1rem",
           borderCollapse: "collapse",
-          fontSize: "0.9rem",
-        }}
-      >
+          fontSize: "0.9rem"
+        }}>
+        
         <thead>
           <tr style={{ background: "#111", color: "#6cf" }}>
             <th style={{ padding: "0.5rem", textAlign: "left" }}>Timestamp</th>
@@ -47,26 +47,26 @@ export default function HealthDashboard() {
           </tr>
         </thead>
         <tbody>
-          {logs.map((log, i) => (
-            <tr key={i} style={{ borderBottom: "1px solid #333" }}>
+          {safeMap(logs, (log, i) =>
+          <tr key={i} style={{ borderBottom: "1px solid #333" }}>
               <td>{new Date(log.timestamp).toLocaleString()}</td>
               <td
-                style={{
-                  color:
-                    log.status === "healthy"
-                      ? "#4caf50"
-                      : log.status === "degraded"
-                      ? "#ffb300"
-                      : "#f44336",
-                }}
-              >
+              style={{
+                color:
+                log.status === "healthy" ?
+                "#4caf50" :
+                log.status === "degraded" ?
+                "#ffb300" :
+                "#f44336"
+              }}>
+              
                 {log.status}
               </td>
               <td>{log.avg_latency_ms?.toFixed(2)}</td>
-            </tr>
-          ))}
+            </tr>)
+          }
         </tbody>
       </table>
-    </div>
-  );
+    </div>);
+
 }

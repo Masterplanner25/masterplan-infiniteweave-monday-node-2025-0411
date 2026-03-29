@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from db.database import Base
@@ -19,6 +19,12 @@ class Task(Base):
     category = Column(String, default="general")
     priority = Column(String, default="medium")
     status = Column(String, default="pending")  # pending, in_progress, paused, completed
+    masterplan_id = Column(Integer, ForeignKey("master_plans.id"), nullable=True, index=True)
+    parent_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
+    depends_on = Column(JSON, nullable=False, default=list)
+    dependency_type = Column(String, default="hard")
+    automation_type = Column(String, nullable=True)
+    automation_config = Column(JSON, nullable=True)
 
     # --- Timing and Scheduling ---
     due_date = Column(DateTime, nullable=True)
@@ -39,3 +45,5 @@ class Task(Base):
     # --- Ownership ---
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     user = relationship("User", back_populates="tasks")
+    masterplan = relationship("MasterPlan", backref="tasks")
+    parent_task = relationship("Task", remote_side=[id], backref="child_tasks")

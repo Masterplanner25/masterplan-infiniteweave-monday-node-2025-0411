@@ -16,6 +16,7 @@ from .leadgen_model import LeadGenResult
 from .score_snapshot import ScoreSnapshotDB
 from .author_model import AuthorDB
 from .system_health_log import SystemHealthLog
+from .system_state_snapshot import SystemStateSnapshot
 from .request_metric import RequestMetric
 from .user import User
 from .user_identity import UserIdentity
@@ -35,6 +36,12 @@ from .agent_event import AgentEvent
 from .capability import Capability, AgentCapabilityMapping
 from .infinity_loop import LoopAdjustment, UserFeedback
 from .system_event import SystemEvent
+from .ripple_edge import RippleEdge
+from .autonomy_decision import AutonomyDecision
+from .goals import Goal
+from .goal_state import GoalState
+from .agent_registry import AgentRegistry
+from .search_history import SearchHistory
 
 
 __all__ = [
@@ -54,6 +61,7 @@ __all__ = [
     "LeadGenResult",
     "AuthorDB",
     "SystemHealthLog",
+    "SystemStateSnapshot",
     "RequestMetric",
     "GenesisSessionDB",
     "User",
@@ -86,4 +94,10 @@ __all__ = [
     "Capability",
     "AgentCapabilityMapping",
     "SystemEvent",
+    "RippleEdge",
+    "AutonomyDecision",
+    "Goal",
+    "GoalState",
+    "AgentRegistry",
+    "SearchHistory",
 ]

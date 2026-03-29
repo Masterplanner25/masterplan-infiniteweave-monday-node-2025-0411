@@ -51,20 +51,35 @@ This document describes the current runtime behavior of the FastAPI backend as i
   - `X-Trace-ID` and `X-Request-ID` are added to every response
   - request completion is logged as JSON
   - `RequestMetric` rows are persisted for observability
-- `SystemEvent` is the canonical durable activity ledger for execution and observability.
+- `SystemEvent` is the canonical durable ledger for core execution and observability, but some subsystems still retain parallel domain-specific durable records such as `AgentEvent`, `FlowHistory`, and async automation logs.
+- `SystemEvent` propagation now carries `trace_id`, `parent_event_id`, and `source`, allowing parent -> child reconstruction across core execution paths.
+- `RippleEdge` rows are now created from `SystemEvent` parentage and can additionally link source events to stored memory nodes.
 - Required execution lifecycle events are emitted on core execution paths.
+- Research, LeadGen, and Freelance route executions now share a centralized execution wrapper (`services/execution_service.py`) that standardizes `trace_id`, lifecycle events, and response shape.
 - Required outbound lifecycle events are emitted for instrumented external interactions through `services/external_call_service.py`.
 - Successful non-flow operational paths now also emit durable events where implemented, including:
   - `health.liveness.completed`
   - `health.readiness.completed`
+  - `identity.created`
   - `auth.register.completed`
   - `auth.login.completed`
+- `POST /auth/register` also performs synchronous signup initialization before returning:
+  - creates the user row
+  - seeds the first identity memory node
+  - creates a baseline score row
+  - creates an initialized execution placeholder
+  - emits required signup lifecycle events
 - Async heavy-execution jobs now emit:
   - `execution.started` immediately on submission
   - `async_job.started` when the worker begins queued execution
   - `async_job.completed` or `async_job.failed` for queued worker outcome
   - `execution.completed` or `execution.failed` as the canonical execution ledger events
+- High-impact execution outcomes can now auto-create Memory Bridge records with causal metadata (`source_event_id`, `root_event_id`, `causal_depth`, `impact_score`, `memory_type`).
+- Embedding generation for newly captured memory is now asynchronous. Request paths persist the memory first with `embedding_status=pending`, enqueue background embedding work, and retrieval can fall back to non-embedding search while vectors are unavailable.
+- Agent execution now performs pre-run memory recall and injects categorized context (`similar_past_outcomes`, `relevant_failures`, `successful_patterns`) before deterministic execution begins.
 - Required `SystemEvent` persistence failures now attempt a fallback `error.system_event_failure` record and then raise fail-closed.
+- Infinity loop decisions can now be memory-weighted in addition to KPI- and feedback-weighted, using ranked memory signals built before `run_loop()`.
+- Execution-envelope normalization is still incomplete across `SystemEvent`, agent runs, flow runs, async jobs, and several execution-adjacent routes. Some surfaces still return direct envelope payloads or raw JSON rather than going through the shared wrapper.
 - Global exception handlers normalize responses for:
   - `HTTPException`
   - `RequestValidationError`
@@ -79,7 +94,8 @@ This document describes the current runtime behavior of the FastAPI backend as i
 
 ## 7. Runtime Risks That Still Exist
 - External model calls are still synchronous in several request paths and can increase request latency.
-- MongoDB remains late-bound and optional; failed Mongo writes are still not uniformly fatal.
+- MongoDB is now a startup requirement. Missing or unreachable `MONGO_URL` fails fast during lifespan initialization instead of surfacing later during execution.
 - Request metrics persistence is best-effort; failures are logged and swallowed.
 - The app is still a monolith: API, scheduler leadership, orchestration, and some execution logic share the same process.
+- SQLite-based verification still reveals PostgreSQL-specific tag operators inside memory auto-link enrichment, so the capture path is not yet cross-dialect clean even though the production PostgreSQL path is intact.
 - Not every domain has a first-class execution-record model yet, even though trace propagation and `SystemEvent` coverage are much stronger.

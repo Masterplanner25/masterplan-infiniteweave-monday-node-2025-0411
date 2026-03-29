@@ -38,6 +38,7 @@ from services.capability_service import check_execution_capability, check_tool_c
 from services.agent_tools import execute_tool
 from services.flow_engine import PersistentFlowRunner, register_node
 from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_types import SystemEventTypes
 from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
@@ -178,13 +179,15 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         )
         emit_system_event(
             db=db,
-            event_type="agent.step.failed",
+            event_type=SystemEventTypes.AGENT_STEP,
             user_id=user_id,
             trace_id=state.get("correlation_id") or context.get("trace_id"),
+            source="agent",
             payload={
                 "run_id": str(agent_run_id),
                 "step_index": idx,
                 "tool_name": tool_name,
+                "status": "failed",
                 "error": error_msg,
             },
             required=True,
@@ -262,9 +265,10 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     db.commit()
     emit_system_event(
         db=db,
-        event_type="agent.step.completed" if step_status == "success" else "agent.step.failed",
+        event_type=SystemEventTypes.AGENT_STEP,
         user_id=user_id,
         trace_id=state.get("correlation_id") or context.get("trace_id"),
+        source="agent",
         payload={
             "run_id": str(agent_run_id),
             "step_index": idx,
@@ -462,6 +466,7 @@ class NodusAgentAdapter:
                     event_type="capability.denied",
                     user_id=user_id,
                     trace_id=correlation_id,
+                    source="agent",
                     payload={
                         "run_id": str(run_id),
                         "capability": "execute_flow",
@@ -495,6 +500,7 @@ class NodusAgentAdapter:
                 event_type="capability.allowed",
                 user_id=user_id,
                 trace_id=correlation_id,
+                source="agent",
                 payload={
                     "run_id": str(run_id),
                     "capability": "execute_flow",
@@ -506,6 +512,7 @@ class NodusAgentAdapter:
                 "agent_run_id": run_id,
                 "user_id": user_id,
                 "steps": steps,
+                "memory_context": (plan or {}).get("memory_context", {}),
                 "current_step_index": 0,
                 "step_results": [],
                 "correlation_id": correlation_id,
@@ -613,6 +620,7 @@ class NodusAgentAdapter:
                         message=str(exc),
                         user_id=user_id,
                         trace_id=correlation_id,
+                        source="agent",
                         payload={"run_id": run_id},
                         required=True,
                     )

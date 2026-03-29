@@ -7,6 +7,7 @@ Provides:
 - Password hashing utilities
 """
 from datetime import datetime, timedelta
+import re
 from typing import Optional, TYPE_CHECKING
 
 from jose import JWTError, jwt
@@ -57,6 +58,24 @@ def create_access_token(
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def _normalize_username_candidate(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    normalized = re.sub(r"[^a-z0-9._-]+", "_", raw).strip("._-")
+    return normalized or "user"
+
+
+def _resolve_username(*, email: str, username: str | None, db: Session) -> str:
+    from db.models.user import User
+
+    base = _normalize_username_candidate(username or email.split("@", 1)[0])
+    candidate = base
+    suffix = 1
+    while db.query(User).filter(User.username == candidate).first():
+        suffix += 1
+        candidate = f"{base}_{suffix}"
+    return candidate
 
 
 def decode_access_token(token: str) -> dict:
@@ -118,13 +137,18 @@ def get_optional_user(
 
 # ── DB-backed user operations ────────────────────────────────────────────────
 
-def register_user(email: str, password: str, username: str, db: Session):
+def register_user(email: str, password: str, username: str | None, db: Session):
     """Create a new user in the database. Raises 409 if email already exists."""
     from db.models.user import User
     existing = db.query(User).filter(User.email == email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
-    user = User(email=email, username=username, hashed_password=hash_password(password))
+    resolved_username = _resolve_username(email=email, username=username, db=db)
+    user = User(
+        email=email,
+        username=resolved_username,
+        hashed_password=hash_password(password),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)

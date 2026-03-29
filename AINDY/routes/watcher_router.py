@@ -22,7 +22,14 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models.watcher_signal import WatcherSignal
 from services.auth_service import verify_api_key
+from services.autonomous_controller import build_decision_response
+from services.autonomous_controller import evaluate_live_trigger
+from services.autonomous_controller import record_decision
+from services.async_job_service import build_deferred_response
+from services.async_job_service import defer_async_job
+from services.execution_envelope import success
 from services.flow_engine import execute_intent
+from utils.trace_context import ensure_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -144,15 +151,20 @@ def _validate_signal(sig: SignalPayload, idx: int) -> None:
             ) from exc
 
 
-def _extract_ingest_result(result: Dict[str, Any]) -> WatcherIngestResponse:
+def _extract_ingest_result(result: Dict[str, Any]) -> Dict[str, Any]:
     if result.get("status") != "SUCCESS":
         raise HTTPException(status_code=500, detail="Watcher ingest failed")
 
     payload = result.get("result") or {}
-    return WatcherIngestResponse(
-        accepted=int(payload.get("accepted") or 0),
-        session_ended_count=int(payload.get("session_ended_count") or 0),
-        orchestration=payload.get("orchestration"),
+    return success(
+        {
+            "accepted": int(payload.get("accepted") or 0),
+            "session_ended_count": int(payload.get("session_ended_count") or 0),
+            "orchestration": payload.get("orchestration"),
+        },
+        result.get("events") or [],
+        result.get("trace_id") or ensure_trace_id(),
+        next_action=result.get("next_action"),
     )
 
 
@@ -160,11 +172,11 @@ def _extract_ingest_result(result: Dict[str, Any]) -> WatcherIngestResponse:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/signals", status_code=201, response_model=WatcherIngestResponse)
+@router.post("/signals", status_code=201)
 def receive_signals(
     batch: SignalBatch,
     db: Session = Depends(get_db),
-) -> WatcherIngestResponse:
+) -> Dict[str, Any]:
     """
     Receive a batch of watcher signals. Validates, persists, and returns counts.
     Invalid signals are rejected wholesale (entire batch) if any signal has
@@ -173,18 +185,64 @@ def receive_signals(
     for idx, sig in enumerate(batch.signals):
         _validate_signal(sig, idx)
 
+    trace_id = ensure_trace_id()
+    trigger_context = {
+        "goal": "watcher_ingest",
+        "importance": 0.40,
+        "goal_alignment": 0.45,
+    }
+    user_id = next((sig.user_id for sig in batch.signals if sig.user_id), None)
+    evaluation = evaluate_live_trigger(
+        db=db,
+        trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
+        user_id=user_id,
+        context=trigger_context,
+    )
+    record_decision(
+        db=db,
+        trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
+        evaluation=evaluation,
+        user_id=user_id,
+        trace_id=trace_id,
+        context=trigger_context,
+    )
+    if evaluation["decision"] == "ignore":
+        return build_decision_response(
+            evaluation,
+            trace_id=trace_id,
+            result={"accepted": 0, "session_ended_count": 0, "orchestration": None},
+        )
+    if evaluation["decision"] == "defer":
+        log_id = defer_async_job(
+            task_name="watcher.ingest",
+            payload={
+                "signals": [sig.model_dump() for sig in batch.signals],
+                "user_id": user_id,
+                "__autonomy": {"trigger_type": "watcher", "source": "watcher_router", "context": trigger_context},
+            },
+            user_id=user_id,
+            source="watcher_router",
+            decision=evaluation,
+        )
+        return build_deferred_response(
+            log_id,
+            task_name="watcher.ingest",
+            source="watcher_router",
+            decision=evaluation,
+        )
+
     result = execute_intent(
         intent_data={
             "workflow_type": "watcher_ingest",
             "signals": [sig.model_dump() for sig in batch.signals],
         },
         db=db,
-        user_id=None,
+        user_id=user_id,
     )
     return _extract_ingest_result(result)
 
 
-@router.get("/signals", response_model=List[SignalResponse])
+@router.get("/signals")
 def list_signals(
     session_id: Optional[str] = Query(default=None, description="Filter by session UUID"),
     signal_type: Optional[str] = Query(default=None, description="Filter by signal type"),
@@ -192,7 +250,7 @@ def list_signals(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-) -> List[SignalResponse]:
+) -> Dict[str, Any]:
     """
     Query stored watcher signals. Supports filtering by session_id and signal_type.
     Returns signals ordered by signal_timestamp descending.
@@ -222,4 +280,4 @@ def list_signals(
         .limit(limit)
         .all()
     )
-    return [_signal_to_response(s) for s in signals]
+    return success([_signal_to_response(s).model_dump() for s in signals], [], ensure_trace_id())

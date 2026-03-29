@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { runResearch } from "../api";
+import SearchHistory from "./SearchHistory";
 
 export default function ResearchEngine() {
   const [query, setQuery] = useState("");
@@ -21,6 +22,12 @@ export default function ResearchEngine() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleHistorySelect = (item) => {
+    setQuery(item.query || "");
+    setSummary("");
+    setResult(item.result || null);
   };
 
   return (
@@ -95,6 +102,12 @@ export default function ResearchEngine() {
           </div>
         </div>
       )}
+
+      <SearchHistory
+        searchType="research"
+        title="Recent Research Queries"
+        onSelect={handleHistorySelect}
+      />
     </div>
   );
 }

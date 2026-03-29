@@ -1,5 +1,84 @@
 // client/src/api.js
+import { safeMap } from "./utils/safe";
+
 export const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+export const TOKEN_STORAGE_KEY = "token";
+export const LEGACY_TOKEN_STORAGE_KEY = "aindy_token";
+const NORMALIZED_ARRAY_KEYS = new Set([
+  "agents",
+  "allowed_auto_grant_tools",
+  "allowed_capabilities",
+  "analyses",
+  "drop_points",
+  "end",
+  "error_rate_series",
+  "events",
+  "feedback",
+  "fields",
+  "findings",
+  "flows",
+  "generations",
+  "granted_tools",
+  "history",
+  "items",
+  "jobs",
+  "logs",
+  "memories",
+  "nodes",
+  "plans",
+  "pings",
+  "recent",
+  "recent_authors",
+  "recent_changes",
+  "recent_errors",
+  "recent_ripples",
+  "results",
+  "runs",
+  "steps",
+  "strategies",
+  "suggestions",
+  "tags",
+  "timeline",
+  "tools",
+]);
+
+function normalizeArrayFields(value) {
+  if (Array.isArray(value)) {
+    return safeMap(value, (item) => normalizeArrayFields(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const normalized = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (NORMALIZED_ARRAY_KEYS.has(key)) {
+      normalized[key] = Array.isArray(entry) ? safeMap(entry, (item) => normalizeArrayFields(item)) : [];
+      continue;
+    }
+    normalized[key] = normalizeArrayFields(entry);
+  }
+  return normalized;
+}
+
+export function getStoredToken() {
+  return (
+    localStorage.getItem(TOKEN_STORAGE_KEY) ||
+    localStorage.getItem(LEGACY_TOKEN_STORAGE_KEY) ||
+    ""
+  );
+}
+
+export function setStoredToken(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  localStorage.setItem(LEGACY_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearStoredToken() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
+}
 
 export function buildApiUrl(path) {
   if (/^https?:\/\//i.test(path)) {
@@ -11,11 +90,13 @@ export function buildApiUrl(path) {
 // ✅ Helper function to handle all requests consistently
 async function request(path, opts = {}) {
   const url = buildApiUrl(path);
+  const token = getStoredToken();
 
   const res = await fetch(url, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts.headers || {}),
     },
   });
@@ -29,7 +110,7 @@ async function request(path, opts = {}) {
   // Handle response parsing
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    return normalizeArrayFields(JSON.parse(text));
   } catch {
     return text;
   }
@@ -37,22 +118,19 @@ async function request(path, opts = {}) {
 
 /* --- Auth helper (injects Bearer token from localStorage) --- */
 function authRequest(path, opts = {}) {
-  const token = localStorage.getItem("aindy_token");
   return request(path, {
     ...opts,
-    headers: {
-      ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
   });
 }
 
 /* --- Auth helper for absolute URLs (used by legacy gateway endpoints) --- */
 async function requestAbsolute(url, opts = {}) {
+  const token = getStoredToken();
   const res = await fetch(url, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts.headers || {}),
     },
   });
@@ -64,20 +142,36 @@ async function requestAbsolute(url, opts = {}) {
 
   const text = await res.text();
   try {
-    return JSON.parse(text);
+    return normalizeArrayFields(JSON.parse(text));
   } catch {
     return text;
   }
 }
 
 export function authRequestExternal(url, opts = {}) {
-  const token = localStorage.getItem("aindy_token");
   return requestAbsolute(url, {
     ...opts,
-    headers: {
-      ...(opts.headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+  });
+}
+
+export function loginUser(credentials) {
+  return request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(credentials),
+  });
+}
+
+export function registerUser(credentials) {
+  return request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(credentials),
+  });
+}
+
+export function bootIdentity(token = getStoredToken()) {
+  return request("/identity/boot", {
+    method: "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 }
 
@@ -87,6 +181,20 @@ export function runResearch(query, summary) {
     method: "POST",
     body: JSON.stringify({ query, summary }),
   });
+}
+
+export function getSearchHistory(searchType = null, limit = 25) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (searchType) params.append("search_type", searchType);
+  return authRequest(`/search/history?${params.toString()}`, { method: "GET" });
+}
+
+export function getSearchHistoryItem(historyId) {
+  return authRequest(`/search/history/${historyId}`, { method: "GET" });
+}
+
+export function deleteSearchHistoryItem(historyId) {
+  return authRequest(`/search/history/${historyId}`, { method: "DELETE" });
 }
 
 /* --- ARM Endpoints --- */
@@ -174,6 +282,17 @@ export function createPost(postData) {
   return authRequest(`/social/post`, {
     method: "POST",
     body: JSON.stringify(postData),
+  });
+}
+
+export function getSocialAnalytics() {
+  return authRequest("/social/analytics", { method: "GET" });
+}
+
+export function recordSocialInteraction(postId, action, amount = 1) {
+  return authRequest(`/social/posts/${postId}/interact`, {
+    method: "POST",
+    body: JSON.stringify({ action, amount }),
   });
 }
 
@@ -702,4 +821,8 @@ export function getRecentRippleEvents(limit = 20) {
 
 export function getRippleTrace(dropPointId) {
   return authRequest(`/rippletrace/ripples/${dropPointId}`, { method: "GET" });
+}
+
+export function getRippleTraceGraph(traceId) {
+  return authRequest(`/rippletrace/${encodeURIComponent(traceId)}`, { method: "GET" });
 }

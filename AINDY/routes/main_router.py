@@ -1,10 +1,10 @@
+import uuid
+
 from fastapi import Depends, APIRouter, HTTPException
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
-from services.projection_service import project_completion
-from datetime import timedelta
 from schemas.masterplan import MasterPlanInput
 from db.models import MasterPlan
 from db.models import CalculationResult
@@ -28,7 +28,6 @@ from schemas.analytics_inputs import (
 from schemas.batch import BatchInput
 from services.calculations import process_batch
 from services.calculation_services import (
-    calculate_twr,
     calculate_effort,
     calculate_productivity,
     calculate_virality,
@@ -50,6 +49,26 @@ from services.calculation_services import (
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
+
+def _legacy_twr_response(*, task: TaskInput, infinity_result: dict) -> dict:
+    score = (infinity_result or {}).get("score") or {}
+    adjustment = (infinity_result or {}).get("adjustment") or {}
+    latest_adjustment = {
+        "decision_type": adjustment.get("decision_type"),
+        "applied_at": adjustment.get("applied_at"),
+        "adjustment_payload": adjustment.get("adjustment_payload"),
+    } if adjustment else None
+    return {
+        "task_name": task.task_name,
+        "TWR": score.get("master_score"),
+        "control_system": "infinity",
+        "message": "Legacy TWR route now uses Infinity as the canonical scoring source.",
+        "score": score,
+        "next_action": (infinity_result or {}).get("next_action"),
+        "latest_adjustment": latest_adjustment,
+        "prior_evaluation": (infinity_result or {}).get("prior_evaluation"),
+    }
+
 @router.post("/calculate_twr")
 @cache(expire=60)
 async def process_task(
@@ -57,66 +76,34 @@ async def process_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-    # 1️⃣ Calculate and save TWR
     try:
-        twr = calculate_twr(task)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=422,
-            detail={"error": "twr_validation_failed", "message": "TWR validation failed", "details": str(e)},
+        result = execute_infinity_orchestrator(
+            user_id=uuid.UUID(str(current_user["sub"])),
+            trigger_event="legacy_twr_route",
+            db=db,
         )
-    except ZeroDivisionError:
+    except Exception as exc:
         raise HTTPException(
-            status_code=422,
+            status_code=500,
             detail={
-                "error": "twr_division_by_zero",
-                "message": "task_difficulty cannot be zero",
+                "error": "infinity_scoring_failed",
+                "message": "Infinity scoring failed for legacy TWR route",
+                "details": str(exc),
+            },
+        ) from exc
+
+    if not result:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "infinity_scoring_failed",
+                "message": "Infinity scoring returned no result",
             },
         )
-    save_calculation(db, "Time-to-Wealth Ratio", twr, user_id=str(current_user["sub"]))
 
-    # 2️⃣ Fetch master plans
-    user_id = str(current_user["sub"])
-    active_plan = db.query(MasterPlan).filter(
-        MasterPlan.is_active.is_(True),
-        MasterPlan.user_id == user_id,
-    ).first()
-    origin_plan = db.query(MasterPlan).filter(
-        MasterPlan.is_origin.is_(True),
-        MasterPlan.user_id == user_id,
-    ).first()
-
-    # If no plan exists yet
-    if not active_plan or not origin_plan:
-        return {
-            "task_name": task.task_name,
-            "TWR": twr,
-            "message": "MasterPlan not configured."
-        }
-
-    # 3️⃣ Fetch TWR history
-    twr_history = db.query(CalculationResult)\
-        .filter(
-            CalculationResult.metric_name == "Time-to-Wealth Ratio",
-            CalculationResult.user_id == user_id,
-        ).all()
-
-    twr_values = [r.result_value for r in twr_history]
-
-    # 4️⃣ Run projection against active plan
-    projection_active = project_completion(active_plan, twr_values)
-
-    # 5️⃣ Run projection against origin (V1)
-    projection_origin = project_completion(origin_plan, twr_values)
-
-    # 6️⃣ Return full response
-    return {
-        "task_name": task.task_name,
-        "TWR": twr,
-        "active_projection": projection_active,
-        "origin_projection": projection_origin
-    }
+    return _legacy_twr_response(task=task, infinity_result=result)
 
 @router.post("/calculate_effort")
 @cache(expire=300)

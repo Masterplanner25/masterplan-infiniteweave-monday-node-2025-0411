@@ -3,6 +3,8 @@ services:
     build:
       context: ./AINDY
       dockerfile: Dockerfile
+    env_file:
+      - .env
     command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
     environment:
       ENV: ${ENV:-production}
@@ -35,6 +37,8 @@ services:
     build:
       context: ./AINDY
       dockerfile: Dockerfile
+    env_file:
+      - .env
     command: python worker.py
     environment:
       ENV: ${ENV:-production}
@@ -75,6 +79,8 @@ services:
 
   postgres:
     image: pgvector/pgvector:pg16
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-aindy}
       POSTGRES_USER: ${POSTGRES_USER:-aindy}
@@ -96,6 +102,8 @@ services:
 
   mongo:
     image: mongo:7
+    env_file:
+      - .env
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-aindy}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}

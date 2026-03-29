@@ -65,3 +65,511 @@
 2026-03-25 12:59:11,748 - INFO - Loaded development environment from .env
 2026-03-25 13:12:16,127 - INFO - Loaded development environment from .env
 2026-03-25 13:12:17,692 - INFO - Loaded development environment from .env
+2026-03-25 21:36:05,197 - INFO - Loaded development environment from .env
+2026-03-25 21:36:16,045 - INFO - Loaded development environment from .env
+2026-03-25 21:40:14,292 - INFO - Loaded development environment from .env
+2026-03-25 21:40:44,831 - INFO - Loaded development environment from .env
+2026-03-25 21:40:44,886 - INFO - Loaded development environment from .env
+2026-03-25 21:41:23,887 - INFO - Loaded development environment from .env
+2026-03-25 21:41:23,916 - INFO - Loaded development environment from .env
+2026-03-25 21:42:24,150 - INFO - Loaded development environment from .env
+2026-03-25 21:42:31,471 - INFO - Loaded development environment from .env
+2026-03-25 21:53:16,936 - INFO - Loaded development environment from .env
+2026-03-25 21:53:28,566 - INFO - Loaded development environment from .env
+2026-03-28 20:42:46,820 - INFO - Loaded development environment from process environment variables
+2026-03-28 21:58:35,187 - INFO - Loaded development environment from process environment variables
+2026-03-28 22:19:09,697 - INFO - Loaded development environment from process environment variables
+2026-03-28 22:43:20,873 - INFO - Loaded development environment from process environment variables
+2026-03-28 22:55:09,508 - INFO - Loaded development environment from process environment variables
+2026-03-28 22:55:53,474 - INFO - Loaded development environment from process environment variables
+2026-03-28 23:21:19,112 - INFO - Loaded development environment from process environment variables
+2026-03-28 23:30:47,420 - INFO - Loaded development environment from process environment variables
+2026-03-28 23:31:17,691 - INFO - Loaded development environment from process environment variables
+2026-03-29 01:30:59,411 - INFO - Loaded development environment from process environment variables
+2026-03-29 01:38:19,458 - INFO - Loaded development environment from process environment variables
+2026-03-29 08:35:20,363 - INFO - Loaded development environment from process environment variables
+2026-03-29 08:37:15,317 - INFO - Loaded development environment from process environment variables
+2026-03-29 08:56:55,312 - INFO - Loaded development environment from process environment variables
+2026-03-29 08:57:56,243 - INFO - Loaded development environment from process environment variables
+2026-03-29 08:58:59,456 - INFO - Loaded development environment from process environment variables
+2026-03-29 09:21:13,184 - INFO - Loaded development environment from process environment variables
+2026-03-29 09:29:29,226 - INFO - Loaded development environment from process environment variables
+2026-03-29 09:29:53,166 - INFO - Loaded development environment from process environment variables
+2026-03-29 09:30:05,906 - INFO - Loaded development environment from process environment variables
+2026-03-29 09:35:34,005 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:10:37,685 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:10:38,500 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:12:04,116 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:13:02,026 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:13:09,106 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:13:09,272 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:13:09,272 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:13:09,682 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:13:09,683 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:13:09,685 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:13:09,685 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:13:09,721 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:13:09,749 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:13:12,690 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.405986 seconds
+2026-03-29 10:13:13,117 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.939928 seconds
+2026-03-29 10:13:14,333 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.422839 seconds
+2026-03-29 10:13:14,775 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.940006 seconds
+2026-03-29 10:13:16,858 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.398818 seconds
+2026-03-29 10:13:17,260 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.939962 seconds
+2026-03-29 10:13:20,321 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.476434 seconds
+2026-03-29 10:13:20,832 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.883119 seconds
+2026-03-29 10:13:21,789 - WARNING - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:13:21,894 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Captured memory [insight] from feedback.latency_spike (significance=0.31): Latency spike detected at 2675.44ms...
+2026-03-29 10:13:22,994 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.439403 seconds
+2026-03-29 10:13:23,447 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.912496 seconds
+2026-03-29 10:13:26,456 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.483590 seconds
+2026-03-29 10:13:26,954 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Retrying request to /embeddings in 0.969950 seconds
+2026-03-29 10:13:28,001 - WARNING - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:13:28,183 - INFO - [trace=f6d60e16-465e-4fba-a520-ecdaee31597d] - {"event": "request_complete", "trace_id": "f6d60e16-465e-4fba-a520-ecdaee31597d", "request_id": "f6d60e16-465e-4fba-a520-ecdaee31597d", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 18430.88, "user_id": null}
+2026-03-29 10:13:28,212 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:13:28,580 - INFO - [trace=23a35f98-f175-4a16-8cb4-c380bc9b4188] - {"event": "request_complete", "trace_id": "23a35f98-f175-4a16-8cb4-c380bc9b4188", "request_id": "23a35f98-f175-4a16-8cb4-c380bc9b4188", "method": "POST", "path": "/auth/login", "status_code": 200, "duration_ms": 365.76, "user_id": null}
+2026-03-29 10:13:28,599 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 200 OK"
+2026-03-29 10:13:28,630 - INFO - [trace=7c41ceab-8ca8-474e-89af-f5b586002b1d] - {"event": "request_complete", "trace_id": "7c41ceab-8ca8-474e-89af-f5b586002b1d", "request_id": "7c41ceab-8ca8-474e-89af-f5b586002b1d", "method": "GET", "path": "/goals", "status_code": 200, "duration_ms": 29.07, "user_id": "b3fdfd35-5188-4501-8480-fe92901b01a8"}
+2026-03-29 10:13:28,652 - INFO - [trace=-] - HTTP Request: GET http://testserver/goals "HTTP/1.1 200 OK"
+2026-03-29 10:13:28,657 - INFO - [trace=02e4ae8c-2da2-4cc1-a488-82c0c5cbc40f] - {"event": "request_complete", "trace_id": "02e4ae8c-2da2-4cc1-a488-82c0c5cbc40f", "request_id": "02e4ae8c-2da2-4cc1-a488-82c0c5cbc40f", "method": "POST", "path": "/goals", "status_code": 405, "duration_ms": 1.24, "user_id": "b3fdfd35-5188-4501-8480-fe92901b01a8"}
+2026-03-29 10:13:28,672 - INFO - [trace=-] - HTTP Request: POST http://testserver/goals "HTTP/1.1 405 Method Not Allowed"
+2026-03-29 10:13:28,718 - INFO - [trace=e3920827-4bad-4b1a-9ca8-2bf14a0218b8] - Created task: release-task-51686f
+2026-03-29 10:13:28,720 - INFO - [trace=e3920827-4bad-4b1a-9ca8-2bf14a0218b8] - {"event": "request_complete", "trace_id": "e3920827-4bad-4b1a-9ca8-2bf14a0218b8", "request_id": "e3920827-4bad-4b1a-9ca8-2bf14a0218b8", "method": "POST", "path": "/tasks/create", "status_code": 200, "duration_ms": 45.53, "user_id": "b3fdfd35-5188-4501-8480-fe92901b01a8"}
+2026-03-29 10:13:28,736 - INFO - [trace=-] - HTTP Request: POST http://testserver/tasks/create "HTTP/1.1 200 OK"
+2026-03-29 10:13:28,760 - ERROR - [trace=-] - Unhandled error: (psycopg2.errors.UndefinedColumn) column strategies.intent_type does not exist
+LINE 1: SELECT strategies.id AS strategies_id, strategies.intent_typ...
+                                               ^
+
+[SQL: SELECT strategies.id AS strategies_id, strategies.intent_type AS strategies_intent_type, strategies.flow AS strategies_flow, strategies.score AS strategies_score, strategies.usage_count AS strategies_usage_count, strategies.success_count AS strategies_success_count, strategies.failure_count AS strategies_failure_count, strategies.user_id AS strategies_user_id, strategies.created_at AS strategies_created_at, strategies.updated_at AS strategies_updated_at 
+FROM strategies 
+WHERE strategies.intent_type = %(intent_type_1)s AND strategies.user_id = %(user_id_1)s::UUID ORDER BY strategies.score DESC 
+ LIMIT %(param_1)s]
+[parameters: {'intent_type_1': 'task_completion', 'user_id_1': UUID('b3fdfd35-5188-4501-8480-fe92901b01a8'), 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2026-03-29 10:13:28,798 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:13:28,798 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:13:28,799 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:13:28,799 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:14:15,813 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:14:23,671 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:14:23,847 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:14:23,848 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:14:24,261 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:14:24,261 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:14:24,266 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,266 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,267 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,267 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,267 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,267 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,267 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:14:24,269 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:14:24,269 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:14:24,270 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:14:24,270 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:14:24,296 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:14:24,320 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:14:27,158 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.426883 seconds
+2026-03-29 10:14:27,592 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.949442 seconds
+2026-03-29 10:14:29,709 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.456370 seconds
+2026-03-29 10:14:30,204 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.901277 seconds
+2026-03-29 10:14:33,271 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.420686 seconds
+2026-03-29 10:14:33,718 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Retrying request to /embeddings in 0.759880 seconds
+2026-03-29 10:14:34,550 - WARNING - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:14:34,738 - INFO - [trace=4cbdfd68-708f-49b6-9700-c2fcef18ef21] - {"event": "request_complete", "trace_id": "4cbdfd68-708f-49b6-9700-c2fcef18ef21", "request_id": "4cbdfd68-708f-49b6-9700-c2fcef18ef21", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 10417.98, "user_id": null}
+2026-03-29 10:14:34,757 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:14:35,269 - INFO - [trace=6123c64e-1758-4897-8d7d-6d4ffa9f2bd1] - {"event": "request_complete", "trace_id": "6123c64e-1758-4897-8d7d-6d4ffa9f2bd1", "request_id": "6123c64e-1758-4897-8d7d-6d4ffa9f2bd1", "method": "POST", "path": "/auth/login", "status_code": 200, "duration_ms": 509.31, "user_id": null}
+2026-03-29 10:14:35,284 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/login "HTTP/1.1 200 OK"
+2026-03-29 10:14:35,304 - INFO - [trace=21fe50a2-8b7d-4175-9207-eab04b8b54dc] - {"event": "request_complete", "trace_id": "21fe50a2-8b7d-4175-9207-eab04b8b54dc", "request_id": "21fe50a2-8b7d-4175-9207-eab04b8b54dc", "method": "GET", "path": "/goals", "status_code": 200, "duration_ms": 17.53, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:14:35,318 - INFO - [trace=-] - HTTP Request: GET http://testserver/goals "HTTP/1.1 200 OK"
+2026-03-29 10:14:35,318 - INFO - [trace=5bb78ddc-ebd9-4417-8f7b-f2972c0f1112] - {"event": "request_complete", "trace_id": "5bb78ddc-ebd9-4417-8f7b-f2972c0f1112", "request_id": "5bb78ddc-ebd9-4417-8f7b-f2972c0f1112", "method": "POST", "path": "/goals", "status_code": 405, "duration_ms": 0.0, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:14:35,332 - INFO - [trace=-] - HTTP Request: POST http://testserver/goals "HTTP/1.1 405 Method Not Allowed"
+2026-03-29 10:14:35,366 - INFO - [trace=9a023199-1a46-4163-b442-17676090368e] - Created task: release-task-7cf656
+2026-03-29 10:14:35,368 - INFO - [trace=9a023199-1a46-4163-b442-17676090368e] - {"event": "request_complete", "trace_id": "9a023199-1a46-4163-b442-17676090368e", "request_id": "9a023199-1a46-4163-b442-17676090368e", "method": "POST", "path": "/tasks/create", "status_code": 200, "duration_ms": 33.04, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:14:35,382 - INFO - [trace=-] - HTTP Request: POST http://testserver/tasks/create "HTTP/1.1 200 OK"
+2026-03-29 10:14:35,403 - ERROR - [trace=-] - Unhandled error: (psycopg2.errors.UndefinedColumn) column strategies.intent_type does not exist
+LINE 1: SELECT strategies.id AS strategies_id, strategies.intent_typ...
+                                               ^
+
+[SQL: SELECT strategies.id AS strategies_id, strategies.intent_type AS strategies_intent_type, strategies.flow AS strategies_flow, strategies.score AS strategies_score, strategies.usage_count AS strategies_usage_count, strategies.success_count AS strategies_success_count, strategies.failure_count AS strategies_failure_count, strategies.user_id AS strategies_user_id, strategies.created_at AS strategies_created_at, strategies.updated_at AS strategies_updated_at 
+FROM strategies 
+WHERE strategies.intent_type = %(intent_type_1)s AND strategies.user_id = %(user_id_1)s::UUID ORDER BY strategies.score DESC 
+ LIMIT %(param_1)s]
+[parameters: {'intent_type_1': 'task_completion', 'user_id_1': UUID('0a25e248-a827-46d8-9685-9489103a908a'), 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2026-03-29 10:14:35,430 - INFO - [trace=-] - HTTP Request: POST http://testserver/tasks/complete "HTTP/1.1 500 Internal Server Error"
+2026-03-29 10:14:35,458 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Running research for query: release search 0ff2af
+2026-03-29 10:14:35,533 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.486009 seconds
+2026-03-29 10:14:36,045 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.837442 seconds
+2026-03-29 10:14:38,069 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.481317 seconds
+2026-03-29 10:14:38,569 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.847978 seconds
+2026-03-29 10:14:41,594 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.390702 seconds
+2026-03-29 10:14:42,010 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.761134 seconds
+2026-03-29 10:14:42,866 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:14:42,887 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - [MemoryNativeScorer] fallback engaged (disabled)
+2026-03-29 10:14:42,887 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - [MemoryOrchestrator] query=release search 0ff2af task_type=analysis candidates=0 returned=0 tokens=0
+2026-03-29 10:14:42,928 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.388480 seconds
+2026-03-29 10:14:43,346 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.926604 seconds
+2026-03-29 10:14:45,432 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.471509 seconds
+2026-03-29 10:14:45,930 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.908301 seconds
+2026-03-29 10:14:49,011 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.473329 seconds
+2026-03-29 10:14:49,505 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.797879 seconds
+2026-03-29 10:14:50,399 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:14:50,469 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.480372 seconds
+2026-03-29 10:14:50,991 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.938044 seconds
+2026-03-29 10:14:53,083 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.417429 seconds
+2026-03-29 10:14:53,545 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.871404 seconds
+2026-03-29 10:14:56,561 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.451815 seconds
+2026-03-29 10:14:57,036 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.839442 seconds
+2026-03-29 10:14:57,975 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:14:57,984 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - [MemoryNativeScorer] fallback engaged (disabled)
+2026-03-29 10:14:57,984 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - [MemoryOrchestrator] query=release search 0ff2af task_type=analysis candidates=0 returned=0 tokens=0
+2026-03-29 10:14:59,150 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - unified_query external analysis failed: HTTPSConnectionPool(host='api.perplexity.ai', port=443): Max retries exceeded with url: /search?q=release%20search%200ff2af (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x0000025083AB24D0>: Failed to establish a new connection: [WinError 10013] An attempt was made to access a socket in a way forbidden by its access permissions'))
+2026-03-29 10:14:59,189 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - [MemoryBridge] Logged node for query: release search 0ff2af
+2026-03-29 10:14:59,189 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Research query completed in 23730.97ms
+2026-03-29 10:14:59,346 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.448197 seconds
+2026-03-29 10:14:59,824 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.766323 seconds
+2026-03-29 10:15:01,687 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.432405 seconds
+2026-03-29 10:15:02,152 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.989017 seconds
+2026-03-29 10:15:05,260 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.437532 seconds
+2026-03-29 10:15:05,722 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.825873 seconds
+2026-03-29 10:15:06,661 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:15:06,721 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Captured memory [insight] from feedback.latency_spike (significance=0.31): Latency spike detected at 23730.97ms...
+2026-03-29 10:15:06,833 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.496131 seconds
+2026-03-29 10:15:07,332 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.892913 seconds
+2026-03-29 10:15:09,337 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.399395 seconds
+2026-03-29 10:15:09,813 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.919125 seconds
+2026-03-29 10:15:12,834 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.499276 seconds
+2026-03-29 10:15:13,334 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Retrying request to /embeddings in 0.971159 seconds
+2026-03-29 10:15:14,371 - WARNING - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:15:14,427 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - Captured memory [insight] from execution.completed (significance=0.31): execution.completed from research...
+2026-03-29 10:15:14,460 - INFO - [trace=62c19b39-76da-4699-8b93-4ce1eef5f671] - {"event": "request_complete", "trace_id": "62c19b39-76da-4699-8b93-4ce1eef5f671", "request_id": "62c19b39-76da-4699-8b93-4ce1eef5f671", "method": "POST", "path": "/research/query", "status_code": 200, "duration_ms": 39028.39, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:15:14,477 - INFO - [trace=-] - HTTP Request: POST http://testserver/research/query "HTTP/1.1 200 OK"
+2026-03-29 10:15:14,628 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.405978 seconds
+2026-03-29 10:15:15,075 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.995880 seconds
+2026-03-29 10:15:17,207 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.398749 seconds
+2026-03-29 10:15:17,623 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.876801 seconds
+2026-03-29 10:15:20,607 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.379158 seconds
+2026-03-29 10:15:21,022 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Retrying request to /embeddings in 0.906619 seconds
+2026-03-29 10:15:22,005 - WARNING - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:15:22,044 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - Captured memory [insight] from execution.completed (significance=0.32): execution.completed from search_history...
+2026-03-29 10:15:22,069 - INFO - [trace=c36c1b11-ce55-4395-85ae-d6d975e16afd] - {"event": "request_complete", "trace_id": "c36c1b11-ce55-4395-85ae-d6d975e16afd", "request_id": "c36c1b11-ce55-4395-85ae-d6d975e16afd", "method": "GET", "path": "/search/history", "status_code": 200, "duration_ms": 7589.28, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:15:22,083 - INFO - [trace=-] - HTTP Request: GET http://testserver/search/history "HTTP/1.1 200 OK"
+2026-03-29 10:15:22,134 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Created freelance order #1 for Release Client
+2026-03-29 10:15:22,210 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.474596 seconds
+2026-03-29 10:15:22,706 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.780388 seconds
+2026-03-29 10:15:24,271 - INFO - [trace=-] - Running job "Task reminder check (trigger: interval[0:01:00], next run at: 2026-03-29 10:15:24 MST)" (scheduled at 2026-03-29 10:15:24.266184-07:00)
+2026-03-29 10:15:24,273 - INFO - [trace=-] - Running job "Background task lease heartbeat (trigger: interval[0:01:00], next run at: 2026-03-29 10:15:24 MST)" (scheduled at 2026-03-29 10:15:24.267795-07:00)
+2026-03-29 10:15:24,276 - INFO - [trace=-] - Running job "Deferred async job retry (trigger: interval[0:01:00], next run at: 2026-03-29 10:15:24 MST)" (scheduled at 2026-03-29 10:15:24.267795-07:00)
+2026-03-29 10:15:24,327 - INFO - [trace=-] - Job "Deferred async job retry (trigger: interval[0:01:00], next run at: 2026-03-29 10:16:24 MST)" executed successfully
+2026-03-29 10:15:24,333 - INFO - [trace=-] - Job "Background task lease heartbeat (trigger: interval[0:01:00], next run at: 2026-03-29 10:16:24 MST)" executed successfully
+2026-03-29 10:15:24,443 - INFO - [trace=-] - Job "Task reminder check (trigger: interval[0:01:00], next run at: 2026-03-29 10:16:24 MST)" executed successfully
+2026-03-29 10:15:24,624 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.381895 seconds
+2026-03-29 10:15:25,038 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.790550 seconds
+2026-03-29 10:15:28,052 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.388068 seconds
+2026-03-29 10:15:28,480 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Retrying request to /embeddings in 0.989187 seconds
+2026-03-29 10:15:29,567 - WARNING - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:15:29,627 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - Captured memory [insight] from execution.completed (significance=0.31): execution.completed from freelance...
+2026-03-29 10:15:29,656 - INFO - [trace=e7350bef-7e08-438f-8d88-cb1e929f4bbb] - {"event": "request_complete", "trace_id": "e7350bef-7e08-438f-8d88-cb1e929f4bbb", "request_id": "e7350bef-7e08-438f-8d88-cb1e929f4bbb", "method": "POST", "path": "/freelance/order", "status_code": 201, "duration_ms": 7570.74, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:15:29,668 - INFO - [trace=-] - HTTP Request: POST http://testserver/freelance/order "HTTP/1.1 201 Created"
+2026-03-29 10:15:29,681 - INFO - [trace=197a47dc-bf3f-4d29-badc-98fae0658a3f] - {"event": "request_complete", "trace_id": "197a47dc-bf3f-4d29-badc-98fae0658a3f", "request_id": "197a47dc-bf3f-4d29-badc-98fae0658a3f", "method": "GET", "path": "/automation/logs", "status_code": 200, "duration_ms": 10.65, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:15:29,696 - INFO - [trace=-] - HTTP Request: GET http://testserver/automation/logs "HTTP/1.1 200 OK"
+2026-03-29 10:15:30,682 - INFO - [trace=37357d66-b23a-4aba-81f3-7d2f0c5287af] - Retrying request to /chat/completions in 0.409940 seconds
+2026-03-29 10:15:31,104 - INFO - [trace=37357d66-b23a-4aba-81f3-7d2f0c5287af] - Retrying request to /chat/completions in 0.857809 seconds
+2026-03-29 10:15:32,046 - WARNING - [trace=37357d66-b23a-4aba-81f3-7d2f0c5287af] - [AgentRuntime] Plan generation failed: Connection error.
+2026-03-29 10:15:32,062 - INFO - [trace=37357d66-b23a-4aba-81f3-7d2f0c5287af] - {"event": "request_complete", "trace_id": "37357d66-b23a-4aba-81f3-7d2f0c5287af", "request_id": "37357d66-b23a-4aba-81f3-7d2f0c5287af", "method": "POST", "path": "/agent/run", "status_code": 500, "duration_ms": 2365.03, "user_id": "0a25e248-a827-46d8-9685-9489103a908a"}
+2026-03-29 10:15:32,073 - INFO - [trace=-] - HTTP Request: POST http://testserver/agent/run "HTTP/1.1 500 Internal Server Error"
+2026-03-29 10:15:32,090 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:15:32,090 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:15:32,090 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:15:32,091 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:26:03,922 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:26:24,713 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:26:57,478 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:27:22,443 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:27:33,976 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:27:34,153 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:27:34,154 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:27:34,568 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:27:34,569 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:27:34,574 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,575 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,575 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,575 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,576 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,576 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,577 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:27:34,577 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:27:34,577 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:27:34,578 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:27:34,579 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:27:34,584 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:27:34,619 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:27:34,658 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:27:37,839 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.406652 seconds
+2026-03-29 10:27:38,270 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.927167 seconds
+2026-03-29 10:27:40,386 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.428592 seconds
+2026-03-29 10:27:40,834 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.790721 seconds
+2026-03-29 10:27:43,831 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.437498 seconds
+2026-03-29 10:27:44,313 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Retrying request to /embeddings in 0.920290 seconds
+2026-03-29 10:27:45,332 - WARNING - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:27:45,757 - INFO - [trace=2329ddec-ca36-4e77-abb8-d1320c8f237d] - {"event": "request_complete", "trace_id": "2329ddec-ca36-4e77-abb8-d1320c8f237d", "request_id": "2329ddec-ca36-4e77-abb8-d1320c8f237d", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 11096.15, "user_id": null}
+2026-03-29 10:27:45,796 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:27:46,032 - INFO - [trace=92198c7a-a17a-4edb-ab1c-0aff078abdc3] - {"event": "request_complete", "trace_id": "92198c7a-a17a-4edb-ab1c-0aff078abdc3", "request_id": "92198c7a-a17a-4edb-ab1c-0aff078abdc3", "method": "GET", "path": "/system/state", "status_code": 200, "duration_ms": 230.26, "user_id": "f57cea33-9f65-4d52-a5ce-0d09124edfd8"}
+2026-03-29 10:27:46,064 - INFO - [trace=-] - HTTP Request: GET http://testserver/system/state "HTTP/1.1 200 OK"
+2026-03-29 10:27:46,101 - INFO - [trace=a41279d6-88d5-4953-966d-c9bb7aeca1d4] - {"event": "request_complete", "trace_id": "a41279d6-88d5-4953-966d-c9bb7aeca1d4", "request_id": "a41279d6-88d5-4953-966d-c9bb7aeca1d4", "method": "GET", "path": "/autonomy/decisions", "status_code": 200, "duration_ms": 33.44, "user_id": "f57cea33-9f65-4d52-a5ce-0d09124edfd8"}
+2026-03-29 10:27:46,129 - INFO - [trace=-] - HTTP Request: GET http://testserver/autonomy/decisions "HTTP/1.1 200 OK"
+2026-03-29 10:27:46,203 - INFO - [trace=813ffdba-630a-474e-8e38-3b1afbbfa1af] - {"event": "request_complete", "trace_id": "813ffdba-630a-474e-8e38-3b1afbbfa1af", "request_id": "813ffdba-630a-474e-8e38-3b1afbbfa1af", "method": "GET", "path": "/scores/me", "status_code": 200, "duration_ms": 72.0, "user_id": "f57cea33-9f65-4d52-a5ce-0d09124edfd8"}
+2026-03-29 10:27:46,247 - INFO - [trace=-] - HTTP Request: GET http://testserver/scores/me "HTTP/1.1 200 OK"
+2026-03-29 10:27:46,273 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:27:46,273 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:27:46,273 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:27:46,275 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:28:23,769 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:28:29,882 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:28:30,105 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:28:30,105 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:28:30,457 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:28:30,457 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:28:30,462 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,463 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,463 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,463 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,463 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,464 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,464 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:28:30,464 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:28:30,464 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:28:30,465 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:28:30,466 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:28:30,473 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:28:30,502 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:28:30,536 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:28:32,486 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.427241 seconds
+2026-03-29 10:28:32,936 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.891380 seconds
+2026-03-29 10:28:35,030 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.481897 seconds
+2026-03-29 10:28:35,549 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.895062 seconds
+2026-03-29 10:28:38,590 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.380863 seconds
+2026-03-29 10:28:38,974 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Retrying request to /embeddings in 0.757636 seconds
+2026-03-29 10:28:39,792 - WARNING - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:28:40,026 - INFO - [trace=4fe7b573-d28f-4489-a657-064e3cf1b81b] - {"event": "request_complete", "trace_id": "4fe7b573-d28f-4489-a657-064e3cf1b81b", "request_id": "4fe7b573-d28f-4489-a657-064e3cf1b81b", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 9488.13, "user_id": null}
+2026-03-29 10:28:40,054 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:28:40,123 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Created freelance order #2 for Release Client
+2026-03-29 10:28:40,225 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.493567 seconds
+2026-03-29 10:28:40,732 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.881206 seconds
+2026-03-29 10:28:42,736 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.466386 seconds
+2026-03-29 10:28:43,229 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.887247 seconds
+2026-03-29 10:28:46,291 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.479608 seconds
+2026-03-29 10:28:46,806 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Retrying request to /embeddings in 0.923782 seconds
+2026-03-29 10:28:47,813 - WARNING - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:28:47,898 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - Captured memory [insight] from execution.completed (significance=0.31): execution.completed from freelance...
+2026-03-29 10:28:47,932 - INFO - [trace=90ed726d-5681-45a3-8188-399a22db45f4] - {"event": "request_complete", "trace_id": "90ed726d-5681-45a3-8188-399a22db45f4", "request_id": "90ed726d-5681-45a3-8188-399a22db45f4", "method": "POST", "path": "/freelance/order", "status_code": 201, "duration_ms": 7875.49, "user_id": "14a6bea7-3a87-402e-b6df-c3bbd00c69f0"}
+2026-03-29 10:28:47,949 - INFO - [trace=-] - HTTP Request: POST http://testserver/freelance/order "HTTP/1.1 201 Created"
+2026-03-29 10:28:48,021 - INFO - [trace=d5bf7630-09aa-4624-be28-247b1dab1f6c] - {"event": "request_complete", "trace_id": "d5bf7630-09aa-4624-be28-247b1dab1f6c", "request_id": "d5bf7630-09aa-4624-be28-247b1dab1f6c", "method": "GET", "path": "/freelance/orders", "status_code": 200, "duration_ms": 69.74, "user_id": "14a6bea7-3a87-402e-b6df-c3bbd00c69f0"}
+2026-03-29 10:28:48,044 - INFO - [trace=-] - HTTP Request: GET http://testserver/freelance/orders "HTTP/1.1 200 OK"
+2026-03-29 10:28:48,063 - INFO - [trace=e0ee4640-dbc7-4977-8c57-eab1b7ffbb20] - {"event": "request_complete", "trace_id": "e0ee4640-dbc7-4977-8c57-eab1b7ffbb20", "request_id": "e0ee4640-dbc7-4977-8c57-eab1b7ffbb20", "method": "GET", "path": "/automation/logs", "status_code": 200, "duration_ms": 15.09, "user_id": "14a6bea7-3a87-402e-b6df-c3bbd00c69f0"}
+2026-03-29 10:28:48,079 - INFO - [trace=-] - HTTP Request: GET http://testserver/automation/logs "HTTP/1.1 200 OK"
+2026-03-29 10:28:48,098 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:28:48,098 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:28:48,098 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:28:48,099 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:41:21,098 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:42:17,164 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:42:34,447 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:42:42,085 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:42:42,207 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:42:42,207 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:42:42,597 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:42:42,598 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:42:42,605 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,606 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,606 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,607 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,608 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,608 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,608 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:42:42,610 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:42:42,610 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:42:42,638 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:42:42,662 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:42:45,458 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.486083 seconds
+2026-03-29 10:42:45,965 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.889183 seconds
+2026-03-29 10:42:47,987 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.468833 seconds
+2026-03-29 10:42:48,489 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.931645 seconds
+2026-03-29 10:42:51,602 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.402563 seconds
+2026-03-29 10:42:52,030 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Retrying request to /embeddings in 0.761090 seconds
+2026-03-29 10:42:52,852 - WARNING - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:42:53,092 - INFO - [trace=85c66909-2365-4d0e-ae46-19a74ee4f22a] - {"event": "request_complete", "trace_id": "85c66909-2365-4d0e-ae46-19a74ee4f22a", "request_id": "85c66909-2365-4d0e-ae46-19a74ee4f22a", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 10427.57, "user_id": null}
+2026-03-29 10:42:53,111 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:42:53,161 - INFO - [trace=2ab67e91-6a90-44e7-983c-1bcd21e19527] - Created task: taskfix-a3251d
+2026-03-29 10:42:53,162 - INFO - [trace=2ab67e91-6a90-44e7-983c-1bcd21e19527] - {"event": "request_complete", "trace_id": "2ab67e91-6a90-44e7-983c-1bcd21e19527", "request_id": "2ab67e91-6a90-44e7-983c-1bcd21e19527", "method": "POST", "path": "/tasks/create", "status_code": 200, "duration_ms": 49.67, "user_id": "747a6ecc-6fc5-4aec-b821-81ec3c468fae"}
+2026-03-29 10:42:53,181 - INFO - [trace=-] - HTTP Request: POST http://testserver/tasks/create "HTTP/1.1 200 OK"
+2026-03-29 10:42:53,242 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - FlowRun started: 68e269fa-3bd0-406d-b65f-6d56848eccd9 (generated_task_completion/task_completion)
+2026-03-29 10:42:53,460 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Saved metric: Execution Speed (ID: 1)
+2026-03-29 10:42:53,629 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.389949 seconds
+2026-03-29 10:42:54,043 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.934203 seconds
+2026-03-29 10:42:56,138 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.487918 seconds
+2026-03-29 10:42:56,656 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.867590 seconds
+2026-03-29 10:42:59,647 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.380721 seconds
+2026-03-29 10:43:00,034 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.935943 seconds
+2026-03-29 10:43:01,075 - WARNING - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:43:01,151 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Captured memory [outcome] from task_completed (significance=0.32): Task completed: taskfix-a3251d (time_spent: 0s)...
+2026-03-29 10:43:01,249 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.474348 seconds
+2026-03-29 10:43:01,787 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.949485 seconds
+2026-03-29 10:43:03,832 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.458306 seconds
+2026-03-29 10:43:04,303 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.782258 seconds
+2026-03-29 10:43:07,231 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.387722 seconds
+2026-03-29 10:43:07,645 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.750582 seconds
+2026-03-29 10:43:08,479 - WARNING - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:43:08,505 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - [MemoryOrchestrator] query=taskfix-a3251d task_type=analysis candidates=0 returned=0 tokens=0
+2026-03-29 10:43:08,505 - WARNING - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - [Velocity Engine] Failed to sync with Social Layer: MONGO_URL is not configured
+2026-03-29 10:43:08,800 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.400462 seconds
+2026-03-29 10:43:09,204 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.997880 seconds
+2026-03-29 10:43:11,345 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.391395 seconds
+2026-03-29 10:43:11,791 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.903954 seconds
+2026-03-29 10:43:14,834 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.376646 seconds
+2026-03-29 10:43:15,212 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Retrying request to /embeddings in 0.928227 seconds
+2026-03-29 10:43:16,211 - WARNING - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:43:16,264 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - Captured memory [insight] from execution.failed (significance=0.31): MONGO_URL is not configured...
+2026-03-29 10:43:16,323 - INFO - [trace=fd055618-48af-4710-ba02-e0ae18ce0cab] - {"event": "request_complete", "trace_id": "fd055618-48af-4710-ba02-e0ae18ce0cab", "request_id": "fd055618-48af-4710-ba02-e0ae18ce0cab", "method": "POST", "path": "/tasks/complete", "status_code": 200, "duration_ms": 23139.83, "user_id": "747a6ecc-6fc5-4aec-b821-81ec3c468fae"}
+2026-03-29 10:43:16,337 - INFO - [trace=-] - HTTP Request: POST http://testserver/tasks/complete "HTTP/1.1 200 OK"
+2026-03-29 10:43:16,351 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:43:16,351 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:43:16,352 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:43:16,352 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:49:27,498 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:49:33,907 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:49:34,075 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:49:34,075 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:49:34,382 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:49:34,385 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:49:34,388 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,388 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,388 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,388 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,389 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,389 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,389 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:49:34,389 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:49:34,389 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:49:34,390 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:49:34,390 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:49:34,390 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:49:34,390 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:49:34,391 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:49:34,391 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:49:34,391 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:49:34,394 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:49:34,416 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:49:34,442 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:49:36,279 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.421324 seconds
+2026-03-29 10:49:36,746 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.989630 seconds
+2026-03-29 10:49:38,858 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.455026 seconds
+2026-03-29 10:49:39,342 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.840223 seconds
+2026-03-29 10:49:42,329 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.476552 seconds
+2026-03-29 10:49:42,812 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Retrying request to /embeddings in 0.818118 seconds
+2026-03-29 10:49:43,710 - WARNING - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:49:43,927 - INFO - [trace=2743e1ff-75c4-4216-be21-17029d7bfd48] - {"event": "request_complete", "trace_id": "2743e1ff-75c4-4216-be21-17029d7bfd48", "request_id": "2743e1ff-75c4-4216-be21-17029d7bfd48", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 9482.73, "user_id": null}
+2026-03-29 10:49:43,954 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:49:44,034 - INFO - [trace=7bb90454-5d5b-475b-bacf-ce6440551961] - {"event": "request_complete", "trace_id": "7bb90454-5d5b-475b-bacf-ce6440551961", "request_id": "7bb90454-5d5b-475b-bacf-ce6440551961", "method": "POST", "path": "/goals", "status_code": 201, "duration_ms": 77.2, "user_id": "21917cc4-3b58-4952-81b1-538c38b437a1"}
+2026-03-29 10:49:44,054 - INFO - [trace=-] - HTTP Request: POST http://testserver/goals "HTTP/1.1 201 Created"
+2026-03-29 10:49:44,072 - INFO - [trace=e54ed143-7285-49de-b648-5d05b779d65d] - {"event": "request_complete", "trace_id": "e54ed143-7285-49de-b648-5d05b779d65d", "request_id": "e54ed143-7285-49de-b648-5d05b779d65d", "method": "GET", "path": "/goals", "status_code": 200, "duration_ms": 15.84, "user_id": "21917cc4-3b58-4952-81b1-538c38b437a1"}
+2026-03-29 10:49:44,089 - INFO - [trace=-] - HTTP Request: GET http://testserver/goals "HTTP/1.1 200 OK"
+2026-03-29 10:49:44,106 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:49:44,106 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:49:44,107 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:49:44,107 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 10:57:45,129 - INFO - Loaded development environment from process environment variables
+2026-03-29 10:57:50,611 - INFO - [trace=-] - Cache backend initialized: memory
+2026-03-29 10:57:50,858 - INFO - [trace=-] - Context impl PostgresqlImpl.
+2026-03-29 10:57:50,859 - INFO - [trace=-] - Will assume transactional DDL.
+2026-03-29 10:57:51,286 - INFO - [trace=-] - Background task lease acquired by MPIW1.
+2026-03-29 10:57:51,286 - INFO - [trace=-] - Background tasks initialized via APScheduler (daemon threads eliminated).
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Added job "Cleanup stale automation logs" to job store "default"
+2026-03-29 10:57:51,298 - INFO - [trace=-] - Added job "Task reminder check" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Added job "Task recurrence check" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Added job "Daily ETA projection recalculation" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Added job "Daily Infinity score recalculation" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Added job "Deferred async job retry" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Added job "Background task lease heartbeat" to job store "default"
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Scheduler started
+2026-03-29 10:57:51,301 - INFO - [trace=-] - APScheduler started — daemon threads replaced
+2026-03-29 10:57:51,301 - INFO - [trace=-] - Flow Engine: 7 flows registered, 21 nodes registered
+2026-03-29 10:57:51,333 - INFO - [trace=-] - [StuckRunService] Startup scan: no stuck runs (threshold=10m)
+2026-03-29 10:57:51,361 - INFO - [trace=-] - System author already present, timestamp refreshed.
+2026-03-29 10:57:53,068 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.388891 seconds
+2026-03-29 10:57:53,458 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.960285 seconds
+2026-03-29 10:57:55,563 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.484327 seconds
+2026-03-29 10:57:56,086 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.925639 seconds
+2026-03-29 10:57:59,177 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.437517 seconds
+2026-03-29 10:57:59,655 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Retrying request to /embeddings in 0.855617 seconds
+2026-03-29 10:58:00,574 - WARNING - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:58:00,773 - INFO - [trace=946a5be3-378e-4e8a-869f-e02e5a4b6741] - {"event": "request_complete", "trace_id": "946a5be3-378e-4e8a-869f-e02e5a4b6741", "request_id": "946a5be3-378e-4e8a-869f-e02e5a4b6741", "method": "POST", "path": "/auth/register", "status_code": 201, "duration_ms": 9410.09, "user_id": null}
+2026-03-29 10:58:00,793 - INFO - [trace=-] - HTTP Request: POST http://testserver/auth/register "HTTP/1.1 201 Created"
+2026-03-29 10:58:00,862 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Created freelance order #3 for Release Client
+2026-03-29 10:58:00,959 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.439213 seconds
+2026-03-29 10:58:01,438 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.880987 seconds
+2026-03-29 10:58:03,491 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.418511 seconds
+2026-03-29 10:58:03,938 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.967850 seconds
+2026-03-29 10:58:07,079 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.469914 seconds
+2026-03-29 10:58:07,591 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Retrying request to /embeddings in 0.760032 seconds
+2026-03-29 10:58:08,435 - WARNING - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Embedding failed after 3 attempts: Connection error.. Saving node without embedding.
+2026-03-29 10:58:08,511 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - Captured memory [insight] from execution.completed (significance=0.31): execution.completed from freelance...
+2026-03-29 10:58:08,558 - INFO - [trace=f77dda38-deae-4373-9d4d-1e8486f3d74c] - {"event": "request_complete", "trace_id": "f77dda38-deae-4373-9d4d-1e8486f3d74c", "request_id": "f77dda38-deae-4373-9d4d-1e8486f3d74c", "method": "POST", "path": "/freelance/order", "status_code": 201, "duration_ms": 7763.85, "user_id": "7c05a1b7-e09c-4f7c-b8c4-91dd1733867a"}
+2026-03-29 10:58:08,578 - INFO - [trace=-] - HTTP Request: POST http://testserver/freelance/order "HTTP/1.1 201 Created"
+2026-03-29 10:58:08,642 - INFO - [trace=3f90d83d-9bab-46b0-8ea6-16dd16125951] - {"event": "request_complete", "trace_id": "3f90d83d-9bab-46b0-8ea6-16dd16125951", "request_id": "3f90d83d-9bab-46b0-8ea6-16dd16125951", "method": "GET", "path": "/freelance/orders", "status_code": 200, "duration_ms": 62.23, "user_id": "7c05a1b7-e09c-4f7c-b8c4-91dd1733867a"}
+2026-03-29 10:58:08,659 - INFO - [trace=-] - HTTP Request: GET http://testserver/freelance/orders "HTTP/1.1 200 OK"
+2026-03-29 10:58:08,676 - INFO - [trace=-] - Background task lease released by MPIW1.
+2026-03-29 10:58:08,677 - INFO - [trace=-] - Background task lease released.
+2026-03-29 10:58:08,677 - INFO - [trace=-] - Scheduler has been shut down
+2026-03-29 10:58:08,677 - INFO - [trace=-] - APScheduler stopped
+2026-03-29 11:02:30,683 - INFO - Loaded development environment from process environment variables
+2026-03-29 11:03:57,074 - INFO - Loaded development environment from process environment variables
+2026-03-29 11:53:57,117 - INFO - Loaded development environment from process environment variables
+2026-03-29 11:54:31,881 - INFO - Loaded development environment from process environment variables

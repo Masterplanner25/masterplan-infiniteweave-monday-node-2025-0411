@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateAiProductivityBoost } from "../api";
+import { calculateAiProductivityBoost } from "../api";import { safeMap } from "../utils/safe";
 
 export default function AIProductivityBoostPanel() {
   const [tasksWithAI, setTasksWithAI] = useState(0);
@@ -23,22 +23,22 @@ export default function AIProductivityBoostPanel() {
     <div style={panelStyle}>
       <h3 style={{ marginTop: 0, fontSize: "16px", color: "#00ffaa" }}>AI Productivity Boost</h3>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "10px" }}>
-        <div><label style={{ fontSize: "11px", color: "#888" }}>With AI</label><input type="number" style={inputStyle} value={tasksWithAI} onChange={(e)=>setTasksWithAI(e.target.value)} /></div>
-        <div><label style={{ fontSize: "11px", color: "#888" }}>Without AI</label><input type="number" style={inputStyle} value={tasksWithoutAI} onChange={(e)=>setTasksWithoutAI(e.target.value)} /></div>
-        <div><label style={{ fontSize: "11px", color: "#888" }}>Time Saved</label><input type="number" style={inputStyle} value={timeSaved} onChange={(e)=>setTimeSaved(e.target.value)} /></div>
+        <div><label style={{ fontSize: "11px", color: "#888" }}>With AI</label><input type="number" style={inputStyle} value={tasksWithAI} onChange={(e) => setTasksWithAI(e.target.value)} /></div>
+        <div><label style={{ fontSize: "11px", color: "#888" }}>Without AI</label><input type="number" style={inputStyle} value={tasksWithoutAI} onChange={(e) => setTasksWithoutAI(e.target.value)} /></div>
+        <div><label style={{ fontSize: "11px", color: "#888" }}>Time Saved</label><input type="number" style={inputStyle} value={timeSaved} onChange={(e) => setTimeSaved(e.target.value)} /></div>
       </div>
       <button style={{ backgroundColor: "#00ffaa", color: "#000", border: "none", padding: "10px", borderRadius: "6px", cursor: "pointer", width: "100%", fontWeight: "bold" }} onClick={handleSubmit}>Analyze Boost</button>
       
-      {result && (
-        <div style={{ marginTop: "15px", padding: "10px", background: "#000", borderRadius: "4px", border: "1px solid #006644" }}>
-          {Object.entries(result).map(([key, val]) => (
-            <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
+      {result &&
+      <div style={{ marginTop: "15px", padding: "10px", background: "#000", borderRadius: "4px", border: "1px solid #006644" }}>
+          {safeMap(Object.entries(result), ([key, val]) =>
+        <div key={key} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginBottom: "4px" }}>
               <span style={{ color: "#888" }}>{key.replace(/_/g, " ")}:</span>
               <span style={{ color: "#00ffaa" }}>{val}{key.includes("percent") || key.includes("increase") ? "%" : ""}</span>
-            </div>
-          ))}
+            </div>)
+        }
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

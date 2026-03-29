@@ -146,11 +146,76 @@ fn weighted_dot_product(values: Vec<f64>, weights: Vec<f64>) -> PyResult<f64> {
     Ok(cpp_bridge::compute_weighted_dot(&values, &weights))
 }
 
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn score_memory_nodes(
+    similarities: Vec<f64>,
+    recencies: Vec<f64>,
+    success_rates: Vec<f64>,
+    usage_frequencies: Vec<f64>,
+    graph_bonuses: Vec<f64>,
+    impact_scores: Vec<f64>,
+    trace_bonuses: Vec<f64>,
+    low_value_flags: Vec<bool>,
+) -> PyResult<Vec<f64>> {
+    let len = similarities.len();
+    let lengths = [
+        recencies.len(),
+        success_rates.len(),
+        usage_frequencies.len(),
+        graph_bonuses.len(),
+        impact_scores.len(),
+        trace_bonuses.len(),
+        low_value_flags.len(),
+    ];
+    if lengths.iter().any(|candidate_len| *candidate_len != len) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "All score vectors must be the same length",
+        ));
+    }
+
+    let mut scores = Vec::with_capacity(len);
+    for idx in 0..len {
+        let usage = usage_frequencies[idx];
+        let success_weight = if usage > 5.0 { 0.25 } else { 0.20 };
+        let impact_bonus = (impact_scores[idx] / 5.0).clamp(0.0, 1.0) * 0.15;
+        let normalized_usage = normalize_usage(usage);
+
+        let mut score = similarities[idx] * 0.40
+            + recencies[idx] * 0.15
+            + success_rates[idx] * success_weight
+            + normalized_usage * 0.10
+            + graph_bonuses[idx] * 0.15
+            + impact_bonus
+            + trace_bonuses[idx];
+
+        if low_value_flags[idx] {
+            score *= 0.5;
+        }
+        scores.push(score);
+    }
+
+    Ok(scores)
+}
+
+fn normalize_usage(value: f64) -> f64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+    let numerator = (1.0 + value).ln();
+    let denominator = 101.0_f64.ln();
+    if denominator.abs() < f64::EPSILON {
+        return 0.0;
+    }
+    (numerator / denominator).clamp(0.0, 1.0)
+}
+
 #[pymodule]
 fn memory_bridge_rs(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<MemoryNode>()?;
     m.add_class::<MemoryTrace>()?;
     m.add_function(wrap_pyfunction!(semantic_similarity, m)?)?;
     m.add_function(wrap_pyfunction!(weighted_dot_product, m)?)?;
+    m.add_function(wrap_pyfunction!(score_memory_nodes, m)?)?;
     Ok(())
 }

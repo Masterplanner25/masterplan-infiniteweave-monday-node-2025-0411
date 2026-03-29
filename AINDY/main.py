@@ -20,6 +20,7 @@ from services import task_services
 from services.observability_events import emit_observability_event
 from services.system_event_service import emit_error_event
 from db.database import SessionLocal
+from db.mongo_setup import init_mongo
 from routes import ROUTERS
 from config import settings
 from db.models.metrics_models import *
@@ -117,6 +118,8 @@ async def lifespan(app: FastAPI):
     else:
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
         logger.info("Cache backend initialized: memory")
+
+    init_mongo()
 
     # SECRET_KEY guard — reject insecure placeholder in production
     _placeholder = "dev-secret-change-in-production"

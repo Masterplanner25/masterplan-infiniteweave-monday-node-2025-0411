@@ -6,11 +6,8 @@ Purpose: Executes AI Search queries, evaluates leads with Infinity Algorithm log
 and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 """
 
-import json
 import uuid
-import re
 import logging
-from urllib.parse import urlparse
 
 from services.search_scoring import score_lead_result
 from datetime import datetime
@@ -20,6 +17,7 @@ from openai import OpenAI
 from bridge.bridge import create_memory_node
 from db.models.leadgen_model import LeadGenResult
 from services.external_call_service import perform_external_call
+from services.search_service import search_leads
 import os
 
 # Initialize the OpenAI client (ensure API key is set in environment)
@@ -30,57 +28,6 @@ logger = logging.getLogger(__name__)
 # --------------------------------------------------------
 # 🧩 CORE FUNCTIONS
 # --------------------------------------------------------
-
-def _extract_leads_from_response(payload, max_results: int = 3):
-    if isinstance(payload, dict):
-        candidates = (
-            payload.get("results")
-            or payload.get("data")
-            or payload.get("items")
-            or []
-        )
-        return _extract_leads_from_response(candidates, max_results=max_results)
-    if isinstance(payload, list):
-        leads = []
-        for item in payload:
-            if not isinstance(item, dict):
-                continue
-            url = item.get("url") or item.get("link") or ""
-            title = item.get("title") or item.get("name") or ""
-            snippet = item.get("snippet") or item.get("summary") or item.get("description") or ""
-            if not url:
-                continue
-            company = title or (urlparse(url).netloc or url).replace("www.", "").split(".")[0].replace("-", " ").title()
-            leads.append({
-                "company": company or "Unknown",
-                "url": url,
-                "context": snippet[:240],
-            })
-            if len(leads) >= max_results:
-                break
-        return leads
-    return []
-
-
-def _extract_leads_from_text(text: str, max_results: int = 3):
-    urls = re.findall(r"https?://[^\s)]+", text or "")
-    seen = set()
-    leads = []
-    for url in urls:
-        if url in seen:
-            continue
-        seen.add(url)
-        domain = urlparse(url).netloc or url
-        company = domain.replace("www.", "").split(".")[0].replace("-", " ").title()
-        leads.append({
-            "company": company or "Unknown",
-            "url": url,
-            "context": (text or "")[:240],
-        })
-        if len(leads) >= max_results:
-            break
-    return leads
-
 
 def run_ai_search(query: str, user_id: str = None, db=None):
     """
@@ -124,25 +71,8 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     # Step 2: External retrieval (best-effort)
     example_results = []
     try:
-        from modules.research_engine import web_search
-        raw = web_search(query)
-        parsed = None
-        try:
-            parsed = json.loads(raw)
-        except Exception:
-            parsed = None
-        if parsed is not None:
-            example_results = _extract_leads_from_response(parsed, max_results=3)
-        if not example_results:
-            example_results = _extract_leads_from_text(raw, max_results=3)
-        if not example_results:
-            example_results = [
-                {
-                    "company": "External Search",
-                    "url": "",
-                    "context": (raw or "")[:240],
-                }
-            ]
+        payload = search_leads(query, db=db, user_id=user_id, max_results=3)
+        example_results = payload.get("results") or []
     except Exception as e:
         logger.warning("[LeadGen] External search failed, using fallback: %s", e)
 

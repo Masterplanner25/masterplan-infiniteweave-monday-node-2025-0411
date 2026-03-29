@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from pymongo.database import Database
 from typing import List, Optional
 import math
@@ -17,9 +18,17 @@ from db.models.social_models import SocialProfile, SocialPost, FeedItem, TrustTi
 # This allows us to "teleport" data from the Social Layer (Mongo) to the Memory Layer (SQL/Symbolic)
 from services.memory_capture_engine import MemoryCaptureEngine
 from services.auth_service import get_current_user
+from services.social_performance_service import compute_conversion_signal
+from services.social_performance_service import compute_engagement_score
+from services.social_performance_service import summarize_social_performance
 
 router = APIRouter(prefix="/social", tags=["Social Layer"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)
+
+
+class SocialInteractionRequest(BaseModel):
+    action: str
+    amount: int = 1
 
 TRUST_TIER_WEIGHTS = {
     TrustTier.INNER_CIRCLE: 2.0,
@@ -44,6 +53,77 @@ def _compute_visibility_score(post: SocialPost) -> float:
     engagement_total = max(post.likes, 0) + max(post.boosts, 0) * 2 + max(post.comments_count, 0)
     engagement_score = math.log1p(engagement_total) / 5.0
     return trust_weight * (1.0 + min(engagement_score, 1.0))
+
+
+def _refresh_post_metrics(post_doc: dict) -> dict:
+    post_doc["engagement_score"] = compute_engagement_score(post_doc)
+    post_doc["conversion_signal"] = compute_conversion_signal(post_doc)
+    return post_doc
+
+
+def _capture_social_performance_memory(
+    *,
+    sql_db: Session,
+    user_id: str,
+    post_doc: dict,
+    signal_type: str,
+    reason: str,
+) -> None:
+    engine = MemoryCaptureEngine(
+        db=sql_db,
+        user_id=user_id,
+        agent_namespace="social",
+    )
+    engine.evaluate_and_capture(
+        event_type="social_performance",
+        content=f"Social performance {signal_type}: {str(post_doc.get('content', ''))[:160]}",
+        source="social_router",
+        tags=["social", "performance", signal_type],
+        node_type="insight" if signal_type == "high" else "failure",
+        force=True,
+        extra={
+            "post_id": str(post_doc.get("id")),
+            "engagement_score": float(post_doc.get("engagement_score", 0.0) or 0.0),
+            "conversion_signal": float(post_doc.get("conversion_signal", 0.0) or 0.0),
+            "impressions": int(post_doc.get("impressions", 0) or 0),
+            "clicks": int(post_doc.get("clicks", 0) or 0),
+            "reason": reason,
+        },
+    )
+
+
+def _maybe_capture_performance_signal(
+    *,
+    db: Database,
+    sql_db: Session,
+    user_id: str,
+    post_doc: dict,
+) -> dict:
+    refreshed = _refresh_post_metrics(dict(post_doc))
+    db["posts"].update_one(
+        {"id": refreshed["id"]},
+        {"$set": {
+            "engagement_score": refreshed["engagement_score"],
+            "conversion_signal": refreshed["conversion_signal"],
+        }},
+    )
+    if refreshed["impressions"] >= 10 and refreshed["engagement_score"] >= 8.0:
+        _capture_social_performance_memory(
+            sql_db=sql_db,
+            user_id=user_id,
+            post_doc=refreshed,
+            signal_type="high",
+            reason="high_engagement",
+        )
+    elif refreshed["impressions"] >= 10 and refreshed["engagement_score"] <= 2.0:
+        _capture_social_performance_memory(
+            sql_db=sql_db,
+            user_id=user_id,
+            post_doc=refreshed,
+            signal_type="low",
+            reason="low_engagement",
+        )
+    return refreshed
 
 
 def _compute_infinity_ranked_score(
@@ -189,6 +269,11 @@ def create_post(
     """
     posts = db["posts"]
     post_data = post.dict()
+    post_data["user_id"] = str(current_user["sub"])
+    post_data["impressions"] = int(post_data.get("impressions", 0) or 0)
+    post_data["clicks"] = int(post_data.get("clicks", 0) or 0)
+    post_data["engagement_score"] = float(post_data.get("engagement_score", 0.0) or 0.0)
+    post_data["conversion_signal"] = float(post_data.get("conversion_signal", 0.0) or 0.0)
     try:
         # 1. Save to Social Layer (MongoDB)
         posts.insert_one(post_data)
@@ -226,6 +311,7 @@ def get_feed(
     trust_filter: Optional[str] = None,
     db: Database = Depends(get_mongo_db),
     sql_db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Retrieve the main feed, ranked by the Infinity Algorithm.
@@ -250,6 +336,26 @@ def get_feed(
         )
 
     post_docs = list(cursor)
+    if post_docs:
+        try:
+            post_ids = [doc.get("id") for doc in post_docs if doc.get("id")]
+            if post_ids:
+                posts_collection.update_many(
+                    {"id": {"$in": post_ids}},
+                    {"$inc": {"impressions": 1}},
+                )
+                post_docs = list(posts_collection.find({"id": {"$in": post_ids}}))
+                post_docs = [
+                    _maybe_capture_performance_signal(
+                        db=db,
+                        sql_db=sql_db,
+                        user_id=str(current_user["sub"]),
+                        post_doc=post_doc,
+                    )
+                    for post_doc in post_docs
+                ]
+        except Exception as exc:
+            logger.warning("Feed impression tracking failed (non-fatal): %s", exc)
 
     # Batch-load author Infinity scores from PostgreSQL
     author_ids = list({doc.get("author_id") for doc in post_docs if doc.get("author_id")})
@@ -280,3 +386,61 @@ def get_feed(
 
     feed_items.sort(key=lambda item: item.relevance_score, reverse=True)
     return feed_items[:limit]
+
+
+@router.post("/posts/{post_id}/interact")
+def record_post_interaction(
+    post_id: str,
+    body: SocialInteractionRequest,
+    db: Database = Depends(get_mongo_db),
+    sql_db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    action = (body.action or "").strip().lower()
+    if action not in {"view", "click", "like", "boost", "comment"}:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_social_action", "message": "Unsupported social action"},
+        )
+    field = {
+        "view": "impressions",
+        "click": "clicks",
+        "like": "likes",
+        "boost": "boosts",
+        "comment": "comments_count",
+    }[action]
+    amount = max(1, int(body.amount or 1))
+    posts = db["posts"]
+    post_doc = posts.find_one({"id": post_id})
+    if not post_doc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "post_not_found", "message": "Post not found"},
+        )
+
+    posts.update_one({"id": post_id}, {"$inc": {field: amount}})
+    updated = posts.find_one({"id": post_id}) or post_doc
+    updated = _maybe_capture_performance_signal(
+        db=db,
+        sql_db=sql_db,
+        user_id=str(current_user["sub"]),
+        post_doc=updated,
+    )
+    return {
+        "post_id": post_id,
+        "action": action,
+        "impressions": int(updated.get("impressions", 0) or 0),
+        "clicks": int(updated.get("clicks", 0) or 0),
+        "likes": int(updated.get("likes", 0) or 0),
+        "boosts": int(updated.get("boosts", 0) or 0),
+        "comments_count": int(updated.get("comments_count", 0) or 0),
+        "engagement_score": float(updated.get("engagement_score", 0.0) or 0.0),
+        "conversion_signal": float(updated.get("conversion_signal", 0.0) or 0.0),
+    }
+
+
+@router.get("/analytics")
+def get_social_analytics(
+    current_user: dict = Depends(get_current_user),
+):
+    return summarize_social_performance(user_id=str(current_user["sub"]))

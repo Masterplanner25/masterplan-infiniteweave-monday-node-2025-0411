@@ -13,6 +13,11 @@ from db.models.request_metric import RequestMetric
 from db.models.system_event import SystemEvent
 from db.models.system_health_log import SystemHealthLog
 from services.auth_service import get_current_user
+from services.rippletrace_service import build_trace_graph
+from services.rippletrace_service import calculate_ripple_span
+from services.rippletrace_service import detect_root_event
+from services.rippletrace_service import detect_terminal_events
+from services.rippletrace_service import generate_trace_insights
 import services.scheduler_service as scheduler_service
 import services.task_services as task_services
 
@@ -44,6 +49,18 @@ def _serialize_system_event(row: SystemEvent) -> dict:
         "trace_id": row.trace_id,
         "timestamp": row.timestamp.isoformat() if row.timestamp else None,
         "payload": payload,
+    }
+
+
+def _serialize_agent_projection(row: AgentEvent) -> dict:
+    return {
+        "id": str(row.id),
+        "run_id": str(row.run_id),
+        "trace_id": row.correlation_id,
+        "event_type": row.event_type,
+        "system_event_id": str(row.system_event_id) if getattr(row, "system_event_id", None) else None,
+        "timestamp": row.occurred_at.isoformat() if row.occurred_at else None,
+        "payload": row.payload or {},
     }
 
 
@@ -208,6 +225,12 @@ def get_observability_dashboard(
     loop_events = [event for event in system_events if event.type.startswith("loop.")]
     loop_activity = [_serialize_system_event(event) for event in loop_events]
 
+    agent_system_events = [
+        row for row in system_events
+        if row.type.startswith("agent.")
+    ][:agent_limit]
+    agent_timeline = [_serialize_system_event(row) for row in agent_system_events]
+
     agent_rows = (
         db.query(AgentEvent)
         .filter(AgentEvent.user_id == user_id)
@@ -215,17 +238,7 @@ def get_observability_dashboard(
         .limit(agent_limit)
         .all()
     )
-    agent_timeline = [
-        {
-            "id": str(row.id),
-            "run_id": str(row.run_id),
-            "trace_id": row.correlation_id,
-            "event_type": row.event_type,
-            "timestamp": row.occurred_at.isoformat() if row.occurred_at else None,
-            "payload": row.payload or {},
-        }
-        for row in agent_rows
-    ]
+    agent_projections = [_serialize_agent_projection(row) for row in agent_rows]
 
     health_rows = (
         db.query(SystemHealthLog)
@@ -284,6 +297,7 @@ def get_observability_dashboard(
         },
         "loop_activity": loop_activity,
         "agent_timeline": agent_timeline,
+        "agent_projections": agent_projections,
         "system_events": {
             "recent": [_serialize_system_event(row) for row in system_events],
             "counts": system_event_counts,
@@ -309,4 +323,38 @@ def get_observability_dashboard(
                 for row in flow_rows[:20]
             ],
         },
+    }
+
+
+@router.get("/rippletrace/{trace_id}")
+def get_rippletrace_graph(
+    trace_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = uuid.UUID(str(current_user["sub"]))
+    events = (
+        db.query(SystemEvent)
+        .filter(SystemEvent.trace_id == trace_id, SystemEvent.user_id == user_id)
+        .count()
+    )
+    if events == 0:
+        return {
+            "trace_id": trace_id,
+            "nodes": [],
+            "edges": [],
+            "root_event": None,
+            "terminal_events": [],
+            "ripple_span": {"node_count": 0, "edge_count": 0, "depth": 0, "terminal_count": 0},
+        }
+
+    graph = build_trace_graph(db, trace_id)
+    return {
+        "trace_id": trace_id,
+        "nodes": graph["nodes"],
+        "edges": graph["edges"],
+        "root_event": detect_root_event(db, trace_id),
+        "terminal_events": detect_terminal_events(db, trace_id),
+        "ripple_span": calculate_ripple_span(db, trace_id),
+        "insights": generate_trace_insights(db, trace_id),
     }

@@ -1,9 +1,10 @@
 # RippleTrace
 
 ## 1. System Role
-RippleTrace is the system’s influence and signal-analysis layer. It tracks content origins, ripple signals, derived patterns, and higher-level relationship views.
+RippleTrace is the system's influence and signal-analysis layer. It tracks content origins, ripple signals, derived patterns, and higher-level relationship views.
 
 It is not the memory system and it is not the canonical execution runtime.
+It is also not the current `SystemEvent` execution-observability layer.
 
 ## 2. Core Domain Model
 - `DropPointDB`: origin content being tracked
@@ -65,8 +66,23 @@ Implemented:
 - dashboard snapshot generation
 - delta, prediction, recommendation, narrative, influence, and causal analysis services
 - graph-oriented frontend consumption through compatibility routes
+- a separate `SystemEvent` observability layer exists for runtime and agent activity, but it is not the RippleTrace domain model
+- execution-side RippleTrace graph building now exists on top of `SystemEvent` via `ripple_edges`
+- causal event stitching now includes parent/child linkage and event -> memory links (`stored_as_memory`)
 
 Still true:
 - RippleTrace is tightly coupled to the monolith
 - the compatibility surface is operationally useful but architecturally legacy
 - no separate worker/eventing model exists for heavy RippleTrace computation
+- the current `causal_graph` implementation is heuristic over drop points, themes, entities, timing, and velocity; it is not a true execution-causality graph
+- the legacy content-domain `causal_graph` remains heuristic even though execution-side causality is now structurally modeled
+
+## 6. Next Steps
+
+### Step 1 - Add end-to-end validation for causal graph generation
+**Files:** test coverage around `services/system_event_service.py`, `services/rippletrace_service.py`, `services/memory_capture_engine.py`  
+**Outcome:** a single execution can be verified to produce reconstructable event and memory causality.
+
+### Step 2 - Expand execution graph validation in the frontend
+**Files:** `client/src/components/RippleTraceViewer.jsx`, supporting API consumers  
+**Outcome:** the proofboard surface remains aligned with the newer execution-side RippleTrace graph, including memory-node targets and async branches.

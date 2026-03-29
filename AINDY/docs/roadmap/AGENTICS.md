@@ -1,256 +1,380 @@
-# Agentics — Canonical Definition & Feasibility Audit
+# AGENTICS
 
----
+This document reconciles the Agentics roadmap against the code currently in the
+repository. It distinguishes between:
 
-## 1. System Definition (Canonical)
+- the implemented A.I.N.D.Y. agent layer
+- the intended long-term A.I.N.D.Y. + Nodus architecture
+- the remaining work required to finish Agentics
 
-Agentics is the conceptual **agent runtime layer** for A.I.N.D.Y. It is not
-implemented yet. It is the execution control plane that:
+Date basis: current workspace state.
 
-- plans actions with explicit tools
-- produces a dry‑run preview
-- enforces approvals based on risk/capability
-- executes deterministically via a workflow engine
-- verifies outcomes and logs audit trails
+## 1. System Reality
 
-This layer is the bridge from **decision** to **reliable execution**.
+### What Agentics currently does
 
----
+Agentics is no longer conceptual. A.I.N.D.Y. already has a functioning
+single-agent execution layer built from:
 
-## 2. Core Lifecycle (Canonical Pipeline)
+- `services/agent_runtime.py`
+- `services/agent_tools.py`
+- `services/nodus_adapter.py`
+- `services/flow_engine.py`
+- `routes/agent_router.py`
+- `db/models/agent_run.py`
+- `db/models/agent_event.py`
+- `services/capability_service.py`
 
+The current lifecycle is:
+
+`goal -> GPT plan -> approval gate -> scoped capability minting -> deterministic execution -> event log -> memory capture -> infinity loop follow-up`
+
+### Production-ready or close to production-ready
+
+- Agent run creation, approval, rejection, replay, recovery, step inspection, and event timeline APIs are implemented in `routes/agent_router.py`.
+- The agent planner is live in `services/agent_runtime.py` and uses GPT-generated structured plans over a fixed tool registry.
+- The execution path is deterministic in practice because approved plans are executed through `PersistentFlowRunner` in `services/flow_engine.py` via `services/nodus_adapter.py`.
+- Per-run scoped capability enforcement exists in `services/capability_service.py` and is checked both before flow execution and before tool execution.
+- Agent lifecycle audit persistence exists through `AgentRun`, `AgentStep`, `AgentEvent`, and `SystemEvent`.
+- Recovery and replay paths exist through `services/stuck_run_service.py` and `services/agent_runtime.py`.
+- The frontend has both an operator console and a dedicated approval inbox:
+  - `client/src/components/AgentConsole.jsx`
+  - `client/src/components/AgentApprovalInbox.jsx`
+
+### Partially working or transitional
+
+- The execution backbone is A.I.N.D.Y.'s internal flow engine, not the real Nodus DSL/VM path. `services/nodus_adapter.py` is an adapter over `PersistentFlowRunner`, not an adapter over the installed Nodus compiler/VM.
+- The Infinity loop is integrated as post-execution orchestration in `services/infinity_orchestrator.py` and `services/infinity_loop.py`, but it is still heuristic and trigger-based rather than autonomous planning/execution.
+- Flow execution exists for ARM, task completion, leadgen, genesis message, genesis conversation, memory execution, and watcher ingest, but strategy learning is mostly structural. `select_strategy()` and `update_strategy_score()` exist, yet there is no broad learned strategy corpus driving the system.
+- Async execution exists in `services/async_job_service.py`, but it is an in-process thread-pool queue, not a durable distributed worker system.
+- The installed Nodus runtime is used only for restricted ad hoc execution through `services/nodus_execution_service.py` and `POST /memory/nodus/execute`, not as the primary execution path for agents or flows.
+
+### Not implemented
+
+- Agent plans are not compiled to `.nd` source, bytecode, or VM programs anywhere in this repository.
+- There are no checked-in `.nd` workflow assets in the repo.
+- The agent runtime does not execute through the installed Nodus compiler/VM stack.
+- Nodus execution traces are not the canonical source of `FlowRun`, `AgentEvent`, or `SystemEvent`.
+- Multi-agent delegation and coordination are not implemented.
+- Autonomous closed-loop agent execution is not implemented beyond post-run suggestion/orchestration.
+- RippleTrace is not yet the unified event intelligence layer for Agentics.
+
+## 2. Architecture (Corrected)
+
+### Current implemented architecture
+
+```text
+User / API / UI
+  -> Agent Runtime
+     (`services/agent_runtime.py`)
+  -> Tool Registry + Capability Enforcement
+     (`services/agent_tools.py`, `services/capability_service.py`)
+  -> Internal Flow Engine
+     (`services/flow_engine.py`)
+  -> Agent Flow Adapter
+     (`services/nodus_adapter.py`)
+  -> Domain Services / Tools
+     (tasks, memory, ARM, Genesis, LeadGen, watcher)
+  -> Event Persistence
+     (`AgentEvent`, `SystemEvent`, `FlowRun`, `FlowHistory`)
+  -> Memory Capture
+     (`services/memory_capture_engine.py`)
+  -> Infinity Follow-up
+     (`services/infinity_orchestrator.py`, `services/infinity_loop.py`)
 ```
-Plan → Dry‑Run → Approve → Execute → Verify → Observe → Memory
+
+### Intended corrected architecture
+
+```text
+A.I.N.D.Y. = intelligence + planning + policy + orchestration
+Nodus      = declarative workflow language + compiler + VM execution layer
+
+Planner / Runtime policy
+  -> Nodus workflow selection or generation
+  -> Nodus compile / load
+  -> Nodus VM execution
+  -> execution events + checkpoints
+  -> RippleTrace / SystemEvent ledger
+  -> Memory Bridge writes + recall feedback
+  -> Infinity loop / higher-order orchestration
 ```
 
----
+### Component definitions
 
-## 3. Conceptual Components (From Agentics Docs)
+- Agent Runtime
+  - Current role: plan generation, approval, capability minting, run lifecycle management.
+  - Primary files: `services/agent_runtime.py`, `routes/agent_router.py`.
 
-- **Runtime**: supervision, scheduling, sandboxing, logs
-- **Capabilities**: scoped permissions + tokens
-- **Policy engine**: risk scoring + approvals
-- **LLM orchestration**: planner/executor/verifier separation
-- **Memory system**: vector + structured + event log
-- **Integrations hub**: API/CLI adapters with schemas
-- **Observability**: audit + replay + traces
-- **Human interfaces**: approvals inbox, audit viewer
+- Nodus Execution Layer
+  - Intended role: declarative workflow language, compiler, bytecode/VM execution, deterministic traces.
+  - Current reality: only partially present through the installed `nodus` package and `services/nodus_execution_service.py`.
+  - Not yet the default execution substrate for Agentics.
 
-Primary source docs:
-- `AINDY/Agentics/Plan.txt`
-- `AINDY/Agentics/A.I.N.D.Y. Plan.txt`
-- `AINDY/Agentics/Real Agent Framework.txt`
-- `AINDY/Agentics/Definition of DONE.txt`
-- `AINDY/Agentics/API Strategy_*`
-- `AINDY/Agentics/Deployment Strategy.txt`
+- Flow Engine
+  - Current role: A.I.N.D.Y.'s actual execution backbone.
+  - Primary files: `services/flow_engine.py`, `services/flow_definitions.py`, `routes/flow_router.py`.
+  - Supports DB-backed state, WAIT/RESUME, flow history, and completion capture.
 
----
+- Infinity Loop
+  - Current role: post-execution score recalculation and next-action suggestion.
+  - Primary files: `services/infinity_orchestrator.py`, `services/infinity_loop.py`.
+  - Not yet an autonomous agent controller.
 
-## 4. Current Implementation (Reality)
+- Memory Bridge
+  - Current role: recall, capture, federated memory, feedback weighting, and Nodus memory helpers.
+  - Primary files: `services/memory_capture_engine.py`, `bridge/nodus_memory_bridge.py`, `routes/memory_router.py`.
 
-**Implemented in A.I.N.D.Y. (Sprints N+4 through N+8):**
-- ✅ Agent plan/dry‑run/approve/execute loop (`services/agent_runtime.py`)
-- ✅ GPT-4o planner with JSON mode + overall_risk enforcement
-- ✅ 9-tool registry with risk levels (`services/agent_tools.py`)
-- ✅ Trust gate: high-risk always approval-gated; low/medium configurable via `AgentTrustSettings`
-- ✅ `AgentRun` / `AgentStep` / `AgentTrustSettings` ORM models + migrations
-- ✅ Deterministic execution via `PersistentFlowRunner` (`services/nodus_adapter.py`)
-  - `AGENT_FLOW`: validate → execute_step (self-loop) → finalize
-  - Per-step retry: low/medium 3x; high-risk 1 attempt (no silent replay)
-  - DB checkpointing after each node via `PersistentFlowRunner`
-  - `FlowHistory → Memory Bridge` capture on completion
-- ✅ `flow_run_id` on `AgentRun` — audit trail to `FlowRun`
-- ✅ KPI-aware planner injection (Infinity Score snapshot in system prompt)
-- ✅ `suggest_tools()` — KPI-driven tool recommendations
-- ✅ Stuck-run recovery: startup scan + `POST /recover` + `POST /replay`
-- ✅ `replayed_from_run_id` lineage tracking on `AgentRun`
-- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips, Timeline tab, pending-approval badge
-- ✅ 13 agent API endpoints (added `GET /agent/runs/{run_id}/events`)
-- ✅ Structured event log (`AgentEvent` table) — PLAN_CREATED, APPROVED, REJECTED, EXECUTION_STARTED, COMPLETED, EXECUTION_FAILED, RECOVERED, REPLAY_CREATED
-- ✅ `correlation_id` (`run_<uuid4>`) on `AgentRun` + `AgentStep` + `AgentEvent` — propagated through full lifecycle
-- ✅ `emit_event()` — non-fatal lifecycle event emitter (`services/agent_event_service.py`)
-- ✅ `GET /agent/runs/{run_id}/events` — unified timeline: lifecycle events + synthesised step events
-- ✅ `new_plan` replay mode in `replay_run()` — re-calls GPT-4o for fresh plan on same goal
+- RippleTrace / SystemEvent layer
+  - Current role: partially split.
+  - Durable execution/event ledger exists in `db/models/system_event.py` and `services/system_event_service.py`.
+  - RippleTrace as a higher-order pattern/graph/insight layer remains incomplete.
 
-**Implemented in A.I.N.D.Y. (pre-N+4):**
-- Memory Bridge (persistence + recall + feedback)
-- JWT/API‑key auth gates
-- Task tracking + analytics ingestion
-- Genesis + MasterPlan lifecycle
-- ARM (analysis + generation)
+## 3. Gap Analysis
 
-**Note on Nodus pip package:**
-The installed `nodus` pip package is a separate scripting-language VM (`.nd` files, filesystem JSON checkpoints, requires Nodus VM closures). It has zero integration path with AINDY's PostgreSQL stack and is NOT used. `PersistentFlowRunner` in `services/flow_engine.py` is the deterministic execution substrate.
+### Missing capabilities
 
-**Still Missing from A.I.N.D.Y.:**
-- Capability issuance + enforcement (scoped tokens, egress control) — Agentics Phase 4
-- Full audit viewer UI (dedicated approval inbox, execution trace browser)
+- Real Nodus-backed agent execution path.
+- `.nd` workflow authoring, storage, loading, and versioning inside A.I.N.D.Y.
+- Compile-to-bytecode or VM-backed execution for agent plans.
+- Unified Nodus trace -> `FlowRun` / `AgentEvent` / `SystemEvent` mapping.
+- Agent-to-agent delegation and shared execution contracts.
+- Autonomous trigger -> plan -> execute loops without manual initiation.
+- Rich egress policy beyond capability checks and per-tool metadata.
 
----
+### Broken or partial flows
 
-## 5. Doc → Code Parity Table
+- The naming around "Nodus" is architecturally misleading today:
+  - `services/nodus_adapter.py` does not use the installed Nodus VM.
+  - the real installed Nodus runtime is only used by `services/nodus_execution_service.py`
+- The current agent plan format is JSON from GPT, not a declarative Nodus workflow.
+- Memory-side Nodus execution is isolated from the flow engine and agent runtime.
+- `select_strategy()` and `update_strategy_score()` exist, but the broader adaptive strategy loop is not yet driving runtime behavior across Agentics.
+- Async execution is in-process only, so execution durability and worker isolation are limited.
 
-| Documented Capability | Implementation Reality | Status | Primary Files |
-| --- | --- | --- | --- |
-| Plan → Dry‑Run → Approve → Execute | Fully implemented | ✅ Done (N+4) | `services/agent_runtime.py`, `routes/agent_router.py` |
-| Approval gates (risk policy) | Trust gate + high-risk invariant | ✅ Done (N+4) | `services/agent_runtime.py::_requires_approval()` |
-| Deterministic workflow engine | PersistentFlowRunner wired | ✅ Done (N+6) | `services/nodus_adapter.py`, `services/flow_engine.py` |
-| Audit/event log for agents | `AgentRun` + `AgentStep` tables | ✅ Done (N+4) | `db/models/agent_run.py` |
-| Replay + traceability | `/recover` + `/replay` + `flow_run_id` | ✅ Done (N+7) | `services/stuck_run_service.py`, `services/agent_runtime.py` |
-| Memory integration | FlowHistory → Memory Bridge | ✅ Done (N+6) | `services/flow_engine.py::_capture_flow_completion()` |
-| KPI → plan adaptation | Infinity Score injected into planner | ✅ Done (N+5) | `services/agent_runtime.py::_build_kpi_context_block()` |
-| Capability descriptors + scoped tokens | Concept only | ❌ Missing | N/A — Agentics Phase 4 |
-| Sandbox + egress control | Concept only | ❌ Missing | N/A — Agentics Phase 4 |
-| LLM verifier separation | Concept only | ❌ Missing | N/A — Agentics Phase 4+ |
+### Inconsistencies
 
----
+- The repo has two execution concepts:
+  - internal flow execution via `PersistentFlowRunner`
+  - embedded Nodus runtime execution via `NodusRuntime`
+- Agentics documentation that treats Nodus integration as complete is inaccurate.
+- Agentics documentation that says the system is not implemented is also inaccurate.
+- RippleTrace is not yet the canonical intelligence layer over execution events.
 
-## 6. Gap → File Mapping
+### Architectural drift
 
-| Gap | Impact | Files to Update |
-| --- | --- | --- |
-| No capability issuance/enforcement | Unsafe execution for high-privilege tools | New: `services/capability_service.py`, `db/models/capability.py` |
-| No dedicated approval inbox UI | Pending runs badge added (N+8) but no standalone inbox view | New: `client/src/components/AgentApprovalInbox.jsx` |
-| ~~No `new_plan` replay mode~~  | ✅ RESOLVED (N+8) — `replay_run(mode="new_plan")` re-calls GPT-4o for fresh plan | `services/agent_runtime.py::replay_run()` |
-| No egress/sandbox control | Tools can call external APIs without constraint | New policy layer |
+- The internal flow engine has become the de facto execution layer that the long-term architecture intended Nodus to own.
+- The term "Nodus" is currently used for both:
+  - a future primary execution substrate
+  - an existing restricted embedded runtime endpoint
+- Without consolidation, A.I.N.D.Y. risks carrying two parallel workflow systems indefinitely.
 
----
+## 4. Agentics Completion Plan
 
-## 7. Risk Register
+### Phase A - Execution Integrity
 
-| Risk | Type | Failure Mode | Impact | Likely? |
-| --- | --- | --- | --- | --- |
-| ~~Agentics assumed implemented~~ | ~~Docs drift~~ | ~~Team expects agent runtime~~ | ~~High~~ | ✅ Resolved N+4 |
-| ~~No deterministic execution~~ | ~~Runtime~~ | ~~Actions remain brittle/manual~~ | ~~High~~ | ✅ Resolved N+6 |
-| No capability enforcement | Security | Over‑privileged execution risk | High | Medium |
-| No approvals layer (UI) | Governance | Pending runs not surfaced proactively | Low | Low (badge added N+8) |
-| ~~Nodus integration not wired~~ | ~~Architecture~~ | ~~Orchestration remains ad‑hoc~~ | ~~Medium~~ | ✅ Resolved N+6 (PersistentFlowRunner) |
+Objective:
+- Stabilize the current internal agent/runtime path as the transitional production base.
 
----
+Required components:
+- agent runtime lifecycle hardening
+- flow/agent/event consistency
+- stronger execution ownership and observability
 
-## 8. Feasibility Summary
+Exact files/modules affected:
+- `services/agent_runtime.py`
+- `services/nodus_adapter.py`
+- `services/flow_engine.py`
+- `services/async_job_service.py`
+- `services/stuck_run_service.py`
+- `routes/agent_router.py`
+- `routes/flow_router.py`
+- `client/src/components/AgentConsole.jsx`
+- `client/src/components/AgentApprovalInbox.jsx`
 
-Feasibility is **high** because:
-- Nodus already provides deterministic workflows + checkpoints.
-- A.I.N.D.Y. already provides memory + policy surfaces.
+Success criteria:
+- every agent run has one authoritative execution record path
+- queued, running, failed, replayed, and recovered states are fully inspectable
+- async execution can be resumed or audited without relying on process memory
+- no ambiguity remains between agent run state and linked `FlowRun`
 
-The missing elements are **integration glue + policy enforcement**, not
-fundamental execution primitives.
+### Phase B - Nodus Integration Completion
 
----
+Objective:
+- Make real Nodus the primary execution substrate instead of the internal flow engine naming shim.
 
-## 9. Nodus Integration Feasibility Memo (Concise)
+Required components:
+- Nodus workflow source management
+- compile/load pipeline for `.nd` assets or generated workflows
+- VM execution adapter into A.I.N.D.Y.'s DB/event model
+- checkpoint and trace mapping
 
-### What Nodus already provides (usable now)
-- Workflow/goal DSL that compiles to task graphs with retries + checkpoints.
-- Persistent graph snapshots for resume/replay.
-- Scheduler + worker dispatch with capability matching.
-- Runtime event bus for traceability.
-- HTTP runtime service mode (plan/run/resume endpoints).
+Exact files/modules affected:
+- `services/nodus_execution_service.py`
+- `services/nodus_adapter.py`
+- `services/flow_engine.py`
+- `services/system_event_service.py`
+- `services/agent_event_service.py`
+- `bridge/nodus_memory_bridge.py`
+- `routes/memory_router.py`
+- `routes/agent_router.py`
+- new Nodus workflow asset location in-repo
 
-### What A.I.N.D.Y. already provides (ready to leverage)
-- Memory Bridge (recall/write/feedback) as the memory substrate.
-- JWT/API‑key auth for gating calls.
-- Task/Genesis/ARM services that can be wrapped as tools.
+Success criteria:
+- agent execution can run through the installed Nodus compiler/VM path
+- `.nd` workflows exist in-repo and are versioned
+- Nodus execution emits durable `SystemEvent` and `AgentEvent` records
+- `FlowRun` either becomes a Nodus-backed run record or is cleanly superseded
 
-### What is missing (integration glue)
-- A thin adapter to register A.I.N.D.Y. services as Nodus tools/agents.
-- Policy enforcement layer for capability issuance + approvals.
-- A.I.N.D.Y. audit table or event stream for PLAN/EXECUTE/VERIFY phases.
+### Phase C - Autonomous Agent Loop
 
-### Feasibility verdict
-High. Nodus already supplies the deterministic execution substrate that Agentics
-requires. A.I.N.D.Y. can embed Nodus with a minimal runtime adapter and route
-plans through it. No major rewrites required.
+Objective:
+- Promote the current post-run Infinity follow-up into a controlled autonomous operating loop.
 
----
+Required components:
+- trigger ingestion
+- planner re-entry rules
+- policy-based autonomous execution windows
+- bounded loop scheduling
 
-## 10. Summary (Operational Truth)
+Exact files/modules affected:
+- `services/infinity_orchestrator.py`
+- `services/infinity_loop.py`
+- `services/agent_runtime.py`
+- `services/system_event_service.py`
+- `routes/observability_router.py`
+- scheduler integration under `services/`
 
-As of 2026-03-25 (Sprint N+8), Agentics Phases 1–3, Phase 5, and the core of Phase 6 are
-**live and tested**. The full lifecycle is operational: a user submits a goal, GPT-4o
-generates a KPI-aware plan, the trust gate applies, the plan executes deterministically via
-`PersistentFlowRunner`, per-step retries are enforced, the full run is checkpointed and
-linked to Memory Bridge, and every lifecycle transition emits a structured `AgentEvent`
-with `correlation_id` threading through `AgentRun`, `AgentStep`, and `AgentEvent`.
-A `new_plan` replay mode re-calls GPT-4o for a fresh plan on the same goal.
-The `AgentConsole.jsx` Timeline tab renders the full event history with colored badges,
-and a pending-approval badge surfaces runs awaiting review.
+Success criteria:
+- approved triggers can generate bounded autonomous runs
+- loop decisions are persisted and replayable
+- no infinite execution chains occur without explicit policy
+- next-action generation can become next-run generation under controlled conditions
 
-The core **authority layer** is now live: scoped capability tokens gate
-run-level execution and tool-level access, and agent execution fails closed when
-the token is missing, invalid, or does not grant `execute_flow` / the required
-tool capability. What remains is tighter egress standardization across every
-non-agent executor surface and a **dedicated approval inbox UI** (Phase 7 —
-standalone `AgentApprovalInbox.jsx`).
+### Phase D - Multi-Agent Coordination
 
----
+Objective:
+- Extend Agentics from single-agent execution to coordinated agent systems.
 
-## 10. Roadmap to Completion
+Required components:
+- agent registry integration with runtime
+- delegation contracts
+- shared/private memory boundaries
+- inter-agent event and approval model
 
-### ✅ Phase 1 — Minimal Runtime — DONE (Sprint N+4, 2026-03-24)
-- `services/agent_runtime.py` — goal → GPT-4o plan → execute → memory
-- 9-tool registry (`services/agent_tools.py`)
-- `AgentRun` / `AgentStep` ORM models + migrations
-- `POST /agent/run`, `GET /agent/runs`, `GET /agent/runs/{id}/steps`
+Exact files/modules affected:
+- `db/models/agent.py`
+- `routes/memory_router.py`
+- `bridge/nodus_memory_bridge.py`
+- `services/agent_runtime.py`
+- `services/capability_service.py`
+- `services/flow_engine.py`
+- new coordination/orchestration service layer
 
-### ✅ Phase 2 — Dry-Run + Approval — DONE (Sprint N+4, 2026-03-24)
-- Plan returned as preview before execution
-- Trust gate: high-risk always gates; low/medium configurable via `AgentTrustSettings`
-- `POST /agent/runs/{id}/approve`, `POST /agent/runs/{id}/reject`
-- `AgentConsole.jsx` — plan preview, risk badge, approve/reject controls
+Success criteria:
+- one agent can delegate a scoped task to another
+- memory sharing rules are explicit and enforced
+- capability tokens can be constrained per delegated sub-run
+- operator surfaces show parent/child agent relationships
 
-### ✅ Phase 3 — Deterministic Execution — DONE (Sprint N+6, 2026-03-25)
-- `services/nodus_adapter.py` — `NodusAgentAdapter` + `AGENT_FLOW`
-- `PersistentFlowRunner` replaces N+4 for-loop
-- Per-step retry (low/medium: 3x; high: halt immediately, no silent replay)
-- DB checkpointing after each node; `FlowHistory → Memory Bridge` on completion
-- `flow_run_id` on `AgentRun` for audit trail
+### Phase E - Production Hardening
 
-### Phase 4 — Policy + Capability System — TODO
-- Capability model (scoped tool permissions)
-- Policy engine enforcing approval on restricted tools
-- Token model (scoped execution tokens, expiry)
-- **Output:** bounded authority per agent run
+Objective:
+- Harden the completed Agentics layer for long-running, multi-instance operation.
 
-### ✅ Phase 5 — Observability + Audit — DONE (Sprint N+7 + N+8, 2026-03-25)
-- `agent_runs` + `agent_steps` tables with full audit data ✅ (N+4)
-- `flow_run_id` correlation: every run links to its `FlowRun` ✅ (N+6)
-- Stuck-run startup scan + manual `/recover` endpoint ✅ (N+7)
-- `/replay` endpoint with `replayed_from_run_id` lineage ✅ (N+7)
-- Unified serializer: all 13 endpoints return consistent run shape ✅ (N+7)
-- `AgentEvent` table — 8 lifecycle event types, `correlation_id` threading ✅ (N+8)
-- `emit_event()` — always non-fatal lifecycle event emitter ✅ (N+8)
-- `GET /agent/runs/{run_id}/events` — merged timeline: lifecycle + step events ✅ (N+8)
-- `new_plan` replay mode — re-calls GPT-4o for fresh plan on same goal ✅ (N+8)
+Required components:
+- durable worker model
+- execution queue isolation
+- standardized policy enforcement
+- stronger event and trace retention
 
-### ✅ Phase 6 (partial) — System Integration — DONE (Sprint N+5, 2026-03-24)
-- Memory Bridge: `FlowHistory → Memory Bridge` capture on run completion ✅
-- Infinity Algorithm: live KPI snapshot injected into planner system prompt ✅
-- `suggest_tools()`: KPI-driven tool suggestions surfaced in `AgentConsole.jsx` ✅
-- Remaining: RippleTrace signal → plan trigger (deferred)
+Exact files/modules affected:
+- `services/async_job_service.py`
+- `services/system_event_service.py`
+- `routes/observability_router.py`
+- deployment/runtime configuration
+- testing under `tests/`
 
-### Phase 7 — UI Layer — Partial
-- ✅ `AgentConsole.jsx` — goal input, plan preview, approve/reject, step timeline, suggestion chips, Timeline tab, pending-approval badge (N+8)
-- ❌ Dedicated approval inbox (`AgentApprovalInbox.jsx`) — pending runs not surfaced in a standalone view
-- ❌ Execution trace browser / visual FlowRun inspector
+Success criteria:
+- execution survives process restarts and multi-instance deployment
+- operator audit views cover agent, flow, and Nodus execution uniformly
+- failure handling is deterministic and observable
+- automated tests cover agent, flow, and Nodus integration paths end to end
 
-### Current State (Sprint N+9, 2026-03-25)
-```
-User/Trigger
-→ AgentConsole.jsx (goal input + suggestion chips + pending-approval badge)
-→ POST /agent/run → generate_plan() [GPT-4o, KPI-aware]
-→ emit_event(PLAN_CREATED, correlation_id=run_<uuid4>)
-→ Trust gate → pending_approval | approved
-→ POST /agent/runs/{id}/approve → emit_event(APPROVED)
-→ emit_event(EXECUTION_STARTED)
-→ NodusAgentAdapter.execute_with_flow(correlation_id=...)
-   └─ PersistentFlowRunner(AGENT_FLOW)
-        ├─ agent_validate_steps
-        ├─ agent_execute_step (loop, per-step retry, correlation_id on AgentStep)
-        └─ agent_finalize_run → Memory Bridge capture → emit_event(COMPLETED)
-→ AgentRun.status = "completed" | "failed"
-→ POST /agent/runs/{id}/recover  (stuck recovery → emit_event(RECOVERED))
-→ POST /agent/runs/{id}/replay   (lineage-tracked → emit_event(REPLAY_CREATED))
-→ GET  /agent/runs/{id}/events   (merged lifecycle + step timeline)
-```
+## 5. Integration With Nodus
+
+### Current level of integration
+
+The installed Nodus package is real and available in the venv. It exposes a
+compiler/runtime stack and an embedded execution API through
+`nodus.runtime.embedding.NodusRuntime`.
+
+Current A.I.N.D.Y. integration points are:
+
+- `services/nodus_execution_service.py`
+  - executes source strings through `NodusRuntime.run_source()`
+- `services/nodus_security.py`
+  - restricts imports, file access, network access, and operation usage
+- `bridge/nodus_memory_bridge.py`
+  - exposes memory operations such as recall/remember/suggest/record_outcome
+- `routes/memory_router.py`
+  - exposes `POST /memory/nodus/execute`
+
+### Missing integration points
+
+- Agent runtime does not generate or execute Nodus workflows.
+- `services/nodus_adapter.py` does not call the Nodus compiler or VM.
+- No repository-managed `.nd` modules or packages exist.
+- No bytecode artifacts or compiled workflow cache are stored by A.I.N.D.Y.
+- Nodus runtime events are not mapped into `AgentEvent` or `FlowHistory`.
+- Nodus is not registered as the execution substrate for flow definitions in `services/flow_definitions.py`.
+
+### Required work to make Nodus the primary execution path
+
+- Define a canonical mapping from agent plan -> Nodus workflow.
+- Decide whether plans become:
+  - generated `.nd` source
+  - templated `.nd` workflows with parameter injection
+  - or precompiled Nodus workflow packages
+- Replace or wrap `PersistentFlowRunner` with a real Nodus-backed execution adapter.
+- Persist Nodus execution traces into A.I.N.D.Y.'s observability model.
+- Route memory operations through `NodusMemoryBridge` without isolating them to the memory endpoint only.
+- Standardize approval, capability, and egress policy at the Nodus execution boundary.
+
+Verdict:
+- Nodus is present.
+- Nodus is not yet the primary Agentics execution layer.
+- The current system is best described as an internal flow-engine-based Agentics layer with limited embedded Nodus support.
+
+## 6. Relationship to Other Roadmaps
+
+### `TECH_DEBT.md`
+
+Agentics-specific debt now centers on:
+
+- the split between the internal flow engine and real Nodus execution
+- single-agent limitations
+- incomplete autonomous loop behavior
+- in-process async execution durability
+- incomplete normalization of execution telemetry across domains
+
+### `EVOLUTION_PLAN.md`
+
+The evolution plan should treat:
+
+- current `PersistentFlowRunner` execution as transitional infrastructure
+- Nodus as the target core execution substrate
+- Agentics completion as a dedicated evolution phase rather than an assumed completed layer
+
+## Summary
+
+Agentics is implemented enough to be operational today, but it is not complete
+and it is not yet the intended A.I.N.D.Y. + Nodus architecture.
+
+Current truth:
+
+- A.I.N.D.Y. has a real agent runtime.
+- A.I.N.D.Y. has a real internal deterministic flow engine.
+- A.I.N.D.Y. has limited embedded Nodus execution for memory-side tasks.
+- A.I.N.D.Y. does not yet run Agentics primarily through real Nodus workflows and VM execution.
+
+That is the baseline this roadmap should be built from.

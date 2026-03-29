@@ -1,13 +1,13 @@
 // src/components/ARMLogs.jsx
 import React, { useEffect, useState } from "react";
-import { getARMLogs } from "../api";
+import { getARMLogs } from "../api";import { safeMap } from "../utils/safe";
 
 function MetricPill({ label, value, color }) {
   return (
     <span style={{ fontSize: 11, color: color || "#8b949e", background: "#0d1117", border: "1px solid #21262d", padding: "2px 8px", borderRadius: 4, marginRight: 6 }}>
       <strong style={{ color: color || "#c9d1d9" }}>{value}</strong> {label}
-    </span>
-  );
+    </span>);
+
 }
 
 export default function ARMLogs() {
@@ -43,36 +43,36 @@ export default function ARMLogs() {
       </div>
 
       {/* Summary Row */}
-      {summary && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+      {summary &&
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
           <MetricPill label="analyses" value={summary.total_analyses} />
           <MetricPill label="generations" value={summary.total_generations} />
           <MetricPill label="total tokens" value={summary.total_tokens_used?.toLocaleString()} color="#4dabf7" />
         </div>
-      )}
+      }
 
-      {!hasData && !loading && (
-        <div style={{ padding: "20px", color: "#555", background: "#0d1117", border: "1px solid #21262d", borderRadius: 8 }}>
+      {!hasData && !loading &&
+      <div style={{ padding: "20px", color: "#555", background: "#0d1117", border: "1px solid #21262d", borderRadius: 8 }}>
           No ARM sessions recorded yet.
         </div>
-      )}
+      }
 
       {/* Analysis History */}
-      {analyses.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
+      {analyses.length > 0 &&
+      <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 11, color: "#8b949e", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
             Analysis Sessions ({analyses.length})
           </div>
           <div style={{ background: "#0d1117", border: "1px solid #30363d", borderRadius: 8, overflow: "hidden" }}>
-            {analyses.map((a, i) => (
-              <div key={i} style={{ padding: "12px 16px", borderBottom: i < analyses.length - 1 ? "1px solid #21262d" : "none", backgroundColor: i % 2 === 0 ? "transparent" : "#161b22" }}>
+            {safeMap(analyses, (a, i) =>
+          <div key={i} style={{ padding: "12px 16px", borderBottom: i < analyses.length - 1 ? "1px solid #21262d" : "none", backgroundColor: i % 2 === 0 ? "transparent" : "#161b22" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                   <span style={{
-                    fontSize: 10, fontWeight: "bold",
-                    color: a.status === "success" ? "#51cf66" : "#ff6b6b",
-                    border: `1px solid ${a.status === "success" ? "#51cf66" : "#ff6b6b"}`,
-                    padding: "1px 5px", borderRadius: 3, textTransform: "uppercase",
-                  }}>
+                fontSize: 10, fontWeight: "bold",
+                color: a.status === "success" ? "#51cf66" : "#ff6b6b",
+                border: `1px solid ${a.status === "success" ? "#51cf66" : "#ff6b6b"}`,
+                padding: "1px 5px", borderRadius: 3, textTransform: "uppercase"
+              }}>
                     {a.status ?? "unknown"}
                   </span>
                   <span style={{ color: "#c9d1d9", fontSize: 13, fontWeight: "bold" }}>{a.file || "—"}</span>
@@ -85,24 +85,24 @@ export default function ARMLogs() {
                   {a.input_tokens != null && <MetricPill label="in" value={a.input_tokens} />}
                   {a.output_tokens != null && <MetricPill label="out" value={a.output_tokens} />}
                 </div>
-                {a.summary && (
-                  <div style={{ fontSize: 12, color: "#8b949e", lineHeight: 1.5, marginTop: 4 }}>{a.summary}</div>
-                )}
-              </div>
-            ))}
+                {a.summary &&
+            <div style={{ fontSize: 12, color: "#8b949e", lineHeight: 1.5, marginTop: 4 }}>{a.summary}</div>
+            }
+              </div>)
+          }
           </div>
         </div>
-      )}
+      }
 
       {/* Generation History */}
-      {generations.length > 0 && (
-        <div>
+      {generations.length > 0 &&
+      <div>
           <div style={{ fontSize: 11, color: "#8b949e", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
             Generation Sessions ({generations.length})
           </div>
           <div style={{ background: "#0d1117", border: "1px solid #30363d", borderRadius: 8, overflow: "hidden" }}>
-            {generations.map((g, i) => (
-              <div key={i} style={{ padding: "12px 16px", borderBottom: i < generations.length - 1 ? "1px solid #21262d" : "none", backgroundColor: i % 2 === 0 ? "transparent" : "#161b22" }}>
+            {safeMap(generations, (g, i) =>
+          <div key={i} style={{ padding: "12px 16px", borderBottom: i < generations.length - 1 ? "1px solid #21262d" : "none", backgroundColor: i % 2 === 0 ? "transparent" : "#161b22" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, color: "#4dabf7", border: "1px solid #4dabf7", padding: "1px 5px", borderRadius: 3, textTransform: "uppercase" }}>
                     {g.generation_type ?? "generate"}
@@ -115,11 +115,11 @@ export default function ARMLogs() {
                   {g.input_tokens != null && <MetricPill label="in tok" value={g.input_tokens} />}
                   {g.output_tokens != null && <MetricPill label="out tok" value={g.output_tokens} />}
                 </div>
-              </div>
-            ))}
+              </div>)
+          }
           </div>
         </div>
-      )}
-    </div>
-  );
+      }
+    </div>);
+
 }

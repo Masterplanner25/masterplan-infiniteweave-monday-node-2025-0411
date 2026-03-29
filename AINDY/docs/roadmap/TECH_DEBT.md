@@ -2,6 +2,54 @@
 
 This document inventories current technical debt based strictly on the existing implementation. It does not propose redesigns or new systems.
 
+## Current Audit Alignment
+
+This section is the canonical current-state view. Historical notes below are retained for traceability, but any stale statuses should be interpreted through this section first.
+
+### Current Priority Summary
+
+#### Critical
+
+- No current critical debt item is newly confirmed in this audit section. Historical critical items remain below for traceability.
+
+#### High
+
+- **UNRESOLVED:** Real Nodus execution is not the primary execution path for Agentics. Core agent execution still runs through `services/flow_engine.py` via `services/nodus_adapter.py`, while embedded Nodus execution remains isolated behind `services/nodus_execution_service.py`. Primary files: `services/nodus_adapter.py`, `services/flow_engine.py`, `services/nodus_execution_service.py`.
+- **UNRESOLVED:** Dual execution surfaces continue to drift architecturally. The internal flow engine and embedded Nodus execution expose different runtime models, semantics, and observability envelopes. Primary files: `services/flow_engine.py`, `services/nodus_adapter.py`, `services/nodus_execution_service.py`, `routes/memory_router.py`.
+- **PARTIAL:** Search is materially more unified now that `services/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `services/search_service.py`, `services/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
+- **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, and Freelance now run through a centralized execution wrapper, but several execution-adjacent routes still return direct envelope responses without the same wrapper/event lifecycle, and `/system/state` still returns a raw snapshot shape. Primary files: `services/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
+
+#### Medium
+
+- **PARTIAL:** RippleTrace now includes execution-causality structure on top of `SystemEvent`, including parent-child edges, event->memory links, and a proofboard-style viewer, but broader productization and deeper scenario coverage remain incomplete. Primary files: `services/system_event_service.py`, `services/rippletrace_service.py`, `db/models/ripple_edge.py`, `client/src/components/RippleTraceViewer.jsx`.
+- **PARTIAL:** Freelancing remains incomplete. AI delivery generation, execution metrics, and external email/webhook delivery now exist, but payment-provider integration is still stubbed and broader commercial workflow automation remains incomplete. Primary files: `services/freelance_service.py`, `routes/freelance_router.py`, `db/models/freelance.py`, `services/automation_execution_service.py`.
+- **PARTIAL:** Infinity is now memory-weighted, system-state-aware, goal-aware, and expected-vs-actual-aware, but optimization depth remains shallow. Watcher, feedback, ranked memory signals, and prediction accuracy now feed decisions, yet KPI-weight learning and broader policy adaptation are still missing. Primary files: `services/infinity_service.py`, `services/infinity_loop.py`, `services/memory_scoring_service.py`, `services/system_state_service.py`, `routes/main_router.py`.
+- **UNRESOLVED:** ARM analyzer config updates remain process-local across instances. Primary file: `routes/arm_router.py`.
+- **RESOLVED:** Mongo is now a fail-fast runtime dependency. `config.py` rejects missing `MONGO_URL`, `db/mongo_setup.py` eagerly pings on startup, and `main.py` initializes Mongo during lifespan. Primary files: `config.py`, `db/mongo_setup.py`, `main.py`.
+- **UNRESOLVED:** Logging is still not fully standardized. `print(...)` remains in database/bootstrap paths. Primary files: `db/database.py`, `db/create_all.py`.
+- **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `services/embedding_jobs.py`, `services/async_job_service.py`, `services/memory_persistence.py`.
+- **PARTIAL:** Multi-agent coordination primitives now exist, including registry, coordinator, message bus, cross-agent trace fields, and coordination endpoints, but real distributed execution and conflict-heavy runtime behavior remain immature. Primary files: `services/agent_coordinator.py`, `services/agent_message_bus.py`, `services/agent_runtime.py`, `db/models/agent_registry.py`, `routes/coordination_router.py`.
+- **PARTIAL:** Rust/C++ memory scoring acceleration is now integrated into the runtime hot path with Python fallback, but release-build deployment and broader traversal-side acceleration are still incomplete. Primary files: `runtime/memory/scorer.py`, `runtime/memory/native_scorer.py`, `bridge/memory_bridge_rs/src/lib.rs`.
+- **PARTIAL:** Memory auto-link enrichment is not cross-dialect clean. The capture path works against PostgreSQL, but SQLite-based verification still hits PostgreSQL tag operators (`@>`) during auto-link candidate lookup and logs warning-only failures. Primary files: `services/memory_capture_engine.py`, `db/dao/memory_node_dao.py`.
+- **PARTIAL:** Live route-level learning behavior is not yet consistently visible even though the causal-learning loop tests pass. Repeated real API executions can succeed without showing recalled memory in route payload context. Primary files: `routes/research_results_router.py`, `runtime/memory/*`, `services/memory_scoring_service.py`, `services/infinity_orchestrator.py`.
+
+#### Low
+
+- **PARTIAL:** Cache backend is configurable for Redis, but in-memory remains the default and multi-instance correctness still depends on explicit deployment configuration. Primary files: `config.py`, `routes/health_router.py`.
+- **UNRESOLVED:** No documented secret rotation policy. Primary files: `config.py`, bridge/auth deployment settings.
+- **UNRESOLVED:** Legacy/archive residue remains under `bridge/archive/` and similar compatibility paths, increasing maintenance drag.
+
+### Stale Historical Entries Corrected By This Audit
+
+The following historical items below should now be treated as resolved or updated:
+
+- MasterPlan anchor and ETA projection are implemented.
+- RippleTrace pattern engine, graph layer, and frontend viewer are implemented.
+- Observability frontend dashboard is implemented.
+- Agent approval inbox is implemented.
+- `IdentityService.get_evolution_summary()` now returns a normalized new-user shape and should no longer be treated as open.
+- `WatcherSignal.user_id` is now UUID-backed with a foreign key, so the older String-based note is stale.
+
 ## 1. Structural Debt
 - ✅ **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
 - ✅ **RESOLVED (Flow Engine Phase A):** Long-running loop variants in `task_services.py` replaced by APScheduler scheduled jobs.
@@ -13,8 +61,8 @@ This document inventories current technical debt based strictly on the existing 
 - Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
 - ✅ **RESOLVED (2026-03-21):** Social Layer visibility scoring + bridge event persistence implemented; social posts now log to Memory Bridge with DB session. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
-- RippleTrace remains signal-capture only; pattern engine, graph layer, and insight engine are not implemented. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.
-- Masterplan SaaS lacks a masterplan anchor (target state), ETA projection, and dependency cascade modeling; current implementation is planning + activation only. Canonical reference: `docs/roadmap/MASTERPLAN_SAAS.md`.
+- RippleTrace is **partially implemented** beyond signal capture; pattern services, graph logic, and a frontend viewer now exist, but execution-causality tracing and the full insight layer remain incomplete. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.
+- Masterplan SaaS no longer lacks anchor/ETA support; the remaining debt is dependency cascade modeling and execution automation on top of the existing planning + activation layer. Canonical reference: `docs/roadmap/MASTERPLAN_SAAS.md`.
 - ✅ **FIXED (2026-03-18 Sprint 4):** `main.py` deprecated `@app.on_event("startup")` handlers replaced with a single `@asynccontextmanager lifespan` function. Both startup handlers (cache init + system identity seeder) merged into one lifespan. Deprecation warnings eliminated (11 → 7 warnings in test suite).
 - ✅ **FIXED (2026-03-18 Sprint 4 Auth Hardening):** Pydantic v1 deprecations removed — `schemas/freelance.py` (3× `class Config: orm_mode = True` → `model_config = ConfigDict(from_attributes=True)`), `schemas/analytics_inputs.py` (`@validator` → `@field_validator` with `@classmethod`), `schemas/research_results_schema.py` (`class Config: from_attributes = True` → `model_config = ConfigDict(from_attributes=True)`). Deprecation warnings reduced from 7 → 1.
 - ✅ **FIXED (2026-03-18 Sprint 6):** SQLAlchemy 2.0 migration complete. `db/database.py:9` `from sqlalchemy.ext.declarative import declarative_base` → `from sqlalchemy.orm import declarative_base`. The final deprecation warning is eliminated. Deprecation warnings: 0. No other files used the old import path (`Base` was defined once and all models import it from `db.database`).
@@ -435,10 +483,8 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/config.py`
 
 ### §15.10 `get_evolution_summary()` has incompatible return shapes for new vs existing users
-- **`IdentityService.get_evolution_summary()` returns two incompatible dict shapes.** New users (no evolution log) get `{message, observation_count, changes}`. Existing users get `{observation_count, total_changes, dimensions_evolved, most_changed_dimension, recent_changes, evolution_arc}`. Frontend components rendering this response must handle both shapes or will crash on one code path.
-  - Location: `AINDY/services/identity_service.py` (early-return path at ~line 359-365)
-  - Fix: Normalize the new-user early-return to include all keys with zero/empty values.
-  - Status: Open. Quick win (5 min).
+- ✅ **RESOLVED (current workspace):** `IdentityService.get_evolution_summary()` now returns a normalized new-user shape including `total_changes`, `dimensions_evolved`, `most_changed_dimension`, `recent_changes`, and `evolution_arc` alongside the existing informational message.
+  - Location: `AINDY/services/identity_service.py`
 
 ### §15.11 MongoDB credentials not enforced by config
 - **`pymongo==4.16.0` is in `requirements.txt` and `db/mongo_setup.py` exists**, but no MongoDB connection string is validated in `config.py`. If MongoDB is unavailable, errors are silent or late-binding. `task_services.py` calls MongoDB for profile updates — a failed connection would silently drop profile state.
@@ -460,16 +506,12 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - ✅ **RESOLVED (2026-03-22 Make It Visible sprint):** `MemoryBrowser.jsx`, `IdentityDashboard.jsx`, and `AgentRegistry.jsx` created. All 3 routes added to `Sidebar.jsx` and `App.jsx`. 16 API functions added to `api.js`. 27 backend endpoint smoke tests added in `tests/test_memory_browser_ui.py`.
 
 ### §15.15 Execution Loop Console — no frontend UI
-- **The memory execution loop (`runtime/execution_loop.py`, endpoints `/memory/execute*`) has no frontend surface.** Users cannot trigger, monitor, or inspect execution sessions from the UI.
-  - Location: `AINDY/runtime/execution_loop.py`, `AINDY/routes/memory_router.py`
-  - Fix: Build an `ExecutionConsole.jsx` component with session start/stop, step list, and live status polling.
-  - Status: Open.
+- ⚠️ **PARTIAL (current workspace):** `ExecutionConsole.jsx` exists and is routed from `client/src/App.jsx`, but it is still a TWR/calculation console rather than a true frontend for the memory execution loop and `/memory/execute*` surfaces.
+  - Location: `AINDY/client/src/components/ExecutionConsole.jsx`, `AINDY/runtime/execution_loop.py`, `AINDY/routes/memory_router.py`
 
 ### §15.16 RippleTrace viewer — no frontend UI
-- **RippleTrace signal capture (`/memory/traces*`) has no frontend visualization.** Signals are written but never surfaced to users.
-  - Location: `AINDY/routes/memory_router.py` (`/memory/traces*`), `AINDY/db/dao/memory_node_dao.py` (MemoryTraceDAO)
-  - Fix: Build a `RippleTraceViewer.jsx` component with a signal timeline and trace-node graph.
-  - Status: Open.
+- ✅ **RESOLVED (current workspace):** `RippleTraceViewer.jsx` now exists and is routed from `client/src/App.jsx`. The viewer renders a signal timeline and graph-based ripple surface against the active RippleTrace APIs.
+  - Location: `AINDY/client/src/components/RippleTraceViewer.jsx`, `AINDY/client/src/App.jsx`
 
 ### §15.17 Observability dashboard — no frontend UI
 - **Request metrics (`/observability/requests*`) and memory metrics (`/memory/metrics*`) have no frontend dashboard.** System health data is only accessible via raw API or logs.
@@ -522,26 +564,83 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
   - Location: `AINDY/services/capability_service.py`, `AINDY/services/agent_runtime.py`, `AINDY/services/nodus_adapter.py`
   - Outcome: approved runs can no longer invoke arbitrary tools outside their scoped token; `genesis.message` remains manual-approval only.
 
-### §16.6 Infinity loop optimization depth remains limited — Open
-- **The Infinity loop is now closed, but the decision engine is intentionally shallow.** `services/infinity_loop.py` applies deterministic rule-based adjustments (`task_reprioritization`, `suggestion_refresh`, `no_op`) and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
-  - modify the standalone TWR formula using watcher-derived focus/distraction
-  - learn from `UserFeedback` to change decision thresholds or KPI weights
-  - implement recommendation ranking or expected-vs-actual scoring
-  - Status: Open. Medium effort, Medium impact.
+### §16.4 `WatcherSignal.user_id` migration not chained cleanly — Low priority
+- ✅ **RESOLVED (current workspace):** `watcher_signals.user_id` is now UUID-backed with `ForeignKey("users.id")`. The older String-based note is stale.
+  - Location: `AINDY/db/models/watcher_signal.py`
 
-### §16.7 SystemEvent coverage is broader, but execution-envelope coverage is still incomplete
+### §16.5 Agent approval inbox has no dedicated UI — Resolved
+- ✅ **RESOLVED (current workspace):** A dedicated approval surface now exists in `AINDY/client/src/components/AgentApprovalInbox.jsx`, routed at `/agent/approvals` from `AINDY/client/src/App.jsx`.
+- ✅ **RESOLVED (current workspace):** Sidebar-level pending approval visibility now exists in `AINDY/client/src/components/Sidebar.jsx` via the approval count badge and `APPROVAL_EVENT` refresh hook.
+
+### §16.6 [AGENTICS] Real Nodus execution is not the primary execution path — Open
+- **Agentics currently runs on A.I.N.D.Y.'s internal flow engine, not on the installed Nodus DSL/VM runtime.** `services/nodus_adapter.py` is a wrapper over `PersistentFlowRunner` in `services/flow_engine.py`. The actual installed `nodus` runtime is only used by `services/nodus_execution_service.py` behind `POST /memory/nodus/execute`.
+  - Current consequence: the system has working deterministic execution, but it is not yet aligned with the intended architecture where Nodus is the primary execution substrate.
+  - Missing pieces:
+    - no `.nd` workflow assets in the repo
+    - no agent-plan-to-Nodus compilation path
+    - no VM trace mapping into `FlowRun`, `AgentEvent`, or `SystemEvent`
+  - Status: Open. High architectural importance.
+
+### §16.7 [AGENTICS] Dual execution model causes architectural drift — Open
+- **There are now two workflow/execution surfaces with different semantics:**
+  - `services/flow_engine.py` for core runtime orchestration
+  - `services/nodus_execution_service.py` for embedded Nodus source execution
+- This split is manageable short-term, but it creates naming confusion, duplicated execution concepts, and drift away from the intended Nodus-centered execution architecture.
+  - Primary files: `AINDY/services/flow_engine.py`, `AINDY/services/nodus_adapter.py`, `AINDY/services/nodus_execution_service.py`, `AINDY/routes/memory_router.py`
+  - Status: Open. Structural debt.
+
+### §16.8 [AGENTICS] Infinity loop is integrated but not autonomous — Open
+- **The Infinity loop is now closed and memory-weighted, but the decision engine is still shallow and post-hoc.** `services/infinity_loop.py` now consumes ranked memory signals in addition to KPI and feedback context, and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
+  - create bounded autonomous agent runs from its own decisions
+  - learn from `UserFeedback` to change decision thresholds or KPI weights
+  - implement expected-vs-actual scoring across agent outcomes
+  - coordinate with capability/approval policy as a true autonomous controller
+  - Status: Open. Medium effort, high strategic importance.
+
+### §16.9 [AGENTICS] SystemEvent coverage is broader, but execution-envelope coverage is still incomplete
 - ✅ **PARTIALLY RESOLVED (current workspace):** `SystemEvent` is now the canonical durable activity ledger for core execution plus outbound external interactions. External OpenAI/HTTP/watcher/health-probe calls fail closed on missing required event emission.
 - ✅ **Further resolved (current workspace):** successful health/auth/async heavy-execution paths now also emit durable success events (`health.liveness.completed`, `health.readiness.completed`, `auth.register.completed`, `auth.login.completed`, `execution.started`, `execution.completed`) and were verified against a live compose deployment.
-- **Still open:** not every domain has a first-class execution record model, so event coverage is stronger than full execution normalization.
+- ✅ **Further resolved (current workspace):** parent-child event stitching, causal `RippleEdge` creation, and `stored_as_memory` links now make execution traces reconstructable across `SystemEvent` and Memory Bridge.
+- **Still open:** event coverage is stronger than full execution normalization. Agent runs, flow runs, async jobs, and embedded Nodus tasks do not yet share one normalized execution record model.
   - Status: Open. Structural follow-through still required.
 
-### §16.4 `WatcherSignal.user_id` migration not chained cleanly — Low priority
-- **Migration `b1c2d3e4f5a6` adds `user_id` to `watcher_signals`** but the column is `String` (not UUID with FK to `users.id`) for consistency with the watcher's HTTP-posted signal flow. This is intentional but creates a heterogeneous `user_id` type pattern across tables. Future user FK normalization work would need to include this table.
-  - Status: Documented. Not blocking.
+### §16.10 [AGENTICS] Multi-agent coordination is still absent — Open
+- **Agentics is still effectively single-agent.** Memory federation exists (`/memory/agents`, federated recall, shared/private memory), but there is no runtime delegation model, no parent/child run structure, and no inter-agent approval/capability boundary.
+  - Primary files: `AINDY/routes/memory_router.py`, `AINDY/bridge/nodus_memory_bridge.py`, `AINDY/services/agent_runtime.py`, `AINDY/db/models/agent.py`
+  - Status: Open. Major functional gap.
 
-### §16.5 Agent approval inbox has no dedicated UI — Partially Resolved
-- ✅ **PARTIALLY RESOLVED (Sprint N+8, 2026-03-25):** `AgentConsole.jsx` now shows an amber pending-approval badge on the runs section header when runs are awaiting approval. The badge count is derived from `pendingRuns.length`.
-- **Still open:** No standalone `AgentApprovalInbox.jsx` component; no badge surfaced in top-level navigation (Sidebar). Users must navigate to AgentConsole to see pending runs.
-  - Location: `AINDY/client/src/components/AgentConsole.jsx`
-  - Remaining fix: Dedicated `AgentApprovalInbox.jsx` or Sidebar badge count.
-  - Status: Partially resolved. Remaining work: Low effort, Medium UX impact.
+## 17. Current Workspace Audit — Newly Documented Debt
+
+### §17.1 Search / SEO frontend-backend contract drift
+- ✅ **RESOLVED (current workspace):** Compatibility routes now exist for `/analyze_seo/`, `/generate_meta/`, and `/suggest_improvements/`, and shared search orchestration lives in `services/search_service.py`.
+  - Location: `AINDY/client/src/api.js`, `AINDY/routes/seo_routes.py`, `AINDY/services/search_service.py`
+
+### §17.2 Logging standardization is incomplete
+- **`print(...)` remains in database/bootstrap code paths.** Core routes/services mostly use `logger`, but `db/database.py` and `db/create_all.py` still emit raw prints, so logging is not fully standardized.
+  - Location: `AINDY/db/database.py`, `AINDY/db/create_all.py`
+  - Status: Open. Low priority, but still real debt.
+
+### §17.3 Mongo configuration remains late-bound
+- **Mongo connectivity is still configured outside the canonical settings model.** `db/mongo_setup.py` reads environment directly and raises only at connection time; `config.py` has no Mongo URI validation or startup policy.
+  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`
+  - Status: Open. Medium priority because Social Layer behavior fails late.
+
+### §17.4 TECH_DEBT historical statuses can drift from live system state
+- **Historical audit entries now contain stale open items that are already resolved in the workspace** (for example MasterPlan anchor/ETA, RippleTrace viewer, Observability dashboard, and normalized identity evolution summary). This document therefore needs periodic alignment to remain trustworthy as an audit artifact.
+  - Location: `AINDY/docs/roadmap/TECH_DEBT.md`
+  - Status: Open. Low priority documentation debt.
+
+### §17.5 New causal-memory and memory-weighted Infinity path lacks end-to-end scenario coverage
+- **The new SystemEvent -> RippleTrace -> Memory Bridge -> Infinity signal path is implemented, but it does not yet have dedicated end-to-end tests that prove a high-impact failure changes the next Infinity decision on a subsequent run.**
+  - Location: `AINDY/services/system_event_service.py`, `AINDY/services/memory_capture_engine.py`, `AINDY/services/rippletrace_service.py`, `AINDY/services/memory_scoring_service.py`, `AINDY/services/infinity_orchestrator.py`, `AINDY/services/infinity_loop.py`
+  - Status: Open. Medium priority because this is now a strategic behavior path.
+
+### §17.6 Automatic behavioral feedback path lacks scenario coverage
+- **Retries, latency spikes, abandonment detection, and repeated-failure signals now emit feedback events and auto-capture into memory, but they do not yet have dedicated scenario tests proving signal emission and downstream decision impact.**
+  - Location: `AINDY/services/system_event_service.py`, `AINDY/services/async_job_service.py`, `AINDY/services/memory_capture_engine.py`, `AINDY/services/memory_scoring_service.py`
+  - Status: Open. Medium priority.
+
+### §17.7 Native memory scorer is integrated, but production hardening is incomplete
+- **The memory scoring hot path now uses the Rust/C++ bridge directly, but production hardening is still incomplete.** The runtime scorer has a safe Python fallback and focused parity tests, but release-mode packaging/benchmark validation and traversal-side native acceleration are still not done.
+  - Location: `AINDY/runtime/memory/scorer.py`, `AINDY/runtime/memory/native_scorer.py`, `AINDY/bridge/memory_bridge_rs/src/lib.rs`, `AINDY/tests/integration/test_memory_native_scorer.py`
+  - Status: Open. Medium priority.

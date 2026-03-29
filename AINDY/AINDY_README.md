@@ -7,6 +7,7 @@ Core backend for the Masterplan Infinite Weave project.
 A.I.N.D.Y. is a FastAPI-based backend that combines:
 - task execution and scoring
 - memory persistence and retrieval
+- identity boot activation after auth
 - agent execution
 - Genesis/masterplan planning flows
 - ARM analysis/generation
@@ -52,6 +53,8 @@ AINDY/
 - `SystemEvent` is the canonical durable activity ledger for execution and observability.
 - Request-scoped `trace_id` is propagated through execution, loops, agent runs, memory writes, logs, and events.
 - Outbound OpenAI/HTTP/watcher interactions are instrumented through `services/external_call_service.py` with required lifecycle events.
+- Authenticated app activation now uses `GET /identity/boot` to hydrate memory, agent runs, metrics, and active flows immediately after JWT login.
+- `identity.boot` is a required fail-closed `SystemEvent`.
 
 ## Development
 

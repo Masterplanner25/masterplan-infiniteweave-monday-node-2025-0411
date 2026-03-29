@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from services.auth_service import create_access_token, register_user, authenticate_user
+from services.signup_initialization_service import initialize_signup_state
 from services.system_event_service import emit_system_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -29,6 +30,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         username=request.username,
         db=db,
     )
+    initialize_signup_state(db=db, user=user)
     emit_system_event(
         db=db,
         event_type="auth.register.completed",

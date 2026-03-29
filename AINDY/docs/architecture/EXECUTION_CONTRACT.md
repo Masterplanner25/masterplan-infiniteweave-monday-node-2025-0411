@@ -544,3 +544,50 @@ It is:
 `Input -> Execution -> Persist -> Orchestrator -> Observability`
 
 If a path does not satisfy all five stages, it is legacy and should be refactored until it does.
+
+## Identity Boot Activation
+
+Authentication is not the whole activation path anymore.
+
+After `POST /auth/login` returns a JWT, the frontend immediately calls:
+
+`GET /identity/boot`
+
+This boot path is now the canonical identity activation contract:
+
+`Auth -> Identity Boot -> Hydrated State -> User Execution`
+
+Signup now uses the same activation path:
+
+`Register -> Seed Identity State -> JWT Issued -> Identity Boot -> User Execution`
+
+On successful `POST /auth/register`, the backend seeds the first system anchor:
+
+- `User`
+- initial `Memory` node
+- initialized `Execution` placeholder
+- baseline `Metrics`
+- required lifecycle `SystemEvent`
+
+Current implementation guarantees:
+
+- JWT remains the auth gate; boot does not bypass auth.
+- successful register returns a usable JWT immediately; no second auth call is required
+- boot returns a DB-backed user execution snapshot:
+  - recent Memory Bridge nodes
+  - recent AgentRun rows
+  - current score metrics
+  - active FlowRun rows
+  - derived `system_state`
+- returned memory is tagged with `context = "identity_boot"` for explicit boot provenance
+- boot emits required `SystemEvent(type="identity.boot")`
+- signup initialization emits required `SystemEvent(type="identity.created")`
+- Infinity orchestration now injects loop context derived from the same boot primitives:
+  - `user_id`
+  - recent memory
+  - current metrics
+
+Implication:
+
+- the frontend should hydrate from identity boot first, then refresh domain panels opportunistically
+- blank post-login dashboards are non-canonical behavior

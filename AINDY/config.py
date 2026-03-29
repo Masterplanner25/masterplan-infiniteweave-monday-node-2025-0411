@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     TESTING: bool = False
     TEST_MODE: bool = False
     DATABASE_URL: str
+    MONGO_URL: str | None = None
     PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
     OPENAI_API_KEY: str
     DEEPSEEK_API_KEY: str | None = None
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     REDIS_URL: str | None = None
     AINDY_CACHE_BACKEND: str = "memory"
+    USE_NATIVE_SCORER: bool = True
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
@@ -68,6 +70,13 @@ class Settings(BaseSettings):
         if not v.startswith("postgres"):
             raise ValueError("DATABASE_URL must be a valid PostgreSQL URI")
         return v
+
+    @field_validator("MONGO_URL")
+    @classmethod
+    def ensure_mongo_url(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("MONGO_URL is required for runtime")
+        return v.strip()
 
     # --- Helper properties ---
     @property

@@ -1,16 +1,20 @@
 # /services/task_services.py
-import time
-import uuid
 import logging
 import os
 import socket
-from sqlalchemy.orm import Session
+import uuid
+from collections import deque
 from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from sqlalchemy.orm import Session
+
 from db.database import SessionLocal
-from db.models.task import Task
 from db.models.background_task_lease import BackgroundTaskLease
-from services.calculation_services import save_calculation, calculate_twr, TaskInput
+from db.models.masterplan import MasterPlan
+from db.models.task import Task
 from db.mongo_setup import get_mongo_client
+from services.calculation_services import save_calculation
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,214 @@ def _user_uuid(user_id: str | uuid.UUID | None) -> uuid.UUID | None:
     if not user_id:
         return None
     return uuid.UUID(str(user_id))
+
+
+def _serialize_dependency(task_id: int, dependency_type: str = "hard") -> dict[str, Any]:
+    return {"task_id": int(task_id), "dependency_type": dependency_type or "hard"}
+
+
+def _normalize_dependencies(dependencies: list[Any] | None) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for dependency in dependencies or []:
+        if isinstance(dependency, dict):
+            task_id = dependency.get("task_id")
+            dep_type = dependency.get("dependency_type", "hard")
+        else:
+            task_id = getattr(dependency, "task_id", None)
+            dep_type = getattr(dependency, "dependency_type", "hard")
+        if task_id is None:
+            continue
+        normalized.append(_serialize_dependency(int(task_id), str(dep_type or "hard")))
+    return normalized
+
+
+def _dependency_ids(task: Task) -> list[int]:
+    ids: list[int] = []
+    for dependency in task.depends_on or []:
+        if isinstance(dependency, dict) and dependency.get("task_id") is not None:
+            ids.append(int(dependency["task_id"]))
+    if task.parent_task_id is not None and int(task.parent_task_id) not in ids:
+        ids.append(int(task.parent_task_id))
+    return ids
+
+
+def _validate_dependencies(
+    db: Session,
+    owner_user_id: uuid.UUID,
+    dependencies: list[dict[str, Any]],
+    parent_task_id: int | None,
+) -> None:
+    referenced_ids = {int(item["task_id"]) for item in dependencies}
+    if parent_task_id is not None:
+        referenced_ids.add(int(parent_task_id))
+    if not referenced_ids:
+        return
+    existing_ids = {
+        task_id
+        for (task_id,) in db.query(Task.id).filter(
+            Task.user_id == owner_user_id,
+            Task.id.in_(referenced_ids),
+        ).all()
+    }
+    missing = sorted(referenced_ids - existing_ids)
+    if missing:
+        raise ValueError(f"dependencies_not_found:{','.join(str(item) for item in missing)}")
+
+
+def _dependencies_complete(db: Session, task: Task, user_id: str | uuid.UUID | None) -> bool:
+    dependency_ids = _dependency_ids(task)
+    if not dependency_ids:
+        return True
+    owner_user_id = _user_uuid(user_id)
+    completed = (
+        db.query(Task)
+        .filter(
+            Task.user_id == owner_user_id,
+            Task.id.in_(dependency_ids),
+            Task.status == "completed",
+        )
+        .count()
+    )
+    return completed == len(set(dependency_ids))
+
+
+def _recompute_task_status(db: Session, task: Task, user_id: str | uuid.UUID | None) -> str:
+    if task.status == "completed":
+        return task.status
+    if _dependencies_complete(db, task, user_id=user_id):
+        if task.status == "blocked":
+            task.status = "pending"
+    else:
+        if task.status in {"pending", "paused"}:
+            task.status = "blocked"
+    return task.status
+
+
+def build_task_graph(tasks: list[Task]) -> dict[str, Any]:
+    nodes = {
+        int(task.id): {
+            "task_id": int(task.id),
+            "name": task.name,
+            "priority": task.priority,
+            "status": task.status,
+            "depends_on": _dependency_ids(task),
+            "automation_type": getattr(task, "automation_type", None),
+            "masterplan_id": getattr(task, "masterplan_id", None),
+        }
+        for task in tasks
+    }
+    downstream = {task_id: [] for task_id in nodes}
+    indegree = {task_id: 0 for task_id in nodes}
+    for task_id, node in nodes.items():
+        for dependency_id in node["depends_on"]:
+            if dependency_id not in nodes:
+                continue
+            downstream[dependency_id].append(task_id)
+            indegree[task_id] += 1
+
+    queue = deque(sorted(task_id for task_id, degree in indegree.items() if degree == 0))
+    topo_order: list[int] = []
+    while queue:
+        current = queue.popleft()
+        topo_order.append(current)
+        for child_id in downstream[current]:
+            indegree[child_id] -= 1
+            if indegree[child_id] == 0:
+                queue.append(child_id)
+
+    if len(topo_order) != len(nodes):
+        raise ValueError("task_dependency_cycle_detected")
+
+    critical_weight = {task_id: 1 for task_id in nodes}
+    for task_id in reversed(topo_order):
+        children = downstream[task_id]
+        if children:
+            critical_weight[task_id] = 1 + max(critical_weight[child_id] for child_id in children)
+
+    ready = [
+        task_id
+        for task_id in topo_order
+        if nodes[task_id]["status"] in {"pending", "paused", "in_progress"}
+        and all(
+            nodes[dependency_id]["status"] == "completed"
+            for dependency_id in nodes[task_id]["depends_on"]
+            if dependency_id in nodes
+        )
+    ]
+    blocked = [
+        task_id
+        for task_id in topo_order
+        if nodes[task_id]["status"] != "completed" and task_id not in ready
+    ]
+    return {
+        "nodes": nodes,
+        "downstream": downstream,
+        "topological_order": topo_order,
+        "critical_weight": critical_weight,
+        "ready": ready,
+        "blocked": blocked,
+    }
+
+
+def get_task_graph_context(db: Session, user_id: str | uuid.UUID | None) -> dict[str, Any]:
+    owner_user_id = _user_uuid(user_id)
+    if not owner_user_id:
+        return {"nodes": {}, "ready": [], "blocked": [], "critical_path": []}
+    tasks = db.query(Task).filter(Task.user_id == owner_user_id).order_by(Task.id.asc()).all()
+    if not tasks:
+        return {"nodes": {}, "ready": [], "blocked": [], "critical_path": []}
+    graph = build_task_graph(tasks)
+    critical_path = sorted(
+        graph["ready"],
+        key=lambda task_id: (
+            -graph["critical_weight"].get(task_id, 0),
+            0 if graph["nodes"][task_id]["priority"] == "high" else 1 if graph["nodes"][task_id]["priority"] == "medium" else 2,
+            task_id,
+        ),
+    )
+    return {
+        "nodes": graph["nodes"],
+        "ready": critical_path,
+        "blocked": graph["blocked"],
+        "critical_path": critical_path,
+        "critical_weight": graph["critical_weight"],
+    }
+
+
+def get_next_ready_task(db: Session, user_id: str | uuid.UUID | None) -> dict[str, Any] | None:
+    context = get_task_graph_context(db, user_id)
+    task_id = next(iter(context.get("critical_path") or []), None)
+    if task_id is None:
+        return None
+    node = (context.get("nodes") or {}).get(task_id)
+    if not node:
+        return None
+    return {
+        "task_id": task_id,
+        "name": node["name"],
+        "priority": node["priority"],
+        "status": node["status"],
+        "critical_weight": (context.get("critical_weight") or {}).get(task_id, 1),
+    }
+
+
+def _unlock_downstream_tasks(db: Session, task: Task, user_id: str | uuid.UUID | None) -> list[dict[str, Any]]:
+    owner_user_id = _user_uuid(user_id)
+    unlocked: list[dict[str, Any]] = []
+    candidates = (
+        db.query(Task)
+        .filter(Task.user_id == owner_user_id, Task.status.in_(["blocked", "pending", "paused"]))
+        .all()
+    )
+    for candidate in candidates:
+        if task.id not in _dependency_ids(candidate):
+            continue
+        previous_status = candidate.status
+        new_status = _recompute_task_status(db, candidate, user_id=user_id)
+        if previous_status == "blocked" and new_status == "pending":
+            unlocked.append({"task_id": candidate.id, "name": candidate.name, "status": candidate.status})
+    return unlocked
+
 
 # Lease constants kept for _acquire/_release helpers used during startup
 _BACKGROUND_LEASE_NAME = "task_background_runner"
@@ -146,24 +358,53 @@ def _release_background_lease(log: logging.Logger | None = None) -> None:
         db.close()
 
 
-
 # ----------------------------
 # Core CRUD Task Management
 # ----------------------------
 
-def create_task(db: Session, name: str, category="general", priority="medium", due_date=None, 
-                dependencies=None, scheduled_time=None, reminder_time=None, recurrence=None, user_id: str | uuid.UUID | None = None):
+
+def create_task(
+    db: Session,
+    name: str,
+    category="general",
+    priority="medium",
+    due_date=None,
+    masterplan_id: int | None = None,
+    parent_task_id: int | None = None,
+    dependency_type: str = "hard",
+    dependencies=None,
+    automation_type: str | None = None,
+    automation_config: dict[str, Any] | None = None,
+    scheduled_time=None,
+    reminder_time=None,
+    recurrence=None,
+    user_id: str | uuid.UUID | None = None,
+):
     """Creates a new task entry in the database."""
     owner_user_id = _user_uuid(user_id)
     if not owner_user_id:
         raise ValueError("user_id is required to create a task")
-    if dependencies is None:
-        dependencies = []
+    if masterplan_id is not None:
+        plan = (
+            db.query(MasterPlan)
+            .filter(MasterPlan.id == masterplan_id, MasterPlan.user_id == owner_user_id)
+            .first()
+        )
+        if not plan:
+            raise ValueError(f"masterplan_not_found:{masterplan_id}")
+    normalized_dependencies = _normalize_dependencies(dependencies)
+    _validate_dependencies(db, owner_user_id, normalized_dependencies, parent_task_id)
     task = Task(
-        name=name,  # ✅ Fixed column name
+        name=name,
         category=category,
         priority=priority,
         due_date=due_date,
+        masterplan_id=masterplan_id,
+        parent_task_id=parent_task_id,
+        depends_on=normalized_dependencies,
+        dependency_type=dependency_type or "hard",
+        automation_type=automation_type,
+        automation_config=automation_config,
         scheduled_time=scheduled_time,
         reminder_time=reminder_time,
         recurrence=recurrence,
@@ -175,6 +416,7 @@ def create_task(db: Session, name: str, category="general", priority="medium", d
         task_difficulty=1,
         status="pending",
     )
+    _recompute_task_status(db, task, user_id=owner_user_id)
     db.add(task)
     db.commit()
     db.refresh(task)
@@ -184,7 +426,6 @@ def create_task(db: Session, name: str, category="general", priority="medium", d
 
 def find_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Find a task by name."""
-    # ✅ Fixed column name here too
     if not user_id:
         return None
     return db.query(Task).filter(Task.name == name, Task.user_id == _user_uuid(user_id)).first()
@@ -194,21 +435,25 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Start tracking time for a task."""
     task = find_task(db, name, user_id=user_id)
     if not task:
-        return f"❌ Task '{name}' not found."
+        return f"Task '{name}' not found."
+    if not _dependencies_complete(db, task, user_id=user_id):
+        _recompute_task_status(db, task, user_id=user_id)
+        db.commit()
+        return f"Task '{name}' is blocked until dependencies complete."
 
     if not getattr(task, "start_time", None):
         task.start_time = datetime.now()
         task.status = "in_progress"
         db.commit()
-        return f"▶️ Started task: {task.name}"
-    return f"⚠️ Task '{name}' already started."
+        return f"Started task: {task.name}"
+    return f"Task '{name}' already started."
 
 
 def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
     """Pause an in-progress task."""
     task = find_task(db, name, user_id=user_id)
     if not task:
-        return "❌ Task not found."
+        return "Task not found."
 
     if getattr(task, "status", None) == "in_progress":
         now = datetime.now()
@@ -216,8 +461,8 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.time_spent += duration
         task.status = "paused"
         db.commit()
-        return f"⏸ Paused task: {task.name}"
-    return f"⚠️ Task '{name}' is not in progress."
+        return f"Paused task: {task.name}"
+    return f"Task '{name}' is not in progress."
 
 
 def complete_task(db: Session, name: str, user_id: str = None):
@@ -227,7 +472,11 @@ def complete_task(db: Session, name: str, user_id: str = None):
     owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
     if not task:
-        return "❌ Task not found."
+        return "Task not found."
+    if not _dependencies_complete(db, task, user_id=user_id):
+        _recompute_task_status(db, task, user_id=user_id)
+        db.commit()
+        raise ValueError(f"task_blocked:{task.name}")
 
     now = datetime.now()
     if getattr(task, "start_time", None):
@@ -235,23 +484,64 @@ def complete_task(db: Session, name: str, user_id: str = None):
 
     task.status = "completed"
     task.end_time = now
+    unlocked_tasks = _unlock_downstream_tasks(db, task, user_id=user_id)
     db.commit()
 
-    # Calculate TWR
-    task_input = TaskInput(
-        task_name=task.name, # Pydantic model uses 'task_name', DB uses 'name'
-        time_spent=task.time_spent / 3600, 
-        task_complexity=task.task_complexity,
-        skill_level=task.skill_level,
-        ai_utilization=task.ai_utilization,
-        task_difficulty=task.task_difficulty
-    )
-    twr_score = calculate_twr(task_input)
-    
-    save_calculation(db, "Time-to-Wealth Ratio", twr_score, user_id=str(owner_user_id))
     save_calculation(db, "Execution Speed", task.time_spent, user_id=str(owner_user_id))
 
-    return f"✅ Completed task: {task.name} (TWR: {twr_score:.2f})"
+    unlocked_names = ", ".join(item["name"] for item in unlocked_tasks)
+    if unlocked_names:
+        return f"Completed task: {task.name} | unlocked: {unlocked_names}"
+    return f"Completed task: {task.name}"
+
+
+def get_task_by_id(db: Session, task_id: int, user_id: str | uuid.UUID | None) -> Task | None:
+    owner_user_id = _user_uuid(user_id)
+    if not owner_user_id:
+        return None
+    return (
+        db.query(Task)
+        .filter(Task.id == int(task_id), Task.user_id == owner_user_id)
+        .first()
+    )
+
+
+def queue_task_automation(
+    db: Session,
+    task: Task,
+    user_id: str | uuid.UUID | None,
+    *,
+    reason: str,
+) -> dict[str, Any] | None:
+    if not task or not getattr(task, "automation_type", None):
+        return None
+    owner_user_id = _user_uuid(user_id)
+    if not owner_user_id:
+        return None
+
+    from services.async_job_service import submit_autonomous_async_job
+
+    payload = {
+        "task_id": task.id,
+        "task_name": task.name,
+        "masterplan_id": task.masterplan_id,
+        "automation_type": task.automation_type,
+        "automation_config": task.automation_config or {},
+        "user_id": str(owner_user_id),
+    }
+    return submit_autonomous_async_job(
+        task_name="automation.execute",
+        payload=payload,
+        user_id=owner_user_id,
+        source="masterplan_task" if task.masterplan_id else "task_automation",
+        trigger_type="system",
+        trigger_context={
+            "goal": f"task:{task.name}",
+            "importance": 0.7 if task.priority == "high" else 0.5 if task.priority == "medium" else 0.3,
+            "reason": reason,
+            "masterplan_id": task.masterplan_id,
+        },
+    )
 
 
 def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
@@ -265,12 +555,16 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
             "eta_recalculated": False,
             "score_orchestrated": False,
             "next_action": None,
+            "unlocked_tasks": [],
+            "task_graph": {},
         }
 
     memory_captured = False
     feedback_recorded = 0
     social_sync = False
     eta_recalculated = False
+    unlocked_tasks = _unlock_downstream_tasks(db, task, user_id=user_id)
+    automation_runs: list[dict[str, Any]] = []
 
     try:
         from services.memory_capture_engine import MemoryCaptureEngine
@@ -324,24 +618,22 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         mongo = get_mongo_client()
         db_mongo = mongo["aindy_social_layer"]
         profiles = db_mongo["profiles"]
-        twr_score = calculate_twr(
-            TaskInput(
-                task_name=task.name,
-                time_spent=task.time_spent / 3600,
-                task_complexity=task.task_complexity,
-                skill_level=task.skill_level,
-                ai_utilization=task.ai_utilization,
-                task_difficulty=task.task_difficulty,
-            )
-        )
+        from services.infinity_service import get_user_kpi_snapshot
+
+        kpi_snapshot = get_user_kpi_snapshot(str(owner_user_id), db) or {}
+        master_score = float(kpi_snapshot.get("master_score", 0.0) or 0.0)
+        execution_speed_score = float(kpi_snapshot.get("execution_speed", 0.0) or 0.0)
         profiles.update_one(
             {"user_id": str(owner_user_id)},
             {
                 "$inc": {
                     "metrics_snapshot.execution_velocity": 1,
-                    "metrics_snapshot.twr_score": twr_score * 0.1,
                 },
-                "$set": {"updated_at": datetime.utcnow()},
+                "$set": {
+                    "metrics_snapshot.infinity_score": master_score,
+                    "metrics_snapshot.execution_speed_score": execution_speed_score,
+                    "updated_at": datetime.utcnow(),
+                },
             },
         )
         social_sync = True
@@ -349,7 +641,6 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", exc)
 
     try:
-        from db.models.masterplan import MasterPlan
         from services.eta_service import calculate_eta
 
         active_plan = (
@@ -371,6 +662,42 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         db=db,
     )
 
+    try:
+        current_task_automation = queue_task_automation(
+            db=db,
+            task=task,
+            user_id=owner_user_id,
+            reason="task_completed",
+        )
+        if current_task_automation:
+            automation_runs.append(
+                {
+                    "task_id": task.id,
+                    "task_name": task.name,
+                    "automation_type": task.automation_type,
+                    "dispatch": current_task_automation,
+                }
+            )
+        for unlocked in unlocked_tasks:
+            unlocked_task = get_task_by_id(db, unlocked["task_id"], owner_user_id)
+            dispatch = queue_task_automation(
+                db=db,
+                task=unlocked_task,
+                user_id=owner_user_id,
+                reason="task_unlocked",
+            )
+            if dispatch:
+                automation_runs.append(
+                    {
+                        "task_id": unlocked_task.id,
+                        "task_name": unlocked_task.name,
+                        "automation_type": unlocked_task.automation_type,
+                        "dispatch": dispatch,
+                    }
+                )
+    except Exception as exc:
+        logger.warning("Task automation dispatch failed: %s", exc)
+
     return {
         "memory_captured": memory_captured,
         "feedback_recorded": feedback_recorded,
@@ -378,6 +705,9 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         "eta_recalculated": eta_recalculated,
         "score_orchestrated": True,
         "next_action": orchestration["next_action"],
+        "unlocked_tasks": unlocked_tasks,
+        "automation_runs": automation_runs,
+        "task_graph": get_task_graph_context(db, user_id=owner_user_id),
     }
 
 
@@ -393,9 +723,11 @@ def execute_task_completion(db: Session, name: str, user_id: str | uuid.UUID | N
         user_id=str(user_id) if user_id is not None else None,
     )
 
+
 # ----------------------------
 # Background / Recurrence Logic
 # ----------------------------
+
 
 def _check_reminders_once(log: logging.Logger | None = None):
     log = log or logger
