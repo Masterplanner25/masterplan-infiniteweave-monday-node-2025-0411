@@ -2,6 +2,8 @@ node_modules/
 venv/
 __pycache__/
 *.pyc
+.coverage
+coverage.xml
 dist/
 build/
 code_analysis.db
@@ -14,3 +16,4 @@ AINDY/.env
 AINDY/.env.*
 AINDY/venv/
 AINDY/logs/
+logs/
