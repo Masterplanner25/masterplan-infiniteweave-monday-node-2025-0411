@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: execution-contract-linter
+        name: execution-contract-linter
+        entry: python tools/execution_contract_linter.py --strict
+        language: system
+        pass_filenames: false

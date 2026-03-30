@@ -53,6 +53,38 @@ If a requirements file is not present, install dependencies used by the project 
 
 ---
 
+# Execution Contract Lint
+
+Execution entry is now statically checked.
+
+Run the execution-contract linter locally with:
+
+```
+python tools/execution_contract_linter.py
+```
+
+Strict mode fails on violations:
+
+```
+python tools/execution_contract_linter.py --strict
+```
+
+This check is also wired into:
+
+```
+.github/workflows/lint.yml
+```
+
+and the local pre-commit hook:
+
+```
+.pre-commit-config.yaml
+```
+
+The current repo may still contain migration debt under this rule set. Use warning mode for local audit, and strict mode when you specifically want contract enforcement to fail the run.
+
+---
+
 # Environment Configuration
 
 The project relies on a properly configured runtime environment.

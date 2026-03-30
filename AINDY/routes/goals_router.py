@@ -4,12 +4,11 @@ from sqlalchemy.orm import Session
 
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.execution_envelope import success
 from services.goal_service import create_goal
 from services.goal_service import detect_goal_drift
 from services.goal_service import get_active_goals
 from services.goal_service import get_goal_states
-from utils.trace_context import ensure_trace_id
+from services.execution_service import ExecutionContext, run_execution
 
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
@@ -29,10 +28,14 @@ def list_goals(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return success(
-        get_active_goals(db, current_user["sub"]),
-        [],
-        ensure_trace_id(),
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="goals_router",
+            operation="goals.list",
+        ),
+        lambda: get_active_goals(db, current_user["sub"]),
     )
 
 
@@ -42,19 +45,26 @@ def create_goal_route(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    created = create_goal(
-        db,
-        user_id=current_user["sub"],
-        name=body.name,
-        description=body.description,
-        goal_type=body.goal_type,
-        priority=body.priority,
-        status=body.status,
-        success_metric=body.success_metric,
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="goals_router",
+            operation="goals.create",
+            start_payload={"goal_name": body.name},
+        ),
+        lambda: create_goal(
+            db,
+            user_id=current_user["sub"],
+            name=body.name,
+            description=body.description,
+            goal_type=body.goal_type,
+            priority=body.priority,
+            status=body.status,
+            success_metric=body.success_metric,
+        ),
+        success_status_code=status.HTTP_201_CREATED,
     )
-    response = success(created, [], ensure_trace_id())
-    response["status"] = "created"
-    return response
 
 
 @router.get("/state")
@@ -62,11 +72,15 @@ def list_goal_state(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return success(
-        {
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="goals_router",
+            operation="goals.state",
+        ),
+        lambda: {
             "goals": get_goal_states(db, current_user["sub"]),
             "drift": detect_goal_drift(db, current_user["sub"]),
         },
-        [],
-        ensure_trace_id(),
     )

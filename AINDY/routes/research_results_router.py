@@ -49,9 +49,22 @@ def create_result(
     user_id = str(current_user["sub"])
     return run_execution(
         ExecutionContext(db=db, user_id=user_id, source="research", operation="research.create"),
-        lambda: _result_payload(research_results_service.create_research_result(db, result, user_id=user_id)),
+        lambda: {
+            "data": _result_payload(research_results_service.create_research_result(db, result, user_id=user_id)),
+            "execution_signals": {
+                "memory": {
+                    "event_type": "research_result",
+                    "content": f"Research: {result.query} | {result.summary}",
+                    "source": "research_engine",
+                    "tags": ["research", "insight"],
+                    "node_type": "insight",
+                    "user_id": user_id,
+                    "agent_namespace": "research",
+                }
+            },
+        },
         success_status_code=201,
-        completed_payload_builder=lambda created: {"research_id": created["id"]},
+        completed_payload_builder=lambda created: {"research_id": created["data"]["id"]},
         handled_exceptions={
             Exception: ExecutionErrorConfig(status_code=500, message="Failed to create research result"),
         },
@@ -143,7 +156,25 @@ def run_research_query(
             "duration_ms": round(duration_ms, 2),
             "search_score": search_score,
         }
-        return payload
+        return {
+            "data": payload,
+            "execution_signals": {
+                "memory": {
+                    "event_type": "research_result",
+                    "content": f"Research: {request.query} | {summary}",
+                    "source": "research_engine",
+                    "tags": ["research", "insight"],
+                    "node_type": "insight",
+                    "user_id": user_id,
+                    "agent_namespace": "research",
+                },
+                "log": {
+                    "level": "info",
+                    "message": "research.query.completed",
+                    "extra": {"duration_ms": round(duration_ms, 2)},
+                },
+            },
+        }
 
     return run_execution(
         ExecutionContext(
@@ -154,7 +185,7 @@ def run_research_query(
             start_payload={"query": request.query},
         ),
         _run_query,
-        completed_payload_builder=lambda result: result.pop("_execution_meta", None),
+        completed_payload_builder=lambda result: (result.get("data") or {}).pop("_execution_meta", None),
         handled_exceptions={
             Exception: ExecutionErrorConfig(status_code=500, message="Research query failed"),
         },

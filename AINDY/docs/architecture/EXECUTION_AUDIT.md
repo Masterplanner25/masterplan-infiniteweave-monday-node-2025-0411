@@ -11,8 +11,19 @@ Several issues called out here have been improved in the current workspace:
 - `SystemEvent` is now the canonical durable activity ledger
 - outbound external interactions now emit required `SystemEvent` lifecycle records
 - silent `except ...: pass` blocks were removed from active production code
+- auth, analytics, ARM, main-calculation, and memory routes now enter a shared route-layer execution pipeline
+- a static execution-contract linter now exists at `tools/execution_contract_linter.py`
 
 The remaining FAIL verdicts are about missing system-wide execution-envelope normalization, not absence of observability or eventing.
+
+The linter makes the normalization gap explicit at compile-time:
+
+- route entry must go through `execute_with_pipeline(...)` or `execute_with_pipeline_sync(...)`
+- direct memory capture outside `core/execution_pipeline.py` is flagged
+- direct event emission outside `core/execution_pipeline.py` is flagged
+- service-level execution entry is flagged
+
+At the time of this note, the repo still contains real violations under that rule set, so the linter should be read as an enforcement mechanism plus migration backlog, not as proof that the audit verdicts are fully resolved.
 
 ## Scope
 
@@ -96,7 +107,7 @@ Audit criteria:
 
 **Where it bypasses the contract**
 
-- Routes call task services directly with no shared execution runtime: `routes/task_router.py:14-56`.
+- Task routes now enter a shared route wrapper, but the task domain still calls task services directly after the route boundary rather than a single persisted execution-record runtime.
 - `create_task`, `start_task`, `pause_task`, and `complete_task` all mutate domain state directly and return user-facing values without a canonical execution envelope: `services/task_services.py:140-205` and `services/task_services.py:209-340`.
 - `complete_task` commits the primary write before memory, feedback, ETA, social sync, or orchestration happen: `services/task_services.py:222-224`.
 
@@ -137,6 +148,7 @@ Audit criteria:
 
 - `ExecutionLoop` does have a recognizable pipeline: recall, execute, persist memory output, feedback, metrics.
 - Trace persistence exists through `MemoryTraceDAO`.
+- Memory routes now enter a shared route-layer execution pipeline before domain work begins.
 
 **Where it bypasses the contract**
 
@@ -239,12 +251,13 @@ Audit criteria:
 **What follows the contract**
 
 - Router input is explicit in `routes/arm_router.py:77-120`.
+- ARM routes now enter a shared route-layer execution pipeline before domain work begins.
 - Domain persistence exists in `analysis_results` and `code_generations`.
 - Failure logging and outbound model-call eventing exist for ARM analysis/generation.
 
 **Where it bypasses the contract**
 
-- The router directly calls the analyzer with no shared runtime: `routes/arm_router.py:94-102` and `routes/arm_router.py:117-120`.
+- The analyzer still executes directly after the route boundary; the route is now wrapped, but there is still no shared persisted execution-record runtime for ARM.
 - `run_analysis()` and `generate_code()` persist domain records and return immediately, with orchestration and memory treated as follow-on work: `modules/deepseek/deepseek_code_analyzer.py:286-341` and `modules/deepseek/deepseek_code_analyzer.py:457-501`.
 - `generate_code()` has no Infinity orchestration stage at all.
 

@@ -24,6 +24,7 @@ from schemas.freelance import (
 from services.automation_execution_service import execute_automation_action
 from services.external_call_service import perform_external_call
 from services.memory_capture_engine import MemoryCaptureEngine
+from services.trace_context import is_pipeline_active
 from services.memory_scoring_service import get_relevant_memories
 from services.async_job_service import submit_autonomous_async_job
 from services.system_event_service import emit_error_event, emit_system_event
@@ -68,6 +69,8 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
 
         # 🔗 Log to Memory Bridge
         try:
+            if is_pipeline_active():
+                raise RuntimeError("pipeline_active_memory_capture_disabled")
             engine = MemoryCaptureEngine(
                 db=db,
                 user_id=str(user_id) if user_id else None,
@@ -82,7 +85,10 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
                 extra={"client_email": order.client_email, "price": order.price},
             )
         except Exception as bridge_err:
-            logger.warning("[MemoryBridge] Failed to log freelance order: %s", bridge_err)
+            if str(bridge_err) == "pipeline_active_memory_capture_disabled":
+                pass
+            else:
+                logger.warning("[MemoryBridge] Failed to log freelance order: %s", bridge_err)
 
         logger.info("Created freelance order #%s for %s", order.id, order.client_name)
         return order
@@ -145,6 +151,8 @@ def deliver_order(db: Session, order_id: int, ai_output: str | None = None, *, g
 
     # Log delivery to Memory Bridge
     try:
+        if is_pipeline_active():
+            raise RuntimeError("pipeline_active_memory_capture_disabled")
         engine = MemoryCaptureEngine(
             db=db,
             user_id=str(order.user_id) if order.user_id else None,
@@ -165,7 +173,8 @@ def deliver_order(db: Session, order_id: int, ai_output: str | None = None, *, g
             },
         )
     except Exception as bridge_err:
-        logger.warning("[MemoryBridge] Delivery log error: %s", bridge_err)
+        if str(bridge_err) != "pipeline_active_memory_capture_disabled":
+            logger.warning("[MemoryBridge] Delivery log error: %s", bridge_err)
 
     _sync_freelance_automation(db, order)
     _update_linked_task_feedback(db, order, outcome="success")
@@ -212,6 +221,8 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
 
     # Log feedback to Memory Bridge
     try:
+        if is_pipeline_active():
+            raise RuntimeError("pipeline_active_memory_capture_disabled")
         engine = MemoryCaptureEngine(
             db=db,
             user_id=str(user_id) if user_id else None,
@@ -226,7 +237,8 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
             extra={"rating": feedback.rating, "success_signal": feedback.success_signal},
         )
     except Exception as bridge_err:
-        logger.warning("[MemoryBridge] Feedback log error: %s", bridge_err)
+        if str(bridge_err) != "pipeline_active_memory_capture_disabled":
+            logger.warning("[MemoryBridge] Feedback log error: %s", bridge_err)
 
     _update_linked_task_feedback(
         db,

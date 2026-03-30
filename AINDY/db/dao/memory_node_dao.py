@@ -92,6 +92,21 @@ class MemoryNodeDAO:
                 "high": 0.9,
             }.get(normalized, 0.0)
 
+    def _is_postgres(self) -> bool:
+        bind = getattr(self.db, "bind", None)
+        dialect = getattr(bind, "dialect", None)
+        return getattr(dialect, "name", "").lower().startswith("postgres")
+
+    @staticmethod
+    def _tags_match(node_tags: list[str] | None, query_tags: list[str], mode: str) -> bool:
+        current = {str(tag) for tag in (node_tags or []) if tag is not None}
+        requested = {str(tag) for tag in (query_tags or []) if tag}
+        if not requested:
+            return True
+        if mode.upper() == "OR":
+            return bool(current & requested)
+        return requested.issubset(current)
+
     @staticmethod
     def _normalize_memory_type(memory_type: str | None, node_type: str | None = None) -> str:
         candidate = str(memory_type or node_type or "insight").strip().lower()
@@ -269,13 +284,21 @@ class MemoryNodeDAO:
             query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
         clean_tags = [t for t in (tags or []) if t]
         if clean_tags:
-            if mode.upper() == "OR":
-                query = query.filter(
-                    or_(*[MemoryNodeModel.tags.contains([t]) for t in clean_tags])
-                )
+            if self._is_postgres():
+                if mode.upper() == "OR":
+                    query = query.filter(
+                        or_(*[MemoryNodeModel.tags.contains([t]) for t in clean_tags])
+                    )
+                else:
+                    for t in clean_tags:
+                        query = query.filter(MemoryNodeModel.tags.contains([t]))
+                rows = query.limit(limit).all()
             else:
-                for t in clean_tags:
-                    query = query.filter(MemoryNodeModel.tags.contains([t]))
+                rows = [
+                    node for node in query.all()
+                    if self._tags_match(getattr(node, "tags", []), clean_tags, mode)
+                ][:limit]
+            return [self._node_to_dict(n) for n in rows]
         return [self._node_to_dict(n) for n in query.limit(limit).all()]
 
     # ------------------------------------------------------------------
@@ -464,16 +487,20 @@ class MemoryNodeDAO:
 
         # Semantic path
         if query:
-            query_embedding = generate_query_embedding(query)
-            similar = self.find_similar(
-                query_embedding=query_embedding,
-                limit=limit * 3,
-                user_id=user_id,
-                node_type=node_type,
-            )
-            for item in similar:
-                item["semantic_score"] = item.get("similarity", 0.0)
-                candidates.append(item)
+            try:
+                query_embedding = generate_query_embedding(query)
+                similar = self.find_similar(
+                    query_embedding=query_embedding,
+                    limit=limit * 3,
+                    user_id=user_id,
+                    node_type=node_type,
+                )
+                for item in similar:
+                    item["semantic_score"] = item.get("similarity", 0.0)
+                    candidates.append(item)
+            except Exception as exc:
+                logger.warning("[MemoryNodeDAO] semantic recall failed, falling back: %s", exc)
+
             if not candidates:
                 text_matches = self._find_text_matches(
                     query=query,

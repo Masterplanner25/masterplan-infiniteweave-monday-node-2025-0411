@@ -81,13 +81,42 @@ def generate_b2b_leads(
         )
         duration_ms = (time.perf_counter() - start) * 1000
         logger.info("LeadGen generated %s results in %.2fms", len(formatted), duration_ms)
+        results_payload = [LeadGenItem(**row).model_dump() for row in (cached_payload.get("results") or formatted)]
         return {
-            "query": query,
-            "count": len(formatted),
-            "results": [LeadGenItem(**row).model_dump() for row in (cached_payload.get("results") or formatted)],
-            "_execution_meta": {
+            "data": {
+                "query": query,
                 "count": len(formatted),
-                "duration_ms": round(duration_ms, 2),
+                "results": results_payload,
+                "_execution_meta": {
+                    "count": len(formatted),
+                    "duration_ms": round(duration_ms, 2),
+                },
+            },
+            "execution_signals": {
+                "memory": [
+                    {
+                        "event_type": "leadgen_search",
+                        "content": f"LeadGen search: '{query[:100]}'. Found {len(formatted)} leads.",
+                        "source": "leadgen_search",
+                        "tags": ["leadgen", "search", "outcome", f"leads_{len(formatted)}"],
+                        "node_type": "outcome",
+                        "user_id": user_id,
+                        "agent_namespace": "leadgen",
+                    }
+                ]
+                + [
+                    {
+                        "event_type": "leadgen_result",
+                        "content": f"Lead Discovered: {item['company']} | Score: {item['overall_score']}",
+                        "source": "leadgen",
+                        "tags": ["leadgen", "aindy", "infinity", "ai-search"],
+                        "node_type": "outcome",
+                        "user_id": user_id,
+                        "agent_namespace": "leadgen",
+                        "extra": {"company": item["company"], "overall_score": item["overall_score"]},
+                    }
+                    for item in results_payload
+                ],
             },
         }
 
@@ -100,7 +129,7 @@ def generate_b2b_leads(
             start_payload={"query": query},
         ),
         _generate,
-        completed_payload_builder=lambda result: {"query": query, **(result.pop("_execution_meta", {}))},
+        completed_payload_builder=lambda result: {"query": query, **((result.get("data") or {}).pop("_execution_meta", {}))},
         handled_exceptions={
             Exception: ExecutionErrorConfig(status_code=500, message="Lead generation failed"),
         },

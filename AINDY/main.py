@@ -4,7 +4,7 @@ import os
 import sys
 import time
 import uuid
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -21,13 +21,16 @@ from services.observability_events import emit_observability_event
 from services.system_event_service import emit_error_event
 from db.database import SessionLocal
 from db.mongo_setup import init_mongo
+from core.execution_guard import require_execution_context, validate_execution_contract
 from routes import ROUTERS
 from config import settings
 from db.models.metrics_models import *
 from db.models.request_metric import RequestMetric
 from utils.trace_context import (
     _trace_id_ctx,
+    reset_current_request,
     reset_current_trace_id,
+    set_current_request,
     set_current_trace_id,
 )
 
@@ -234,7 +237,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 for route in ROUTERS:
-    app.include_router(route)
+    app.include_router(route, dependencies=[Depends(require_execution_context)])
 
 # CORS — explicit origins only (wildcard + credentials is a security violation)
 import os as _os
@@ -324,6 +327,17 @@ def _extract_user_id_from_request(request: Request):
         return uuid.UUID(str(payload["sub"]))
     except Exception:
         return None
+
+
+@app.middleware("http")
+async def enforce_execution_contract(request: Request, call_next):
+    request_token = set_current_request(request)
+    try:
+        response = await call_next(request)
+        validate_execution_contract(request)
+        return response
+    finally:
+        reset_current_request(request_token)
 
 
 @app.middleware("http")

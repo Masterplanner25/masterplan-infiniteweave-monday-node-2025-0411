@@ -94,6 +94,7 @@ class MemoryCaptureEngine:
         extra: dict = None,
         force: bool = False,
         agent_namespace: str = None,
+        allow_when_pipeline_active: bool = False,
     ) -> Optional[dict]:
         """
         Main entry point. Evaluates whether an event is
@@ -109,6 +110,13 @@ class MemoryCaptureEngine:
         context: additional context for significance scoring
         force: bypass significance check (always store)
         """
+        try:
+            from services.trace_context import is_pipeline_active
+
+            if is_pipeline_active() and not allow_when_pipeline_active:
+                return None
+        except Exception:
+            pass
         try:
             # Step 1: Score significance
             score = self._score_significance(

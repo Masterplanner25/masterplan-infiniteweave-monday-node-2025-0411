@@ -135,7 +135,7 @@ Added in Memory Bridge Phase 2 (2026-03-18). Authentication: JWT Bearer (`Depend
   - `tags: Optional[List[str]]` (default `[]`)
   - `node_type: Optional[Literal["decision", "outcome", "insight", "relationship"]]` (default `None`)
   - `extra: Optional[dict]` (default `{}`)
-- Behavior: calls `MemoryNodeDAO.save()`, which generates an embedding via `embedding_service.generate_embedding()` and persists to `memory_nodes`. Returns node dict.
+- Behavior: calls `MemoryNodeDAO.save()`, which persists the node immediately with `embedding_status` and enqueues asynchronous embedding generation. Returns node dict.
 - Response: node dict with `id`, `content`, `tags`, `node_type`, `source`, `user_id`, `extra`, `created_at`, `updated_at`.
 
 ### `GET /memory/nodes/{node_id}`

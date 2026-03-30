@@ -99,6 +99,13 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
   - `async_job.completed` or `async_job.failed` for queued-worker outcome
   - `execution.completed` or `execution.failed` as the canonical execution result
 - Required event persistence failures attempt `error.system_event_failure` and then raise fail-closed.
+- Additional route-layer execution coverage:
+  - `auth_router.py`
+  - `analytics_router.py`
+  - `arm_router.py`
+  - `main_router.py`
+  - `memory_router.py`
+  now execute through `core/execution_pipeline.py` / `core/execution_helper.py`, which preserves their existing body shapes by default while adding request-scoped `trace_id`, best-effort `SystemEvent` lifecycle emission, and response `X-Trace-ID` headers.
 
 **Freelancing summary (current implementation):**
 - Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
@@ -223,7 +230,7 @@ Response: `{ "access_token": str, "token_type": "bearer" }`
 Status Codes: 200, 401
 Errors: 401 if credentials invalid.
 Auth: None (public endpoint — use this to obtain a token)
-Observability: emits `auth.login.completed` on success.
+Observability: route runs through the route execution pipeline and emits `auth.login.completed` on success.
 
 `POST /auth/register`
 Method: POST
@@ -241,6 +248,7 @@ Notes:
   - an initialized execution placeholder via `AgentRun`
   - a blank `UserIdentity` row when absent
 Observability:
+- route runs through the route execution pipeline
 - emits required `identity.created` on successful signup initialization
 - emits `auth.register.completed` on success
 
@@ -494,6 +502,9 @@ Status Codes: 200
 Errors: Not explicitly defined.
 
 ### Main Calculation & Masterplan Routes (`AINDY/routes/main_router.py`, no prefix)
+Route execution note:
+- These routes now enter the route execution pipeline and preserve their existing JSON/ORM body shapes rather than returning the generic execution envelope.
+
 `POST /calculate_twr`
 Method: POST
 Request Body: `TaskInput` (`AINDY/schemas/analytics_inputs.py`)
@@ -717,6 +728,8 @@ Status Codes: 200, 500 on errors.
 
 ### ARM Routes (`AINDY/routes/arm_router.py`, prefix `/arm`) — Phase 1 (2026-03-17)
 Auth: JWT Bearer required on all endpoints (router-level dependency).
+Route execution note:
+- ARM routes now enter the route execution pipeline. Sync responses preserve existing payload shape; queued async-heavy responses still return the existing `202` queued body unchanged.
 Rate limits: POST /arm/analyze and POST /arm/generate — 10 requests/minute per IP.
 
 `POST /arm/analyze`
@@ -1002,7 +1015,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: `SocialProfile` (`AINDY/db/models/social_models.py`)
 Query Params: None
-Response: `SocialProfile`
+Response: success envelope with profile payload in `data`
 Status Codes: 200
 Errors: Not explicitly defined.
 
@@ -1010,14 +1023,14 @@ Errors: Not explicitly defined.
 Method: GET
 Request Body: None
 Query Params: None
-Response: `SocialProfile`
+Response: success envelope with profile payload in `data`
 Status Codes: 200, 404 if profile not found.
 
 `POST /social/post`
 Method: POST
 Request Body: `SocialPost` (`AINDY/db/models/social_models.py`)
 Query Params: None
-Response: `SocialPost`
+Response: success envelope with post payload in `data`
 Status Codes: 200
 Errors: Not explicitly defined; memory bridge logging errors are swallowed.
 
@@ -1025,9 +1038,23 @@ Errors: Not explicitly defined; memory bridge logging errors are swallowed.
 Method: GET
 Request Body: None
 Query Params: `limit` (default 20), `trust_filter` (optional)
-Response: `list[FeedItem]`
+Response: success envelope with `list[FeedItem]` in `data`
 Status Codes: 200
 Errors: Not explicitly defined.
+
+`POST /social/posts/{post_id}/interact`
+Method: POST
+Request Body: `SocialInteractionRequest`
+Query Params: None
+Response: success envelope with interaction metrics payload in `data`
+Status Codes: 200, 404 if post not found, 422 if action invalid.
+
+`GET /social/analytics`
+Method: GET
+Request Body: None
+Query Params: None
+Response: success envelope with analytics summary payload in `data`
+Status Codes: 200
 
 ### Analytics Routes (`AINDY/routes/analytics_router.py`, prefix `/analytics`)
 `POST /analytics/linkedin/manual`
@@ -1036,6 +1063,7 @@ Request Body: `LinkedInRawInput` (`AINDY/schemas/analytics.py`)
 Query Params: None
 Response: ORM `CanonicalMetricDB` object.
 Status Codes: 200, 404 if MasterPlan not found.
+Notes: route now enters the route execution pipeline but preserves the ORM response shape.
 
 `GET /analytics/masterplan/{masterplan_id}`
 Method: GET
@@ -1044,6 +1072,7 @@ Query Params: `period_type`, `platform`, `scope_type`
 Response: List of `CanonicalMetricDB` ORM objects.
 Status Codes: 200
 Errors: Not explicitly defined.
+Notes: route now enters the route execution pipeline but preserves the list response shape.
 
 `GET /analytics/masterplan/{masterplan_id}/summary`
 Method: GET
@@ -1052,6 +1081,7 @@ Query Params: `group_by` (optional, e.g., "period")
 Response: Summary dict; schema depends on `group_by` and record availability.
 Status Codes: 200
 Errors: Not explicitly defined.
+Notes: route now enters the route execution pipeline and preserves the existing summary payload shape.
 
 ### Genesis Routes (`AINDY/routes/genesis_router.py`, prefix `/genesis`) **[JWT auth required]** — Genesis Blocks 1-3 (2026-03-17)
 
@@ -1059,7 +1089,7 @@ Errors: Not explicitly defined.
 Method: POST
 Request Body: None
 Auth: JWT Bearer (user_id bound from token sub)
-Response: `{ "session_id": int }`
+Response: success envelope with `{ "session_id": int }` in `data`
 Status Codes: 200
 
 `POST /genesis/message`
@@ -1073,20 +1103,20 @@ Notes: `synthesis_ready` is a one-way flag — once True, never reverts to False
 `GET /genesis/session/{session_id}`
 Method: GET
 Auth: JWT Bearer
-Response: `{ "session_id": int, "status": str, "synthesis_ready": bool, "summarized_state": object, "created_at": datetime, "updated_at": datetime }`
+Response: success envelope with session payload in `data`
 Status Codes: 200, 404 if not found or not owned.
 
 `GET /genesis/draft/{session_id}`
 Method: GET
 Auth: JWT Bearer
-Response: `{ "session_id": int, "draft": object, "synthesis_ready": bool }`
+Response: success envelope with draft payload in `data`
 Status Codes: 200, 404 if no draft yet (run /synthesize first) or session not owned.
 
 `POST /genesis/synthesize`
 Method: POST
 Request Body: `dict` with `session_id` (int)
 Auth: JWT Bearer
-Response: `{ "draft": <synthesis object> }` — vision_statement, time_horizon_years, primary_mechanism, ambition_score, core_domains, phases, success_criteria, risk_factors, confidence_at_synthesis
+Response: success envelope with `{ "draft": <synthesis object> }` in `data`, or queued envelope on async execution
 Status Codes: 200, 400 on missing session_id, 404 if session not owned, 422 if `synthesis_ready` is False.
 Notes: Persists draft to `session.draft_json`. Rate limited: 5/minute.
 
@@ -1094,7 +1124,7 @@ Notes: Persists draft to `session.draft_json`. Rate limited: 5/minute.
 Method: POST
 Request Body: `dict` with `session_id` (int) and `draft` (object)
 Auth: JWT Bearer
-Response: `{ "masterplan_id": int, "version": str, "posture": str }`
+Response: success envelope with masterplan lock payload in `data`
 Status Codes: 200, 400 on missing fields or session already locked.
 
 `POST /genesis/{plan_id}/activate`

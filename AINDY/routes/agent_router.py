@@ -29,9 +29,9 @@ from services.auth_service import get_current_user
 from services.autonomous_controller import build_decision_response
 from services.autonomous_controller import evaluate_live_trigger
 from services.autonomous_controller import record_decision
-from services.execution_envelope import success
 from services.async_job_service import defer_async_job
-from utils.trace_context import ensure_trace_id
+from services.execution_service import ExecutionContext, run_execution
+from services.trace_context import ensure_trace_id
 from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
@@ -107,63 +107,71 @@ def create_agent_run(
         raise HTTPException(status_code=400, detail="goal is required")
 
     user_id = _current_user_id(current_user)
-    if async_heavy_execution_enabled():
-        response = submit_autonomous_async_job(
-            task_name="agent.create_run",
-            payload={"goal": body.goal.strip(), "user_id": str(user_id)},
+    def _run():
+        if async_heavy_execution_enabled():
+            response = submit_autonomous_async_job(
+                task_name="agent.create_run",
+                payload={"goal": body.goal.strip(), "user_id": str(user_id)},
+                user_id=user_id,
+                source="agent_router",
+                trigger_type="user",
+                trigger_context={"goal": body.goal.strip(), "importance": 0.95},
+            )
+            return JSONResponse(status_code=202, content=response)
+
+        trace_id = ensure_trace_id()
+        trigger_context = {"goal": body.goal.strip(), "importance": 0.95}
+        evaluation = evaluate_live_trigger(
+            db=db,
+            trigger={"trigger_type": "user", "source": "agent_router", "goal": body.goal.strip()},
             user_id=user_id,
-            source="agent_router",
-            trigger_type="user",
-            trigger_context={"goal": body.goal.strip(), "importance": 0.95},
+            context=trigger_context,
         )
-        return JSONResponse(status_code=202, content=response)
-
-    trace_id = ensure_trace_id()
-    trigger_context = {"goal": body.goal.strip(), "importance": 0.95}
-    evaluation = evaluate_live_trigger(
-        db=db,
-        trigger={"trigger_type": "user", "source": "agent_router", "goal": body.goal.strip()},
-        user_id=user_id,
-        context=trigger_context,
-    )
-    record_decision(
-        db=db,
-        trigger={"trigger_type": "user", "source": "agent_router", "goal": body.goal.strip()},
-        evaluation=evaluation,
-        user_id=user_id,
-        trace_id=trace_id,
-        context=trigger_context,
-    )
-    if evaluation["decision"] == "ignore":
-        return build_decision_response(evaluation, trace_id=trace_id)
-    if evaluation["decision"] == "defer":
-        log_id = defer_async_job(
-            task_name="agent.create_run",
-            payload={"goal": body.goal.strip(), "user_id": str(user_id), "__autonomy": {"trigger_type": "user", "source": "agent_router", "context": trigger_context}},
+        record_decision(
+            db=db,
+            trigger={"trigger_type": "user", "source": "agent_router", "goal": body.goal.strip()},
+            evaluation=evaluation,
             user_id=user_id,
+            trace_id=trace_id,
+            context=trigger_context,
+        )
+        if evaluation["decision"] == "ignore":
+            return build_decision_response(evaluation, trace_id=trace_id)
+        if evaluation["decision"] == "defer":
+            log_id = defer_async_job(
+                task_name="agent.create_run",
+                payload={"goal": body.goal.strip(), "user_id": str(user_id), "__autonomy": {"trigger_type": "user", "source": "agent_router", "context": trigger_context}},
+                user_id=user_id,
+                source="agent_router",
+                decision=evaluation,
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_decision_response(
+                    evaluation,
+                    trace_id=log_id,
+                    result={"automation_log_id": log_id, "decision": "defer", "reason": evaluation["reason"]},
+                    next_action={"type": "poll_automation_log", "automation_log_id": log_id},
+                ),
+            )
+
+        run = create_run(goal=body.goal.strip(), user_id=user_id, db=db)
+        if not run:
+            raise HTTPException(status_code=500, detail="Failed to generate plan")
+        if run["status"] == "approved":
+            run = execute_run(run_id=run["run_id"], user_id=user_id, db=db) or run
+        return to_execution_response(run, db)
+
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
             source="agent_router",
-            decision=evaluation,
-        )
-        return JSONResponse(
-            status_code=202,
-            content=build_decision_response(
-                evaluation,
-                trace_id=log_id,
-                result={"automation_log_id": log_id, "decision": "defer", "reason": evaluation["reason"]},
-                next_action={"type": "poll_automation_log", "automation_log_id": log_id},
-            ),
-        )
-
-    run = create_run(goal=body.goal.strip(), user_id=user_id, db=db)
-
-    if not run:
-        raise HTTPException(status_code=500, detail="Failed to generate plan")
-
-    # Auto-execute if trust gate approved it
-    if run["status"] == "approved":
-        run = execute_run(run_id=run["run_id"], user_id=user_id, db=db) or run
-
-    return to_execution_response(run, db)
+            operation="agent.run.create",
+            start_payload={"goal": body.goal.strip()},
+        ),
+        _run,
+    )
 
 
 @router.get("/runs")
@@ -182,8 +190,16 @@ def list_agent_runs(
     if status:
         query = query.filter(AgentRun.status == status)
 
-    runs = query.order_by(AgentRun.created_at.desc()).limit(limit).all()
-    return success([_run_to_response(r) for r in runs], [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="agent_router",
+            operation="agent.runs.list",
+            start_payload={"status": status},
+        ),
+        lambda: [_run_to_response(r) for r in query.order_by(AgentRun.created_at.desc()).limit(limit).all()],
+    )
 
 
 @router.get("/runs/{run_id}")
@@ -196,7 +212,17 @@ def get_agent_run(
     user_id = _current_user_id(current_user)
     run = _get_run_or_404(run_id, user_id, db)
     serialized = _run_to_response(run)
-    return success(serialized, [], serialized.get("trace_id") or ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="agent_router",
+            operation="agent.runs.get",
+            trace_id=serialized.get("trace_id"),
+            start_payload={"run_id": run_id},
+        ),
+        lambda: serialized,
+    )
 
 
 @router.post("/runs/{run_id}/approve")
@@ -216,59 +242,69 @@ def approve_agent_run(
     )
 
     user_id = _current_user_id(current_user)
-    if async_heavy_execution_enabled():
-        response = submit_autonomous_async_job(
-            task_name="agent.approve_run",
-            payload={"run_id": run_id, "user_id": str(user_id)},
+    def _approve():
+        if async_heavy_execution_enabled():
+            response = submit_autonomous_async_job(
+                task_name="agent.approve_run",
+                payload={"run_id": run_id, "user_id": str(user_id)},
+                user_id=user_id,
+                source="agent_router",
+                trigger_type="user",
+                trigger_context={"goal": f"approve_run:{run_id}", "importance": 0.9},
+            )
+            return JSONResponse(status_code=202, content=response)
+
+        trace_id = ensure_trace_id()
+        trigger_context = {"goal": f"approve_run:{run_id}", "importance": 0.9}
+        evaluation = evaluate_live_trigger(
+            db=db,
+            trigger={"trigger_type": "user", "source": "agent_router.approve", "goal": f"approve_run:{run_id}"},
             user_id=user_id,
-            source="agent_router",
-            trigger_type="user",
-            trigger_context={"goal": f"approve_run:{run_id}", "importance": 0.9},
+            context=trigger_context,
         )
-        return JSONResponse(status_code=202, content=response)
-
-    trace_id = ensure_trace_id()
-    trigger_context = {"goal": f"approve_run:{run_id}", "importance": 0.9}
-    evaluation = evaluate_live_trigger(
-        db=db,
-        trigger={"trigger_type": "user", "source": "agent_router.approve", "goal": f"approve_run:{run_id}"},
-        user_id=user_id,
-        context=trigger_context,
-    )
-    record_decision(
-        db=db,
-        trigger={"trigger_type": "user", "source": "agent_router.approve", "goal": f"approve_run:{run_id}"},
-        evaluation=evaluation,
-        user_id=user_id,
-        trace_id=trace_id,
-        context=trigger_context,
-    )
-    if evaluation["decision"] == "ignore":
-        return build_decision_response(evaluation, trace_id=trace_id)
-    if evaluation["decision"] == "defer":
-        log_id = defer_async_job(
-            task_name="agent.approve_run",
-            payload={"run_id": run_id, "user_id": str(user_id), "__autonomy": {"trigger_type": "user", "source": "agent_router.approve", "context": trigger_context}},
+        record_decision(
+            db=db,
+            trigger={"trigger_type": "user", "source": "agent_router.approve", "goal": f"approve_run:{run_id}"},
+            evaluation=evaluation,
             user_id=user_id,
+            trace_id=trace_id,
+            context=trigger_context,
+        )
+        if evaluation["decision"] == "ignore":
+            return build_decision_response(evaluation, trace_id=trace_id)
+        if evaluation["decision"] == "defer":
+            log_id = defer_async_job(
+                task_name="agent.approve_run",
+                payload={"run_id": run_id, "user_id": str(user_id), "__autonomy": {"trigger_type": "user", "source": "agent_router.approve", "context": trigger_context}},
+                user_id=user_id,
+                source="agent_router",
+                decision=evaluation,
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_decision_response(
+                    evaluation,
+                    trace_id=log_id,
+                    result={"automation_log_id": log_id, "decision": "defer", "reason": evaluation["reason"]},
+                    next_action={"type": "poll_automation_log", "automation_log_id": log_id},
+                ),
+            )
+
+        run = approve_run(run_id=run_id, user_id=user_id, db=db)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found or not approvable")
+        return to_execution_response(run, db)
+
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
             source="agent_router",
-            decision=evaluation,
-        )
-        return JSONResponse(
-            status_code=202,
-            content=build_decision_response(
-                evaluation,
-                trace_id=log_id,
-                result={"automation_log_id": log_id, "decision": "defer", "reason": evaluation["reason"]},
-                next_action={"type": "poll_automation_log", "automation_log_id": log_id},
-            ),
-        )
-
-    run = approve_run(run_id=run_id, user_id=user_id, db=db)
-
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found or not approvable")
-
-    return to_execution_response(run, db)
+            operation="agent.runs.approve",
+            start_payload={"run_id": run_id},
+        ),
+        _approve,
+    )
 
 
 @router.post("/runs/{run_id}/reject")
@@ -281,14 +317,17 @@ def reject_agent_run(
     from services.agent_runtime import reject_run
 
     user_id = _current_user_id(current_user)
-    run = reject_run(run_id=run_id, user_id=user_id, db=db)
+    def _reject():
+        run = reject_run(run_id=run_id, user_id=user_id, db=db)
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found or not rejectable")
+        from services.agent_runtime import to_execution_response
+        return to_execution_response(run, db)
 
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found or not rejectable")
-
-    from services.agent_runtime import to_execution_response
-
-    return to_execution_response(run, db)
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.runs.reject", start_payload={"run_id": run_id}),
+        _reject,
+    )
 
 
 @router.post("/runs/{run_id}/recover")
@@ -312,21 +351,24 @@ def recover_agent_run(
     from services.stuck_run_service import recover_stuck_agent_run
 
     user_id = _current_user_id(current_user)
-    result = recover_stuck_agent_run(run_id=run_id, user_id=user_id, db=db, force=force)
+    def _recover():
+        result = recover_stuck_agent_run(run_id=run_id, user_id=user_id, db=db, force=force)
+        if result["ok"]:
+            from services.agent_runtime import to_execution_response
+            return to_execution_response(result["run"], db)
+        error_code = result.get("error_code", "internal_error")
+        if error_code == "not_found":
+            raise HTTPException(status_code=404, detail="Run not found")
+        if error_code == "forbidden":
+            raise HTTPException(status_code=403, detail="Not authorized")
+        if error_code in ("wrong_status", "too_recent"):
+            raise HTTPException(status_code=409, detail=result.get("detail", error_code))
+        raise HTTPException(status_code=500, detail="Recovery failed")
 
-    if result["ok"]:
-        from services.agent_runtime import to_execution_response
-
-        return to_execution_response(result["run"], db)
-
-    error_code = result.get("error_code", "internal_error")
-    if error_code == "not_found":
-        raise HTTPException(status_code=404, detail="Run not found")
-    if error_code == "forbidden":
-        raise HTTPException(status_code=403, detail="Not authorized")
-    if error_code in ("wrong_status", "too_recent"):
-        raise HTTPException(status_code=409, detail=result.get("detail", error_code))
-    raise HTTPException(status_code=500, detail="Recovery failed")
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.runs.recover", start_payload={"run_id": run_id, "force": force}),
+        _recover,
+    )
 
 
 @router.post("/runs/{run_id}/replay")
@@ -346,14 +388,17 @@ def replay_agent_run(
     from services.agent_runtime import replay_run
 
     user_id = _current_user_id(current_user)
-    new_run = replay_run(run_id=run_id, user_id=user_id, db=db)
+    def _replay():
+        new_run = replay_run(run_id=run_id, user_id=user_id, db=db)
+        if not new_run:
+            raise HTTPException(status_code=404, detail="Run not found or not replayable")
+        from services.agent_runtime import to_execution_response
+        return to_execution_response(new_run, db)
 
-    if not new_run:
-        raise HTTPException(status_code=404, detail="Run not found or not replayable")
-
-    from services.agent_runtime import to_execution_response
-
-    return to_execution_response(new_run, db)
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.runs.replay", start_payload={"run_id": run_id}),
+        _replay,
+    )
 
 
 @router.get("/runs/{run_id}/steps")
@@ -375,20 +420,23 @@ def get_run_steps(
         .all()
     )
 
-    return success([
-        {
-            "step_index": s.step_index,
-            "tool_name": s.tool_name,
-            "description": s.description,
-            "risk_level": s.risk_level,
-            "status": s.status,
-            "result": s.result,
-            "error_message": s.error_message,
-            "execution_ms": s.execution_ms,
-            "executed_at": s.executed_at.isoformat() if s.executed_at else None,
-        }
-        for s in steps
-    ], [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.runs.steps", start_payload={"run_id": run_id}),
+        lambda: [
+            {
+                "step_index": s.step_index,
+                "tool_name": s.tool_name,
+                "description": s.description,
+                "risk_level": s.risk_level,
+                "status": s.status,
+                "result": s.result,
+                "error_message": s.error_message,
+                "execution_ms": s.execution_ms,
+                "executed_at": s.executed_at.isoformat() if s.executed_at else None,
+            }
+            for s in steps
+        ],
+    )
 
 
 @router.get("/runs/{run_id}/events")
@@ -421,26 +469,35 @@ def get_run_events(
             raise HTTPException(status_code=404, detail="Run not found")
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return success(result, [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.runs.events", start_payload={"run_id": run_id}),
+        lambda: result,
+    )
 
 
 @router.get("/tools")
-def list_tools(current_user=Depends(get_current_user)):
+def list_tools(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """List all registered tools with risk levels and descriptions."""
     from services.agent_tools import TOOL_REGISTRY
 
-    return success([
-        {
-            "name": name,
-            "risk": entry["risk"],
-            "description": entry["description"],
-            "capability": entry.get("capability"),
-            "required_capability": entry.get("required_capability"),
-            "category": entry.get("category"),
-            "egress_scope": entry.get("egress_scope"),
-        }
-        for name, entry in TOOL_REGISTRY.items()
-    ], [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(current_user["sub"]), source="agent_router", operation="agent.tools.list"),
+        lambda: [
+            {
+                "name": name,
+                "risk": entry["risk"],
+                "description": entry["description"],
+                "capability": entry.get("capability"),
+                "required_capability": entry.get("required_capability"),
+                "category": entry.get("category"),
+                "egress_scope": entry.get("egress_scope"),
+            }
+            for name, entry in TOOL_REGISTRY.items()
+        ],
+    )
 
 
 @router.get("/trust")
@@ -457,8 +514,9 @@ def get_trust_settings(
         AgentTrustSettings.user_id == user_id
     ).first()
 
-    return success(
-        {
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.trust.get"),
+        lambda: {
             "user_id": str(user_id),
             "auto_execute_low": trust.auto_execute_low if trust else False,
             "auto_execute_medium": trust.auto_execute_medium if trust else False,
@@ -469,8 +527,6 @@ def get_trust_settings(
             ),
             "note": "High-risk plans always require approval regardless of trust settings.",
         },
-        [],
-        ensure_trace_id(),
     )
 
 
@@ -492,10 +548,9 @@ def get_tool_suggestions(
 
     user_id = _current_user_id(current_user)
     snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
-    return success(
-        suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db),
-        [],
-        ensure_trace_id(),
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.suggestions.get"),
+        lambda: suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db),
     )
 
 
@@ -539,14 +594,13 @@ def update_trust_settings(
     db.commit()
     db.refresh(trust)
 
-    return success(
-        {
+    return run_execution(
+        ExecutionContext(db=db, user_id=str(user_id), source="agent_router", operation="agent.trust.update"),
+        lambda: {
             "user_id": str(user_id),
             "auto_execute_low": trust.auto_execute_low,
             "auto_execute_medium": trust.auto_execute_medium,
             "allowed_auto_grant_tools": trust.allowed_auto_grant_tools or [],
             "note": "High-risk plans always require approval regardless of trust settings.",
         },
-        [],
-        ensure_trace_id(),
     )
