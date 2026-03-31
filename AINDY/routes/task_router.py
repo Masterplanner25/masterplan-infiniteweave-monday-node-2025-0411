@@ -4,11 +4,10 @@ from fastapi import APIRouter, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from db.database import get_db
 from services import task_services
-from services.execution_envelope import success
+from services.execution_service import ExecutionContext, run_execution
 from schemas.task_schemas import TaskCreate, TaskAction
 from services.task_services import handle_recurrence
 from services.auth_service import get_current_user
-from utils.trace_context import ensure_trace_id
 
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -36,24 +35,34 @@ def create_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    created = task_services.create_task(
-        db=db,
-        name=task.name,
-        category=task.category,
-        priority=task.priority,
-        due_date=task.due_date,
-        masterplan_id=task.masterplan_id,
-        parent_task_id=task.parent_task_id,
-        dependency_type=task.dependency_type,
-        dependencies=task.dependencies,
-        automation_type=task.automation_type,
-        automation_config=task.automation_config,
-        scheduled_time=task.scheduled_time,
-        reminder_time=task.reminder_time,
-        recurrence=task.recurrence,
-        user_id=current_user["sub"],
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.create",
+            start_payload={"task_name": task.name},
+        ),
+        lambda: _serialize_task(
+            task_services.create_task(
+                db=db,
+                name=task.name,
+                category=task.category,
+                priority=task.priority,
+                due_date=task.due_date,
+                masterplan_id=task.masterplan_id,
+                parent_task_id=task.parent_task_id,
+                dependency_type=task.dependency_type,
+                dependencies=task.dependencies,
+                automation_type=task.automation_type,
+                automation_config=task.automation_config,
+                scheduled_time=task.scheduled_time,
+                reminder_time=task.reminder_time,
+                recurrence=task.recurrence,
+                user_id=current_user["sub"],
+            )
+        ),
     )
-    return success(_serialize_task(created), [], ensure_trace_id())
 
 @router.post("/start")
 def start_task(
@@ -61,8 +70,16 @@ def start_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    result = task_services.start_task(db, task.name, user_id=current_user["sub"])
-    return success({"message": result}, [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.start",
+            start_payload={"task_name": task.name},
+        ),
+        lambda: {"message": task_services.start_task(db, task.name, user_id=current_user["sub"])},
+    )
 
 @router.post("/pause")
 def pause_task(
@@ -70,8 +87,16 @@ def pause_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    result = task_services.pause_task(db, task.name, user_id=current_user["sub"])
-    return success({"message": result}, [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.pause",
+            start_payload={"task_name": task.name},
+        ),
+        lambda: {"message": task_services.pause_task(db, task.name, user_id=current_user["sub"])},
+    )
 
 @router.post("/complete")
 def complete_task(
@@ -79,30 +104,57 @@ def complete_task(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return task_services.execute_task_completion(db, task.name, user_id=current_user["sub"])
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.complete",
+            start_payload={"task_name": task.name},
+        ),
+        lambda: task_services.execute_task_completion(db, task.name, user_id=current_user["sub"]),
+    )
 
 @router.get("/list")
 def list_tasks(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    tasks = db.query(task_services.Task).filter(
-        task_services.Task.user_id == uuid.UUID(str(current_user["sub"]))
-    ).all()
-    return success([
-        _serialize_task(t)
-        for t in tasks
-    ], [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.list",
+        ),
+        lambda: [
+            _serialize_task(t)
+            for t in db.query(task_services.Task).filter(
+                task_services.Task.user_id == uuid.UUID(str(current_user["sub"]))
+            ).all()
+        ],
+    )
 
 @router.post("/recurrence/check")
 def trigger_recurrence(
     background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Triggers the recurrence check job asynchronously.
     Public — no auth required (internal maintenance endpoint).
     """
-    background_tasks.add_task(handle_recurrence)
-    return success({"message": "Recurrence job started in background."}, [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(current_user["sub"]),
+            source="task_router",
+            operation="tasks.recurrence.check",
+        ),
+        lambda: (
+            background_tasks.add_task(handle_recurrence),
+            {"message": "Recurrence job started in background."},
+        )[1],
+    )
 

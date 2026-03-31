@@ -98,6 +98,8 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 
 **CI enforcement (current):** All tests run automatically on every push and PR to `main` via `.github/workflows/ci.yml`. Coverage threshold is 69%. Ruff lint is enforced in a separate job. `tests/validate_memory_loop.py` remains excluded from CI because it requires live OpenAI + a real DB.
 
+**Execution-contract lint (current):** `.github/workflows/lint.yml` now runs `python tools/execution_contract_linter.py --strict`. The same check is available locally through `.pre-commit-config.yaml`. This is architecture enforcement rather than behavioral test coverage; it statically rejects route-entry, direct-memory, and direct-event patterns that bypass the execution pipeline.
+
 **Root test files**
 - Legacy root-level test files have been migrated out of `tests/` and replaced by the structured layout above.
 

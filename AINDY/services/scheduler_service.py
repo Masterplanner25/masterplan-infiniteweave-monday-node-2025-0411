@@ -21,9 +21,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
+except ImportError:  # pragma: no cover - optional dependency
+    BackgroundScheduler = None
+    CronTrigger = None
+    IntervalTrigger = None
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -32,6 +37,8 @@ from tenacity import (
 )
 
 logger = logging.getLogger(__name__)
+
+APScheduler_AVAILABLE = BackgroundScheduler is not None
 
 # Global scheduler instance — initialized once on startup
 _scheduler: Optional[BackgroundScheduler] = None
@@ -50,6 +57,8 @@ def get_scheduler() -> BackgroundScheduler:
         raise RuntimeError(
             "Scheduler not started. Call scheduler_service.start() first."
         )
+    if not APScheduler_AVAILABLE:
+        raise RuntimeError("APScheduler is not installed; scheduler is disabled.")
     return _scheduler
 
 
@@ -60,6 +69,10 @@ def start() -> None:
     Replaces threading.Thread(daemon=True) pattern.
     """
     global _scheduler
+    if not APScheduler_AVAILABLE:
+        logger.warning("APScheduler not installed; scheduler disabled")
+        return
+
     if _scheduler is not None and _scheduler.running:
         logger.warning("Scheduler already running — start() called twice")
         return

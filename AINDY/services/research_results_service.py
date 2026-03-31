@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from services.memory_capture_engine import MemoryCaptureEngine
 from db.models.research_results import ResearchResult
 from schemas.research_results_schema import ResearchResultCreate
+from services.trace_context import is_pipeline_active
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,8 @@ def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | N
     Logs research results into A.I.N.D.Y.'s symbolic Memory Bridge layer.
     Persists a MemoryNode via the capture engine.
     """
+    if is_pipeline_active():
+        return
     try:
         engine = MemoryCaptureEngine(
             db=db,

@@ -11,6 +11,8 @@ from services.rippletrace_service import link_events
 from services.system_event_types import SystemEventTypes
 from services.trace_context import get_parent_event_id
 from services.trace_context import get_trace_id
+from services.trace_context import is_pipeline_active
+from config import settings
 from utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
@@ -390,6 +392,11 @@ def emit_system_event(
     required: bool = False,
 ) -> uuid.UUID | None:
     """Durable system event emission; may raise when required=True."""
+    if str(event_type).startswith("execution.") and not is_pipeline_active():
+        message = f"ExecutionContract violation: execution event '{event_type}' emitted outside pipeline"
+        if settings.ENFORCE_EXECUTION_CONTRACT:
+            raise RuntimeError(message)
+        logger.warning(message)
     effective_trace_id = trace_id or get_trace_id()
     effective_parent_event_id = parent_event_id or get_parent_event_id()
     logger_method = logger.info if _VERBOSE_SYSTEM_EVENT_LOGS else logger.debug

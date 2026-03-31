@@ -10,7 +10,8 @@ This document describes the current runtime behavior of the FastAPI backend as i
   2. Enforce `SECRET_KEY` safety rules. Production startup fails if the placeholder secret is still configured.
   3. Enforce schema drift guard when `AINDY_ENFORCE_SCHEMA=true` by comparing the current Alembic revision to head.
   4. Attempt to acquire the background-task leadership lease via `task_services.start_background_tasks(...)`.
-  5. Start APScheduler only on the lease-holder instance via `services.scheduler_service.start()`.
+   5. Start APScheduler only on the lease-holder instance via `services.scheduler_service.start()`.
+      - If APScheduler is unavailable (e.g., lightweight test runs), `start()` simply logs that the scheduler is disabled and the rest of the stack continues without background jobs.
   6. Register canonical flow-engine nodes and flows via `services.flow_definitions.register_all_flows()`.
   7. Optionally scan and recover stuck flow/agent runs.
   8. Seed or refresh the internal `author-system` identity row.
@@ -20,7 +21,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
 ## 2. Background Task Lifecycle
 - Background execution is no longer driven by daemon threads in `main.py`.
 - Inter-instance coordination is handled by a DB lease in `services/task_services.py`.
-- Only the lease leader starts APScheduler jobs.
+- Only the lease leader starts APScheduler jobs; a missing APScheduler dependency means background jobs are disabled but the API remains responsive for tests or constrained environments.
 - Lease timestamps are normalized to timezone-aware UTC in Python before comparison or persistence.
 - Scheduler lifecycle:
   - startup: `task_services.start_background_tasks(...)` -> `scheduler_service.start()`
@@ -55,7 +56,8 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - `SystemEvent` propagation now carries `trace_id`, `parent_event_id`, and `source`, allowing parent -> child reconstruction across core execution paths.
 - `RippleEdge` rows are now created from `SystemEvent` parentage and can additionally link source events to stored memory nodes.
 - Required execution lifecycle events are emitted on core execution paths.
-- Research, LeadGen, and Freelance route executions now share a centralized execution wrapper (`services/execution_service.py`) that standardizes `trace_id`, lifecycle events, and response shape.
+- Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis route executions now share the centralized execution wrapper (`services/execution_service.py`) or pass through canonical execution envelopes that standardize `trace_id`, lifecycle events, and response shape.
+- Auth, Analytics, ARM, Main-calculation, and Memory routes now also pass through the lighter route-layer execution pipeline in `core/execution_pipeline.py` / `core/execution_helper.py`, which preserves existing route response shapes while adding request-level trace/event handling.
 - Required outbound lifecycle events are emitted for instrumented external interactions through `services/external_call_service.py`.
 - Successful non-flow operational paths now also emit durable events where implemented, including:
   - `health.liveness.completed`
@@ -79,7 +81,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - Agent execution now performs pre-run memory recall and injects categorized context (`similar_past_outcomes`, `relevant_failures`, `successful_patterns`) before deterministic execution begins.
 - Required `SystemEvent` persistence failures now attempt a fallback `error.system_event_failure` record and then raise fail-closed.
 - Infinity loop decisions can now be memory-weighted in addition to KPI- and feedback-weighted, using ranked memory signals built before `run_loop()`.
-- Execution-envelope normalization is still incomplete across `SystemEvent`, agent runs, flow runs, async jobs, and several execution-adjacent routes. Some surfaces still return direct envelope payloads or raw JSON rather than going through the shared wrapper.
+- Execution-envelope normalization is still incomplete across `SystemEvent`, agent runs, flow runs, async jobs, and some remaining route groups. The major execution-facing routes now use either the service-level wrapper, the route-layer execution pipeline, or canonical execution envelopes, but not every route in the repo goes through the same centralized implementation.
 - Global exception handlers normalize responses for:
   - `HTTPException`
   - `RequestValidationError`
@@ -97,5 +99,5 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - MongoDB is now a startup requirement. Missing or unreachable `MONGO_URL` fails fast during lifespan initialization instead of surfacing later during execution.
 - Request metrics persistence is best-effort; failures are logged and swallowed.
 - The app is still a monolith: API, scheduler leadership, orchestration, and some execution logic share the same process.
-- SQLite-based verification still reveals PostgreSQL-specific tag operators inside memory auto-link enrichment, so the capture path is not yet cross-dialect clean even though the production PostgreSQL path is intact.
+- Memory auto-link enrichment is now cross-dialect aware: PostgreSQL uses native tag containment, while SQLite/non-PostgreSQL verification falls back to Python-side tag filtering.
 - Not every domain has a first-class execution-record model yet, even though trace propagation and `SystemEvent` coverage are much stronger.

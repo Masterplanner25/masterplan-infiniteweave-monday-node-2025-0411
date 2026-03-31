@@ -138,9 +138,26 @@ def execute(user_id: str, trigger_event: str, db):
         required=True,
     )
 
+    adjustment_payload = serialized.get("adjustment_payload") or {}
+    memory_summary = adjustment_payload.get("memory_summary") or {}
+    memory_adjustment = adjustment_payload.get("memory_adjustment") or {}
+    score_metadata = score.setdefault("metadata", {})
+    score_metadata["memory_context_count"] = len(memory_nodes)
+    score_metadata["memory_signal_count"] = len(memory_signals)
+    score_metadata["memory_influence"] = {
+        "memory_adjustment": memory_adjustment,
+        "memory_summary": memory_summary,
+    }
+
     return {
         "score": score,
         "prior_evaluation": prior_evaluation,
         "adjustment": serialized,
         "next_action": next_action,
+        "memory_context_count": len(memory_nodes),
+        "memory_signal_count": len(memory_signals),
+        "memory_influence": {
+            "memory_adjustment": memory_adjustment,
+            "memory_summary": memory_summary,
+        },
     }

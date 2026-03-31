@@ -83,10 +83,25 @@ Index("uq_memory_links_unique", MemoryLinkModel.source_node_id, MemoryLinkModel.
 
 
 class MemoryNodeDAO:
-    """Simple DAO — requires a SQLAlchemy Session"""
+    """Simple DAO - requires a SQLAlchemy Session"""
 
     def __init__(self, db: Session):
         self.db = db
+
+    def _is_postgres(self) -> bool:
+        bind = getattr(self.db, "bind", None)
+        dialect = getattr(bind, "dialect", None)
+        return getattr(dialect, "name", "").lower().startswith("postgres")
+
+    @staticmethod
+    def _tags_match(node_tags: list[str] | None, query_tags: list[str], mode: str) -> bool:
+        current = {str(tag) for tag in (node_tags or []) if tag is not None}
+        requested = {str(tag) for tag in (query_tags or []) if tag}
+        if not requested:
+            return True
+        if mode.upper() == "OR":
+            return bool(current & requested)
+        return requested.issubset(current)
 
     def save_memory_node(self, memory_node) -> MemoryNodeModel:
         try:
@@ -162,12 +177,20 @@ class MemoryNodeDAO:
             query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
         tags = [t for t in (tags or []) if t]
         if tags:
-            if mode.upper() == "OR":
-                query = query.filter(or_(*[MemoryNodeModel.tags.contains([t]) for t in tags]))
+            if self._is_postgres():
+                if mode.upper() == "OR":
+                    query = query.filter(or_(*[MemoryNodeModel.tags.contains([t]) for t in tags]))
+                else:
+                    for t in tags:
+                        query = query.filter(MemoryNodeModel.tags.contains([t]))
+                db_nodes = query.limit(limit).all()
             else:
-                for t in tags:
-                    query = query.filter(MemoryNodeModel.tags.contains([t]))
-        db_nodes = query.limit(limit).all()
+                db_nodes = [
+                    node for node in query.all()
+                    if self._tags_match(getattr(node, "tags", []), tags, mode)
+                ][:limit]
+        else:
+            db_nodes = query.limit(limit).all()
         return [
             {
                 "id": str(n.id),

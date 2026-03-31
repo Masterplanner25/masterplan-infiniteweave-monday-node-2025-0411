@@ -49,9 +49,23 @@ def create_freelance_order(
             operation="freelance.order.create",
             start_payload={"service_type": order.service_type, "client_name": order.client_name},
         ),
-        lambda: _serialize_order(freelance_service.create_order(db, order, user_id=user_id)),
+        lambda: {
+            "data": _serialize_order(freelance_service.create_order(db, order, user_id=user_id)),
+            "execution_signals": {
+                "memory": {
+                    "event_type": "freelance_order",
+                    "content": f"New Freelance Order: {order.service_type} for {order.client_name}",
+                    "source": "freelance_service",
+                    "tags": ["freelance", "order", order.service_type],
+                    "node_type": "outcome",
+                    "user_id": user_id,
+                    "agent_namespace": "freelance",
+                    "extra": {"client_email": order.client_email, "price": order.price},
+                }
+            },
+        },
         success_status_code=201,
-        completed_payload_builder=lambda created: {"order_id": created["id"]},
+        completed_payload_builder=lambda created: {"order_id": created["data"]["id"]},
         handled_exceptions={
             Exception: ExecutionErrorConfig(status_code=500, message="Failed to create order"),
         },
@@ -74,8 +88,21 @@ def deliver_order(
             operation="freelance.order.deliver",
             start_payload={"order_id": order_id},
         ),
-        lambda: _serialize_order(_require_owned_order_delivery(db, user_id, order_id, ai_output)),
-        completed_payload_builder=lambda delivered: {"order_id": delivered["id"]},
+        lambda: {
+            "data": _serialize_order(_require_owned_order_delivery(db, user_id, order_id, ai_output)),
+            "execution_signals": {
+                "memory": {
+                    "event_type": "freelance_delivery",
+                    "content": f"Delivered Order #{order_id}",
+                    "source": "freelance_service",
+                    "tags": ["freelance", "delivery"],
+                    "node_type": "outcome",
+                    "user_id": user_id,
+                    "agent_namespace": "freelance",
+                }
+            },
+        },
+        completed_payload_builder=lambda delivered: {"order_id": delivered["data"]["id"]},
         handled_exceptions={
             LookupError: ExecutionErrorConfig(status_code=404, message="Order not found"),
             Exception: ExecutionErrorConfig(status_code=500, message="Failed to deliver order"),
@@ -131,8 +158,22 @@ def collect_feedback(
             operation="freelance.feedback.collect",
             start_payload={"order_id": feedback.order_id},
         ),
-        lambda: _serialize_feedback(freelance_service.collect_feedback(db, feedback, user_id=user_id)),
-        completed_payload_builder=lambda collected: {"order_id": collected["order_id"]},
+        lambda: {
+            "data": _serialize_feedback(freelance_service.collect_feedback(db, feedback, user_id=user_id)),
+            "execution_signals": {
+                "memory": {
+                    "event_type": "freelance_feedback",
+                    "content": f"Feedback for Order #{feedback.order_id}",
+                    "source": "freelance_service",
+                    "tags": ["freelance", "feedback"],
+                    "node_type": "insight",
+                    "user_id": user_id,
+                    "agent_namespace": "freelance",
+                    "extra": {"rating": feedback.rating},
+                }
+            },
+        },
+        completed_payload_builder=lambda collected: {"order_id": collected["data"]["order_id"]},
         handled_exceptions={
             ValueError: ExecutionErrorConfig(status_code=404, message="Feedback target not found"),
             Exception: ExecutionErrorConfig(status_code=500, message="Failed to collect feedback"),

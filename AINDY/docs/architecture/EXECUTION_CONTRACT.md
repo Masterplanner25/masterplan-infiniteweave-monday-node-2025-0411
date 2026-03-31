@@ -46,7 +46,7 @@ Current behavior:
 
 Current behavior:
 
-- Direct service mutation path
+- Route now enters a shared route-layer execution pipeline, but the underlying task domain work is still a direct service mutation path
 - Persistence happens first
 - Memory capture, social sync, ETA, and Infinity orchestration are follow-on side effects
 - No first-class execution envelope or execution event record
@@ -62,6 +62,7 @@ Current behavior:
 Current behavior:
 
 - Has recall, execution, writeback, metrics, and optional trace
+- Route entry now goes through the shared route-layer execution pipeline for memory APIs
 - `/memory/execute` is the active memory execution path
 - `/memory/execute/complete` is deprecated compatibility surface and not the canonical pattern
 - `/memory/nodus/execute` is still a separate execution surface, but it is now restricted by source validation, allowed-operation registration, and optional scoped capability tokens for write operations
@@ -99,7 +100,7 @@ Current behavior:
 
 Current behavior:
 
-- Execution is direct
+- Route entry now goes through the shared route-layer execution pipeline, but analyzer execution remains domain-direct after the route boundary
 - Domain persistence exists in `analysis_results` and `code_generations`
 - No explicit shared orchestration contract around analyze/generate calls
 
@@ -544,6 +545,13 @@ It is:
 `Input -> Execution -> Persist -> Orchestrator -> Observability`
 
 If a path does not satisfy all five stages, it is legacy and should be refactored until it does.
+
+Status note:
+- Route-level normalization improved materially after introduction of `core/execution_pipeline.py` and `core/execution_helper.py`.
+- That change unifies request-scoped trace creation, best-effort lifecycle event emission, and response passthrough on several legacy route groups without yet introducing a single persisted `ExecutionRecord` model.
+- Compile-time enforcement now exists via `tools/execution_contract_linter.py`, plus `.github/workflows/lint.yml` and `.pre-commit-config.yaml`.
+- The linter currently enforces direct route entry through `execute_with_pipeline(...)` / `execute_with_pipeline_sync(...)` and flags direct memory/event execution patterns outside the pipeline.
+- The repo is not yet fully clean under that rule set; the linter is the enforcement mechanism and the current violation list is a migration backlog, not proof of full convergence.
 
 ## Identity Boot Activation
 

@@ -10,7 +10,6 @@ Auth: API key (X-API-Key header) — Watcher is a headless background process.
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
@@ -19,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from db.models.watcher_signal import WatcherSignal
 from services.auth_service import verify_api_key
@@ -27,11 +27,8 @@ from services.autonomous_controller import evaluate_live_trigger
 from services.autonomous_controller import record_decision
 from services.async_job_service import build_deferred_response
 from services.async_job_service import defer_async_job
-from services.execution_envelope import success
 from services.flow_engine import execute_intent
 from utils.trace_context import ensure_trace_id
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/watcher",
@@ -156,16 +153,11 @@ def _extract_ingest_result(result: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Watcher ingest failed")
 
     payload = result.get("result") or {}
-    return success(
-        {
-            "accepted": int(payload.get("accepted") or 0),
-            "session_ended_count": int(payload.get("session_ended_count") or 0),
-            "orchestration": payload.get("orchestration"),
-        },
-        result.get("events") or [],
-        result.get("trace_id") or ensure_trace_id(),
-        next_action=result.get("next_action"),
-    )
+    return {
+        "accepted": int(payload.get("accepted") or 0),
+        "session_ended_count": int(payload.get("session_ended_count") or 0),
+        "orchestration": payload.get("orchestration"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -182,64 +174,75 @@ def receive_signals(
     Invalid signals are rejected wholesale (entire batch) if any signal has
     an unknown signal_type — partial persistence is not supported.
     """
-    for idx, sig in enumerate(batch.signals):
-        _validate_signal(sig, idx)
+    def handler(ctx):
+        for idx, sig in enumerate(batch.signals):
+            _validate_signal(sig, idx)
 
-    trace_id = ensure_trace_id()
-    trigger_context = {
-        "goal": "watcher_ingest",
-        "importance": 0.40,
-        "goal_alignment": 0.45,
-    }
-    user_id = next((sig.user_id for sig in batch.signals if sig.user_id), None)
-    evaluation = evaluate_live_trigger(
-        db=db,
-        trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
-        user_id=user_id,
-        context=trigger_context,
-    )
-    record_decision(
-        db=db,
-        trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
-        evaluation=evaluation,
-        user_id=user_id,
-        trace_id=trace_id,
-        context=trigger_context,
-    )
-    if evaluation["decision"] == "ignore":
-        return build_decision_response(
-            evaluation,
-            trace_id=trace_id,
-            result={"accepted": 0, "session_ended_count": 0, "orchestration": None},
-        )
-    if evaluation["decision"] == "defer":
-        log_id = defer_async_job(
-            task_name="watcher.ingest",
-            payload={
-                "signals": [sig.model_dump() for sig in batch.signals],
-                "user_id": user_id,
-                "__autonomy": {"trigger_type": "watcher", "source": "watcher_router", "context": trigger_context},
-            },
+        trace_id = str(ctx.request_id or ensure_trace_id())
+        trigger_context = {
+            "goal": "watcher_ingest",
+            "importance": 0.40,
+            "goal_alignment": 0.45,
+        }
+        user_id = next((sig.user_id for sig in batch.signals if sig.user_id), None)
+        evaluation = evaluate_live_trigger(
+            db=db,
+            trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
             user_id=user_id,
-            source="watcher_router",
-            decision=evaluation,
+            context=trigger_context,
         )
-        return build_deferred_response(
-            log_id,
-            task_name="watcher.ingest",
-            source="watcher_router",
-            decision=evaluation,
+        record_decision(
+            db=db,
+            trigger={"trigger_type": "watcher", "source": "watcher_router", "goal": "watcher_ingest"},
+            evaluation=evaluation,
+            user_id=user_id,
+            trace_id=trace_id,
+            context=trigger_context,
         )
+        if evaluation["decision"] == "ignore":
+            return build_decision_response(
+                evaluation,
+                trace_id=trace_id,
+                result={"accepted": 0, "session_ended_count": 0, "orchestration": None},
+            )
+        if evaluation["decision"] == "defer":
+            log_id = defer_async_job(
+                task_name="watcher.ingest",
+                payload={
+                    "signals": [sig.model_dump() for sig in batch.signals],
+                    "user_id": user_id,
+                    "__autonomy": {"trigger_type": "watcher", "source": "watcher_router", "context": trigger_context},
+                },
+                user_id=user_id,
+                source="watcher_router",
+                decision=evaluation,
+            )
+            return build_deferred_response(
+                log_id,
+                task_name="watcher.ingest",
+                source="watcher_router",
+                decision=evaluation,
+            )
 
-    result = execute_intent(
-        intent_data={
-            "workflow_type": "watcher_ingest",
-            "signals": [sig.model_dump() for sig in batch.signals],
-        },
-        db=db,
-        user_id=user_id,
+        result = execute_intent(
+            intent_data={
+                "workflow_type": "watcher_ingest",
+                "signals": [sig.model_dump() for sig in batch.signals],
+            },
+            db=db,
+            user_id=user_id,
+        )
+        return _extract_ingest_result(result)
+
+    return execute_with_pipeline_sync(
+        request=None,
+        route_name="watcher.signals.receive",
+        handler=handler,
+        user_id=next((sig.user_id for sig in batch.signals if sig.user_id), None),
+        input_payload=batch.model_dump(),
+        metadata={"db": db},
+        success_status_code=201,
     )
-    return _extract_ingest_result(result)
 
 
 @router.get("/signals")
@@ -255,29 +258,45 @@ def list_signals(
     Query stored watcher signals. Supports filtering by session_id and signal_type.
     Returns signals ordered by signal_timestamp descending.
     """
-    q = db.query(WatcherSignal)
-    if session_id:
-        q = q.filter(WatcherSignal.session_id == session_id)
-    if user_id:
-        try:
-            q = q.filter(WatcherSignal.user_id == UUID(str(user_id)))
-        except Exception as exc:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Invalid user_id filter: {user_id!r}",
-            ) from exc
-    if signal_type:
-        if signal_type not in _VALID_SIGNAL_TYPES:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Unknown signal_type: {signal_type!r}",
-            )
-        q = q.filter(WatcherSignal.signal_type == signal_type)
+    def handler(ctx):
+        q = db.query(WatcherSignal)
+        if session_id:
+            q = q.filter(WatcherSignal.session_id == session_id)
+        if user_id:
+            try:
+                q = q.filter(WatcherSignal.user_id == UUID(str(user_id)))
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid user_id filter: {user_id!r}",
+                ) from exc
+        if signal_type:
+            if signal_type not in _VALID_SIGNAL_TYPES:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown signal_type: {signal_type!r}",
+                )
+            q = q.filter(WatcherSignal.signal_type == signal_type)
 
-    signals = (
-        q.order_by(WatcherSignal.signal_timestamp.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
+        signals = (
+            q.order_by(WatcherSignal.signal_timestamp.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return [_signal_to_response(s).model_dump() for s in signals]
+
+    return execute_with_pipeline_sync(
+        request=None,
+        route_name="watcher.signals.list",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+        input_payload={
+            "session_id": session_id,
+            "signal_type": signal_type,
+            "user_id": user_id,
+            "limit": limit,
+            "offset": offset,
+        },
     )
-    return success([_signal_to_response(s).model_dump() for s in signals], [], ensure_trace_id())

@@ -18,6 +18,7 @@ from bridge.bridge import create_memory_node
 from db.models.leadgen_model import LeadGenResult
 from services.external_call_service import perform_external_call
 from services.search_service import search_leads
+from services.trace_context import is_pipeline_active
 import os
 
 # Initialize the OpenAI client (ensure API key is set in environment)
@@ -42,7 +43,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     logger.info("[LeadGen] Running AI search for query: %s", query)
 
     # Step 1: Recall relevant past leadgen searches
-    if user_id and db:
+    if user_id and db and not is_pipeline_active():
         try:
             from db.dao.memory_node_dao import MemoryNodeDAO
             from runtime.memory import MemoryOrchestrator
@@ -97,7 +98,7 @@ def run_ai_search(query: str, user_id: str = None, db=None):
         ]
 
     # Step 3: Write outcome memory node after results are gathered
-    if user_id and db:
+    if user_id and db and not is_pipeline_active():
         try:
             result_count = len(example_results)
             top = example_results[0]["company"] if example_results else "none"
@@ -221,13 +222,14 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
         db.refresh(db_entry)
 
         # 🧠 Log symbolic memory node
-        create_memory_node(
-            content=f"Lead Discovered: {lead['company']} | {lead['context']} | Score: {score['overall_score']}",
-            source="leadgen",
-            tags=["leadgen", "aindy", "infinity", "ai-search"],
-            db=db,
-            user_id=user_id,
-        )
+        if not is_pipeline_active():
+            create_memory_node(
+                content=f"Lead Discovered: {lead['company']} | {lead['context']} | Score: {score['overall_score']}",
+                source="leadgen",
+                tags=["leadgen", "aindy", "infinity", "ai-search"],
+                db=db,
+                user_id=user_id,
+            )
 
         logger.info("[LeadGen] Logged %s (%s)", lead["company"], score["overall_score"])
         results.append((db_entry, search_score))

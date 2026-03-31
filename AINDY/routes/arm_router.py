@@ -20,6 +20,7 @@ from typing import Optional
 import threading
 from uuid import UUID
 
+from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
 from services.rate_limiter import limiter
@@ -92,42 +93,52 @@ async def analyze_code(
     Task Priority is calculated per request via the Infinity Algorithm:
         TP = (Complexity × Urgency) / Resource Cost
     """
-    from services.async_job_service import (
-        async_heavy_execution_enabled,
-        build_queued_response,
-        submit_async_job,
-    )
-
-    if async_heavy_execution_enabled():
-        log_id = submit_async_job(
-            task_name="arm.analyze",
-            payload={
-                "file_path": body.file_path,
-                "user_id": str(current_user["sub"]),
-                "complexity": body.complexity,
-                "urgency": body.urgency,
-                "context": body.context,
-            },
-            user_id=current_user["sub"],
-            source="arm_router",
+    async def handler(ctx):
+        from services.async_job_service import (
+            async_heavy_execution_enabled,
+            build_queued_response,
+            submit_async_job,
         )
-        return JSONResponse(
-            status_code=202,
-            content=build_queued_response(
-                log_id,
+
+        if async_heavy_execution_enabled():
+            log_id = submit_async_job(
                 task_name="arm.analyze",
+                payload={
+                    "file_path": body.file_path,
+                    "user_id": str(current_user["sub"]),
+                    "complexity": body.complexity,
+                    "urgency": body.urgency,
+                    "context": body.context,
+                },
+                user_id=current_user["sub"],
                 source="arm_router",
-            ),
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="arm.analyze",
+                    source="arm_router",
+                ),
+            )
+
+        analyzer = get_analyzer()
+        return analyzer.run_analysis(
+            file_path=body.file_path,
+            user_id=current_user["sub"],
+            db=db,
+            complexity=body.complexity,
+            urgency=body.urgency,
+            additional_context=body.context,
         )
 
-    analyzer = get_analyzer()
-    return analyzer.run_analysis(
-        file_path=body.file_path,
-        user_id=current_user["sub"],
-        db=db,
-        complexity=body.complexity,
-        urgency=body.urgency,
-        additional_context=body.context,
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.analyze",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+        input_payload=body.model_dump(),
     )
 
 
@@ -143,53 +154,64 @@ async def generate_code(
     Generate or refactor code based on a prompt.
     Optionally link to a previous analysis session via analysis_id.
     """
-    from services.async_job_service import (
-        async_heavy_execution_enabled,
-        build_queued_response,
-        submit_async_job,
-    )
-
-    if async_heavy_execution_enabled():
-        log_id = submit_async_job(
-            task_name="arm.generate",
-            payload={
-                "prompt": body.prompt,
-                "user_id": str(current_user["sub"]),
-                "original_code": body.original_code,
-                "language": body.language,
-                "generation_type": body.generation_type,
-                "analysis_id": body.analysis_id,
-                "complexity": body.complexity,
-                "urgency": body.urgency,
-            },
-            user_id=current_user["sub"],
-            source="arm_router",
+    async def handler(ctx):
+        from services.async_job_service import (
+            async_heavy_execution_enabled,
+            build_queued_response,
+            submit_async_job,
         )
-        return JSONResponse(
-            status_code=202,
-            content=build_queued_response(
-                log_id,
+
+        if async_heavy_execution_enabled():
+            log_id = submit_async_job(
                 task_name="arm.generate",
+                payload={
+                    "prompt": body.prompt,
+                    "user_id": str(current_user["sub"]),
+                    "original_code": body.original_code,
+                    "language": body.language,
+                    "generation_type": body.generation_type,
+                    "analysis_id": body.analysis_id,
+                    "complexity": body.complexity,
+                    "urgency": body.urgency,
+                },
+                user_id=current_user["sub"],
                 source="arm_router",
-            ),
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="arm.generate",
+                    source="arm_router",
+                ),
+            )
+
+        analyzer = get_analyzer()
+        return analyzer.generate_code(
+            prompt=body.prompt,
+            user_id=current_user["sub"],
+            db=db,
+            original_code=body.original_code,
+            language=body.language,
+            generation_type=body.generation_type,
+            analysis_id=body.analysis_id,
+            complexity=body.complexity,
+            urgency=body.urgency,
         )
 
-    analyzer = get_analyzer()
-    return analyzer.generate_code(
-        prompt=body.prompt,
-        user_id=current_user["sub"],
-        db=db,
-        original_code=body.original_code,
-        language=body.language,
-        generation_type=body.generation_type,
-        analysis_id=body.analysis_id,
-        complexity=body.complexity,
-        urgency=body.urgency,
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.generate",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+        input_payload=body.model_dump(),
     )
 
 
 @router.get("/logs")
 async def get_arm_logs(
+    request: Request,
     limit: int = 20,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -200,76 +222,92 @@ async def get_arm_logs(
     Returns analysis and generation history with Infinity Algorithm
     performance metrics (execution speed, task priority).
     """
-    analyses = (
-        db.query(AnalysisResult)
-        .filter(AnalysisResult.user_id == UUID(str(current_user["sub"])))
-        .order_by(AnalysisResult.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    generations = (
-        db.query(CodeGeneration)
-        .filter(CodeGeneration.user_id == UUID(str(current_user["sub"])))
-        .order_by(CodeGeneration.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    def handler(ctx):
+        analyses = (
+            db.query(AnalysisResult)
+            .filter(AnalysisResult.user_id == UUID(str(current_user["sub"])))
+            .order_by(AnalysisResult.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        generations = (
+            db.query(CodeGeneration)
+            .filter(CodeGeneration.user_id == UUID(str(current_user["sub"])))
+            .order_by(CodeGeneration.created_at.desc())
+            .limit(limit)
+            .all()
+        )
 
-    return {
-        "analyses": [
-            {
-                "session_id": str(a.session_id),
-                "file": a.file_path.split("/")[-1].split("\\")[-1] if a.file_path else "",
-                "status": a.status,
-                "execution_seconds": a.execution_seconds,
-                "input_tokens": a.input_tokens,
-                "output_tokens": a.output_tokens,
-                "task_priority": a.task_priority,
-                "execution_speed": round(
-                    ((a.input_tokens or 0) + (a.output_tokens or 0))
-                    / max(a.execution_seconds or 0.001, 0.001),
-                    1,
+        return {
+            "analyses": [
+                {
+                    "session_id": str(a.session_id),
+                    "file": a.file_path.split("/")[-1].split("\\")[-1] if a.file_path else "",
+                    "status": a.status,
+                    "execution_seconds": a.execution_seconds,
+                    "input_tokens": a.input_tokens,
+                    "output_tokens": a.output_tokens,
+                    "task_priority": a.task_priority,
+                    "execution_speed": round(
+                        ((a.input_tokens or 0) + (a.output_tokens or 0))
+                        / max(a.execution_seconds or 0.001, 0.001),
+                        1,
+                    ),
+                    "summary": a.result_summary,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in analyses
+            ],
+            "generations": [
+                {
+                    "session_id": str(g.session_id),
+                    "language": g.language,
+                    "generation_type": g.generation_type,
+                    "execution_seconds": g.execution_seconds,
+                    "input_tokens": g.input_tokens,
+                    "output_tokens": g.output_tokens,
+                    "created_at": g.created_at.isoformat() if g.created_at else None,
+                }
+                for g in generations
+            ],
+            "summary": {
+                "total_analyses": len(analyses),
+                "total_generations": len(generations),
+                "total_tokens_used": sum(
+                    (a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses
+                )
+                + sum(
+                    (g.input_tokens or 0) + (g.output_tokens or 0) for g in generations
                 ),
-                "summary": a.result_summary,
-                "created_at": a.created_at.isoformat() if a.created_at else None,
-            }
-            for a in analyses
-        ],
-        "generations": [
-            {
-                "session_id": str(g.session_id),
-                "language": g.language,
-                "generation_type": g.generation_type,
-                "execution_seconds": g.execution_seconds,
-                "input_tokens": g.input_tokens,
-                "output_tokens": g.output_tokens,
-                "created_at": g.created_at.isoformat() if g.created_at else None,
-            }
-            for g in generations
-        ],
-        "summary": {
-            "total_analyses": len(analyses),
-            "total_generations": len(generations),
-            "total_tokens_used": sum(
-                (a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses
-            )
-            + sum(
-                (g.input_tokens or 0) + (g.output_tokens or 0) for g in generations
-            ),
-        },
-    }
+            },
+        }
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.logs",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+    )
 
 
 @router.get("/config")
 async def get_config(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """Read current ARM configuration."""
-    return ConfigManager().get_all()
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.config.get",
+        handler=lambda ctx: ConfigManager().get_all(),
+        user_id=str(current_user["sub"]),
+    )
 
 
 @router.put("/config")
 async def update_config(
+    request: Request,
     body: ConfigUpdateRequest,
     current_user: dict = Depends(get_current_user),
 ):
@@ -281,15 +319,24 @@ async def update_config(
 
     Phase 2: will also trigger the Infinity Algorithm self-tuning feedback loop.
     """
-    updated = ConfigManager().update(body.updates)
-    # Reset singleton so next request uses updated config
-    global _analyzer
-    _analyzer = None
-    return {"status": "updated", "config": updated}
+    def handler(ctx):
+        updated = ConfigManager().update(body.updates)
+        global _analyzer
+        _analyzer = None
+        return {"status": "updated", "config": updated}
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.config.update",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        input_payload=body.model_dump(),
+    )
 
 
 @router.get("/metrics")
 async def get_arm_metrics(
+    request: Request,
     window: int = 30,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -306,12 +353,21 @@ async def get_arm_metrics(
 
     window: lookback period in days (default 30)
     """
-    metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
-    return metrics_service.get_all_metrics(window=window)
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.metrics.get",
+        handler=lambda ctx: ARMMetricsService(
+            db=db,
+            user_id=current_user["sub"],
+        ).get_all_metrics(window=window),
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+    )
 
 
 @router.get("/config/suggest")
 async def get_config_suggestions(
+    request: Request,
     window: int = 30,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -330,39 +386,40 @@ async def get_config_suggestions(
     Low-risk suggestions can be auto-applied.
     Medium/high-risk suggestions require explicit approval.
     """
-    # Get current metrics
-    metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
-    metrics = metrics_service.get_all_metrics(window=window)
+    def handler(ctx):
+        metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
+        metrics = metrics_service.get_all_metrics(window=window)
+        config_manager = ConfigManager()
+        current_config = config_manager.get_all()
+        suggestion_engine = ARMConfigSuggestionEngine(
+            current_config=current_config,
+            metrics=metrics,
+        )
+        suggestions = suggestion_engine.generate_suggestions()
+        suggestions["metrics_snapshot"] = {
+            "decision_efficiency": metrics.get("decision_efficiency", {}).get(
+                "score", 0
+            ),
+            "execution_speed_avg": metrics.get("execution_speed", {}).get(
+                "average", 0
+            ),
+            "ai_productivity_ratio": metrics.get("ai_productivity_boost", {}).get(
+                "ratio", 0
+            ),
+            "waste_percentage": metrics.get("lost_potential", {}).get(
+                "waste_percentage", 0
+            ),
+            "learning_trend": metrics.get("learning_efficiency", {}).get(
+                "trend", "insufficient data"
+            ),
+            "total_sessions": metrics.get("total_sessions", 0),
+        }
+        return suggestions
 
-    # Get current config
-    config_manager = ConfigManager()
-    current_config = config_manager.get_all()
-
-    # Generate suggestions
-    suggestion_engine = ARMConfigSuggestionEngine(
-        current_config=current_config,
-        metrics=metrics,
+    return await execute_with_pipeline(
+        request=request,
+        route_name="arm.config.suggest",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
     )
-    suggestions = suggestion_engine.generate_suggestions()
-
-    # Include current metrics summary for context
-    suggestions["metrics_snapshot"] = {
-        "decision_efficiency": metrics.get("decision_efficiency", {}).get(
-            "score", 0
-        ),
-        "execution_speed_avg": metrics.get("execution_speed", {}).get(
-            "average", 0
-        ),
-        "ai_productivity_ratio": metrics.get("ai_productivity_boost", {}).get(
-            "ratio", 0
-        ),
-        "waste_percentage": metrics.get("lost_potential", {}).get(
-            "waste_percentage", 0
-        ),
-        "learning_trend": metrics.get("learning_efficiency", {}).get(
-            "trend", "insufficient data"
-        ),
-        "total_sessions": metrics.get("total_sessions", 0),
-    }
-
-    return suggestions

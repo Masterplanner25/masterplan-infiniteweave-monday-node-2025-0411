@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     AINDY_CACHE_BACKEND: str = "memory"
     USE_NATIVE_SCORER: bool = True
+    ENFORCE_EXECUTION_CONTRACT: bool = False
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(

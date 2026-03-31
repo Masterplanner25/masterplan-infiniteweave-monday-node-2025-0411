@@ -46,7 +46,25 @@ def _latest_adjustment_payload(user_id: str, db: Session) -> dict | None:
     }
 
 
+def _latest_memory_visibility(user_id: str, db: Session) -> dict:
+    latest = _latest_adjustment_payload(user_id=user_id, db=db)
+    payload = (latest or {}).get("adjustment_payload") or {}
+    loop_context = payload.get("loop_context") or {}
+    memory_signals = list(loop_context.get("memory_signals") or [])
+    memory_summary = payload.get("memory_summary") or {}
+    memory_adjustment = payload.get("memory_adjustment") or {}
+    return {
+        "memory_context_count": len(loop_context.get("memory") or []),
+        "memory_signal_count": len(memory_signals),
+        "memory_influence": {
+            "memory_adjustment": memory_adjustment,
+            "memory_summary": memory_summary,
+        },
+    }
+
+
 def _score_to_response(score: UserScore, user_id: str, db: Session) -> dict:
+    memory_visibility = _latest_memory_visibility(user_id=user_id, db=db)
     return {
         "user_id": user_id,
         "master_score": score.master_score,
@@ -65,6 +83,9 @@ def _score_to_response(score: UserScore, user_id: str, db: Session) -> dict:
             "calculated_at": (
                 score.calculated_at.isoformat() if score.calculated_at else None
             ),
+            "memory_context_count": memory_visibility["memory_context_count"],
+            "memory_signal_count": memory_visibility["memory_signal_count"],
+            "memory_influence": memory_visibility["memory_influence"],
         },
         "latest_adjustment": _latest_adjustment_payload(user_id=user_id, db=db),
     }

@@ -17,7 +17,7 @@ This section is the canonical current-state view. Historical notes below are ret
 - **UNRESOLVED:** Real Nodus execution is not the primary execution path for Agentics. Core agent execution still runs through `services/flow_engine.py` via `services/nodus_adapter.py`, while embedded Nodus execution remains isolated behind `services/nodus_execution_service.py`. Primary files: `services/nodus_adapter.py`, `services/flow_engine.py`, `services/nodus_execution_service.py`.
 - **UNRESOLVED:** Dual execution surfaces continue to drift architecturally. The internal flow engine and embedded Nodus execution expose different runtime models, semantics, and observability envelopes. Primary files: `services/flow_engine.py`, `services/nodus_adapter.py`, `services/nodus_execution_service.py`, `routes/memory_router.py`.
 - **PARTIAL:** Search is materially more unified now that `services/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `services/search_service.py`, `services/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
-- **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, and Freelance now run through a centralized execution wrapper, but several execution-adjacent routes still return direct envelope responses without the same wrapper/event lifecycle, and `/system/state` still returns a raw snapshot shape. Primary files: `services/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
+- **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis now run through the centralized execution wrapper or canonical execution envelopes, and `/system/state` now returns the shared success envelope, but other route groups in the repo still return raw JSON or direct route-level envelopes outside the same wrapper/event lifecycle. Primary files: `services/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
 
 #### Medium
 
@@ -30,7 +30,7 @@ This section is the canonical current-state view. Historical notes below are ret
 - **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `services/embedding_jobs.py`, `services/async_job_service.py`, `services/memory_persistence.py`.
 - **PARTIAL:** Multi-agent coordination primitives now exist, including registry, coordinator, message bus, cross-agent trace fields, and coordination endpoints, but real distributed execution and conflict-heavy runtime behavior remain immature. Primary files: `services/agent_coordinator.py`, `services/agent_message_bus.py`, `services/agent_runtime.py`, `db/models/agent_registry.py`, `routes/coordination_router.py`.
 - **PARTIAL:** Rust/C++ memory scoring acceleration is now integrated into the runtime hot path with Python fallback, but release-build deployment and broader traversal-side acceleration are still incomplete. Primary files: `runtime/memory/scorer.py`, `runtime/memory/native_scorer.py`, `bridge/memory_bridge_rs/src/lib.rs`.
-- **PARTIAL:** Memory auto-link enrichment is not cross-dialect clean. The capture path works against PostgreSQL, but SQLite-based verification still hits PostgreSQL tag operators (`@>`) during auto-link candidate lookup and logs warning-only failures. Primary files: `services/memory_capture_engine.py`, `db/dao/memory_node_dao.py`.
+- **RESOLVED:** Memory auto-link tag lookup is now cross-dialect aware. PostgreSQL keeps native tag containment queries, while SQLite/non-PostgreSQL backends fall back to Python-side tag filtering for consistent auto-link candidate lookup. Primary files: `services/memory_capture_engine.py`, `db/dao/memory_node_dao.py`, `services/memory_persistence.py`.
 - **PARTIAL:** Live route-level learning behavior is not yet consistently visible even though the causal-learning loop tests pass. Repeated real API executions can succeed without showing recalled memory in route payload context. Primary files: `routes/research_results_router.py`, `runtime/memory/*`, `services/memory_scoring_service.py`, `services/infinity_orchestrator.py`.
 
 #### Low
@@ -487,10 +487,8 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
   - Location: `AINDY/services/identity_service.py`
 
 ### §15.11 MongoDB credentials not enforced by config
-- **`pymongo==4.16.0` is in `requirements.txt` and `db/mongo_setup.py` exists**, but no MongoDB connection string is validated in `config.py`. If MongoDB is unavailable, errors are silent or late-binding. `task_services.py` calls MongoDB for profile updates — a failed connection would silently drop profile state.
-  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`, `AINDY/services/task_services.py`
-  - Fix: Add `MONGO_URI` to `config.py` with a clear optional-with-warning behavior; add startup connectivity check if Mongo is required.
-  - Status: Open. Low priority until MongoDB becomes load-bearing.
+- ✅ **RESOLVED (current workspace):** `config.py` now requires `MONGO_URL` for runtime, `db/mongo_setup.py` eagerly validates connectivity with a ping, and `main.py` initializes Mongo during startup so failures happen before request handling.
+  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`, `AINDY/main.py`
 
 ### §15.12 cpython-314 pycache present alongside cpython-311
 - **`modules/deepseek/__pycache__/` contains both cpython-311 and cpython-314 compiled bytecode.** This indicates the project has been executed under Python 3.14 (pre-release as of 2026-03). Mixed pycache creates confusion about which Python version is authoritative and may cause subtle import resolution issues.
@@ -621,9 +619,8 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
   - Status: Open. Low priority, but still real debt.
 
 ### §17.3 Mongo configuration remains late-bound
-- **Mongo connectivity is still configured outside the canonical settings model.** `db/mongo_setup.py` reads environment directly and raises only at connection time; `config.py` has no Mongo URI validation or startup policy.
-  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`
-  - Status: Open. Medium priority because Social Layer behavior fails late.
+- ✅ **RESOLVED (current workspace):** Mongo is now part of the validated runtime config. Missing or unreachable `MONGO_URL` fails startup instead of surfacing later during execution.
+  - Location: `AINDY/config.py`, `AINDY/db/mongo_setup.py`, `AINDY/main.py`
 
 ### §17.4 TECH_DEBT historical statuses can drift from live system state
 - **Historical audit entries now contain stale open items that are already resolved in the workspace** (for example MasterPlan anchor/ETA, RippleTrace viewer, Observability dashboard, and normalized identity evolution summary). This document therefore needs periodic alignment to remain trustworthy as an audit artifact.

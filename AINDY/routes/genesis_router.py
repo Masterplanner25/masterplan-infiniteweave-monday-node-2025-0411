@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import GenesisSessionDB, MasterPlan
 from services.auth_service import get_current_user
-from services.execution_envelope import success
+from services.execution_service import ExecutionContext, run_execution
 from services.flow_engine import execute_intent
 from services.observability_events import emit_observability_event
 from services.genesis_ai import (
@@ -20,7 +20,6 @@ from services.genesis_ai import (
 )
 from services.masterplan_factory import create_masterplan_from_genesis
 from services.rate_limiter import limiter
-from utils.trace_context import ensure_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -62,11 +61,21 @@ def create_genesis_session(
         },
     )
 
-    db.add(session)
-    db.commit()
-    db.refresh(session)
+    def _create() -> dict:
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return {"session_id": session.id}
 
-    return success({"session_id": session.id}, [], ensure_trace_id())
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.session.create",
+        ),
+        _create,
+    )
 
 
 @router.post("/message")
@@ -99,38 +108,50 @@ def genesis_message(
         )
 
     _get_user_session(session_id, user_id, db)
-    if async_heavy_execution_enabled():
-        log_id = submit_async_job(
-            task_name="genesis.message",
-            payload={
+    def _run_message():
+        if async_heavy_execution_enabled():
+            log_id = submit_async_job(
+                task_name="genesis.message",
+                payload={
+                    "session_id": session_id,
+                    "message": user_message,
+                    "user_id": str(user_id),
+                },
+                user_id=user_id,
+                source="genesis_router",
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="genesis.message",
+                    source="genesis_router",
+                ),
+            )
+
+        result = execute_intent(
+            intent_data={
+                "workflow_type": "genesis_message",
                 "session_id": session_id,
                 "message": user_message,
-                "user_id": str(user_id),
             },
-            user_id=user_id,
-            source="genesis_router",
+            db=db,
+            user_id=str(user_id),
         )
-        return JSONResponse(
-            status_code=202,
-            content=build_queued_response(
-                log_id,
-                task_name="genesis.message",
-                source="genesis_router",
-            ),
-        )
+        if result.get("status") != "SUCCESS":
+            raise HTTPException(status_code=500, detail="Genesis message execution failed")
+        return result
 
-    result = execute_intent(
-        intent_data={
-            "workflow_type": "genesis_message",
-            "session_id": session_id,
-            "message": user_message,
-        },
-        db=db,
-        user_id=str(user_id),
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.message",
+            start_payload={"session_id": session_id},
+        ),
+        _run_message,
     )
-    if result.get("status") != "SUCCESS":
-        raise HTTPException(status_code=500, detail="Genesis message execution failed")
-    return result
 
 
 @router.get("/session/{session_id}")
@@ -142,8 +163,15 @@ def get_genesis_session(
     user_id = uuid.UUID(str(current_user["sub"]))
     session = _get_user_session(session_id, user_id, db)
 
-    return success(
-        {
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.session.get",
+            start_payload={"session_id": session_id},
+        ),
+        lambda: {
             "session_id": session.id,
             "status": session.status,
             "synthesis_ready": session.synthesis_ready,
@@ -151,8 +179,6 @@ def get_genesis_session(
             "created_at": session.created_at,
             "updated_at": session.updated_at,
         },
-        [],
-        ensure_trace_id(),
     )
 
 
@@ -174,14 +200,19 @@ def get_genesis_draft(
             },
         )
 
-    return success(
-        {
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.draft.get",
+            start_payload={"session_id": session_id},
+        ),
+        lambda: {
             "session_id": session.id,
             "draft": session.draft_json,
             "synthesis_ready": session.synthesis_ready,
         },
-        [],
-        ensure_trace_id(),
     )
 
 
@@ -219,33 +250,43 @@ def synthesize_genesis(
             },
         )
 
-    if async_heavy_execution_enabled():
-        log_id = submit_async_job(
-            task_name="genesis.synthesize",
-            payload={"session_id": session_id, "user_id": str(user_id)},
-            user_id=user_id,
-            source="genesis_router",
-        )
-        return JSONResponse(
-            status_code=202,
-            content=build_queued_response(
-                log_id,
+    def _synthesize():
+        if async_heavy_execution_enabled():
+            log_id = submit_async_job(
                 task_name="genesis.synthesize",
+                payload={"session_id": session_id, "user_id": str(user_id)},
+                user_id=user_id,
                 source="genesis_router",
-            ),
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="genesis.synthesize",
+                    source="genesis_router",
+                ),
+            )
+
+        current_state = session.summarized_state or {}
+        draft = call_genesis_synthesis_llm(
+            current_state,
+            user_id=str(user_id),
+            db=db,
         )
+        session.draft_json = draft
+        db.commit()
+        return {"draft": draft}
 
-    current_state = session.summarized_state or {}
-    draft = call_genesis_synthesis_llm(
-        current_state,
-        user_id=str(user_id),
-        db=db,
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.synthesize",
+            start_payload={"session_id": session_id},
+        ),
+        _synthesize,
     )
-
-    session.draft_json = draft
-    db.commit()
-
-    return success({"draft": draft}, [], ensure_trace_id())
 
 
 class AuditRequest(BaseModel):
@@ -287,24 +328,35 @@ def audit_genesis_draft(
             },
         )
 
-    if async_heavy_execution_enabled():
-        log_id = submit_async_job(
-            task_name="genesis.audit",
-            payload={"session_id": body.session_id, "user_id": str(user_id)},
-            user_id=user_id,
-            source="genesis_router",
-        )
-        return JSONResponse(
-            status_code=202,
-            content=build_queued_response(
-                log_id,
+    def _audit():
+        if async_heavy_execution_enabled():
+            log_id = submit_async_job(
                 task_name="genesis.audit",
+                payload={"session_id": body.session_id, "user_id": str(user_id)},
+                user_id=user_id,
                 source="genesis_router",
-            ),
-        )
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="genesis.audit",
+                    source="genesis_router",
+                ),
+            )
 
-    audit_result = validate_draft_integrity(session.draft_json)
-    return success(audit_result, [], ensure_trace_id())
+        return validate_draft_integrity(session.draft_json)
+
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.audit",
+            start_payload={"session_id": body.session_id},
+        ),
+        _audit,
+    )
 
 
 @router.post("/lock")
@@ -325,59 +377,67 @@ def lock_masterplan(
 
     _get_user_session(session_id, user_id, db)
 
-    try:
-        masterplan = create_masterplan_from_genesis(
-            session_id=session_id,
-            draft=draft,
-            db=db,
-            user_id=str(user_id),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
-        )
+    def _lock():
+        try:
+            masterplan = create_masterplan_from_genesis(
+                session_id=session_id,
+                draft=draft,
+                db=db,
+                user_id=str(user_id),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "masterplan_create_failed", "message": "Failed to create masterplan", "details": str(e)},
+            )
 
-    try:
-        from services.memory_capture_engine import MemoryCaptureEngine
+        try:
+            from services.memory_capture_engine import MemoryCaptureEngine
 
-        vision = ""
-        if isinstance(draft, dict):
-            vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
-        engine = MemoryCaptureEngine(
-            db=db,
-            user_id=str(user_id),
-            agent_namespace="genesis",
-        )
-        engine.evaluate_and_capture(
-            event_type="masterplan_locked",
-            content=(
-                f"Masterplan locked: {masterplan.version_label} "
-                f"(posture: {masterplan.posture}, session: {session_id}). "
-                f"Vision: {vision[:200]}"
-            ),
-            source="genesis_lock",
-            tags=["genesis", "masterplan", "decision"],
-            node_type="decision",
-            force=True,
-        )
-    except Exception:
-        emit_observability_event(
-            logger,
-            event="genesis_lock_memory_capture_failed",
-            route="/genesis/lock",
-            session_id=session_id,
-            user_id=user_id,
-        )
+            vision = ""
+            if isinstance(draft, dict):
+                vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=str(user_id),
+                agent_namespace="genesis",
+            )
+            engine.evaluate_and_capture(
+                event_type="masterplan_locked",
+                content=(
+                    f"Masterplan locked: {masterplan.version_label} "
+                    f"(posture: {masterplan.posture}, session: {session_id}). "
+                    f"Vision: {vision[:200]}"
+                ),
+                source="genesis_lock",
+                tags=["genesis", "masterplan", "decision"],
+                node_type="decision",
+                force=True,
+            )
+        except Exception:
+            emit_observability_event(
+                logger,
+                event="genesis_lock_memory_capture_failed",
+                route="/genesis/lock",
+                session_id=session_id,
+                user_id=user_id,
+            )
 
-    return success(
-        {
+        return {
             "masterplan_id": masterplan.id,
             "version": masterplan.version_label,
             "posture": masterplan.posture,
-        },
-        [],
-        ensure_trace_id(),
+        }
+
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="genesis_router",
+            operation="genesis.lock",
+            start_payload={"session_id": session_id},
+        ),
+        _lock,
     )
 
 
@@ -401,37 +461,47 @@ def activate_masterplan(
             detail={"error": "masterplan_not_found", "message": "Plan not found"},
         )
 
-    db.query(MasterPlan).filter(MasterPlan.user_id == user_id).update({"is_active": False})
+    def _activate():
+        db.query(MasterPlan).filter(MasterPlan.user_id == user_id).update({"is_active": False})
+        plan.is_active = True
+        plan.status = "active"
+        plan.activated_at = datetime.utcnow()
+        db.commit()
 
-    plan.is_active = True
-    plan.status = "active"
-    plan.activated_at = datetime.utcnow()
+        try:
+            from services.memory_capture_engine import MemoryCaptureEngine
 
-    db.commit()
+            engine = MemoryCaptureEngine(
+                db=db,
+                user_id=str(user_id),
+                agent_namespace="genesis",
+            )
+            engine.evaluate_and_capture(
+                event_type="masterplan_activated",
+                content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",
+                source="genesis_activate",
+                tags=["genesis", "masterplan", "activation"],
+                node_type="decision",
+                force=True,
+            )
+        except Exception:
+            emit_observability_event(
+                logger,
+                event="genesis_activate_memory_capture_failed",
+                route="/genesis/{plan_id}/activate",
+                plan_id=plan_id,
+                user_id=user_id,
+            )
 
-    try:
-        from services.memory_capture_engine import MemoryCaptureEngine
+        return {"activation_status": "activated"}
 
-        engine = MemoryCaptureEngine(
+    return run_execution(
+        ExecutionContext(
             db=db,
             user_id=str(user_id),
-            agent_namespace="genesis",
-        )
-        engine.evaluate_and_capture(
-            event_type="masterplan_activated",
-            content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",
-            source="genesis_activate",
-            tags=["genesis", "masterplan", "activation"],
-            node_type="decision",
-            force=True,
-        )
-    except Exception:
-        emit_observability_event(
-            logger,
-            event="genesis_activate_memory_capture_failed",
-            route="/genesis/{plan_id}/activate",
-            plan_id=plan_id,
-            user_id=user_id,
-        )
-
-    return success({"activation_status": "activated"}, [], ensure_trace_id())
+            source="genesis_router",
+            operation="genesis.activate",
+            start_payload={"plan_id": plan_id},
+        ),
+        _activate,
+    )

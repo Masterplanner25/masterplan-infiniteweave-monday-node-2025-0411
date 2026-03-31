@@ -1,0 +1,18 @@
+name: execution-contract-lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  execution-contract:
+    runs-on: ubuntu-latest
+    env:
+      STRICT_EXECUTION_CONTRACT: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run execution contract linter
+        run: python tools/execution_contract_linter.py --strict

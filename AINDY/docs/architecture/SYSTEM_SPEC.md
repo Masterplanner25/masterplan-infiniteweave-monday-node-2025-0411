@@ -52,6 +52,7 @@ FastAPI app (main.py)
 
 ## 4. Core Execution Layers
 - API layer: `routes/*`
+- Route execution pipeline: `core/execution_pipeline.py`, `core/execution_helper.py`
 - Service/orchestration layer: `services/*`
 - Flow execution layer: `services/flow_engine.py`
 - Agent runtime: `services/agent_runtime.py`, `services/nodus_adapter.py`
@@ -89,7 +90,7 @@ System-wide activity ledger:
 - `SystemEvent` is the canonical durable record for core execution and observability activity, while some subsystems still retain domain-specific durable records such as agent events, flow history, and automation logs.
 - `SystemEvent` now carries `trace_id`, `parent_event_id`, and `source`, allowing causal reconstruction across core execution paths.
 - RippleTrace now structures execution causality on top of `SystemEvent` through `ripple_edges`, including event-to-event and event-to-memory links.
-- Core execution paths emit required lifecycle events, but not every route-level execution-adjacent surface is yet routed through the same centralized wrapper.
+- Core execution paths emit required lifecycle events. Route-layer execution is now split between the newer fail-open route pipeline in `core/execution_pipeline.py` and older service-level wrappers/canonical envelopes, so execution normalization is stronger but still not perfectly single-path across the repo.
 - Successful health, auth, and async heavy-execution paths now emit durable success events in addition to core flow execution paths.
 - External interactions now also emit required lifecycle events through `services/external_call_service.py`.
 - Required outbound event types:
@@ -120,7 +121,7 @@ System-wide activity ledger:
 - Scheduler leadership is single-instance.
 - Background lease timestamps are compared and persisted as timezone-aware UTC values in the lease path.
 - Canonical execution responses should be traceable and structured.
-- A `trace_id` should be present on all major route responses, but not every route yet uses the same centralized execution wrapper.
+- A `trace_id` should be present on all major route responses. Auth, analytics, ARM, main-calculation, and memory routes now also enter the shared route execution pipeline, though some non-target route groups still return raw JSON outside that path.
 - Agent/tool execution must be capability-scoped.
 - Silent `except ...: pass` behavior is not allowed in production execution paths.
 - External calls are not allowed to bypass `SystemEvent` emission.

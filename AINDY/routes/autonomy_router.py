@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from services.auth_service import get_current_user
 from services.autonomous_controller import list_recent_decisions
-from services.execution_envelope import success
-from utils.trace_context import ensure_trace_id
 
 
 router = APIRouter(prefix="/autonomy", tags=["Autonomy"])
@@ -17,8 +16,10 @@ def get_recent_autonomy_decisions(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return success(
-        list_recent_decisions(db, user_id=current_user["sub"], limit=limit),
-        [],
-        ensure_trace_id(),
+    return execute_with_pipeline_sync(
+        request=None,
+        route_name="autonomy.decisions.list",
+        handler=lambda ctx: list_recent_decisions(db, user_id=current_user["sub"], limit=limit),
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
     )
