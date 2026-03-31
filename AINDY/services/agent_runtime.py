@@ -51,7 +51,7 @@ from services.agent_tools import TOOL_REGISTRY
 from services.capability_service import mint_token
 from services.agent_coordinator import decide_execution_mode
 from services.agent_coordinator import register_or_update_agent
-from services.agent_event_service import emit_event
+from core.execution_signal_helper import record_agent_event
 from services.external_call_service import perform_external_call
 from services.system_event_service import emit_error_event
 from services.trace_context import get_parent_event_id
@@ -350,7 +350,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
 
         # Emit PLAN_CREATED lifecycle event
         auto_executed = status == "approved"
-        emit_event(
+        record_agent_event(
             run_id=str(run.id),
             user_id=user_db_id,
             event_type="PLAN_CREATED",
@@ -432,7 +432,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             run.completed_at = datetime.now(timezone.utc)
             run.error_message = "Missing scoped capability token."
             db.commit()
-            emit_event(
+            record_agent_event(
                 run_id=str(run.id),
                 user_id=user_db_id,
                 event_type="CAPABILITY_DENIED",
@@ -475,7 +475,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             run.status = "completed"
             run.completed_at = datetime.now(timezone.utc)
             db.commit()
-            emit_event(
+            record_agent_event(
                 run_id=str(run.id),
                 user_id=user_db_id,
                 event_type="COMPLETED",
@@ -504,7 +504,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         db.commit()
 
         # Emit EXECUTION_STARTED lifecycle event
-        execution_started_event_id = emit_event(
+        execution_started_event_id = record_agent_event(
             run_id=str(run.id),
             user_id=user_db_id,
             event_type="EXECUTION_STARTED",
@@ -679,7 +679,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         db.commit()
 
         # Emit APPROVED lifecycle event
-        emit_event(
+        record_agent_event(
             run_id=str(run.id),
             user_id=user_db_id,
             event_type="APPROVED",
@@ -726,7 +726,7 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         db.commit()
 
         # Emit REJECTED lifecycle event
-        emit_event(
+        record_agent_event(
             run_id=str(run.id),
             user_id=user_db_id,
             event_type="REJECTED",
@@ -973,7 +973,7 @@ def replay_run(
 
         # Emit REPLAY_CREATED lifecycle event on the new run
         if new_run:
-            emit_event(
+            record_agent_event(
                 run_id=new_run["run_id"],
                 user_id=user_id,
                 event_type="REPLAY_CREATED",
@@ -1097,3 +1097,4 @@ def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     except Exception as exc:
         logger.warning("[AgentRuntime] get_run_events failed for %s: %s", run_id, exc)
         return None
+

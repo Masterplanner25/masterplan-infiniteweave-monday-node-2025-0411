@@ -100,8 +100,8 @@ def create_memory_node(
     unpersisted MemoryNode when db is not provided.
     """
     import logging
+    from core.execution_signal_helper import queue_system_event
     from db.dao.memory_node_dao import MemoryNodeDAO
-    from services.system_event_service import emit_system_event
 
     logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def create_memory_node(
         user_id=user_id,
         node_type=node_type,
     )
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type="memory.write",
         user_id=user_id,

@@ -38,11 +38,12 @@ class TestSchedulerStatusEndpoint:
 
         assert response.status_code == 200
         payload = response.json()
-        assert "scheduler_running" in payload
-        assert "is_leader" in payload
-        assert "lease" in payload
-        assert payload["scheduler_running"] is False
-        assert payload["lease"] is None
+        data = payload.get("data", payload)
+        assert "scheduler_running" in data
+        assert "is_leader" in data
+        assert "lease" in data
+        assert data["scheduler_running"] is False
+        assert data["lease"] is None
 
     def test_reports_running_scheduler_and_serialized_lease(
         self,
@@ -72,7 +73,8 @@ class TestSchedulerStatusEndpoint:
 
         assert response.status_code == 200
         payload = response.json()
-        assert payload["scheduler_running"] is True
-        assert payload["is_leader"] is True
-        assert payload["lease"]["owner_id"] == "leader-1"
-        assert payload["lease"]["expires_at"] is not None
+        data = payload.get("data", payload)
+        assert data["scheduler_running"] is True
+        assert data["is_leader"] is True
+        assert data["lease"]["owner_id"] == "leader-1"
+        assert data["lease"]["expires_at"] is not None

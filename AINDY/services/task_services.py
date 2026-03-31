@@ -567,14 +567,12 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
     automation_runs: list[dict[str, Any]] = []
 
     try:
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from core.execution_signal_helper import queue_memory_capture
 
-        engine = MemoryCaptureEngine(
+        node = queue_memory_capture(
             db=db,
             user_id=str(owner_user_id),
             agent_namespace="user",
-        )
-        node = engine.evaluate_and_capture(
             event_type="task_completed",
             content=f"Task completed: {task.name} (time_spent: {task.time_spent:.0f}s)",
             source="task_service",

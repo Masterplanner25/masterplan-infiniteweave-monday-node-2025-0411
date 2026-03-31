@@ -8,7 +8,10 @@ and logs symbolic results into the A.I.N.D.Y. Memory Bridge.
 
 import uuid
 import logging
+import json
+import re
 
+from core.execution_signal_helper import queue_memory_capture
 from services.search_scoring import score_lead_result
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -107,13 +110,10 @@ def run_ai_search(query: str, user_id: str = None, db=None):
                 f"Found {result_count} leads. "
                 f"Top result: {top}"
             )
-            from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(
+            queue_memory_capture(
                 db=db,
                 user_id=user_id,
                 agent_namespace="leadgen",
-            )
-            engine.evaluate_and_capture(
                 event_type="leadgen_search",
                 content=memory_content,
                 source="leadgen_search",
@@ -124,6 +124,34 @@ def run_ai_search(query: str, user_id: str = None, db=None):
             logging.warning(f"LeadGen memory write failed: {e}")
 
     return example_results
+
+
+def _extract_leads_from_text(text: str, max_results: int = 3) -> list[dict]:
+    urls = re.findall(r"https?://[^\s,;]+", text)
+    leads = []
+    for url in urls[:max_results]:
+        leads.append(
+            {
+                "company": url.replace("https://", "").split("/")[0],
+                "url": url,
+                "context": f"Found via text search: {text[:100]}",
+            }
+        )
+    return leads
+
+
+def _extract_leads_from_response(payload: dict, max_results: int = 3) -> list[dict]:
+    results = payload.get("results", []) if payload else []
+    leads = []
+    for entry in results[:max_results]:
+        leads.append(
+            {
+                "company": entry.get("title") or entry.get("company", ""),
+                "url": entry.get("url") or entry.get("href"),
+                "context": entry.get("snippet") or entry.get("description") or "",
+            }
+        )
+    return leads
 
 
 def score_lead(lead_data: dict):

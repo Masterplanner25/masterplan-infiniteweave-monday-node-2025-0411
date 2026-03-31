@@ -5,10 +5,11 @@ import time
 import uuid
 from typing import Any
 
+from core.execution_signal_helper import queue_system_event
 from db.database import SessionLocal
 from services.async_job_service import register_async_job, submit_async_job
 from services.embedding_service import generate_embedding
-from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ def process_embedding_job(payload: dict[str, Any], db):
     trace_id = payload.get("trace_id") or (memory_node.extra or {}).get("trace_id") or str(memory_node.id)
     parent_event_id = str(memory_node.source_event_id) if memory_node.source_event_id else None
 
-    started_event_id = emit_system_event(
+    started_event_id = queue_system_event(
         db=db,
         event_type=SystemEventTypes.EMBEDDING_STARTED,
         user_id=memory_node.user_id,
@@ -75,7 +76,7 @@ def process_embedding_job(payload: dict[str, Any], db):
                 raise RuntimeError("Embedding generation returned an empty or zero vector")
 
             _set_embedding_status(db, memory_node, "complete", embedding=embedding)
-            emit_system_event(
+            queue_system_event(
                 db=db,
                 event_type=SystemEventTypes.EMBEDDING_COMPLETED,
                 user_id=memory_node.user_id,
@@ -98,7 +99,7 @@ def process_embedding_job(payload: dict[str, Any], db):
             logger.warning("[EmbeddingJobs] embedding attempt %s failed for %s: %s", attempt, memory_node.id, exc)
             if attempt == len(EMBEDDING_RETRY_DELAYS):
                 _set_embedding_status(db, memory_node, "failed")
-                emit_system_event(
+                queue_system_event(
                     db=db,
                     event_type=SystemEventTypes.EMBEDDING_FAILED,
                     user_id=memory_node.user_id,

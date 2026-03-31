@@ -22,12 +22,12 @@ from schemas.freelance import (
 )
 
 from services.automation_execution_service import execute_automation_action
+from core.execution_signal_helper import queue_memory_capture, queue_system_event
 from services.external_call_service import perform_external_call
-from services.memory_capture_engine import MemoryCaptureEngine
 from services.trace_context import is_pipeline_active
 from services.memory_scoring_service import get_relevant_memories
 from services.async_job_service import submit_autonomous_async_job
-from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 from services.task_services import queue_task_automation
 
@@ -71,12 +71,10 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
         try:
             if is_pipeline_active():
                 raise RuntimeError("pipeline_active_memory_capture_disabled")
-            engine = MemoryCaptureEngine(
+            queue_memory_capture(
                 db=db,
                 user_id=str(user_id) if user_id else None,
                 agent_namespace="freelance",
-            )
-            engine.evaluate_and_capture(
                 event_type="freelance_order",
                 content=f"New Freelance Order: {order.service_type} for {order.client_name}",
                 source="freelance_service",
@@ -153,12 +151,10 @@ def deliver_order(db: Session, order_id: int, ai_output: str | None = None, *, g
     try:
         if is_pipeline_active():
             raise RuntimeError("pipeline_active_memory_capture_disabled")
-        engine = MemoryCaptureEngine(
+        queue_memory_capture(
             db=db,
             user_id=str(order.user_id) if order.user_id else None,
             agent_namespace="freelance",
-        )
-        engine.evaluate_and_capture(
             event_type="freelance_delivery",
             content=f"Delivered Order #{order.id}: {order.service_type}",
             source="freelance_service",
@@ -223,12 +219,10 @@ def collect_feedback(db: Session, feedback_data: FeedbackCreate, user_id: str = 
     try:
         if is_pipeline_active():
             raise RuntimeError("pipeline_active_memory_capture_disabled")
-        engine = MemoryCaptureEngine(
+        queue_memory_capture(
             db=db,
             user_id=str(user_id) if user_id else None,
             agent_namespace="freelance",
-        )
-        engine.evaluate_and_capture(
             event_type="freelance_feedback",
             content=f"Feedback for Order #{feedback.order_id}: {summary}",
             source="freelance_service",
@@ -422,7 +416,7 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
         "client_email": order.client_email,
         "delivery_type": delivery_type,
     }
-    started_event_id = emit_system_event(
+    started_event_id = queue_system_event(
         db=db,
         event_type=SystemEventTypes.FREELANCE_DELIVERY_STARTED,
         user_id=order.user_id,
@@ -443,7 +437,7 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
         order.income_efficiency = _calculate_income_efficiency(order)
         db.commit()
         db.refresh(order)
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=SystemEventTypes.FREELANCE_DELIVERY_COMPLETED,
             user_id=order.user_id,
@@ -465,7 +459,7 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
         order.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(order)
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=SystemEventTypes.FREELANCE_DELIVERY_FAILED,
             user_id=order.user_id,

@@ -1,27 +1,17 @@
-"""
-Score Router — Infinity Algorithm score endpoints.
-
-GET  /scores/me               — latest cached score + 5 KPI breakdown
-POST /scores/me/recalculate   — force full recalculation
-GET  /scores/me/history       — score history (reverse chronological)
-POST /scores/feedback         — explicit ARM / agent / manual feedback
-GET  /scores/feedback         — explicit feedback history
-"""
+from fastapi import APIRouter, Depends, HTTPException, Request
 import uuid
-from typing import Literal, Optional
-
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+from core.execution_helper import execute_with_pipeline
 
 from db.database import get_db
 from db.models.user_score import UserScore, ScoreHistory, KPI_WEIGHTS
 from services.auth_service import get_current_user
 
-router = APIRouter(
-    prefix="/scores",
-    tags=["Infinity Score"],
-)
+
+router = APIRouter(prefix="/scores", tags=["Infinity Score"])
 
 
 class FeedbackRequest(BaseModel):
@@ -32,7 +22,7 @@ class FeedbackRequest(BaseModel):
     loop_adjustment_id: Optional[str] = None
 
 
-def _latest_adjustment_payload(user_id: str, db: Session) -> dict | None:
+def _latest_adjustment_payload(user_id: str, db: Session):
     from services.infinity_loop import get_latest_adjustment, serialize_adjustment
 
     latest = get_latest_adjustment(user_id=user_id, db=db)
@@ -46,24 +36,18 @@ def _latest_adjustment_payload(user_id: str, db: Session) -> dict | None:
     }
 
 
-def _latest_memory_visibility(user_id: str, db: Session) -> dict:
+def _latest_memory_visibility(user_id: str, db: Session):
     latest = _latest_adjustment_payload(user_id=user_id, db=db)
     payload = (latest or {}).get("adjustment_payload") or {}
     loop_context = payload.get("loop_context") or {}
     memory_signals = list(loop_context.get("memory_signals") or [])
-    memory_summary = payload.get("memory_summary") or {}
-    memory_adjustment = payload.get("memory_adjustment") or {}
     return {
         "memory_context_count": len(loop_context.get("memory") or []),
         "memory_signal_count": len(memory_signals),
-        "memory_influence": {
-            "memory_adjustment": memory_adjustment,
-            "memory_summary": memory_summary,
-        },
     }
 
 
-def _score_to_response(score: UserScore, user_id: str, db: Session) -> dict:
+def _score_to_response(score: UserScore, user_id: str, db: Session):
     memory_visibility = _latest_memory_visibility(user_id=user_id, db=db)
     return {
         "user_id": user_id,
@@ -85,210 +69,166 @@ def _score_to_response(score: UserScore, user_id: str, db: Session) -> dict:
             ),
             "memory_context_count": memory_visibility["memory_context_count"],
             "memory_signal_count": memory_visibility["memory_signal_count"],
-            "memory_influence": memory_visibility["memory_influence"],
         },
         "latest_adjustment": _latest_adjustment_payload(user_id=user_id, db=db),
     }
 
 
+# ------------------------------
+# GET SCORE
+# ------------------------------
 @router.get("/me")
 async def get_my_score(
+    request: Request,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Get the current user's Infinity score.
-    Returns latest cached score with all 5 KPIs.
-    If no score exists, calculates one on the fly.
-    """
-    user_id = uuid.UUID(str(current_user["sub"]))
+    def handler(ctx):
+        user_id = uuid.UUID(str(current_user["sub"]))
 
-    score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
+        score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
 
-    if not score:
+        if not score:
+            from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+
+            result = execute_infinity_orchestrator(
+                user_id=user_id, db=db, trigger_event="manual"
+            )
+
+            if result:
+                return result["score"]
+
+            return {
+                "user_id": str(user_id),
+                "master_score": 0.0,
+                "kpis": {},
+                "message": "No score yet.",
+            }
+
+        return _score_to_response(score, str(user_id), db)
+
+    return execute_with_pipeline(request, "scores_get_me", handler)
+
+
+# ------------------------------
+# RECALCULATE
+# ------------------------------
+@router.post("/me/recalculate")
+async def recalculate_my_score(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    def handler(ctx):
         from services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         result = execute_infinity_orchestrator(
-            user_id=user_id, db=db, trigger_event="manual"
+            user_id=uuid.UUID(str(current_user["sub"])),
+            db=db,
+            trigger_event="manual",
         )
-        if result:
-            result["score"]["latest_adjustment"] = _latest_adjustment_payload(user_id=user_id, db=db)
-            return result["score"]
-        return {
-            "user_id": str(user_id),
-            "master_score": 0.0,
-            "kpis": {
-                "execution_speed": 0.0,
-                "decision_efficiency": 0.0,
-                "ai_productivity_boost": 0.0,
-                "focus_quality": 0.0,
-                "masterplan_progress": 0.0,
-            },
-            "message": (
-                "No score yet. Complete tasks, run ARM analyses, "
-                "and start focus sessions to build your Infinity score."
-            ),
-            "latest_adjustment": None,
-        }
 
-    return _score_to_response(score=score, user_id=user_id, db=db)
+        if not result:
+            raise HTTPException(status_code=500, detail="Score calculation failed")
+
+        return result["score"]
+
+    return execute_with_pipeline(request, "scores_recalculate", handler)
 
 
-@router.post("/me/recalculate")
-async def recalculate_my_score(
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    """
-    Force recalculation of the current user's Infinity score.
-    Use after significant activity to refresh immediately.
-    """
-    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-    result = execute_infinity_orchestrator(
-        user_id=uuid.UUID(str(current_user["sub"])),
-        db=db,
-        trigger_event="manual",
-    )
-
-    if not result:
-        raise HTTPException(status_code=500, detail="Score calculation failed")
-
-    result["score"]["latest_adjustment"] = _latest_adjustment_payload(
-        user_id=uuid.UUID(str(current_user["sub"])),
-        db=db,
-    )
-    return result["score"]
-
-
+# ------------------------------
+# HISTORY
+# ------------------------------
 @router.get("/me/history")
 async def get_score_history(
+    request: Request,
     limit: int = 30,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Get score history for the current user.
-    Returns entries in reverse chronological order.
-    """
-    user_id = uuid.UUID(str(current_user["sub"]))
+    def handler(ctx):
+        user_id = uuid.UUID(str(current_user["sub"]))
 
-    history = (
-        db.query(ScoreHistory)
-        .filter(ScoreHistory.user_id == user_id)
-        .order_by(ScoreHistory.calculated_at.desc())
-        .limit(limit)
-        .all()
-    )
+        history = (
+            db.query(ScoreHistory)
+            .filter(ScoreHistory.user_id == user_id)
+            .order_by(ScoreHistory.calculated_at.desc())
+            .limit(limit)
+            .all()
+        )
 
-    return {
-        "user_id": str(user_id),
-        "history": [
-            {
-                "master_score": h.master_score,
-                "kpis": {
-                    "execution_speed": h.execution_speed_score,
-                    "decision_efficiency": h.decision_efficiency_score,
-                    "ai_productivity_boost": h.ai_productivity_boost_score,
-                    "focus_quality": h.focus_quality_score,
-                    "masterplan_progress": h.masterplan_progress_score,
-                },
-                "score_delta": h.score_delta,
-                "trigger_event": h.trigger_event,
-                "calculated_at": (
-                    h.calculated_at.isoformat() if h.calculated_at else None
-                ),
-            }
-            for h in history
-        ],
-        "count": len(history),
-    }
+        return {
+            "user_id": str(user_id),
+            "history": [
+                {
+                    "master_score": h.master_score,
+                    "calculated_at": (
+                        h.calculated_at.isoformat() if h.calculated_at else None
+                    ),
+                }
+                for h in history
+            ],
+        }
+
+    return execute_with_pipeline(request, "scores_history", handler)
 
 
+# ------------------------------
+# FEEDBACK
+# ------------------------------
 @router.post("/feedback")
 async def record_score_feedback(
+    request: Request,
     body: FeedbackRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from datetime import datetime, timezone
+    def handler(ctx):
+        from db.models.infinity_loop import UserFeedback
 
-    from db.models.infinity_loop import LoopAdjustment, UserFeedback
+        user_id = uuid.UUID(str(current_user["sub"]))
 
-    user_id = uuid.UUID(str(current_user["sub"]))
-    feedback = UserFeedback(
-        user_id=user_id,
-        source_type=body.source_type,
-        source_id=body.source_id,
-        feedback_value=body.feedback_value,
-        feedback_text=body.feedback_text,
-        loop_adjustment_id=body.loop_adjustment_id,
-    )
-    db.add(feedback)
+        feedback = UserFeedback(
+            user_id=user_id,
+            source_type=body.source_type,
+            source_id=body.source_id,
+            feedback_value=body.feedback_value,
+            feedback_text=body.feedback_text,
+            loop_adjustment_id=body.loop_adjustment_id,
+        )
 
-    if body.loop_adjustment_id:
-        try:
-            adjustment_uuid = uuid.UUID(body.loop_adjustment_id)
-        except ValueError:
-            adjustment_uuid = None
-        if adjustment_uuid:
-            adjustment = (
-                db.query(LoopAdjustment)
-                .filter(
-                    LoopAdjustment.id == adjustment_uuid,
-                    LoopAdjustment.user_id == user_id,
-                )
-                .first()
-            )
-            if adjustment:
-                adjustment.evaluated_at = datetime.now(timezone.utc)
-                db.add(adjustment)
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
 
-    db.commit()
-    db.refresh(feedback)
+        return {"id": str(feedback.id)}
 
-    return {
-        "id": str(feedback.id),
-        "user_id": str(feedback.user_id),
-        "source_type": feedback.source_type,
-        "source_id": feedback.source_id,
-        "feedback_value": feedback.feedback_value,
-        "feedback_text": feedback.feedback_text,
-        "loop_adjustment_id": feedback.loop_adjustment_id,
-        "created_at": feedback.created_at.isoformat() if feedback.created_at else None,
-    }
+    return execute_with_pipeline(request, "scores_feedback", handler)
 
 
 @router.get("/feedback")
 async def get_score_feedback(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from db.models.infinity_loop import UserFeedback
+    def handler(ctx):
+        from db.models.infinity_loop import UserFeedback
 
-    user_id = uuid.UUID(str(current_user["sub"]))
-    history = (
-        db.query(UserFeedback)
-        .filter(UserFeedback.user_id == user_id)
-        .order_by(UserFeedback.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+        user_id = uuid.UUID(str(current_user["sub"]))
 
-    return {
-        "user_id": str(user_id),
-        "feedback": [
-            {
-                "id": str(item.id),
-                "source_type": item.source_type,
-                "source_id": item.source_id,
-                "feedback_value": item.feedback_value,
-                "feedback_text": item.feedback_text,
-                "loop_adjustment_id": item.loop_adjustment_id,
-                "created_at": item.created_at.isoformat() if item.created_at else None,
-            }
-            for item in history
-        ],
-        "count": len(history),
-    }
+        history = (
+            db.query(UserFeedback)
+            .filter(UserFeedback.user_id == user_id)
+            .order_by(UserFeedback.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        return {
+            "user_id": str(user_id),
+            "count": len(history),
+        }
+
+    return execute_with_pipeline(request, "scores_feedback_list", handler)

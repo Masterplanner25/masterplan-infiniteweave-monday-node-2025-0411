@@ -29,7 +29,7 @@ The TOOL_REGISTRY dict maps tool_name →
 import logging
 from typing import Callable
 
-from services.system_event_service import emit_system_event
+from core.execution_signal_helper import queue_system_event
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def execute_tool(
                 tool_name=tool_name,
             )
             if not capability_check["ok"]:
-                emit_system_event(
+                queue_system_event(
                     db=db,
                     event_type="capability.denied",
                     user_id=user_id,
@@ -140,7 +140,7 @@ def execute_tool(
                     "result": None,
                     "error": capability_check["error"],
                 }
-            emit_system_event(
+            queue_system_event(
                 db=db,
                 event_type="capability.allowed",
                 user_id=user_id,

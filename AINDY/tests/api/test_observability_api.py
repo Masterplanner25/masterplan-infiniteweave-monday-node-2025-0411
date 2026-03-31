@@ -51,15 +51,19 @@ def test_observability_requests_returns_real_db_summary(
     response = client.get("/observability/requests", headers=auth_headers)
 
     assert response.status_code == 200
+
     payload = response.json()
-    assert payload["summary"]["total_requests"] == 2
-    assert payload["summary"]["total_errors"] == 1
-    assert payload["summary"]["window_requests"] == 2
-    assert payload["summary"]["window_errors"] == 1
-    assert payload["summary"]["avg_latency_ms"] == 30.25
-    assert len(payload["recent"]) == 2
-    assert len(payload["recent_errors"]) == 1
-    assert payload["recent_errors"][0]["trace_id"] == "trace-2"
+    data = payload["data"]
+
+    assert data["summary"]["total_requests"] == 2
+    assert data["summary"]["total_errors"] == 1
+    assert data["summary"]["window_requests"] == 2
+    assert data["summary"]["window_errors"] == 1
+    assert data["summary"]["avg_latency_ms"] == 30.25
+
+    assert len(data["recent"]) == 2
+    assert len(data["recent_errors"]) == 1
+    assert data["recent_errors"][0]["trace_id"] == "trace-2"
 
 
 def test_observability_dashboard_returns_real_db_sections(
@@ -129,16 +133,20 @@ def test_observability_dashboard_returns_real_db_sections(
     response = client.get("/observability/dashboard", headers=auth_headers)
 
     assert response.status_code == 200
+
     payload = response.json()
-    assert payload["summary"]["window_requests"] == 1
-    assert payload["summary"]["window_errors"] == 0
-    assert payload["summary"]["loop_events"] == 1
-    assert payload["summary"]["agent_events"] == 1
-    assert payload["summary"]["system_event_total"] == 1
-    assert payload["summary"]["health_status"] == "healthy"
-    assert payload["loop_activity"][0]["type"] == "loop.decision"
-    assert payload["agent_timeline"][0]["event_type"] == "COMPLETED"
-    assert payload["system_events"]["counts"]["loop.decision"] == 1
-    assert payload["system_health"]["latest"]["status"] == "healthy"
-    assert payload["flows"]["status_counts"]["running"] == 1
-    assert payload["flows"]["recent"][0]["trace_id"] == trace_id
+    data = payload["data"]
+
+    assert data["summary"]["window_requests"] == 1
+    assert data["summary"]["window_errors"] == 0
+    assert data["summary"]["loop_events"] == 1
+    assert data["summary"]["agent_events"] == 1
+    assert data["summary"]["system_event_total"] == 1
+    assert data["summary"]["health_status"] == "healthy"
+
+    assert data["loop_activity"][0]["type"] == "loop.decision"
+    assert data["agent_timeline"][0]["event_type"] == "COMPLETED"
+    assert data["system_events"]["counts"]["loop.decision"] == 1
+    assert data["system_health"]["latest"]["status"] == "healthy"
+    assert data["flows"]["status_counts"]["running"] == 1
+    assert data["flows"]["recent"][0]["trace_id"] == trace_id

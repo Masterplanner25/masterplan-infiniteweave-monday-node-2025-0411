@@ -62,7 +62,8 @@ class TestMemoryTraceRoutes:
             json={"title": "Trace", "description": "Primary trace"},
         )
         assert create_trace_response.status_code == 201
-        trace = create_trace_response.json()
+        payload = create_trace_response.json()
+        trace = payload.get("data", payload)
 
         create_node_response = client.post(
             "/memory/nodes",
@@ -70,7 +71,8 @@ class TestMemoryTraceRoutes:
             json={"content": "node for trace", "node_type": "insight", "tags": ["trace"]},
         )
         assert create_node_response.status_code == 201
-        node = create_node_response.json()
+        payload = create_node_response.json()
+        node = payload.get("data", payload)
 
         append_response = client.post(
             f"/memory/traces/{trace['id']}/append",
@@ -78,23 +80,31 @@ class TestMemoryTraceRoutes:
             json={"node_id": node["id"]},
         )
         assert append_response.status_code == 201
-        assert append_response.json()["node_id"] == node["id"]
+        append_payload = append_response.json()
+        append_data = append_payload.get("data", append_payload)
+        assert append_data["node_id"] == node["id"]
 
         list_response = client.get("/memory/traces", headers=auth_headers)
         assert list_response.status_code == 200
-        assert list_response.json()["count"] == 1
+        list_payload = list_response.json()
+        list_data = list_payload.get("data", list_payload)
+        assert list_data["count"] == 1
 
         get_response = client.get(f"/memory/traces/{trace['id']}", headers=auth_headers)
         assert get_response.status_code == 200
-        assert get_response.json()["title"] == "Trace"
+        get_payload = get_response.json()
+        get_data = get_payload.get("data", get_payload)
+        assert get_data["title"] == "Trace"
 
         nodes_response = client.get(
             f"/memory/traces/{trace['id']}/nodes?include_nodes=true",
             headers=auth_headers,
         )
         assert nodes_response.status_code == 200
-        assert nodes_response.json()["count"] == 1
-        assert nodes_response.json()["nodes"][0]["node"]["id"] == node["id"]
+        nodes_payload = nodes_response.json()
+        nodes_data = nodes_payload.get("data", nodes_payload)
+        assert nodes_data["count"] == 1
+        assert nodes_data["nodes"][0]["node"]["id"] == node["id"]
 
         other_trace = MemoryTraceDAO(db_session).create_trace(
             user_id=str(other_user.id),
@@ -122,4 +132,6 @@ class TestMemoryTraceRoutes:
             headers=auth_headers,
         )
         assert hidden_nodes_response.status_code == 200
-        assert hidden_nodes_response.json()["count"] == 0
+        hidden_payload = hidden_nodes_response.json()
+        hidden_data = hidden_payload.get("data", hidden_payload)
+        assert hidden_data["count"] == 0

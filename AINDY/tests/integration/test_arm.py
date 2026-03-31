@@ -382,7 +382,8 @@ class TestARMRoutes:
     def test_config_get_with_auth_returns_model_key(self, client, auth_headers):
         response = client.get("/arm/config", headers=auth_headers)
         if response.status_code == 200:
-            data = response.json()
+            payload = response.json()
+            data = payload.get("data", payload)
             assert "model" in data
             assert "temperature" in data
 
@@ -395,7 +396,8 @@ class TestARMRoutes:
         # 200 = success, 422 = validation error — both are not 401
         assert response.status_code != 401
         if response.status_code == 200:
-            data = response.json()
+            payload = response.json()
+            data = payload.get("data", payload)
             assert data["status"] == "updated"
 
     def test_config_update_ignores_unknown_keys(self, client, auth_headers):
@@ -514,7 +516,8 @@ class TestARMRoutes:
         """GET /arm/logs with auth returns expected JSON structure."""
         response = client.get("/arm/logs", headers=auth_headers)
         if response.status_code == 200:
-            data = response.json()
+            payload = response.json()
+            data = payload.get("data", payload)
             assert "analyses" in data
             assert "generations" in data
             assert "summary" in data

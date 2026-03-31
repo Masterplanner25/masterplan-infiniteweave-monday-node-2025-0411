@@ -1,8 +1,9 @@
 # /routes/network_bridge_router.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from datetime import datetime
 import uuid
@@ -14,6 +15,15 @@ from services import rippletrace_services, network_bridge_services
 
 router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
+
+
+def _execute_network_bridge(request: Request, route_name: str, handler, *, db: Session):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        metadata={"db": db, "source": "network_bridge_router"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -37,6 +47,7 @@ class NetworkUser(BaseModel):
 # ---------------------------------------------------------------------------
 @router.post("/connect")
 async def connect_external_author(
+    request: Request,
     handshake: NetworkHandshake,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -68,15 +79,17 @@ async def connect_external_author(
     logger.info("Logged metric from router: %s", metric_name)
     db.commit()  # Final commit after all other services
 
-    return {
-        "status": "connected",
-        "author_id": author.id,
-        "platform": handshake.platform,
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+    def handler(_ctx):
+        return {
+            "status": "connected",
+            "author_id": author.id,
+            "platform": handshake.platform,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    return _execute_network_bridge(request, "network_bridge.connect", handler, db=db)
 
 @router.post("/user_event")
-def log_user_event(event: NetworkUser, db: Session = Depends(get_db)):
+def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(get_db)):
     """
     Called from the Node server whenever a new user joins or updates their profile.
     Logs the event into A.I.N.D.Y.'s metrics system (calculation_results table).
@@ -88,16 +101,19 @@ def log_user_event(event: NetworkUser, db: Session = Depends(get_db)):
 
     logger.info("Bridge user event: %s via %s", event.name, event.platform)
 
-    return {
-        "status": "logged",
-        "user": event.name,
-        "tagline": event.tagline,
-        "record_id": result.id if result else str(uuid.uuid4())
-    }
+    def handler(_ctx):
+        return {
+            "status": "logged",
+            "user": event.name,
+            "tagline": event.tagline,
+            "record_id": result.id if result else str(uuid.uuid4())
+        }
+    return _execute_network_bridge(request, "network_bridge.user_event", handler, db=db)
 
 
 @router.get("/authors")
 def list_authors(
+    request: Request,
     platform: str | None = None,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -106,4 +122,6 @@ def list_authors(
     Return persisted external authors for gateway state reads.
     """
     authors = network_bridge_services.list_authors(db=db, platform=platform, limit=limit)
-    return {"authors": authors, "count": len(authors), "platform": platform}
+    def handler(_ctx):
+        return {"authors": authors, "count": len(authors), "platform": platform}
+    return _execute_network_bridge(request, "network_bridge.authors.list", handler, db=db)

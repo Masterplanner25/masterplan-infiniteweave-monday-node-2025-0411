@@ -60,7 +60,10 @@ def test_async_job_never_disappears(client, db_session, test_user, auth_headers,
 
     response = client.post("/agent/run", headers=auth_headers, json={"goal": "Harden async execution"})
     assert response.status_code == 202
-    log_id = response.json()["result"]["automation_log_id"]
+    payload = response.json()
+    data = payload.get("data", payload)
+    result = data.get("result", data)
+    log_id = result.get("automation_log_id") or data.get("automation_log_id")
 
     log = _wait_for_log(db_session, log_id)
     assert log.status == "success"
@@ -197,4 +200,6 @@ def test_event_completeness_for_successful_job(db_session, db_session_factory, t
 def test_invalid_uuid_input_fails_cleanly(client, auth_headers):
     agent_response = client.get("/agent/runs/not-a-uuid", headers=auth_headers)
     assert agent_response.status_code == 400
-    assert "Invalid run_id" in str(agent_response.json())
+    payload = agent_response.json()
+    data = payload.get("data", payload)
+    assert "Invalid run_id" in str(data)

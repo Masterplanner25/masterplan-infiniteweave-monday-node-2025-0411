@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from services.auth_service import get_current_user
 from services.goal_service import create_goal
@@ -12,6 +13,18 @@ from services.execution_service import ExecutionContext, run_execution
 
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
+
+
+def _execute_goals(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None, success_status_code: int = 200):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload,
+        metadata={"db": db, "source": "goals_router"},
+        success_status_code=success_status_code,
+    )
 
 
 class GoalCreateRequest(BaseModel):
@@ -25,62 +38,94 @@ class GoalCreateRequest(BaseModel):
 
 @router.get("")
 def list_goals(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="goals_router",
-            operation="goals.list",
-        ),
-        lambda: get_active_goals(db, current_user["sub"]),
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="goals_router",
+                operation="goals.list",
+            ),
+            lambda: get_active_goals(db, current_user["sub"]),
+        )
+    return _execute_goals(
+        request,
+        "goals.list",
+        handler,
+        db=db,
+        user_id=user_id,
     )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_goal_route(
+    request: Request,
     body: GoalCreateRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="goals_router",
-            operation="goals.create",
-            start_payload={"goal_name": body.name},
-        ),
-        lambda: create_goal(
-            db,
-            user_id=current_user["sub"],
-            name=body.name,
-            description=body.description,
-            goal_type=body.goal_type,
-            priority=body.priority,
-            status=body.status,
-            success_metric=body.success_metric,
-        ),
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="goals_router",
+                operation="goals.create",
+                start_payload={"goal_name": body.name},
+            ),
+            lambda: create_goal(
+                db,
+                user_id=current_user["sub"],
+                name=body.name,
+                description=body.description,
+                goal_type=body.goal_type,
+                priority=body.priority,
+                status=body.status,
+                success_metric=body.success_metric,
+            ),
+            success_status_code=status.HTTP_201_CREATED,
+        )
+    return _execute_goals(
+        request,
+        "goals.create",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload={"goal_name": body.name},
         success_status_code=status.HTTP_201_CREATED,
     )
 
 
 @router.get("/state")
 def list_goal_state(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="goals_router",
-            operation="goals.state",
-        ),
-        lambda: {
-            "goals": get_goal_states(db, current_user["sub"]),
-            "drift": detect_goal_drift(db, current_user["sub"]),
-        },
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="goals_router",
+                operation="goals.state",
+            ),
+            lambda: {
+                "goals": get_goal_states(db, current_user["sub"]),
+                "drift": detect_goal_drift(db, current_user["sub"]),
+            },
+        )
+    return _execute_goals(
+        request,
+        "goals.state",
+        handler,
+        db=db,
+        user_id=user_id,
     )

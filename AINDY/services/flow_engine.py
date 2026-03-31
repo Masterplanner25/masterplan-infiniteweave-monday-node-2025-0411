@@ -46,7 +46,8 @@ from sqlalchemy.orm import Session
 from services.execution_envelope import error as execution_error
 from services.execution_envelope import success as execution_success
 from services.goal_service import update_goals_from_execution
-from services.system_event_service import emit_error_event, emit_system_event
+from core.execution_signal_helper import queue_memory_capture, queue_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 from services.trace_context import ensure_trace_id
 from services.trace_context import get_trace_id
@@ -381,7 +382,7 @@ class PersistentFlowRunner:
             flow_name,
             self.workflow_type,
         )
-        root_event_id = emit_system_event(
+        root_event_id = queue_system_event(
             db=self.db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
             user_id=self.user_id,
@@ -466,7 +467,7 @@ class PersistentFlowRunner:
                 )
             except Exception as exc:
                 logger.warning("Goal progress failure update skipped: %s", exc)
-            emit_system_event(
+            queue_system_event(
                 db=self.db,
                 event_type=SystemEventTypes.EXECUTION_FAILED,
                 user_id=self.user_id,
@@ -509,7 +510,7 @@ class PersistentFlowRunner:
         try:
             while True:
                 input_snapshot = dict(state)
-                node_started_event_id = emit_system_event(
+                node_started_event_id = queue_system_event(
                     db=self.db,
                     event_type=SystemEventTypes.FLOW_NODE_STARTED,
                     user_id=self.user_id,
@@ -527,7 +528,7 @@ class PersistentFlowRunner:
                 try:
                     result = execute_node(current_node, state, context)
                 except PermissionError as exc:
-                    emit_system_event(
+                    queue_system_event(
                         db=self.db,
                         event_type=SystemEventTypes.FLOW_NODE_FAILED,
                         user_id=self.user_id,
@@ -545,7 +546,7 @@ class PersistentFlowRunner:
                     return _fail_execution(str(exc), failed_node=current_node, parent_event_id=str(node_started_event_id) if node_started_event_id else None)
                 except Exception as exc:
                     logger.error("Node %s raised exception: %s", current_node, exc)
-                    emit_system_event(
+                    queue_system_event(
                         db=self.db,
                         event_type=SystemEventTypes.FLOW_NODE_FAILED,
                         user_id=self.user_id,
@@ -580,7 +581,7 @@ class PersistentFlowRunner:
                 )
                 self.db.commit()
 
-                emit_system_event(
+                queue_system_event(
                     db=self.db,
                     event_type=SystemEventTypes.FLOW_NODE_COMPLETED if node_status in {"SUCCESS", "WAIT"} else SystemEventTypes.FLOW_NODE_FAILED,
                     user_id=self.user_id,
@@ -629,7 +630,7 @@ class PersistentFlowRunner:
                     run.state = _json_safe(state)
                     run.current_node = current_node
                     self.db.commit()
-                    emit_system_event(
+                    queue_system_event(
                         db=self.db,
                         event_type=SystemEventTypes.FLOW_WAITING,
                         user_id=self.user_id,
@@ -672,7 +673,7 @@ class PersistentFlowRunner:
                             )
                         except Exception as exc:
                             logger.warning("Goal progress success update skipped: %s", exc)
-                        emit_system_event(
+                        queue_system_event(
                             db=self.db,
                             event_type=SystemEventTypes.EXECUTION_COMPLETED,
                             user_id=self.user_id,
@@ -736,7 +737,6 @@ class PersistentFlowRunner:
 
         try:
             from db.models.flow_run import FlowHistory
-            from services.memory_capture_engine import MemoryCaptureEngine
 
             history = (
                 self.db.query(FlowHistory)
@@ -771,12 +771,10 @@ class PersistentFlowRunner:
             event_type = _event_map.get(self.workflow_type, "flow_completion")
             namespace = self.workflow_type.split("_")[0]
 
-            engine = MemoryCaptureEngine(
+            queue_memory_capture(
                 db=self.db,
                 user_id=self.user_id,
                 agent_namespace=namespace,
-            )
-            engine.evaluate_and_capture(
                 event_type=event_type,
                 content=content,
                 source=f"flow_history:{run.flow_name}",

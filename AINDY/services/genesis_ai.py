@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from core.execution_signal_helper import queue_memory_capture
 from openai import OpenAI
 from services.external_call_service import perform_external_call
 from services.observability_events import emit_observability_event
@@ -163,13 +164,6 @@ Return only valid JSON.
     # Step 3: Write memory node after successful LLM call
     if user_id and db:
         try:
-            from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(
-                db=db,
-                user_id=user_id,
-                agent_namespace="genesis",
-            )
-
             state_signals = []
             if current_state.get("vision_summary"):
                 state_signals.append(f"vision: {current_state['vision_summary'][:100]}")
@@ -182,7 +176,10 @@ Return only valid JSON.
                 f"Synthesis ready: {llm_output.get('synthesis_ready', False)}"
             )
 
-            engine.evaluate_and_capture(
+            queue_memory_capture(
+                db=db,
+                user_id=user_id,
+                agent_namespace="genesis",
                 event_type="genesis_message",
                 content=memory_content,
                 source="genesis_conversation",

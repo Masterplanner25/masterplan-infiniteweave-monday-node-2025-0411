@@ -19,6 +19,7 @@ import logging
 import time
 import uuid
 
+from core.execution_signal_helper import queue_memory_capture
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
@@ -338,13 +339,10 @@ class DeepSeekCodeAnalyzer:
             if user_id:
                 try:
                     _summary = result.get("summary", "")[:300]
-                    from services.memory_capture_engine import MemoryCaptureEngine
-                    engine = MemoryCaptureEngine(
+                    queue_memory_capture(
                         db=db,
                         user_id=user_id,
                         agent_namespace="arm",
-                    )
-                    engine.evaluate_and_capture(
                         event_type="arm_analysis_complete",
                         content=f"ARM analysis of {path.name}: {_summary}",
                         source=f"arm_analysis:{path.name}",
@@ -493,13 +491,10 @@ class DeepSeekCodeAnalyzer:
             if user_id:
                 try:
                     _task_summary = prompt[:100]
-                    from services.memory_capture_engine import MemoryCaptureEngine
-                    engine = MemoryCaptureEngine(
+                    queue_memory_capture(
                         db=db,
                         user_id=user_id,
                         agent_namespace="arm",
-                    )
-                    engine.evaluate_and_capture(
                         event_type="arm_generation_complete",
                         content=f"ARM generated {language} code for: {_task_summary}",
                         source=f"arm_codegen:{language}",

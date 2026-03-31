@@ -31,7 +31,13 @@ def adapt_response(route_name: str, canonical: dict[str, Any], *, status_code: i
             payload.headers.setdefault("X-Trace-ID", trace_id)
         return payload
 
-    if route_name.startswith(("auth.", "analytics.", "arm.", "main.", "memory.")):
+    if route_name.startswith((
+        "auth.", "analytics.", "arm.", "main.", "memory.",
+        "authorship.", "bridge.", "dashboard.", "db.",
+        "flow.", "health.", "masterplan.", "network_bridge.",
+        "observability.", "rippletrace.", "score.", "seo.",
+        "legacy_surface.",
+    )):
         return JSONResponse(
             status_code=status_code,
             content=jsonable_encoder(payload),

@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+from core.execution_signal_helper import record_agent_event
 from services.observability_events import emit_observability_event
 
 _RECOVERY_ERROR_MSG = "Stuck run recovery: process terminated before completion"
@@ -222,8 +223,7 @@ def recover_stuck_agent_run(
         )
 
         # Emit RECOVERED lifecycle event
-        from services.agent_event_service import emit_event
-        emit_event(
+        record_agent_event(
             run_id=str(run.id),
             user_id=run.user_id,
             event_type="RECOVERED",

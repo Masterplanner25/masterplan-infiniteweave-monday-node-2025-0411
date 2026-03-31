@@ -16,6 +16,7 @@ def test_memory_execute_route(client, auth_headers):
     )
     assert response.status_code == 200
     payload = response.json()
-    assert "result" in payload
-    assert "recalled_memories" in payload
-    assert "memory_context" in payload
+    data = payload["data"]
+    assert "result" in data
+    assert "recalled_memories" in data
+    assert "memory_context" in data

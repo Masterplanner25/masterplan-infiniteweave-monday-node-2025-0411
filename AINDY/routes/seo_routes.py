@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from core.execution_helper import execute_with_pipeline_sync
 from services.seo import SEOInput, MetaInput
 from services.calculation_services import save_calculation
 from services.auth_service import get_current_user
@@ -10,12 +11,24 @@ from services.search_service import generate_meta as generate_meta_result, searc
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
+def _execute_seo(request: Request, route_name: str, handler, *, db: Session | None = None):
+    metadata = {"source": "seo_routes"}
+    if db is not None:
+        metadata["db"] = db
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        metadata=metadata,
+    )
+
+
 class LegacyContentInput(BaseModel):
     content: str
 
 
 @router.post("/seo/analyze")
-def analyze_seo(data: SEOInput, db: Session = Depends(get_db)):
+def analyze_seo(request: Request, data: SEOInput, db: Session = Depends(get_db)):
     results = search_seo(data.text, data.top_n)
 
     # Save key SEO metrics
@@ -28,28 +41,40 @@ def analyze_seo(data: SEOInput, db: Session = Depends(get_db)):
         avg_density = sum(results["keyword_densities"].values()) / len(results["keyword_densities"])
         save_calculation(db, "seo_avg_keyword_density", round(avg_density, 2))
 
-    return results
+    def handler(_ctx):
+        return results
+    return _execute_seo(request, "seo.analyze", handler, db=db)
 
 @router.post("/seo/meta")
-def generate_meta(data: MetaInput):
-    return generate_meta_result(data.text, data.limit)
+def generate_meta(request: Request, data: MetaInput):
+    def handler(_ctx):
+        return generate_meta_result(data.text, data.limit)
+    return _execute_seo(request, "seo.meta", handler)
 
 
 @router.post("/seo/suggest")
-def suggest_improvements(data: SEOInput):
-    return suggest_seo_improvements(data.text, data.top_n)
+def suggest_improvements(request: Request, data: SEOInput):
+    def handler(_ctx):
+        return suggest_seo_improvements(data.text, data.top_n)
+    return _execute_seo(request, "seo.suggest", handler)
 
 
 @router.post("/analyze_seo/")
-def analyze_seo_compat(data: LegacyContentInput, db: Session = Depends(get_db)):
-    return analyze_seo(SEOInput(text=data.content), db=db)
+def analyze_seo_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
+    def handler(_ctx):
+        return search_seo(data.content, 10)
+    return _execute_seo(request, "seo.analyze.compat", handler, db=db)
 
 
 @router.post("/generate_meta/")
-def generate_meta_compat(data: LegacyContentInput):
-    return generate_meta(MetaInput(text=data.content))
+def generate_meta_compat(request: Request, data: LegacyContentInput):
+    def handler(_ctx):
+        return generate_meta_result(data.content, 160)
+    return _execute_seo(request, "seo.meta.compat", handler)
 
 
 @router.post("/suggest_improvements/")
-def suggest_improvements_compat(data: LegacyContentInput):
-    return suggest_seo_improvements(data.content)
+def suggest_improvements_compat(request: Request, data: LegacyContentInput):
+    def handler(_ctx):
+        return suggest_seo_improvements(data.content)
+    return _execute_seo(request, "seo.suggest.compat", handler)

@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     AINDY_CACHE_BACKEND: str = "memory"
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = False
+    SKIP_MONGO_PING: bool = False
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
@@ -76,6 +77,8 @@ class Settings(BaseSettings):
     @classmethod
     def ensure_mongo_url(cls, v: str) -> str:
         if not v or not v.strip():
+            if os.getenv("AINDY_SKIP_MONGO_PING", "0").lower() in {"1","true","yes"}:
+                return ""
             raise ValueError("MONGO_URL is required for runtime")
         return v.strip()
 
@@ -103,14 +106,19 @@ settings = Settings()
 # --------------------------------------------------------------------
 log_path = Path("logs")
 log_path.mkdir(exist_ok=True)
+log_handlers = []
+try:
+    log_handlers.append(logging.FileHandler(log_path / f"aindy_{settings.ENV}.log"))
+except PermissionError:
+    logging.getLogger(__name__).warning(
+        "Unable to create log file, only console logging will be active"
+    )
+log_handlers.append(logging.StreamHandler())
 
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler(log_path / f"aindy_{settings.ENV}.log"),
-        logging.StreamHandler(),
-    ],
+    handlers=log_handlers,
 )
 
 logging.getLogger(__name__).info(

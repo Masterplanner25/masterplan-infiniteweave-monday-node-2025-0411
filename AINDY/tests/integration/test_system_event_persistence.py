@@ -5,10 +5,10 @@ import uuid
 
 def test_emit_system_event_persists_to_test_db(db_session, test_user):
     from db.models.system_event import SystemEvent
-    from services.system_event_service import emit_system_event
+    from core.execution_signal_helper import queue_system_event
 
     trace_id = str(uuid.uuid4())
-    emit_system_event(
+    queue_system_event(
         db=db_session,
         event_type="execution.started",
         user_id=test_user.id,

@@ -6,7 +6,7 @@ from db.models.agent_event import AgentEvent
 from db.models.agent_run import AgentRun, AgentStep
 from db.models.system_event import SystemEvent
 from db.models.user import User
-from services.agent_event_service import emit_event
+from core.execution_signal_helper import record_agent_event
 from services.agent_runtime import get_run_events, replay_run
 from tests.fixtures.auth import build_access_token
 
@@ -61,7 +61,7 @@ def _make_other_user(db_session) -> User:
 def test_emit_event_persists_agent_and_system_event(db_session, test_user):
     run = _make_run(db_session, test_user)
 
-    emit_event(
+    record_agent_event(
         run_id=str(run.id),
         user_id=test_user.id,
         event_type="PLAN_CREATED",
@@ -83,7 +83,7 @@ def test_emit_event_persists_agent_and_system_event(db_session, test_user):
 
 def test_get_run_events_merges_lifecycle_and_steps(db_session, test_user):
     run = _make_run(db_session, test_user)
-    emit_event(
+    record_agent_event(
         run_id=str(run.id),
         user_id=test_user.id,
         event_type="PLAN_CREATED",
@@ -129,7 +129,7 @@ def test_events_endpoint_requires_auth(client, test_user, db_session):
 
 def test_events_endpoint_returns_user_scoped_timeline(client, auth_headers, db_session, test_user):
     run = _make_run(db_session, test_user)
-    emit_event(
+    record_agent_event(
         run_id=str(run.id),
         user_id=test_user.id,
         event_type="PLAN_CREATED",
@@ -143,9 +143,10 @@ def test_events_endpoint_returns_user_scoped_timeline(client, auth_headers, db_s
 
     assert response.status_code == 200
     body = response.json()
-    assert body["run_id"] == str(run.id)
-    assert body["correlation_id"] == run.correlation_id
-    assert body["events"][0]["event_type"] == "PLAN_CREATED"
+    data = body.get("data", body)
+    assert data["run_id"] == str(run.id)
+    assert data["correlation_id"] == run.correlation_id
+    assert data["events"][0]["event_type"] == "PLAN_CREATED"
 
 
 def test_events_endpoint_forbids_cross_user_access(client, db_session, test_user):

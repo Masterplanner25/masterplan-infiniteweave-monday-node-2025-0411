@@ -2,7 +2,7 @@
 import logging
 import uuid
 from sqlalchemy.orm import Session
-from services.memory_capture_engine import MemoryCaptureEngine
+from core.execution_signal_helper import queue_memory_capture
 from db.models.research_results import ResearchResult
 from schemas.research_results_schema import ResearchResultCreate
 from services.trace_context import is_pipeline_active
@@ -17,12 +17,10 @@ def log_to_memory_bridge(query: str, summary: str, db: Session, user_id: str | N
     if is_pipeline_active():
         return
     try:
-        engine = MemoryCaptureEngine(
+        queue_memory_capture(
             db=db,
             user_id=str(user_id) if user_id else None,
             agent_namespace="research",
-        )
-        engine.evaluate_and_capture(
             event_type="research_result",
             content=f"Research: {query} | {summary}",
             source="research_engine",

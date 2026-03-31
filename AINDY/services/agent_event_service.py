@@ -22,7 +22,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from services.system_event_service import emit_system_event, SystemEventEmissionError
+from core.execution_signal_helper import queue_system_event
+from services.system_event_service import SystemEventEmissionError
 from services.trace_context import get_parent_event_id
 from services.trace_context import get_trace_id
 from utils.uuid_utils import normalize_uuid
@@ -84,7 +85,7 @@ def emit_event(
 
         normalized_user_id = normalize_uuid(user_id) if user_id is not None else None
 
-        system_event_id = emit_system_event(
+        system_event_id = queue_system_event(
             db=db,
             event_type=f"agent.{str(event_type).lower()}",
             user_id=user_id,

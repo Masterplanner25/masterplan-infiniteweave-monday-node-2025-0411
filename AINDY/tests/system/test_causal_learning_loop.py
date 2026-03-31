@@ -5,11 +5,11 @@ import uuid
 from db.models.ripple_edge import RippleEdge
 from db.models.system_event import SystemEvent
 from db.models.task import Task
+from core.execution_signal_helper import queue_system_event
 from services.infinity_loop import run_loop
 from services.memory_persistence import MemoryNodeModel
 from services.memory_scoring_service import get_relevant_memories, score_memory
 from services.rippletrace_service import build_trace_graph
-from services.system_event_service import emit_system_event
 from services.system_event_types import SystemEventTypes
 
 
@@ -51,7 +51,7 @@ def _create_ready_task(db_session, test_user, name: str = "Recover execution pat
 
 def _emit_execution_failure_trace(db_session, test_user, *, task_name: str, trigger_event: str = "task_completed"):
     trace_id = str(uuid.uuid4())
-    started_event_id = emit_system_event(
+    started_event_id = queue_system_event(
         db=db_session,
         event_type=SystemEventTypes.EXECUTION_STARTED,
         user_id=test_user.id,
@@ -64,7 +64,7 @@ def _emit_execution_failure_trace(db_session, test_user, *, task_name: str, trig
         },
         required=True,
     )
-    failed_event_id = emit_system_event(
+    failed_event_id = queue_system_event(
         db=db_session,
         event_type=SystemEventTypes.EXECUTION_FAILED,
         user_id=test_user.id,
@@ -210,7 +210,7 @@ class TestCausalLearningLoop:
         task = _create_ready_task(db_session, test_user, name="Competing memory task")
 
         success_trace = str(uuid.uuid4())
-        success_started = emit_system_event(
+        success_started = queue_system_event(
             db=db_session,
             event_type=SystemEventTypes.EXECUTION_STARTED,
             user_id=test_user.id,
@@ -219,7 +219,7 @@ class TestCausalLearningLoop:
             payload={"message": "success path started", "task_name": task.name, "workflow_type": "task_completed"},
             required=True,
         )
-        emit_system_event(
+        queue_system_event(
             db=db_session,
             event_type=SystemEventTypes.EXECUTION_COMPLETED,
             user_id=test_user.id,

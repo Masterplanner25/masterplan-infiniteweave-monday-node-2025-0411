@@ -71,16 +71,24 @@ def test_memory_metrics_api_endpoints(client, auth_headers):
     response = client.get("/memory/metrics", headers=auth_headers)
     assert response.status_code == 200
     payload = response.json()
-    assert "avg_impact_score" in payload
-    assert "total_runs" in payload
+    data = payload.get("data", payload)
+    assert "avg_impact_score" in data
+    assert "total_runs" in data
 
     response = client.get("/memory/metrics/detail", headers=auth_headers)
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    detail_payload = response.json()
+    detail_data = (
+        detail_payload["data"]
+        if isinstance(detail_payload, dict) and "data" in detail_payload
+        else detail_payload
+    )
+    assert isinstance(detail_data, list)
 
     response = client.get("/memory/metrics/dashboard", headers=auth_headers)
     assert response.status_code == 200
     dashboard = response.json()
-    assert "summary" in dashboard
-    assert "recent_runs" in dashboard
-    assert "insights" in dashboard
+    dashboard_data = dashboard.get("data", dashboard)
+    assert "summary" in dashboard_data
+    assert "recent_runs" in dashboard_data
+    assert "insights" in dashboard_data

@@ -4,7 +4,7 @@ import os
 import sys
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
-os.environ.setdefault("MONGO_URL", "mongodb://test-mongo:27017")
+os.environ.setdefault("MONGO_URL", "")
 os.environ.setdefault("AINDY_ALLOW_SQLITE", "1")
 os.environ.setdefault("OPENAI_API_KEY", "sk-test-fake-key-for-testing-only")
 os.environ.setdefault("DEEPSEEK_API_KEY", "fake-deepseek-key")
@@ -19,6 +19,8 @@ os.environ.setdefault("AINDY_ASYNC_HEAVY_EXECUTION", "false")
 os.environ.setdefault("AINDY_ENABLE_BACKGROUND_TASKS", "false")
 os.environ.setdefault("AINDY_ENFORCE_SCHEMA", "false")
 os.environ.setdefault("AINDY_ENABLE_LEGACY_SURFACE", "true")
+os.environ.setdefault("SKIP_MONGO_PING", "1")
+os.environ.setdefault("AINDY_SKIP_MONGO_PING", "1")
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT not in sys.path:

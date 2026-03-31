@@ -38,12 +38,13 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["embedding_status"] == "pending"
+    data = payload.get("data", payload)
+    assert data["embedding_status"] == "pending"
 
     db_session.expire_all()
     node = (
         db_session.query(MemoryNodeModel)
-        .filter(MemoryNodeModel.id == uuid.UUID(payload["id"]))
+        .filter(MemoryNodeModel.id == uuid.UUID(data["id"]))
         .first()
     )
     assert node is not None
@@ -61,7 +62,7 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
     )
     assert log is not None
     assert log.status == "pending"
-    assert log.payload["memory_id"] == payload["id"]
+    assert log.payload["memory_id"] == data["id"]
 
 
 def test_memory_recall_falls_back_to_text_when_embedding_missing(

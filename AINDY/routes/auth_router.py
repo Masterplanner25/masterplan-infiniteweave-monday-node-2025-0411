@@ -8,13 +8,13 @@ Public endpoints (no auth required):
 Phase 3: Uses PostgreSQL User model via DB session (replaced in-memory store).
 """
 from fastapi import APIRouter, Depends, Request
+from core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from services.auth_service import create_access_token, register_user, authenticate_user
 from services.signup_initialization_service import initialize_signup_state
-from services.system_event_service import emit_system_event
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,7 +37,7 @@ async def register(
             db=db,
         )
         initialize_signup_state(db=db, user=user)
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type="auth.register.completed",
             user_id=user.id,
@@ -71,7 +71,7 @@ async def login(
     """
     def handler(ctx):
         user = authenticate_user(email=body.email, password=body.password, db=db)
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type="auth.login.completed",
             user_id=user.id,

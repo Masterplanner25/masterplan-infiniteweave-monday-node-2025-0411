@@ -1,17 +1,30 @@
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import settings
+from core.execution_helper import execute_with_pipeline_sync
+from core.execution_signal_helper import queue_system_event
 from db.database import SessionLocal, engine, get_db
 from services.auth_service import verify_api_key
-from services.system_event_service import emit_system_event
 
 router = APIRouter(tags=["Health"])
 logger = logging.getLogger(__name__)
+
+
+def _execute_health(request: Request, route_name: str, handler, *, db: Session | None = None):
+    metadata = {"source": "health_router"}
+    if db is not None:
+        metadata["db"] = db
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        metadata=metadata,
+    )
 
 
 def _liveness_payload() -> dict:
@@ -24,39 +37,43 @@ def _liveness_payload() -> dict:
 
 
 @router.get("/health")
-def liveness() -> dict:
+def liveness(request: Request) -> dict:
     payload = _liveness_payload()
-    event_db = SessionLocal()
-    try:
-        emit_system_event(
-            db=event_db,
-            event_type="health.liveness.completed",
-            payload=payload,
-            required=False,
-        )
-    finally:
-        event_db.close()
-    return payload
+    def handler(_ctx):
+        event_db = SessionLocal()
+        try:
+            queue_system_event(
+                db=event_db,
+                event_type="health.liveness.completed",
+                payload=payload,
+                required=False,
+            )
+        finally:
+            event_db.close()
+        return payload
+    return _execute_health(request, "health.liveness", handler)
 
 
 @router.get("/health/")
-def liveness_legacy_alias() -> dict:
+def liveness_legacy_alias(request: Request) -> dict:
     payload = _liveness_payload()
-    event_db = SessionLocal()
-    try:
-        emit_system_event(
-            db=event_db,
-            event_type="health.liveness.completed",
-            payload=payload,
-            required=False,
-        )
-    finally:
-        event_db.close()
-    return payload
+    def handler(_ctx):
+        event_db = SessionLocal()
+        try:
+            queue_system_event(
+                db=event_db,
+                event_type="health.liveness.completed",
+                payload=payload,
+                required=False,
+            )
+        finally:
+            event_db.close()
+        return payload
+    return _execute_health(request, "health.liveness.legacy", handler)
 
 
 @router.get("/ready")
-def readiness(db: Session = Depends(get_db)) -> dict:
+def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
     try:
@@ -103,17 +120,19 @@ def readiness(db: Session = Depends(get_db)) -> dict:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "components": components,
     }
-    emit_system_event(
-        db=db,
-        event_type="health.readiness.completed",
-        payload=payload,
-        required=False,
-    )
-    return payload
+    def handler(_ctx):
+        queue_system_event(
+            db=db,
+            event_type="health.readiness.completed",
+            payload=payload,
+            required=False,
+        )
+        return payload
+    return _execute_health(request, "health.readiness", handler, db=db)
 
 
 @router.get("/health/details", dependencies=[Depends(verify_api_key)])
-def health_details(db: Session = Depends(get_db)) -> dict:
+def health_details(request: Request, db: Session = Depends(get_db)) -> dict:
     status = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": "A.I.N.D.Y. v1.0.0",
@@ -152,4 +171,6 @@ def health_details(db: Session = Depends(get_db)) -> dict:
         status["components"]["memory_bridge"] = f"error: {exc}"
         status["status"] = "degraded"
 
-    return status
+    def handler(_ctx):
+        return status
+    return _execute_health(request, "health.details", handler, db=db)

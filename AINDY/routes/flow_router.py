@@ -9,10 +9,11 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from db.models.flow_run import FlowHistory, FlowRun
 from services.auth_service import get_current_user
@@ -22,8 +23,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/flows", tags=["Flow Engine"])
 
 
+async def _execute_flow(request: Request, route_name: str, handler, *, user_id: str, db: Session | None = None):
+    metadata = {"source": "flow_router"}
+    if db is not None:
+        metadata["db"] = db
+    return await execute_with_pipeline(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        metadata=metadata,
+    )
+
+
 @router.get("/runs")
 async def list_flow_runs(
+    request: Request,
     status: Optional[str] = None,
     workflow_type: Optional[str] = None,
     limit: int = 20,
@@ -44,30 +59,33 @@ async def list_flow_runs(
 
     runs = query.order_by(FlowRun.created_at.desc()).limit(limit).all()
 
-    return {
-        "runs": [
-            {
-                "id": r.id,
-                "flow_name": r.flow_name,
-                "workflow_type": r.workflow_type,
-                "status": r.status,
-                "trace_id": r.trace_id,
-                "current_node": r.current_node,
-                "waiting_for": r.waiting_for,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-                "completed_at": r.completed_at.isoformat()
-                if r.completed_at
-                else None,
-                "error_message": r.error_message,
-            }
-            for r in runs
-        ],
-        "count": len(runs),
-    }
+    def handler(_ctx):
+        return {
+            "runs": [
+                {
+                    "id": r.id,
+                    "flow_name": r.flow_name,
+                    "workflow_type": r.workflow_type,
+                    "status": r.status,
+                    "trace_id": r.trace_id,
+                    "current_node": r.current_node,
+                    "waiting_for": r.waiting_for,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "completed_at": r.completed_at.isoformat()
+                    if r.completed_at
+                    else None,
+                    "error_message": r.error_message,
+                }
+                for r in runs
+            ],
+            "count": len(runs),
+        }
+    return await _execute_flow(request, "flow.runs.list", handler, user_id=str(current_user["sub"]), db=db)
 
 
 @router.get("/runs/{run_id}")
 async def get_flow_run(
+    request: Request,
     run_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -85,24 +103,27 @@ async def get_flow_run(
     if not run:
         raise HTTPException(404, "Flow run not found")
 
-    return {
-        "id": run.id,
-        "flow_name": run.flow_name,
-        "workflow_type": run.workflow_type,
-        "status": run.status,
-        "trace_id": run.trace_id,
-        "current_node": run.current_node,
-        "waiting_for": run.waiting_for,
-        "state": run.state,
-        "error_message": run.error_message,
-        "created_at": run.created_at.isoformat() if run.created_at else None,
-        "updated_at": run.updated_at.isoformat() if run.updated_at else None,
-        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-    }
+    def handler(_ctx):
+        return {
+            "id": run.id,
+            "flow_name": run.flow_name,
+            "workflow_type": run.workflow_type,
+            "status": run.status,
+            "trace_id": run.trace_id,
+            "current_node": run.current_node,
+            "waiting_for": run.waiting_for,
+            "state": run.state,
+            "error_message": run.error_message,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "updated_at": run.updated_at.isoformat() if run.updated_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        }
+    return await _execute_flow(request, "flow.runs.get", handler, user_id=str(current_user["sub"]), db=db)
 
 
 @router.get("/runs/{run_id}/history")
 async def get_flow_run_history(
+    request: Request,
     run_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -131,25 +152,27 @@ async def get_flow_run_history(
         .all()
     )
 
-    return {
-        "run_id": run_id,
-        "trace_id": run.trace_id,
-        "flow_name": run.flow_name,
-        "workflow_type": run.workflow_type,
-        "history": [
-            {
-                "id": h.id,
-                "node_name": h.node_name,
-                "status": h.status,
-                "execution_time_ms": h.execution_time_ms,
-                "output_patch": h.output_patch,
-                "error_message": h.error_message,
-                "created_at": h.created_at.isoformat() if h.created_at else None,
-            }
-            for h in history
-        ],
-        "node_count": len(history),
-    }
+    def handler(_ctx):
+        return {
+            "run_id": run_id,
+            "trace_id": run.trace_id,
+            "flow_name": run.flow_name,
+            "workflow_type": run.workflow_type,
+            "history": [
+                {
+                    "id": h.id,
+                    "node_name": h.node_name,
+                    "status": h.status,
+                    "execution_time_ms": h.execution_time_ms,
+                    "output_patch": h.output_patch,
+                    "error_message": h.error_message,
+                    "created_at": h.created_at.isoformat() if h.created_at else None,
+                }
+                for h in history
+            ],
+            "node_count": len(history),
+        }
+    return await _execute_flow(request, "flow.runs.history", handler, user_id=str(current_user["sub"]), db=db)
 
 
 class ResumeRequest(BaseModel):
@@ -159,6 +182,7 @@ class ResumeRequest(BaseModel):
 
 @router.post("/runs/{run_id}/resume")
 async def resume_flow_run(
+    request: Request,
     run_id: str,
     body: ResumeRequest,
     db: Session = Depends(get_db),
@@ -203,11 +227,14 @@ async def resume_flow_run(
         user_id=UUID(str(current_user["sub"])),
     )
 
-    return {"run_id": run_id, "resumed": True, "results": results}
+    def handler(_ctx):
+        return {"run_id": run_id, "resumed": True, "results": results}
+    return await _execute_flow(request, "flow.runs.resume", handler, user_id=str(current_user["sub"]), db=db)
 
 
 @router.get("/registry")
 async def get_flow_registry(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -216,16 +243,18 @@ async def get_flow_registry(
     """
     from services.flow_engine import FLOW_REGISTRY, NODE_REGISTRY
 
-    return {
-        "flows": {
-            name: {
-                "start": flow["start"],
-                "end": flow.get("end", []),
-                "node_count": len(flow.get("edges", {})) + 1,
-            }
-            for name, flow in FLOW_REGISTRY.items()
-        },
-        "nodes": list(NODE_REGISTRY.keys()),
-        "flow_count": len(FLOW_REGISTRY),
-        "node_count": len(NODE_REGISTRY),
-    }
+    def handler(_ctx):
+        return {
+            "flows": {
+                name: {
+                    "start": flow["start"],
+                    "end": flow.get("end", []),
+                    "node_count": len(flow.get("edges", {})) + 1,
+                }
+                for name, flow in FLOW_REGISTRY.items()
+            },
+            "nodes": list(NODE_REGISTRY.keys()),
+            "flow_count": len(FLOW_REGISTRY),
+            "node_count": len(NODE_REGISTRY),
+        }
+    return await _execute_flow(request, "flow.registry", handler, user_id=str(current_user["sub"]))

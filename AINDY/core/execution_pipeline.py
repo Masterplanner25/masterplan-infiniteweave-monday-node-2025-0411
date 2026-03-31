@@ -90,6 +90,7 @@ class ExecutionPipeline:
         started_event_id: str | None = None
         parent_token: Any = None
         pipeline_token: Any = None
+        execution_ctx_token: Any = None
 
         logger.info(
             "execution.entry=PIPELINE",
@@ -105,6 +106,7 @@ class ExecutionPipeline:
             )
             parent_token = self._safe_set_parent_event(started_event_id)
             pipeline_token = self._safe_set_pipeline_active()
+            execution_ctx_token = self._safe_set_current_execution_context(ctx)
             result = handler(ctx)
             if inspect.isawaitable(result):
                 result = await result
@@ -114,6 +116,7 @@ class ExecutionPipeline:
                     "ExecutionContract violation: raw Response returned",
                 )
             result, signals = self._extract_execution_result_and_signals(result)
+            signals = self._merge_queued_signals(ctx, signals)
             injected_count = self._apply_execution_signals(ctx, signals)
             memory_context_count = max(
                 self._extract_memory_context_count(result),
@@ -193,6 +196,7 @@ class ExecutionPipeline:
                 metadata={**ctx.metadata, "status_code": 500, "detail": str(exc)},
             )
         finally:
+            self._safe_reset_current_execution_context(execution_ctx_token)
             self._safe_reset_pipeline_active(pipeline_token)
             self._safe_reset_parent_event(parent_token)
 
@@ -321,8 +325,32 @@ class ExecutionPipeline:
     def _apply_execution_signals(self, ctx: ExecutionContext, signals: dict[str, Any]) -> int:
         memory_count = self._apply_memory_signals(ctx, signals.get("memory"))
         self._apply_event_signals(ctx, signals.get("events"))
+        queued_signals = self._merge_queued_signals(ctx, {})
+        if queued_signals.get("memory") or queued_signals.get("events"):
+            memory_count = max(memory_count, self._apply_memory_signals(ctx, queued_signals.get("memory")))
+            self._apply_event_signals(ctx, queued_signals.get("events"))
         self._apply_log_signal(ctx, signals.get("log"), memory_count=memory_count)
         return memory_count
+
+    def _merge_queued_signals(self, ctx: ExecutionContext, signals: dict[str, Any]) -> dict[str, Any]:
+        queued = dict(ctx.metadata.pop("queued_execution_signals", {}) or {})
+        merged = dict(signals or {})
+        for key in ("memory", "events"):
+            queued_value = queued.get(key)
+            if not queued_value:
+                continue
+            current_value = merged.get(key)
+            items: list[Any] = []
+            if isinstance(current_value, list):
+                items.extend(current_value)
+            elif current_value is not None:
+                items.append(current_value)
+            if isinstance(queued_value, list):
+                items.extend(queued_value)
+            else:
+                items.append(queued_value)
+            merged[key] = items
+        return merged
 
     def _apply_memory_signals(self, ctx: ExecutionContext, memory_signal: Any) -> int:
         hints: list[dict[str, Any]] = []
@@ -464,3 +492,22 @@ class ExecutionPipeline:
             reset_pipeline_active(token)
         except Exception:
             logger.debug("execution.pipeline_active_reset_skipped", exc_info=True)
+
+    def _safe_set_current_execution_context(self, ctx: ExecutionContext) -> Any:
+        try:
+            from services.trace_context import set_current_execution_context
+
+            return set_current_execution_context(ctx)
+        except Exception:
+            logger.debug("execution.current_ctx_set_skipped", exc_info=True)
+            return None
+
+    def _safe_reset_current_execution_context(self, token: Any) -> None:
+        if token is None:
+            return
+        try:
+            from services.trace_context import reset_current_execution_context
+
+            reset_current_execution_context(token)
+        except Exception:
+            logger.debug("execution.current_ctx_reset_skipped", exc_info=True)

@@ -4,7 +4,7 @@ from db.dao.memory_node_dao import MemoryNodeDAO
 from db.models.agent_run import AgentRun
 from db.models.user_identity import UserIdentity
 from db.models.user_score import UserScore
-from services.system_event_service import emit_system_event
+from core.execution_signal_helper import queue_system_event
 
 
 def initialize_signup_state(*, db, user) -> dict:
@@ -87,7 +87,7 @@ def initialize_signup_state(*, db, user) -> dict:
         db.commit()
         db.refresh(agent_run)
 
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type="identity.created",
         user_id=user.id,

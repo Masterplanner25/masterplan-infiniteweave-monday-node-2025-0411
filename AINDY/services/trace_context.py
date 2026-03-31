@@ -9,6 +9,7 @@ _trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="-")
 _parent_event_id_ctx: ContextVar[str] = ContextVar("parent_event_id", default="-")
 _pipeline_active_ctx: ContextVar[bool] = ContextVar("pipeline_active", default=False)
 _current_request_ctx: ContextVar[Any] = ContextVar("current_request", default=None)
+_current_execution_context_ctx: ContextVar[Any] = ContextVar("current_execution_context", default=None)
 
 
 def get_trace_id(default: str | None = None) -> str | None:
@@ -75,3 +76,18 @@ def set_current_request(request: Any) -> Token:
 
 def reset_current_request(token: Token) -> None:
     _current_request_ctx.reset(token)
+
+
+def get_current_execution_context(default: Any = None) -> Any:
+    current = _current_execution_context_ctx.get()
+    if current is None:
+        return default
+    return current
+
+
+def set_current_execution_context(context: Any) -> Token:
+    return _current_execution_context_ctx.set(context)
+
+
+def reset_current_execution_context(token: Token) -> None:
+    _current_execution_context_ctx.reset(token)

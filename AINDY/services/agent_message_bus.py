@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.system_event_service import emit_system_event
+from core.execution_signal_helper import queue_system_event
 
 
 MESSAGE_TYPES = {
@@ -26,7 +26,7 @@ def publish_message(
     if message_type not in MESSAGE_TYPES:
         raise ValueError(f"Unsupported message_type: {message_type}")
     return str(
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=f"agent.message.{message_type}",
             user_id=user_id,

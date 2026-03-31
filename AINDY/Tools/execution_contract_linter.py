@@ -13,8 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 ROUTES_DIR = ROOT / "routes"
 SERVICES_DIR = ROOT / "services"
 CORE_PIPELINE_FILE = ROOT / "core" / "execution_pipeline.py"
+SIGNAL_HELPER_FILE = ROOT / "core" / "execution_signal_helper.py"
 MEMORY_ENGINE_FILE = ROOT / "services" / "memory_capture_engine.py"
 SYSTEM_EVENT_FILE = ROOT / "services" / "system_event_service.py"
+AGENT_EVENT_SERVICE_FILE = ROOT / "services" / "agent_event_service.py"
+ALLOWED_TEST_DIRECT_MEMORY_FILES = {
+    (ROOT / "tests" / "integration" / "test_memory_bridge_v5.py").resolve(),
+    (ROOT / "tests" / "system" / "test_system_event_invariants.py").resolve(),
+}
 SKIP_DIR_NAMES = {
     "__pycache__",
     ".git",
@@ -38,14 +44,15 @@ class Violation:
 
 
 class RouteFunctionAnalyzer(ast.NodeVisitor):
-    def __init__(self, fn_node: ast.AST):
+    def __init__(self, fn_node: ast.AST, valid_wrapper_names: set[str]):
         self.fn_node = fn_node
+        self.valid_wrapper_names = valid_wrapper_names
         self.calls_pipeline = False
         self.raw_return_lines: list[int] = []
 
     def visit_Call(self, node: ast.Call) -> None:
         name = _call_name(node)
-        if name in {"execute_with_pipeline", "execute_with_pipeline_sync"}:
+        if name in {"execute_with_pipeline", "execute_with_pipeline_sync", "run_execution"} | self.valid_wrapper_names:
             self.calls_pipeline = True
         self.generic_visit(node)
 
@@ -121,10 +128,11 @@ def lint_routes() -> list[Violation]:
         tree = _parse_file(path)
         if tree is None:
             continue
+        valid_wrapper_names = _find_valid_wrapper_names(tree)
         for node in tree.body:
             if not _is_router_decorated(node):
                 continue
-            analyzer = RouteFunctionAnalyzer(node)
+            analyzer = RouteFunctionAnalyzer(node, valid_wrapper_names)
             analyzer.visit(node)
             if not analyzer.calls_pipeline:
                 violations.append(
@@ -149,11 +157,29 @@ def lint_routes() -> list[Violation]:
     return violations
 
 
+def _find_valid_wrapper_names(tree: ast.AST) -> set[str]:
+    valid: set[str] = set()
+    for node in getattr(tree, "body", []):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        analyzer = RouteFunctionAnalyzer(node, set())
+        analyzer.visit(node)
+        if analyzer.calls_pipeline:
+            valid.add(node.name)
+    return valid
+
+
 def lint_memory_usage() -> list[Violation]:
     violations: list[Violation] = []
-    allowed = {CORE_PIPELINE_FILE.resolve(), MEMORY_ENGINE_FILE.resolve()}
+    allowed = {
+        CORE_PIPELINE_FILE.resolve(),
+        SIGNAL_HELPER_FILE.resolve(),
+        MEMORY_ENGINE_FILE.resolve(),
+    }
     for path in sorted(_iter_python_files(ROOT)):
         if path.resolve() in allowed:
+            continue
+        if path.resolve() in ALLOWED_TEST_DIRECT_MEMORY_FILES:
             continue
         tree = _parse_file(path)
         if tree is None:
@@ -178,7 +204,12 @@ def lint_memory_usage() -> list[Violation]:
 
 def lint_event_usage() -> list[Violation]:
     violations: list[Violation] = []
-    allowed = {CORE_PIPELINE_FILE.resolve(), SYSTEM_EVENT_FILE.resolve()}
+    allowed = {
+        CORE_PIPELINE_FILE.resolve(),
+        SIGNAL_HELPER_FILE.resolve(),
+        SYSTEM_EVENT_FILE.resolve(),
+        AGENT_EVENT_SERVICE_FILE.resolve(),
+    }
     for path in sorted(_iter_python_files(ROOT)):
         if path.resolve() in allowed:
             continue

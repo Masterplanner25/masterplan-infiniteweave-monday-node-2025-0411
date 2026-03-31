@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.dao.memory_node_dao import MemoryNodeDAO
 from db.dao.memory_trace_dao import MemoryTraceDAO
 from db.database import get_db
@@ -15,6 +16,17 @@ from services.auth_service import get_current_user
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
+
+
+def _execute_memory_trace(request: Request, route_name: str, handler, *, db: Session, user_id: str, success_status_code: int = 200):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db, "source": "memory_trace_router"},
+        success_status_code=success_status_code,
+    )
 
 
 class CreateTraceRequest(BaseModel):
@@ -31,6 +43,7 @@ class AppendTraceRequest(BaseModel):
 
 @router.post("/traces", status_code=201)
 def create_trace(
+    request: Request,
     body: CreateTraceRequest,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -43,22 +56,28 @@ def create_trace(
         source=body.source,
         extra=body.extra,
     )
-    return trace
+    def handler(_ctx):
+        return trace
+    return _execute_memory_trace(request, "memory.traces.create", handler, db=db, user_id=str(current_user["sub"]), success_status_code=201)
 
 
 @router.get("/traces")
 def list_traces(
+    request: Request,
     limit: int = 50,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     dao = MemoryTraceDAO(db)
     traces = dao.list_traces(user_id=str(current_user["sub"]), limit=limit)
-    return {"traces": traces, "count": len(traces)}
+    def handler(_ctx):
+        return {"traces": traces, "count": len(traces)}
+    return _execute_memory_trace(request, "memory.traces.list", handler, db=db, user_id=str(current_user["sub"]))
 
 
 @router.get("/traces/{trace_id}")
 def get_trace(
+    request: Request,
     trace_id: str,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -70,11 +89,14 @@ def get_trace(
             status_code=404,
             detail={"error": "trace_not_found", "message": "Trace not found"},
         )
-    return trace
+    def handler(_ctx):
+        return trace
+    return _execute_memory_trace(request, "memory.traces.get", handler, db=db, user_id=str(current_user["sub"]))
 
 
 @router.get("/traces/{trace_id}/nodes")
 def get_trace_nodes(
+    request: Request,
     trace_id: str,
     limit: int = 200,
     include_nodes: bool = False,
@@ -88,7 +110,9 @@ def get_trace_nodes(
         limit=limit,
     )
     if not nodes:
-        return {"trace_id": trace_id, "nodes": [], "count": 0}
+        def empty_handler(_ctx):
+            return {"trace_id": trace_id, "nodes": [], "count": 0}
+        return _execute_memory_trace(request, "memory.traces.nodes", empty_handler, db=db, user_id=str(current_user["sub"]))
 
     if include_nodes:
         memory_dao = MemoryNodeDAO(db)
@@ -101,11 +125,14 @@ def get_trace_nodes(
             })
         nodes = hydrated
 
-    return {"trace_id": trace_id, "nodes": nodes, "count": len(nodes)}
+    def handler(_ctx):
+        return {"trace_id": trace_id, "nodes": nodes, "count": len(nodes)}
+    return _execute_memory_trace(request, "memory.traces.nodes", handler, db=db, user_id=str(current_user["sub"]))
 
 
 @router.post("/traces/{trace_id}/append", status_code=201)
 def append_trace_node(
+    request: Request,
     trace_id: str,
     body: AppendTraceRequest,
     db: Session = Depends(get_db),
@@ -131,4 +158,6 @@ def append_trace_node(
             status_code=404,
             detail={"error": "trace_not_found", "message": "Trace not found"},
         )
-    return appended
+    def handler(_ctx):
+        return appended
+    return _execute_memory_trace(request, "memory.traces.append", handler, db=db, user_id=str(current_user["sub"]), success_status_code=201)

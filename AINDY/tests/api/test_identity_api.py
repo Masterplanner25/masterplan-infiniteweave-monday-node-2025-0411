@@ -50,12 +50,13 @@ def test_identity_profile_returns_real_db_profile(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["user_id"] == str(test_user.id)
-    assert payload["communication"]["tone"] == "technical"
-    assert payload["tools"]["preferred_languages"] == ["python"]
-    assert payload["decision_making"]["risk_tolerance"] == "moderate"
-    assert payload["learning"]["style"] == "examples"
-    assert payload["evolution"]["observation_count"] == 3
+    data = payload["data"]
+    assert data["user_id"] == str(test_user.id)
+    assert data["communication"]["tone"] == "technical"
+    assert data["tools"]["preferred_languages"] == ["python"]
+    assert data["decision_making"]["risk_tolerance"] == "moderate"
+    assert data["learning"]["style"] == "examples"
+    assert data["evolution"]["observation_count"] == 3
 
 
 def test_identity_context_returns_personalized_context(
@@ -81,10 +82,11 @@ def test_identity_context_returns_personalized_context(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["is_empty"] is False
-    assert "Communication style: technical" in payload["context"]
-    assert "Preferred languages: python, sql" in payload["context"]
-    assert "Risk tolerance: moderate" in payload["context"]
+    data = payload["data"]
+    assert data["is_empty"] is False
+    assert "Communication style: technical" in data["context"]
+    assert "Preferred languages: python, sql" in data["context"]
+    assert "Risk tolerance: moderate" in data["context"]
 
 
 def test_identity_evolution_returns_real_summary(
@@ -111,13 +113,14 @@ def test_identity_evolution_returns_real_summary(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["observation_count"] == 2
-    assert payload["total_changes"] == 2
-    assert set(payload["dimensions_evolved"]) == {
+    data = payload["data"]
+    assert data["observation_count"] == 2
+    assert data["total_changes"] == 2
+    assert set(data["dimensions_evolved"]) == {
         "preferred_languages",
         "preferred_tools",
     }
-    assert payload["most_changed_dimension"] in {
+    assert data["most_changed_dimension"] in {
         "preferred_languages",
         "preferred_tools",
     }
@@ -213,18 +216,19 @@ def test_identity_boot_returns_full_scoped_state_and_emits_event(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["user_id"] == str(test_user.id)
-    assert payload["system_state"]["memory_count"] == 1
-    assert payload["system_state"]["active_runs"] == 1
-    assert payload["system_state"]["score"] == 88.0
-    assert payload["system_state"]["active_flows"] == 1
-    assert [node["content"] for node in payload["memory"]] == ["Own memory node"]
-    assert payload["memory"][0]["context"] == "identity_boot"
-    assert payload["memory"][0]["extra"]["context"] == "identity_boot"
-    assert [run["goal"] for run in payload["runs"]] == ["Own run"]
-    assert [flow["flow_name"] for flow in payload["flows"]] == ["Identity Flow"]
-    assert payload["metrics"]["master_score"] == 88.0
-    assert payload["metrics"]["metadata"]["confidence"] == "high"
+    data = payload["data"]
+    assert data["user_id"] == str(test_user.id)
+    assert data["system_state"]["memory_count"] == 1
+    assert data["system_state"]["active_runs"] == 1
+    assert data["system_state"]["score"] == 88.0
+    assert data["system_state"]["active_flows"] == 1
+    assert [node["content"] for node in data["memory"]] == ["Own memory node"]
+    assert data["memory"][0]["context"] == "identity_boot"
+    assert data["memory"][0]["extra"]["context"] == "identity_boot"
+    assert [run["goal"] for run in data["runs"]] == ["Own run"]
+    assert [flow["flow_name"] for flow in data["flows"]] == ["Identity Flow"]
+    assert data["metrics"]["master_score"] == 88.0
+    assert data["metrics"]["metadata"]["confidence"] == "high"
 
     event = (
         db_session.query(SystemEvent)

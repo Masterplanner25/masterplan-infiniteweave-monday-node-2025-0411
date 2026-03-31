@@ -11,6 +11,7 @@ no behavior changes, just wrapped in the node contract:
 """
 import logging
 
+from core.execution_signal_helper import queue_memory_capture
 from services.flow_engine import FLOW_REGISTRY, NODE_REGISTRY, register_flow, register_node
 
 logger = logging.getLogger(__name__)
@@ -63,15 +64,15 @@ def arm_analyze_code(state, context):
 def arm_store_result(state, context):
     """Store ARM result via capture engine."""
     try:
-        from services.memory_capture_engine import MemoryCaptureEngine
-
         db = context.get("db")
         user_id = context.get("user_id")
         result = state.get("analysis_result", {})
 
         if db and user_id:
-            engine = MemoryCaptureEngine(db=db, user_id=user_id, agent_namespace="arm")
-            engine.evaluate_and_capture(
+            queue_memory_capture(
+                db=db,
+                user_id=user_id,
+                agent_namespace="arm",
                 event_type="arm_analysis_complete",
                 content=str(result)[:500],
                 source="flow_engine:arm_analysis",
@@ -169,17 +170,15 @@ def leadgen_search_node(state, context):
 def leadgen_store(state, context):
     """Store leadgen results via capture engine."""
     try:
-        from services.memory_capture_engine import MemoryCaptureEngine
-
         db = context.get("db")
         user_id = context.get("user_id")
         results = state.get("search_results", [])
 
         if db and user_id and results:
-            engine = MemoryCaptureEngine(
-                db=db, user_id=user_id, agent_namespace="leadgen"
-            )
-            engine.evaluate_and_capture(
+            queue_memory_capture(
+                db=db,
+                user_id=user_id,
+                agent_namespace="leadgen",
                 event_type="leadgen_search",
                 content=f"LeadGen: {str(results)[:300]}",
                 source="flow_engine:leadgen",
@@ -223,17 +222,15 @@ def genesis_record_exchange(state, context):
 def genesis_store_synthesis(state, context):
     """Store genesis synthesis completion to Memory Bridge."""
     try:
-        from services.memory_capture_engine import MemoryCaptureEngine
-
         db = context.get("db")
         user_id = context.get("user_id")
         session_id = state.get("session_id")
 
         if db and user_id:
-            engine = MemoryCaptureEngine(
-                db=db, user_id=user_id, agent_namespace="genesis"
-            )
-            engine.evaluate_and_capture(
+            queue_memory_capture(
+                db=db,
+                user_id=user_id,
+                agent_namespace="genesis",
                 event_type="genesis_synthesized",
                 content=(
                     f"Genesis conversation {session_id} synthesis complete "
