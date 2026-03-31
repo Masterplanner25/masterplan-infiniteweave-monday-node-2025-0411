@@ -114,7 +114,10 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
     try:
         response = client.post("/agent/run", headers=auth_headers, json={"goal": "follow up"})
         assert response.status_code == 202
-        log_id = response.json()["result"]["automation_log_id"]
+        payload = response.json()
+        data = payload.get("data", payload)
+        result = data.get("result", data)
+        log_id = result.get("automation_log_id") or data.get("automation_log_id")
 
         log = _wait_for_async_job(db_session, log_id)
         assert log.status == "success"
@@ -145,7 +148,9 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
         json={"content": "tenant secret", "source": "pytest", "tags": ["private"], "node_type": "insight"},
     )
     assert create_response.status_code == 201
-    node_id = create_response.json()["id"]
+    node_payload = create_response.json()
+    node = node_payload.get("data", node_payload)
+    node_id = node["id"]
 
     assert client.get(f"/memory/nodes/{node_id}", headers=auth_headers).status_code == 200
     assert client.get(f"/memory/nodes/{node_id}", headers=other_headers).status_code == 404
@@ -153,7 +158,9 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
     other_run = _make_run(db_session, other_user.id, status="completed")
     runs_response = client.get("/agent/runs", headers=auth_headers)
     assert runs_response.status_code == 200
-    returned_ids = {item["run_id"] for item in runs_response.json()}
+    ran_payload = runs_response.json()
+    runs_data = ran_payload.get("data", ran_payload)
+    returned_ids = {item["run_id"] for item in runs_data}
     assert str(other_run.id) not in returned_ids
 
 
@@ -210,7 +217,8 @@ def test_metrics_reflect_actions(client, db_session, test_user, auth_headers):
 
     db_session.expire_all()
     after_count = db_session.query(RequestMetric).filter(RequestMetric.user_id == test_user.id).count()
-    dashboard = dashboard_response.json()
+    dashboard_payload = dashboard_response.json()
+    dashboard = dashboard_payload.get("data", dashboard_payload)
 
     assert after_count >= before_count + 2
     assert dashboard["summary"]["window_requests"] >= 1

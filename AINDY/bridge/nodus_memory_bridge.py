@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from core.execution_signal_helper import queue_memory_capture
+
 logger = logging.getLogger(__name__)
 
 
@@ -154,14 +156,16 @@ class NodusMemoryBridge:
                     ["nodus", "task_execution"])
             )
 
-            node = self.engine.evaluate_and_capture(
+            node = queue_memory_capture(
+                db=self.db,
+                user_id=self.user_id,
+                agent_namespace=self.agent_namespace,
                 event_type="task_completed",
                 content=content,
                 source="nodus_task",
                 tags=combined_tags,
                 node_type=node_type,
                 context={"significance": significance, "outcome": outcome},
-                agent_namespace=self.agent_namespace,
             )
 
             return node.get("id") if node else None

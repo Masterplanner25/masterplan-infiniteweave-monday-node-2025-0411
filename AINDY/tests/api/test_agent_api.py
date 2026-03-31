@@ -55,8 +55,9 @@ def test_agent_tools_list_authenticated(client, auth_headers):
 
     assert response.status_code == 200
     payload = response.json()
-    assert isinstance(payload, list)
-    assert any(tool["name"] == "task.create" for tool in payload)
+    data = payload["data"]
+    assert isinstance(data, list)
+    assert any(tool["name"] == "task.create" for tool in data)
 
 
 def test_agent_trust_get_and_put_use_real_db(
@@ -69,8 +70,9 @@ def test_agent_trust_get_and_put_use_real_db(
 
     assert get_response.status_code == 200
     initial = get_response.json()
-    assert initial["user_id"] == str(test_user.id)
-    assert initial["auto_execute_low"] is False
+    initial_data = initial["data"]
+    assert initial_data["user_id"] == str(test_user.id)
+    assert initial_data["auto_execute_low"] is False
 
     put_response = client.put(
         "/agent/trust",
@@ -84,9 +86,10 @@ def test_agent_trust_get_and_put_use_real_db(
 
     assert put_response.status_code == 200
     payload = put_response.json()
-    assert payload["auto_execute_low"] is True
-    assert payload["auto_execute_medium"] is False
-    assert payload["allowed_auto_grant_tools"] == ["task.create"]
+    data = payload["data"]
+    assert data["auto_execute_low"] is True
+    assert data["auto_execute_medium"] is False
+    assert data["allowed_auto_grant_tools"] == ["task.create"]
 
     db_session.expire_all()
     trust = (
@@ -136,9 +139,10 @@ def test_agent_runs_are_user_scoped(
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload) == 1
-    assert payload[0]["goal"] == "visible run"
-    assert str(payload[0]["user_id"]) == str(test_user.id)
+    data = payload["data"]
+    assert len(data) == 1
+    assert data[0]["goal"] == "visible run"
+    assert str(data[0]["user_id"]) == str(test_user.id)
 
 
 def test_agent_run_async_create_persists_log_run_and_events(
@@ -188,8 +192,9 @@ def test_agent_run_async_create_persists_log_run_and_events(
 
         assert response.status_code == 202
         payload = response.json()
+        data = payload["data"]
         assert payload["status"] == "QUEUED"
-        log_id = payload["result"]["automation_log_id"]
+        log_id = data["automation_log_id"]
         assert payload["trace_id"] == log_id
 
         log = _wait_for_async_job(db_session, log_id)

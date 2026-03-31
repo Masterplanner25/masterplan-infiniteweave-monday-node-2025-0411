@@ -12,12 +12,13 @@ from config import settings
 from db.database import SessionLocal
 from db.models.automation_log import AutomationLog
 from db.models.system_event import SystemEvent
+from core.execution_signal_helper import queue_system_event
 from services.autonomous_controller import build_decision_response
 from services.autonomous_controller import evaluate_live_trigger
 from services.autonomous_controller import record_decision
 from services.execution_envelope import error as execution_error
 from services.execution_envelope import success as execution_success
-from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 from services.trace_context import get_parent_event_id
 from services.trace_context import reset_parent_event_id
@@ -163,7 +164,7 @@ def submit_async_job(
         db.add(log)
         db.commit()
         db.refresh(log)
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
             user_id=user_uuid,
@@ -196,7 +197,7 @@ def submit_async_job(
                     log.status = "failed"
                     log.error_message = str(exc)
                     log.completed_at = datetime.now(timezone.utc)
-                    emit_system_event(
+                    queue_system_event(
                         db=db,
                         event_type=SystemEventTypes.EXECUTION_FAILED,
                         user_id=log.user_id,
@@ -485,7 +486,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
         if queued_event_exists:
-            started_event_id = emit_system_event(
+            started_event_id = queue_system_event(
                 db=db,
                 event_type=SystemEventTypes.ASYNC_JOB_STARTED,
                 user_id=log.user_id,
@@ -502,7 +503,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                 required=True,
             )
         else:
-            started_event_id = emit_system_event(
+            started_event_id = queue_system_event(
                 db=db,
                 event_type=SystemEventTypes.EXECUTION_STARTED,
                 user_id=log.user_id,
@@ -535,7 +536,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         if log.started_at and log.completed_at:
             duration_ms = round((log.completed_at - log.started_at).total_seconds() * 1000, 2)
         if queued_event_exists:
-            emit_system_event(
+            queue_system_event(
                 db=db,
                 event_type=SystemEventTypes.ASYNC_JOB_COMPLETED,
                 user_id=log.user_id,
@@ -553,7 +554,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                 },
                 required=True,
             )
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_COMPLETED,
             user_id=log.user_id,
@@ -585,7 +586,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
             if log.started_at and log.completed_at:
                 duration_ms = round((log.completed_at - log.started_at).total_seconds() * 1000, 2)
             if _has_existing_execution_started(db, str(log_id)):
-                emit_system_event(
+                queue_system_event(
                     db=db,
                     event_type=SystemEventTypes.ASYNC_JOB_FAILED,
                     user_id=log.user_id,
@@ -603,7 +604,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                     },
                     required=True,
                 )
-            emit_system_event(
+            queue_system_event(
                 db=db,
                 event_type=SystemEventTypes.EXECUTION_FAILED,
                 user_id=log.user_id,
@@ -817,3 +818,4 @@ def _job_freelance_generate_delivery(payload: dict[str, Any], db):
 
 # Register late-bound handlers that depend on async_job_service.
 from services import embedding_jobs as _embedding_jobs  # noqa: E402,F401
+

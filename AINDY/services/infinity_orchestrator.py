@@ -7,6 +7,7 @@ System invariant:
 """
 from __future__ import annotations
 
+from core.execution_signal_helper import queue_system_event
 from services.identity_boot_service import get_recent_memory, get_user_metrics
 from services.goal_service import rank_goals
 from services.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
@@ -14,7 +15,6 @@ from services.infinity_service import calculate_infinity_score, orchestrator_sco
 from services.memory_scoring_service import get_relevant_memories
 from services.social_performance_service import get_social_performance_signals
 from services.system_state_service import compute_current_state
-from services.system_event_service import emit_system_event
 from services.task_services import get_task_graph_context
 from utils.trace_context import get_current_trace_id
 
@@ -47,7 +47,7 @@ def execute(user_id: str, trigger_event: str, db):
         "task_graph": task_graph,
         "social_signals": social_signals,
     }
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type="loop.started",
         user_id=user_id,
@@ -111,7 +111,7 @@ def execute(user_id: str, trigger_event: str, db):
     if not next_action:
         raise RuntimeError("Infinity loop invariant violated: next_action is empty")
 
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type="loop.decision",
         user_id=user_id,

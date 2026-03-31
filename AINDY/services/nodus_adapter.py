@@ -34,10 +34,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from core.execution_signal_helper import queue_system_event, record_agent_event
 from services.capability_service import check_execution_capability, check_tool_capability
 from services.agent_tools import execute_tool
 from services.flow_engine import PersistentFlowRunner, register_node
-from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 from utils.user_ids import parse_user_id
 
@@ -163,7 +164,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         db.commit()
 
         from services.agent_event_service import emit_event
-        emit_event(
+        record_agent_event(
             run_id=agent_run_id,
             user_id=user_id,
             event_type="CAPABILITY_DENIED",
@@ -177,7 +178,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             },
             required=True,
         )
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type=SystemEventTypes.AGENT_STEP,
             user_id=user_id,
@@ -263,7 +264,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         agent_run.steps_completed = idx + 1
         agent_run.current_step = idx + 1
     db.commit()
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type=SystemEventTypes.AGENT_STEP,
         user_id=user_id,
@@ -365,7 +366,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
 
     # Emit COMPLETED lifecycle event
     from services.agent_event_service import emit_event
-    emit_event(
+    record_agent_event(
         run_id=agent_run_id,
         user_id=state.get("user_id", ""),
         event_type="COMPLETED",
@@ -461,7 +462,7 @@ class NodusAgentAdapter:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     agent_run.error_message = flow_capability_check["error"]
                     agent_run.result = {"steps": []}
-                emit_system_event(
+                queue_system_event(
                     db=db,
                     event_type="capability.denied",
                     user_id=user_id,
@@ -474,7 +475,7 @@ class NodusAgentAdapter:
                     },
                     required=True,
                 )
-                emit_event(
+                record_agent_event(
                     run_id=run_id,
                     user_id=user_id,
                     event_type="CAPABILITY_DENIED",
@@ -495,7 +496,7 @@ class NodusAgentAdapter:
                     "status": "FAILED",
                     "error": flow_capability_check["error"],
                 }
-            emit_system_event(
+            queue_system_event(
                 db=db,
                 event_type="capability.allowed",
                 user_id=user_id,
@@ -576,7 +577,7 @@ class NodusAgentAdapter:
                     )
                     # Emit EXECUTION_FAILED lifecycle event
                     from services.agent_event_service import emit_event
-                    emit_event(
+                    record_agent_event(
                         run_id=run_id,
                         user_id=user_id,
                         event_type="EXECUTION_FAILED",
@@ -603,7 +604,7 @@ class NodusAgentAdapter:
                     agent_run.error_message = f"Adapter error: {exc}"
                     db.commit()
                     from services.agent_event_service import emit_event
-                    emit_event(
+                    record_agent_event(
                         run_id=run_id,
                         user_id=user_id,
                         event_type="EXECUTION_FAILED",
@@ -633,3 +634,4 @@ class NodusAgentAdapter:
                     error=str(exc),
                 )
             return {"status": "FAILED", "error": str(exc)}
+

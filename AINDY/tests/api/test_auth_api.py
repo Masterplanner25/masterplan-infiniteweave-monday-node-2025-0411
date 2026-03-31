@@ -19,7 +19,8 @@ def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_sess
 
     assert register_response.status_code == 201
     register_payload = register_response.json()
-    token = register_payload["access_token"]
+    register_data = register_payload.get("data", register_payload)
+    token = register_data["access_token"]
     claims = decode_access_token(token)
     user_id = uuid.UUID(claims["sub"])
 
@@ -67,11 +68,12 @@ def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_sess
     )
     assert boot_response.status_code == 200
     boot_payload = boot_response.json()
-    assert boot_payload["system_state"]["memory_count"] == 1
-    assert boot_payload["system_state"]["active_runs"] == 1
-    assert boot_payload["system_state"]["score"] == 0.0
-    assert boot_payload["memory"][0]["content"] == "User account created"
-    assert boot_payload["metrics"]["trajectory"] == "baseline"
+    boot_data = boot_payload["data"]
+    assert boot_data["system_state"]["memory_count"] == 1
+    assert boot_data["system_state"]["active_runs"] == 1
+    assert boot_data["system_state"]["score"] == 0.0
+    assert boot_data["memory"][0]["content"] == "User account created"
+    assert boot_data["metrics"]["trajectory"] == "baseline"
 
 
 def test_register_derives_unique_username_when_email_local_part_collides(client, db_session):

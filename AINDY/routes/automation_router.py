@@ -9,10 +9,11 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from db.models.automation_log import AutomationLog
 from services import task_services
@@ -23,6 +24,17 @@ from services.task_services import queue_task_automation
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/automation", tags=["Automation"])
+
+
+def _execute_automation(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload,
+        metadata={"db": db, "source": "automation_router"},
+    )
 
 
 class AutomationTriggerRequest(BaseModel):
@@ -50,6 +62,7 @@ def _serialize_log(log: AutomationLog) -> dict:
 
 @router.get("/logs")
 async def get_automation_logs(
+    request: Request,
     status: Optional[str] = None,
     source: Optional[str] = None,
     limit: int = 50,
@@ -72,20 +85,24 @@ async def get_automation_logs(
             "filters": {"status": status, "source": source},
         }
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="automation_router",
-            operation="automation.logs.list",
-            start_payload={"status": status, "source_filter": source},
-        ),
-        _load,
-    )
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="automation_router",
+                operation="automation.logs.list",
+                start_payload={"status": status, "source_filter": source},
+            ),
+            _load,
+        )
+    return _execute_automation(request, "automation.logs.list", handler, db=db, user_id=user_id, input_payload={"status": status, "source_filter": source})
 
 
 @router.get("/logs/{log_id}")
 async def get_automation_log(
+    request: Request,
     log_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -101,20 +118,24 @@ async def get_automation_log(
     if not log:
         raise HTTPException(status_code=404, detail="Automation log not found")
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="automation_router",
-            operation="automation.logs.get",
-            start_payload={"automation_log_id": log_id},
-        ),
-        lambda: _serialize_log(log),
-    )
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="automation_router",
+                operation="automation.logs.get",
+                start_payload={"automation_log_id": log_id},
+            ),
+            lambda: _serialize_log(log),
+        )
+    return _execute_automation(request, "automation.logs.get", handler, db=db, user_id=user_id, input_payload={"automation_log_id": log_id})
 
 
 @router.post("/logs/{log_id}/replay")
 async def replay_automation_log(
+    request: Request,
     log_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -170,20 +191,24 @@ async def replay_automation_log(
             ),
         }
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="automation_router",
-            operation="automation.logs.replay",
-            start_payload={"automation_log_id": log_id},
-        ),
-        _replay,
-    )
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="automation_router",
+                operation="automation.logs.replay",
+                start_payload={"automation_log_id": log_id},
+            ),
+            _replay,
+        )
+    return _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id, input_payload={"automation_log_id": log_id})
 
 
 @router.get("/scheduler/status")
 async def get_scheduler_status(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -192,35 +217,39 @@ async def get_scheduler_status(
 
         scheduler = get_scheduler()
         jobs = scheduler.get_jobs()
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=str(current_user["sub"]),
-                source="automation_router",
-                operation="automation.scheduler.status",
-            ),
-            lambda: {
-                "running": scheduler.running,
-                "job_count": len(jobs),
-                "jobs": [
-                    {
-                        "id": job.id,
-                        "name": job.name,
-                        "next_run": (
-                            job.next_run_time.isoformat() if job.next_run_time else None
-                        ),
-                        "trigger": str(job.trigger),
-                    }
-                    for job in jobs
-                ],
-            },
-        )
+        user_id = str(current_user["sub"])
+        def handler(_ctx):
+            return run_execution(
+                ExecutionContext(
+                    db=db,
+                    user_id=user_id,
+                    source="automation_router",
+                    operation="automation.scheduler.status",
+                ),
+                lambda: {
+                    "running": scheduler.running,
+                    "job_count": len(jobs),
+                    "jobs": [
+                        {
+                            "id": job.id,
+                            "name": job.name,
+                            "next_run": (
+                                job.next_run_time.isoformat() if job.next_run_time else None
+                            ),
+                            "trigger": str(job.trigger),
+                        }
+                        for job in jobs
+                    ],
+                },
+            )
+        return _execute_automation(request, "automation.scheduler.status", handler, db=db, user_id=user_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
 
 
 @router.post("/tasks/{task_id}/trigger")
 async def trigger_task_automation(
+    request: Request,
     task_id: int,
     body: AutomationTriggerRequest,
     db: Session = Depends(get_db),
@@ -250,13 +279,16 @@ async def trigger_task_automation(
             raise RuntimeError("task_automation_dispatch_failed")
         return dispatch
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=str(current_user["sub"]),
-            source="automation_router",
-            operation="automation.tasks.trigger",
-            start_payload={"task_id": task_id, "automation_type": task.automation_type},
-        ),
-        _dispatch,
-    )
+    user_id = str(current_user["sub"])
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="automation_router",
+                operation="automation.tasks.trigger",
+                start_payload={"task_id": task_id, "automation_type": task.automation_type},
+            ),
+            _dispatch,
+        )
+    return _execute_automation(request, "automation.tasks.trigger", handler, db=db, user_id=user_id, input_payload={"task_id": task_id, "automation_type": task.automation_type})

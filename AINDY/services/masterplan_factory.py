@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
+from core.execution_signal_helper import queue_memory_capture
 from sqlalchemy.orm import Session
 from db.models import MasterPlan, GenesisSessionDB
 from services.posture import determine_posture  # adjust import if needed
@@ -82,16 +83,13 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
     # Capture lock event to memory (fire-and-forget)
     if user_id:
         try:
-            from services.memory_capture_engine import MemoryCaptureEngine
-            engine = MemoryCaptureEngine(
-                db=db,
-                user_id=user_id,
-                agent_namespace="genesis",
-            )
             vision = ""
             if isinstance(draft_to_use, dict):
                 vision = str(draft_to_use.get("vision_statement") or draft_to_use.get("vision_summary") or "")
-            engine.evaluate_and_capture(
+            queue_memory_capture(
+                db=db,
+                user_id=user_id,
+                agent_namespace="genesis",
                 event_type="masterplan_locked",
                 content=(
                     f"Masterplan locked: {masterplan.version_label} "

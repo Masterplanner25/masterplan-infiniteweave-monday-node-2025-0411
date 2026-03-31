@@ -300,11 +300,12 @@ class TestMemoryRoutePhase2:
                         headers=auth_headers,
                     )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert "results" in data
-        assert data["scoring_version"] == "v2"
-        assert "formula" in data
+                    assert response.status_code == 200
+                    payload = response.json()
+                    data = payload.get("data", payload)
+                    assert "results" in data
+                    assert data["scoring_version"] == "v2"
+                    assert "formula" in data
         assert data["formula"]["semantic"] == 0.40
         assert data["formula"]["graph"] == 0.15
         assert data["formula"]["recency"] == 0.15
@@ -325,9 +326,10 @@ class TestMemoryRoutePhase2:
                         headers=auth_headers,
                     )
 
-        assert response.status_code == 200
-        data = response.json()
-        assert "query" in data
-        assert data["query"] == "important decisions"
-        assert "results" in data
+                    assert response.status_code == 200
+                    payload = response.json()
+                    data = payload.get("data", payload)
+                    assert "query" in data
+                    assert data["query"] == "important decisions"
+                    assert "results" in data
         assert "count" in data

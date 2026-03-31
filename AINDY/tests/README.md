@@ -14,6 +14,7 @@ Current foundation:
 - shared SQLite-backed fixtures live under `tests/fixtures/`
 - `TEST_MODE=true` is the default pytest runtime
 - test env defaults are injected from `tests/conftest.py`
+- Mongo connectivity is disabled in tests (`SKIP_MONGO_PING=1`, blank `MONGO_URL`) to avoid external dependencies
 - API-key protected routes use `api_key_headers`
 - the legacy compatibility surface is enabled in tests and remains API-key protected
 - async heavy execution is disabled by default unless a test explicitly enables it

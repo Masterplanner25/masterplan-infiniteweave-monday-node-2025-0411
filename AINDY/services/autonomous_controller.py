@@ -8,11 +8,11 @@ from db.models.agent_run import AgentRun
 from db.models.autonomy_decision import AutonomyDecision
 from db.models.flow_run import FlowRun
 from db.models.system_event import SystemEvent
+from core.execution_signal_helper import queue_system_event
 from services.execution_envelope import success
 from services.goal_service import calculate_goal_alignment
 from services.goal_service import rank_goals
 from services.memory_scoring_service import get_relevant_memories
-from services.system_event_service import emit_system_event
 from services.system_event_types import SystemEventTypes
 from services.system_state_service import compute_current_state
 from utils.uuid_utils import normalize_uuid
@@ -166,7 +166,7 @@ def record_decision(
     db.add(decision)
     db.commit()
     db.refresh(decision)
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type=SystemEventTypes.AUTONOMY_DECISION,
         user_id=user_id,

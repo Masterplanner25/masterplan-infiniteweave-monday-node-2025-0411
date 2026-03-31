@@ -4,9 +4,10 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.dao.memory_node_dao import MemoryNodeDAO
 from db.database import get_db
 from runtime.memory import MemoryOrchestrator
@@ -26,6 +27,18 @@ search_history_router = APIRouter(prefix="/search", tags=["Search History"], dep
 logger = logging.getLogger(__name__)
 
 
+def _execute_research(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None, success_status_code: int = 200):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload,
+        metadata={"db": db, "source": "research"},
+        success_status_code=success_status_code,
+    )
+
+
 def _result_payload(result) -> dict:
     result_data = getattr(result, "data", None)
     search_score = result_data.get("search_score") if isinstance(result_data, dict) else None
@@ -42,53 +55,60 @@ def _result_payload(result) -> dict:
 
 @router.post("/")
 def create_result(
+    request: Request,
     result: ResearchResultCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(db=db, user_id=user_id, source="research", operation="research.create"),
-        lambda: {
-            "data": _result_payload(research_results_service.create_research_result(db, result, user_id=user_id)),
-            "execution_signals": {
-                "memory": {
-                    "event_type": "research_result",
-                    "content": f"Research: {result.query} | {result.summary}",
-                    "source": "research_engine",
-                    "tags": ["research", "insight"],
-                    "node_type": "insight",
-                    "user_id": user_id,
-                    "agent_namespace": "research",
-                }
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(db=db, user_id=user_id, source="research", operation="research.create"),
+            lambda: {
+                "data": _result_payload(research_results_service.create_research_result(db, result, user_id=user_id)),
+                "execution_signals": {
+                    "memory": {
+                        "event_type": "research_result",
+                        "content": f"Research: {result.query} | {result.summary}",
+                        "source": "research_engine",
+                        "tags": ["research", "insight"],
+                        "node_type": "insight",
+                        "user_id": user_id,
+                        "agent_namespace": "research",
+                    }
+                },
             },
-        },
-        success_status_code=201,
-        completed_payload_builder=lambda created: {"research_id": created["data"]["id"]},
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Failed to create research result"),
-        },
-    )
+            success_status_code=201,
+            completed_payload_builder=lambda created: {"research_id": created["data"]["id"]},
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Failed to create research result"),
+            },
+        )
+    return _execute_research(request, "research.create", handler, db=db, user_id=user_id, success_status_code=201)
 
 
 @router.get("/")
 def list_results(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(db=db, user_id=user_id, source="research", operation="research.list"),
-        lambda: [_result_payload(item) for item in research_results_service.get_all_research_results(db, user_id=user_id)],
-        completed_payload_builder=lambda items: {"count": len(items)},
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Failed to load research results"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(db=db, user_id=user_id, source="research", operation="research.list"),
+            lambda: [_result_payload(item) for item in research_results_service.get_all_research_results(db, user_id=user_id)],
+            completed_payload_builder=lambda items: {"count": len(items)},
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Failed to load research results"),
+            },
+        )
+    return _execute_research(request, "research.list", handler, db=db, user_id=user_id)
 
 
 @router.post("/query")
 def run_research_query(
+    http_request: Request,
     request: ResearchResultCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -176,20 +196,22 @@ def run_research_query(
             },
         }
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="research",
-            operation="research.query",
-            start_payload={"query": request.query},
-        ),
-        _run_query,
-        completed_payload_builder=lambda result: (result.get("data") or {}).pop("_execution_meta", None),
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Research query failed"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="research",
+                operation="research.query",
+                start_payload={"query": request.query},
+            ),
+            _run_query,
+            completed_payload_builder=lambda result: (result.get("data") or {}).pop("_execution_meta", None),
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Research query failed"),
+            },
+        )
+    return _execute_research(http_request, "research.query", handler, db=db, user_id=user_id, input_payload={"query": request.query})
 
 
 def _history_to_dict(item):
@@ -205,72 +227,81 @@ def _history_to_dict(item):
 
 @search_history_router.get("/history")
 def list_search_history(
+    request: Request,
     limit: int = 25,
     search_type: str | None = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="search_history",
-            operation="search.history.list",
-            start_payload={"search_type": search_type},
-        ),
-        lambda: {
-            "count": len(items := get_search_history(db, user_id, limit=limit, search_type=search_type)),
-            "items": [_history_to_dict(item) for item in items],
-        },
-        completed_payload_builder=lambda result: {"count": result["count"]},
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="search_history",
+                operation="search.history.list",
+                start_payload={"search_type": search_type},
+            ),
+            lambda: {
+                "count": len(items := get_search_history(db, user_id, limit=limit, search_type=search_type)),
+                "items": [_history_to_dict(item) for item in items],
+            },
+            completed_payload_builder=lambda result: {"count": result["count"]},
+        )
+    return _execute_research(request, "search.history.list", handler, db=db, user_id=user_id, input_payload={"search_type": search_type})
 
 
 @search_history_router.get("/history/{history_id}")
 def get_search_history_detail(
+    request: Request,
     history_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="search_history",
-            operation="search.history.detail",
-            start_payload={"history_id": history_id},
-        ),
-        lambda: _history_to_dict(_require_history_item(db, user_id, history_id)),
-        completed_payload_builder=lambda result: {"history_id": result["id"]},
-        handled_exceptions={
-            LookupError: ExecutionErrorConfig(status_code=404, message="Search history item not found"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="search_history",
+                operation="search.history.detail",
+                start_payload={"history_id": history_id},
+            ),
+            lambda: _history_to_dict(_require_history_item(db, user_id, history_id)),
+            completed_payload_builder=lambda result: {"history_id": result["id"]},
+            handled_exceptions={
+                LookupError: ExecutionErrorConfig(status_code=404, message="Search history item not found"),
+            },
+        )
+    return _execute_research(request, "search.history.detail", handler, db=db, user_id=user_id, input_payload={"history_id": history_id})
 
 
 @search_history_router.delete("/history/{history_id}")
 def delete_search_history_detail(
+    request: Request,
     history_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="search_history",
-            operation="search.history.delete",
-            start_payload={"history_id": history_id},
-        ),
-        lambda: _delete_history_item(db, user_id, history_id),
-        completed_payload_builder=lambda result: {"history_id": result["id"]},
-        handled_exceptions={
-            LookupError: ExecutionErrorConfig(status_code=404, message="Search history item not found"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="search_history",
+                operation="search.history.delete",
+                start_payload={"history_id": history_id},
+            ),
+            lambda: _delete_history_item(db, user_id, history_id),
+            completed_payload_builder=lambda result: {"history_id": result["id"]},
+            handled_exceptions={
+                LookupError: ExecutionErrorConfig(status_code=404, message="Search history item not found"),
+            },
+        )
+    return _execute_research(request, "search.history.delete", handler, db=db, user_id=user_id, input_payload={"history_id": history_id})
 
 
 def _require_history_item(db: Session, user_id: str, history_id: str):

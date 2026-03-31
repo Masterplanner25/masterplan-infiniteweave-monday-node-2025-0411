@@ -4,6 +4,7 @@ Identity Router - v5 Phase 2
 API for viewing and managing user identity profiles.
 """
 from fastapi import APIRouter, Depends, HTTPException
+from core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -14,7 +15,6 @@ from services.identity_boot_service import boot_identity_context
 from services.identity_service import IdentityService
 from services.system_event_service import (
     SystemEventEmissionError,
-    emit_system_event,
 )
 from utils.user_ids import require_user_id
 
@@ -44,7 +44,7 @@ async def boot_identity(
     result = boot_identity_context(user_id, db)
 
     try:
-        emit_system_event(
+        queue_system_event(
             db=db,
             event_type="identity.boot",
             user_id=user_id,

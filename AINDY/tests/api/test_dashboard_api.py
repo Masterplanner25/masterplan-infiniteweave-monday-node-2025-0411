@@ -104,8 +104,9 @@ def test_dashboard_overview_returns_real_db_snapshot(
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] == "ok"
-    overview = payload["overview"]
+    data = payload["data"]
+    assert payload["status"] == "success"
+    overview = data["overview"]
     assert overview["author_count"] == 1
     assert len(overview["recent_authors"]) == 1
     assert overview["recent_authors"][0]["id"] == "author-1"

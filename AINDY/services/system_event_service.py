@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from config import settings
+from core.execution_signal_helper import queue_system_event
 from services.rippletrace_service import link_events
 from services.system_event_types import SystemEventTypes
 from services.trace_context import get_parent_event_id
@@ -210,7 +211,7 @@ def _emit_feedback_signal(
 ) -> None:
     if _has_recent_feedback_event(db, trace_id=trace_id, event_type=event_type):
         return
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type=event_type,
         user_id=user_id,
@@ -509,7 +510,7 @@ def emit_error_event(
         "message": message,
         **(payload or {}),
     }
-    emit_system_event(
+    queue_system_event(
         db=db,
         event_type=f"error.{error_type}",
         user_id=user_id,

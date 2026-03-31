@@ -1,9 +1,10 @@
 # /routes/dashboard_router.py
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from db.models.author_model import AuthorDB
 from db.models import PingDB  # from your existing rippletrace models
@@ -12,8 +13,19 @@ from services.auth_service import get_current_user
 router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"], dependencies=[Depends(get_current_user)])
 
 
+def _execute_dashboard(request: Request, route_name: str, handler, *, db: Session, user_id: str):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db, "source": "dashboard_router"},
+    )
+
+
 @router.get("/overview")
 async def get_system_overview(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ) -> dict:
@@ -60,4 +72,6 @@ async def get_system_overview(
         "recent_ripples": ripple_list,
     }
 
-    return {"status": "ok", "overview": overview}
+    def handler(_ctx):
+        return {"status": "ok", "overview": overview}
+    return _execute_dashboard(request, "dashboard.overview", handler, db=db, user_id=str(current_user["sub"]))

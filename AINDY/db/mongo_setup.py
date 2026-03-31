@@ -19,6 +19,11 @@ def init_mongo() -> MongoClient:
         return _client
 
     mongo_url = settings.MONGO_URL
+    if settings.SKIP_MONGO_PING:
+        _client = None
+        logger.info("Skipping Mongo connection (SKIP_MONGO_PING enabled)")
+        return _client
+
     if not mongo_url:
         raise RuntimeError("MONGO_URL is required for runtime")
 

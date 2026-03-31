@@ -178,8 +178,9 @@ def test_memory_nodus_async_route_emits_system_events(
 
         assert response.status_code == 202
         payload = response.json()
-        assert payload["status"] == "QUEUED"
-        log_id = payload["result"]["automation_log_id"]
+        data = payload["data"]
+        assert data["status"] == "QUEUED"
+        log_id = data["result"]["automation_log_id"]
 
         log = _wait_for_async_job(db_session, log_id)
         assert log.status == "success"

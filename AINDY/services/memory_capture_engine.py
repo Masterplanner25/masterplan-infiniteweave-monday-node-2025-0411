@@ -18,9 +18,10 @@ import uuid
 from typing import Optional
 
 from sqlalchemy import text
+from core.execution_signal_helper import queue_memory_capture, queue_system_event
 from services.observability_events import emit_observability_event
 from services.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
-from services.system_event_service import emit_error_event, emit_system_event
+from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 from utils.trace_context import get_current_trace_id
 
@@ -229,7 +230,7 @@ class MemoryCaptureEngine:
                 score,
                 content[:50],
             )
-            emit_system_event(
+            queue_system_event(
                 db=self.db,
                 event_type=SystemEventTypes.MEMORY_WRITE,
                 user_id=self.user_id,
@@ -516,7 +517,6 @@ def capture_system_event_as_memory(db, event) -> Optional[dict]:
     trace_id = getattr(event, "trace_id", None)
     source = getattr(event, "source", None) or "system_event"
 
-    engine = MemoryCaptureEngine(db=db, user_id=str(user_id) if user_id else None, agent_namespace="system")
     content = payload.get("message") or payload.get("error") or payload.get("description")
     if not content:
         content = f"{event_type} from {source}"
@@ -524,7 +524,10 @@ def capture_system_event_as_memory(db, event) -> Optional[dict]:
     tags = [source, event_type.replace(".", "_"), "causal_memory"]
     if "feedback." in str(event_type):
         tags.append("behavior_signal")
-    return engine.evaluate_and_capture(
+    return queue_memory_capture(
+        db=db,
+        user_id=str(user_id) if user_id else None,
+        agent_namespace="system",
         event_type=event_type,
         content=content,
         source=f"system_event:{source}",
@@ -537,5 +540,4 @@ def capture_system_event_as_memory(db, event) -> Optional[dict]:
             "event_payload": payload,
         },
         force=True,
-        agent_namespace="system",
     )

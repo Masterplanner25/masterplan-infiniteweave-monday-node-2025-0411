@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_signal_helper import queue_memory_capture
 from db.database import get_db
 from db.models import GenesisSessionDB, MasterPlan
 from services.auth_service import get_current_user
@@ -392,17 +393,13 @@ def lock_masterplan(
             )
 
         try:
-            from services.memory_capture_engine import MemoryCaptureEngine
-
             vision = ""
             if isinstance(draft, dict):
                 vision = str(draft.get("vision_statement") or draft.get("vision_summary") or "")
-            engine = MemoryCaptureEngine(
+            queue_memory_capture(
                 db=db,
                 user_id=str(user_id),
                 agent_namespace="genesis",
-            )
-            engine.evaluate_and_capture(
                 event_type="masterplan_locked",
                 content=(
                     f"Masterplan locked: {masterplan.version_label} "
@@ -469,14 +466,10 @@ def activate_masterplan(
         db.commit()
 
         try:
-            from services.memory_capture_engine import MemoryCaptureEngine
-
-            engine = MemoryCaptureEngine(
+            queue_memory_capture(
                 db=db,
                 user_id=str(user_id),
                 agent_namespace="genesis",
-            )
-            engine.evaluate_and_capture(
                 event_type="masterplan_activated",
                 content=f"Masterplan activated: {plan.version_label} (id: {plan_id})",
                 source="genesis_activate",

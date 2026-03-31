@@ -474,7 +474,8 @@ class TestMasterplanListResponseShape:
         response = client.get("/masterplans/", headers=auth_headers)
         # 200 or 500 (no DB) — either way, if 200 the body must be an object
         if response.status_code == 200:
-            data = response.json()
+            payload = response.json()
+            data = payload.get("data", payload)
             assert isinstance(data, dict), (
                 f"list_masterplans returned a list instead of dict: {data}"
             )

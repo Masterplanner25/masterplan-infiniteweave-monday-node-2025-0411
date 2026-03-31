@@ -176,6 +176,8 @@ async def create_node(
         )
 
     return await _execute_memory(request, "memory.nodes.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
+
+
 @router.get("/nodes/{node_id}")
 async def get_node(
     request: Request,
@@ -195,6 +197,8 @@ async def get_node(
         return node
 
     return await _execute_memory(request, "memory.nodes.get", handler, db=db, current_user=current_user)
+
+
 @router.put("/nodes/{node_id}")
 async def update_node(
     request: Request,
@@ -221,6 +225,8 @@ async def update_node(
         return dao._node_to_dict(updated)
 
     return await _execute_memory(request, "memory.nodes.update", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.get("/nodes/{node_id}/history")
 async def get_node_history(
     request: Request,
@@ -243,6 +249,8 @@ async def get_node_history(
         }
 
     return await _execute_memory(request, "memory.nodes.history", handler, db=db, current_user=current_user)
+
+
 @router.get("/nodes/{node_id}/links")
 async def get_linked_nodes(
     request: Request,
@@ -275,6 +283,8 @@ async def get_linked_nodes(
         }
 
     return await _execute_memory(request, "memory.nodes.links", handler, db=db, current_user=current_user)
+
+
 @router.get("/nodes")
 async def search_nodes_by_tags(
     request: Request,
@@ -302,6 +312,8 @@ async def search_nodes_by_tags(
         }
 
     return await _execute_memory(request, "memory.nodes.search_tags", handler, db=db, current_user=current_user)
+
+
 @router.post("/links", status_code=201)
 async def create_link(
     request: Request,
@@ -333,6 +345,8 @@ async def create_link(
             )
 
     return await _execute_memory(request, "memory.links.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
+
+
 @router.get("/nodes/{node_id}/traverse")
 async def traverse_from_node(
     request: Request,
@@ -361,6 +375,8 @@ async def traverse_from_node(
         return result
 
     return await _execute_memory(request, "memory.nodes.traverse", handler, db=db, current_user=current_user)
+
+
 @router.post("/nodes/expand")
 async def expand_nodes(
     request: Request,
@@ -387,6 +403,8 @@ async def expand_nodes(
         )
 
     return await _execute_memory(request, "memory.nodes.expand", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.post("/nodes/search")
 async def search_similar_nodes(
     request: Request,
@@ -413,6 +431,8 @@ async def search_similar_nodes(
         }
 
     return await _execute_memory(request, "memory.nodes.search_similar", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.post("/recall")
 async def recall_memories(
     request: Request,
@@ -464,6 +484,8 @@ async def recall_memories(
         }
 
     return await _execute_memory(request, "memory.recall", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.post("/recall/v3")
 async def recall_v3(
     request: Request,
@@ -543,6 +565,8 @@ async def recall_v3(
         }
 
     return await _execute_memory(request, "memory.recall.v3", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.post("/federated/recall")
 async def federated_recall(
     request: Request,
@@ -568,6 +592,8 @@ async def federated_recall(
         )
 
     return await _execute_memory(request, "memory.recall.federated", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+
+
 @router.get("/agents")
 async def list_agents(
     request: Request,
@@ -616,6 +642,8 @@ async def list_agents(
         }
 
     return await _execute_memory(request, "memory.agents.list", handler, db=db, current_user=current_user)
+
+
 @router.post("/nodes/{node_id}/share")
 async def share_memory_node(
     request: Request,
@@ -643,6 +671,8 @@ async def share_memory_node(
         }
 
     return await _execute_memory(request, "memory.nodes.share", handler, db=db, current_user=current_user)
+
+
 @router.get("/agents/{namespace}/recall")
 async def recall_from_agent_endpoint(
     request: Request,
@@ -670,6 +700,8 @@ async def recall_from_agent_endpoint(
         }
 
     return await _execute_memory(request, "memory.agents.recall", handler, db=db, current_user=current_user)
+
+
 @router.post("/nodes/{node_id}/feedback")
 async def record_node_feedback(
     request: Request,
@@ -706,6 +738,49 @@ async def record_node_feedback(
         }
 
     return await _execute_memory(request, "memory.nodes.feedback", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+    """
+    Record explicit feedback on a memory node.
+
+    Signals whether this memory led to a good or bad outcome.
+    Updates the node's success/failure counts and adjusts
+    its adaptive weight for future resonance v2 scoring.
+
+    outcome values:
+      "success" — this memory helped, boost its weight
+      "failure" — this memory misled, suppress its weight
+      "neutral" — acknowledged but no clear outcome
+
+    Called explicitly by the user (thumbs up/down UI)
+    or automatically by workflow hooks.
+    """
+    dao = MemoryNodeDAO(db)
+    node = dao.record_feedback(
+        node_id=node_id,
+        outcome=body.outcome,
+        user_id=str(current_user["sub"]),
+    )
+    if not node:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
+
+    return {
+        "node_id": node_id,
+        "outcome": body.outcome,
+        "success_count": node.success_count,
+        "failure_count": node.failure_count,
+        "usage_count": node.usage_count,
+        "adaptive_weight": node.weight,
+        "success_rate": dao.get_success_rate(node),
+        "message": {
+            "success": "Weight boosted — memory reinforced",
+            "failure": "Weight reduced — memory suppressed",
+            "neutral": "Usage recorded — no weight change",
+        }[body.outcome],
+    }
+
+
 @router.get("/nodes/{node_id}/performance")
 async def get_node_performance(
     request: Request,
@@ -751,6 +826,53 @@ async def get_node_performance(
         }
 
     return await _execute_memory(request, "memory.nodes.performance", handler, db=db, current_user=current_user)
+    """
+    Get performance metrics for a memory node.
+    Shows how well this memory has performed over time.
+    """
+    dao = MemoryNodeDAO(db)
+    node = dao._get_model_by_id(node_id, user_id=str(current_user["sub"]))
+    if not node:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "memory_node_not_found", "message": "Memory node not found"},
+        )
+
+    success_rate = dao.get_success_rate(node)
+    usage_freq = dao.get_usage_frequency_score(node)
+    graph_score = dao.get_graph_connectivity_score(node_id)
+
+    total_feedback = (node.success_count or 0) + (node.failure_count or 0)
+
+    return {
+        "node_id": node_id,
+        "content_preview": (node.content or "")[:100],
+        "node_type": node.node_type,
+        "performance": {
+            "success_count": node.success_count or 0,
+            "failure_count": node.failure_count or 0,
+            "usage_count": node.usage_count or 0,
+            "success_rate": round(success_rate, 3),
+            "adaptive_weight": round(node.weight or 1.0, 3),
+            "last_outcome": node.last_outcome,
+            "last_used_at": node.last_used_at.isoformat()
+            if node.last_used_at
+            else None,
+            "total_feedback_signals": total_feedback,
+            "graph_connectivity": round(graph_score, 3),
+            "usage_frequency_score": round(usage_freq, 3),
+        },
+        "resonance_v2_preview": {
+            "note": "Scores shown for this node in isolation. "
+            "Actual resonance depends on query context.",
+            "success_rate_component": round(success_rate * 0.20, 4),
+            "usage_freq_component": round(usage_freq * 0.10, 4),
+            "graph_component": round(graph_score * 0.15, 4),
+            "adaptive_weight": round(node.weight or 1.0, 3),
+        },
+    }
+
+
 @router.post("/suggest")
 async def get_suggestions(
     request: Request,
@@ -774,6 +896,36 @@ async def get_suggestions(
         )
 
     return await _execute_memory(request, "memory.suggest", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+    """
+    Get suggestions based on past high-performing memories.
+
+    Analyzes what worked before in similar contexts and
+    returns actionable recommendations with reasoning.
+
+    This is A.I.N.D.Y.'s "based on past, do this" layer —
+    memory actively guides future decisions rather than
+    just responding to queries.
+
+    Confidence score = resonance_v2 × adaptive_weight
+    Higher confidence = more validated by past outcomes.
+    """
+    if not body.query and not body.tags:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
+        )
+
+    dao = MemoryNodeDAO(db)
+    result = dao.suggest(
+        query=body.query,
+        tags=body.tags,
+        context=body.context,
+        user_id=str(current_user["sub"]),
+        limit=body.limit,
+    )
+    return result
+
+
 @router.post("/nodus/execute")
 async def execute_nodus_task(
     request: Request,
@@ -846,6 +998,81 @@ async def execute_nodus_task(
             )
 
     return await _execute_memory(request, "memory.nodus.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+    """
+    Execute a Nodus task block with restricted Memory Bridge access.
+    """
+    from services.async_job_service import (
+        async_heavy_execution_enabled,
+        build_queued_response,
+        submit_async_job,
+    )
+    from services.nodus_execution_service import execute_nodus_task_payload
+    from utils.user_ids import require_user_id
+
+    user_id = str(require_user_id(current_user["sub"]))
+    if async_heavy_execution_enabled():
+        log_id = submit_async_job(
+            task_name="memory.nodus.execute",
+            payload={
+                "task_name": body.task_name,
+                "task_code": body.task_code,
+                "user_id": user_id,
+                "session_tags": body.session_tags,
+                "allowed_operations": body.allowed_operations,
+                "execution_id": body.execution_id,
+                "capability_token": body.capability_token,
+            },
+            user_id=user_id,
+            source="memory_router",
+        )
+        return JSONResponse(
+            status_code=202,
+            content=build_queued_response(
+                log_id,
+                task_name="memory.nodus.execute",
+                source="memory_router",
+            ),
+        )
+
+    try:
+        result = execute_nodus_task_payload(
+            task_name=body.task_name,
+            task_code=body.task_code,
+            db=db,
+            user_id=user_id,
+            session_tags=body.session_tags,
+            allowed_operations=body.allowed_operations,
+            execution_id=body.execution_id,
+            capability_token=body.capability_token,
+            logger=logger,
+        )
+        if isinstance(result, dict) and {
+            "status",
+            "result",
+            "events",
+            "next_action",
+            "trace_id",
+        }.issubset(result.keys()):
+            return result
+        return success(result, [], ensure_trace_id())
+    except NodusSecurityError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "nodus_security_violation",
+                "message": str(exc),
+            },
+        )
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "nodus_execute_failed", "message": "Task execution failed", "details": str(exc)},
+        )
+
+
 @router.post("/execute")
 async def execute_with_memory(
     request: Request,
@@ -882,6 +1109,37 @@ async def execute_with_memory(
         return result
 
     return await _execute_memory(request, "memory.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+    """
+    Execute any workflow with the full v5 memory loop.
+    """
+    user_id = normalize_uuid(current_user["sub"])
+    result = execute_intent(
+        intent_data={
+            "workflow_type": "memory_execution",
+            "original_workflow": body.workflow,
+            "execution_input": body.input,
+            "session_tags": body.session_tags,
+        },
+        db=db,
+        user_id=user_id,
+    )
+    if result.get("status") != "SUCCESS":
+        raise HTTPException(status_code=500, detail="Memory execution failed")
+    execution_result = result.get("result")
+    if isinstance(execution_result, dict):
+        for key in (
+            "recalled_memories",
+            "memory_context",
+            "recall_count",
+            "workflow",
+            "session_tags",
+            "memory_bridge_version",
+        ):
+            if key in execution_result:
+                result[key] = execution_result[key]
+    return result
+
+
 @router.post("/execute/complete")
 async def complete_execution_loop(
     request: Request,
@@ -899,3 +1157,68 @@ async def complete_execution_loop(
         )
 
     return await _execute_memory(request, "memory.execute.complete", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+    """
+    Complete the v5 execution loop after workflow finishes.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "error": "memory_execute_complete_deprecated",
+            "message": "Execution completion is now handled inside POST /memory/execute via the canonical flow pipeline.",
+        },
+    )
+    user_id = str(current_user["sub"])
+
+    from services.memory_capture_engine import EVENT_SIGNIFICANCE
+    from db.dao.memory_node_dao import MemoryNodeDAO
+    dao = MemoryNodeDAO(db)
+
+    event_type = f"{body.workflow}_complete"
+    if event_type not in EVENT_SIGNIFICANCE:
+        event_type = "task_completed"
+
+    node = queue_memory_capture(
+        db=db,
+        user_id=user_id,
+        agent_namespace="user",
+        event_type=event_type,
+        content=body.outcome_content,
+        source=f"v5_execution_loop:{body.workflow}",
+        tags=body.session_tags,
+        context={
+            **(body.context or {}),
+            "outcome": body.outcome,
+        },
+    )
+
+    feedback_results = []
+    for node_id in body.recalled_node_ids:
+        try:
+            updated = dao.record_feedback(
+                node_id=node_id,
+                outcome=body.outcome,
+                user_id=user_id,
+            )
+            if updated:
+                feedback_results.append({
+                    "node_id": node_id,
+                    "new_weight": updated.weight,
+                    "outcome": body.outcome,
+                })
+        except Exception as exc:
+            logger.warning("Feedback failed for %s: %s", node_id, exc)
+
+    return {
+        "loop_complete": True,
+        "memory_captured": node is not None,
+        "captured_node_id": node.get("id") if node else None,
+        "feedback_recorded": len(feedback_results),
+        "feedback_results": feedback_results,
+        "message": (
+            "Execution loop complete. Memory captured "
+            "and feedback recorded."
+            if node else
+            "Outcome below significance threshold — "
+            "not stored. Feedback recorded on recalled nodes."
+        ),
+    }

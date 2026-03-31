@@ -15,6 +15,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
+from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from schemas.leadgen_schema import LeadGenItem
 from services import leadgen_service
@@ -25,6 +26,17 @@ from services.search_service import get_cached_search_result, persist_search_res
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
+
+
+def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload,
+        metadata={"db": db, "source": "leadgen"},
+    )
 
 
 @router.post("/")
@@ -120,47 +132,53 @@ def generate_b2b_leads(
             },
         }
 
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="leadgen",
-            operation="leadgen.generate",
-            start_payload={"query": query},
-        ),
-        _generate,
-        completed_payload_builder=lambda result: {"query": query, **((result.get("data") or {}).pop("_execution_meta", {}))},
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Lead generation failed"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="leadgen",
+                operation="leadgen.generate",
+                start_payload={"query": query},
+            ),
+            _generate,
+            completed_payload_builder=lambda result: {"query": query, **((result.get("data") or {}).pop("_execution_meta", {}))},
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Lead generation failed"),
+            },
+        )
+    return _execute_leadgen(request, "leadgen.generate", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 
 @router.get("/search")
 def preview_lead_search(
+    request: Request,
     query: str = Query(..., description="Search intent or keyword for AI lead discovery"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="leadgen",
-            operation="leadgen.search",
-            start_payload={"query": query},
-        ),
-        lambda: search_leads(query, db=db, user_id=user_id),
-        completed_payload_builder=lambda payload: {"query": query, "count": len(payload.get("results") or [])},
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Lead search failed"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(
+                db=db,
+                user_id=user_id,
+                source="leadgen",
+                operation="leadgen.search",
+                start_payload={"query": query},
+            ),
+            lambda: search_leads(query, db=db, user_id=user_id),
+            completed_payload_builder=lambda payload: {"query": query, "count": len(payload.get("results") or [])},
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Lead search failed"),
+            },
+        )
+    return _execute_leadgen(request, "leadgen.search", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 
 @router.get("/")
 def list_all_leads(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -191,14 +209,16 @@ def list_all_leads(
             for r in all_results
         ]
 
-    return run_execution(
-        ExecutionContext(db=db, user_id=user_id, source="leadgen", operation="leadgen.list"),
-        _list_results,
-        completed_payload_builder=lambda results: {
-            "count": len(results),
-            "duration_ms": round((time.perf_counter() - start) * 1000, 2),
-        },
-        handled_exceptions={
-            Exception: ExecutionErrorConfig(status_code=500, message="Failed to load leads"),
-        },
-    )
+    def handler(_ctx):
+        return run_execution(
+            ExecutionContext(db=db, user_id=user_id, source="leadgen", operation="leadgen.list"),
+            _list_results,
+            completed_payload_builder=lambda results: {
+                "count": len(results),
+                "duration_ms": round((time.perf_counter() - start) * 1000, 2),
+            },
+            handled_exceptions={
+                Exception: ExecutionErrorConfig(status_code=500, message="Failed to load leads"),
+            },
+        )
+    return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)

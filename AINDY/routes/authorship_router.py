@@ -8,17 +8,24 @@ reclaimed, watermarked version with a visible + invisible authorship signature.
 """
 
 # /routes/authorship_router.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from core.execution_helper import execute_with_pipeline_sync
 from services.authorship_services import reclaim_authorship
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depends(get_current_user)])
 
+
+def _execute_authorship(request: Request, route_name: str, handler):
+    return execute_with_pipeline_sync(request=request, route_name=route_name, handler=handler)
+
 @router.post("/reclaim")
-def reclaim_authorship_endpoint(content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):
+def reclaim_authorship_endpoint(request: Request, content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):
     """
     Reclaim authorship for provided text.
     Returns semantically watermarked text and fingerprint metadata.
     """
-    return reclaim_authorship(content, author, motto)
+    def handler(_ctx):
+        return reclaim_authorship(content, author, motto)
+    return _execute_authorship(request, "authorship.reclaim", handler)
 

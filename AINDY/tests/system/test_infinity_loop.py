@@ -469,7 +469,9 @@ class TestScoreRouterLoopSurface:
             response = client.get("/scores/me", headers=auth_headers)
 
         assert response.status_code == 200
-        assert response.json()["latest_adjustment"]["decision_type"] == "suggestion_refresh"
+        payload = response.json()
+        data = payload.get("data", payload)
+        assert data["latest_adjustment"]["decision_type"] == "suggestion_refresh"
 
     def test_recalculate_calls_orchestrator(self, client, auth_headers, mock_db, mocker):
         orchestrator_mock = mocker.patch(
@@ -543,7 +545,9 @@ class TestScoreRouterLoopSurface:
 
         response = client.get("/scores/feedback", headers=auth_headers)
         assert response.status_code == 200
-        assert response.json()["count"] == 1
+        payload = response.json()
+        data = payload.get("data", payload)
+        assert data["count"] == 1
 
     def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, db_session, test_user):
         from db.models.infinity_loop import LoopAdjustment
