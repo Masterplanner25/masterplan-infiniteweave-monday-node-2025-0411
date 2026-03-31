@@ -25,7 +25,7 @@ The backend performs real startup checks:
 - `SECRET_KEY` safety validation
 - Alembic schema drift guard when `AINDY_ENFORCE_SCHEMA=true`
 - background-task lease acquisition
-- APScheduler startup only on the lease leader
+- APScheduler startup only on the lease leader (if the `apscheduler` dependency is present; otherwise the service logs that the scheduler is disabled)
 - flow registration
 - stuck-run recovery scan
 
@@ -46,7 +46,7 @@ Required or operationally important variables:
 
 ## 5. Background Work Model
 - Background work is not started by daemon threads.
-- APScheduler is the active scheduler.
+- APScheduler is the active scheduler when installed; otherwise the system continues running without scheduled jobs.
 - Leadership is coordinated through the DB lease in `background_task_leases`.
 - Lease timestamps are normalized as timezone-aware UTC in the Python lease path before comparison or persistence.
 - Only one instance should actively run scheduled jobs at a time.

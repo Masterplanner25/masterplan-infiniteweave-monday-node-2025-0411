@@ -10,7 +10,8 @@ This document describes the current runtime behavior of the FastAPI backend as i
   2. Enforce `SECRET_KEY` safety rules. Production startup fails if the placeholder secret is still configured.
   3. Enforce schema drift guard when `AINDY_ENFORCE_SCHEMA=true` by comparing the current Alembic revision to head.
   4. Attempt to acquire the background-task leadership lease via `task_services.start_background_tasks(...)`.
-  5. Start APScheduler only on the lease-holder instance via `services.scheduler_service.start()`.
+   5. Start APScheduler only on the lease-holder instance via `services.scheduler_service.start()`.
+      - If APScheduler is unavailable (e.g., lightweight test runs), `start()` simply logs that the scheduler is disabled and the rest of the stack continues without background jobs.
   6. Register canonical flow-engine nodes and flows via `services.flow_definitions.register_all_flows()`.
   7. Optionally scan and recover stuck flow/agent runs.
   8. Seed or refresh the internal `author-system` identity row.
@@ -20,7 +21,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
 ## 2. Background Task Lifecycle
 - Background execution is no longer driven by daemon threads in `main.py`.
 - Inter-instance coordination is handled by a DB lease in `services/task_services.py`.
-- Only the lease leader starts APScheduler jobs.
+- Only the lease leader starts APScheduler jobs; a missing APScheduler dependency means background jobs are disabled but the API remains responsive for tests or constrained environments.
 - Lease timestamps are normalized to timezone-aware UTC in Python before comparison or persistence.
 - Scheduler lifecycle:
   - startup: `task_services.start_background_tasks(...)` -> `scheduler_service.start()`
