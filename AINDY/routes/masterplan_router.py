@@ -1,21 +1,27 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from datetime import datetime
-from typing import Optional
 
-from core.execution_helper import execute_with_pipeline
 from db.database import get_db
-from db.models import MasterPlan
 from services.auth_service import get_current_user
-from services.masterplan_factory import create_masterplan_from_genesis
-from services.masterplan_execution_service import (
-    get_masterplan_execution_status,
-    sync_masterplan_tasks,
-)
-from services.posture import posture_description
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
+
+
+def _run_flow_masterplan(flow_name: str, payload: dict, db: Session, user_id: str):
+    from services.flow_engine import run_flow
+    result = run_flow(flow_name, payload, db=db, user_id=user_id)
+    if result.get("status") == "FAILED":
+        error = result.get("error", "")
+        if error.startswith("HTTP_"):
+            parts = error.split(":", 1)
+            code = int(parts[0].replace("HTTP_", ""))
+            msg = parts[1] if len(parts) > 1 else error
+            raise HTTPException(status_code=code, detail=msg)
+        raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
+    return result.get("data")
 
 
 # ------------------------------
@@ -28,55 +34,11 @@ def lock_from_genesis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-        session_id = payload.get("session_id")
-        draft = payload.get("draft", {})
-
-        if not session_id:
-            raise HTTPException(
-                status_code=400,
-                detail={"error": "session_id_required", "message": "session_id is required"},
-            )
-
-        try:
-            masterplan = create_masterplan_from_genesis(
-                session_id=session_id,
-                draft=draft,
-                db=db,
-                user_id=user_id_str,
-            )
-        except ValueError as e:
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "masterplan_validation_failed",
-                    "message": "Masterplan validation failed",
-                    "details": str(e),
-                },
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "masterplan_create_failed",
-                    "message": "Failed to create masterplan",
-                    "details": str(e),
-                },
-            )
-
-        task_sync = sync_masterplan_tasks(db=db, masterplan=masterplan, user_id=user_id_str)
-
-        return {
-            "masterplan_id": masterplan.id,
-            "version": masterplan.version_label,
-            "posture_description": posture_description(masterplan.posture),
-            "posture": masterplan.posture,
-            "status": masterplan.status,
-            "task_sync": task_sync,
-        }
-
-    return execute_with_pipeline(request, "masterplan_lock_from_genesis", handler)
+    return _run_flow_masterplan(
+        "masterplan_lock_from_genesis",
+        {"session_id": payload.get("session_id"), "draft": payload.get("draft", {})},
+        db, str(current_user["sub"]),
+    )
 
 
 # ------------------------------
@@ -89,30 +51,7 @@ def lock_plan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
-            .first()
-        )
-
-        if not plan:
-            raise HTTPException(404, detail={"error": "masterplan_not_found", "message": "Plan not found"})
-
-        if plan.status == "locked":
-            raise HTTPException(400, detail={"error": "masterplan_already_locked", "message": "Plan is already locked"})
-
-        plan.status = "locked"
-        plan.locked_at = datetime.utcnow()
-        db.commit()
-
-        task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id_str)
-
-        return {"plan_id": plan.id, "status": plan.status, "task_sync": task_sync}
-
-    return execute_with_pipeline(request, "masterplan_lock", handler)
+    return _run_flow_masterplan("masterplan_lock", {"plan_id": plan_id}, db, str(current_user["sub"]))
 
 
 # ------------------------------
@@ -124,33 +63,7 @@ def list_masterplans(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plans = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.user_id == user_id_str)
-            .order_by(MasterPlan.id.desc())
-            .all()
-        )
-
-        return {
-            "plans": [
-                {
-                    "id": p.id,
-                    "version_label": p.version_label,
-                    "posture": p.posture,
-                    "status": p.status,
-                    "is_active": p.is_active,
-                    "created_at": p.created_at,
-                    "locked_at": p.locked_at,
-                    "activated_at": p.activated_at,
-                }
-                for p in plans
-            ]
-        }
-
-    return execute_with_pipeline(request, "masterplan_list", handler)
+    return _run_flow_masterplan("masterplan_list", {}, db, str(current_user["sub"]))
 
 
 # ------------------------------
@@ -163,37 +76,7 @@ def get_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
-            .first()
-        )
-
-        if not plan:
-            raise HTTPException(404, detail={"error": "masterplan_not_found", "message": "Plan not found"})
-
-        execution_status = get_masterplan_execution_status(
-            db=db, masterplan_id=plan.id, user_id=user_id_str
-        )
-
-        return {
-            "id": plan.id,
-            "version_label": plan.version_label,
-            "posture": plan.posture,
-            "status": plan.status,
-            "is_active": plan.is_active,
-            "structure_json": plan.structure_json,
-            "created_at": plan.created_at,
-            "locked_at": plan.locked_at,
-            "activated_at": plan.activated_at,
-            "linked_genesis_session_id": plan.linked_genesis_session_id,
-            "execution_status": execution_status,
-        }
-
-    return execute_with_pipeline(request, "masterplan_get", handler)
+    return _run_flow_masterplan("masterplan_get", {"plan_id": plan_id}, db, str(current_user["sub"]))
 
 
 # ------------------------------
@@ -214,42 +97,17 @@ def set_masterplan_anchor(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
-            .first()
-        )
-
-        if not plan:
-            raise HTTPException(404, detail={"error": "masterplan_not_found", "message": "Plan not found"})
-
-        if body.anchor_date is not None:
-            try:
-                plan.anchor_date = datetime.fromisoformat(body.anchor_date)
-            except ValueError:
-                raise HTTPException(422, detail={"error": "invalid_anchor_date", "message": "anchor_date must be ISO format"})
-
-        if body.goal_value is not None:
-            plan.goal_value = body.goal_value
-        if body.goal_unit is not None:
-            plan.goal_unit = body.goal_unit
-        if body.goal_description is not None:
-            plan.goal_description = body.goal_description
-
-        db.commit()
-
-        return {
-            "plan_id": plan.id,
-            "anchor_date": plan.anchor_date.isoformat() if plan.anchor_date else None,
-            "goal_value": plan.goal_value,
-            "goal_unit": plan.goal_unit,
-            "goal_description": plan.goal_description,
-        }
-
-    return execute_with_pipeline(request, "masterplan_anchor", handler)
+    return _run_flow_masterplan(
+        "masterplan_anchor",
+        {
+            "plan_id": plan_id,
+            "anchor_date": body.anchor_date,
+            "goal_value": body.goal_value,
+            "goal_unit": body.goal_unit,
+            "goal_description": body.goal_description,
+        },
+        db, str(current_user["sub"]),
+    )
 
 
 # ------------------------------
@@ -262,26 +120,7 @@ def get_masterplan_projection(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
-            .first()
-        )
-
-        if not plan:
-            raise HTTPException(404, detail={"error": "masterplan_not_found", "message": "Plan not found"})
-
-        from services.eta_service import calculate_eta
-
-        try:
-            return calculate_eta(db=db, masterplan_id=plan_id, user_id=user_id_str)
-        except Exception as exc:
-            raise HTTPException(500, detail={"error": "eta_calculation_failed", "message": str(exc)})
-
-    return execute_with_pipeline(request, "masterplan_projection", handler)
+    return _run_flow_masterplan("masterplan_projection", {"plan_id": plan_id}, db, str(current_user["sub"]))
 
 
 # ------------------------------
@@ -294,35 +133,4 @@ def activate_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    def handler(ctx):
-        user_id_str = str(current_user["sub"])
-
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == user_id_str)
-            .first()
-        )
-
-        if not plan:
-            raise HTTPException(404, detail={"error": "masterplan_not_found", "message": "Plan not found"})
-
-        db.query(MasterPlan).filter(MasterPlan.user_id == user_id_str).update({"is_active": False})
-
-        plan.is_active = True
-        plan.status = "active"
-        plan.activated_at = datetime.utcnow()
-        db.commit()
-
-        task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id_str)
-        execution_status = get_masterplan_execution_status(
-            db=db, masterplan_id=plan.id, user_id=user_id_str
-        )
-
-        return {
-            "status": "activated",
-            "plan_id": plan.id,
-            "task_sync": task_sync,
-            "execution_status": execution_status,
-        }
-
-    return execute_with_pipeline(request, "masterplan_activate", handler)
+    return _run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"]))

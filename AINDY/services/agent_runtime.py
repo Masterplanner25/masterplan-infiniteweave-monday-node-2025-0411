@@ -219,7 +219,15 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         kpi_block = _build_kpi_context_block(user_id=user_id, db=db)
-        system_prompt = PLANNER_SYSTEM_PROMPT + kpi_block
+        from services.memory_helpers import enrich_context, format_memories_for_prompt
+        _plan_ctx = enrich_context({
+            "db": db,
+            "user_id": str(user_id) if user_id else None,
+            "node_name": "agent_planning",
+            "agent_type": "default",
+        })
+        memory_block = format_memories_for_prompt(_plan_ctx.get("memory_context") or [])
+        system_prompt = PLANNER_SYSTEM_PROMPT + kpi_block + memory_block
 
         client = _get_client()
         response = perform_external_call(
@@ -315,6 +323,19 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         db.add(run)
         db.commit()
         db.refresh(run)
+        try:
+            from services.execution_unit_service import ExecutionUnitService
+            ExecutionUnitService(db).create(
+                eu_type="agent",
+                user_id=user_db_id,
+                source_type="agent_run",
+                source_id=str(run.id),
+                correlation_id=correlation_id,
+                status="pending",
+                extra={"goal_preview": goal[:120], "overall_risk": overall_risk},
+            )
+        except Exception as _eu_exc:
+            logger.warning("[EU] agent hook create failed — non-fatal | error=%s", _eu_exc)
 
         if status == "approved":
             token = mint_token(

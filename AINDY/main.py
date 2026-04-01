@@ -22,7 +22,7 @@ from services.system_event_service import emit_error_event
 from db.database import SessionLocal
 from db.mongo_setup import init_mongo
 from core.execution_guard import require_execution_context, validate_execution_contract
-from routes import ROUTERS
+from routes import ROOT_ROUTERS, PLATFORM_ROUTERS, APP_ROUTERS, platform_router
 from config import settings
 from db.models.metrics_models import *
 from db.models.request_metric import RequestMetric
@@ -173,9 +173,36 @@ async def lifespan(app: FastAPI):
     if is_leader:
         scheduler_service.start()
 
-    # Register Flow Engine flows and nodes
+    # Register Flow Engine flows and nodes (static startup definitions)
     from services.flow_definitions import register_all_flows
     register_all_flows()
+
+    # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
+    # Runs after register_all_flows() so static nodes are available for flow validation.
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        from services.platform_loader import load_dynamic_registry
+        _loader_db = SessionLocal()
+        try:
+            _loader_stats = load_dynamic_registry(_loader_db)
+            logger.info(
+                "Dynamic registry restored: nodes=%d flows=%d webhooks=%d",
+                _loader_stats.get("nodes_loaded", 0),
+                _loader_stats.get("flows_loaded", 0),
+                _loader_stats.get("webhooks_loaded", 0),
+            )
+        except Exception as _loader_exc:
+            logger.warning("Dynamic registry restore failed (non-fatal): %s", _loader_exc)
+        finally:
+            _loader_db.close()
+
+    # Enforce execution boundary: no router may import services directly
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        from core.router_guard import RouterBoundaryViolation, validate_router_boundary
+        try:
+            validate_router_boundary()
+        except RouterBoundaryViolation as _rbv:
+            logger.error("EXECUTION BOUNDARY VIOLATED:\n%s", _rbv)
+            raise RuntimeError(str(_rbv)) from _rbv
 
     # Sprint N+7: Recover any FlowRun/AgentRun rows stranded by prior crash
     if enable_background and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
@@ -236,8 +263,19 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-for route in ROUTERS:
+# Root — health probes + auth (no prefix; stable k8s / RFC paths)
+for route in ROOT_ROUTERS:
     app.include_router(route, dependencies=[Depends(require_execution_context)])
+
+# Platform — runtime API  (/platform/*)
+# platform_router carries /platform internally; mount without extra prefix.
+app.include_router(platform_router, dependencies=[Depends(require_execution_context)])
+for route in PLATFORM_ROUTERS:
+    app.include_router(route, prefix="/platform", dependencies=[Depends(require_execution_context)])
+
+# Apps — domain features  (/apps/*)
+for route in APP_ROUTERS:
+    app.include_router(route, prefix="/apps", dependencies=[Depends(require_execution_context)])
 
 # CORS — explicit origins only (wildcard + credentials is a security violation)
 import os as _os

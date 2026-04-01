@@ -1,3 +1,27 @@
+"""
+routes/__init__.py — Router registry with platform / apps layer separation.
+
+Mount groups
+-------------
+ROOT_ROUTERS          — mounted at /          — health probes + auth (no prefix)
+platform_router       — mounted at /          — already carries /platform internally
+PLATFORM_ROUTERS      — mounted at /platform  — runtime infrastructure
+APP_ROUTERS           — mounted at /apps      — mutable domain features
+
+Layer definitions
+------------------
+Platform (/platform/*):
+  Stable, versioned API surface intended for external integrations and tooling.
+  Endpoints here represent the runtime itself — flow execution, event routing,
+  observability, key management.  Breaking changes require a version bump.
+
+Apps (/apps/*):
+  Mutable domain features tied to A.I.N.D.Y.'s business logic.
+  Endpoints here evolve freely as product requirements change.
+
+Auth (/auth/*) and Health (/) sit at the root to match RFC / k8s conventions
+and for backward compatibility with existing clients.
+"""
 import os
 
 from .seo_routes import router as seo_router
@@ -35,47 +59,75 @@ from routes.agent_router import router as agent_router
 from routes.autonomy_router import router as autonomy_router
 from routes.goals_router import router as goals_router
 from routes.coordination_router import router as coordination_router
+from routes.platform_router import router as platform_router
 
 
-ROUTERS = [
-    seo_router,
-    task_router,
-    bridge_router,
-    authorship_router,
-    rippletrace_router,
-    network_bridge_router,
-    db_verify_router,
-    research_router,
-    search_history_router,
-    main_router,
-    freelance_router,
-    arm_router,
-    leadgen_router,
-    dashboard_router,
-    health_router,
-    health_dashboard_router,
-    social_router,
-    analytics_router,
-    genesis_router,
-    auth_router,
-    masterplan_router,
-    memory_router,
-    memory_metrics_router,
-    memory_trace_router,
-    identity_router,
-    observability_router,
-    system_state_router,
-    automation_router,
-    flow_router,
-    watcher_router,
-    score_router,
-    agent_router,
-    autonomy_router,
-    goals_router,
-    coordination_router,
+# ---------------------------------------------------------------------------
+# Root — health probes + auth (no mount prefix)
+# ---------------------------------------------------------------------------
+ROOT_ROUTERS = [
+    health_router,   # GET /health, /health/, /ready, /health/details
+    auth_router,     # POST /auth/register, /auth/login
+]
+
+# ---------------------------------------------------------------------------
+# Platform — runtime infrastructure (mounted at /platform)
+# ---------------------------------------------------------------------------
+# platform_router is mounted separately in main.py (it already carries /platform
+# internally and must not receive a second /platform prefix at mount time).
+PLATFORM_ROUTERS = [
+    flow_router,           # /platform/flows/runs, /platform/flows/runs/{id}, ...
+    observability_router,  # /platform/observability/scheduler/status, /requests, ...
+    system_state_router,   # /platform/system/state
+    db_verify_router,      # /platform/db/verify
+]
+
+# ---------------------------------------------------------------------------
+# Apps — mutable domain features (mounted at /apps)
+# ---------------------------------------------------------------------------
+APP_ROUTERS = [
+    # ── Intelligence & reasoning ──────────────────────────────────────────
+    agent_router,          # /apps/agent/run, /runs, /tools, /trust, ...
+    arm_router,            # /apps/arm/analyze, /generate, /logs, /config, ...
+    autonomy_router,       # /apps/autonomy/decisions
+    # ── Planning & execution ──────────────────────────────────────────────
+    task_router,           # /apps/tasks/create, /start, /pause, ...
+    goals_router,          # /apps/goals/
+    masterplan_router,     # /apps/masterplans/
+    genesis_router,        # /apps/genesis/session, /message, ...
+    automation_router,     # /apps/automation/logs, /scheduler/status, ...
+    # ── Data & memory ─────────────────────────────────────────────────────
+    memory_router,         # /apps/memory/nodes, /recall, /execute, ...
+    memory_metrics_router, # /apps/memory/metrics, /metrics/detail, ...
+    memory_trace_router,   # /apps/memory/traces, /traces/{id}, ...
+    bridge_router,         # /apps/bridge/nodes, /link, /user_event
+    # ── Growth & monetisation ─────────────────────────────────────────────
+    freelance_router,      # /apps/freelance/order, /deliver, /feedback, ...
+    leadgen_router,        # /apps/leadgen/
+    analytics_router,      # /apps/analytics/linkedin/manual, /masterplan/{id}, ...
+    social_router,         # /apps/social/profile, /post, /feed, ...
+    score_router,          # /apps/scores/me, /feedback, ...
+    # ── Observability & identity ───────────────────────────────────────────
+    identity_router,       # /apps/identity/boot, /evolution, /context
+    watcher_router,        # /apps/watcher/signals
+    coordination_router,   # /apps/coordination/agents, /graph
+    dashboard_router,      # /apps/dashboard/overview
+    health_dashboard_router, # /apps/dashboard/health
+    # ── Tooling ───────────────────────────────────────────────────────────
+    seo_router,            # /apps/seo/analyze, /meta, /suggest, ...
+    research_router,       # /apps/research/
+    search_history_router, # /apps/search/history
+    authorship_router,     # /apps/authorship/reclaim
+    rippletrace_router,    # /apps/rippletrace/drop_point, /ping, ...
+    network_bridge_router, # /apps/network_bridge/connect, /authors
+    main_router,           # /apps/compute/calculate_*, /results (legacy KPI surface)
 ]
 
 if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
-    ROUTERS.insert(13, legacy_surface_router)
+    APP_ROUTERS.append(legacy_surface_router)
 
-
+# ---------------------------------------------------------------------------
+# ROUTERS — backward-compat flat list consumed by tests and legacy callers.
+# main.py uses the layered groups above; this shim keeps existing imports valid.
+# ---------------------------------------------------------------------------
+ROUTERS = ROOT_ROUTERS + [platform_router] + PLATFORM_ROUTERS + APP_ROUTERS

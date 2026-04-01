@@ -462,6 +462,24 @@ def emit_system_event(
                 event_id,
                 capture_exc,
             )
+        # ── Webhook fan-out ───────────────────────────────────────────────
+        # Fire-and-forget: runs in background thread pool, never blocks here.
+        try:
+            from services.event_service import dispatch_webhooks_async
+            dispatch_webhooks_async(
+                event_type=event_type,
+                event_id=str(event_id) if event_id else "",
+                payload=payload or {},
+                user_id=str(user_id) if user_id else None,
+                trace_id=effective_trace_id,
+                source=source,
+            )
+        except Exception as wh_exc:
+            logger.debug(
+                "[SystemEvent] webhook dispatch skipped for %s id=%s: %s",
+                event_type, event_id, wh_exc,
+            )
+        # ─────────────────────────────────────────────────────────────────
         return event_id
     except Exception as exc:
         try:

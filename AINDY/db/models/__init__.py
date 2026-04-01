@@ -42,6 +42,11 @@ from .goals import Goal
 from .goal_state import GoalState
 from .agent_registry import AgentRegistry
 from .search_history import SearchHistory
+from .execution_unit import ExecutionUnit
+from .api_key import PlatformAPIKey
+from .dynamic_flow import DynamicFlow
+from .dynamic_node import DynamicNode
+from .webhook_subscription import WebhookSubscription
 
 
 __all__ = [
@@ -100,4 +105,9 @@ __all__ = [
     "GoalState",
     "AgentRegistry",
     "SearchHistory",
+    "ExecutionUnit",
+    "PlatformAPIKey",
+    "DynamicFlow",
+    "DynamicNode",
+    "WebhookSubscription",
 ]

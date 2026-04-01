@@ -8,7 +8,7 @@ from services.auth_service import get_current_user
 from db.database import get_db
 from services.search_service import generate_meta as generate_meta_result, search_seo, suggest_seo_improvements
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/seo", tags=["SEO"], dependencies=[Depends(get_current_user)])
 
 
 def _execute_seo(request: Request, route_name: str, handler, *, db: Session | None = None):
@@ -27,7 +27,7 @@ class LegacyContentInput(BaseModel):
     content: str
 
 
-@router.post("/seo/analyze")
+@router.post("/analyze")
 def analyze_seo(request: Request, data: SEOInput, db: Session = Depends(get_db)):
     results = search_seo(data.text, data.top_n)
 
@@ -45,14 +45,14 @@ def analyze_seo(request: Request, data: SEOInput, db: Session = Depends(get_db))
         return results
     return _execute_seo(request, "seo.analyze", handler, db=db)
 
-@router.post("/seo/meta")
+@router.post("/meta")
 def generate_meta(request: Request, data: MetaInput):
     def handler(_ctx):
         return generate_meta_result(data.text, data.limit)
     return _execute_seo(request, "seo.meta", handler)
 
 
-@router.post("/seo/suggest")
+@router.post("/suggest")
 def suggest_improvements(request: Request, data: SEOInput):
     def handler(_ctx):
         return suggest_seo_improvements(data.text, data.top_n)

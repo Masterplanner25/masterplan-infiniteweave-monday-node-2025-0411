@@ -7,7 +7,6 @@ makes those runs inspectable and controllable.
 """
 import logging
 from typing import Optional
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -15,7 +14,6 @@ from sqlalchemy.orm import Session
 
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
-from db.models.flow_run import FlowHistory, FlowRun
 from services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -45,41 +43,13 @@ async def list_flow_runs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    List flow runs for the current user.
-    Shows all workflow executions — running, waiting, succeeded, failed.
-    """
-    query = db.query(FlowRun).filter(
-        FlowRun.user_id == UUID(str(current_user["sub"]))
-    )
-    if status:
-        query = query.filter(FlowRun.status == status)
-    if workflow_type:
-        query = query.filter(FlowRun.workflow_type == workflow_type)
-
-    runs = query.order_by(FlowRun.created_at.desc()).limit(limit).all()
-
+    """List flow runs for the current user."""
     def handler(_ctx):
-        return {
-            "runs": [
-                {
-                    "id": r.id,
-                    "flow_name": r.flow_name,
-                    "workflow_type": r.workflow_type,
-                    "status": r.status,
-                    "trace_id": r.trace_id,
-                    "current_node": r.current_node,
-                    "waiting_for": r.waiting_for,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                    "completed_at": r.completed_at.isoformat()
-                    if r.completed_at
-                    else None,
-                    "error_message": r.error_message,
-                }
-                for r in runs
-            ],
-            "count": len(runs),
-        }
+        from services.flow_engine import run_flow
+        result = run_flow("flow_runs_list", {"status": status, "workflow_type": workflow_type, "limit": limit}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "FAILED":
+            raise HTTPException(status_code=500, detail="Flow runs list failed")
+        return result.get("data")
     return await _execute_flow(request, "flow.runs.list", handler, user_id=str(current_user["sub"]), db=db)
 
 
@@ -91,33 +61,13 @@ async def get_flow_run(
     current_user: dict = Depends(get_current_user),
 ):
     """Get a single flow run with full state."""
-    run = (
-        db.query(FlowRun)
-        .filter(
-            FlowRun.id == run_id,
-            FlowRun.user_id == UUID(str(current_user["sub"])),
-        )
-        .first()
-    )
-
-    if not run:
-        raise HTTPException(404, "Flow run not found")
-
     def handler(_ctx):
-        return {
-            "id": run.id,
-            "flow_name": run.flow_name,
-            "workflow_type": run.workflow_type,
-            "status": run.status,
-            "trace_id": run.trace_id,
-            "current_node": run.current_node,
-            "waiting_for": run.waiting_for,
-            "state": run.state,
-            "error_message": run.error_message,
-            "created_at": run.created_at.isoformat() if run.created_at else None,
-            "updated_at": run.updated_at.isoformat() if run.updated_at else None,
-            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
-        }
+        from services.flow_engine import run_flow
+        result = run_flow("flow_run_get", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "FAILED":
+            error = result.get("error", "")
+            raise HTTPException(404 if "404" in error else 500, error or "Flow run not found")
+        return result.get("data")
     return await _execute_flow(request, "flow.runs.get", handler, user_id=str(current_user["sub"]), db=db)
 
 
@@ -128,50 +78,14 @@ async def get_flow_run_history(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Get the node execution history for a flow run.
-    Shows every node that executed, its status, input/output, and execution time.
-    """
-    # Verify ownership
-    run = (
-        db.query(FlowRun)
-        .filter(
-            FlowRun.id == run_id,
-            FlowRun.user_id == UUID(str(current_user["sub"])),
-        )
-        .first()
-    )
-
-    if not run:
-        raise HTTPException(404, "Flow run not found")
-
-    history = (
-        db.query(FlowHistory)
-        .filter(FlowHistory.flow_run_id == run_id)
-        .order_by(FlowHistory.created_at.asc())
-        .all()
-    )
-
+    """Get the node execution history for a flow run."""
     def handler(_ctx):
-        return {
-            "run_id": run_id,
-            "trace_id": run.trace_id,
-            "flow_name": run.flow_name,
-            "workflow_type": run.workflow_type,
-            "history": [
-                {
-                    "id": h.id,
-                    "node_name": h.node_name,
-                    "status": h.status,
-                    "execution_time_ms": h.execution_time_ms,
-                    "output_patch": h.output_patch,
-                    "error_message": h.error_message,
-                    "created_at": h.created_at.isoformat() if h.created_at else None,
-                }
-                for h in history
-            ],
-            "node_count": len(history),
-        }
+        from services.flow_engine import run_flow
+        result = run_flow("flow_run_history", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "FAILED":
+            error = result.get("error", "")
+            raise HTTPException(404 if "404" in error else 500, error or "Flow run not found")
+        return result.get("data")
     return await _execute_flow(request, "flow.runs.history", handler, user_id=str(current_user["sub"]), db=db)
 
 
@@ -188,47 +102,23 @@ async def resume_flow_run(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Resume a waiting flow run with an event.
-
-    Used when a flow is in WAIT state waiting for user input or an external
-    event. Send the event payload here to resume execution.
-    """
-    run = (
-        db.query(FlowRun)
-        .filter(
-            FlowRun.id == run_id,
-            FlowRun.user_id == UUID(str(current_user["sub"])),
-        )
-        .first()
-    )
-
-    if not run:
-        raise HTTPException(404, "Flow run not found")
-
-    if run.status != "waiting":
-        raise HTTPException(
-            400,
-            f"Flow run is '{run.status}', not 'waiting'. Cannot resume.",
-        )
-
-    if run.waiting_for != body.event_type:
-        raise HTTPException(
-            400,
-            f"Flow run waiting for '{run.waiting_for}', not '{body.event_type}'",
-        )
-
-    from services.flow_engine import route_event
-
-    results = route_event(
-        event_type=body.event_type,
-        payload=body.payload,
-        db=db,
-        user_id=UUID(str(current_user["sub"])),
-    )
-
+    """Resume a waiting flow run with an event."""
     def handler(_ctx):
-        return {"run_id": run_id, "resumed": True, "results": results}
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "flow_run_resume",
+            {"run_id": run_id, "event_type": body.event_type, "payload": body.payload},
+            db=db,
+            user_id=str(current_user["sub"]),
+        )
+        if result.get("status") == "FAILED":
+            error = result.get("error", "")
+            if "404" in error:
+                raise HTTPException(404, "Flow run not found")
+            if "400" in error:
+                raise HTTPException(400, error.split(":", 1)[-1] if ":" in error else error)
+            raise HTTPException(500, "Resume failed")
+        return result.get("data")
     return await _execute_flow(request, "flow.runs.resume", handler, user_id=str(current_user["sub"]), db=db)
 
 
@@ -237,24 +127,11 @@ async def get_flow_registry(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    List all registered flows and nodes.
-    Shows the execution backbone topology.
-    """
-    from services.flow_engine import FLOW_REGISTRY, NODE_REGISTRY
-
+    """List all registered flows and nodes."""
     def handler(_ctx):
-        return {
-            "flows": {
-                name: {
-                    "start": flow["start"],
-                    "end": flow.get("end", []),
-                    "node_count": len(flow.get("edges", {})) + 1,
-                }
-                for name, flow in FLOW_REGISTRY.items()
-            },
-            "nodes": list(NODE_REGISTRY.keys()),
-            "flow_count": len(FLOW_REGISTRY),
-            "node_count": len(NODE_REGISTRY),
-        }
+        from services.flow_engine import run_flow
+        result = run_flow("flow_registry_get", {}, user_id=str(current_user["sub"]))
+        if result.get("status") == "FAILED":
+            raise HTTPException(status_code=500, detail="Registry fetch failed")
+        return result.get("data")
     return await _execute_flow(request, "flow.registry", handler, user_id=str(current_user["sub"]))

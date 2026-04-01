@@ -149,6 +149,124 @@ def _extract_execution_result(workflow_type: str | None, state: dict) -> object:
         "memory_execution": "memory_execution_response",
         "watcher_ingest": "watcher_ingest_result",
         "arm_analysis": "analysis_result",
+        # Flows added in unified execution model migration
+        "arm_generate": "generation_result",
+        "leadgen_search": "search_results",
+        "task_create": "task_create_result",
+        "task_start": "task_start_result",
+        "task_pause": "task_pause_result",
+        "goal_create": "goal_create_result",
+        "score_recalculate": "score_recalculate_result",
+        "score_feedback": "score_feedback_result",
+        # ── Hard Execution Boundary flows ──────────────────────────────────────
+        "arm_logs": "arm_logs_result",
+        "arm_config_get": "arm_config_get_result",
+        "arm_config_update": "arm_config_update_result",
+        "arm_metrics": "arm_metrics_result",
+        "arm_config_suggest": "arm_config_suggest_result",
+        "goals_list": "goals_list_result",
+        "goals_state": "goals_state_result",
+        "score_get": "score_get_result",
+        "score_history": "score_history_result",
+        "score_feedback_list": "score_feedback_list_result",
+        "leadgen_list": "leadgen_list_result",
+        "leadgen_preview_search": "leadgen_preview_search_result",
+        "tasks_list": "tasks_list_result",
+        "tasks_recurrence_check": "tasks_recurrence_check_result",
+        "agent_run_create": "agent_run_create_result",
+        "agent_runs_list": "agent_runs_list_result",
+        "agent_run_get": "agent_run_get_result",
+        "agent_run_approve": "agent_run_approve_result",
+        "agent_run_reject": "agent_run_reject_result",
+        "agent_run_recover": "agent_run_recover_result",
+        "agent_run_replay": "agent_run_replay_result",
+        "agent_run_steps": "agent_run_steps_result",
+        "agent_run_events": "agent_run_events_result",
+        "agent_tools_list": "agent_tools_list_result",
+        "agent_trust_get": "agent_trust_get_result",
+        "agent_trust_update": "agent_trust_update_result",
+        "agent_suggestions_get": "agent_suggestions_get_result",
+        "analytics_linkedin_ingest": "analytics_linkedin_ingest_result",
+        "analytics_masterplan_get": "analytics_masterplan_get_result",
+        "analytics_masterplan_summary": "analytics_masterplan_summary_result",
+        "watcher_signals_receive": "watcher_ingest_result",
+        "watcher_signals_list": "watcher_signals_list_result",
+        "genesis_session_create": "genesis_session_create_result",
+        "genesis_session_get": "genesis_session_get_result",
+        "genesis_draft_get": "genesis_draft_get_result",
+        "genesis_synthesize": "genesis_synthesize_result",
+        "genesis_audit": "genesis_audit_result",
+        "genesis_lock": "genesis_lock_result",
+        "genesis_activate": "genesis_activate_result",
+        "flow_runs_list": "flow_runs_list_result",
+        "flow_run_get": "flow_run_get_result",
+        "flow_run_history": "flow_run_history_result",
+        "flow_run_resume": "flow_run_resume_result",
+        "flow_registry_get": "flow_registry_get_result",
+        "memory_node_create": "memory_node_create_result",
+        "memory_node_get": "memory_node_get_result",
+        "memory_node_update": "memory_node_update_result",
+        "memory_node_history": "memory_node_history_result",
+        "memory_node_links": "memory_node_links_result",
+        "memory_nodes_search_tags": "memory_nodes_search_tags_result",
+        "memory_link_create": "memory_link_create_result",
+        "memory_node_traverse": "memory_node_traverse_result",
+        "memory_nodes_expand": "memory_nodes_expand_result",
+        "memory_nodes_search_similar": "memory_nodes_search_similar_result",
+        "memory_recall": "memory_recall_result",
+        "memory_recall_v3": "memory_recall_v3_result",
+        "memory_recall_federated": "memory_recall_federated_result",
+        "memory_agents_list": "memory_agents_list_result",
+        "memory_node_share": "memory_node_share_result",
+        "memory_agent_recall": "memory_agent_recall_result",
+        "memory_node_feedback": "memory_node_feedback_result",
+        "memory_node_performance": "memory_node_performance_result",
+        "memory_suggest": "memory_suggest_result",
+        "memory_nodus_execute": "memory_nodus_execute_result",
+        "memory_execute_loop": "memory_execution_response",
+        # Automation
+        "automation_logs_list": "automation_logs_list_result",
+        "automation_log_get": "automation_log_get_result",
+        "automation_log_replay": "automation_log_replay_result",
+        "automation_scheduler_status": "automation_scheduler_status_result",
+        "automation_task_trigger": "automation_task_trigger_result",
+        # Freelance
+        "freelance_order_create": "freelance_order_create_result",
+        "freelance_order_deliver": "freelance_order_deliver_result",
+        "freelance_delivery_update": "freelance_delivery_update_result",
+        "freelance_feedback_collect": "freelance_feedback_collect_result",
+        "freelance_orders_list": "freelance_orders_list_result",
+        "freelance_feedback_list": "freelance_feedback_list_result",
+        "freelance_metrics_latest": "freelance_metrics_latest_result",
+        "freelance_metrics_update": "freelance_metrics_update_result",
+        "freelance_delivery_generate": "freelance_delivery_generate_result",
+        # Research
+        "research_create": "research_create_result",
+        "research_list": "research_list_result",
+        "research_query": "research_query_result",
+        "search_history_list": "search_history_list_result",
+        "search_history_get": "search_history_get_result",
+        "search_history_delete": "search_history_delete_result",
+        # Masterplan
+        "masterplan_lock_from_genesis": "masterplan_lock_from_genesis_result",
+        "masterplan_lock": "masterplan_lock_result",
+        "masterplan_list": "masterplan_list_result",
+        "masterplan_get": "masterplan_get_result",
+        "masterplan_anchor": "masterplan_anchor_result",
+        "masterplan_projection": "masterplan_projection_result",
+        "masterplan_activate": "masterplan_activate_result",
+        # Autonomy
+        "autonomy_decisions_list": "autonomy_decisions_list_result",
+        # Watcher autonomy gate
+        "watcher_evaluate_trigger": "watcher_evaluate_trigger_result",
+        # Dashboard
+        "dashboard_overview": "dashboard_overview_result",
+        "health_dashboard_list": "health_dashboard_list_result",
+        # Observability
+        "observability_scheduler_status": "observability_scheduler_status_result",
+        "observability_requests": "observability_requests_result",
+        "observability_dashboard": "observability_dashboard_result",
+        "observability_rippletrace": "observability_rippletrace_result",
     }
     result_key = workflow_key_map.get(workflow_type or "")
     if result_key and result_key in state:
@@ -249,6 +367,8 @@ def execute_node(node_name: str, state: dict, context: dict) -> dict:
     Execute a registered node function.
 
     Enforces policy, tracks attempt count, returns the node result dict.
+    Automatically injects memory_context into context before each node
+    executes, closing the execution→memory→execution feedback loop.
     """
     enforce_policy(node_name)
 
@@ -263,11 +383,36 @@ def execute_node(node_name: str, state: dict, context: dict) -> dict:
     attempt = context["attempts"].get(node_name, 0) + 1
     context["attempts"][node_name] = attempt
 
+    # ── Memory Injection ───────────────────────────────────────────────────────
+    # Delegate to the shared enrich_context helper so all execution surfaces
+    # use the same recall logic. node_name is set here so it is available as
+    # a tag signal alongside flow_name / workflow_type already in context.
+    context["node_name"] = node_name
+    from services.memory_helpers import enrich_context
+    enrich_context(context)
+    # ──────────────────────────────────────────────────────────────────────────
+
     start_ms = int(time.time() * 1000)
     result = node_fn(state, context)
     end_ms = int(time.time() * 1000)
 
     result["_execution_time_ms"] = end_ms - start_ms
+
+    # ── Memory Feedback ────────────────────────────────────────────────────────
+    # Map node status → memory outcome and record against every recalled memory.
+    # usage_count is incremented on all outcomes; success/failure_count update
+    # the adaptive weight so frequently-wrong memories score lower on next recall.
+    _status = result.get("status", "")
+    if _status == "SUCCESS":
+        _outcome = "success"
+    elif _status == "FAILURE":
+        _outcome = "failure"
+    else:
+        _outcome = "neutral"  # RETRY / WAIT / unknown
+    from services.memory_helpers import record_execution_feedback
+    record_execution_feedback(context, _outcome)
+    # ──────────────────────────────────────────────────────────────────────────
+
     return result
 
 
@@ -368,6 +513,21 @@ class PersistentFlowRunner:
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
+        try:
+            from services.execution_unit_service import ExecutionUnitService
+            _eu = ExecutionUnitService(self.db).create(
+                eu_type="flow",
+                user_id=self.user_id,
+                source_type="flow_run",
+                source_id=run.id,
+                flow_run_id=run.id,
+                status="executing",
+                extra={"flow_name": flow_name, "workflow_type": self.workflow_type},
+            )
+            self._eu_id = _eu.id if _eu else None
+        except Exception as _eu_exc:
+            logger.warning("[EU] flow hook create failed — non-fatal | error=%s", _eu_exc)
+            self._eu_id = None
         if isinstance(initial_state, dict):
             if not initial_state.get("trace_id"):
                 initial_state["trace_id"] = run.trace_id or str(run.id)
@@ -448,6 +608,7 @@ class PersistentFlowRunner:
             "trace_id": run.trace_id or (state.get("trace_id") if isinstance(state, dict) else None),
             "user_id": self.user_id,
             "workflow_type": self.workflow_type,
+            "flow_name": run.flow_name,
             "attempts": {},
             "db": self.db,
         }
@@ -457,6 +618,18 @@ class PersistentFlowRunner:
             run.error_message = error_message
             run.completed_at = datetime.now(timezone.utc)
             self.db.commit()
+            try:
+                from services.execution_unit_service import ExecutionUnitService
+                _eus = ExecutionUnitService(self.db)
+                _eu_id = getattr(self, "_eu_id", None)
+                if _eu_id:
+                    _eus.update_status(_eu_id, "failed")
+                else:
+                    _eu = _eus.get_by_source("flow_run", run.id)
+                    if _eu:
+                        _eus.update_status(_eu.id, "failed")
+            except Exception as _eu_exc:
+                logger.warning("[EU] flow fail hook — non-fatal | error=%s", _eu_exc)
             try:
                 update_goals_from_execution(
                     self.db,
@@ -781,6 +954,18 @@ class PersistentFlowRunner:
                 tags=["flow_history", "execution_pattern", self.workflow_type],
                 context={"run_id": run.id, "total_ms": total_ms},
             )
+            try:
+                from services.execution_unit_service import ExecutionUnitService
+                _eus = ExecutionUnitService(self.db)
+                _eu_id = getattr(self, "_eu_id", None)
+                if _eu_id:
+                    _eus.update_status(_eu_id, "completed")
+                else:
+                    _eu = _eus.get_by_source("flow_run", run.id)
+                    if _eu:
+                        _eus.update_status(_eu.id, "completed")
+            except Exception as _eu_exc:
+                logger.warning("[EU] flow completion hook — non-fatal | error=%s", _eu_exc)
         except Exception as e:
             logger.warning("FlowHistory -> Memory Bridge capture failed: %s", e)
             emit_error_event(
@@ -1102,3 +1287,45 @@ def execute_intent(
     )
 
     return runner.start(initial_state=intent_data, flow_name=flow_name)
+
+
+# ── Router-facing entry point ──────────────────────────────────────────────────
+
+
+def run_flow(flow_name: str, state: dict, db: Session, user_id: str = None) -> dict:
+    """
+    Execute a registered flow by name.
+
+    Thin wrapper over PersistentFlowRunner for use inside router handlers.
+    Raises KeyError immediately if the flow is not registered, so misconfigured
+    routers fail loudly at startup rather than silently at request time.
+
+    Returns the standard execution envelope:
+        {
+            "status": "success" | "error",
+            "data":   <_extract_execution_result output>,
+            "trace_id": str,
+            "run_id":   str,
+            ...
+        }
+
+    Usage inside a handler:
+        result = run_flow("task_create", {"task_name": "..."}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError(result.get("data", {}).get("message", "flow failed"))
+        return result.get("data")
+    """
+    flow = FLOW_REGISTRY.get(flow_name)
+    if not flow:
+        raise KeyError(
+            f"Flow '{flow_name}' not registered. "
+            f"Available: {sorted(FLOW_REGISTRY.keys())}"
+        )
+    normalized_user_id = normalize_uuid(user_id) if user_id is not None else None
+    runner = PersistentFlowRunner(
+        flow=flow,
+        db=db,
+        user_id=normalized_user_id,
+        workflow_type=flow_name,
+    )
+    return runner.start(initial_state=dict(state), flow_name=flow_name)
