@@ -224,6 +224,7 @@ def _extract_execution_result(workflow_type: str | None, state: dict) -> object:
         "memory_suggest": "memory_suggest_result",
         "memory_nodus_execute": "memory_nodus_execute_result",
         "memory_execute_loop": "memory_execution_response",
+        "nodus_execute": "nodus_execute_result",
         # Automation
         "automation_logs_list": "automation_logs_list_result",
         "automation_log_get": "automation_log_get_result",
@@ -480,12 +481,14 @@ class PersistentFlowRunner:
         user_id: str = None,
         workflow_type: str = None,
         automation_log_id: str = None,
+        priority: str = "normal",
     ):
         self.flow = flow
         self.db = db
         self.user_id = normalize_uuid(user_id) if user_id is not None else None
         self.workflow_type = workflow_type
         self.automation_log_id = automation_log_id
+        self.priority = priority
 
     def start(self, initial_state: dict, flow_name: str = "default") -> dict:
         """
@@ -515,6 +518,7 @@ class PersistentFlowRunner:
         self.db.refresh(run)
         try:
             from services.execution_unit_service import ExecutionUnitService
+            _tenant_id = str(self.user_id) if self.user_id else ""
             _eu = ExecutionUnitService(self.db).create(
                 eu_type="flow",
                 user_id=self.user_id,
@@ -522,12 +526,27 @@ class PersistentFlowRunner:
                 source_id=run.id,
                 flow_run_id=run.id,
                 status="executing",
-                extra={"flow_name": flow_name, "workflow_type": self.workflow_type},
+                extra={
+                    "flow_name": flow_name,
+                    "workflow_type": self.workflow_type,
+                    "tenant_id": _tenant_id,
+                    "priority": self.priority,
+                },
             )
             self._eu_id = _eu.id if _eu else None
+            self._tenant_id = _tenant_id
+            # Register execution with ResourceManager (concurrency tracking)
+            try:
+                from services.resource_manager import get_resource_manager
+                get_resource_manager().mark_started(
+                    _tenant_id, str(self._eu_id) if self._eu_id else None
+                )
+            except Exception as _rm_exc:
+                logger.debug("[EU] resource_manager.mark_started skipped: %s", _rm_exc)
         except Exception as _eu_exc:
             logger.warning("[EU] flow hook create failed — non-fatal | error=%s", _eu_exc)
             self._eu_id = None
+            self._tenant_id = str(self.user_id) if self.user_id else ""
         if isinstance(initial_state, dict):
             if not initial_state.get("trace_id"):
                 initial_state["trace_id"] = run.trace_id or str(run.id)
@@ -628,6 +647,15 @@ class PersistentFlowRunner:
                     _eu = _eus.get_by_source("flow_run", run.id)
                     if _eu:
                         _eus.update_status(_eu.id, "failed")
+                # OS Layer: release concurrency slot
+                try:
+                    from services.resource_manager import get_resource_manager as _get_rm_f
+                    _get_rm_f().mark_completed(
+                        getattr(self, "_tenant_id", str(self.user_id or "")),
+                        str(_eu_id) if _eu_id else None,
+                    )
+                except Exception as _rm_fail_exc:
+                    logger.debug("[EU] resource_manager.mark_completed(failed) skipped: %s", _rm_fail_exc)
             except Exception as _eu_exc:
                 logger.warning("[EU] flow fail hook — non-fatal | error=%s", _eu_exc)
             try:
@@ -698,6 +726,58 @@ class PersistentFlowRunner:
                     required=True,
                 )
                 node_parent_token = set_parent_event_id(str(node_started_event_id) if node_started_event_id else root_event_id)
+                # ── OS Layer: resource quota pre-check ────────────────────────
+                try:
+                    from services.resource_manager import get_resource_manager as _get_rm
+                    _rm = _get_rm()
+                    _tenant_id = getattr(self, "_tenant_id", str(self.user_id or ""))
+                    _eu_id_str = str(getattr(self, "_eu_id", "") or "")
+                    _can_run, _run_reason = _rm.can_execute(_tenant_id, _eu_id_str)
+                    if not _can_run:
+                        # Pause run — re-queue via SchedulerEngine
+                        run.status = "waiting"
+                        run.waiting_for = "resource_available"
+                        run.current_node = current_node
+                        run.state = _json_safe(state)
+                        self.db.commit()
+                        try:
+                            from services.scheduler_engine import get_scheduler_engine, ScheduledItem
+                            _se = get_scheduler_engine()
+                            _this_run_id = str(run.id)
+                            _this_runner = self
+                            _se.register_wait(
+                                run_id=_this_run_id,
+                                wait_for_event="resource_available",
+                                tenant_id=_tenant_id,
+                                eu_id=_eu_id_str,
+                                resume_callback=lambda: _this_runner.resume(_this_run_id),
+                                priority=getattr(self, "priority", "normal"),
+                            )
+                        except Exception as _se_exc:
+                            logger.debug("[Flow] scheduler register_wait skipped: %s", _se_exc)
+                        reset_parent_event_id(node_parent_token)
+                        return _format_execution_response(
+                            status="WAITING",
+                            trace_id=run.trace_id or str(run.id),
+                            result={"waiting_for": "resource_available", "reason": _run_reason},
+                            events=_serialize_flow_events(self.db, run.id),
+                            next_action=None,
+                            run_id=run.id,
+                            state=state,
+                        )
+                    # Mid-execution quota check (cpu_time, syscall_count)
+                    _quota_ok, _quota_reason = _rm.check_quota(_eu_id_str)
+                    if not _quota_ok:
+                        reset_parent_event_id(node_parent_token)
+                        return _fail_execution(
+                            _quota_reason,
+                            failed_node=current_node,
+                            parent_event_id=str(node_started_event_id) if node_started_event_id else None,
+                        )
+                except (ImportError, AttributeError) as _rm_import_exc:
+                    logger.debug("[Flow] resource check skipped: %s", _rm_import_exc)
+                # ─────────────────────────────────────────────────────────────
+                _node_t_start = time.monotonic()
                 try:
                     result = execute_node(current_node, state, context)
                 except PermissionError as exc:
@@ -740,7 +820,19 @@ class PersistentFlowRunner:
 
                 node_status = result["status"]
                 patch = result.get("output_patch", {})
-                exec_ms = result.get("_execution_time_ms", 0)
+                exec_ms = result.get("_execution_time_ms", 0) or int((time.monotonic() - _node_t_start) * 1000)
+                # ── OS Layer: record node resource usage ──────────────────────
+                try:
+                    from services.resource_manager import get_resource_manager as _get_rm2
+                    _eu_id_str2 = str(getattr(self, "_eu_id", "") or "")
+                    if _eu_id_str2:
+                        _get_rm2().record_usage(
+                            _eu_id_str2,
+                            {"cpu_time_ms": exec_ms, "syscall_count": 0},
+                        )
+                except Exception as _rm_rec_exc:
+                    logger.debug("[Flow] resource record skipped: %s", _rm_rec_exc)
+                # ─────────────────────────────────────────────────────────────
                 self.db.add(
                     FlowHistory(
                         flow_run_id=run.id,
@@ -964,6 +1056,15 @@ class PersistentFlowRunner:
                     _eu = _eus.get_by_source("flow_run", run.id)
                     if _eu:
                         _eus.update_status(_eu.id, "completed")
+                # OS Layer: release concurrency slot
+                try:
+                    from services.resource_manager import get_resource_manager as _get_rm_s
+                    _get_rm_s().mark_completed(
+                        getattr(self, "_tenant_id", str(self.user_id or "")),
+                        str(_eu_id) if _eu_id else None,
+                    )
+                except Exception as _rm_succ_exc:
+                    logger.debug("[EU] resource_manager.mark_completed(success) skipped: %s", _rm_succ_exc)
             except Exception as _eu_exc:
                 logger.warning("[EU] flow completion hook — non-fatal | error=%s", _eu_exc)
         except Exception as e:

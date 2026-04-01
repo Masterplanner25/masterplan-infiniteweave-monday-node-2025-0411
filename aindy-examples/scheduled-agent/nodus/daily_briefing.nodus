@@ -1,0 +1,114 @@
+// daily_briefing.nodus
+//
+// Scheduled intelligence agent.
+// Runs on cron — no human involvement required after setup.
+//
+// Input state:
+//   namespace  (string) — MAS prefix to scan, e.g. "/memory/examples"
+
+let ns = get_state("namespace")
+
+// ── Phase 1: Scan recent memory ───────────────────────────────────────────
+let scan = sys("sys.v1.memory.read", {
+    path:  ns + "/**",
+    limit: 100
+})
+
+let nodes      = scan.data.nodes
+let total      = nodes.length
+
+// Early exit — nothing to brief
+if total == 0 {
+    sys("sys.v1.memory.write", {
+        path:      ns + "/briefings/decision",
+        content:   "Daily briefing: no new activity since last run.",
+        tags:      ["daily-briefing", "empty", "auto-generated"],
+        node_type: "decision"
+    })
+    emit("daily.briefing.ready", {
+        node_count: 0,
+        summary:    "No activity."
+    })
+    set_state("briefing",   "No activity.")
+    set_state("node_count", 0)
+    set_state("done",       true)
+}
+
+// ── Phase 2: Count by node type ───────────────────────────────────────────
+let decisions = 0
+let outcomes  = 0
+let insights  = 0
+let blocked   = 0
+let i = 0
+
+while i < total {
+    let t = nodes[i].node_type
+    let s = nodes[i].extra.status
+    if t == "decision" { decisions = decisions + 1 }
+    if t == "outcome"  { outcomes  = outcomes  + 1 }
+    if t == "insight"  { insights  = insights  + 1 }
+    if s == "blocked"  { blocked   = blocked   + 1 }
+    i = i + 1
+}
+
+// ── Phase 3: Build summary ────────────────────────────────────────────────
+let summary = "Daily briefing: " + total + " node(s) — "
+            + decisions + " decisions, "
+            + outcomes  + " outcomes, "
+            + insights  + " insights."
+
+if blocked > 0 {
+    summary = summary + " ⚠ " + blocked + " blocked task(s) need attention."
+}
+
+// ── Phase 4: Optional deep analysis via flow ──────────────────────────────
+let analysis_summary = summary
+let flow_ran = false
+
+if total >= 3 {
+    let analysis = sys("sys.v1.flow.run", {
+        flow_name: "analyze_tasks",
+        input: {
+            nodes:   nodes,
+            context: "daily briefing — scheduled run"
+        }
+    })
+    if analysis.status == "success" {
+        analysis_summary = analysis.data.summary
+        flow_ran = true
+    }
+}
+
+// ── Phase 5: Write briefing to well-known path ────────────────────────────
+sys("sys.v1.memory.write", {
+    path:      ns + "/briefings/decision",
+    content:   analysis_summary,
+    tags:      ["daily-briefing", "auto-generated"],
+    node_type: "decision",
+    extra: {
+        total:      total,
+        decisions:  decisions,
+        outcomes:   outcomes,
+        insights:   insights,
+        blocked:    blocked,
+        flow_ran:   flow_ran
+    }
+})
+
+// ── Phase 6: Emit for downstream consumers and webhooks ───────────────────
+emit("daily.briefing.ready", {
+    node_count: total,
+    decisions:  decisions,
+    outcomes:   outcomes,
+    insights:   insights,
+    blocked:    blocked,
+    summary:    analysis_summary,
+    flow_ran:   flow_ran
+})
+
+// ── Surface results ───────────────────────────────────────────────────────
+set_state("briefing",   analysis_summary)
+set_state("node_count", total)
+set_state("blocked",    blocked)
+set_state("flow_ran",   flow_ran)
+set_state("done",       true)

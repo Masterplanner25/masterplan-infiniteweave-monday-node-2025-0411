@@ -113,6 +113,39 @@ API key management (`/platform/keys/*`):
 
 Persistence: All dynamic flows, nodes, and webhook subscriptions are persisted to `dynamic_flows`, `dynamic_nodes`, and `webhook_subscriptions` tables and **restored automatically on server restart** via `services/platform_loader.py` (startup loader).
 
+**OS Isolation Layer (2026-04-01):**
+
+Tenant usage (`/platform/tenants/*`):
+- `GET /platform/tenants/{tenant_id}/usage` — JWT or Platform API key required. Returns quota usage for a tenant's active execution unit: `{tenant_id, quota_group, syscall_count, cpu_time_ms, memory_bytes, priority}`. 404 if no active unit found.
+
+**Memory Address Space (MAS) — (2026-04-01):**
+
+MAS path-addressable memory (`/platform/memory/*`):
+- `GET /platform/memory` — JWT or Platform API key required. Hybrid list endpoint. Query params: `path` (MAS expression — exact, `/*`, or `/**`), `query` (text search), `tags` (comma-separated), `limit` (default 20). Returns `{nodes: [...], count: int, path: str|null}`.
+- `GET /platform/memory/tree` — JWT or Platform API key required. Hierarchical tree from path prefix. Query params: `path` (required), `limit` (default 100). Returns `{tree: {...}, flat: [...], count: int, root: str}`.
+- `GET /platform/memory/trace` — JWT or Platform API key required. Causal chain following `source_event_id` links backward from an exact node path. Query params: `path` (required), `depth` (default 5, max 10). Returns `{chain: [...], count: int, root_path: str}`.
+
+See `docs/architecture/MEMORY_ADDRESS_SPACE.md` for path structure and wildcard rules.
+
+**Syscall Registry Introspection (2026-04-01):**
+
+- `GET /platform/syscalls` — JWT or Platform API key required. Query param: `version` (optional filter, e.g. `v1`). Returns the versioned registry with full ABI schemas: `{versions: ["v1", "v2"], syscalls: {v1: {action: {name, capability, description, stable, deprecated, input_schema, output_schema}}, ...}, total_count: int}`.
+
+See `docs/architecture/SYSCALL_SYSTEM.md` for the full syscall system reference.
+
+**Nodus Runtime (2026-04-01):**
+
+Flow compiler (`/platform/nodus/flow/*`):
+- `POST /platform/nodus/flow` — compile and optionally run a Nodus flow from `flow.step()` DSL. Body: `{source: str, run?: bool, state?: dict}`. Returns compiled graph or execution result.
+
+Scheduler (`/platform/nodus/schedule/*`):
+- `POST /platform/nodus/schedule` — schedule a Nodus flow. Body: `{name, flow_name, cron_expr, state?}`.
+- `GET /platform/nodus/schedule` — list scheduled jobs for the current user.
+- `DELETE /platform/nodus/schedule/{name}` — cancel a scheduled job.
+
+Trace (`/platform/nodus/trace/*`):
+- `GET /platform/nodus/trace/{execution_id}` — retrieve all `NodusTraceEvent` rows for an execution, ordered chronologically.
+
 **Sprint 5 User Isolation (2026-03-18):**
 - Freelance, research, and rippletrace routes now scope all reads and writes to the authenticated user's `user_id` (extracted from JWT `sub` claim).
 - `GET /freelance/orders`, `GET /freelance/feedback` — return only records belonging to the current user.

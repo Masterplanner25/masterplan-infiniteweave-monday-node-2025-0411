@@ -64,6 +64,11 @@ class MemoryNodeDAO:
             "extra": n.extra,
             "created_at": n.created_at.isoformat() if n.created_at else None,
             "updated_at": n.updated_at.isoformat() if n.updated_at else None,
+            # MAS path fields
+            "path": getattr(n, "path", None),
+            "namespace": getattr(n, "namespace", None),
+            "addr_type": getattr(n, "addr_type", None),
+            "parent_path": getattr(n, "parent_path", None),
         }
 
     def _get_model_by_id(self, node_id: str, user_id: str = None) -> Optional[MemoryNodeModel]:
@@ -136,6 +141,10 @@ class MemoryNodeDAO:
         memory_type: str | None = None,
         source_agent: str | None = None,
         visibility: str = "private",
+        path: str | None = None,
+        namespace: str | None = None,
+        addr_type: str | None = None,
+        parent_path: str | None = None,
     ) -> dict:
         """Insert a new memory node and return its dict representation."""
         node_extra = dict(extra or {})
@@ -159,6 +168,10 @@ class MemoryNodeDAO:
             memory_type=self._normalize_memory_type(memory_type, node_type),
             embedding_status="pending",
             extra=node_extra,
+            path=path,
+            namespace=namespace,
+            addr_type=addr_type,
+            parent_path=parent_path,
         )
 
         try:
@@ -1442,3 +1455,179 @@ class MemoryNodeDAO:
                 "and record outcomes to build suggestions."
             ),
         }
+
+    # ------------------------------------------------------------------
+    # MAS path operations
+    # ------------------------------------------------------------------
+
+    def save_at_path(
+        self,
+        path: str,
+        content: str,
+        user_id: str,
+        tags: List[str] = None,
+        node_type: str = None,
+        extra: dict = None,
+        memory_type: str | None = None,
+        source_agent: str | None = None,
+        visibility: str = "private",
+    ) -> dict:
+        """Write a node at an explicit MAS path.
+
+        The path must be a full leaf address including node_id.
+        namespace, addr_type, and parent_path are derived from the path.
+        """
+        from services.memory_address_space import parse_path, parent_path_of, enrich_node_with_path
+
+        parsed = parse_path(path)
+        ns = parsed.get("namespace") or "general"
+        at = parsed.get("addr_type") or (node_type or "insight")
+        pp = parent_path_of(path)
+
+        node = self.save(
+            content=content,
+            user_id=user_id,
+            tags=tags,
+            node_type=node_type,
+            extra=extra,
+            memory_type=memory_type,
+            source_agent=source_agent,
+            visibility=visibility,
+            path=path,
+            namespace=ns,
+            addr_type=at,
+            parent_path=pp,
+        )
+        return node
+
+    def get_by_path(self, path: str, user_id: str = None) -> Optional[dict]:
+        """Return the node at an exact MAS path, or None."""
+        from services.memory_address_space import enrich_node_with_path
+
+        query = self.db.query(MemoryNodeModel).filter(MemoryNodeModel.path == path)
+        owner = parse_user_id(user_id)
+        if owner:
+            query = query.filter(MemoryNodeModel.user_id == owner)
+        node = query.first()
+        if node is None:
+            return None
+        d = self._node_to_dict(node)
+        return enrich_node_with_path(d)
+
+    def list_path(self, parent_path: str, user_id: str = None, limit: int = 100) -> List[dict]:
+        """Return nodes whose parent_path equals *parent_path* (one level)."""
+        from services.memory_address_space import enrich_node_with_path
+
+        query = self.db.query(MemoryNodeModel).filter(
+            MemoryNodeModel.parent_path == parent_path
+        )
+        owner = parse_user_id(user_id)
+        if owner:
+            query = query.filter(MemoryNodeModel.user_id == owner)
+        rows = query.limit(limit).all()
+        return [enrich_node_with_path(self._node_to_dict(n)) for n in rows]
+
+    def walk_path(self, prefix: str, user_id: str = None, limit: int = 200) -> List[dict]:
+        """Return all nodes whose path starts with *prefix* (recursive)."""
+        from services.memory_address_space import enrich_node_with_path
+
+        safe_prefix = prefix.rstrip("/") + "/"
+        query = self.db.query(MemoryNodeModel).filter(
+            MemoryNodeModel.path.like(f"{safe_prefix}%")
+        )
+        owner = parse_user_id(user_id)
+        if owner:
+            query = query.filter(MemoryNodeModel.user_id == owner)
+        rows = query.limit(limit).all()
+        return [enrich_node_with_path(self._node_to_dict(n)) for n in rows]
+
+    def query_path(
+        self,
+        path_expr: str | None = None,
+        query: str | None = None,
+        tags: List[str] | None = None,
+        user_id: str | None = None,
+        limit: int = 20,
+    ) -> List[dict]:
+        """Hybrid query: path expression + optional semantic query + optional tags.
+
+        path_expr may be:
+          - exact path  → delegates to get_by_path
+          - prefix/**   → delegates to walk_path
+          - prefix/*    → delegates to list_path
+          - None        → no path filter (use tags/query only)
+        """
+        from services.memory_address_space import (
+            is_exact, is_wildcard, is_recursive, wildcard_prefix,
+            enrich_node_with_path,
+        )
+
+        candidates: List[dict] = []
+
+        if path_expr:
+            if is_recursive(path_expr):
+                candidates = self.walk_path(wildcard_prefix(path_expr), user_id=user_id, limit=limit * 2)
+            elif is_wildcard(path_expr):
+                candidates = self.list_path(wildcard_prefix(path_expr), user_id=user_id, limit=limit * 2)
+            elif is_exact(path_expr):
+                node = self.get_by_path(path_expr, user_id=user_id)
+                candidates = [node] if node else []
+            else:
+                candidates = self.walk_path(path_expr, user_id=user_id, limit=limit * 2)
+        else:
+            # No path filter — fall through to tag/query filter below
+            base_q = self.db.query(MemoryNodeModel)
+            owner = parse_user_id(user_id)
+            if owner:
+                base_q = base_q.filter(MemoryNodeModel.user_id == owner)
+            candidates = [enrich_node_with_path(self._node_to_dict(n)) for n in base_q.limit(limit * 4).all()]
+
+        # Filter by tags
+        if tags:
+            clean_tags = [t for t in tags if t]
+            candidates = [
+                c for c in candidates
+                if self._tags_match(c.get("tags"), clean_tags, "AND")
+            ]
+
+        # Filter by keyword (simple content search; semantic search via find_similar)
+        if query:
+            q_lower = query.lower()
+            candidates = [c for c in candidates if q_lower in (c.get("content") or "").lower()]
+
+        return candidates[:limit]
+
+    def causal_trace(self, path: str, depth: int = 5, user_id: str = None) -> List[dict]:
+        """Follow the causal chain from the node at *path* up to *depth* hops.
+
+        Traverses source_event_id → root_event_id links to build a causal history.
+        Returns a list ordered from the origin node down to its earliest ancestor.
+        """
+        from services.memory_address_space import enrich_node_with_path
+
+        origin = self.get_by_path(path, user_id=user_id)
+        if origin is None:
+            return []
+
+        chain: List[dict] = [origin]
+        seen = {origin["id"]}
+        current = origin
+
+        for _ in range(depth - 1):
+            source_event_id = current.get("source_event_id")
+            if not source_event_id:
+                break
+            # Find a node whose root_event_id matches the current node's source_event_id
+            node = (
+                self.db.query(MemoryNodeModel)
+                .filter(MemoryNodeModel.root_event_id == uuid.UUID(str(source_event_id)))
+                .first()
+            )
+            if node is None or str(node.id) in seen:
+                break
+            d = enrich_node_with_path(self._node_to_dict(node))
+            chain.append(d)
+            seen.add(str(node.id))
+            current = d
+
+        return chain

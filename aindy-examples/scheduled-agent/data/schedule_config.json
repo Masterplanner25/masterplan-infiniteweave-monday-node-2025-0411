@@ -1,0 +1,56 @@
+{
+  "schedule": {
+    "name":      "daily_briefing",
+    "cron_expr": "0 9 * * *",
+    "namespace": "/memory/examples"
+  },
+  "webhook": {
+    "event_type":   "daily.briefing.ready",
+    "callback_url": "https://webhook.site/replace-with-your-token",
+    "secret":       "change-me-in-production"
+  },
+  "seed_nodes": [
+    {
+      "path":      "/memory/examples/tasks/outcome",
+      "content":   "Implement syscall versioning layer",
+      "tags":      ["engineering", "sprint-12", "completed"],
+      "node_type": "outcome",
+      "extra":     {"status": "completed", "owner": "shawn"}
+    },
+    {
+      "path":      "/memory/examples/tasks/outcome",
+      "content":   "Write and publish SDK documentation",
+      "tags":      ["docs", "sdk", "sprint-12", "completed"],
+      "node_type": "outcome",
+      "extra":     {"status": "completed", "owner": "shawn"}
+    },
+    {
+      "path":      "/memory/examples/tasks/outcome",
+      "content":   "Add rate limiting to platform syscall endpoint",
+      "tags":      ["engineering", "security", "sprint-12", "in-progress"],
+      "node_type": "outcome",
+      "extra":     {"status": "in-progress", "owner": "shawn"}
+    },
+    {
+      "path":      "/memory/examples/decisions/decision",
+      "content":   "Decided to keep SDK dependency-free — stdlib only",
+      "tags":      ["architecture", "sdk", "decision"],
+      "node_type": "decision",
+      "extra":     {"status": "accepted", "owner": "shawn"}
+    },
+    {
+      "path":      "/memory/examples/insights/insight",
+      "content":   "Syscall dispatcher never raises — all errors returned in envelope",
+      "tags":      ["architecture", "insight", "syscall"],
+      "node_type": "insight",
+      "extra":     {"source": "code-review", "confidence": "high"}
+    },
+    {
+      "path":      "/memory/examples/tasks/outcome",
+      "content":   "Set up GitHub Actions CI for SDK tests",
+      "tags":      ["engineering", "ci", "sprint-12", "blocked"],
+      "node_type": "outcome",
+      "extra":     {"status": "blocked", "blocker": "runner quota", "owner": "shawn"}
+    }
+  ]
+}

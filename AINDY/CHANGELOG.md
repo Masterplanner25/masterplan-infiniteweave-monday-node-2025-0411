@@ -1,3 +1,341 @@
+## [Unreleased] — feat/infinity-algorithm-loop
+
+### Added (2026-04-01 - Syscall Versioning and ABI Stability)
+
+**`services/syscall_versioning.py`** — NEW; ABI stability module:
+- `ABI_VERSIONS`, `LATEST_STABLE_VERSION`, `SYSCALL_VERSION_FALLBACK`
+- `SyscallSpec` dataclass — serialisable per-syscall ABI contract (name, version, input/output schema, stable, deprecated, deprecated_since, replacement, full_name, deprecation_message(), to_dict())
+- `parse_syscall_name("sys.v1.memory.read")` → `("v1", "memory.read")`
+- `validate_payload(schema, payload)` — lightweight required-field + type check
+- `validate_input()` / `validate_output()` — aliases for input and output validation
+- `resolve_version(requested, available, fallback)` — version fallback resolver
+
+**`services/syscall_registry.py`** (MODIFIED):
+- `SyscallEntry` — extended with `input_schema`, `output_schema`, `stable`, `deprecated`, `deprecated_since`, `replacement` (all optional, backward-compat defaults)
+- `VersionedSyscallRegistry(MutableMapping)` — NEW; supports flat key access (backward compat) AND versioned view (`registry.versioned`, `registry.get_version("v1")`, `registry.versions()`)
+- `SYSCALL_REGISTRY` now a `VersionedSyscallRegistry` instance (same dict interface for existing code)
+- All 8 built-in v1 syscalls now carry `input_schema` and `output_schema`
+- `sys.v2.memory.read` — NEW example v2 syscall with `filters` dict for structured field filtering
+- `register_syscall()` — extended with `input_schema`, `output_schema`, `stable`, `deprecated`, `deprecated_since`, `replacement` params (all optional)
+
+**`services/syscall_dispatcher.py`** (MODIFIED):
+- Response envelope gains two new fields: `"version"` (parsed ABI version) and `"warning"` (deprecation message or null)
+- Step 1 now parses version from name; checks version availability before entry lookup
+- Step 2d: input payload validated against `entry.input_schema` — invalid calls rejected with structured error
+- Step 2e: deprecated syscalls emit log warning + set `"warning"` in response (execution continues)
+- Step 3b: output validated against `entry.output_schema` — mismatches log warning only (non-fatal)
+- Version fallback: if `SYSCALL_VERSION_FALLBACK=True`, unknown versions fall back to latest stable
+
+**`routes/platform_router.py`** (MODIFIED):
+- `GET /platform/syscalls` — returns available versions, syscall names, schemas, deprecation status
+- Optional `?version=v1` filter
+- Response: `{versions, syscalls: {v1: {name: {full_name, capability, input_schema, ...}}, v2: {...}}, total_count}`
+
+**Tests (`tests/unit/test_syscall_versioning.py`)**: 64 new tests (Groups A-J)
+
+**Test count:** 64 new versioning tests; 287 sprint-owned tests passing (0 regressions)
+
+---
+
+### Added (2026-04-01 - Memory Address Space: Hierarchical Path-Addressable Memory)
+
+**`services/memory_address_space.py`** — NEW; full MAS utility module:
+- `normalize_path()`, `validate_tenant_path()`, `parse_path()`, `build_path()`, `generate_node_path()`
+- `derive_legacy_path()` — on-the-fly path derivation for legacy nodes (no DB backfill required)
+- `parent_path_of()`, `is_exact()`, `is_wildcard()`, `is_recursive()`, `wildcard_prefix()`
+- `path_from_write_payload()` — extract/construct full path from write payloads
+- `build_tree()`, `flatten_tree()`, `enrich_node_with_path()`
+
+**`services/memory_persistence.py`** (MODIFIED) — 4 MAS columns added to `MemoryNodeModel`:
+`path` (String 512, indexed), `namespace` (String 128, indexed), `addr_type` (String 128, indexed), `parent_path` (String 512, indexed)
+
+**`alembic/versions/g5h6i7j8k9l0_add_memory_address_space_columns.py`** — migration (down_revision = f4g5h6i7j8k9) — adds all 4 path columns + 4 indexes
+
+**`db/dao/memory_node_dao.py`** (MODIFIED):
+- `_node_to_dict()` — now includes path, namespace, addr_type, parent_path
+- `save()` — extended with path, namespace, addr_type, parent_path params
+- NEW: `save_at_path()` — write at explicit MAS path (derives parent/ns/type from path)
+- NEW: `get_by_path()` — exact path lookup
+- NEW: `list_path()` — one-level listing under a parent_path
+- NEW: `walk_path()` — recursive listing under a prefix (LIKE query)
+- NEW: `query_path()` — hybrid: path expression + optional keyword + optional tags
+- NEW: `causal_trace()` — follows source_event_id chain up to N hops
+
+**`services/syscall_registry.py`** (MODIFIED):
+- `_handle_memory_read` — extended with `path` param; routes to `dao.query_path()` when present
+- `_handle_memory_write` — extended with `path`, `namespace`, `addr_type`; stores full MAS path
+- `_handle_memory_search` — extended with `path` for scoped semantic search
+- NEW: `_handle_memory_list` — `sys.v1.memory.list`
+- NEW: `_handle_memory_tree` — `sys.v1.memory.tree`
+- NEW: `_handle_memory_trace` — `sys.v1.memory.trace`
+
+**`services/syscall_handlers.py`** (MODIFIED) — 3 MAS syscalls registered via `register_all_domain_handlers()`: `sys.v1.memory.list`, `sys.v1.memory.tree`, `sys.v1.memory.trace`
+
+**`routes/platform_router.py`** (MODIFIED) — 3 new MAS API endpoints:
+- `GET /platform/memory?path=...` — hybrid path+tag+query listing
+- `GET /platform/memory/tree?path=...` — hierarchical tree response
+- `GET /platform/memory/trace?path=...` — causal chain from a node
+
+**Tests (`tests/unit/test_memory_address_space.py`)**: 61 new tests (Groups A-K)
+
+**Test count:** 61 new MAS tests; 0 regressions in sprint-owned test files
+
+---
+
+### Added (2026-04-01 - OS Isolation Layer: Tenant Context, Resource Manager, Scheduler Engine)
+
+**`services/tenant_context.py`** — NEW; `TenantContext` (frozen dataclass: tenant_id, user_id, namespace, capability_scope), memory path enforcement (`/memory/{tenant_id}/...`), cross-tenant guard, `build_tenant_context()`, `tenant_context_from_syscall_context()`
+
+**`services/resource_manager.py`** — NEW; `ResourceManager` singleton with thread-safe usage tracking, quota enforcement (cpu_time_ms, memory_bytes, syscall_count, max_concurrent), `can_execute()` / `check_quota()` / `mark_started()` / `mark_completed()` / `record_usage()`, `get_tenant_summary()`, `get_resource_manager()` singleton, `ResourceLimitError`
+
+**`services/scheduler_engine.py`** — NEW; `SchedulerEngine` singleton with 3-level priority queues (high/normal/low), round-robin tenant fairness per queue, `enqueue()` / `dequeue_next()` / `schedule()` (drains up to 10 items, re-enqueues if quota exceeded), full WAIT/RESUME integration (`register_wait()` / `resume_waiting()`), `get_scheduler_engine()` singleton
+
+**`db/models/execution_unit.py`** (MODIFIED) — added 6 columns: `tenant_id` (String), `cpu_time_ms` (Integer, default 0), `memory_bytes` (BigInteger, default 0), `syscall_count` (Integer, default 0), `priority` (String, default "normal"), `quota_group` (String); `ix_eu_tenant_priority` composite index
+
+**`alembic/versions/f4g5h6i7j8k9_add_tenant_resource_fields_to_execution_units.py`** — migration with up/downgrade for all 6 new EU columns
+
+**`services/syscall_dispatcher.py`** (MODIFIED) — tenant validation (empty user_id → TENANT_VIOLATION), pre-execution quota check (`check_quota()`), post-execution syscall usage recording (`record_usage()`); all ResourceManager calls non-fatal (caught + debug-logged)
+
+**`services/flow_engine.py`** (MODIFIED) — `PersistentFlowRunner` accepts `priority` arg; `mark_started()` on EU creation; pre-node quota check with scheduler pause path (WAIT → `register_wait()`); post-node `record_usage()`; `mark_completed()` on success and failure paths
+
+**`routes/platform_router.py`** (MODIFIED) — `GET /platform/tenants/{id}/usage` — returns `active_executions`, `total_cpu_time_ms`, `total_syscalls`, scheduler stats, quota limits; 403 if caller != tenant_id
+
+**Tests (`tests/unit/test_os_layer.py`)**: 64 new tests (Groups A-I)
+
+**Test count:** 599 unit tests passing (64 new, zero regressions)
+
+---
+
+### Added (2026-04-01 - Syscall Dispatcher + System-Wide Architectural Refactor)
+
+**`services/syscall_registry.py`** — NEW; `SyscallContext` dataclass, `SyscallEntry`, `DEFAULT_NODUS_CAPABILITIES`, 5 built-in handlers, `SYSCALL_REGISTRY`, `register_syscall()`
+
+**`services/syscall_dispatcher.py`** — NEW; `SyscallDispatcher.dispatch()` (never raises), capability enforcement, standard response envelope `{status, data, trace_id, execution_unit_id, syscall, duration_ms, error}`, `SYSCALL_EXECUTED` observability event, `get_dispatcher()` singleton, `make_syscall_ctx_from_flow()`, `make_syscall_ctx_from_tool()`
+
+**`services/syscall_handlers.py`** — NEW; 20 domain handlers across 9 domains (task×6, leadgen×3, arm×3, genesis×2, score×2, watcher, goal, research, agent), `register_all_domain_handlers()`
+
+**`services/agent_tools.py`** (MODIFIED) — all 9 tools refactored to thin `_syscall()` wrappers; `suggest_tools()` routes through `sys.v1.agent.suggest_tools`
+
+**`services/flow_definitions.py`** (MODIFIED) — all 15 execute-nodes refactored to thin `_syscall_node()` wrappers; `_syscall_node()` helper added at module top
+
+**`services/system_event_types.py`** (MODIFIED) — added `SYSCALL_EXECUTED = "syscall.executed"`
+
+**`services/nodus_runtime_adapter.py`** (MODIFIED) — `sys` global injected as `_nodus_syscall(name, payload)` closure; elevated caps via `input_payload["syscall_capabilities"]`
+
+**`main.py`** (MODIFIED) — `register_all_domain_handlers()` called at startup lifespan before `register_all_flows()`
+
+**Tests (`tests/unit/test_syscall_dispatcher.py`)**: 54 tests — Groups A-L covering context, registry shape, registration, dispatch routing, capability enforcement, response envelope, handler errors, all 5 built-in handlers, Nodus binding
+
+**Tests (`tests/unit/test_syscall_handlers.py`)**: 44 new tests — Groups A-I covering all 20 domain handlers
+
+**Test count:** 407 total
+
+---
+
+### Added (2026-04-01 - Nodus CLI "A.I.N.D.Y. CLI Bridge")
+
+**`cli.py` — standalone Nodus CLI routing through A.I.N.D.Y. API (stdlib-only)**
+
+- `nodus run <file.nd>` — reads script, POSTs to `POST /platform/nodus/run`, prints result
+- `nodus trace <trace_id>` — GETs `GET /platform/nodus/trace/{id}`, formats step list
+- `nodus upload <file.nd>` — POSTs to `POST /platform/nodus/upload`
+- `--trace` flag on `run` — auto-fetches trace summary after execution
+- `--dump-bytecode` — local Nodus VM disassembly via `disassemble_source()`; degrades gracefully if VM absent
+- `--api-url` / `--api-token` flags (env: `AINDY_API_URL`, `AINDY_API_TOKEN`)
+- `--project-root`, `--input` (JSON), `--error-policy`, `--max-retries`, `--json` flags
+- `_http_post()` / `_http_get()` — `urllib.request`-only; no `requests` dependency
+- `_fmt_run_result()` / `_fmt_trace()` — human-readable and `--json` output modes
+
+**Tests (`tests/unit/test_aindy_cli.py`): 46 new tests**
+- Groups: A=config helpers (6), B=HTTP helpers (6), C=formatters (6), D=cmd_run (10), E=cmd_trace (5), F=cmd_upload (5), G=main dispatch (8)
+
+**Test count:** 363 total
+
+---
+
+### Added (2026-04-01 - Nodus Observability "Per-Call Trace Capture")
+
+**`db/models/nodus_trace_event.py`** — `NodusTraceEvent` ORM table (per-host-function-call record)
+- Fields: id (UUID PK), execution_unit_id (indexed), trace_id (indexed), sequence (Integer), fn_name (String 64), args_summary (JSON), result_summary (JSON), duration_ms (Integer nullable), status (String 16, default "ok"), error (Text nullable), user_id (UUID indexed), timestamp (DateTime tz indexed)
+- `trace_id == execution_unit_id` in standard PersistentFlowRunner runs
+
+**`alembic/versions/e3f4a5b6c7d8_add_nodus_trace_events.py`** — migration (down_revision: `d2e3f4a5b6c7`); indexes on execution_unit_id, trace_id, user_id, timestamp, composite (trace_id, sequence)
+
+**`services/nodus_runtime_adapter.py`** (MODIFIED):
+- Added `from datetime import datetime, timezone` to module imports
+- `_make_traced(fn_name, fn)` closure: wraps all 11 `register_function()` calls; captures sequence, timing, status, error; appends to `collected_traces`
+- `_sanitize_args()` / `_sanitize_result()` — truncate strings at 200 chars, summarize dicts/lists; JSON-safe
+- `_flush_nodus_traces(traces)` — opens its own `SessionLocal()`; non-fatal; runs in `finally` block
+- `services/system_event_types.py`: added `NODUS_TRACE_STEP`, `NODUS_TRACE_COMPLETE`
+
+**`services/nodus_trace_service.py`** — `query_nodus_trace()`, `build_trace_summary()`, `_serialize_trace_event()`
+
+**`routes/platform_router.py`** — `GET /platform/nodus/trace/{trace_id}` (ownership enforced, 404 if no events, `limit` param)
+
+**Tests (`tests/unit/test_nodus_trace.py`): 44 new tests**
+- Groups: A=_sanitize_args, B=_sanitize_result, C=_flush, D=query_nodus_trace, E=build_trace_summary, F=endpoint, G=model
+
+**Test count:** 317 Nodus total
+
+---
+
+### Added (2026-04-01 - Nodus Scheduler "Cron-Driven Script Execution")
+
+**`db/models/nodus_scheduled_job.py`** — `NodusScheduledJob` ORM table; fields: id, user_id, name, cron_expr, script_source, project_root, input_payload, error_policy, max_retries, enabled, last_run_at, last_status, last_error, created_at
+
+**`alembic/versions/d2e3f4a5b6c7_add_nodus_scheduled_jobs.py`** — migration (down_revision: `c1d2e3f4a5b6`)
+
+**`services/nodus_schedule_service.py`** — `create_job()`, `list_jobs()`, `delete_job()`, `run_due_jobs()` (leader-election gated)
+
+**`routes/platform_router.py`** — `POST /platform/nodus/schedule`, `GET /platform/nodus/schedule`, `DELETE /platform/nodus/schedule/{job_id}`
+
+**Tests (`tests/unit/test_nodus_scheduler.py`): 39 new tests**
+
+**Test count:** 273 Nodus total
+
+---
+
+### Added (2026-03-31 - Nodus Flow Compiler "Script → Flow Graph DSL")
+
+**`flow.step()` DSL** inside Nodus scripts — defines named steps with dependencies; `compile_nodus_flow()` produces `NodusFlowGraph`
+
+**`services/nodus_flow_compiler.py`** — `NodusFlowGraph`, `compile_nodus_flow()`, `NodusFlowBuiltins`; registered as `nodus.flow.compile` + `nodus.flow.run` nodes
+
+**`routes/platform_router.py`** — `POST /platform/nodus/flow` (compile + register flow)
+
+**Tests (`tests/unit/test_nodus_flow_compiler.py`): 57 new tests**
+
+**Test count:** 234 Nodus total
+
+---
+
+### Added (2026-03-31 - Nodus Event Builtins "emit / wait / resume")
+
+**`event.emit(type, payload)` / `event.wait(type)`** — Nodus scripts can emit SystemEvents and suspend on external signals
+
+**`NodusWaitSignal`** — raised by `event.wait()`; caught by PersistentFlowRunner; run parked until resume signal arrives
+
+**`services/nodus_event_builtins.py`** — `NodusEventBuiltins`; injected as `event` global
+
+**WAIT/RESUME flow** — parked run updated to `waiting` status; `POST /platform/nodus/resume/{run_id}` resumes
+
+**Tests (`tests/unit/test_nodus_event_builtins.py`): 39 new tests**
+
+**Test count:** 177 Nodus total
+
+---
+
+### Added (2026-03-31 - Nodus Memory Builtins "memory.recall / write / search")
+
+**`memory.recall(query)` / `memory.write(key, value)` / `memory.search(query, tags)`** — Nodus scripts have first-class memory access via bridge
+
+**`services/nodus_memory_builtins.py`** — `NodusMemoryBuiltins`; injected as `memory` global into every Nodus execution
+
+**Tests (`tests/unit/test_nodus_memory_builtins.py`): 49 new tests**
+
+**Test count:** 138 Nodus total
+
+---
+
+### Added (2026-03-31 - Sprint N+11 "Platform Persistence — Dynamic Registry")
+
+**Dynamic registry persistence** — registered flows, nodes, and webhooks survive server restart
+
+**`db/models/`**: `PersistentFlow`, `PersistentNode`, `PersistentWebhook` (3 new ORM models)
+
+**`services/platform_loader.py`** — startup restore: reads all 3 tables, re-registers into in-memory registries; `db=None` pattern for test isolation
+
+**Tests:** covered in platform integration test suite
+
+---
+
+### Added (2026-03-31 - Sprint N+10 "Platform Auth — API Keys")
+
+**`db/models/platform_api_key.py`** — `PlatformAPIKey` table; fields: id, user_id, key_hash, name, scopes (JSON array), created_at, last_used_at, enabled
+
+**`services/api_key_service.py`** — `create_key()`, `verify_key()`, `list_keys()`, `revoke_key()`
+
+**`auth/api_key_auth.py`** — FastAPI dependency for platform key authentication
+
+**`routes/platform_router.py`** — `POST /platform/keys`, `GET /platform/keys`, `GET /platform/keys/{key_id}`, `DELETE /platform/keys/{key_id}`
+
+Scoped capabilities — keys carry explicit capability list; endpoints enforce required scopes
+
+---
+
+### Added (2026-03-25 - Sprint N+9 "Scheduler / Request Context")
+
+**APScheduler leader election** — `is_background_leader()` lease check; only the DB-lease holder runs scheduled jobs; prevents double-execution in multi-process deploys
+
+**Heartbeat job** — periodic APScheduler job to refresh leader lease
+
+**`request_id` ContextVar propagation** — request-scoped ID flows through async task boundaries; appears in all logs/events for that request
+
+**`GET /observability/scheduler/status`** — returns scheduler running state, leader status, next fire times
+
+**Tests (`tests/unit/test_scheduler_context.py`): 30 new tests**
+
+**Test count:** 1,326 total (30 new)
+
+---
+
+### Added (2026-03-25 - Sprint N+8 "Agent Event Log")
+
+**`db/models/agent_event.py`** — `AgentEvent` table: id, run_id (FK), correlation_id, event_type, payload (JSON), timestamp
+
+**`services/agent_runtime.py`** — `emit_event(run_id, type, payload)` — writes AgentEvent rows; used at plan creation, step execution, approval/rejection, completion
+
+**`correlation_id`** — propagated through all AgentEvent rows for a run; enables cross-run correlation
+
+**`GET /agent/runs/{run_id}/timeline`** — returns chronological AgentEvent list for a run
+
+**`new_plan` replay** — `/replay` can re-generate plan for a failed run (distinct from step-level replay)
+
+**Timeline UI tab** (AgentConsole.jsx) — visual event log per run
+
+**Tests (`tests/unit/test_agent_event_log.py`): 40 new tests**
+
+**Test count:** 1,296 total (40 new)
+
+---
+
+### Added (2026-03-25 - Sprint N+7 "Agent Observability")
+
+**Stuck-run startup scan** — on server start, scans for `executing` runs older than 10 min; auto-marks them `failed` with `stuck_on_startup` reason
+
+**`POST /agent/runs/{run_id}/recover`** — explicit recover endpoint; returns 409 if run is not stuck (distinct from generic retry)
+
+**`POST /agent/runs/{run_id}/replay`** — re-executes a completed/failed run from a specific step index; creates new AgentRun with `replayed_from_run_id`
+
+**`replayed_from_run_id`** — new column on `agent_runs`; alembic migration added
+
+**Serializer unification** — all AgentRun/AgentStep responses use single canonical serializer; no more field divergence between list and detail endpoints
+
+**Tests (`tests/unit/test_agent_observability.py`): 55 new tests**
+
+**Test count:** 1,256 total (55 new)
+
+---
+
+### Added (2026-03-25 - Sprint N+6 "Deterministic Agent — NodusAgentAdapter")
+
+**`services/nodus_agent_adapter.py`** — `NodusAgentAdapter`; replaces the N+4 for-loop executor with a Nodus-script-driven execution model
+
+**`PersistentFlowRunner`** — canonical execution engine for all Nodus script runs; wraps NodusRuntime + flow graph + step retry
+
+**Per-step retry** — configurable `max_retries` per step; high-risk steps never retry (hardcoded invariant)
+
+**`flow_run_id`** — new column on `agent_runs` linking to the PersistentFlowRunner run; alembic migration added
+
+**`NODUS_SCRIPT_FLOW`** — canonical flow definition; all Nodus execution paths (API, scheduled, CLI, agent) use this flow
+
+**Tests (`tests/unit/test_nodus_agent_adapter.py`): 81 new tests**
+- Coverage: NodusAgentAdapter, PersistentFlowRunner, per-step retry logic, flow_run_id linkage, high-risk no-retry invariant
+
+**Test count:** 1,201 total (81 new), 69.18% coverage
+
+---
+
 ## [Unreleased] — feat/flow-engine-console-ui
 
 ### Added (2026-03-24 - Sprint N+5 Phase 1+2 "Score-Aware Agent")

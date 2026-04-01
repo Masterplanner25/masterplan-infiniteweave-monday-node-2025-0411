@@ -1,0 +1,86 @@
+// task_processor.nodus
+//
+// General-purpose task processing script.
+// Reads tasks from memory, classifies them by priority and status,
+// writes a processing report, and emits a summary event.
+//
+// Input state:
+//   namespace  (string) — MAS prefix, e.g. "/memory/examples"
+//   dry_run    (bool)   — if true, skip memory writes (default false)
+
+let ns      = get_state("namespace")
+let dry_run = get_state("dry_run")
+
+// ── Load tasks ────────────────────────────────────────────────────────────
+let result = sys("sys.v1.memory.read", {
+    path:  ns + "/tasks/**",
+    limit: 100
+})
+
+let tasks = result.data.nodes
+let total = tasks.length
+
+// ── Classify ──────────────────────────────────────────────────────────────
+let high_priority     = 0
+let critical_priority = 0
+let needs_attention   = 0
+let ready_to_ship     = 0
+let i = 0
+
+while i < total {
+    let priority = tasks[i].extra.priority
+    let status   = tasks[i].extra.status
+
+    if priority == "critical" { critical_priority = critical_priority + 1 }
+    if priority == "high"     { high_priority     = high_priority + 1 }
+    if status   == "blocked"  { needs_attention   = needs_attention + 1 }
+    if status   == "completed" {
+        let is_high = priority == "high"
+        let is_crit = priority == "critical"
+        if is_high { ready_to_ship = ready_to_ship + 1 }
+        if is_crit { ready_to_ship = ready_to_ship + 1 }
+    }
+    i = i + 1
+}
+
+// ── Build processing report ───────────────────────────────────────────────
+let report = "Task processing report: " + total + " tasks. "
+           + "Critical: " + critical_priority + ", "
+           + "High: " + high_priority + ", "
+           + "Blocked: " + needs_attention + ", "
+           + "Ready to ship: " + ready_to_ship + "."
+
+// ── Write report (unless dry run) ─────────────────────────────────────────
+if !dry_run {
+    sys("sys.v1.memory.write", {
+        path:      ns + "/reports/decision",
+        content:   report,
+        tags:      ["processing-report", "auto-generated"],
+        node_type: "decision",
+        extra: {
+            total:            total,
+            critical:         critical_priority,
+            high:             high_priority,
+            needs_attention:  needs_attention,
+            ready_to_ship:    ready_to_ship
+        }
+    })
+}
+
+// ── Emit and surface ──────────────────────────────────────────────────────
+emit("tasks.processed", {
+    namespace:       ns,
+    total:           total,
+    critical:        critical_priority,
+    high:            high_priority,
+    needs_attention: needs_attention,
+    ready_to_ship:   ready_to_ship,
+    dry_run:         dry_run
+})
+
+set_state("report",         report)
+set_state("total",          total)
+set_state("critical",       critical_priority)
+set_state("needs_attention", needs_attention)
+set_state("ready_to_ship",  ready_to_ship)
+set_state("done",           true)

@@ -46,6 +46,11 @@ class MemoryNodeModel(Base):
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     last_outcome = Column(String, nullable=True)
     weight = Column(Float, nullable=False, default=1.0)
+    # Memory Address Space (MAS) path fields — added Sprint MAS
+    path = Column(String(512), nullable=True, index=True)
+    namespace = Column(String(128), nullable=True, index=True)
+    addr_type = Column(String(128), nullable=True, index=True)
+    parent_path = Column(String(512), nullable=True, index=True)
 
 
 Index("ix_memory_nodes_tags_gin", MemoryNodeModel.tags, postgresql_using="gin")

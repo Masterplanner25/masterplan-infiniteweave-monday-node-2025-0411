@@ -1,0 +1,85 @@
+// analyze.nodus
+// Nodus version of the memory analyzer.
+// Run via: client.nodus.run_script(script_name="memory_analyze")
+//
+// Input state keys:
+//   namespace  (string) — MAS prefix to scan, e.g. "/memory/examples"
+//   limit      (int)    — max nodes to load (default 50)
+
+let ns    = get_state("namespace")
+let limit = get_state("limit")
+
+// ── Phase 1: Load tasks ───────────────────────────────────────────────────
+let read_result = sys("sys.v1.memory.read", {
+    path:  ns + "/tasks/**",
+    limit: limit
+})
+
+let nodes = read_result.data.nodes
+let total = nodes.length
+
+if total == 0 {
+    set_state("summary", "No tasks found at " + ns + "/tasks/**")
+    set_state("insights_written", 0)
+    emit("analysis.complete", {namespace: ns, node_count: 0})
+}
+
+// ── Phase 2: Count by status ──────────────────────────────────────────────
+let completed   = 0
+let in_progress = 0
+let blocked     = 0
+let i = 0
+
+while i < total {
+    let status = nodes[i].extra.status
+    if status == "completed"   { completed   = completed   + 1 }
+    if status == "in-progress" { in_progress = in_progress + 1 }
+    if status == "blocked"     { blocked     = blocked     + 1 }
+    i = i + 1
+}
+
+let completion_pct = 0
+if total > 0 {
+    completion_pct = completed * 100 / total
+}
+
+// ── Phase 3: Write completion insight ────────────────────────────────────
+sys("sys.v1.memory.write", {
+    path:      ns + "/insights/decision",
+    content:   "Completion rate: " + completion_pct + "% (" + completed + "/" + total + " tasks done). " + in_progress + " in progress, " + blocked + " blocked.",
+    tags:      ["completion", "sprint-metric", "auto-generated"],
+    node_type: "decision",
+    extra: {
+        completion_rate: completion_pct,
+        completed:       completed,
+        in_progress:     in_progress,
+        blocked:         blocked,
+        total:           total
+    }
+})
+
+// ── Phase 4: Detect blocked work and write bottleneck insight ────────────
+if blocked > 0 {
+    sys("sys.v1.memory.write", {
+        path:      ns + "/insights/decision",
+        content:   blocked + " task(s) are blocked this sprint. Review and unblock to maintain velocity.",
+        tags:      ["bottleneck", "risk", "auto-generated"],
+        node_type: "decision",
+        extra:     {blocked_count: blocked}
+    })
+}
+
+// ── Phase 5: Emit and surface results ────────────────────────────────────
+emit("analysis.complete", {
+    namespace:       ns,
+    total:           total,
+    completed:       completed,
+    in_progress:     in_progress,
+    blocked:         blocked,
+    completion_rate: completion_pct
+})
+
+set_state("summary",          "Analyzed " + total + " tasks: " + completion_pct + "% complete.")
+set_state("completion_rate",  completion_pct)
+set_state("insights_written", 2)
+set_state("done",             true)

@@ -30,8 +30,22 @@ import logging
 from typing import Callable
 
 from core.execution_signal_helper import queue_system_event
+from services.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
 logger = logging.getLogger(__name__)
+
+
+def _syscall(name: str, payload: dict, user_id: str, capability: str) -> dict:
+    """Dispatch a syscall from within a tool and unwrap the response.
+
+    Returns the ``data`` dict on success, or raises RuntimeError on error.
+    This preserves the tool's original return contract (raw domain data).
+    """
+    ctx = make_syscall_ctx_from_tool(user_id, capabilities=[capability])
+    result = get_dispatcher().dispatch(name, payload, ctx)
+    if result["status"] == "error":
+        raise RuntimeError(result["error"])
+    return result["data"]
 
 # ── Registry ─────────────────────────────────────────────────────────────────
 
@@ -178,80 +192,21 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
     """
     Return up to 3 tool suggestions based on the user's current KPI state.
 
-    Each suggestion: {tool, reason, suggested_goal}
-
-    Rules (in priority order):
-      focus_quality < 40   → memory.recall   (recall context before deep work)
-      execution_speed < 40 → task.create     (rebuild momentum with a concrete task)
-      ai_boost < 40        → arm.analyze     (improve code quality via ARM)
-      task_velocity low    → task.create     (secondary trigger if speed between 40-55)
-      master_score >= 70   → genesis.message (high performer unlock)
-
-    Returns [] when kpi_snapshot is None/empty or no rules trigger.
-    Never raises.
+    Routes through sys.v1.agent.suggest_tools syscall handler.
+    Returns [] on any failure. Never raises.
     """
-    if user_id and db:
-        try:
-            from services.infinity_loop import get_latest_adjustment
-
-            latest = get_latest_adjustment(user_id=user_id, db=db)
-            if latest and latest.adjustment_payload:
-                persisted = latest.adjustment_payload.get("suggestions")
-                if isinstance(persisted, list):
-                    return persisted[:3]
-        except Exception as exc:
-            logger.warning("[AgentTools] persisted suggestions lookup failed: %s", exc)
-
-    if not kpi_snapshot:
-        return []
-
     try:
-        suggestions = []
-
-        focus = kpi_snapshot.get("focus_quality", 50.0)
-        speed = kpi_snapshot.get("execution_speed", 50.0)
-        ai_boost = kpi_snapshot.get("ai_productivity_boost", 50.0)
-        master = kpi_snapshot.get("master_score", 50.0)
-
-        if focus < 40:
-            suggestions.append({
-                "tool": "memory.recall",
-                "reason": f"Focus quality is low ({focus:.0f}/100) — recall past context before starting new work",
-                "suggested_goal": "Recall recent memories and notes to regain context on current priorities",
-            })
-
-        if speed < 40:
-            suggestions.append({
-                "tool": "task.create",
-                "reason": f"Execution speed is low ({speed:.0f}/100) — create a concrete next action to rebuild momentum",
-                "suggested_goal": "Create a focused task for the most important thing I need to do today",
-            })
-        elif speed < 55:
-            suggestions.append({
-                "tool": "task.create",
-                "reason": f"Execution pace is below average ({speed:.0f}/100) — a new task could help",
-                "suggested_goal": "Create a small, completable task to get back on track",
-            })
-
-        if ai_boost < 40 and len(suggestions) < 3:
-            suggestions.append({
-                "tool": "arm.analyze",
-                "reason": f"ARM usage is low ({ai_boost:.0f}/100) — analyzing code could boost quality scores",
-                "suggested_goal": "Analyze the current codebase for architecture and integrity improvements",
-            })
-
-        if master >= 70 and len(suggestions) < 3:
-            suggestions.append({
-                "tool": "genesis.message",
-                "reason": f"Strong overall performance ({master:.0f}/100) — review strategic direction with Genesis",
-                "suggested_goal": "Review my current MasterPlan progress and refine next priorities with Genesis",
-            })
-
-        return suggestions[:3]
-
+        ctx = make_syscall_ctx_from_tool(str(user_id or ""), capabilities=["agent.suggest_tools"])
+        result = get_dispatcher().dispatch(
+            "sys.v1.agent.suggest_tools",
+            {"kpi_snapshot": kpi_snapshot},
+            ctx,
+        )
+        if result["status"] == "success":
+            return result["data"].get("suggestions", [])
     except Exception as exc:
-        logger.warning("[AgentTools] suggest_tools failed: %s", exc)
-        return []
+        logger.warning("[AgentTools] suggest_tools dispatch failed: %s", exc)
+    return []
 
 
 # ── Tool Implementations ─────────────────────────────────────────────────────
@@ -267,21 +222,8 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
     egress_scope="internal",
 )
 def task_create(args: dict, user_id: str, db) -> dict:
-    from services.task_services import create_task
-
-    name = args.get("name") or args.get("task_name")
-    if not name:
-        raise ValueError("task.create requires 'name'")
-
-    task = create_task(
-        db=db,
-        name=name,
-        category=args.get("category", "general"),
-        priority=args.get("priority", "medium"),
-        due_date=args.get("due_date"),
-        user_id=user_id,
-    )
-    return {"task_id": str(task.id), "name": task.name, "status": task.status}
+    data = _syscall("sys.v1.task.create", args, user_id, "task.create")
+    return {"task_id": data.get("task_id"), "name": data.get("task_name"), "status": data.get("status")}
 
 
 @register_tool(
@@ -294,13 +236,7 @@ def task_create(args: dict, user_id: str, db) -> dict:
     egress_scope="internal",
 )
 def task_complete(args: dict, user_id: str, db) -> dict:
-    from services.task_services import execute_task_completion
-
-    name = args.get("name") or args.get("task_name")
-    if not name:
-        raise ValueError("task.complete requires 'name'")
-
-    return execute_task_completion(db=db, name=name, user_id=user_id)
+    return _syscall("sys.v1.task.complete_full", args, user_id, "task.complete_full")
 
 
 @register_tool(
@@ -313,20 +249,7 @@ def task_complete(args: dict, user_id: str, db) -> dict:
     egress_scope="internal",
 )
 def memory_recall(args: dict, user_id: str, db) -> dict:
-    from bridge.bridge import recall_memories
-
-    query = args.get("query", "")
-    tags = args.get("tags", [])
-    limit = int(args.get("limit", 5))
-
-    nodes = recall_memories(
-        query=query,
-        tags=tags,
-        limit=limit,
-        user_id=user_id,
-        db=db,
-    )
-    return {"nodes": nodes, "count": len(nodes)}
+    return _syscall("sys.v1.memory.read", args, user_id, "memory.read")
 
 
 @register_tool(
@@ -339,20 +262,10 @@ def memory_recall(args: dict, user_id: str, db) -> dict:
     egress_scope="internal",
 )
 def memory_write(args: dict, user_id: str, db) -> dict:
-    from bridge.bridge import create_memory_node
-
-    content = args.get("content")
-    if not content:
-        raise ValueError("memory.write requires 'content'")
-
-    node = create_memory_node(
-        content=content,
-        source=args.get("source", "agent"),
-        tags=args.get("tags", []),
-        user_id=user_id,
-        db=db,
-        node_type=args.get("node_type"),
-    )
+    # Ensure "source" defaults to "agent" (preserved from original behavior)
+    payload = {"source": "agent", **args}
+    data = _syscall("sys.v1.memory.write", payload, user_id, "memory.write")
+    node = data.get("node", {})
     return {"node_id": node.get("id") if isinstance(node, dict) else None}
 
 
@@ -366,27 +279,12 @@ def memory_write(args: dict, user_id: str, db) -> dict:
     egress_scope="external_llm",
 )
 def arm_analyze(args: dict, user_id: str, db) -> dict:
-    from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-    # For agent-driven analysis, we wrap the prompt as additional_context
-    # and use a sentinel path (the analyzer reads from the path, so we
-    # require either a real file_path or accept failure gracefully).
-    file_path = args.get("file_path")
-    if not file_path:
-        raise ValueError("arm.analyze requires 'file_path'")
-
-    analyzer = DeepSeekCodeAnalyzer()
-    result = analyzer.run_analysis(
-        file_path=file_path,
-        user_id=user_id,
-        db=db,
-        additional_context=args.get("additional_context", ""),
-    )
+    data = _syscall("sys.v1.arm.analyze", args, user_id, "arm.analyze")
     return {
-        "summary": result.get("summary", ""),
-        "architecture_score": result.get("architecture_score"),
-        "integrity_score": result.get("integrity_score"),
-        "analysis_id": result.get("analysis_id"),
+        "summary": data.get("summary", ""),
+        "architecture_score": data.get("architecture_score"),
+        "integrity_score": data.get("integrity_score"),
+        "analysis_id": data.get("analysis_id"),
     }
 
 
@@ -400,24 +298,11 @@ def arm_analyze(args: dict, user_id: str, db) -> dict:
     egress_scope="external_llm",
 )
 def arm_generate(args: dict, user_id: str, db) -> dict:
-    from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-    prompt = args.get("prompt")
-    if not prompt:
-        raise ValueError("arm.generate requires 'prompt'")
-
-    analyzer = DeepSeekCodeAnalyzer()
-    result = analyzer.generate_code(
-        prompt=prompt,
-        user_id=user_id,
-        db=db,
-        language=args.get("language", "python"),
-        original_code=args.get("original_code", ""),
-    )
+    data = _syscall("sys.v1.arm.generate", args, user_id, "arm.generate")
     return {
-        "generated_code": result.get("generated_code", ""),
-        "explanation": result.get("explanation", ""),
-        "generation_id": result.get("generation_id"),
+        "generated_code": data.get("generated_code", ""),
+        "explanation": data.get("explanation", ""),
+        "generation_id": data.get("generation_id"),
     }
 
 
@@ -431,14 +316,8 @@ def arm_generate(args: dict, user_id: str, db) -> dict:
     egress_scope="external_web",
 )
 def leadgen_search(args: dict, user_id: str, db) -> dict:
-    from services.leadgen_service import run_ai_search
-
-    query = args.get("query")
-    if not query:
-        raise ValueError("leadgen.search requires 'query'")
-
-    leads = run_ai_search(query=query, user_id=user_id, db=db)
-    return {"leads": leads, "count": len(leads)}
+    data = _syscall("sys.v1.leadgen.search_ai", args, user_id, "leadgen.search_ai")
+    return {"leads": data.get("leads", []), "count": data.get("count", 0)}
 
 
 @register_tool(
@@ -451,14 +330,7 @@ def leadgen_search(args: dict, user_id: str, db) -> dict:
     egress_scope="external_web",
 )
 def research_query(args: dict, user_id: str, db) -> dict:
-    from modules.research_engine import web_search
-
-    query = args.get("query")
-    if not query:
-        raise ValueError("research.query requires 'query'")
-
-    raw = web_search(query)
-    return {"raw_result": raw[:2000] if raw else ""}
+    return _syscall("sys.v1.research.query", args, user_id, "research.query")
 
 
 @register_tool(
@@ -471,22 +343,4 @@ def research_query(args: dict, user_id: str, db) -> dict:
     egress_scope="external_llm",
 )
 def genesis_message(args: dict, user_id: str, db) -> dict:
-    from services.flow_engine import execute_intent
-
-    message = args.get("message")
-    session_id = args.get("session_id")
-    if not message:
-        raise ValueError("genesis.message requires 'message'")
-    if not session_id:
-        raise ValueError("genesis.message requires 'session_id'")
-
-    result = execute_intent(
-        intent_data={
-            "workflow_type": "genesis_message",
-            "session_id": session_id,
-            "message": message,
-        },
-        db=db,
-        user_id=user_id,
-    )
-    return result
+    return _syscall("sys.v1.genesis.message", args, user_id, "genesis.message")
