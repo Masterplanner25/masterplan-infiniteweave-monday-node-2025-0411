@@ -4,45 +4,114 @@ This document formalizes the current FastAPI HTTP interface based strictly on im
 
 ## 1. Route Inventory
 
-Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
-- `AINDY/routes/seo_routes.py` (no router prefix) **[JWT auth required]**
-- `AINDY/routes/task_router.py` (prefix `/tasks`) **[JWT auth required]**
-- `AINDY/routes/bridge_router.py` (prefix `/bridge`) **[JWT auth required for /nodes and /link; API key required for /user_event]**
-- `AINDY/routes/authorship_router.py` (prefix `/authorship`) **[JWT auth required]**
-- `AINDY/routes/rippletrace_router.py` (prefix `/rippletrace`) **[JWT auth required]**
-- `AINDY/routes/network_bridge_router.py` (prefix `/network_bridge`) **[API key required]**
-- `AINDY/routes/db_verify_router.py` (prefix `/db`) **[API key required]**
-- `AINDY/routes/research_results_router.py` (prefix `/research`) **[JWT auth required]**
-- `AINDY/routes/main_router.py` (no router prefix) **[JWT auth required]** — calculation math API, secured Sprint 4
-- `AINDY/routes/freelance_router.py` (prefix `/freelance`) **[JWT auth required]**
-- `AINDY/routes/arm_router.py` (prefix `/arm`) **[JWT auth required]**
-- `AINDY/routes/leadgen_router.py` (prefix `/leadgen`) **[JWT auth required]**
-- `AINDY/routes/dashboard_router.py` (prefix `/dashboard`) **[JWT auth required]**
-- `AINDY/routes/legacy_surface_router.py` (no prefix) **[compatibility surface; auth depends on underlying service behavior]**
-- `AINDY/routes/health_router.py` (prefix `/health`) **[public]**
-- `AINDY/routes/health_dashboard_router.py` (prefix `/dashboard`) **[JWT auth required]**
-- `AINDY/routes/social_router.py` (prefix `/social`) **[JWT auth required]**
-- `AINDY/routes/analytics_router.py` (prefix `/analytics`) **[JWT auth required]**
-- `AINDY/routes/genesis_router.py` (prefix `/genesis`) **[JWT auth required]**
-- `AINDY/routes/auth_router.py` (prefix `/auth`) **[public — provides tokens]**
-- `AINDY/routes/masterplan_router.py` (prefix `/masterplans`) **[JWT auth required]**
-- `AINDY/routes/memory_router.py` (prefix `/memory`) **[JWT auth required]**
-- `AINDY/routes/memory_metrics_router.py` (prefix `/memory`) **[JWT auth required]**
-- `AINDY/routes/memory_trace_router.py` (prefix `/memory`) **[JWT auth required]**
-- `AINDY/routes/identity_router.py` (prefix `/identity`) **[JWT auth required]**
-- `AINDY/routes/observability_router.py` (prefix `/observability`) **[JWT auth required]**
-- `AINDY/routes/automation_router.py` (prefix `/automation`) **[JWT auth required]**
-- `AINDY/routes/flow_router.py` (prefix `/flows`) **[JWT auth required]**
-- `AINDY/routes/watcher_router.py` (prefix `/watcher`) **[API key required]**
-- `AINDY/routes/score_router.py` (prefix `/score`) **[JWT auth required]**
-- `AINDY/routes/agent_router.py` (prefix `/agent`) **[JWT auth required]**
+Routers are registered in `AINDY/main.py` using three mount groups defined in `AINDY/routes/__init__.py`.
+The **final URL** is `mount_prefix + router_prefix + route_path`.
 
-**Authentication model (Sprint 4 Auth Hardening — complete as of 2026-03-18):**
-- **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Required on: tasks, leadgen, genesis, analytics, seo, authorship, arm, rippletrace, freelance, research, dashboard, social, memory, **all calculation math routes** (`/calculate_twr`, `/calculate_engagement`, etc.), `/bridge/nodes`, `/bridge/link`.
-- **API key** (`X-API-Key` header) — required on: `network_bridge_router` (service-to-service from Node.js gateway), `db_verify_router` (admin schema inspection), `/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
+### Root (mounted at `/` — no prefix)
+
+These paths are stable infrastructure. Never add an app or platform prefix here.
+
+- `AINDY/routes/health_router.py` (no router prefix) **[public]** → `/health`, `/health/`, `/ready`, `/health/details`
+- `AINDY/routes/auth_router.py` (router prefix `/auth`) **[public — provides tokens]** → `/auth/register`, `/auth/login`
+
+### Platform layer (mounted at `/platform`)
+
+Stable runtime API for external integrations and tooling. Breaking changes require a version bump.
+
+- `AINDY/routes/platform_router.py` (router prefix `/platform`, mounted at root) **[JWT or Platform API key]** → `/platform/flows/*`, `/platform/nodes/*`, `/platform/webhooks/*`, `/platform/keys/*`
+- `AINDY/routes/flow_router.py` (router prefix `/flows`) **[JWT auth required]** → `/platform/flows/runs`, `/platform/flows/runs/{id}`, `/platform/flows/registry`, etc.
+- `AINDY/routes/observability_router.py` (router prefix `/observability`) **[JWT auth required]** → `/platform/observability/scheduler/status`, `/platform/observability/requests`, `/platform/observability/dashboard`, etc.
+- `AINDY/routes/system_state_router.py` (router prefix `/system`) **[JWT auth required]** → `/platform/system/state`
+- `AINDY/routes/db_verify_router.py` (router prefix `/db`) **[API key required]** → `/platform/db/verify`
+
+### Apps layer (mounted at `/apps`)
+
+Mutable domain features. All paths below are prefixed with `/apps`.
+
+- `AINDY/routes/agent_router.py` (router prefix `/agent`) **[JWT auth required]** → `/apps/agent/run`, `/apps/agent/runs`, etc.
+- `AINDY/routes/arm_router.py` (router prefix `/arm`) **[JWT auth required]** → `/apps/arm/analyze`, `/apps/arm/generate`, etc.
+- `AINDY/routes/autonomy_router.py` (router prefix `/autonomy`) **[JWT auth required]** → `/apps/autonomy/decisions`
+- `AINDY/routes/task_router.py` (router prefix `/tasks`) **[JWT auth required]** → `/apps/tasks/create`, `/apps/tasks/start`, etc.
+- `AINDY/routes/goals_router.py` (router prefix `/goals`) **[JWT auth required]** → `/apps/goals/`
+- `AINDY/routes/masterplan_router.py` (router prefix `/masterplans`) **[JWT auth required]** → `/apps/masterplans/`
+- `AINDY/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** → `/apps/genesis/session`, `/apps/genesis/message`, etc.
+- `AINDY/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** → `/apps/automation/logs`, etc.
+- `AINDY/routes/memory_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/nodes`, `/apps/memory/recall`, etc.
+- `AINDY/routes/memory_metrics_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/metrics`, etc.
+- `AINDY/routes/memory_trace_router.py` (router prefix `/memory`) **[JWT auth required]** → `/apps/memory/traces`, etc.
+- `AINDY/routes/bridge_router.py` (router prefix `/bridge`) **[JWT auth required for /nodes and /link; API key for /user_event]** → `/apps/bridge/*`
+- `AINDY/routes/freelance_router.py` (router prefix `/freelance`) **[JWT auth required]** → `/apps/freelance/*`
+- `AINDY/routes/leadgen_router.py` (router prefix `/leadgen`) **[JWT auth required]** → `/apps/leadgen/`
+- `AINDY/routes/analytics_router.py` (router prefix `/analytics`) **[JWT auth required]** → `/apps/analytics/*`
+- `AINDY/routes/social_router.py` (router prefix `/social`) **[JWT auth required]** → `/apps/social/*`
+- `AINDY/routes/score_router.py` (router prefix `/scores`) **[JWT auth required]** → `/apps/scores/me`, `/apps/scores/feedback`, etc.
+- `AINDY/routes/identity_router.py` (router prefix `/identity`) **[JWT auth required]** → `/apps/identity/boot`, `/apps/identity/evolution`, etc.
+- `AINDY/routes/watcher_router.py` (router prefix `/watcher`) **[API key required]** → `/apps/watcher/signals`
+- `AINDY/routes/coordination_router.py` (router prefix `/coordination`) **[JWT auth required]** → `/apps/coordination/agents`, `/apps/coordination/graph`
+- `AINDY/routes/dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** → `/apps/dashboard/overview`
+- `AINDY/routes/health_dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** → `/apps/dashboard/health`
+- `AINDY/routes/seo_routes.py` (router prefix `/seo`) **[JWT auth required]** → `/apps/seo/analyze`, `/apps/seo/meta`, `/apps/seo/suggest`, etc.
+- `AINDY/routes/research_results_router.py` (router prefix `/research`) **[JWT auth required]** → `/apps/research/`
+- `AINDY/routes/authorship_router.py` (router prefix `/authorship`) **[JWT auth required]** → `/apps/authorship/reclaim`
+- `AINDY/routes/rippletrace_router.py` (router prefix `/rippletrace`) **[JWT auth required]** → `/apps/rippletrace/*`
+- `AINDY/routes/network_bridge_router.py` (router prefix `/network_bridge`) **[API key required]** → `/apps/network_bridge/*`
+- `AINDY/routes/main_router.py` (router prefix `/compute`) **[JWT auth required]** → `/apps/compute/calculate_twr`, `/apps/compute/calculate_engagement`, etc. (legacy KPI surface)
+- `AINDY/routes/legacy_surface_router.py` (no router prefix, env-gated) **[compatibility surface]** → `/apps/*` (old ripple/strategy/playbook endpoints; enabled via `AINDY_ENABLE_LEGACY_SURFACE=true`)
+
+**Authentication model:**
+
+Three principals are supported. All three work on any route that uses the `get_authenticated_principal()` or `require_scope()` dependency.
+
+- **JWT Bearer token** — obtain via `POST /auth/login`; pass as `Authorization: Bearer <token>`. Full trust — no scope restrictions. Required on all `/apps/*` routes and most `/platform/*` routes.
+
+- **Platform API key** (`X-Platform-Key: aindy_<token>` header) — issued via `POST /platform/keys`. Carries explicit capability scopes. Intended for external integrations and machine clients. Valid scopes:
+  - `flow.read` — list/get flows and their definitions
+  - `flow.execute` — run any registered flow via `POST /platform/flows/{name}/run`
+  - `memory.read` — read memory nodes, recall, search
+  - `memory.write` — create/update/delete memory nodes
+  - `agent.run` — create and monitor agent runs
+  - `webhook.manage` — create/delete webhook subscriptions
+  - `platform.admin` — full platform access (implies all scopes)
+  - Keys are SHA-256 hashed at rest; plaintext returned exactly once on creation.
+  - Implementation: `auth/api_key_auth.py` — `require_scope("flow.execute")` dependency pattern.
+
+- **Service API key** (`X-API-Key` header) — required on: `network_bridge_router` (Node.js gateway), `db_verify_router` (admin schema inspection), `/apps/bridge/user_event`. Key value from `AINDY_API_KEY` env var.
+
 - **HMAC permission** — deprecated. `/bridge` write routes rely on JWT; `permission` is ignored if provided.
-- **Public routes** (no auth): `/auth/*`, `/health/*`, `GET /`.
+
+- **Public routes** (no auth): `/auth/*`, `/health`, `/health/`, `/ready`, `/health/details`, `GET /`.
+
 - Zero unprotected non-public routes as of Sprint 4 (2026-03-18).
+
+**Platform API (Sprint N+10/N+11 — 2026-03-31):**
+
+Flow management (`/platform/flows/*`):
+- `POST /platform/flows` — register a dynamic flow at runtime (no restart). Body: `FlowDefinition {name, nodes[], edges{}, start, end[], overwrite?}`. Persisted to DB.
+- `GET /platform/flows` — list dynamically registered flows.
+- `GET /platform/flows/{name}` — get a flow definition.
+- `POST /platform/flows/{name}/run` — execute any registered flow. Body: `{state: {...}}`. Returns full execution envelope.
+- `DELETE /platform/flows/{name}` — remove a dynamic flow (soft-delete in DB).
+
+Node management (`/platform/nodes/*`):
+- `POST /platform/nodes/register` — register an external node (webhook or plugin). Body: `NodeRegistration {name, type, handler, timeout_seconds?, secret?, overwrite?}`. Persisted to DB.
+- `GET /platform/nodes` — list dynamic nodes.
+- `GET /platform/nodes/{name}` — get node metadata.
+- `DELETE /platform/nodes/{name}` — remove a dynamic node.
+
+Webhook subscriptions (`/platform/webhooks/*`):
+- `POST /platform/webhooks` — subscribe to a `SystemEvent` type. Body: `{event_type, callback_url, secret?}`. Supports exact (`"execution.completed"`), prefix wildcard (`"execution.*"`), and global wildcard (`"*"`). Persisted to DB.
+- `GET /platform/webhooks` — list current user's subscriptions.
+- `GET /platform/webhooks/{id}` — get subscription details (ownership-enforced).
+- `DELETE /platform/webhooks/{id}` — cancel a subscription (soft-delete in DB).
+- Delivery: async, up to 3 retries with exponential backoff (1 s → 2 s → 4 s). HMAC-SHA256 signed when `secret` is provided (`X-AINDY-Signature: sha256=<hex>`).
+
+API key management (`/platform/keys/*`):
+- `POST /platform/keys` — create a scoped API key. Body: `{name, scopes[], expires_at?}`. Returns plaintext key **once** — store it immediately.
+- `GET /platform/keys` — list keys (prefix/scopes/stats; no plaintext).
+- `GET /platform/keys/{id}` — get single key metadata.
+- `DELETE /platform/keys/{id}` — revoke a key.
+
+Persistence: All dynamic flows, nodes, and webhook subscriptions are persisted to `dynamic_flows`, `dynamic_nodes`, and `webhook_subscriptions` tables and **restored automatically on server restart** via `services/platform_loader.py` (startup loader).
 
 **Sprint 5 User Isolation (2026-03-18):**
 - Freelance, research, and rippletrace routes now scope all reads and writes to the authenticated user's `user_id` (extracted from JWT `sub` claim).
@@ -63,10 +132,10 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
 - Enforced via `@limiter.limit()` decorator from `services/rate_limiter.py`; HTTP 429 on excess.
 
 **Search System summary (current implementation):**
-- SEO: `POST /seo/analyze`, `POST /seo/meta`.
-- LeadGen: `POST /leadgen/` (query param), `GET /leadgen/`.
-- Research: `POST /research/`, `POST /research/query`, `GET /research/`.
-- Memory search: `POST /memory/nodes/search`, `POST /memory/recall`.
+- SEO: `POST /apps/seo/analyze`, `POST /apps/seo/meta`.
+- LeadGen: `POST /apps/leadgen/` (query param), `GET /apps/leadgen/`.
+- Research: `POST /apps/research/`, `POST /apps/research/query`, `GET /apps/research/`.
+- Memory search: `POST /apps/memory/nodes/search`, `POST /apps/memory/recall`.
 - Note: LeadGen uses external retrieval with structured parsing; research routes now invoke `modules/research_engine.web_search()` + `ai_analyze()`.
 
 **External interaction contract (current implementation):**
@@ -108,35 +177,35 @@ Routers registered in `AINDY/main.py` via `AINDY/routes/__init__.py`:
   now execute through `core/execution_pipeline.py` / `core/execution_helper.py`, which preserves their existing body shapes by default while adding request-scoped `trace_id`, best-effort `SystemEvent` lifecycle emission, and response `X-Trace-ID` headers.
 
 **Freelancing summary (current implementation):**
-- Orders: `POST /freelance/order`, `POST /freelance/deliver/{order_id}`, `GET /freelance/orders`.
-- Feedback: `POST /freelance/feedback`, `GET /freelance/feedback`.
-- Metrics: `GET /freelance/metrics/latest`, `POST /freelance/metrics/update`.
+- Orders: `POST /apps/freelance/order`, `POST /apps/freelance/deliver/{order_id}`, `GET /apps/freelance/orders`.
+- Feedback: `POST /apps/freelance/feedback`, `GET /apps/freelance/feedback`.
+- Metrics: `GET /apps/freelance/metrics/latest`, `POST /apps/freelance/metrics/update`.
 
 **Social Layer summary (current implementation):**
-- Profiles: `POST /social/profile`, `GET /social/profile/{username}`.
-- Posts/Feed: `POST /social/post`, `GET /social/feed`.
+- Profiles: `POST /apps/social/profile`, `GET /apps/social/profile/{username}`.
+- Posts/Feed: `POST /apps/social/post`, `GET /apps/social/feed`.
 
 **Masterplan SaaS summary (current implementation):**
-- Genesis: `/genesis/*` supports draft, synthesize, audit, and lock flows.
-- MasterPlans: `/masterplans/*` supports list, lock, and activate.
+- Genesis: `/apps/genesis/*` supports draft, synthesize, audit, and lock flows.
+- MasterPlans: `/apps/masterplans/*` supports list, lock, and activate.
 - Note: Masterplan anchor/ETA projection and dependency cascade outputs are not exposed as APIs.
 
 **Memory Bridge Phase 1 additions (2026-03-18):**
-- `POST /memory/nodes` — JWT required. Body: `CreateNodeRequest {content, source?, tags?, node_type?, extra?}`. Persists a memory node. Returns node dict. Status 201.
-- `GET /memory/nodes/{node_id}` — JWT required. Returns node dict or 404.
-- `GET /memory/nodes/{node_id}/links` — JWT required. Query param: `direction` (`in`|`out`|`both`, default `both`). Returns `{"nodes": [...]}`. 404 if node not found, 422 if direction invalid.
-- `GET /memory/nodes` — JWT required. Query params: `tags` (comma-separated), `mode` (`AND`|`OR`, default `AND`), `limit` (default 50). Returns `{"nodes": [...]}`.
-- `POST /memory/links` — JWT required. Body: `CreateLinkRequest {source_id, target_id, link_type?}`. Returns link dict. Status 201. 422 if nodes don't exist or same ID.
+- `POST /apps/memory/nodes` — JWT required. Body: `CreateNodeRequest {content, source?, tags?, node_type?, extra?}`. Persists a memory node. Returns node dict. Status 201.
+- `GET /apps/memory/nodes/{node_id}` — JWT required. Returns node dict or 404.
+- `GET /apps/memory/nodes/{node_id}/links` — JWT required. Query param: `direction` (`in`|`out`|`both`, default `both`). Returns `{"nodes": [...]}`. 404 if node not found, 422 if direction invalid.
+- `GET /apps/memory/nodes` — JWT required. Query params: `tags` (comma-separated), `mode` (`AND`|`OR`, default `AND`), `limit` (default 50). Returns `{"nodes": [...]}`.
+- `POST /apps/memory/links` — JWT required. Body: `CreateLinkRequest {source_id, target_id, link_type?}`. Returns link dict. Status 201. 422 if nodes don't exist or same ID.
 
 **Memory Bridge Phase 2 additions (2026-03-18):**
-- `POST /memory/nodes/search` — JWT required. Body: `SimilaritySearchRequest {query, limit?, node_type?, min_similarity?}`. Returns `{"query", "results", "count"}` with semantic `similarity` and `distance`.
-- `POST /memory/recall` — JWT required. Body: `RecallRequest {query?, tags?, limit?, node_type?}`. Returns resonance-scored results and scoring metadata (`scoring_version: "v2"`, `formula: {...}`). 400 if neither `query` nor `tags` provided.
+- `POST /apps/memory/nodes/search` — JWT required. Body: `SimilaritySearchRequest {query, limit?, node_type?, min_similarity?}`. Returns `{"query", "results", "count"}` with semantic `similarity` and `distance`.
+- `POST /apps/memory/recall` — JWT required. Body: `RecallRequest {query?, tags?, limit?, node_type?}`. Returns resonance-scored results and scoring metadata (`scoring_version: "v2"`, `formula: {...}`). 400 if neither `query` nor `tags` provided.
 
 **Memory Bridge v3 additions (2026-03-18):**
-- `PUT /memory/nodes/{node_id}` — JWT required. Body: `UpdateNodeRequest {content?, tags?, node_type?, source?}`. Updates a memory node and records history (previous values).
-- `GET /memory/nodes/{node_id}/history` — JWT required. Query: `limit` (default 20). Returns `{node_id, history, count}` ordered by `changed_at DESC`.
-- `GET /memory/nodes/{node_id}/traverse` — JWT required. Query: `max_depth` (default 3, capped at 5), `link_type` (optional), `min_strength` (default 0.0). Returns DFS chain plus narrative.
-- `POST /memory/nodes/expand` — JWT required. Body: `ExpandRequest {node_ids, include_linked?, include_similar?, limit_per_node?}`. Returns expanded context graph; max 10 input nodes.
+- `PUT /apps/memory/nodes/{node_id}` — JWT required. Body: `UpdateNodeRequest {content?, tags?, node_type?, source?}`. Updates a memory node and records history (previous values).
+- `GET /apps/memory/nodes/{node_id}/history` — JWT required. Query: `limit` (default 20). Returns `{node_id, history, count}` ordered by `changed_at DESC`.
+- `GET /apps/memory/nodes/{node_id}/traverse` — JWT required. Query: `max_depth` (default 3, capped at 5), `link_type` (optional), `min_strength` (default 0.0). Returns DFS chain plus narrative.
+- `POST /apps/memory/nodes/expand` — JWT required. Body: `ExpandRequest {node_ids, include_linked?, include_similar?, limit_per_node?}`. Returns expanded context graph; max 10 input nodes.
 - `POST /memory/recall/v3` — JWT required. Body: `RecallV3Request {query?, tags?, limit?, node_type?, expand_results?}`. Returns standard recall or expanded context when `expand_results=true`.
 
 **Memory Bridge v4 additions (2026-03-18):**

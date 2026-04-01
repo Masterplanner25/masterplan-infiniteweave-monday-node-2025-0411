@@ -25,9 +25,9 @@ Anything outside that shape is legacy behavior and should be treated as non-cano
 
 ### Agent
 
-- `POST /agent/run`
-- `POST /agent/runs/{run_id}/approve`
-- `POST /agent/runs/{run_id}/replay`
+- `POST /apps/agent/run`
+- `POST /apps/agent/runs/{run_id}/approve`
+- `POST /apps/agent/runs/{run_id}/replay`
 - Runtime: `services.agent_runtime`
 - Executor: `services.nodus_adapter.NodusAgentAdapter.execute_with_flow()`
 
@@ -38,10 +38,10 @@ Current behavior:
 
 ### Task
 
-- `POST /tasks/`
-- `POST /tasks/start`
-- `POST /tasks/pause`
-- `POST /tasks/complete`
+- `POST /apps/tasks/create`
+- `POST /apps/tasks/start`
+- `POST /apps/tasks/pause`
+- `POST /apps/tasks/complete`
 - Runtime: `services.task_services`
 
 Current behavior:
@@ -53,11 +53,11 @@ Current behavior:
 
 ### Memory
 
-- `POST /memory/execute`
-- `POST /memory/nodus/execute`
-- `POST /memory/recall`
-- `POST /memory/recall/v3`
-- Runtime: canonical flow-backed execution for `/memory/execute`; separate Nodus execution surface for `/memory/nodus/execute`
+- `POST /apps/memory/execute`
+- `POST /apps/memory/nodus/execute`
+- `POST /apps/memory/recall`
+- `POST /apps/memory/recall/v3`
+- Runtime: canonical flow-backed execution for `/apps/memory/execute`; separate Nodus execution surface for `/apps/memory/nodus/execute`
 
 Current behavior:
 
@@ -69,10 +69,10 @@ Current behavior:
 
 ### Genesis
 
-- `POST /genesis/message`
-- `POST /genesis/synthesize`
-- `POST /genesis/lock`
-- `POST /genesis/{plan_id}/activate`
+- `POST /apps/genesis/message`
+- `POST /apps/genesis/synthesize`
+- `POST /apps/genesis/lock`
+- `POST /apps/genesis/{plan_id}/activate`
 - Runtime: `services.genesis_ai`, `services.masterplan_factory`
 
 Current behavior:
@@ -83,7 +83,7 @@ Current behavior:
 
 ### Watcher
 
-- `POST /watcher/signals`
+- `POST /apps/watcher/signals`
 - Runtime: `routes.watcher_router.receive_signals`
 
 Current behavior:
@@ -94,8 +94,8 @@ Current behavior:
 
 ### ARM
 
-- `POST /arm/analyze`
-- `POST /arm/generate`
+- `POST /apps/arm/analyze`
+- `POST /apps/arm/generate`
 - Runtime: `modules.deepseek.deepseek_code_analyzer.DeepSeekCodeAnalyzer`
 
 Current behavior:
@@ -384,7 +384,7 @@ Minimum outbound metadata:
 Canonical path:
 
 ```text
-POST /agent/run
+POST /apps/agent/run
   -> ExecutionRequest(type=agent)
   -> persist execution envelope
   -> generate plan / approval gate / execute flow
@@ -406,7 +406,7 @@ Expected output:
 Canonical path:
 
 ```text
-POST /tasks/complete
+POST /apps/tasks/complete
   -> ExecutionRequest(type=task.complete)
   -> persist execution envelope
   -> complete task
@@ -424,7 +424,7 @@ Current gap:
 Canonical path:
 
 ```text
-POST /memory/execute
+POST /apps/memory/execute
   -> ExecutionRequest(type=memory.workflow)
   -> persist execution envelope
   -> recall context + execute + write memory + feedback
@@ -435,14 +435,14 @@ POST /memory/execute
 
 Current gap:
 
-- `/memory/nodus/execute` is still a separate executor surface rather than a first-class flow/orchestrator path
+- `/apps/memory/nodus/execute` is still a separate executor surface rather than a first-class flow/orchestrator path
 
 ### Genesis
 
 Canonical path:
 
 ```text
-POST /genesis/message
+POST /apps/genesis/message
   -> ExecutionRequest(type=genesis.message)
   -> persist execution envelope
   -> call genesis model + update session
@@ -460,7 +460,7 @@ Current gap:
 Canonical path:
 
 ```text
-POST /watcher/signals
+POST /apps/watcher/signals
   -> ExecutionRequest(type=watcher.ingest)
   -> persist execution envelope
   -> store batch + summarize ingest outcome
@@ -478,7 +478,7 @@ Current gap:
 Canonical path:
 
 ```text
-POST /arm/analyze
+POST /apps/arm/analyze
   -> ExecutionRequest(type=arm.analyze)
   -> persist execution envelope
   -> run analysis
@@ -559,7 +559,7 @@ Authentication is not the whole activation path anymore.
 
 After `POST /auth/login` returns a JWT, the frontend immediately calls:
 
-`GET /identity/boot`
+`GET /apps/identity/boot`
 
 This boot path is now the canonical identity activation contract:
 
