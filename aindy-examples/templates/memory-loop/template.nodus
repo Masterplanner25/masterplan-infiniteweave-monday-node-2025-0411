@@ -1,0 +1,30 @@
+// Memory Loop Template — Nodus version
+// ──────────────────────────────────────
+// Input state keys:
+//   read_path   e.g. "/memory/shawn/data/*"
+//   flow_name   e.g. "process"
+//   write_path  e.g. "/memory/shawn/output"
+
+let read_path  = get_state("read_path")   // ← CHANGE THIS
+let flow_name  = get_state("flow_name")   // ← CHANGE THIS
+let write_path = get_state("write_path")  // ← CHANGE THIS
+
+// Read
+let read  = sys("sys.v1.memory.read", {path: read_path, limit: 50})
+let nodes = read.data.nodes
+
+// Process
+let result = sys("sys.v1.flow.run", {flow_name: flow_name, input: {nodes: nodes}})
+
+// Write
+sys("sys.v1.memory.write", {
+    path:      write_path,
+    content:   result.data.summary,
+    tags:      ["template", "output"],
+    node_type: "outcome"
+})
+
+// Done
+emit("loop.complete", {node_count: nodes.length})
+set_state("done", true)
+set_state("output", result.data)

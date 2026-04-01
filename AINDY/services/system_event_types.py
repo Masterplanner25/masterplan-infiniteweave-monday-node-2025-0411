@@ -34,3 +34,16 @@ class SystemEventTypes:
     FREELANCE_DELIVERY_STARTED = "freelance.delivery.started"
     FREELANCE_DELIVERY_COMPLETED = "freelance.delivery.completed"
     FREELANCE_DELIVERY_FAILED = "freelance.delivery.failed"
+
+    NODUS_EXECUTE_STARTED = "nodus.execute.started"
+    NODUS_EXECUTE_COMPLETED = "nodus.execute.completed"
+    NODUS_EXECUTE_FAILED = "nodus.execute.failed"
+
+    NODUS_EVENT_EMITTED = "nodus.event.emitted"
+    NODUS_EVENT_WAIT_REQUESTED = "nodus.event.wait_requested"
+    NODUS_EVENT_WAIT_RESUMED = "nodus.event.wait_resumed"
+
+    NODUS_TRACE_STEP = "nodus.trace.step"
+    NODUS_TRACE_COMPLETE = "nodus.trace.complete"
+
+    SYSCALL_EXECUTED = "syscall.executed"

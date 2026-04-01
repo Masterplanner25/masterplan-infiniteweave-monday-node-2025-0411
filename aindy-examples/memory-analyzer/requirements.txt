@@ -1,0 +1,6 @@
+# Memory Analyzer — dependencies
+# The aindy SDK uses stdlib only.
+# Install it from the repo:
+#   pip install -e ../../sdk
+#
+# No other dependencies required.

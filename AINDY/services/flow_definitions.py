@@ -18,6 +18,24 @@ from services.flow_definitions_extended import register_extended_flows  # noqa: 
 logger = logging.getLogger(__name__)
 
 
+def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dict:
+    """Dispatch a syscall from a flow node and translate the response.
+
+    Maps syscall envelope → flow node result contract:
+      success → {"status": "SUCCESS", "output_patch": data}
+      error   → {"status": "RETRY",   "error": message}
+
+    This is the standard thin-wrapper pattern for all refactored flow nodes.
+    """
+    from services.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
+
+    ctx = make_syscall_ctx_from_flow(context, capabilities=[capability])
+    result = get_dispatcher().dispatch(name, state, ctx)
+    if result["status"] == "error":
+        return {"status": "RETRY", "error": result["error"]}
+    return {"status": "SUCCESS", "output_patch": result["data"]}
+
+
 # ── ARM Analysis Flow ──────────────────────────────────────────────────────────
 
 
@@ -31,60 +49,19 @@ def arm_validate_input(state, context):
 
 @register_node("arm_analyze_code")
 def arm_analyze_code(state, context):
-    """
-    Run ARM analysis via existing service.
-    Wraps DeepSeekCodeAnalyzer.run_analysis().
-    """
-    try:
-        from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        file_path = state.get("file_path")
-
-        analyzer = DeepSeekCodeAnalyzer()
-        result = analyzer.run_analysis(
-            file_path=file_path,
-            user_id=user_id,
-            db=db,
-        )
-
-        return {
-            "status": "SUCCESS",
-            "output_patch": {
-                "analysis_result": result,
-                "analysis_score": result.get("architecture_score", 5),
-            },
-        }
-    except Exception as e:
-        logger.error("ARM analysis node failed: %s", e)
-        return {"status": "RETRY", "error": str(e)}
+    """Run ARM analysis via sys.v1.arm.analyze syscall."""
+    return _syscall_node("sys.v1.arm.analyze", state, context, "arm.analyze")
 
 
 @register_node("arm_store_result")
 def arm_store_result(state, context):
-    """Store ARM result via capture engine."""
-    try:
-        db = context.get("db")
-        user_id = context.get("user_id")
-        result = state.get("analysis_result", {})
-
-        if db and user_id:
-            queue_memory_capture(
-                db=db,
-                user_id=user_id,
-                agent_namespace="arm",
-                event_type="arm_analysis_complete",
-                content=str(result)[:500],
-                source="flow_engine:arm_analysis",
-                context={"score": state.get("analysis_score", 5)},
-            )
-
-        return {"status": "SUCCESS", "output_patch": {"stored": True}}
-    except Exception as e:
-        logger.warning("ARM store node failed (non-fatal): %s", e)
-        # Storage failure is non-fatal
-        return {"status": "SUCCESS", "output_patch": {"stored": False}}
+    """Store ARM result via sys.v1.arm.store syscall."""
+    payload = {
+        "result": state.get("analysis_result", {}),
+        "event_type": "arm_analysis_complete",
+        "score": state.get("analysis_score", 5),
+    }
+    return _syscall_node("sys.v1.arm.store", payload, context, "arm.store")
 
 
 # ── Task Completion Flow ───────────────────────────────────────────────────────
@@ -100,40 +77,18 @@ def task_validate(state, context):
 
 @register_node("task_complete")
 def task_complete(state, context):
-    """Complete task via the core task mutation service."""
-    try:
-        from services.task_services import complete_task
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        task_name = state.get("task_name")
-
-        result = complete_task(db=db, name=task_name, user_id=user_id)
-
-        return {"status": "SUCCESS", "output_patch": {"task_result": result}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Complete task via sys.v1.task.complete syscall."""
+    return _syscall_node("sys.v1.task.complete", state, context, "task.complete")
 
 
 @register_node("task_orchestrate")
 def task_orchestrate(state, context):
-    """Run the structured post-completion orchestration for a task."""
-    try:
-        from services.task_services import orchestrate_task_completion
-        db = context.get("db")
-        user_id = context.get("user_id")
-        task_name = state.get("task_name")
-        orchestration = orchestrate_task_completion(
-            db=db,
-            name=task_name,
-            user_id=user_id,
-        )
-        return {
-            "status": "SUCCESS",
-            "output_patch": {"task_orchestration": orchestration},
-        }
-    except Exception as e:
-        return {"status": "FAILURE", "error": str(e)}
+    """Post-completion task orchestration via sys.v1.task.orchestrate syscall."""
+    result = _syscall_node("sys.v1.task.orchestrate", state, context, "task.orchestrate")
+    # task_orchestrate maps RETRY → FAILURE (non-retryable orchestration)
+    if result.get("status") == "RETRY":
+        return {"status": "FAILURE", "error": result.get("error", "")}
+    return result
 
 
 # ── LeadGen Search Flow ────────────────────────────────────────────────────────
@@ -149,76 +104,25 @@ def leadgen_validate(state, context):
 
 @register_node("leadgen_search")
 def leadgen_search_node(state, context):
-    """
-    Run leadgen search via create_lead_results.
-
-    Serializes SQLAlchemy result objects to plain dicts so the flow state
-    can be JSON-checkpointed by PersistentFlowRunner.
-    """
-    try:
-        from services.leadgen_service import create_lead_results
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        query = state.get("query", "")
-
-        raw = create_lead_results(db, query, user_id=user_id)
-        serialized = [
-            {
-                "company": r.company,
-                "url": r.url,
-                "fit_score": r.fit_score,
-                "intent_score": r.intent_score,
-                "data_quality_score": r.data_quality_score,
-                "overall_score": r.overall_score,
-                "reasoning": r.reasoning,
-                "search_score": search_score,
-                "created_at": r.created_at.isoformat() if hasattr(r.created_at, "isoformat") else str(r.created_at or ""),
-            }
-            for r, search_score in raw
-        ]
-        return {"status": "SUCCESS", "output_patch": {"search_results": serialized}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Run leadgen search via sys.v1.leadgen.search syscall."""
+    result = _syscall_node("sys.v1.leadgen.search", state, context, "leadgen.search")
+    # Rename data key to match expected state key
+    if result.get("status") == "SUCCESS":
+        data = result.get("output_patch", {})
+        return {"status": "SUCCESS", "output_patch": {"search_results": data.get("search_results", [])}}
+    return result
 
 
 @register_node("leadgen_store")
 def leadgen_store(state, context):
-    """Store leadgen results to memory bridge and search cache."""
-    try:
-        db = context.get("db")
-        user_id = context.get("user_id")
-        query = state.get("query", "")
-        results = state.get("search_results", [])
+    """Store leadgen results via sys.v1.leadgen.store syscall."""
+    payload = {
+        "query": state.get("query", ""),
+        "results": state.get("search_results", []),
+    }
+    return _syscall_node("sys.v1.leadgen.store", payload, context, "leadgen.store")
 
-        if db and user_id and results:
-            queue_memory_capture(
-                db=db,
-                user_id=user_id,
-                agent_namespace="leadgen",
-                event_type="leadgen_search",
-                content=f"LeadGen '{query[:80]}': {len(results)} results",
-                source="flow_engine:leadgen",
-                tags=["leadgen", "search", "outcome"],
-            )
 
-        if db and user_id and query and results:
-            try:
-                from services.search_service import persist_search_result
-                persist_search_result(
-                    db=db,
-                    user_id=user_id,
-                    query=query,
-                    result={"query": query, "count": len(results), "results": results},
-                    search_type="leadgen",
-                )
-            except Exception as cache_exc:
-                logger.warning("[leadgen_store] search cache persist failed (non-fatal): %s", cache_exc)
-
-        return {"status": "SUCCESS", "output_patch": {"stored": True}}
-    except Exception as e:
-        logger.warning("[leadgen_store] store failed (non-fatal): %s", e)
-        return {"status": "SUCCESS", "output_patch": {"stored": False}}
 
 
 # ── Genesis Conversation Flow ──────────────────────────────────────────────────
@@ -289,57 +193,12 @@ def genesis_message_validate(state, context):
 
 @register_node("genesis_message_execute")
 def genesis_message_execute(state, context):
-    try:
-        import uuid
-
-        from db.models import GenesisSessionDB
-        from services.genesis_ai import call_genesis_llm
-
-        db = context.get("db")
-        user_id = uuid.UUID(str(context.get("user_id")))
-        session = (
-            db.query(GenesisSessionDB)
-            .filter(
-                GenesisSessionDB.id == state.get("session_id"),
-                GenesisSessionDB.user_id == user_id,
-            )
-            .first()
-        )
-        if not session:
-            return {"status": "FAILURE", "error": "GenesisSession not found"}
-
-        current_state = session.summarized_state or {}
-        llm_output = call_genesis_llm(
-            message=state.get("message"),
-            current_state=current_state,
-            user_id=str(user_id),
-            db=db,
-        )
-
-        state_update = llm_output.get("state_update", {})
-        for key, value in state_update.items():
-            if key in current_state and value is not None:
-                current_state[key] = value
-
-        if "confidence" in current_state:
-            current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
-
-        session.summarized_state = current_state
-        if llm_output.get("synthesis_ready", False) and not session.synthesis_ready:
-            session.synthesis_ready = True
-        db.commit()
-
-        return {
-            "status": "SUCCESS",
-            "output_patch": {
-                "genesis_response": {
-                    "reply": llm_output.get("reply", ""),
-                    "synthesis_ready": session.synthesis_ready,
-                }
-            },
-        }
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Call Genesis LLM and update session via sys.v1.genesis.execute_llm syscall."""
+    result = _syscall_node("sys.v1.genesis.execute_llm", state, context, "genesis.execute_llm")
+    # Handler failure for "not found" should be FAILURE not RETRY
+    if result.get("status") == "RETRY" and "not found" in (result.get("error") or "").lower():
+        return {"status": "FAILURE", "error": result["error"]}
+    return result
 
 
 @register_node("genesis_message_orchestrate")
@@ -483,46 +342,8 @@ def task_create_validate(state, context):
 
 @register_node("task_create_execute")
 def task_create_execute(state, context):
-    """Create a task via the core task service."""
-    try:
-        from services.task_services import create_task
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        task = create_task(
-            db=db,
-            name=state.get("task_name"),
-            category=state.get("category"),
-            priority=state.get("priority"),
-            due_date=state.get("due_date"),
-            masterplan_id=state.get("masterplan_id"),
-            parent_task_id=state.get("parent_task_id"),
-            dependency_type=state.get("dependency_type"),
-            dependencies=state.get("dependencies"),
-            automation_type=state.get("automation_type"),
-            automation_config=state.get("automation_config"),
-            scheduled_time=state.get("scheduled_time"),
-            reminder_time=state.get("reminder_time"),
-            recurrence=state.get("recurrence"),
-            user_id=user_id,
-        )
-        result = {
-            "task_id": task.id,
-            "task_name": task.name,
-            "category": task.category,
-            "priority": task.priority,
-            "status": getattr(task, "status", "unknown"),
-            "time_spent": task.time_spent,
-            "masterplan_id": getattr(task, "masterplan_id", None),
-            "parent_task_id": getattr(task, "parent_task_id", None),
-            "depends_on": getattr(task, "depends_on", []) or [],
-            "dependency_type": getattr(task, "dependency_type", "hard"),
-            "automation_type": getattr(task, "automation_type", None),
-            "automation_config": getattr(task, "automation_config", None),
-        }
-        return {"status": "SUCCESS", "output_patch": {"task_create_result": result}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Create a task via sys.v1.task.create syscall."""
+    return _syscall_node("sys.v1.task.create", state, context, "task.create")
 
 
 # ── Task Start Flow ────────────────────────────────────────────────────────────
@@ -530,16 +351,8 @@ def task_create_execute(state, context):
 
 @register_node("task_start_execute")
 def task_start_execute(state, context):
-    """Start a task via the core task service."""
-    try:
-        from services.task_services import start_task
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        message = start_task(db, state.get("task_name"), user_id=user_id)
-        return {"status": "SUCCESS", "output_patch": {"task_start_result": {"message": message}}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Start a task via sys.v1.task.start syscall."""
+    return _syscall_node("sys.v1.task.start", state, context, "task.start")
 
 
 # ── Task Pause Flow ────────────────────────────────────────────────────────────
@@ -547,16 +360,8 @@ def task_start_execute(state, context):
 
 @register_node("task_pause_execute")
 def task_pause_execute(state, context):
-    """Pause a task via the core task service."""
-    try:
-        from services.task_services import pause_task
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        message = pause_task(db, state.get("task_name"), user_id=user_id)
-        return {"status": "SUCCESS", "output_patch": {"task_pause_result": {"message": message}}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Pause a task via sys.v1.task.pause syscall."""
+    return _syscall_node("sys.v1.task.pause", state, context, "task.pause")
 
 
 # ── Goal Create Flow ───────────────────────────────────────────────────────────
@@ -572,25 +377,8 @@ def goal_create_validate(state, context):
 
 @register_node("goal_create_execute")
 def goal_create_execute(state, context):
-    """Create a goal via the goal service."""
-    try:
-        from services.goal_service import create_goal
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        goal = create_goal(
-            db,
-            user_id=user_id,
-            name=state.get("name"),
-            description=state.get("description"),
-            goal_type=state.get("goal_type", "strategic"),
-            priority=state.get("priority", 0.5),
-            status=state.get("status", "active"),
-            success_metric=state.get("success_metric", {}),
-        )
-        return {"status": "SUCCESS", "output_patch": {"goal_create_result": goal}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Create a goal via sys.v1.goal.create syscall."""
+    return _syscall_node("sys.v1.goal.create", state, context, "goal.create")
 
 
 # ── Score Recalculate Flow ─────────────────────────────────────────────────────
@@ -598,19 +386,8 @@ def goal_create_execute(state, context):
 
 @register_node("score_recalculate_execute")
 def score_recalculate_execute(state, context):
-    """Recalculate the user's Infinity Score via the orchestrator."""
-    try:
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        result = execute_infinity_orchestrator(user_id=user_id, db=db, trigger_event="manual")
-        if not result:
-            return {"status": "FAILURE", "error": "score calculation returned empty result"}
-        score_data = result.get("score") or result
-        return {"status": "SUCCESS", "output_patch": {"score_recalculate_result": score_data}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Recalculate the user's Infinity Score via sys.v1.score.recalculate syscall."""
+    return _syscall_node("sys.v1.score.recalculate", state, context, "score.recalculate")
 
 
 # ── Score Feedback Flow ────────────────────────────────────────────────────────
@@ -618,28 +395,8 @@ def score_recalculate_execute(state, context):
 
 @register_node("score_feedback_execute")
 def score_feedback_execute(state, context):
-    """Persist a score feedback record."""
-    try:
-        from uuid import UUID
-
-        from db.models.infinity_loop import UserFeedback
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        feedback = UserFeedback(
-            user_id=UUID(str(user_id)),
-            source_type=state.get("source_type"),
-            source_id=state.get("source_id"),
-            feedback_value=state.get("feedback_value"),
-            feedback_text=state.get("feedback_text"),
-            loop_adjustment_id=state.get("loop_adjustment_id"),
-        )
-        db.add(feedback)
-        db.commit()
-        db.refresh(feedback)
-        return {"status": "SUCCESS", "output_patch": {"score_feedback_result": {"id": str(feedback.id)}}}
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Persist a score feedback record via sys.v1.score.feedback syscall."""
+    return _syscall_node("sys.v1.score.feedback", state, context, "score.feedback")
 
 
 # ── ARM Generate Flow ──────────────────────────────────────────────────────────
@@ -655,50 +412,18 @@ def arm_generate_validate(state, context):
 
 @register_node("arm_generate_code")
 def arm_generate_code(state, context):
-    """Run ARM code generation via DeepSeekCodeAnalyzer."""
-    try:
-        from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        analyzer = DeepSeekCodeAnalyzer()
-        result = analyzer.generate_code(
-            prompt=state.get("prompt"),
-            user_id=user_id,
-            db=db,
-            original_code=state.get("original_code", ""),
-            language=state.get("language", "python"),
-            generation_type=state.get("generation_type", "generate"),
-            analysis_id=state.get("analysis_id"),
-            complexity=state.get("complexity"),
-            urgency=state.get("urgency"),
-        )
-        return {"status": "SUCCESS", "output_patch": {"generation_result": result}}
-    except Exception as e:
-        logger.error("arm_generate_code node failed: %s", e)
-        return {"status": "RETRY", "error": str(e)}
+    """Run ARM code generation via sys.v1.arm.generate syscall."""
+    return _syscall_node("sys.v1.arm.generate", state, context, "arm.generate")
 
 
 @register_node("arm_generate_store")
 def arm_generate_store(state, context):
-    """Store ARM generation result to Memory Bridge."""
-    try:
-        db = context.get("db")
-        user_id = context.get("user_id")
-        result = state.get("generation_result", {})
-        if db and user_id:
-            queue_memory_capture(
-                db=db,
-                user_id=user_id,
-                agent_namespace="arm",
-                event_type="arm_generate_complete",
-                content=str(result)[:500],
-                source="flow_engine:arm_generate",
-            )
-        return {"status": "SUCCESS", "output_patch": {"stored": True}}
-    except Exception as e:
-        logger.warning("arm_generate_store failed (non-fatal): %s", e)
-        return {"status": "SUCCESS", "output_patch": {"stored": False}}
+    """Store ARM generation result to Memory Bridge via sys.v1.arm.store syscall."""
+    payload = {
+        "result": state.get("generation_result", {}),
+        "event_type": "arm_generate_complete",
+    }
+    return _syscall_node("sys.v1.arm.store", payload, context, "arm.store")
 
 
 # ── Watcher Ingest Flow ────────────────────────────────────────────────────────
@@ -714,65 +439,8 @@ def watcher_ingest_validate(state, context):
 
 @register_node("watcher_ingest_persist")
 def watcher_ingest_persist(state, context):
-    try:
-        from datetime import datetime, timezone
-        from uuid import UUID
-
-        from db.models.watcher_signal import WatcherSignal
-        from routes.watcher_router import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
-
-        db = context.get("db")
-        signals = state.get("signals") or []
-        persisted = 0
-        session_ended_count = 0
-        batch_user_id = None
-
-        for idx, sig in enumerate(signals):
-            signal_type = sig.get("signal_type")
-            activity_type = sig.get("activity_type")
-            if signal_type not in _VALID_SIGNAL_TYPES:
-                return {"status": "FAILURE", "error": f"Signal [{idx}]: unknown signal_type {signal_type!r}"}
-            if activity_type not in _VALID_ACTIVITY_TYPES:
-                return {"status": "FAILURE", "error": f"Signal [{idx}]: unknown activity_type {activity_type!r}"}
-
-            ts = _parse_timestamp(sig.get("timestamp"))
-            meta = sig.get("metadata") or {}
-            signal_user_id = sig.get("user_id")
-            if signal_user_id and not batch_user_id:
-                batch_user_id = signal_user_id
-
-            row = WatcherSignal(
-                signal_type=signal_type,
-                session_id=sig.get("session_id"),
-                user_id=UUID(str(signal_user_id)) if signal_user_id else None,
-                app_name=sig.get("app_name"),
-                window_title=sig.get("window_title") or None,
-                activity_type=activity_type,
-                signal_timestamp=ts,
-                received_at=datetime.now(timezone.utc),
-                duration_seconds=meta.get("duration_seconds"),
-                focus_score=meta.get("focus_score"),
-                signal_metadata=meta if meta else None,
-            )
-            db.add(row)
-            if signal_type == "session_ended":
-                session_ended_count += 1
-            persisted += 1
-
-        db.commit()
-        return {
-            "status": "SUCCESS",
-            "output_patch": {
-                "watcher_ingest_result": {
-                    "accepted": persisted,
-                    "session_ended_count": session_ended_count,
-                },
-                "watcher_batch_user_id": batch_user_id,
-                "watcher_session_ended_count": session_ended_count,
-            },
-        }
-    except Exception as e:
-        return {"status": "RETRY", "error": str(e)}
+    """Persist watcher signals via sys.v1.watcher.ingest syscall."""
+    return _syscall_node("sys.v1.watcher.ingest", state, context, "watcher.ingest")
 
 
 @register_node("watcher_ingest_orchestrate")

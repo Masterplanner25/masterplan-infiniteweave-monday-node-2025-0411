@@ -173,6 +173,10 @@ async def lifespan(app: FastAPI):
     if is_leader:
         scheduler_service.start()
 
+    # Register domain syscall handlers (must come before flow registration)
+    from services.syscall_handlers import register_all_domain_handlers
+    register_all_domain_handlers()
+
     # Register Flow Engine flows and nodes (static startup definitions)
     from services.flow_definitions import register_all_flows
     register_all_flows()

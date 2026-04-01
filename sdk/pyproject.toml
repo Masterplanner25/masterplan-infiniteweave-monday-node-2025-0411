@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "aindy"
+version = "1.0.0"
+description = "A.I.N.D.Y. Developer SDK — memory, flows, syscalls, and Nodus script execution"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []   # stdlib only — no external dependencies
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-mock>=3",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aindy*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

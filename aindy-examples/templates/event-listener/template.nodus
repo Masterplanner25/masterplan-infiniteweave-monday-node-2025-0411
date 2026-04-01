@@ -1,0 +1,45 @@
+// Event Listener Template — Nodus version
+// ─────────────────────────────────────────
+// Loops forever, waking up on each trigger event.
+//
+// Input state keys:
+//   trigger_event   e.g. "task.created"
+//   handler_flow    e.g. "handle_task"
+//   write_path      e.g. "/memory/shawn/handled"
+
+let trigger = get_state("trigger_event")  // ← CHANGE THIS
+let flow    = get_state("handler_flow")   // ← CHANGE THIS
+let path    = get_state("write_path")     // ← CHANGE THIS
+
+// Loop — resumes on every matching event
+let running = true
+while running {
+
+    // Wait for next trigger (suspends execution unit)
+    let signal = sys("sys.v1.event.wait", {
+        event_type:      trigger,
+        timeout_seconds: 3600
+    })
+
+    let payload = signal.data.payload
+
+    // Handle it
+    let result = sys("sys.v1.flow.run", {
+        flow_name: flow,
+        input:     {event: payload}
+    })
+
+    // Write result to memory
+    sys("sys.v1.memory.write", {
+        path:      path,
+        content:   result.data.summary,
+        tags:      ["handled", "auto"],
+        node_type: "outcome"
+    })
+
+    // Confirm handling
+    emit(trigger + ".handled", {status: result.status})
+
+    // Continue loop
+    running = true
+}

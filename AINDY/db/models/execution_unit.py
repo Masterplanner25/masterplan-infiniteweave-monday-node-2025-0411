@@ -30,7 +30,7 @@ record without hitting the DB.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from db.database import Base
@@ -91,6 +91,30 @@ class ExecutionUnit(Base):
     output_memory_ids = Column(JSONB, nullable=True, default=list)
     # UUIDs (strings) of MemoryNodes produced as a result of this execution.
 
+    # ── Tenant isolation (OS layer) ────────────────────────────────────────────
+    tenant_id = Column(String(128), nullable=True, index=True)
+    # Owning tenant. In A.I.N.D.Y.'s single-user-per-tenant model this equals
+    # str(user_id). Indexed for fast per-tenant quota queries.
+
+    # ── Resource tracking (OS layer) ──────────────────────────────────────────
+    cpu_time_ms = Column(Integer, nullable=False, default=0)
+    # Accumulated wall-clock execution time in milliseconds. Updated after each
+    # flow node or syscall. Enforced by ResourceManager.
+
+    memory_bytes = Column(BigInteger, nullable=False, default=0)
+    # Peak memory high-water mark in bytes. Tracked by ResourceManager.
+
+    syscall_count = Column(Integer, nullable=False, default=0)
+    # Total number of sys.v1.* dispatches for this execution unit.
+
+    # ── Scheduling (OS layer) ──────────────────────────────────────────────────
+    priority = Column(String(16), nullable=False, default="normal")
+    # Scheduling priority: "low" | "normal" | "high"
+    # Used by SchedulerEngine to order execution across tenants.
+
+    quota_group = Column(String(64), nullable=True)
+    # Optional policy tag for quota-group overrides (e.g. "premium", "batch").
+
     # ── Extra ──────────────────────────────────────────────────────────────────
     extra = Column(JSONB, nullable=True)
     # Per-type metadata: workflow_type, goal_preview, task_name, etc.
@@ -116,4 +140,6 @@ class ExecutionUnit(Base):
         Index("ix_eu_source", "source_type", "source_id"),
         # Trace all EUs sharing a correlation chain
         Index("ix_eu_correlation", "correlation_id"),
+        # Per-tenant scheduling queries (OS layer)
+        Index("ix_eu_tenant_priority", "tenant_id", "priority"),
     )

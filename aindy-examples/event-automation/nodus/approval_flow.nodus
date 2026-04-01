@@ -1,0 +1,107 @@
+// approval_flow.nodus
+//
+// Approval workflow with WAIT/RESUME.
+//
+// Phase 1 (runs immediately):
+//   - loads pending tasks from memory
+//   - writes a summary of what's awaiting approval
+//   - suspends, waiting for "task.review.requested"
+//
+// Phase 2 (runs after approval event arrives):
+//   - reads the reviewer decision from event payload
+//   - writes approved/rejected insights to memory
+//   - emits a confirmation event
+
+let ns = get_state("namespace")
+
+// ── Phase 1: Load and summarise pending tasks ─────────────────────────────
+let pending = sys("sys.v1.memory.read", {
+    path:  ns + "/pending/**",
+    limit: 50
+})
+
+let tasks = pending.data.nodes
+let count = tasks.length
+
+// Write a human-readable pending summary so reviewers can read it
+sys("sys.v1.memory.write", {
+    path:      ns + "/review/decision",
+    content:   count + " task(s) pending approval. Review required before processing.",
+    tags:      ["review", "pending", "awaiting-approval"],
+    node_type: "decision",
+    extra:     {task_count: count, phase: "pending"}
+})
+
+// ── SUSPEND — wait for the reviewer to emit the signal ───────────────────
+let signal = sys("sys.v1.event.wait", {
+    event_type:      "task.review.requested",
+    timeout_seconds: 600
+})
+
+// ── Phase 2: Process the decision ────────────────────────────────────────
+let approved  = signal.data.payload.approved
+let reviewer  = signal.data.payload.reviewer
+let note      = signal.data.payload.note
+let processed = 0
+
+if approved {
+    // Mark each task as approved in memory
+    let i = 0
+    while i < count {
+        sys("sys.v1.memory.write", {
+            path:      ns + "/approved/outcome",
+            content:   "APPROVED: " + tasks[i].content,
+            tags:      ["approved", reviewer, "processed"],
+            node_type: "outcome",
+            extra: {
+                original_id:    tasks[i].id,
+                reviewer:       reviewer,
+                reviewer_note:  note
+            }
+        })
+        processed = processed + 1
+        i = i + 1
+    }
+
+    // Write decision record
+    sys("sys.v1.memory.write", {
+        path:      ns + "/review/decision",
+        content:   "Approved by " + reviewer + ": " + note,
+        tags:      ["approved", reviewer, "decision"],
+        node_type: "decision",
+        extra:     {reviewer: reviewer, task_count: processed, outcome: "approved"}
+    })
+
+    emit("task.review.completed", {
+        outcome:    "approved",
+        reviewer:   reviewer,
+        task_count: processed,
+        note:       note
+    })
+
+    set_state("outcome",         "approved")
+    set_state("processed_count", processed)
+    set_state("reviewer",        reviewer)
+
+} else {
+    // Rejection path
+    sys("sys.v1.memory.write", {
+        path:      ns + "/review/decision",
+        content:   "Rejected by " + reviewer + ": " + note,
+        tags:      ["rejected", reviewer, "decision"],
+        node_type: "decision",
+        extra:     {reviewer: reviewer, task_count: count, outcome: "rejected"}
+    })
+
+    emit("task.review.rejected", {
+        outcome:  "rejected",
+        reviewer: reviewer,
+        reason:   note
+    })
+
+    set_state("outcome",   "rejected")
+    set_state("reason",    note)
+    set_state("reviewer",  reviewer)
+}
+
+set_state("done", true)

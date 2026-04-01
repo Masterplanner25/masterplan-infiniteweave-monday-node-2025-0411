@@ -172,6 +172,18 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         replace_existing=True,
     )
 
+    # Restore user-defined Nodus scheduled jobs from DB after all system jobs
+    # are registered.  Done last so system jobs are never blocked by a bad
+    # user script.
+    try:
+        from services.nodus_schedule_service import restore_nodus_scheduled_jobs
+        restore_nodus_scheduled_jobs()
+    except Exception as _nodus_restore_exc:
+        logger.warning(
+            "Nodus scheduled job restore failed (non-fatal): %s",
+            _nodus_restore_exc,
+        )
+
 
 def _recalculate_all_scores() -> None:
     """Daily job: recalculate Infinity scores for all users."""

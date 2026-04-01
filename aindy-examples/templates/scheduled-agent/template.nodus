@@ -1,0 +1,36 @@
+// Scheduled Agent Template — Nodus version
+// ──────────────────────────────────────────
+// Upload this script, then schedule it:
+//
+//   POST /platform/nodus/schedule
+//   {"name":"my_agent","flow_name":"my_agent","cron_expr":"0 9 * * *","state":{...}}
+//
+// Input state keys:
+//   namespace   e.g. "/memory/shawn"
+//   flow_name   e.g. "daily_analysis"
+
+let ns   = get_state("namespace")   // ← CHANGE THIS
+let flow = get_state("flow_name")   // ← CHANGE THIS
+
+// ── Your logic here ───────────────────────────────────────────────────────────
+
+let data  = sys("sys.v1.memory.read", {path: ns + "/**", limit: 100})
+let nodes = data.data.nodes
+
+let result = sys("sys.v1.flow.run", {
+    flow_name: flow,
+    input:     {nodes: nodes}
+})
+
+sys("sys.v1.memory.write", {
+    path:      ns + "/output/outcome",
+    content:   result.data.summary,
+    tags:      ["scheduled", "auto"],
+    node_type: "outcome"
+})
+
+// ── Boilerplate — do not remove ───────────────────────────────────────────────
+emit("agent.run.complete", {node_count: nodes.length, status: result.status})
+set_state("done",       true)
+set_state("node_count", nodes.length)
+set_state("summary",    result.data.summary)

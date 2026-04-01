@@ -1,0 +1,35 @@
+[
+  {
+    "content":     "Deploy syscall versioning layer to staging environment",
+    "tags":        ["deploy", "engineering", "sprint-12"],
+    "node_type":   "outcome",
+    "status":      "pending-approval",
+    "requires":    ["ops-sign-off", "security-review"],
+    "priority":    "high",
+    "owner":       "shawn",
+    "risk":        "medium",
+    "rollback":    "revert to previous syscall_dispatcher.py"
+  },
+  {
+    "content":     "Publish A.I.N.D.Y. SDK v1.0.0 to package index",
+    "tags":        ["sdk", "release", "sprint-12"],
+    "node_type":   "outcome",
+    "status":      "pending-approval",
+    "requires":    ["version-tag", "changelog-updated"],
+    "priority":    "medium",
+    "owner":       "shawn",
+    "risk":        "low",
+    "rollback":    "yank release from index"
+  },
+  {
+    "content":     "Merge API contracts doc updates to main branch",
+    "tags":        ["docs", "sprint-12"],
+    "node_type":   "outcome",
+    "status":      "pending-approval",
+    "requires":    ["peer-review"],
+    "priority":    "low",
+    "owner":       "shawn",
+    "risk":        "low",
+    "rollback":    "git revert merge commit"
+  }
+]

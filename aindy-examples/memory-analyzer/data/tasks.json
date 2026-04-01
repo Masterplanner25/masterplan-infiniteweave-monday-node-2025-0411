@@ -1,0 +1,67 @@
+[
+  {
+    "content":   "Implement auth middleware for platform API keys",
+    "tags":      ["engineering", "security", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "completed",
+    "priority":  "high",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Write unit tests for syscall versioning layer",
+    "tags":      ["engineering", "testing", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "completed",
+    "priority":  "high",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Deploy syscall versioning to staging environment",
+    "tags":      ["engineering", "deploy", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "blocked",
+    "priority":  "high",
+    "owner":     "ops",
+    "blocker":   "staging credentials not rotated"
+  },
+  {
+    "content":   "Fix memory leak in flow engine node transitions",
+    "tags":      ["engineering", "bugfix", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "completed",
+    "priority":  "critical",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Update API contracts doc with MAS and syscall endpoints",
+    "tags":      ["docs", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "completed",
+    "priority":  "medium",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Add rate limiting to /platform/syscall endpoint",
+    "tags":      ["engineering", "security", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "in-progress",
+    "priority":  "medium",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Refactor DAO layer for path-based queries",
+    "tags":      ["engineering", "refactor", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "completed",
+    "priority":  "medium",
+    "owner":     "shawn"
+  },
+  {
+    "content":   "Publish A.I.N.D.Y. SDK to package index",
+    "tags":      ["sdk", "release", "sprint-12"],
+    "node_type": "outcome",
+    "status":    "in-progress",
+    "priority":  "low",
+    "owner":     "shawn"
+  }
+]

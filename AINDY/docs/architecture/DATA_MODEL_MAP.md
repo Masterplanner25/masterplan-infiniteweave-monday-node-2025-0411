@@ -711,6 +711,24 @@ Only relationships declared via SQLAlchemy `relationship()` are listed.
 **Ownership UUID normalization (2026-03-22):**
 - `2359cded7445` - `normalize_user_id_uuid`: converts `user_id` columns to UUID and adds FKs on `research_results`, `freelance_orders`, `client_feedback`, `drop_points`, `pings` (invalid UUIDs set to NULL before cast).
 
+**Nodus scheduled jobs migration (2026-04-01):**
+- Adds `nodus_scheduled_jobs` table: `id`, `name`, `user_id`, `flow_name`, `cron_expr`, `state`, `last_run_at`, `next_run_at`, `is_active`, `created_at`.
+
+**Nodus trace events migration (2026-04-01):**
+- Adds `nodus_trace_events` table: `id`, `execution_id`, `node_name`, `event_type`, `payload`, `created_at`.
+
+**OS Isolation Layer migration (2026-04-01):**
+- Adds 6 columns to `execution_units`: `tenant_id` (String), `cpu_time_ms` (Integer, default 0), `memory_bytes` (Integer, default 0), `syscall_count` (Integer, default 0), `priority` (Integer, default 5), `quota_group` (String, default `"default"`).
+
+**Platform API key migration (2026-03-31):**
+- Adds `platform_api_keys` table: `id`, `user_id`, `name`, `key_prefix`, `key_hash`, `scopes` (JSONB), `expires_at`, `last_used_at`, `is_active`, `created_at`.
+
+**Dynamic registry persistence migrations (2026-03-31):**
+- Adds `dynamic_flows`, `dynamic_nodes`, `webhook_subscriptions` tables for persistent platform registry.
+
+**Memory Address Space (MAS) migration (2026-04-01):**
+- `g5h6i7j8k9l0` - `add_memory_address_space_columns`: adds `path` String(512), `namespace` String(128), `addr_type` String(128), `parent_path` String(512) to `memory_nodes`. All nullable, all indexed.
+
 > **Migration Reminder:** Always run `alembic upgrade head` immediately after any SQLAlchemy model change. SQLAlchemy models alone do not alter the live database — migrations must be applied explicitly.
 
 
@@ -787,9 +805,17 @@ Defined in `AINDY/services/memory_persistence.py`.
 - `last_used_at`: DateTime(timezone=True), nullable=True
 - `last_outcome`: String, nullable=True
 - `weight`: Float, nullable=False, default=1.0
+- `path`: String(512), nullable=True, index=True — **added MAS sprint (2026-04-01)** full MAS path `/memory/{tenant}/{namespace}/{addr_type}/{node_id}`
+- `namespace`: String(128), nullable=True, index=True — **added MAS sprint (2026-04-01)** logical namespace segment
+- `addr_type`: String(128), nullable=True, index=True — **added MAS sprint (2026-04-01)** type segment (named `addr_type` to avoid Python `type` keyword collision)
+- `parent_path`: String(512), nullable=True, index=True — **added MAS sprint (2026-04-01)** parent path for tree queries
 - Indexes
 - `ix_memory_nodes_tags_gin` on `tags` using GIN
 - `ix_memory_nodes_source_agent` on `source_agent`
+- `ix_memory_nodes_path` on `path` (added migration `g5h6i7j8k9l0`)
+- `ix_memory_nodes_namespace` on `namespace` (added migration `g5h6i7j8k9l0`)
+- `ix_memory_nodes_addr_type` on `addr_type` (added migration `g5h6i7j8k9l0`)
+- `ix_memory_nodes_parent_path` on `parent_path` (added migration `g5h6i7j8k9l0`)
 - Unique constraints: Not explicitly defined in current implementation.
 - Node type enforcement: `VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}` validated by SQLAlchemy `before_insert` / `before_update` event listener in `services/memory_persistence.py`. Non-null `node_type` values outside this set raise `ValueError` at ORM layer.
 - pgvector extension required: `CREATE EXTENSION IF NOT EXISTS vector` (included in migration `mb2embed0001`).

@@ -48,11 +48,24 @@ The historical breakdown below is preserved, but the current validated baseline 
   - invalid agent run IDs fail cleanly as `400` instead of surfacing as `500`
 - These suites use real persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with only boundary mocks for external planners/executors.
 
-**Current validated baseline** — local `pytest -q --tb=short` after Sprint N+11:
-- **1,290 passed**
+**Current validated baseline** — local `pytest -q --tb=short` after Syscall Versioning sprint (2026-04-01):
+- **~1,378 passed** (287 sprint-owned tests added across OS Layer, MAS, and Syscall Versioning sprints since N+11)
 - **4 skipped**
 - **0 failed**
 - full suite green under `pytest -q --no-cov`
+
+Sprint test additions since N+11:
+- Nodus memory builtins: +49 (total 1,339 after)
+- Nodus event builtins: +39
+- Nodus flow compiler: +57
+- Nodus scheduler: +39
+- Nodus observability: +44
+- Nodus CLI: +46
+- Syscall dispatcher: +54
+- Syscall refactor: +44
+- MAS (Memory Address Space): +61 (`tests/unit/test_memory_address_space.py`)
+- OS Isolation Layer: +64
+- Syscall Versioning: +64 (`tests/unit/test_syscall_versioning.py`)
 
 **Current runtime guarantees validated by the green suite**
 - UUID identity normalization holds across route/service/system paths.

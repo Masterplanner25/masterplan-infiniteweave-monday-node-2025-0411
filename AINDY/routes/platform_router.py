@@ -32,18 +32,44 @@ API key management
   GET    /platform/keys/{id}          — get single key metadata
   DELETE /platform/keys/{id}          — revoke a key
 
+Nodus script execution
+  POST   /platform/nodus/run          — execute an inline Nodus script via flow engine
+  POST   /platform/nodus/upload       — upload and register a named Nodus script
+  GET    /platform/nodus/scripts      — list uploaded scripts
+
+Nodus flow execution
+  POST   /platform/nodus/flow         — compile a Nodus flow script and optionally run it
+
+Nodus scheduled execution
+  POST   /platform/nodus/schedule     — create a cron-scheduled Nodus job
+  GET    /platform/nodus/schedule     — list the caller's scheduled jobs
+  DELETE /platform/nodus/schedule/{id} — cancel a scheduled job
+
+Nodus execution trace
+  GET    /platform/nodus/trace/{id}   — full host-function call trace for an execution
+
+Tenant resource visibility (OS layer)
+  GET    /platform/tenants/{id}/usage — active executions, resource usage, quota limits
+
+SDK syscall dispatch
+  POST   /platform/syscall             — execute any registered syscall by name (SDK entry point)
+
 Stability contract
   — Simple edges only (node_name → [next_node_name]) are supported via API.
   — Condition functions cannot be serialised over HTTP; use startup-registered flows.
   — All business logic routes through run_flow() per the HARD EXECUTION BOUNDARY.
   — Registry CRUD (flows/nodes) calls services.flow_registry directly (infra ops).
+  — Nodus scripts are sandboxed: no imports, eval, exec, filesystem or network access.
 """
 from __future__ import annotations
 
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from core.execution_helper import execute_with_pipeline_sync
@@ -118,6 +144,164 @@ class WebhookSubscription(BaseModel):
     )
 
 
+class NodusRunRequest(BaseModel):
+    script: Optional[str] = Field(
+        None,
+        description="Inline Nodus source code.  Mutually exclusive with script_name.",
+    )
+    script_name: Optional[str] = Field(
+        None,
+        description="Name of a previously uploaded script (POST /platform/nodus/upload).",
+    )
+    input: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Input payload exposed as the `input_payload` global inside the script.",
+    )
+    error_policy: str = Field(
+        "fail",
+        description=(
+            "'fail' (default) — script error is returned as nodus_status='failure' in the response. "
+            "'retry' — the flow engine retries up to max_retries before surfacing the error."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _require_source(self) -> "NodusRunRequest":
+        if not self.script and not self.script_name:
+            raise ValueError(
+                "Provide either 'script' (inline source) or 'script_name' (uploaded script name)"
+            )
+        if self.script and self.script_name:
+            raise ValueError("Provide 'script' or 'script_name', not both")
+        if self.error_policy not in ("fail", "retry"):
+            raise ValueError("error_policy must be 'fail' or 'retry'")
+        return self
+
+
+class NodusScriptUpload(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_\-\.]+$",
+        description="Unique script name — alphanumeric, hyphens, underscores, dots.",
+    )
+    content: str = Field(
+        ...,
+        min_length=1,
+        description="Nodus source code.  Subject to the same sandbox restrictions as inline scripts.",
+    )
+    description: Optional[str] = Field(None, max_length=512)
+    overwrite: bool = Field(False, description="Replace an existing script with the same name.")
+
+
+class NodusFlowRequest(BaseModel):
+    flow_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+        description=(
+            "Logical name for the compiled flow.  Used as the FLOW_REGISTRY key "
+            "when ``register=true``."
+        ),
+    )
+    script: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Nodus source code that defines flow routing via ``flow.step()``. "
+            "Example: ``flow.step('fetch_data')\\nflow.step('analyze', when='ready')``"
+        ),
+    )
+    input: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Initial state passed to the compiled flow when ``run=true``.",
+    )
+    register: bool = Field(
+        False,
+        description=(
+            "When true, registers the compiled flow in FLOW_REGISTRY so it can "
+            "be executed later via POST /platform/flows/{name}/run."
+        ),
+    )
+    run: bool = Field(
+        True,
+        description="When true (default), executes the compiled flow immediately.",
+    )
+
+
+class NodusScheduleRequest(BaseModel):
+    script: Optional[str] = Field(
+        None,
+        description="Inline Nodus source code.  Mutually exclusive with script_name.",
+    )
+    script_name: Optional[str] = Field(
+        None,
+        description=(
+            "Name of a previously uploaded script (POST /platform/nodus/upload).  "
+            "The script content is copied at creation time so the job is "
+            "self-contained and independent of the script registry."
+        ),
+    )
+    cron: str = Field(
+        ...,
+        description=(
+            "Standard 5-field cron expression (UTC). "
+            "Examples: '0 10 * * *' (daily 10:00), '*/15 * * * *' (every 15 min), "
+            "'0 9 * * 1-5' (weekdays 09:00)."
+        ),
+    )
+    input: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Input payload exposed as ``input_payload`` global inside the script.",
+    )
+    job_name: Optional[str] = Field(
+        None,
+        max_length=256,
+        description="Human-readable label for this job (optional).",
+    )
+    error_policy: str = Field(
+        "fail",
+        description=(
+            "'fail' (default) — script errors end the run immediately. "
+            "'retry' — the flow engine retries the nodus.execute node up to "
+            "max_retries times with exponential back-off."
+        ),
+    )
+    max_retries: int = Field(
+        3,
+        ge=1,
+        le=10,
+        description="Maximum retries when error_policy='retry'.",
+    )
+
+    @model_validator(mode="after")
+    def _require_source(self) -> "NodusScheduleRequest":
+        if not self.script and not self.script_name:
+            raise ValueError(
+                "Provide either 'script' (inline source) or "
+                "'script_name' (uploaded script name)"
+            )
+        if self.script and self.script_name:
+            raise ValueError("Provide 'script' or 'script_name', not both")
+        if self.error_policy not in ("fail", "retry"):
+            raise ValueError("error_policy must be 'fail' or 'retry'")
+        return self
+
+
+# ---------------------------------------------------------------------------
+# Nodus script registry  (in-memory; survives within a server process)
+# ---------------------------------------------------------------------------
+
+_script_lock = threading.Lock()
+_NODUS_SCRIPT_REGISTRY: Dict[str, Dict[str, Any]] = {}
+
+# Uploaded scripts are also persisted to this directory so they survive a
+# process restart (best-effort; directory created on first upload).
+_SCRIPTS_DIR = Path(__file__).parent.parent / "scripts" / "nodus"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -137,6 +321,123 @@ def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | 
     # run_id, trace_id.  _extract_execution_result returns the full final state for
     # unknown flow names, which is the most useful response for dynamic callers.
     return result
+
+
+def _ensure_nodus_flow_registered() -> None:
+    """
+    Register NODUS_SCRIPT_FLOW into FLOW_REGISTRY on first call.
+
+    Also imports nodus_adapter to ensure the flow nodes (nodus.execute,
+    nodus_record_outcome, nodus_handle_error) are in NODE_REGISTRY.
+    Thread-safe; idempotent.
+    """
+    import services.nodus_adapter  # noqa: F401 — registers nodes as side-effect
+    from services.flow_engine import FLOW_REGISTRY, register_flow
+    from services.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
+
+    if "nodus_execute" not in FLOW_REGISTRY:
+        register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
+
+
+def _run_nodus_script(
+    *,
+    script: str,
+    input_payload: dict,
+    error_policy: str,
+    db: Session,
+    user_id: str,
+) -> dict:
+    """
+    Execute a Nodus script via PersistentFlowRunner(NODUS_SCRIPT_FLOW).
+
+    Returns the raw flow result dict — caller is responsible for formatting.
+    Never raises on script-level failures (those become nodus_status="failure"
+    in the returned state).  May raise HTTPException on infrastructure failure
+    (VM not installed, DB unreachable, etc.).
+    """
+    from services.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+    from utils.uuid_utils import normalize_uuid
+
+    _ensure_nodus_flow_registered()
+
+    flow = FLOW_REGISTRY["nodus_execute"]
+    runner = PersistentFlowRunner(
+        flow=flow,
+        db=db,
+        user_id=normalize_uuid(user_id) if user_id else None,
+        workflow_type="nodus_execute",
+    )
+    return runner.start(
+        initial_state={
+            "nodus_script": script,
+            "nodus_input_payload": input_payload,
+            "nodus_error_policy": error_policy,
+        },
+        flow_name="nodus_execute",
+    )
+
+
+def _format_nodus_response(flow_result: dict) -> dict:
+    """
+    Extract Nodus-specific fields from a NODUS_SCRIPT_FLOW result and return
+    a clean, stable API response.
+
+    Fields
+    ------
+    status              "SUCCESS" | "FAILED"  — flow-level outcome
+    trace_id            str — correlates all events from this execution
+    run_id              str — identifies the FlowRun row
+    nodus_status        "success" | "failure" — script-level outcome
+    output_state        dict — set_state() mutations made inside the script
+    events              list — emit() calls made inside the script
+    memory_writes       list — remember() calls made inside the script
+    events_emitted      int
+    memory_writes_count int
+    error               str | None — script error message (if nodus_status="failure")
+    """
+    final_state = flow_result.get("state") or {}
+    # _extract_execution_result maps "nodus_execute" → state["nodus_execute_result"]
+    nodus_result = flow_result.get("data") or {}
+    if not isinstance(nodus_result, dict) or "status" not in nodus_result:
+        nodus_result = final_state.get("nodus_execute_result") or {}
+
+    return {
+        "status": flow_result.get("status"),
+        "trace_id": flow_result.get("trace_id"),
+        "run_id": flow_result.get("run_id"),
+        "nodus_status": (
+            final_state.get("nodus_status")
+            or nodus_result.get("status")
+        ),
+        "output_state": (
+            nodus_result.get("output_state")
+            or final_state.get("nodus_output_state")
+            or {}
+        ),
+        "events": final_state.get("nodus_events") or [],
+        "memory_writes": final_state.get("nodus_memory_writes") or [],
+        "events_emitted": nodus_result.get("events_emitted", 0),
+        "memory_writes_count": nodus_result.get("memory_writes", 0),
+        "error": (
+            nodus_result.get("error")
+            or final_state.get("nodus_handled_error")
+            or (None if flow_result.get("status") != "FAILED" else flow_result.get("error"))
+        ),
+    }
+
+
+def _validate_nodus_source(source: str, field: str = "script") -> None:
+    """
+    Run nodus_security sandbox checks.  Raises HTTPException(422) on violation.
+    """
+    from services.nodus_security import NodusSecurityError, validate_nodus_source
+    try:
+        validate_nodus_source(source)
+    except NodusSecurityError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "nodus_security_violation", "message": str(exc), "field": field},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -569,3 +870,936 @@ def revoke_key(
     if not revoked:
         raise HTTPException(status_code=404, detail=f"API key {key_id!r} not found")
     return None
+
+
+# ---------------------------------------------------------------------------
+# Nodus script execution endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/nodus/run")
+def run_nodus_script(
+    request: Request,
+    body: NodusRunRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Execute a Nodus script via the flow engine.
+
+    The script is sandboxed — no imports, eval, exec, filesystem, or network
+    access are permitted.  Violations are rejected with HTTP 422 before the VM
+    is even started.
+
+    **Inline execution** (`script` field):
+    ```json
+    {
+      "script": "let result = input_payload[\\"value\\"] * 2\\nset_state(\\"result\\", result)\\nemit(\\"doubled\\", {value: result})",
+      "input": {"value": 21},
+      "error_policy": "fail"
+    }
+    ```
+
+    **Named script execution** (`script_name` field — must be uploaded first):
+    ```json
+    { "script_name": "my_processor", "input": {"goal": "Q2 growth"} }
+    ```
+
+    **Response**
+    ```json
+    {
+      "status":              "SUCCESS",
+      "trace_id":            "<uuid>",
+      "run_id":              "<uuid>",
+      "nodus_status":        "success",
+      "output_state":        {"result": 42},
+      "events":              [{"event_type": "doubled", "payload": {"value": 42}}],
+      "memory_writes":       [],
+      "events_emitted":      1,
+      "memory_writes_count": 0,
+      "error":               null
+    }
+    ```
+
+    **error_policy**
+    - `"fail"` (default) — script errors are returned as `nodus_status="failure"` with
+      the error message in `error`.  The HTTP status is always 200.
+    - `"retry"` — the flow engine retries up to `max_retries` (3) times before treating
+      the failure as final.  Useful for transient VM errors.
+    """
+    user_id = str(current_user["sub"])
+
+    # Resolve source — inline script or named upload
+    if body.script:
+        script_source = body.script
+        _validate_nodus_source(script_source, field="script")
+    else:
+        with _script_lock:
+            record = _NODUS_SCRIPT_REGISTRY.get(body.script_name)  # type: ignore[arg-type]
+        if not record:
+            # Try restoring from disk before giving up
+            disk_path = _SCRIPTS_DIR / f"{body.script_name}.nodus"
+            if disk_path.exists():
+                script_source = disk_path.read_text(encoding="utf-8")
+                with _script_lock:
+                    _NODUS_SCRIPT_REGISTRY[body.script_name] = {  # type: ignore[index]
+                        "name": body.script_name,
+                        "content": script_source,
+                        "restored_from_disk": True,
+                        "uploaded_at": None,
+                        "uploaded_by": None,
+                    }
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": "script_not_found",
+                        "message": (
+                            f"Script {body.script_name!r} not found. "
+                            "Upload it first via POST /platform/nodus/upload."
+                        ),
+                    },
+                )
+        else:
+            script_source = record["content"]
+
+    def handler(_ctx):
+        flow_result = _run_nodus_script(
+            script=script_source,
+            input_payload=body.input,
+            error_policy=body.error_policy,
+            db=db,
+            user_id=user_id,
+        )
+        return _format_nodus_response(flow_result)
+
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name="platform.nodus.run",
+        handler=handler,
+        user_id=user_id,
+        input_payload={
+            "script_name": body.script_name,
+            "has_inline_script": bool(body.script),
+            "error_policy": body.error_policy,
+            **body.input,
+        },
+        metadata={"db": db},
+    )
+
+
+@router.post("/nodus/upload", status_code=201)
+def upload_nodus_script(
+    body: NodusScriptUpload,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Upload and register a named Nodus script for repeated execution.
+
+    The script is validated against the same sandbox rules as inline scripts
+    (no imports, eval, exec, filesystem, or network access).
+
+    After upload, execute it with:
+    ```json
+    POST /platform/nodus/run
+    {"script_name": "<name>", "input": {...}}
+    ```
+
+    Scripts are persisted to `scripts/nodus/<name>.nodus` on disk and kept
+    in memory for the lifetime of the server process.  Set `overwrite=true`
+    to replace an existing script with the same name.
+
+    **Response**
+    ```json
+    {
+      "name":        "my_processor",
+      "description": "Processes goals",
+      "size_bytes":  128,
+      "uploaded_at": "2026-03-31T12:00:00Z",
+      "uploaded_by": "<user_id>"
+    }
+    ```
+    """
+    user_id = str(current_user["sub"])
+    _validate_nodus_source(body.content, field="content")
+
+    with _script_lock:
+        if body.name in _NODUS_SCRIPT_REGISTRY and not body.overwrite:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "script_already_exists",
+                    "message": (
+                        f"Script {body.name!r} already exists. "
+                        "Set overwrite=true to replace it."
+                    ),
+                },
+            )
+
+        # Persist to disk (best-effort; in-memory registry is the source of truth)
+        try:
+            _SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
+            script_path = _SCRIPTS_DIR / f"{body.name}.nodus"
+            script_path.write_text(body.content, encoding="utf-8")
+        except OSError:
+            # Non-fatal — the script is still usable from the in-memory registry
+            pass
+
+        now = datetime.now(timezone.utc).isoformat()
+        meta: Dict[str, Any] = {
+            "name": body.name,
+            "content": body.content,
+            "description": body.description,
+            "size_bytes": len(body.content.encode("utf-8")),
+            "uploaded_at": now,
+            "uploaded_by": user_id,
+        }
+        _NODUS_SCRIPT_REGISTRY[body.name] = meta
+
+    return {
+        "name": meta["name"],
+        "description": meta["description"],
+        "size_bytes": meta["size_bytes"],
+        "uploaded_at": meta["uploaded_at"],
+        "uploaded_by": meta["uploaded_by"],
+    }
+
+
+@router.get("/nodus/scripts")
+def list_nodus_scripts(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    List all uploaded Nodus scripts.
+
+    Returns metadata only — the script content is not included to keep the
+    response compact.  Scripts are listed in upload order (most recent first).
+
+    **Response**
+    ```json
+    {
+      "count": 2,
+      "scripts": [
+        {
+          "name":        "my_processor",
+          "description": "Processes goals",
+          "size_bytes":  128,
+          "uploaded_at": "2026-03-31T12:00:00Z",
+          "uploaded_by": "<user_id>"
+        }
+      ]
+    }
+    ```
+
+    To also discover scripts that were written to disk before this process
+    started, the endpoint performs a one-time scan of `scripts/nodus/` on
+    first call and imports any `.nodus` files not yet in memory.
+    """
+    # Lazy disk scan — import any on-disk scripts not yet in the in-memory registry
+    if _SCRIPTS_DIR.exists():
+        with _script_lock:
+            for script_path in _SCRIPTS_DIR.glob("*.nodus"):
+                name = script_path.stem
+                if name not in _NODUS_SCRIPT_REGISTRY:
+                    try:
+                        content = script_path.read_text(encoding="utf-8")
+                        _NODUS_SCRIPT_REGISTRY[name] = {
+                            "name": name,
+                            "content": content,
+                            "description": None,
+                            "size_bytes": len(content.encode("utf-8")),
+                            "uploaded_at": None,
+                            "uploaded_by": None,
+                        }
+                    except OSError:
+                        pass
+
+    with _script_lock:
+        scripts = [
+            {
+                "name": m["name"],
+                "description": m.get("description"),
+                "size_bytes": m.get("size_bytes", 0),
+                "uploaded_at": m.get("uploaded_at"),
+                "uploaded_by": m.get("uploaded_by"),
+            }
+            for m in reversed(list(_NODUS_SCRIPT_REGISTRY.values()))
+        ]
+
+    return {"count": len(scripts), "scripts": scripts}
+
+
+# ---------------------------------------------------------------------------
+# Nodus flow endpoint
+# ---------------------------------------------------------------------------
+
+@router.post("/nodus/flow")
+def compile_and_run_nodus_flow(
+    request: Request,
+    body: NodusFlowRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Compile a Nodus flow script and optionally register / execute it.
+
+    The script uses the ``flow.*`` API to declare nodes and conditional edges:
+
+    ```nodus
+    flow.step("fetch_data")
+    flow.step("analyze", when="data_ready")   # skipped when state["data_ready"] is falsy
+    flow.step("summarize")
+    ```
+
+    All referenced node names must already be registered in ``NODE_REGISTRY``
+    (via POST /platform/nodes/register or startup registration).
+
+    **Response**
+    ```json
+    {
+      "flow_name":  "market_analysis",
+      "compiled":   true,
+      "start":      "fetch_data",
+      "nodes":      ["fetch_data", "analyze", "summarize"],
+      "end":        ["summarize"],
+      "registered": false,
+      "run_result": {
+        "status":   "SUCCESS",
+        "run_id":   "<uuid>",
+        "trace_id": "<uuid>",
+        "error":    null
+      }
+    }
+    ```
+
+    Set ``run=false`` to compile only (no execution).
+    Set ``register=true`` to persist the compiled flow in ``FLOW_REGISTRY``
+    for later execution via POST /platform/flows/{name}/run.
+
+    **Stability note:** Condition closures produced by ``when=`` edges live
+    in-memory only.  Registered flows survive the process lifetime but are
+    not restored from DB on restart — re-POST to re-register after a restart.
+    """
+    user_id = str(current_user["sub"])
+    _validate_nodus_source(body.script, field="script")
+
+    def handler(_ctx):
+        from services.nodus_flow_compiler import compile_nodus_flow
+        from services.flow_engine import PersistentFlowRunner, register_flow
+        from utils.uuid_utils import normalize_uuid
+
+        # Compile the Nodus flow script → flow dict
+        try:
+            compiled_flow = compile_nodus_flow(body.script, body.flow_name)
+        except (ValueError, RuntimeError) as exc:
+            # Return a structured error response rather than raising so
+            # the pipeline still records the attempt.
+            return {
+                "flow_name": body.flow_name,
+                "compiled": False,
+                "error": str(exc),
+            }
+
+        response: Dict[str, Any] = {
+            "flow_name": body.flow_name,
+            "compiled": True,
+            "start": compiled_flow["start"],
+            "nodes": list(compiled_flow["edges"].keys()),
+            "end": compiled_flow["end"],
+            "registered": False,
+        }
+
+        if body.register:
+            register_flow(body.flow_name, compiled_flow)
+            response["registered"] = True
+
+        if body.run:
+            uid = normalize_uuid(user_id) if user_id else None
+            runner = PersistentFlowRunner(
+                flow=compiled_flow,
+                db=db,
+                user_id=uid,
+                workflow_type="nodus_flow",
+            )
+            result = runner.start(
+                initial_state=dict(body.input),
+                flow_name=body.flow_name,
+            )
+            response["run_result"] = {
+                "status": result.get("status"),
+                "run_id": result.get("run_id"),
+                "trace_id": result.get("trace_id"),
+                "error": result.get("error"),
+            }
+
+        return response
+
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name="platform.nodus.flow",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"flow_name": body.flow_name, "run": body.run, "register": body.register},
+        metadata={"db": db},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Nodus scheduled execution endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/nodus/schedule", status_code=201)
+def create_nodus_schedule(
+    body: NodusScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Create a cron-scheduled Nodus job.
+
+    The script is executed on every cron tick by the APScheduler leader
+    instance via ``PersistentFlowRunner(NODUS_SCRIPT_FLOW)``, giving the
+    script access to memory, event, and WAIT/RESUME primitives.
+
+    **Request**
+    ```json
+    {
+      "script":       "set_state('ts', input_payload['now'])",
+      "cron":         "0 9 * * 1-5",
+      "input":        {"now": "injected_at_runtime"},
+      "job_name":     "weekday_morning_snapshot",
+      "error_policy": "fail",
+      "max_retries":  3
+    }
+    ```
+
+    **Cron syntax** — standard 5-field UTC cron:
+
+    | Field | Range | Special |
+    |-------|-------|---------|
+    | min   | 0-59  | , - * / |
+    | hour  | 0-23  | , - * / |
+    | dom   | 1-31  | , - * / |
+    | month | 1-12  | , - * / |
+    | dow   | 0-6   | , - * / |
+
+    Common patterns:
+    - `"0 10 * * *"` — daily at 10:00 UTC
+    - `"*/15 * * * *"` — every 15 minutes
+    - `"0 9 * * 1-5"` — weekdays at 09:00 UTC
+
+    **Response**
+    ```json
+    {
+      "id":              "<uuid>",
+      "job_name":        "weekday_morning_snapshot",
+      "cron_expression": "0 9 * * 1-5",
+      "next_run_at":     "2026-04-02T09:00:00+00:00",
+      "error_policy":    "fail",
+      "max_retries":     3,
+      "is_active":       true,
+      "created_at":      "2026-04-01T12:00:00+00:00"
+    }
+    ```
+
+    **Leader election:** Only the A.I.N.D.Y. instance holding the
+    background task DB lease executes scheduled jobs.  All other instances
+    skip the tick silently.
+    """
+    user_id = str(current_user["sub"])
+
+    # Validate security sandbox before anything else
+    if body.script:
+        _validate_nodus_source(body.script, field="script")
+        script_source = body.script
+    else:
+        # Resolve script_name → content; copy into the job for self-containment
+        with _script_lock:
+            record = _NODUS_SCRIPT_REGISTRY.get(body.script_name)  # type: ignore[arg-type]
+        if not record:
+            disk_path = _SCRIPTS_DIR / f"{body.script_name}.nodus"
+            if disk_path.exists():
+                script_source = disk_path.read_text(encoding="utf-8")
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": "script_not_found",
+                        "message": (
+                            f"Script {body.script_name!r} not found. "
+                            "Upload it first via POST /platform/nodus/upload."
+                        ),
+                    },
+                )
+        else:
+            script_source = record["content"]
+        _validate_nodus_source(script_source, field="script_name")
+
+    from services.nodus_schedule_service import create_nodus_scheduled_job
+
+    try:
+        meta = create_nodus_scheduled_job(
+            db=db,
+            script=script_source,
+            cron_expression=body.cron,
+            user_id=user_id,
+            job_name=body.job_name,
+            script_name=body.script_name,
+            input_payload=body.input,
+            error_policy=body.error_policy,
+            max_retries=body.max_retries,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"error": str(exc)})
+
+    return meta
+
+
+@router.get("/nodus/schedule")
+def list_nodus_schedules(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    List all active Nodus scheduled jobs owned by the current user.
+
+    **Response**
+    ```json
+    {
+      "count": 1,
+      "jobs": [
+        {
+          "id":              "<uuid>",
+          "job_name":        "weekday_morning_snapshot",
+          "cron_expression": "0 9 * * 1-5",
+          "error_policy":    "fail",
+          "max_retries":     3,
+          "is_active":       true,
+          "last_run_at":     null,
+          "last_run_status": null,
+          "last_run_log_id": null,
+          "next_run_at":     null,
+          "created_at":      "2026-04-01T12:00:00+00:00"
+        }
+      ]
+    }
+    ```
+    """
+    from services.nodus_schedule_service import list_nodus_scheduled_jobs
+
+    user_id = str(current_user["sub"])
+    jobs = list_nodus_scheduled_jobs(db=db, user_id=user_id)
+    return {"count": len(jobs), "jobs": jobs}
+
+
+@router.delete("/nodus/schedule/{job_id}", status_code=204)
+def delete_nodus_schedule(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Cancel a scheduled Nodus job.
+
+    Sets ``is_active=False`` (soft-delete) and removes the job from
+    APScheduler immediately.  The job's execution history is preserved.
+
+    Returns 204 on success, 404 if not found or not owned by the caller.
+    """
+    from services.nodus_schedule_service import delete_nodus_scheduled_job
+
+    user_id = str(current_user["sub"])
+    removed = delete_nodus_scheduled_job(db=db, job_id=job_id, user_id=user_id)
+    if not removed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scheduled job {job_id!r} not found",
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Nodus execution trace endpoint
+# ---------------------------------------------------------------------------
+
+@router.get("/nodus/trace/{trace_id}")
+def get_nodus_trace(
+    trace_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+    limit: int = 500,
+):
+    """
+    Return the full host-function call trace for a Nodus execution.
+
+    ``trace_id`` equals the ``execution_unit_id`` / ``run_id`` returned by
+    POST /platform/nodus/run (in the ``trace_id`` response field).
+
+    **Response**
+    ```json
+    {
+      "trace_id":            "<uuid>",
+      "execution_unit_id":   "<uuid>",
+      "count":               3,
+      "steps": [
+        {
+          "id":              "<uuid>",
+          "sequence":        1,
+          "fn_name":         "recall",
+          "args_summary":    ["goals"],
+          "result_summary":  {"keys": ["id", "content"], "size": 2},
+          "duration_ms":     12,
+          "status":          "ok",
+          "error":           null,
+          "timestamp":       "2026-04-01T12:00:00.123456+00:00"
+        }
+      ],
+      "summary": {
+        "total_calls":      3,
+        "total_duration_ms": 25,
+        "fn_counts":        {"recall": 1, "set_state": 2},
+        "error_count":      0,
+        "fn_names":         ["recall", "set_state"]
+      }
+    }
+    ```
+
+    Returns 404 if no trace events are found for the given ``trace_id``
+    (execution did not call any host functions, or belongs to another user).
+
+    **Ownership:** only events belonging to the authenticated user are returned.
+    """
+    from services.nodus_trace_service import query_nodus_trace
+
+    user_id = str(current_user["sub"])
+    result = query_nodus_trace(db=db, trace_id=trace_id, user_id=user_id, limit=limit)
+    if result["count"] == 0:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "trace_not_found",
+                "message": (
+                    f"No trace events found for trace_id {trace_id!r}. "
+                    "The execution may not have called any host functions, "
+                    "may belong to another user, or may not exist."
+                ),
+            },
+        )
+    return result
+
+
+# ── Tenant resource usage (OS layer) ─────────────────────────────────────────
+
+
+@router.get("/tenants/{tenant_id}/usage")
+def get_tenant_usage(
+    tenant_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return resource usage and quota information for a tenant.
+
+    **Ownership enforcement:** callers may only query their own tenant_id.
+    Attempting to query another tenant's usage returns 403.
+
+    **Response fields:**
+    ```json
+    {
+      "tenant_id":            "...",
+      "active_executions":    2,
+      "execution_count":      14,
+      "total_cpu_time_ms":    12500,
+      "peak_memory_bytes":    0,
+      "total_syscalls":       47,
+      "scheduler": {
+        "queues":             {"high": 0, "normal": 1, "low": 0},
+        "waiting":            0,
+        "total_enqueued":     12,
+        "total_dispatched":   11,
+        "total_dropped":      0
+      },
+      "quota_limits": {
+        "max_cpu_time_ms":             30000,
+        "max_memory_bytes":            268435456,
+        "max_syscalls_per_execution":  100,
+        "max_concurrent_executions":   5
+      }
+    }
+    ```
+    """
+    caller_id = str(current_user["sub"])
+    if caller_id != tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "TENANT_VIOLATION",
+                "message": f"Caller {caller_id!r} is not authorised to view usage for tenant {tenant_id!r}",
+            },
+        )
+
+    from services.resource_manager import get_resource_manager
+    from services.scheduler_engine import get_scheduler_engine
+
+    rm = get_resource_manager()
+    se = get_scheduler_engine()
+
+    summary = rm.get_tenant_summary(tenant_id)
+    summary["scheduler"] = se.stats()
+    return summary
+
+
+# ── Memory Address Space (MAS) endpoints ─────────────────────────────────────
+
+
+@router.get("/memory")
+def list_memory_path(
+    path: str,
+    limit: int = 50,
+    query: Optional[str] = None,
+    tags: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List memory nodes at a MAS path.
+
+    **path** examples:
+    - ``/memory/user-123/tasks/*``  — one level under tasks
+    - ``/memory/user-123/tasks/**`` — all descendants of tasks
+    - ``/memory/user-123/tasks/pending/abc`` — exact node
+
+    Optionally filter by **query** (keyword) and **tags** (comma-separated).
+    """
+    from services.memory_address_space import validate_tenant_path, normalize_path
+    from db.dao.memory_node_dao import MemoryNodeDAO
+
+    user_id = str(current_user["sub"])
+    try:
+        norm = normalize_path(path)
+        validate_tenant_path(norm, user_id)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)})
+
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    dao = MemoryNodeDAO(db)
+    nodes = dao.query_path(
+        path_expr=norm,
+        query=query,
+        tags=tag_list,
+        user_id=user_id,
+        limit=limit,
+    )
+    return {"nodes": nodes, "count": len(nodes), "path": norm}
+
+
+@router.get("/memory/tree")
+def memory_tree(
+    path: str,
+    limit: int = 200,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return a hierarchical tree of memory nodes under a path prefix."""
+    from services.memory_address_space import (
+        validate_tenant_path, normalize_path, is_exact,
+        wildcard_prefix, build_tree,
+    )
+    from db.dao.memory_node_dao import MemoryNodeDAO
+
+    user_id = str(current_user["sub"])
+    try:
+        norm = normalize_path(path)
+        validate_tenant_path(norm, user_id)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)})
+
+    dao = MemoryNodeDAO(db)
+    prefix = norm if is_exact(norm) else wildcard_prefix(norm)
+    nodes = dao.walk_path(prefix, user_id=user_id, limit=limit)
+    tree = build_tree(nodes)
+    return {"tree": tree, "node_count": len(nodes), "path": norm}
+
+
+@router.get("/memory/trace")
+def memory_trace(
+    path: str,
+    depth: int = 5,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Follow the causal chain from the memory node at an exact path."""
+    from services.memory_address_space import validate_tenant_path, normalize_path
+    from db.dao.memory_node_dao import MemoryNodeDAO
+
+    user_id = str(current_user["sub"])
+    try:
+        norm = normalize_path(path)
+        validate_tenant_path(norm, user_id)
+    except (ValueError, PermissionError) as exc:
+        raise HTTPException(status_code=400, detail={"error": str(exc)})
+
+    dao = MemoryNodeDAO(db)
+    chain = dao.causal_trace(path=norm, depth=min(depth, 20), user_id=user_id)
+    if not chain:
+        raise HTTPException(status_code=404, detail={"error": "No node found at path"})
+    return {"chain": chain, "depth": len(chain), "path": norm}
+
+
+# ── Syscall versioning introspection ──────────────────────────────────────────
+
+
+@router.get("/syscalls")
+def list_syscalls(
+    version: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return available syscall versions, names, schemas, and deprecation status.
+
+    Optionally filter by **version** (e.g. ``?version=v1``).
+
+    **Response shape**::
+
+        {
+          "versions": ["v1", "v2"],
+          "syscalls": {
+            "v1": {
+              "memory.read": {
+                "full_name": "sys.v1.memory.read",
+                "capability": "memory.read",
+                "description": "...",
+                "stable": true,
+                "deprecated": false,
+                "input_schema": {...},
+                "output_schema": {...},
+                "replacement": null
+              },
+              ...
+            }
+          },
+          "total_count": 9
+        }
+    """
+    from services.syscall_registry import SYSCALL_REGISTRY
+    from services.syscall_versioning import SyscallSpec
+
+    versioned = SYSCALL_REGISTRY.versioned
+    available_versions = SYSCALL_REGISTRY.versions()
+
+    if version:
+        if version not in versioned:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": f"Unknown syscall version: {version!r}"},
+            )
+        versioned = {version: versioned[version]}
+
+    result: dict[str, dict] = {}
+    total = 0
+    for ver, actions in versioned.items():
+        result[ver] = {}
+        for action, entry in sorted(actions.items()):
+            spec = SyscallSpec(
+                name=action,
+                version=ver,
+                capability=entry.capability,
+                description=entry.description,
+                input_schema=entry.input_schema,
+                output_schema=entry.output_schema,
+                stable=entry.stable,
+                deprecated=entry.deprecated,
+                deprecated_since=entry.deprecated_since,
+                replacement=entry.replacement,
+            )
+            result[ver][action] = spec.to_dict()
+            total += 1
+
+    return {
+        "versions": available_versions if not version else [version],
+        "syscalls": result,
+        "total_count": total,
+    }
+
+
+# ── SDK syscall dispatch ───────────────────────────────────────────────────────
+
+
+class SyscallDispatchRequest(BaseModel):
+    """Request body for POST /platform/syscall."""
+
+    name: str = Field(
+        ...,
+        description="Fully-qualified syscall name — sys.v{N}.{domain}.{action}",
+        examples=["sys.v1.memory.read"],
+    )
+    payload: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Syscall-specific arguments.",
+    )
+
+
+@router.post("/syscall")
+def dispatch_syscall(
+    body: SyscallDispatchRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Execute any registered syscall by name.
+
+    This is the primary SDK entry point. It maps directly to
+    ``SyscallDispatcher.dispatch()`` — the same pipeline used internally
+    by Nodus scripts and flow nodes.
+
+    **Request**::
+
+        {
+            "name":    "sys.v1.memory.read",
+            "payload": {"query": "authentication flow", "limit": 5}
+        }
+
+    **Response** — standard syscall envelope::
+
+        {
+            "status":            "success" | "error",
+            "data":              dict,
+            "version":           "v1",
+            "warning":           null,
+            "trace_id":          str,
+            "execution_unit_id": str,
+            "syscall":           str,
+            "duration_ms":       int,
+            "error":             null
+        }
+
+    Error codes:
+    - ``422`` — malformed syscall name or payload fails input schema validation.
+    - ``403`` — caller's API key lacks the required capability.
+    - ``429`` — execution unit has exceeded its resource quota.
+    - The dispatcher itself never raises; all errors are returned in the envelope.
+      HTTP-level errors (4xx) are raised by this route for missing syscalls,
+      capability violations, and validation failures so SDK error mapping works.
+    """
+    from services.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+    from services.syscall_registry import DEFAULT_NODUS_CAPABILITIES
+
+    user_id = str(current_user.get("user_id") or current_user.get("sub") or "")
+
+    # Build a SyscallContext from the authenticated principal.
+    # The execution_unit_id is a fresh UUID for this HTTP call.
+    ctx = make_syscall_ctx_from_tool(
+        user_id=user_id,
+        capabilities=list(DEFAULT_NODUS_CAPABILITIES),
+    )
+
+    result = get_dispatcher().dispatch(body.name, body.payload, ctx)
+
+    # Surface structured failures as HTTP errors so the SDK can map them.
+    if result["status"] == "error":
+        msg = result.get("error", "syscall error")
+        if "Permission denied" in msg or "capability" in msg:
+            raise HTTPException(status_code=403, detail={"error": msg})
+        if "Input validation failed" in msg:
+            raise HTTPException(status_code=422, detail={"error": msg})
+        if "quota" in msg.lower() or "QUOTA" in msg:
+            raise HTTPException(status_code=429, detail={"error": msg})
+        if "Unknown syscall" in msg:
+            raise HTTPException(status_code=404, detail={"error": msg})
+
+    return result
