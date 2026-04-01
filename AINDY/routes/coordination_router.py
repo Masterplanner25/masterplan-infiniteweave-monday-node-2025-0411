@@ -9,7 +9,7 @@ from services.agent_coordinator import list_agents
 from services.auth_service import get_current_user
 
 
-router = APIRouter(tags=["Coordination"])
+router = APIRouter(prefix="/coordination", tags=["Coordination"])
 
 
 @router.get("/agents")
@@ -40,7 +40,7 @@ def get_agents_status(
     )
 
 
-@router.get("/coordination/graph")
+@router.get("/graph")
 def get_coordination_graph(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

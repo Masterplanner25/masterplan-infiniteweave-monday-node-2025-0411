@@ -5,26 +5,41 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel
 import logging
 
-from core.execution_signal_helper import queue_memory_capture
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
-from db.dao.memory_node_dao import MemoryNodeDAO
 from services.auth_service import get_current_user
-from services.execution_envelope import success
-from services.flow_engine import execute_intent
-from services.observability_events import emit_observability_event
-from services.nodus_security import (
-    ALLOWED_OPERATION_CAPABILITIES,
-    NodusSecurityError,
-    authorize_nodus_execution,
-)
-from utils.trace_context import ensure_trace_id
-from utils.uuid_utils import normalize_uuid
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 logger = logging.getLogger(__name__)
 
 NodeType = Literal["decision", "outcome", "insight", "relationship"]
+
+
+def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
+    """Run a memory flow and decode node HTTP errors."""
+    from services.flow_engine import run_flow
+    result = run_flow(flow_name, payload, db=db, user_id=user_id)
+    data = result.get("data")
+
+    if isinstance(data, dict) and data.get("_http_status") == 202:
+        return JSONResponse(status_code=202, content=data.get("_http_response", {}))
+
+    if result.get("status") == "FAILED":
+        error = result.get("error", "")
+        if error.startswith("HTTP_"):
+            parts = error.split(":", 1)
+            code = int(parts[0].replace("HTTP_", ""))
+            msg = parts[1] if len(parts) > 1 else error
+            detail_map = {
+                404: {"error": "memory_node_not_found", "message": msg},
+                422: {"error": "invalid_request", "message": msg},
+                400: {"error": "bad_request", "message": msg},
+                403: {"error": "forbidden", "message": msg},
+            }
+            raise HTTPException(status_code=code, detail=detail_map.get(code, msg))
+        raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
+
+    return data
 
 
 # ------------------------------------------------------------------
@@ -164,16 +179,10 @@ async def create_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        user_id = str(current_user["sub"])
-        dao = MemoryNodeDAO(db)
-        return dao.save(
-            content=body.content,
-            source=body.source,
-            tags=body.tags,
-            user_id=user_id,
-            node_type=body.node_type,
-            extra=body.extra,
-        )
+        return _mem_run_flow("memory_node_create", {
+            "content": body.content, "source": body.source,
+            "tags": body.tags, "node_type": body.node_type, "extra": body.extra,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}")
@@ -184,15 +193,7 @@ async def get_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        user_id = normalize_uuid(current_user["sub"])
-        node = dao.get_by_id(node_id, user_id=user_id)
-        if not node:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        return node
+        return _mem_run_flow("memory_node_get", {"node_id": node_id}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.get", handler, db=db, current_user=current_user)
 @router.put("/nodes/{node_id}")
@@ -204,21 +205,10 @@ async def update_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        updated = dao.update(
-            node_id=node_id,
-            user_id=str(current_user["sub"]),
-            content=body.content,
-            tags=body.tags,
-            node_type=body.node_type,
-            source=body.source,
-        )
-        if not updated:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        return dao._node_to_dict(updated)
+        return _mem_run_flow("memory_node_update", {
+            "node_id": node_id, "content": body.content,
+            "tags": body.tags, "node_type": body.node_type, "source": body.source,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.update", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/nodes/{node_id}/history")
@@ -230,17 +220,7 @@ async def get_node_history(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        history = dao.get_history(
-            node_id=node_id,
-            user_id=str(current_user["sub"]),
-            limit=limit,
-        )
-        return {
-            "node_id": node_id,
-            "history": history,
-            "count": len(history),
-        }
+        return _mem_run_flow("memory_node_history", {"node_id": node_id, "limit": limit}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.history", handler, db=db, current_user=current_user)
 @router.get("/nodes/{node_id}/links")
@@ -252,27 +232,7 @@ async def get_linked_nodes(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if direction not in ("in", "out", "both"):
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "error": "invalid_direction",
-                    "message": "direction must be 'in', 'out', or 'both'",
-                },
-            )
-        dao = MemoryNodeDAO(db)
-        if not dao.get_by_id(node_id, user_id=str(current_user["sub"])):
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        return {
-            "nodes": dao.get_linked_nodes(
-                node_id,
-                direction=direction,
-                user_id=str(current_user["sub"]),
-            )
-        }
+        return _mem_run_flow("memory_node_links", {"node_id": node_id, "direction": direction}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.links", handler, db=db, current_user=current_user)
 @router.get("/nodes")
@@ -285,21 +245,7 @@ async def search_nodes_by_tags(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if mode.upper() not in ("AND", "OR"):
-            raise HTTPException(
-                status_code=422,
-                detail={"error": "invalid_mode", "message": "mode must be 'AND' or 'OR'"},
-            )
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-        dao = MemoryNodeDAO(db)
-        return {
-            "nodes": dao.get_by_tags(
-                tag_list,
-                limit=limit,
-                mode=mode,
-                user_id=str(current_user["sub"]),
-            )
-        }
+        return _mem_run_flow("memory_nodes_search_tags", {"tags": tags, "mode": mode, "limit": limit}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.search_tags", handler, db=db, current_user=current_user)
 @router.post("/links", status_code=201)
@@ -310,27 +256,10 @@ async def create_link(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        user_id = str(current_user["sub"])
-        source = dao.get_by_id(body.source_id, user_id=user_id)
-        if not source and dao._get_model_by_id(body.source_id) is not None:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "source_node_not_found", "message": "Source node not found"},
-            )
-        target = dao.get_by_id(body.target_id, user_id=user_id)
-        if not target and dao._get_model_by_id(body.target_id) is not None:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "target_node_not_found", "message": "Target node not found"},
-            )
-        try:
-            return dao.create_link(body.source_id, body.target_id, body.link_type, body.weight or 0.5)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=422,
-                detail={"error": "memory_link_invalid", "message": "Invalid memory link", "details": str(e)},
-            )
+        return _mem_run_flow("memory_link_create", {
+            "source_id": body.source_id, "target_id": body.target_id,
+            "link_type": body.link_type, "weight": body.weight,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.links.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}/traverse")
@@ -344,21 +273,10 @@ async def traverse_from_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        depth = 5 if max_depth > 5 else max_depth
-        dao = MemoryNodeDAO(db)
-        result = dao.traverse(
-            start_node_id=node_id,
-            max_depth=depth,
-            link_type=link_type,
-            user_id=str(current_user["sub"]),
-            min_strength=min_strength,
-        )
-        if not result["found"]:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        return result
+        return _mem_run_flow("memory_node_traverse", {
+            "node_id": node_id, "max_depth": max_depth,
+            "link_type": link_type, "min_strength": min_strength,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.traverse", handler, db=db, current_user=current_user)
 @router.post("/nodes/expand")
@@ -369,22 +287,10 @@ async def expand_nodes(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if len(body.node_ids) > 10:
-            raise HTTPException(
-                status_code=400,
-                detail={
-                    "error": "expansion_limit_exceeded",
-                    "message": "Maximum 10 nodes per expansion request",
-                },
-            )
-        dao = MemoryNodeDAO(db)
-        return dao.expand(
-            node_ids=body.node_ids,
-            user_id=str(current_user["sub"]),
-            include_linked=body.include_linked,
-            include_similar=body.include_similar,
-            limit_per_node=body.limit_per_node,
-        )
+        return _mem_run_flow("memory_nodes_expand", {
+            "node_ids": body.node_ids, "include_linked": body.include_linked,
+            "include_similar": body.include_similar, "limit_per_node": body.limit_per_node,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.expand", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodes/search")
@@ -395,22 +301,10 @@ async def search_similar_nodes(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from services.embedding_service import generate_query_embedding
-
-        query_embedding = generate_query_embedding(body.query)
-        dao = MemoryNodeDAO(db)
-        results = dao.find_similar(
-            query_embedding=query_embedding,
-            limit=body.limit,
-            user_id=str(current_user["sub"]),
-            node_type=body.node_type,
-            min_similarity=body.min_similarity,
-        )
-        return {
-            "query": body.query,
-            "results": results,
-            "count": len(results),
-        }
+        return _mem_run_flow("memory_nodes_search_similar", {
+            "query": body.query, "limit": body.limit,
+            "node_type": body.node_type, "min_similarity": body.min_similarity,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.search_similar", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall")
@@ -421,47 +315,10 @@ async def recall_memories(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if not body.query and not body.tags:
-            raise HTTPException(
-                status_code=400,
-                detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
-            )
-
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-
-        metadata = {
-            "tags": body.tags,
-            "node_type": body.node_type,
-            "limit": body.limit,
-        }
-        if body.node_type is None:
-            metadata["node_types"] = []
-
-        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
-        context = orchestrator.get_context(
-            user_id=str(current_user["sub"]),
-            query=body.query or "",
-            task_type="analysis",
-            db=db,
-            max_tokens=1200,
-            metadata=metadata,
-        )
-        results = memory_items_to_dicts(context.items)
-        return {
-            "query": body.query,
-            "tags": body.tags,
-            "results": results,
-            "count": len(results),
-            "scoring_version": "v2",
-            "formula": {
-                "semantic": 0.40,
-                "graph": 0.15,
-                "recency": 0.15,
-                "success_rate": 0.20,
-                "usage_frequency": 0.10,
-                "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
-            },
-        }
+        return _mem_run_flow("memory_recall", {
+            "query": body.query, "tags": body.tags,
+            "limit": body.limit, "node_type": body.node_type,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.recall", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall/v3")
@@ -472,75 +329,10 @@ async def recall_v3(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if not body.query and not body.tags:
-            raise HTTPException(
-                status_code=400,
-                detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
-            )
-
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-
-        metadata = {
-            "tags": body.tags,
-            "node_type": body.node_type,
-            "limit": body.limit,
-        }
-        if body.node_type is None:
-            metadata["node_types"] = []
-
-        orchestrator = MemoryOrchestrator(MemoryNodeDAO)
-        context = orchestrator.get_context(
-            user_id=str(current_user["sub"]),
-            query=body.query or "",
-            task_type="analysis",
-            db=db,
-            max_tokens=1200,
-            metadata=metadata,
-        )
-        results = memory_items_to_dicts(context.items)
-
-        if body.expand_results and context.ids:
-            dao = MemoryNodeDAO(db)
-            expansion = dao.expand(
-                node_ids=context.ids[:3],
-                user_id=str(current_user["sub"]),
-                include_linked=True,
-                include_similar=True,
-                limit_per_node=2,
-            )
-            return {
-                "query": body.query,
-                "tags": body.tags,
-                "results": results,
-                "expanded": expansion.get("expanded_nodes", []),
-                "expansion_map": expansion.get("expansion_map", {}),
-                "total_context_nodes": len(results) + len(expansion.get("expanded_nodes", [])),
-                "scoring_version": "v2",
-                "formula": {
-                    "semantic": 0.40,
-                    "graph": 0.15,
-                    "recency": 0.15,
-                    "success_rate": 0.20,
-                    "usage_frequency": 0.10,
-                    "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
-                },
-            }
-
-        return {
-            "query": body.query,
-            "tags": body.tags,
-            "results": results,
-            "count": len(results),
-            "scoring_version": "v2",
-            "formula": {
-                "semantic": 0.40,
-                "graph": 0.15,
-                "recency": 0.15,
-                "success_rate": 0.20,
-                "usage_frequency": 0.10,
-                "note": "adaptive_weight multiplier applied; tag_score adds up to +0.1",
-            },
-        }
+        return _mem_run_flow("memory_recall_v3", {
+            "query": body.query, "tags": body.tags, "limit": body.limit,
+            "node_type": body.node_type, "expand_results": body.expand_results,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.recall.v3", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/federated/recall")
@@ -551,21 +343,10 @@ async def federated_recall(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        if not body.query and not body.tags:
-            raise HTTPException(
-                status_code=400,
-                detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
-            )
-
-        user_id = normalize_uuid(current_user["sub"])
-        dao = MemoryNodeDAO(db)
-        return dao.recall_federated(
-            query=body.query,
-            tags=body.tags,
-            agent_namespaces=body.agent_namespaces,
-            limit=body.limit,
-            user_id=user_id,
-        )
+        return _mem_run_flow("memory_recall_federated", {
+            "query": body.query, "tags": body.tags,
+            "agent_namespaces": body.agent_namespaces, "limit": body.limit,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.recall.federated", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/agents")
@@ -575,45 +356,7 @@ async def list_agents(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from db.models.agent import Agent
-        from services.memory_persistence import MemoryNodeModel
-
-        user_id = normalize_uuid(current_user["sub"])
-        agents = db.query(Agent).filter(
-            Agent.is_active.is_(True)
-        ).all()
-
-        result = []
-        for agent in agents:
-            node_count = db.query(MemoryNodeModel).filter(
-                MemoryNodeModel.source_agent == agent.memory_namespace,
-                MemoryNodeModel.user_id == user_id,
-            ).count()
-
-            shared_count = db.query(MemoryNodeModel).filter(
-                MemoryNodeModel.source_agent == agent.memory_namespace,
-                MemoryNodeModel.user_id == user_id,
-                MemoryNodeModel.is_shared.is_(True),
-            ).count()
-
-            result.append({
-                "id": agent.id,
-                "name": agent.name,
-                "agent_type": agent.agent_type,
-                "description": agent.description,
-                "memory_namespace": agent.memory_namespace,
-                "is_active": agent.is_active,
-                "memory_stats": {
-                    "total_nodes": node_count,
-                    "shared_nodes": shared_count,
-                    "private_nodes": node_count - shared_count,
-                },
-            })
-
-        return {
-            "agents": result,
-            "total": len(result),
-        }
+        return _mem_run_flow("memory_agents_list", {}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.agents.list", handler, db=db, current_user=current_user)
 @router.post("/nodes/{node_id}/share")
@@ -624,23 +367,7 @@ async def share_memory_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        node = dao.share_memory(
-            node_id=node_id,
-            user_id=normalize_uuid(current_user["sub"]),
-        )
-        if not node:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-
-        return {
-            "node_id": node_id,
-            "is_shared": node.is_shared,
-            "source_agent": node.source_agent,
-            "message": "Memory node is now shared with all agents.",
-        }
+        return _mem_run_flow("memory_node_share", {"node_id": node_id}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.share", handler, db=db, current_user=current_user)
 @router.get("/agents/{namespace}/recall")
@@ -653,21 +380,7 @@ async def recall_from_agent_endpoint(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        results = dao.recall_from_agent(
-            agent_namespace=namespace,
-            query=query,
-            limit=limit,
-            user_id=normalize_uuid(current_user["sub"]),
-            include_private=False,
-        )
-
-        return {
-            "agent_namespace": namespace,
-            "query": query,
-            "results": results,
-            "count": len(results),
-        }
+        return _mem_run_flow("memory_agent_recall", {"namespace": namespace, "query": query, "limit": limit}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.agents.recall", handler, db=db, current_user=current_user)
 @router.post("/nodes/{node_id}/feedback")
@@ -679,31 +392,7 @@ async def record_node_feedback(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        node = dao.record_feedback(
-            node_id=node_id,
-            outcome=body.outcome,
-            user_id=str(current_user["sub"]),
-        )
-        if not node:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        return {
-            "node_id": node_id,
-            "outcome": body.outcome,
-            "success_count": node.success_count,
-            "failure_count": node.failure_count,
-            "usage_count": node.usage_count,
-            "adaptive_weight": node.weight,
-            "success_rate": dao.get_success_rate(node),
-            "message": {
-                "success": "Weight boosted - memory reinforced",
-                "failure": "Weight reduced - memory suppressed",
-                "neutral": "Usage recorded - no weight change",
-            }[body.outcome],
-        }
+        return _mem_run_flow("memory_node_feedback", {"node_id": node_id, "outcome": body.outcome}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.feedback", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/nodes/{node_id}/performance")
@@ -714,41 +403,7 @@ async def get_node_performance(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        dao = MemoryNodeDAO(db)
-        node = dao._get_model_by_id(node_id, user_id=str(current_user["sub"]))
-        if not node:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "memory_node_not_found", "message": "Memory node not found"},
-            )
-        success_rate = dao.get_success_rate(node)
-        usage_freq = dao.get_usage_frequency_score(node)
-        graph_score = dao.get_graph_connectivity_score(node_id)
-        total_feedback = (node.success_count or 0) + (node.failure_count or 0)
-        return {
-            "node_id": node_id,
-            "content_preview": (node.content or "")[:100],
-            "node_type": node.node_type,
-            "performance": {
-                "success_count": node.success_count or 0,
-                "failure_count": node.failure_count or 0,
-                "usage_count": node.usage_count or 0,
-                "success_rate": round(success_rate, 3),
-                "adaptive_weight": round(node.weight or 1.0, 3),
-                "last_outcome": node.last_outcome,
-                "last_used_at": node.last_used_at.isoformat() if node.last_used_at else None,
-                "total_feedback_signals": total_feedback,
-                "graph_connectivity": round(graph_score, 3),
-                "usage_frequency_score": round(usage_freq, 3),
-            },
-            "resonance_v2_preview": {
-                "note": "Scores shown for this node in isolation. Actual resonance depends on query context.",
-                "success_rate_component": round(success_rate * 0.20, 4),
-                "usage_freq_component": round(usage_freq * 0.10, 4),
-                "graph_component": round(graph_score * 0.15, 4),
-                "adaptive_weight": round(node.weight or 1.0, 3),
-            },
-        }
+        return _mem_run_flow("memory_node_performance", {"node_id": node_id}, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodes.performance", handler, db=db, current_user=current_user)
 @router.post("/suggest")
@@ -764,14 +419,10 @@ async def get_suggestions(
                 status_code=400,
                 detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
             )
-        dao = MemoryNodeDAO(db)
-        return dao.suggest(
-            query=body.query,
-            tags=body.tags,
-            context=body.context,
-            user_id=str(current_user["sub"]),
-            limit=body.limit,
-        )
+        return _mem_run_flow("memory_suggest", {
+            "query": body.query, "tags": body.tags,
+            "context": body.context, "limit": body.limit,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.suggest", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodus/execute")
@@ -781,69 +432,15 @@ async def execute_nodus_task(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    async def handler(ctx):
-        from services.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
-        from services.nodus_execution_service import execute_nodus_task_payload
-        from utils.user_ids import require_user_id
-
-        user_id = str(require_user_id(current_user["sub"]))
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="memory.nodus.execute",
-                payload={
-                    "task_name": body.task_name,
-                    "task_code": body.task_code,
-                    "user_id": user_id,
-                    "session_tags": body.session_tags,
-                    "allowed_operations": body.allowed_operations,
-                    "execution_id": body.execution_id,
-                    "capability_token": body.capability_token,
-                },
-                user_id=user_id,
-                source="memory_router",
-            )
-            return JSONResponse(
-                status_code=202,
-                content=build_queued_response(
-                    log_id,
-                    task_name="memory.nodus.execute",
-                    source="memory_router",
-                ),
-            )
-
-        try:
-            result = execute_nodus_task_payload(
-                task_name=body.task_name,
-                task_code=body.task_code,
-                db=db,
-                user_id=user_id,
-                session_tags=body.session_tags,
-                allowed_operations=body.allowed_operations,
-                execution_id=body.execution_id,
-                capability_token=body.capability_token,
-                logger=logger,
-            )
-            if isinstance(result, dict) and {
-                "status",
-                "result",
-                "events",
-                "next_action",
-                "trace_id",
-            }.issubset(result.keys()):
-                return result
-            return success(result, [], ensure_trace_id())
-        except NodusSecurityError as exc:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "nodus_security_violation",
-                    "message": str(exc),
-                },
-            )
+    def handler(ctx):
+        return _mem_run_flow("memory_nodus_execute", {
+            "task_name": body.task_name,
+            "task_code": body.task_code,
+            "session_tags": body.session_tags,
+            "allowed_operations": body.allowed_operations,
+            "execution_id": body.execution_id,
+            "capability_token": body.capability_token,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.nodus.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute")
@@ -854,32 +451,11 @@ async def execute_with_memory(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        user_id = normalize_uuid(current_user["sub"])
-        result = execute_intent(
-            intent_data={
-                "workflow_type": "memory_execution",
-                "original_workflow": body.workflow,
-                "execution_input": body.input,
-                "session_tags": body.session_tags,
-            },
-            db=db,
-            user_id=user_id,
-        )
-        if result.get("status") != "SUCCESS":
-            raise HTTPException(status_code=500, detail="Memory execution failed")
-        execution_result = result.get("result")
-        if isinstance(execution_result, dict):
-            for key in (
-                "recalled_memories",
-                "memory_context",
-                "recall_count",
-                "workflow",
-                "session_tags",
-                "memory_bridge_version",
-            ):
-                if key in execution_result:
-                    result[key] = execution_result[key]
-        return result
+        return _mem_run_flow("memory_execute_loop", {
+            "workflow": body.workflow,
+            "input": body.input,
+            "session_tags": body.session_tags,
+        }, db, str(current_user["sub"]))
 
     return await _execute_memory(request, "memory.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute/complete")

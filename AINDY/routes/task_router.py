@@ -1,13 +1,9 @@
 # /routers/task_router.py
-import uuid
 from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
-from services import task_services
-from services.execution_service import ExecutionContext, run_execution
 from schemas.task_schemas import TaskCreate, TaskAction
-from services.task_services import handle_recurrence
 from services.auth_service import get_current_user
 
 
@@ -49,35 +45,35 @@ def create_task(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.create",
-                start_payload={"task_name": task.name},
-            ),
-            lambda: _serialize_task(
-                task_services.create_task(
-                    db=db,
-                    name=task.name,
-                    category=task.category,
-                    priority=task.priority,
-                    due_date=task.due_date,
-                    masterplan_id=task.masterplan_id,
-                    parent_task_id=task.parent_task_id,
-                    dependency_type=task.dependency_type,
-                    dependencies=task.dependencies,
-                    automation_type=task.automation_type,
-                    automation_config=task.automation_config,
-                    scheduled_time=task.scheduled_time,
-                    reminder_time=task.reminder_time,
-                    recurrence=task.recurrence,
-                    user_id=current_user["sub"],
-                )
-            )
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "task_create",
+            {
+                "task_name": task.name,
+                "category": task.category,
+                "priority": task.priority,
+                "due_date": task.due_date.isoformat() if task.due_date else None,
+                "masterplan_id": task.masterplan_id,
+                "parent_task_id": task.parent_task_id,
+                "dependency_type": task.dependency_type,
+                "dependencies": task.dependencies,
+                "automation_type": task.automation_type,
+                "automation_config": task.automation_config,
+                "scheduled_time": task.scheduled_time.isoformat() if task.scheduled_time else None,
+                "reminder_time": task.reminder_time.isoformat() if task.reminder_time else None,
+                "recurrence": task.recurrence,
+            },
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "Task create flow failed")
+            )
+        return result.get("data")
+
     return _execute_tasks(request, "tasks.create", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.post("/start")
@@ -88,17 +84,21 @@ def start_task(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.start",
-                start_payload={"task_name": task.name},
-            ),
-            lambda: {"message": task_services.start_task(db, task.name, user_id=current_user["sub"])},
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "task_start",
+            {"task_name": task.name},
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "Task start flow failed")
+            )
+        return result.get("data")
+
     return _execute_tasks(request, "tasks.start", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.post("/pause")
@@ -109,17 +109,21 @@ def pause_task(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.pause",
-                start_payload={"task_name": task.name},
-            ),
-            lambda: {"message": task_services.pause_task(db, task.name, user_id=current_user["sub"])},
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "task_pause",
+            {"task_name": task.name},
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "Task pause flow failed")
+            )
+        return result.get("data")
+
     return _execute_tasks(request, "tasks.pause", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.post("/complete")
@@ -130,17 +134,21 @@ def complete_task(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.complete",
-                start_payload={"task_name": task.name},
-            ),
-            lambda: task_services.execute_task_completion(db, task.name, user_id=current_user["sub"]),
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "task_completion",
+            {"task_name": task.name},
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "Task completion flow failed")
+            )
+        return result.get("data")
+
     return _execute_tasks(request, "tasks.complete", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.get("/list")
@@ -151,46 +159,26 @@ def list_tasks(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.list",
-            ),
-            lambda: [
-                _serialize_task(t)
-                for t in db.query(task_services.Task).filter(
-                    task_services.Task.user_id == uuid.UUID(str(current_user["sub"]))
-                ).all()
-            ],
-        )
+        from services.flow_engine import run_flow
+        result = run_flow("tasks_list", {}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Tasks list flow failed"))
+        return result.get("data")
     return _execute_tasks(request, "tasks.list", handler, db=db, user_id=user_id)
 
 @router.post("/recurrence/check")
 def trigger_recurrence(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Triggers the recurrence check job asynchronously.
-    Public — no auth required (internal maintenance endpoint).
-    """
+    """Triggers the recurrence check job asynchronously."""
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="task_router",
-                operation="tasks.recurrence.check",
-            ),
-            lambda: (
-                background_tasks.add_task(handle_recurrence),
-                {"message": "Recurrence job started in background."},
-            )[1],
-        )
+        from services.flow_engine import run_flow
+        result = run_flow("tasks_recurrence_check", {}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Recurrence check failed"))
+        return result.get("data")
     return _execute_tasks(request, "tasks.recurrence.check", handler, db=db, user_id=user_id)
 

@@ -9,8 +9,6 @@ lead discovery and scoring engine.
 from __future__ import annotations
 
 import logging
-import time
-import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -18,11 +16,9 @@ from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from schemas.leadgen_schema import LeadGenItem
-from services import leadgen_service
 from services.auth_service import get_current_user
-from services.execution_service import ExecutionContext, ExecutionErrorConfig, run_execution
 from services.rate_limiter import limiter
-from services.search_service import get_cached_search_result, persist_search_result, search_leads
+from services.search_service import get_cached_search_result
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
@@ -49,7 +45,9 @@ def generate_b2b_leads(
 ):
     start = time.perf_counter()
     user_id = str(current_user["sub"])
-    def _generate() -> dict:
+
+    def handler(_ctx):
+        # Fast path: return cached results without running the flow
         cached = get_cached_search_result(
             db=db,
             user_id=user_id,
@@ -65,88 +63,33 @@ def generate_b2b_leads(
                 "_execution_meta": {"cached": True, "count": len(cached_results)},
             }
 
-        results = leadgen_service.create_lead_results(db, query, user_id=user_id)
-        formatted = [
-            {
-                "company": r.company,
-                "url": r.url,
-                "fit_score": r.fit_score,
-                "intent_score": r.intent_score,
-                "data_quality_score": r.data_quality_score,
-                "overall_score": r.overall_score,
-                "reasoning": r.reasoning,
-                "search_score": search_score,
-                "created_at": r.created_at,
-            }
-            for r, search_score in results
-        ]
-        cached_payload = persist_search_result(
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "leadgen_search",
+            {"query": query},
             db=db,
             user_id=user_id,
-            query=query,
-            result={
-                "query": query,
-                "count": len(formatted),
-                "results": formatted,
-            },
-            search_type="leadgen",
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "LeadGen flow failed")
+            )
+
+        # result["data"] = serialized list from leadgen_search_node
+        search_results = result.get("data") or []
         duration_ms = (time.perf_counter() - start) * 1000
-        logger.info("LeadGen generated %s results in %.2fms", len(formatted), duration_ms)
-        results_payload = [LeadGenItem(**row).model_dump() for row in (cached_payload.get("results") or formatted)]
+        logger.info("LeadGen generated %s results in %.2fms", len(search_results), duration_ms)
+        results_payload = [LeadGenItem(**item).model_dump() for item in search_results]
         return {
-            "data": {
-                "query": query,
-                "count": len(formatted),
-                "results": results_payload,
-                "_execution_meta": {
-                    "count": len(formatted),
-                    "duration_ms": round(duration_ms, 2),
-                },
-            },
-            "execution_signals": {
-                "memory": [
-                    {
-                        "event_type": "leadgen_search",
-                        "content": f"LeadGen search: '{query[:100]}'. Found {len(formatted)} leads.",
-                        "source": "leadgen_search",
-                        "tags": ["leadgen", "search", "outcome", f"leads_{len(formatted)}"],
-                        "node_type": "outcome",
-                        "user_id": user_id,
-                        "agent_namespace": "leadgen",
-                    }
-                ]
-                + [
-                    {
-                        "event_type": "leadgen_result",
-                        "content": f"Lead Discovered: {item['company']} | Score: {item['overall_score']}",
-                        "source": "leadgen",
-                        "tags": ["leadgen", "aindy", "infinity", "ai-search"],
-                        "node_type": "outcome",
-                        "user_id": user_id,
-                        "agent_namespace": "leadgen",
-                        "extra": {"company": item["company"], "overall_score": item["overall_score"]},
-                    }
-                    for item in results_payload
-                ],
+            "query": query,
+            "count": len(search_results),
+            "results": results_payload,
+            "_execution_meta": {
+                "count": len(search_results),
+                "duration_ms": round(duration_ms, 2),
             },
         }
 
-    def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="leadgen",
-                operation="leadgen.generate",
-                start_payload={"query": query},
-            ),
-            _generate,
-            completed_payload_builder=lambda result: {"query": query, **((result.get("data") or {}).pop("_execution_meta", {}))},
-            handled_exceptions={
-                Exception: ExecutionErrorConfig(status_code=500, message="Lead generation failed"),
-            },
-        )
     return _execute_leadgen(request, "leadgen.generate", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 
@@ -159,20 +102,11 @@ def preview_lead_search(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="leadgen",
-                operation="leadgen.search",
-                start_payload={"query": query},
-            ),
-            lambda: search_leads(query, db=db, user_id=user_id),
-            completed_payload_builder=lambda payload: {"query": query, "count": len(payload.get("results") or [])},
-            handled_exceptions={
-                Exception: ExecutionErrorConfig(status_code=500, message="Lead search failed"),
-            },
-        )
+        from services.flow_engine import run_flow
+        result = run_flow("leadgen_preview_search", {"query": query}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Lead search failed"))
+        return result.get("data")
     return _execute_leadgen(request, "leadgen.search", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 
@@ -182,43 +116,13 @@ def list_all_leads(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    start = time.perf_counter()
     user_id = str(current_user["sub"])
-    from db.models.leadgen_model import LeadGenResult
-
-    def _list_results() -> list[dict]:
-        all_results = (
-            db.query(LeadGenResult)
-            .filter(LeadGenResult.user_id == uuid.UUID(user_id))
-            .order_by(LeadGenResult.created_at.desc())
-            .all()
-        )
-        duration_ms = (time.perf_counter() - start) * 1000
-        logger.info("LeadGen list returned %s results in %.2fms", len(all_results), duration_ms)
-        return [
-            LeadGenItem(
-                company=r.company,
-                url=r.url,
-                fit_score=r.fit_score,
-                intent_score=r.intent_score,
-                data_quality_score=r.data_quality_score,
-                overall_score=r.overall_score,
-                reasoning=r.reasoning,
-                created_at=r.created_at,
-            ).model_dump()
-            for r in all_results
-        ]
 
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(db=db, user_id=user_id, source="leadgen", operation="leadgen.list"),
-            _list_results,
-            completed_payload_builder=lambda results: {
-                "count": len(results),
-                "duration_ms": round((time.perf_counter() - start) * 1000, 2),
-            },
-            handled_exceptions={
-                Exception: ExecutionErrorConfig(status_code=500, message="Failed to load leads"),
-            },
-        )
+        from services.flow_engine import run_flow
+        result = run_flow("leadgen_list", {}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Failed to load leads"))
+        return result.get("data")
+
     return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)

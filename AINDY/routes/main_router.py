@@ -48,7 +48,7 @@ from services.calculation_services import (
     save_calculation
 )
 
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/compute", tags=["Compute"], dependencies=[Depends(get_current_user)])
 
 
 async def _execute_main(

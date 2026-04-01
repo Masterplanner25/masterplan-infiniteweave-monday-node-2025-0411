@@ -209,6 +209,15 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             "output_patch": {"step_results": new_step_results},
         }
 
+    # ── Memory Injection (tool execution) ─────────────────────────────────────
+    # Enrich context with memories recalled for this specific tool so the tool
+    # implementation (and any node that reads context["memory_context"]) can
+    # adapt its behaviour based on past outcomes.
+    context["tool_name"] = tool_name
+    from services.memory_helpers import enrich_context
+    enrich_context(context)
+    # ──────────────────────────────────────────────────────────────────────────
+
     # Execute with per-step retry
     max_attempts = 1 if risk_level == "high" else MAX_STEP_RETRIES
     tool_result = None

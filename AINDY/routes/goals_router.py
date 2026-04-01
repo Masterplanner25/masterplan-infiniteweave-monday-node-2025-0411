@@ -5,11 +5,6 @@ from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.goal_service import create_goal
-from services.goal_service import detect_goal_drift
-from services.goal_service import get_active_goals
-from services.goal_service import get_goal_states
-from services.execution_service import ExecutionContext, run_execution
 
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
@@ -44,22 +39,12 @@ def list_goals(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="goals_router",
-                operation="goals.list",
-            ),
-            lambda: get_active_goals(db, current_user["sub"]),
-        )
-    return _execute_goals(
-        request,
-        "goals.list",
-        handler,
-        db=db,
-        user_id=user_id,
-    )
+        from services.flow_engine import run_flow
+        result = run_flow("goals_list", {}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Goals list flow failed"))
+        return result.get("data")
+    return _execute_goals(request, "goals.list", handler, db=db, user_id=user_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -70,27 +55,28 @@ def create_goal_route(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="goals_router",
-                operation="goals.create",
-                start_payload={"goal_name": body.name},
-            ),
-            lambda: create_goal(
-                db,
-                user_id=current_user["sub"],
-                name=body.name,
-                description=body.description,
-                goal_type=body.goal_type,
-                priority=body.priority,
-                status=body.status,
-                success_metric=body.success_metric,
-            ),
-            success_status_code=status.HTTP_201_CREATED,
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "goal_create",
+            {
+                "name": body.name,
+                "description": body.description,
+                "goal_type": body.goal_type,
+                "priority": body.priority,
+                "status": body.status,
+                "success_metric": body.success_metric,
+            },
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "Goal create flow failed")
+            )
+        return result.get("data")
+
     return _execute_goals(
         request,
         "goals.create",
@@ -110,22 +96,9 @@ def list_goal_state(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return run_execution(
-            ExecutionContext(
-                db=db,
-                user_id=user_id,
-                source="goals_router",
-                operation="goals.state",
-            ),
-            lambda: {
-                "goals": get_goal_states(db, current_user["sub"]),
-                "drift": detect_goal_drift(db, current_user["sub"]),
-            },
-        )
-    return _execute_goals(
-        request,
-        "goals.state",
-        handler,
-        db=db,
-        user_id=user_id,
-    )
+        from services.flow_engine import run_flow
+        result = run_flow("goals_state", {}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError((result.get("data") or {}).get("message", "Goals state flow failed"))
+        return result.get("data")
+    return _execute_goals(request, "goals.state", handler, db=db, user_id=user_id)

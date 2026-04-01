@@ -17,17 +17,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-import threading
-from uuid import UUID
 
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
 from services.rate_limiter import limiter
-from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-from modules.deepseek.config_manager_deepseek import ConfigManager
-from services.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
-from db.models.arm_models import AnalysisResult, CodeGeneration
 
 
 router = APIRouter(
@@ -35,21 +29,6 @@ router = APIRouter(
     tags=["ARM — Autonomous Reasoning"],
     dependencies=[Depends(get_current_user)],
 )
-
-# ── Singleton analyzer (loads config once per process) ───────────────────────
-
-_analyzer: Optional[DeepSeekCodeAnalyzer] = None
-_analyzer_lock = threading.Lock()
-
-
-def get_analyzer() -> DeepSeekCodeAnalyzer:
-    global _analyzer
-    if _analyzer is None:
-        with _analyzer_lock:
-            if _analyzer is None:
-                _analyzer = DeepSeekCodeAnalyzer()
-    return _analyzer
-
 
 # ── Request schemas ───────────────────────────────────────────────────────────
 
@@ -122,15 +101,23 @@ async def analyze_code(
                 ),
             )
 
-        analyzer = get_analyzer()
-        return analyzer.run_analysis(
-            file_path=body.file_path,
-            user_id=current_user["sub"],
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "arm_analysis",
+            {
+                "file_path": body.file_path,
+                "complexity": body.complexity,
+                "urgency": body.urgency,
+                "context": body.context,
+            },
             db=db,
-            complexity=body.complexity,
-            urgency=body.urgency,
-            additional_context=body.context,
+            user_id=str(current_user["sub"]),
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "ARM analysis flow failed")
+            )
+        return result.get("data")
 
     return await execute_with_pipeline(
         request=request,
@@ -186,18 +173,26 @@ async def generate_code(
                 ),
             )
 
-        analyzer = get_analyzer()
-        return analyzer.generate_code(
-            prompt=body.prompt,
-            user_id=current_user["sub"],
+        from services.flow_engine import run_flow
+        result = run_flow(
+            "arm_generate",
+            {
+                "prompt": body.prompt,
+                "original_code": body.original_code,
+                "language": body.language,
+                "generation_type": body.generation_type,
+                "analysis_id": str(body.analysis_id) if body.analysis_id else None,
+                "complexity": body.complexity,
+                "urgency": body.urgency,
+            },
             db=db,
-            original_code=body.original_code,
-            language=body.language,
-            generation_type=body.generation_type,
-            analysis_id=body.analysis_id,
-            complexity=body.complexity,
-            urgency=body.urgency,
+            user_id=str(current_user["sub"]),
         )
+        if result.get("status") == "error":
+            raise RuntimeError(
+                (result.get("data") or {}).get("message", "ARM generate flow failed")
+            )
+        return result.get("data")
 
     return await execute_with_pipeline(
         request=request,
@@ -216,78 +211,17 @@ async def get_arm_logs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Fetch reasoning session logs for the current user.
-
-    Returns analysis and generation history with Infinity Algorithm
-    performance metrics (execution speed, task priority).
-    """
+    """Fetch reasoning session logs for the current user."""
     def handler(ctx):
-        analyses = (
-            db.query(AnalysisResult)
-            .filter(AnalysisResult.user_id == UUID(str(current_user["sub"])))
-            .order_by(AnalysisResult.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-        generations = (
-            db.query(CodeGeneration)
-            .filter(CodeGeneration.user_id == UUID(str(current_user["sub"])))
-            .order_by(CodeGeneration.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-
-        return {
-            "analyses": [
-                {
-                    "session_id": str(a.session_id),
-                    "file": a.file_path.split("/")[-1].split("\\")[-1] if a.file_path else "",
-                    "status": a.status,
-                    "execution_seconds": a.execution_seconds,
-                    "input_tokens": a.input_tokens,
-                    "output_tokens": a.output_tokens,
-                    "task_priority": a.task_priority,
-                    "execution_speed": round(
-                        ((a.input_tokens or 0) + (a.output_tokens or 0))
-                        / max(a.execution_seconds or 0.001, 0.001),
-                        1,
-                    ),
-                    "summary": a.result_summary,
-                    "created_at": a.created_at.isoformat() if a.created_at else None,
-                }
-                for a in analyses
-            ],
-            "generations": [
-                {
-                    "session_id": str(g.session_id),
-                    "language": g.language,
-                    "generation_type": g.generation_type,
-                    "execution_seconds": g.execution_seconds,
-                    "input_tokens": g.input_tokens,
-                    "output_tokens": g.output_tokens,
-                    "created_at": g.created_at.isoformat() if g.created_at else None,
-                }
-                for g in generations
-            ],
-            "summary": {
-                "total_analyses": len(analyses),
-                "total_generations": len(generations),
-                "total_tokens_used": sum(
-                    (a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses
-                )
-                + sum(
-                    (g.input_tokens or 0) + (g.output_tokens or 0) for g in generations
-                ),
-            },
-        }
+        from services.flow_engine import run_flow
+        result = run_flow("arm_logs", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "error":
+            raise RuntimeError("ARM logs flow failed")
+        return result.get("data")
 
     return await execute_with_pipeline(
-        request=request,
-        route_name="arm.logs",
-        handler=handler,
-        user_id=str(current_user["sub"]),
-        metadata={"db": db},
+        request=request, route_name="arm.logs", handler=handler,
+        user_id=str(current_user["sub"]), metadata={"db": db},
     )
 
 
@@ -297,10 +231,15 @@ async def get_config(
     current_user: dict = Depends(get_current_user),
 ):
     """Read current ARM configuration."""
+    def handler(ctx):
+        from services.flow_engine import run_flow
+        result = run_flow("arm_config_get", {}, user_id=str(current_user["sub"]))
+        if result.get("status") == "error":
+            raise RuntimeError("ARM config get flow failed")
+        return result.get("data")
+
     return await execute_with_pipeline(
-        request=request,
-        route_name="arm.config.get",
-        handler=lambda ctx: ConfigManager().get_all(),
+        request=request, route_name="arm.config.get", handler=handler,
         user_id=str(current_user["sub"]),
     )
 
@@ -311,26 +250,17 @@ async def update_config(
     body: ConfigUpdateRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Update ARM configuration parameters.
-
-    Changes persist to deepseek_config.json.
-    The analyzer singleton is reset so the next request picks up the new config.
-
-    Phase 2: will also trigger the Infinity Algorithm self-tuning feedback loop.
-    """
+    """Update ARM configuration parameters."""
     def handler(ctx):
-        updated = ConfigManager().update(body.updates)
-        global _analyzer
-        _analyzer = None
-        return {"status": "updated", "config": updated}
+        from services.flow_engine import run_flow
+        result = run_flow("arm_config_update", {"updates": body.updates}, user_id=str(current_user["sub"]))
+        if result.get("status") == "error":
+            raise RuntimeError("ARM config update flow failed")
+        return result.get("data")
 
     return await execute_with_pipeline(
-        request=request,
-        route_name="arm.config.update",
-        handler=handler,
-        user_id=str(current_user["sub"]),
-        input_payload=body.model_dump(),
+        request=request, route_name="arm.config.update", handler=handler,
+        user_id=str(current_user["sub"]), input_payload=body.model_dump(),
     )
 
 
@@ -341,27 +271,17 @@ async def get_arm_metrics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Get the full Thinking KPI report for this user's ARM sessions.
+    """Get the full Thinking KPI report for this user's ARM sessions."""
+    def handler(ctx):
+        from services.flow_engine import run_flow
+        result = run_flow("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "error":
+            raise RuntimeError("ARM metrics flow failed")
+        return result.get("data")
 
-    Returns Infinity Algorithm metrics:
-    - Execution Speed (tokens/sec)
-    - Decision Efficiency (% successful sessions)
-    - AI Productivity Boost (output/input token ratio)
-    - Lost Potential (% wasted on failed sessions)
-    - Learning Efficiency (speed trend over time)
-
-    window: lookback period in days (default 30)
-    """
     return await execute_with_pipeline(
-        request=request,
-        route_name="arm.metrics.get",
-        handler=lambda ctx: ARMMetricsService(
-            db=db,
-            user_id=current_user["sub"],
-        ).get_all_metrics(window=window),
-        user_id=str(current_user["sub"]),
-        metadata={"db": db},
+        request=request, route_name="arm.metrics.get", handler=handler,
+        user_id=str(current_user["sub"]), metadata={"db": db},
     )
 
 
@@ -372,54 +292,15 @@ async def get_config_suggestions(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Analyze ARM performance metrics and suggest configuration
-    improvements. Suggestions are advisory — apply via PUT /arm/config.
-
-    Each suggestion includes:
-    - The metric that triggered it
-    - Current value vs threshold
-    - Recommended config change
-    - Expected impact
-    - Risk level (low/medium/high)
-
-    Low-risk suggestions can be auto-applied.
-    Medium/high-risk suggestions require explicit approval.
-    """
+    """Analyze ARM performance metrics and suggest configuration improvements."""
     def handler(ctx):
-        metrics_service = ARMMetricsService(db=db, user_id=current_user["sub"])
-        metrics = metrics_service.get_all_metrics(window=window)
-        config_manager = ConfigManager()
-        current_config = config_manager.get_all()
-        suggestion_engine = ARMConfigSuggestionEngine(
-            current_config=current_config,
-            metrics=metrics,
-        )
-        suggestions = suggestion_engine.generate_suggestions()
-        suggestions["metrics_snapshot"] = {
-            "decision_efficiency": metrics.get("decision_efficiency", {}).get(
-                "score", 0
-            ),
-            "execution_speed_avg": metrics.get("execution_speed", {}).get(
-                "average", 0
-            ),
-            "ai_productivity_ratio": metrics.get("ai_productivity_boost", {}).get(
-                "ratio", 0
-            ),
-            "waste_percentage": metrics.get("lost_potential", {}).get(
-                "waste_percentage", 0
-            ),
-            "learning_trend": metrics.get("learning_efficiency", {}).get(
-                "trend", "insufficient data"
-            ),
-            "total_sessions": metrics.get("total_sessions", 0),
-        }
-        return suggestions
+        from services.flow_engine import run_flow
+        result = run_flow("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
+        if result.get("status") == "error":
+            raise RuntimeError("ARM config suggest flow failed")
+        return result.get("data")
 
     return await execute_with_pipeline(
-        request=request,
-        route_name="arm.config.suggest",
-        handler=handler,
-        user_id=str(current_user["sub"]),
-        metadata={"db": db},
+        request=request, route_name="arm.config.suggest", handler=handler,
+        user_id=str(current_user["sub"]), metadata={"db": db},
     )

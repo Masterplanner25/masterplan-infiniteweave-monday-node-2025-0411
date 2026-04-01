@@ -421,6 +421,18 @@ def create_task(
     db.commit()
     db.refresh(task)
     logger.info("Created task: %s", task.name)
+    try:
+        from services.execution_unit_service import ExecutionUnitService
+        ExecutionUnitService(db).create(
+            eu_type="task",
+            user_id=owner_user_id,
+            source_type="task",
+            source_id=str(task.id),
+            status="pending",
+            extra={"task_name": task.name, "category": task.category, "priority": task.priority},
+        )
+    except Exception as _eu_exc:
+        logger.warning("[EU] task create hook — non-fatal | error=%s", _eu_exc)
     return task
 
 
@@ -445,6 +457,14 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.start_time = datetime.now()
         task.status = "in_progress"
         db.commit()
+        try:
+            from services.execution_unit_service import ExecutionUnitService
+            _eus = ExecutionUnitService(db)
+            _eu = _eus.get_by_source("task", str(task.id))
+            if _eu:
+                _eus.update_status(_eu.id, "executing")
+        except Exception as _eu_exc:
+            logger.warning("[EU] task start hook — non-fatal | error=%s", _eu_exc)
         return f"Started task: {task.name}"
     return f"Task '{name}' already started."
 
@@ -461,6 +481,14 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.time_spent += duration
         task.status = "paused"
         db.commit()
+        try:
+            from services.execution_unit_service import ExecutionUnitService
+            _eus = ExecutionUnitService(db)
+            _eu = _eus.get_by_source("task", str(task.id))
+            if _eu:
+                _eus.update_status(_eu.id, "waiting")
+        except Exception as _eu_exc:
+            logger.warning("[EU] task pause hook — non-fatal | error=%s", _eu_exc)
         return f"Paused task: {task.name}"
     return f"Task '{name}' is not in progress."
 
@@ -486,6 +514,14 @@ def complete_task(db: Session, name: str, user_id: str = None):
     task.end_time = now
     unlocked_tasks = _unlock_downstream_tasks(db, task, user_id=user_id)
     db.commit()
+    try:
+        from services.execution_unit_service import ExecutionUnitService
+        _eus = ExecutionUnitService(db)
+        _eu = _eus.get_by_source("task", str(task.id))
+        if _eu:
+            _eus.update_status(_eu.id, "completed")
+    except Exception as _eu_exc:
+        logger.warning("[EU] task complete hook — non-fatal | error=%s", _eu_exc)
 
     save_calculation(db, "Execution Speed", task.time_spent, user_id=str(owner_user_id))
 
