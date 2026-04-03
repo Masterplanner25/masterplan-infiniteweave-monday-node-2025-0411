@@ -99,7 +99,7 @@ def queue_memory_capture(
             "source": source,
         }
 
-    from services.memory_capture_engine import MemoryCaptureEngine
+    from memory.memory_capture_engine import MemoryCaptureEngine
 
     engine = MemoryCaptureEngine(
         db=db,

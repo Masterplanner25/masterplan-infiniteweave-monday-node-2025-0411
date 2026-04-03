@@ -30,7 +30,7 @@ class TestFeedbackColumns:
                 f"memory_nodes missing: {col}"
 
     def test_feedback_columns_on_model(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         cols = [c.key for c in mapper.columns]

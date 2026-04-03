@@ -9,11 +9,11 @@ from unittest.mock import MagicMock
 
 class TestMemoryCaptureEngine:
     def test_engine_importable(self):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         assert MemoryCaptureEngine is not None
 
     def test_event_significance_map_complete(self):
-        from services.memory_capture_engine import EVENT_SIGNIFICANCE
+        from memory.memory_capture_engine import EVENT_SIGNIFICANCE
         required_events = [
             "arm_analysis_complete",
             "task_completed",
@@ -24,7 +24,7 @@ class TestMemoryCaptureEngine:
             assert event in EVENT_SIGNIFICANCE, f"Missing event: {event}"
 
     def test_significance_scoring(self, mock_db):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         score = engine._score_significance(
@@ -42,7 +42,7 @@ class TestMemoryCaptureEngine:
         assert score_low < score
 
     def test_node_type_classification(self, mock_db):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         assert engine._classify_node_type("masterplan_locked", "") == "decision"
@@ -50,7 +50,7 @@ class TestMemoryCaptureEngine:
         assert engine._classify_node_type("task_completed", "") == "outcome"
 
     def test_tag_enrichment(self, mock_db):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         tags = engine._enrich_tags(
@@ -65,7 +65,7 @@ class TestMemoryCaptureEngine:
         assert "custom_tag" in tags
 
     def test_capture_below_threshold_returns_none(self, mock_db, mocker):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         mocker.patch.object(
@@ -83,7 +83,7 @@ class TestMemoryCaptureEngine:
         assert result is None
 
     def test_capture_force_bypasses_threshold(self, mock_db, mocker):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         mocker.patch.object(
@@ -111,7 +111,7 @@ class TestMemoryCaptureEngine:
         assert result is not None
 
     def test_duplicate_check_prevents_double_capture(self, mock_db, mocker):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         engine = MemoryCaptureEngine(db=mock_db, user_id="test-user")
 
         mocker.patch.object(
@@ -128,7 +128,7 @@ class TestMemoryCaptureEngine:
 
 class TestNodusMemoryBridge:
     def test_bridge_importable(self):
-        from bridge.nodus_memory_bridge import (
+        from memory.nodus_memory_bridge import (
             NodusMemoryBridge,
             create_nodus_bridge,
         )
@@ -136,7 +136,7 @@ class TestNodusMemoryBridge:
         assert callable(create_nodus_bridge)
 
     def test_bridge_creation(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(
             user_id="test-user",
             session_tags=["test", "nodus"],
@@ -145,7 +145,7 @@ class TestNodusMemoryBridge:
         assert "test" in bridge.session_tags
 
     def test_recall_without_db_returns_empty(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(
             db=None,
             user_id="test-user",
@@ -154,7 +154,7 @@ class TestNodusMemoryBridge:
         assert result == []
 
     def test_remember_without_db_returns_none(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(
             db=None,
             user_id="test-user",
@@ -163,7 +163,7 @@ class TestNodusMemoryBridge:
         assert result is None
 
     def test_record_outcome_without_db_silent(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(
             db=None,
             user_id="test-user",
@@ -171,7 +171,7 @@ class TestNodusMemoryBridge:
         bridge.record_outcome("some-id", "success")
 
     def test_session_tags_combined_with_query_tags(self, mock_db, mocker):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
 
         mocker.patch(
             "db.dao.memory_node_dao.MemoryNodeDAO.recall",
@@ -193,7 +193,7 @@ class TestNodusMemoryBridge:
         assert True
 
     def test_bridge_exported_from_bridge_package(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         assert callable(create_nodus_bridge)
 
 

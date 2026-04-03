@@ -1536,8 +1536,8 @@ def get_tenant_usage(
             },
         )
 
-    from services.resource_manager import get_resource_manager
-    from services.scheduler_engine import get_scheduler_engine
+    from kernel.resource_manager import get_resource_manager
+    from kernel.scheduler_engine import get_scheduler_engine
 
     rm = get_resource_manager()
     se = get_scheduler_engine()
@@ -1568,7 +1568,7 @@ def list_memory_path(
 
     Optionally filter by **query** (keyword) and **tags** (comma-separated).
     """
-    from services.memory_address_space import validate_tenant_path, normalize_path
+    from memory.memory_address_space import validate_tenant_path, normalize_path
     from db.dao.memory_node_dao import MemoryNodeDAO
 
     user_id = str(current_user["sub"])
@@ -1598,7 +1598,7 @@ def memory_tree(
     db: Session = Depends(get_db),
 ):
     """Return a hierarchical tree of memory nodes under a path prefix."""
-    from services.memory_address_space import (
+    from memory.memory_address_space import (
         validate_tenant_path, normalize_path, is_exact,
         wildcard_prefix, build_tree,
     )
@@ -1626,7 +1626,7 @@ def memory_trace(
     db: Session = Depends(get_db),
 ):
     """Follow the causal chain from the memory node at an exact path."""
-    from services.memory_address_space import validate_tenant_path, normalize_path
+    from memory.memory_address_space import validate_tenant_path, normalize_path
     from db.dao.memory_node_dao import MemoryNodeDAO
 
     user_id = str(current_user["sub"])
@@ -1677,8 +1677,8 @@ def list_syscalls(
           "total_count": 9
         }
     """
-    from services.syscall_registry import SYSCALL_REGISTRY
-    from services.syscall_versioning import SyscallSpec
+    from kernel.syscall_registry import SYSCALL_REGISTRY
+    from kernel.syscall_versioning import SyscallSpec
 
     versioned = SYSCALL_REGISTRY.versioned
     available_versions = SYSCALL_REGISTRY.versions()
@@ -1776,16 +1776,26 @@ def dispatch_syscall(
       HTTP-level errors (4xx) are raised by this route for missing syscalls,
       capability violations, and validation failures so SDK error mapping works.
     """
-    from services.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
-    from services.syscall_registry import DEFAULT_NODUS_CAPABILITIES
+    from kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+    from kernel.syscall_registry import DEFAULT_NODUS_CAPABILITIES
 
     user_id = str(current_user.get("user_id") or current_user.get("sub") or "")
+
+    # For platform API key callers, restrict capabilities to what the key was granted.
+    # JWT users retain the full default capability set.
+    if current_user.get("auth_type") == "api_key":
+        api_key_scopes = current_user.get("api_key_scopes") or []
+        # Intersect granted scopes with the default capability set so unknown
+        # scope strings from the key don't expand the capability surface.
+        capabilities = [s for s in api_key_scopes if s in DEFAULT_NODUS_CAPABILITIES]
+    else:
+        capabilities = list(DEFAULT_NODUS_CAPABILITIES)
 
     # Build a SyscallContext from the authenticated principal.
     # The execution_unit_id is a fresh UUID for this HTTP call.
     ctx = make_syscall_ctx_from_tool(
         user_id=user_id,
-        capabilities=list(DEFAULT_NODUS_CAPABILITIES),
+        capabilities=capabilities,
     )
 
     result = get_dispatcher().dispatch(body.name, body.payload, ctx)

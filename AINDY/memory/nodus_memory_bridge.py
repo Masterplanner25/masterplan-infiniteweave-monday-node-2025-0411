@@ -60,7 +60,7 @@ class NodusMemoryBridge:
     @property
     def engine(self):
         if self._engine is None and self.db:
-            from services.memory_capture_engine import MemoryCaptureEngine
+            from memory.memory_capture_engine import MemoryCaptureEngine
             self._engine = MemoryCaptureEngine(
                 db=self.db,
                 user_id=self.user_id,

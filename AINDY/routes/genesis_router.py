@@ -6,10 +6,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.observability_events import emit_observability_event
 from db.database import get_db
 from services.auth_service import get_current_user
 from services.flow_engine import run_flow
 from services.rate_limiter import limiter
+from services.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,18 @@ def genesis_message(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
+    # START — emitted before validation so even bad requests are observable
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_MESSAGE_STARTED,
+            user_id=user_id,
+            payload={"operation": "message"},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
+
     session_id = payload.get("session_id")
     user_message = payload.get("message")
 
@@ -64,7 +78,29 @@ def genesis_message(
 
     result = run_flow("genesis_message", {"session_id": session_id, "message": user_message}, db=db, user_id=user_id)
     if result.get("status") != "SUCCESS":
+        # TERMINAL — failure
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.GENESIS_MESSAGE_FAILED,
+                user_id=user_id,
+                payload={"operation": "message", "status": "failed"},
+                source="genesis",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
         raise HTTPException(status_code=500, detail="Genesis message execution failed")
+
+    # TERMINAL — success
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_MESSAGE_COMPLETED,
+            user_id=user_id,
+            payload={"operation": "message", "status": "complete"},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+
     return result
 
 
@@ -94,10 +130,50 @@ def synthesize_genesis(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
     session_id = payload.get("session_id")
+
+    # START
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_SYNTHESIZE_STARTED,
+            user_id=user_id,
+            payload={"operation": "synthesize", "session_id": session_id},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
+
     if not session_id:
         raise HTTPException(status_code=400, detail={"error": "session_id_required", "message": "session_id required"})
-    return _genesis_run_flow("genesis_synthesize", {"session_id": session_id}, db, str(current_user["sub"]))
+
+    try:
+        result = _genesis_run_flow("genesis_synthesize", {"session_id": session_id}, db, user_id)
+    except HTTPException:
+        # TERMINAL — failure
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.GENESIS_SYNTHESIZE_FAILED,
+                user_id=user_id,
+                payload={"operation": "synthesize", "session_id": session_id, "status": "failed"},
+                source="genesis",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+        raise
+
+    # TERMINAL — success
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_SYNTHESIZED,
+            user_id=user_id,
+            payload={"operation": "synthesize", "session_id": session_id, "status": "complete"},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+
+    return result
 
 
 class AuditRequest(BaseModel):
@@ -122,11 +198,51 @@ def lock_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
     session_id = payload.get("session_id")
     draft = payload.get("draft")
+
+    # START
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_LOCK_STARTED,
+            user_id=user_id,
+            payload={"operation": "lock", "session_id": session_id},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
+
     if not session_id or not draft:
         raise HTTPException(status_code=400, detail={"error": "missing_session_or_draft", "message": "Missing session or draft"})
-    return _genesis_run_flow("genesis_lock", {"session_id": session_id, "draft": draft}, db, str(current_user["sub"]))
+
+    try:
+        result = _genesis_run_flow("genesis_lock", {"session_id": session_id, "draft": draft}, db, user_id)
+    except HTTPException:
+        # TERMINAL — failure
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.GENESIS_LOCK_FAILED,
+                user_id=user_id,
+                payload={"operation": "lock", "session_id": session_id, "status": "failed"},
+                source="genesis",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+        raise
+
+    # TERMINAL — success
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_LOCKED,
+            user_id=user_id,
+            payload={"operation": "lock", "session_id": session_id, "status": "complete"},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+
+    return result
 
 
 @router.post("/{plan_id}/activate")
@@ -135,4 +251,43 @@ def activate_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _genesis_run_flow("genesis_activate", {"plan_id": plan_id}, db, str(current_user["sub"]))
+    user_id = str(current_user["sub"])
+
+    # START
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_ACTIVATE_STARTED,
+            user_id=user_id,
+            payload={"operation": "activate", "plan_id": plan_id},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
+
+    try:
+        result = _genesis_run_flow("genesis_activate", {"plan_id": plan_id}, db, user_id)
+    except HTTPException:
+        # TERMINAL — failure
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.GENESIS_ACTIVATE_FAILED,
+                user_id=user_id,
+                payload={"operation": "activate", "plan_id": plan_id, "status": "failed"},
+                source="genesis",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+        raise
+
+    # TERMINAL — success
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.GENESIS_ACTIVATED,
+            user_id=user_id,
+            payload={"operation": "activate", "plan_id": plan_id, "status": "complete"},
+            source="genesis",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+
+    return result

@@ -100,6 +100,27 @@ for _handler in logging.root.handlers:
 
 logger = logging.getLogger(__name__)
 
+
+def _check_alembic_head() -> None:
+    """Warn at startup if DB schema is behind the latest Alembic migration."""
+    try:
+        import subprocess, sys
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "check"],
+            capture_output=True, text=True,
+            cwd=os.path.dirname(__file__),
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "[startup] Alembic schema is not at head — run `alembic upgrade head`.\n%s",
+                result.stdout or result.stderr,
+            )
+        else:
+            logger.info("[startup] Alembic schema is at head.")
+    except Exception as exc:
+        logger.warning("[startup] Could not verify Alembic schema: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
@@ -174,7 +195,7 @@ async def lifespan(app: FastAPI):
         scheduler_service.start()
 
     # Register domain syscall handlers (must come before flow registration)
-    from services.syscall_handlers import register_all_domain_handlers
+    from kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
 
     # Register Flow Engine flows and nodes (static startup definitions)
@@ -247,6 +268,13 @@ async def lifespan(app: FastAPI):
             logger.warning(f"System identity seed failed (non-fatal): {e}")
         finally:
             db.close()
+
+    # Warn if DB schema is behind the latest migration (non-fatal)
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            _check_alembic_head()
+        except Exception as _alembic_exc:
+            logger.warning("[startup] Alembic head check raised unexpectedly: %s", _alembic_exc)
 
     yield
     # --- Shutdown ---

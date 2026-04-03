@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from services.memory_ingest_service import MemoryIngestService
+from memory.memory_ingest_service import MemoryIngestService
 
 
 class DummyDAO:

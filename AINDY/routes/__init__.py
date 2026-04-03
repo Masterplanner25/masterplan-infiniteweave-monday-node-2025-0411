@@ -85,43 +85,49 @@ PLATFORM_ROUTERS = [
 # ---------------------------------------------------------------------------
 # Apps — mutable domain features (mounted at /apps)
 # ---------------------------------------------------------------------------
-APP_ROUTERS = [
-    # ── Intelligence & reasoning ──────────────────────────────────────────
+import os as _os
+
+# Routers always mounted on the platform surface
+_PLATFORM_APP_ROUTERS = [
     agent_router,          # /apps/agent/run, /runs, /tools, /trust, ...
-    arm_router,            # /apps/arm/analyze, /generate, /logs, /config, ...
     autonomy_router,       # /apps/autonomy/decisions
-    # ── Planning & execution ──────────────────────────────────────────────
     task_router,           # /apps/tasks/create, /start, /pause, ...
     goals_router,          # /apps/goals/
     masterplan_router,     # /apps/masterplans/
     genesis_router,        # /apps/genesis/session, /message, ...
     automation_router,     # /apps/automation/logs, /scheduler/status, ...
-    # ── Data & memory ─────────────────────────────────────────────────────
     memory_router,         # /apps/memory/nodes, /recall, /execute, ...
     memory_metrics_router, # /apps/memory/metrics, /metrics/detail, ...
     memory_trace_router,   # /apps/memory/traces, /traces/{id}, ...
     bridge_router,         # /apps/bridge/nodes, /link, /user_event
-    # ── Growth & monetisation ─────────────────────────────────────────────
-    freelance_router,      # /apps/freelance/order, /deliver, /feedback, ...
-    leadgen_router,        # /apps/leadgen/
     analytics_router,      # /apps/analytics/linkedin/manual, /masterplan/{id}, ...
-    social_router,         # /apps/social/profile, /post, /feed, ...
     score_router,          # /apps/scores/me, /feedback, ...
-    # ── Observability & identity ───────────────────────────────────────────
     identity_router,       # /apps/identity/boot, /evolution, /context
     watcher_router,        # /apps/watcher/signals
     coordination_router,   # /apps/coordination/agents, /graph
     dashboard_router,      # /apps/dashboard/overview
     health_dashboard_router, # /apps/dashboard/health
-    # ── Tooling ───────────────────────────────────────────────────────────
+]
+
+# Domain-specific routers — only mounted when ENABLE_DOMAIN_APPS=true
+_DOMAIN_APP_ROUTERS = [
+    arm_router,            # /apps/arm/analyze, /generate, /logs, /config, ...
+    freelance_router,      # /apps/freelance/order, /deliver, /feedback, ...
+    leadgen_router,        # /apps/leadgen/
     seo_router,            # /apps/seo/analyze, /meta, /suggest, ...
+    social_router,         # /apps/social/profile, /post, /feed, ...
+    authorship_router,     # /apps/authorship/reclaim
     research_router,       # /apps/research/
     search_history_router, # /apps/search/history
-    authorship_router,     # /apps/authorship/reclaim
     rippletrace_router,    # /apps/rippletrace/drop_point, /ping, ...
     network_bridge_router, # /apps/network_bridge/connect, /authors
     main_router,           # /apps/compute/calculate_*, /results (legacy KPI surface)
 ]
+
+_enable_domain = _os.getenv("ENABLE_DOMAIN_APPS", "false").lower() in {
+    "1", "true", "yes"
+}
+APP_ROUTERS = _PLATFORM_APP_ROUTERS + (_DOMAIN_APP_ROUTERS if _enable_domain else [])
 
 if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
     APP_ROUTERS.append(legacy_surface_router)

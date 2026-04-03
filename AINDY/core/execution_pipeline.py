@@ -410,7 +410,7 @@ class ExecutionPipeline:
         if db is None:
             return False
         try:
-            from services.memory_capture_engine import MemoryCaptureEngine
+            from memory.memory_capture_engine import MemoryCaptureEngine
 
             engine = MemoryCaptureEngine(
                 db=db,

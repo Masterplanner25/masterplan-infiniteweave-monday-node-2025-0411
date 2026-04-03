@@ -10,7 +10,7 @@ from db.models.user import User
 from db.models.user_identity import UserIdentity
 from db.models.user_score import UserScore
 from services.auth_service import hash_password
-from services.memory_persistence import MemoryNodeModel
+from memory.memory_persistence import MemoryNodeModel
 
 
 def test_identity_requires_auth(client):

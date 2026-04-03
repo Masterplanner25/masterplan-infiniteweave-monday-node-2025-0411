@@ -1,10 +1,16 @@
 # /routers/task_router.py
+import logging
+
 from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
+from core.observability_events import emit_observability_event
 from db.database import get_db
 from schemas.task_schemas import TaskCreate, TaskAction
 from services.auth_service import get_current_user
+from services.system_event_types import SystemEventTypes
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -46,6 +52,8 @@ def create_task(
 ):
     user_id = str(current_user["sub"])
 
+    _task_result: dict = {}
+
     def handler(_ctx):
         from services.flow_engine import run_flow
         result = run_flow(
@@ -72,9 +80,33 @@ def create_task(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "Task create flow failed")
             )
-        return result.get("data")
+        data = result.get("data")
+        if isinstance(data, dict):
+            _task_result.update(data)
+        return data
 
-    return _execute_tasks(request, "tasks.create", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
+    response = _execute_tasks(request, "tasks.create", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
+
+    # TERMINAL — emitted after the pipeline so any internal rollback is already settled.
+    # user_id intentionally omitted: the pipeline's FK errors can roll back the users
+    # row in the test session, and the FK on system_events.user_id would fail.
+    # The event is still fully observable via trace_id and payload.
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.TASK_CREATED,
+            user_id=None,
+            payload={
+                "operation": "create",
+                "name": task.name,
+                "user_id": user_id,
+                "task_id": _task_result.get("task_id"),
+            },
+            source="task",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[task] observability emit failed (create): %s", _obs_exc)
+
+    return response
 
 @router.post("/start")
 def start_task(

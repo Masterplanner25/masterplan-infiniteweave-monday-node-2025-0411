@@ -7,9 +7,9 @@ from fastapi.testclient import TestClient
 
 from db.dao.memory_node_dao import MemoryNodeDAO
 from db.models.automation_log import AutomationLog
-from services.embedding_jobs import EMBEDDING_JOB_NAME
-from services.embedding_jobs import process_embedding_job
-from services.memory_persistence import MemoryNodeModel
+from memory.embedding_jobs import EMBEDDING_JOB_NAME
+from memory.embedding_jobs import process_embedding_job
+from memory.memory_persistence import MemoryNodeModel
 
 
 @pytest.fixture

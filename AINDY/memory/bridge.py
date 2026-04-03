@@ -224,7 +224,7 @@ def create_memory_link(
     if db is None:
         raise ValueError("create_memory_link requires a DB session")
 
-    from services.memory_persistence import MemoryNodeDAO
+    from memory.memory_persistence import MemoryNodeDAO
     dao = MemoryNodeDAO(db)
     return dao.create_link(source_id, target_id, link_type, weight)
 

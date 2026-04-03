@@ -21,6 +21,7 @@ from fastapi.security import (
 from sqlalchemy.orm import Session
 
 from config import settings
+from db.database import get_db
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -34,6 +35,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)
+_platform_key_header = APIKeyHeader(name="X-Platform-Key", auto_error=False)
 
 
 # ── Password utilities ──────────────────────────────────────────────────────
@@ -94,12 +96,20 @@ def decode_access_token(token: str) -> dict:
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    platform_key: str | None = Security(_platform_key_header),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     FastAPI dependency for JWT-protected routes.
     Usage: current_user: dict = Depends(get_current_user)
     Returns the decoded token payload (user info).
+
+    Also accepts X-Platform-Key header as an alternative to Bearer JWT.
     """
+    # Platform API key path — look up key by hash and return user dict
+    if platform_key:
+        return _resolve_platform_key_as_user(platform_key, db)
+
     if settings.TEST_MODE:
         if credentials is None:
             raise HTTPException(
@@ -118,6 +128,50 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return decode_access_token(credentials.credentials)
+
+
+def _resolve_platform_key_as_user(raw_key: str, db: Session) -> dict:
+    """Validate a platform API key and return a user dict compatible with get_current_user."""
+    import hashlib
+    import json as _json
+    from sqlalchemy import text as _text
+    from db.models.api_key import PlatformAPIKey
+
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    record = db.query(PlatformAPIKey).filter(PlatformAPIKey.key_hash == key_hash).first()
+
+    if record is None or not record.is_valid():
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or revoked API key",
+        )
+
+    # Read scopes via raw SQL to avoid SQLAlchemy ARRAY type result-processor
+    # mishandling SQLite's JSON representation of the column.
+    # PostgreSQL returns a list (psycopg2 converts ARRAY automatically).
+    # SQLite returns a JSON-encoded string.
+    row = db.execute(
+        _text("SELECT scopes FROM platform_api_keys WHERE key_hash = :kh"),
+        {"kh": key_hash},
+    ).fetchone()
+    raw_scopes_val = row[0] if row else None
+    if isinstance(raw_scopes_val, list):
+        scopes = raw_scopes_val
+    elif isinstance(raw_scopes_val, str):
+        try:
+            scopes = _json.loads(raw_scopes_val)
+        except Exception:
+            scopes = []
+    else:
+        scopes = []
+
+    return {
+        "sub": str(record.user_id),
+        "user_id": str(record.user_id),
+        "auth_type": "api_key",
+        "api_key_id": str(record.id),
+        "api_key_scopes": list(scopes),
+    }
 
 
 def get_optional_user(

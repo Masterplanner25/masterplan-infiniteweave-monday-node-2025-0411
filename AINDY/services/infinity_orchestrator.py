@@ -12,7 +12,7 @@ from services.identity_boot_service import get_recent_memory, get_user_metrics
 from services.goal_service import rank_goals
 from services.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
 from services.infinity_service import calculate_infinity_score, orchestrator_score_context
-from services.memory_scoring_service import get_relevant_memories
+from memory.memory_scoring_service import get_relevant_memories
 from services.social_performance_service import get_social_performance_signals
 from services.system_state_service import compute_current_state
 from services.task_services import get_task_graph_context

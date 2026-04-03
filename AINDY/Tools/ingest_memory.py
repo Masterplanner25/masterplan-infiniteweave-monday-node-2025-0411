@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from db.database import SessionLocal
-from services.memory_ingest_service import MemoryIngestService
+from memory.memory_ingest_service import MemoryIngestService
 
 
 DEFAULT_PATHS = [

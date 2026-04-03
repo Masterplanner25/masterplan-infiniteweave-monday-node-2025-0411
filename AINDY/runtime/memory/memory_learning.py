@@ -4,7 +4,7 @@ import logging
 import math
 import uuid
 
-from services.memory_persistence import MemoryNodeModel
+from memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
 from services.observability_events import emit_observability_event

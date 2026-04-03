@@ -482,7 +482,7 @@ class MemoryCaptureEngine:
                 if not self.user_id or r.get("user_id") == self.user_id
             ]
 
-            from bridge.bridge import create_memory_link
+            from memory.bridge import create_memory_link
 
             for related_node in related:
                 if related_node.get("id") == new_node.get("id"):

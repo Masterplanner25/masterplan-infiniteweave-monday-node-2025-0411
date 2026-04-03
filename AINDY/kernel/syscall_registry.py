@@ -287,7 +287,7 @@ def _handle_memory_write(payload: dict, context: SyscallContext) -> dict:
     """
     from db.database import SessionLocal
     from db.dao.memory_node_dao import MemoryNodeDAO
-    from services.memory_address_space import path_from_write_payload
+    from memory.memory_address_space import path_from_write_payload
 
     content: str = payload.get("content", "")
     if not content:
@@ -301,7 +301,7 @@ def _handle_memory_write(payload: dict, context: SyscallContext) -> dict:
         {**payload, "node_type": node_type},
         tenant_id=str(context.user_id),
     )
-    from services.memory_address_space import parent_path_of
+    from memory.memory_address_space import parent_path_of
     parent_path = parent_path_of(full_path)
 
     db = SessionLocal()
@@ -396,7 +396,7 @@ def _handle_memory_tree(payload: dict, context: SyscallContext) -> dict:
     """
     from db.database import SessionLocal
     from db.dao.memory_node_dao import MemoryNodeDAO
-    from services.memory_address_space import build_tree, wildcard_prefix, is_exact, normalize_path
+    from memory.memory_address_space import build_tree, wildcard_prefix, is_exact, normalize_path
 
     path: str = payload.get("path", "")
     if not path:
@@ -634,6 +634,7 @@ SYSCALL_REGISTRY["sys.v1.memory.list"] = SyscallEntry(
         "required": ["nodes", "count"],
         "properties": {"nodes": {"type": "list"}, "count": {"type": "int"}},
     },
+    stable=False,
 )
 SYSCALL_REGISTRY["sys.v1.memory.tree"] = SyscallEntry(
     handler=_handle_memory_tree,
@@ -647,6 +648,7 @@ SYSCALL_REGISTRY["sys.v1.memory.tree"] = SyscallEntry(
         "required": ["tree", "node_count"],
         "properties": {"tree": {"type": "dict"}, "node_count": {"type": "int"}},
     },
+    stable=False,
 )
 SYSCALL_REGISTRY["sys.v1.memory.trace"] = SyscallEntry(
     handler=_handle_memory_trace,
@@ -660,6 +662,7 @@ SYSCALL_REGISTRY["sys.v1.memory.trace"] = SyscallEntry(
         "required": ["chain", "depth"],
         "properties": {"chain": {"type": "list"}, "depth": {"type": "int"}},
     },
+    stable=False,
 )
 SYSCALL_REGISTRY["sys.v1.flow.run"] = SyscallEntry(
     handler=_handle_flow_run,
@@ -711,6 +714,7 @@ SYSCALL_REGISTRY["sys.v2.memory.read"] = SyscallEntry(
             "version": {"type": "string"},
         },
     },
+    stable=False,
 )
 
 

@@ -266,7 +266,7 @@ def test_agent_step_success_emits_system_event(monkeypatch):
 
 
 def test_memory_write_requires_system_event(monkeypatch):
-    from services.memory_capture_engine import MemoryCaptureEngine
+    from memory.memory_capture_engine import MemoryCaptureEngine
     from services.system_event_service import SystemEventEmissionError
 
     class _Dao:
