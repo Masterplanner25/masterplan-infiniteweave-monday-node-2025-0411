@@ -25,7 +25,7 @@ The OS layer is **non-fatal by design** — all `ResourceManager` and `Scheduler
 
 ## 2. TenantContext
 
-Defined in `services/os_layer.py`.
+Defined in `kernel/tenant_context.py`.
 
 ```python
 @dataclass
@@ -45,7 +45,7 @@ Every execution unit carries a `TenantContext`. It is resolved from `SyscallCont
 Manages per-execution-unit quotas and usage tracking.
 
 ```python
-from services.resource_manager import get_resource_manager
+from kernel.resource_manager import get_resource_manager
 
 rm = get_resource_manager()
 
@@ -84,7 +84,7 @@ When `check_quota()` returns `(False, reason)`, the dispatcher returns an error 
 Handles priority-based scheduling and WAIT/RESUME flow control.
 
 ```python
-from services.scheduler_engine import get_scheduler_engine
+from kernel.scheduler_engine import get_scheduler_engine
 
 se = get_scheduler_engine()
 
@@ -189,9 +189,9 @@ The `try/except` ensures that if `ResourceManager` is unavailable (e.g., test en
 
 | File | Role |
 |------|------|
-| `services/os_layer.py` | `TenantContext`, core OS layer primitives |
-| `services/resource_manager.py` | `ResourceManager`, quota check + usage recording |
-| `services/scheduler_engine.py` | `SchedulerEngine`, priority scheduling, WAIT/RESUME |
-| `services/syscall_dispatcher.py` | OS layer integration points (Steps 5, 6, 11) |
+| `kernel/tenant_context.py` | `TenantContext`, core OS layer primitives |
+| `kernel/resource_manager.py` | `ResourceManager`, quota check + usage recording |
+| `kernel/scheduler_engine.py` | `SchedulerEngine`, priority scheduling, WAIT/RESUME |
+| `kernel/syscall_dispatcher.py` | OS layer integration points (Steps 5, 6, 11) |
 | `routes/platform_router.py` | `GET /platform/tenants/{id}/usage` |
 | `tests/unit/test_os_layer.py` | 64 OS isolation tests |
