@@ -17,7 +17,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from openai import OpenAI
 
-from bridge.bridge import create_memory_node
+from memory.bridge import create_memory_node
 from db.models.leadgen_model import LeadGenResult
 from services.external_call_service import perform_external_call
 from services.search_service import search_leads

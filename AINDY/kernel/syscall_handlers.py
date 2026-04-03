@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from services.syscall_registry import SyscallContext, register_syscall
+from kernel.syscall_registry import SyscallContext, register_syscall
 
 logger = logging.getLogger(__name__)
 
@@ -825,19 +825,19 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
 
 def _mas_memory_list(payload: dict, context) -> dict:
     """sys.v1.memory.list — list MAS nodes at a path prefix."""
-    from services.syscall_registry import _handle_memory_list
+    from kernel.syscall_registry import _handle_memory_list
     return _handle_memory_list(payload, context)
 
 
 def _mas_memory_tree(payload: dict, context) -> dict:
     """sys.v1.memory.tree — hierarchical tree of nodes under a path."""
-    from services.syscall_registry import _handle_memory_tree
+    from kernel.syscall_registry import _handle_memory_tree
     return _handle_memory_tree(payload, context)
 
 
 def _mas_memory_trace(payload: dict, context) -> dict:
     """sys.v1.memory.trace — causal trace from node at path."""
-    from services.syscall_registry import _handle_memory_trace
+    from kernel.syscall_registry import _handle_memory_trace
     return _handle_memory_trace(payload, context)
 
 
@@ -851,44 +851,47 @@ def register_all_domain_handlers() -> None:
     Called once at application startup. Safe to call multiple times
     (subsequent calls overwrite with the same values — idempotent).
     """
+    # Tuples: (name, handler, capability, description, stable)
+    # Domain-specific handlers are stable=False — they wrap application logic
+    # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
         # Task
-        ("sys.v1.task.create",             _handle_task_create,           "task.create",           "Create a task"),
-        ("sys.v1.task.complete",           _handle_task_complete,         "task.complete",         "Mark task complete (flow nodes)"),
-        ("sys.v1.task.complete_full",      _handle_task_complete_full,    "task.complete_full",    "Full task completion with orchestration (agent tools)"),
-        ("sys.v1.task.start",              _handle_task_start,            "task.start",            "Start a task"),
-        ("sys.v1.task.pause",              _handle_task_pause,            "task.pause",            "Pause a task"),
-        ("sys.v1.task.orchestrate",        _handle_task_orchestrate,      "task.orchestrate",      "Post-completion task orchestration"),
+        ("sys.v1.task.create",             _handle_task_create,           "task.create",           "Create a task",                                          False),
+        ("sys.v1.task.complete",           _handle_task_complete,         "task.complete",         "Mark task complete (flow nodes)",                        False),
+        ("sys.v1.task.complete_full",      _handle_task_complete_full,    "task.complete_full",    "Full task completion with orchestration (agent tools)",  False),
+        ("sys.v1.task.start",              _handle_task_start,            "task.start",            "Start a task",                                           False),
+        ("sys.v1.task.pause",              _handle_task_pause,            "task.pause",            "Pause a task",                                           False),
+        ("sys.v1.task.orchestrate",        _handle_task_orchestrate,      "task.orchestrate",      "Post-completion task orchestration",                     False),
         # LeadGen
-        ("sys.v1.leadgen.search",          _handle_leadgen_search,        "leadgen.search",        "B2B lead search via create_lead_results"),
-        ("sys.v1.leadgen.search_ai",       _handle_leadgen_search_ai,     "leadgen.search_ai",     "AI-powered B2B lead search"),
-        ("sys.v1.leadgen.store",           _handle_leadgen_store,         "leadgen.store",         "Persist leadgen results to memory bridge"),
+        ("sys.v1.leadgen.search",          _handle_leadgen_search,        "leadgen.search",        "B2B lead search via create_lead_results",                False),
+        ("sys.v1.leadgen.search_ai",       _handle_leadgen_search_ai,     "leadgen.search_ai",     "AI-powered B2B lead search",                            False),
+        ("sys.v1.leadgen.store",           _handle_leadgen_store,         "leadgen.store",         "Persist leadgen results to memory bridge",               False),
         # ARM
-        ("sys.v1.arm.analyze",             _handle_arm_analyze,           "arm.analyze",           "ARM code analysis"),
-        ("sys.v1.arm.generate",            _handle_arm_generate,          "arm.generate",          "ARM code generation"),
-        ("sys.v1.arm.store",               _handle_arm_store,             "arm.store",             "Persist ARM result to memory bridge"),
+        ("sys.v1.arm.analyze",             _handle_arm_analyze,           "arm.analyze",           "ARM code analysis",                                      False),
+        ("sys.v1.arm.generate",            _handle_arm_generate,          "arm.generate",          "ARM code generation",                                    False),
+        ("sys.v1.arm.store",               _handle_arm_store,             "arm.store",             "Persist ARM result to memory bridge",                    False),
         # Genesis
-        ("sys.v1.genesis.execute_llm",     _handle_genesis_execute_llm,   "genesis.execute_llm",   "Call Genesis LLM and update session (flow nodes)"),
-        ("sys.v1.genesis.message",         _handle_genesis_message,       "genesis.message",       "Full genesis message flow (agent tools)"),
+        ("sys.v1.genesis.execute_llm",     _handle_genesis_execute_llm,   "genesis.execute_llm",   "Call Genesis LLM and update session (flow nodes)",      False),
+        ("sys.v1.genesis.message",         _handle_genesis_message,       "genesis.message",       "Full genesis message flow (agent tools)",                False),
         # Score
-        ("sys.v1.score.recalculate",       _handle_score_recalculate,     "score.recalculate",     "Recalculate Infinity Score"),
-        ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record"),
+        ("sys.v1.score.recalculate",       _handle_score_recalculate,     "score.recalculate",     "Recalculate Infinity Score",                             False),
+        ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False),
         # Watcher
-        ("sys.v1.watcher.ingest",          _handle_watcher_ingest,        "watcher.ingest",        "Persist batch of WatcherSignals"),
+        ("sys.v1.watcher.ingest",          _handle_watcher_ingest,        "watcher.ingest",        "Persist batch of WatcherSignals",                        False),
         # Goal
-        ("sys.v1.goal.create",             _handle_goal_create,           "goal.create",           "Create a goal"),
+        ("sys.v1.goal.create",             _handle_goal_create,           "goal.create",           "Create a goal",                                          False),
         # Research
-        ("sys.v1.research.query",          _handle_research_query,        "research.query",        "Web research query"),
+        ("sys.v1.research.query",          _handle_research_query,        "research.query",        "Web research query",                                     False),
         # Agent
-        ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions"),
-        # Memory Address Space
-        ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix"),
-        ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path"),
-        ("sys.v1.memory.trace",            _mas_memory_trace,             "memory.trace",          "Causal trace from node at path"),
+        ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False),
+        # Memory Address Space (path-based — experimental extensions)
+        ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False),
+        ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False),
+        ("sys.v1.memory.trace",            _mas_memory_trace,             "memory.trace",          "Causal trace from node at path",                         False),
     ]
 
-    for name, handler, capability, description in _registrations:
-        register_syscall(name, handler, capability, description)
+    for name, handler, capability, description, stable in _registrations:
+        register_syscall(name, handler, capability, description, stable=stable)
 
     logger.info(
         "[syscall_handlers] registered %d domain handlers", len(_registrations)

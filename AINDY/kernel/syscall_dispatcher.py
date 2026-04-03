@@ -54,14 +54,14 @@ import time
 from typing import Any
 
 # Re-export SyscallContext so callers only need one import.
-from services.syscall_registry import (  # noqa: F401
+from kernel.syscall_registry import (  # noqa: F401
     DEFAULT_NODUS_CAPABILITIES,
     SYSCALL_REGISTRY,
     SyscallContext,
     SyscallEntry,
     register_syscall,
 )
-from services.syscall_versioning import (
+from kernel.syscall_versioning import (
     parse_syscall_name,
     validate_input,
     validate_output,
@@ -82,7 +82,7 @@ __all__ = [
 # Lazy import of ResourceManager to avoid circular imports at module load.
 # The resource manager is only consulted inside dispatch(), so it's safe.
 def _get_rm():
-    from services.resource_manager import get_resource_manager
+    from kernel.resource_manager import get_resource_manager
     return get_resource_manager()
 
 logger = logging.getLogger(__name__)
@@ -191,14 +191,17 @@ class SyscallDispatcher:
             )
 
         # Step 2c — resource quota check (syscall budget)
+        # If _get_rm() or check_quota() raises, fail-open (log warning, allow execution).
+        # Only a clean (False, reason) return blocks the syscall.
         try:
             rm = _get_rm()
             quota_ok, quota_reason = rm.check_quota(context.execution_unit_id)
+        except Exception as _rm_exc:
+            logger.warning("[SyscallDispatcher] resource quota check skipped: %s", _rm_exc)
+        else:
             if not quota_ok:
                 return self._error_envelope(name, context, quota_reason, t_start,
                                             version=parsed_version)
-        except Exception as _rm_exc:
-            logger.debug("[SyscallDispatcher] resource quota check skipped: %s", _rm_exc)
 
         # Step 2d — input validation against ABI schema
         if entry.input_schema:

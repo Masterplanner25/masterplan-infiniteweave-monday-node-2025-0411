@@ -33,7 +33,7 @@ TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
 curl -s -X POST http://localhost:8000/platform/keys \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"quickstart","scopes":["memory.read","memory.write","flow.run","event.emit"]}' \
+  -d '{"name":"quickstart","scopes":["memory.read","memory.write","memory.search","event.emit"]}' \
   | python -m json.tool
 ```
 

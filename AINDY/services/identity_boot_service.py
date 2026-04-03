@@ -9,7 +9,7 @@ from db.dao.memory_node_dao import MemoryNodeDAO
 from db.models.agent_run import AgentRun
 from db.models.flow_run import FlowRun
 from db.models.user_score import UserScore
-from services.memory_persistence import MemoryNodeModel
+from memory.memory_persistence import MemoryNodeModel
 
 
 _BOOT_MEMORY_LIMIT = 20

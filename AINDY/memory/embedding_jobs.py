@@ -8,7 +8,7 @@ from typing import Any
 from core.execution_signal_helper import queue_system_event
 from db.database import SessionLocal
 from services.async_job_service import register_async_job, submit_async_job
-from services.embedding_service import generate_embedding
+from memory.embedding_service import generate_embedding
 from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes
 
@@ -44,7 +44,7 @@ def _set_embedding_status(db, memory_node, status: str, embedding: list[float] |
 
 @register_async_job(EMBEDDING_JOB_NAME)
 def process_embedding_job(payload: dict[str, Any], db):
-    from services.memory_persistence import MemoryNodeModel
+    from memory.memory_persistence import MemoryNodeModel
 
     memory_node = (
         db.query(MemoryNodeModel)

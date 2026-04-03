@@ -5,7 +5,7 @@ import uuid
 from db.models.system_event import SystemEvent
 from db.models.user import User
 from services.auth_service import decode_access_token
-from services.memory_persistence import MemoryNodeModel
+from memory.memory_persistence import MemoryNodeModel
 
 
 def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_session):

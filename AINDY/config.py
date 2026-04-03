@@ -8,10 +8,19 @@ import logging
 import os
 from datetime import datetime, timezone
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
+
+def _read_version() -> str:
+    import json, pathlib
+    _vf = pathlib.Path(__file__).parent / "version.json"
+    try:
+        return json.loads(_vf.read_text(encoding="utf-8"))["version"]
+    except Exception:
+        return "1.0.0"
+
 
 # --------------------------------------------------------------------
 # Base Settings
@@ -34,14 +43,21 @@ class Settings(BaseSettings):
 
     @field_validator("SECRET_KEY")
     @classmethod
-    def warn_insecure_secret_key(cls, v: str) -> str:
-        if v == "dev-secret-change-in-production":
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
-                "SECRET_KEY is using the insecure default placeholder. "
-                "Set SECRET_KEY in the environment before deploying to production."
-            )
+    def reject_insecure_secret_key(cls, v: str) -> str:
+        is_test = os.getenv("ENV", "").lower() == "test" or os.getenv(
+            "TEST_MODE", "0"
+        ).lower() in {"1", "true", "yes"}
+        if not is_test:
+            _BAD = {"secret", "changeme", "your-secret-key", "REPLACE_THIS"}
+            if v.startswith("REPLACE_THIS") or v in _BAD:
+                raise RuntimeError(
+                    "SECRET_KEY is set to an insecure placeholder. "
+                    "Generate a real key with: "
+                    'python3 -c "import secrets; print(secrets.token_hex(32))"'
+                )
         return v
+
+    VERSION: str = Field(default_factory=_read_version, exclude=True)
 
     # --- Optional runtime options ---
     LOG_LEVEL: str = "INFO"
@@ -50,10 +66,13 @@ class Settings(BaseSettings):
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = False
     SKIP_MONGO_PING: bool = False
+    ENABLE_DOMAIN_APPS: bool = False
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
-        extra="ignore"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # --- Validators ---
@@ -106,24 +125,40 @@ settings = Settings()
 # --------------------------------------------------------------------
 log_path = Path("logs")
 log_path.mkdir(exist_ok=True)
-log_handlers = []
-try:
-    log_handlers.append(logging.FileHandler(log_path / f"aindy_{settings.ENV}.log"))
-except PermissionError:
-    logging.getLogger(__name__).warning(
-        "Unable to create log file, only console logging will be active"
-    )
-log_handlers.append(logging.StreamHandler())
 
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=log_handlers,
+def _build_log_handler(use_file: bool, log_file: Path) -> list[logging.Handler]:
+    handlers: list[logging.Handler] = []
+    if use_file:
+        try:
+            handlers.append(logging.FileHandler(log_file))
+        except PermissionError:
+            pass
+    handlers.append(logging.StreamHandler())
+    return handlers
+
+_log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+_handlers = _build_log_handler(
+    use_file=True,
+    log_file=log_path / f"aindy_{settings.ENV}.log",
 )
 
+if settings.is_prod:
+    # Structured JSON — one JSON object per line
+    from pythonjsonlogger import jsonlogger  # noqa: PLC0415
+    _fmt = jsonlogger.JsonFormatter(
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
+    for _h in _handlers:
+        _h.setFormatter(_fmt)
+else:
+    _plain_fmt = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    for _h in _handlers:
+        _h.setFormatter(_plain_fmt)
+
+logging.basicConfig(level=_log_level, handlers=_handlers)
 logging.getLogger(__name__).info(
-    "Loaded %s environment from process environment variables",
-    settings.ENV,
+    "Loaded %s environment from process environment variables", settings.ENV
 )
 
 

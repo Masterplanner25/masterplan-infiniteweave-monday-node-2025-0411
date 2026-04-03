@@ -25,6 +25,7 @@ from services.nodus_runtime_adapter import (
     NodusExecutionContext,
     NodusExecutionResult,
     NodusRuntimeAdapter,
+    NodusTimeoutError,
 )
 
 
@@ -221,7 +222,7 @@ class TestNodusRuntimeAdapterRunFile:
 
         executed_scripts: list[str] = []
 
-        def fake_execute(script: str, filename: str, context: Any) -> NodusExecutionResult:
+        def fake_execute(script: str, filename: str, context: Any, **_kwargs: Any) -> NodusExecutionResult:
             executed_scripts.append(script)
             return NodusExecutionResult(
                 output_state={}, emitted_events=[], memory_writes=[], status="success"
@@ -406,3 +407,112 @@ class TestNodusRuntimeAdapterContextInjection:
         assert passed_globals["input_payload"] == {"goal": "test"}
         assert passed_globals["execution_unit_id"] == ctx.execution_unit_id
         assert passed_globals["user_id"] == ctx.user_id
+
+
+# ── NodusExecutionContext.max_execution_ms ────────────────────────────────────
+
+class TestNodusExecutionContextMaxExecutionMs:
+    def test_default_is_none(self):
+        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1")
+        assert ctx.max_execution_ms is None
+
+    def test_can_be_set(self):
+        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1", max_execution_ms=5000)
+        assert ctx.max_execution_ms == 5000
+
+
+# ── Timeout enforcement ───────────────────────────────────────────────────────
+
+def _make_sys_modules_patch(runtime_mock, bridge_mock):
+    """Return a sys.modules dict that stubs the Nodus VM and bridge imports."""
+    bridge_factory = MagicMock(return_value=bridge_mock)
+    runtime_cls = MagicMock(return_value=runtime_mock)
+    return {
+        "nodus": MagicMock(),
+        "nodus.runtime": MagicMock(),
+        "nodus.runtime.embedding": MagicMock(NodusRuntime=runtime_cls),
+        "bridge": MagicMock(),
+        "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=bridge_factory),
+    }
+
+
+def _make_bridge_mock():
+    return MagicMock(
+        recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
+        recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
+        remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
+    )
+
+
+class TestNodusRuntimeAdapterTimeout:
+    """Verify that max_execution_ms kills an infinite loop and returns failure."""
+
+    def _adapter(self) -> NodusRuntimeAdapter:
+        return NodusRuntimeAdapter(db=MagicMock())
+
+    def test_infinite_loop_times_out(self):
+        """
+        run_source() spins in 'while True: pass'.
+        With max_execution_ms=100 the timer fires, injects NodusTimeoutError
+        into the VM thread, and _execute() returns a failure envelope.
+        The whole test must complete in under 1 second.
+        """
+        import time
+
+        def _spinning(*args, **kwargs):
+            while True:
+                pass  # pure Python loop — interruptible via PyThreadState_SetAsyncExc
+
+        runtime_mock = MagicMock()
+        runtime_mock.run_source.side_effect = _spinning
+        bridge_mock = _make_bridge_mock()
+
+        t0 = time.monotonic()
+        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
+            adapter = self._adapter()
+            ctx = _make_context()
+            result = adapter.run_script("while True: pass", ctx, max_execution_ms=100)
+        elapsed = time.monotonic() - t0
+
+        assert result.status == "failure"
+        assert "timeout" in result.error.lower()
+        assert result.emitted_events == []
+        assert result.memory_writes == []
+        assert elapsed < 1.0, f"Test took {elapsed:.2f}s — timeout not enforced"
+
+    def test_context_max_execution_ms_is_respected(self):
+        """NodusExecutionContext.max_execution_ms overrides the default parameter."""
+        import time
+
+        def _spinning(*args, **kwargs):
+            while True:
+                pass
+
+        runtime_mock = MagicMock()
+        runtime_mock.run_source.side_effect = _spinning
+        bridge_mock = _make_bridge_mock()
+
+        t0 = time.monotonic()
+        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
+            adapter = self._adapter()
+            ctx = _make_context(max_execution_ms=100)  # set on context, no explicit param
+            result = adapter.run_script("while True: pass", ctx)
+        elapsed = time.monotonic() - t0
+
+        assert result.status == "failure"
+        assert "timeout" in result.error.lower()
+        assert elapsed < 1.0, f"Test took {elapsed:.2f}s — context timeout not enforced"
+
+    def test_fast_script_is_not_timed_out(self):
+        """A script that completes quickly is not affected by the timeout."""
+        runtime_mock = MagicMock()
+        runtime_mock.run_source.return_value = {"ok": True}
+        bridge_mock = _make_bridge_mock()
+
+        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
+            adapter = self._adapter()
+            ctx = _make_context()
+            result = adapter.run_script("let x = 1", ctx, max_execution_ms=500)
+
+        assert result.status == "success"
+        assert result.error is None

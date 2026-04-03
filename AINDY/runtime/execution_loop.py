@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
-from bridge import create_memory_node
+from memory.bridge import create_memory_node
 from db.dao.memory_trace_dao import MemoryTraceDAO
 from runtime.memory import MemoryOrchestrator
 from runtime.memory.memory_feedback import MemoryFeedbackEngine

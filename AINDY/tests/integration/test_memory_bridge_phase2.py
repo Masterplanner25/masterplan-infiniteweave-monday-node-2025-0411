@@ -48,7 +48,7 @@ class TestEmbeddingService:
         mock_client.embeddings.create.return_value = make_mock_openai_response()
 
         with patch("services.embedding_service._client", mock_client):
-            from services.embedding_service import generate_embedding
+            from memory.embedding_service import generate_embedding
             result = generate_embedding("hello world")
 
         assert isinstance(result, list)
@@ -57,19 +57,19 @@ class TestEmbeddingService:
 
     def test_empty_content_returns_zero_vector(self):
         """Empty or whitespace-only input returns zero vector without calling OpenAI."""
-        from services.embedding_service import generate_embedding
+        from memory.embedding_service import generate_embedding
         assert generate_embedding("") == [0.0] * 1536
         assert generate_embedding("   ") == [0.0] * 1536
 
     def test_cosine_similarity_identical_vectors(self):
         """Identical non-zero vectors have similarity 1.0."""
-        from services.embedding_service import cosine_similarity_python
+        from memory.embedding_service import cosine_similarity_python
         result = cosine_similarity_python(MOCK_EMBEDDING, MOCK_EMBEDDING)
         assert abs(result - 1.0) < 1e-6
 
     def test_cosine_similarity_orthogonal_vectors(self):
         """Orthogonal vectors have similarity 0.0."""
-        from services.embedding_service import cosine_similarity_python
+        from memory.embedding_service import cosine_similarity_python
         a = [1.0] + [0.0] * 1535
         b = [0.0, 1.0] + [0.0] * 1534
         result = cosine_similarity_python(a, b)
@@ -97,7 +97,7 @@ class TestEmbeddingService:
 
     def test_cosine_similarity_falls_back_to_python(self):
         """cosine_similarity falls back to Python when C++ import fails."""
-        from services.embedding_service import cosine_similarity_python
+        from memory.embedding_service import cosine_similarity_python
 
         # The Python fallback itself must work correctly
         result = cosine_similarity_python(MOCK_EMBEDDING, MOCK_EMBEDDING)
@@ -118,7 +118,7 @@ class TestEmbeddingService:
 
         with patch("services.embedding_service._client", mock_client):
             with patch("services.embedding_service.time.sleep"):
-                from services.embedding_service import generate_embedding
+                from memory.embedding_service import generate_embedding
                 result = generate_embedding("test content")
 
         assert result == [0.0] * 1536
@@ -132,7 +132,7 @@ class TestMemoryNodeEmbeddingColumn:
 
     def test_embedding_column_on_model(self):
         """MemoryNodeModel ORM mapper has an 'embedding' attribute."""
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -224,13 +224,13 @@ class TestMemoryTypeEnforcement:
 
     def test_valid_node_types(self):
         """VALID_NODE_TYPES contains exactly 4 valid types."""
-        from services.memory_persistence import VALID_NODE_TYPES
+        from memory.memory_persistence import VALID_NODE_TYPES
         assert VALID_NODE_TYPES == {"decision", "outcome", "insight", "relationship"}
         assert len(VALID_NODE_TYPES) == 4
 
     def test_invalid_type_not_in_set(self):
         """'generic' and 'research' are not valid node types."""
-        from services.memory_persistence import VALID_NODE_TYPES
+        from memory.memory_persistence import VALID_NODE_TYPES
         assert "generic" not in VALID_NODE_TYPES
         assert "research" not in VALID_NODE_TYPES
 

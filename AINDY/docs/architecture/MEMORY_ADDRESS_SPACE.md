@@ -25,7 +25,7 @@ Examples:
 /memory/user-abc/_legacy/insight/1a2b...   ← auto-derived for old nodes
 ```
 
-Constants (in `services/memory_address_space.py`):
+Constants (in `memory/memory_address_space.py`):
 - `MAS_ROOT = "/memory"`
 - `LEGACY_NAMESPACE = "_legacy"`
 - `MAX_PATH_DEPTH = 6`
@@ -53,7 +53,7 @@ wildcard_prefix(path)  # returns prefix without /* or /**
 
 ## 3. Path Functions
 
-All defined in `services/memory_address_space.py`.
+All defined in `memory/memory_address_space.py`.
 
 ### Building Paths
 
@@ -103,7 +103,7 @@ derive_legacy_path(node_dict) -> "/memory/{user_id}/_legacy/{memory_type}/{node_
 
 ## 5. Database Columns
 
-Added to `MemoryNodeModel` in `services/memory_persistence.py` (migration `g5h6i7j8k9l0`):
+Added to `MemoryNodeModel` in `memory/memory_persistence.py` (migration `g5h6i7j8k9l0`):
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -151,7 +151,7 @@ dao.causal_trace(path, depth=5, user_id=None) -> List[dict]
 ## 7. Tree Operations
 
 ```python
-from services.memory_address_space import build_tree, flatten_tree
+from memory.memory_address_space import build_tree, flatten_tree
 
 tree = build_tree(nodes)   # {path → {"node": {...}, "children": [...]}}
 flat = flatten_tree(tree)  # depth-first ordered list
@@ -233,8 +233,8 @@ MAS path methods are exposed as syscalls:
 
 | File | Role |
 |------|------|
-| `services/memory_address_space.py` | All path utilities: normalize, parse, build, generate, derive_legacy, wildcard helpers, tree ops |
-| `services/memory_persistence.py` | `MemoryNodeModel` with 4 new path columns |
+| `memory/memory_address_space.py` | All path utilities: normalize, parse, build, generate, derive_legacy, wildcard helpers, tree ops |
+| `memory/memory_persistence.py` | `MemoryNodeModel` with 4 new path columns |
 | `db/dao/memory_node_dao.py` | 6 new path DAO methods |
 | `alembic/versions/g5h6i7j8k9l0_add_memory_address_space_columns.py` | Migration adding path columns + indexes |
 | `routes/platform_router.py` | 3 MAS API endpoints |

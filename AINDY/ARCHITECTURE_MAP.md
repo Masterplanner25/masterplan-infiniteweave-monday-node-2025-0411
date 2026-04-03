@@ -113,7 +113,7 @@ Each module functions as both \*\*a tool\*\* and \*\*a node in a growing AI cogn
 \- \*\*RippleTrace\*\* — Visibility layer that tracks signals, resonance, and recognition.  
 
 \- \*\*Memory Bridge\*\* — Symbolic persistence system enabling continuity across AI models.  
-- **Memory Bridge Canon** � docs/architecture/MEMORY_BRIDGE.md (canonical definition + evolution plan).  
+- **Memory Bridge Canon** � docs/architecture/MEMORY_BRIDGE.md (canonical definition + evolution plan).  
 - **Infinity Algorithm Support System Canon** — docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md (signal/observation/feedback layer).  
 - **RippleTrace Canon** — docs/roadmap/RIPPLETRACE.md (visibility and influence tracing system).  
 - **Search System Canon** — docs/roadmap/SEARCH_SYSTEM.md (AI retrieval + scoring stack).  
@@ -143,21 +143,39 @@ masterplan-infiniteweave-monday-node-2025-0411/
 
 ├── AINDY/ → Core backend for AI Native Development \& Yield
 
-│ ├── bridge/ → Memory Bridge subsystem (persistence layer)
+│ ├── kernel/ → Syscall dispatcher, registry, versioning, OS isolation (tenant, quota, scheduler)
 
-│ ├── db/ → Database and Alembic migrations
+│ ├── memory/ → Memory Address Space, persistence, capture, embeddings, scoring, bridge
 
-│ ├── models/ → SQLAlchemy + Pydantic data models
+│ ├── runtime/ → Flow engine, Nodus adapter, flow compiler, execution services
+
+│ ├── agents/ → Agent runtime, tools, coordinator, autonomous controller, message bus
+
+│ ├── platform_layer/ → API key service, platform loader, registry persistence, event/rate/job services
+
+│ ├── analytics/ → Domain analytics modules
+
+│ ├── domain/ → Domain business logic
+
+│ ├── core/ → Execution pipeline, observability events, system event types
+
+│ ├── db/ → Database sessions and Alembic migrations
 
 │ ├── routes/ → FastAPI routers and endpoints
 
-│ ├── services/ → Execution logic and formulas
+│ ├── schemas/ → Pydantic request/response schemas
+
+│ ├── services/ → Backward-compat shims (→ kernel/memory/runtime/agents/platform_layer) + auth_service
+
+│ ├── tests/ → Unit, integration, system, v1_gates test suites
+
+│ ├── docs/ → Architecture, interface, governance, and roadmap documentation
+
+│ ├── bridge/ → Legacy bridge shim layer (→ memory/)
 
 │ ├── utils/ → Helper utilities
 
-│ ├── tools/ → Meta-modules (e.g., Authorship)
-
-│ ├── memoryevents/ → Symbolic event logs
+│ ├── Tools/ → Meta-modules (e.g., Authorship, ingest)
 
 │ ├── memorytraces/ → Narrative continuity traces
 

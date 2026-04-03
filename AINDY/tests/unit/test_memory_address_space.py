@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from services.memory_address_space import (
+from memory.memory_address_space import (
     MAS_ROOT,
     LEGACY_NAMESPACE,
     normalize_path,

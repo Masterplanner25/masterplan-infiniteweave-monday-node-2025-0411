@@ -51,7 +51,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from services.resource_manager import get_resource_manager
+from kernel.resource_manager import get_resource_manager
 
 logger = logging.getLogger(__name__)
 

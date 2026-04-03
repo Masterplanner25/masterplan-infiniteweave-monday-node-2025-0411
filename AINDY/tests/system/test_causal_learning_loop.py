@@ -7,8 +7,8 @@ from db.models.system_event import SystemEvent
 from db.models.task import Task
 from core.execution_signal_helper import queue_system_event
 from services.infinity_loop import run_loop
-from services.memory_persistence import MemoryNodeModel
-from services.memory_scoring_service import get_relevant_memories, score_memory
+from memory.memory_persistence import MemoryNodeModel
+from memory.memory_scoring_service import get_relevant_memories, score_memory
 from services.rippletrace_service import build_trace_graph
 from services.system_event_types import SystemEventTypes
 

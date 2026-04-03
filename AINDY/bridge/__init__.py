@@ -1,5 +1,5 @@
-from .bridge import create_memory_node, create_memory_link, recall_memories
-from .nodus_memory_bridge import NodusMemoryBridge, create_nodus_bridge
+from memory.bridge import create_memory_node, create_memory_link, recall_memories
+from memory.nodus_memory_bridge import NodusMemoryBridge, create_nodus_bridge
 
 
 def suggest_from_memory(
@@ -27,4 +27,3 @@ def suggest_from_memory(
         import logging
         logging.warning("suggest_from_memory failed: %s", e)
         return {"suggestions": []}
-

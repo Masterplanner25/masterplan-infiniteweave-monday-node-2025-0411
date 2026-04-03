@@ -122,7 +122,7 @@ versioned = SYSCALL_REGISTRY.versioned        # {"v1": {...}, "v2": {...}}
 ### Registering a Syscall
 
 ```python
-from services.syscall_registry import register_syscall
+from kernel.syscall_registry import register_syscall
 
 register_syscall(
     name="sys.v1.myservice.dostuff",
@@ -226,7 +226,7 @@ class SyscallContext:
     metadata:          dict         # optional — workflow_type, flow_name, etc.
 ```
 
-Helper builders (from `services/syscall_dispatcher.py`):
+Helper builders (from `kernel/syscall_dispatcher.py`):
 
 ```python
 # From a flow node context dict
@@ -240,7 +240,7 @@ ctx = make_syscall_ctx_from_tool(user_id="user-123", run_id="run-456")
 
 ## 9. Built-in Syscalls (v1)
 
-All registered in `services/syscall_registry.py` and `services/syscall_handlers.py`.
+Core syscalls registered in `kernel/syscall_registry.py`; domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`.
 
 | Syscall | Capability | Description |
 |---------|-----------|-------------|
@@ -254,7 +254,7 @@ All registered in `services/syscall_registry.py` and `services/syscall_handlers.
 | `sys.v1.event.emit` | `event.emit` | Emit a system event |
 | `sys.v2.memory.read` | `memory.read` | v2 evolution — adds `filters` dict (memory_type, node_type, min_impact) |
 
-Domain handlers registered at startup via `register_all_domain_handlers()` in `services/syscall_handlers.py`.
+Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`.
 
 ---
 
@@ -307,10 +307,10 @@ Response:
 
 | File | Role |
 |------|------|
-| `services/syscall_versioning.py` | `SyscallSpec`, `parse_syscall_name`, `validate_payload`, `resolve_version`, `ABI_VERSIONS` |
-| `services/syscall_registry.py` | `SyscallEntry`, `VersionedSyscallRegistry`, `SYSCALL_REGISTRY`, `register_syscall` |
-| `services/syscall_dispatcher.py` | `SyscallDispatcher`, `get_dispatcher`, `SyscallContext`, context builder helpers |
-| `services/syscall_handlers.py` | All 20+ domain handler functions; `register_all_domain_handlers()` |
-| `routes/platform_router.py` | `GET /platform/syscalls` introspection endpoint |
+| `kernel/syscall_versioning.py` | `SyscallSpec`, `parse_syscall_name`, `validate_payload`, `resolve_version`, `ABI_VERSIONS` |
+| `kernel/syscall_registry.py` | `SyscallEntry`, `VersionedSyscallRegistry`, `SYSCALL_REGISTRY`, `register_syscall`, `DEFAULT_NODUS_CAPABILITIES` |
+| `kernel/syscall_dispatcher.py` | `SyscallDispatcher`, `get_dispatcher`, `SyscallContext`, context builder helpers |
+| `kernel/syscall_handlers.py` | All 23 domain handler functions; `register_all_domain_handlers()` |
+| `routes/platform_router.py` | `GET /platform/syscalls` introspection endpoint; `POST /platform/syscall` dispatch |
 | `tests/unit/test_syscall_versioning.py` | 64 versioning/ABI tests (Groups A–J) |
 | `tests/unit/test_syscall_dispatcher.py` | Dispatcher unit tests |

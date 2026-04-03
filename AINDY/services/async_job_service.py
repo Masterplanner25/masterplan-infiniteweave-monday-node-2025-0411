@@ -817,5 +817,5 @@ def _job_freelance_generate_delivery(payload: dict[str, Any], db):
 
 
 # Register late-bound handlers that depend on async_job_service.
-from services import embedding_jobs as _embedding_jobs  # noqa: E402,F401
+from memory import embedding_jobs as _embedding_jobs  # noqa: E402,F401
 

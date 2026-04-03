@@ -23,16 +23,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import services.syscall_dispatcher as _disp_mod
-import services.syscall_registry as _reg_mod
-from services.syscall_dispatcher import (
+import kernel.syscall_dispatcher as _disp_mod
+import kernel.syscall_registry as _reg_mod
+from kernel.syscall_dispatcher import (
     DEFAULT_NODUS_CAPABILITIES,
     SyscallContext,
     get_dispatcher,
     register_syscall,
 )
-from services.syscall_dispatcher import SyscallDispatcher
-from services.syscall_registry import SYSCALL_REGISTRY
+from kernel.syscall_dispatcher import SyscallDispatcher
+from kernel.syscall_registry import SYSCALL_REGISTRY
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -309,13 +309,13 @@ class TestMemoryReadHandler:
     """Test _handle_memory_read by calling it directly with mocked dependencies."""
 
     def _call(self, payload: dict, user_id: str = "u1") -> dict:
-        from services.syscall_registry import _handle_memory_read
+        from kernel.syscall_registry import _handle_memory_read
         ctx = _ctx(user_id=user_id)
         mock_db = MagicMock()
         mock_dao = MagicMock()
         mock_dao.recall.return_value = [{"id": "n1", "content": "hello"}]
-        with patch("services.syscall_registry.SessionLocal", return_value=mock_db):
-            with patch("services.syscall_registry.MemoryNodeDAO", return_value=mock_dao):
+        with patch("kernel.syscall_registry.SessionLocal", return_value=mock_db):
+            with patch("kernel.syscall_registry.MemoryNodeDAO", return_value=mock_dao):
                 # SessionLocal() is called inside handler; patch it as a context manager
                 pass
         # Patch both imports inside the handler's lazy import scope
@@ -326,7 +326,7 @@ class TestMemoryReadHandler:
             return _handle_memory_read(payload, ctx), mock_dao
 
     def test_recall_called_with_user_id(self):
-        from services.syscall_registry import _handle_memory_read
+        from kernel.syscall_registry import _handle_memory_read
         ctx = _ctx(user_id="u-test")
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -342,7 +342,7 @@ class TestMemoryReadHandler:
         assert call_kwargs["limit"] == 3
 
     def test_returns_nodes_and_count(self):
-        from services.syscall_registry import _handle_memory_read
+        from kernel.syscall_registry import _handle_memory_read
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -356,7 +356,7 @@ class TestMemoryReadHandler:
         assert len(result["nodes"]) == 2
 
     def test_default_limit_is_5(self):
-        from services.syscall_registry import _handle_memory_read
+        from kernel.syscall_registry import _handle_memory_read
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -380,7 +380,7 @@ class TestMemoryReadHandler:
 
 class TestMemoryWriteHandler:
     def _call_write(self, payload: dict) -> dict:
-        from services.syscall_registry import _handle_memory_write
+        from kernel.syscall_registry import _handle_memory_write
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -401,7 +401,7 @@ class TestMemoryWriteHandler:
         assert result["node"]["id"] == "new-node"
 
     def test_empty_content_raises_value_error(self):
-        from services.syscall_registry import _handle_memory_write
+        from kernel.syscall_registry import _handle_memory_write
         ctx = _ctx()
         with pytest.raises(ValueError, match="content"):
             _handle_memory_write({"content": ""}, ctx)
@@ -417,7 +417,7 @@ class TestMemoryWriteHandler:
 
 class TestMemorySearchHandler:
     def test_search_returns_nodes(self):
-        from services.syscall_registry import _handle_memory_search
+        from kernel.syscall_registry import _handle_memory_search
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -430,7 +430,7 @@ class TestMemorySearchHandler:
         assert result["count"] == 1
 
     def test_empty_query_raises(self):
-        from services.syscall_registry import _handle_memory_search
+        from kernel.syscall_registry import _handle_memory_search
         ctx = _ctx()
         with pytest.raises(ValueError, match="query"):
             _handle_memory_search({"query": ""}, ctx)
@@ -446,13 +446,13 @@ class TestMemorySearchHandler:
 
 class TestFlowRunHandler:
     def test_missing_flow_name_raises(self):
-        from services.syscall_registry import _handle_flow_run
+        from kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         with pytest.raises(ValueError, match="flow_name"):
             _handle_flow_run({}, ctx)
 
     def test_unknown_flow_raises(self):
-        from services.syscall_registry import _handle_flow_run
+        from kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         mock_registry = {}
         with patch.dict("sys.modules", {
@@ -466,7 +466,7 @@ class TestFlowRunHandler:
                 _handle_flow_run({"flow_name": "NO_SUCH"}, ctx)
 
     def test_runs_flow_and_returns_result(self):
-        from services.syscall_registry import _handle_flow_run
+        from kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         mock_db = MagicMock()
         mock_runner = MagicMock()
@@ -493,13 +493,13 @@ class TestFlowRunHandler:
 
 class TestEventEmitHandler:
     def test_missing_event_type_raises(self):
-        from services.syscall_registry import _handle_event_emit
+        from kernel.syscall_registry import _handle_event_emit
         ctx = _ctx()
         with pytest.raises(ValueError, match="event_type"):
             _handle_event_emit({}, ctx)
 
     def test_emit_called_with_correct_type(self):
-        from services.syscall_registry import _handle_event_emit
+        from kernel.syscall_registry import _handle_event_emit
         ctx = _ctx(user_id="u1", trace_id="t1")
         mock_db = MagicMock()
         mock_emit = MagicMock(return_value="ev-123")
@@ -515,7 +515,7 @@ class TestEventEmitHandler:
         assert call_kwargs["trace_id"] == "t1"
 
     def test_returns_event_id(self):
-        from services.syscall_registry import _handle_event_emit
+        from kernel.syscall_registry import _handle_event_emit
         import uuid as _uuid
         ctx = _ctx()
         ev_id = _uuid.uuid4()
@@ -562,7 +562,7 @@ class TestNodusIntegration:
 
     def test_sys_global_is_callable(self):
         """_nodus_syscall must be a callable wrapping get_dispatcher().dispatch."""
-        from services.syscall_dispatcher import DEFAULT_NODUS_CAPABILITIES, SyscallContext, get_dispatcher
+        from kernel.syscall_dispatcher import DEFAULT_NODUS_CAPABILITIES, SyscallContext, get_dispatcher
 
         # Simulate what nodus_runtime_adapter builds
         ctx = self._make_exec_context()
@@ -595,3 +595,64 @@ class TestNodusIntegration:
         d1 = get_dispatcher()
         d2 = get_dispatcher()
         assert d1 is d2
+
+
+# ── M: Quota enforcement ──────────────────────────────────────────────────────
+
+_QUOTA_SYSCALL = "sys.v1.test.quota"
+_QUOTA_CAP = "test.quota"
+
+
+class TestQuotaEnforcement:
+    """Verify that a (False, reason) from check_quota blocks dispatch."""
+
+    def setup_method(self):
+        self.dispatcher = SyscallDispatcher()
+        SYSCALL_REGISTRY[_QUOTA_SYSCALL] = _reg_mod.SyscallEntry(
+            handler=lambda p, c: {"ok": True},
+            capability=_QUOTA_CAP,
+        )
+
+    def teardown_method(self):
+        SYSCALL_REGISTRY.pop(_QUOTA_SYSCALL, None)
+
+    def _ctx_with_cap(self):
+        return _ctx(capabilities=[_QUOTA_CAP])
+
+    def test_quota_exceeded_returns_error_envelope(self):
+        """mock check_quota → (False, 'over limit') must yield status='error'."""
+        mock_rm = MagicMock()
+        mock_rm.check_quota.return_value = (False, "over limit")
+
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+            result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
+
+        assert result["status"] == "error"
+        assert "over limit" in result["error"]
+
+    def test_quota_ok_allows_dispatch(self):
+        """mock check_quota → (True, None) must not block execution."""
+        mock_rm = MagicMock()
+        mock_rm.check_quota.return_value = (True, None)
+
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+            result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
+
+        assert result["status"] == "success"
+
+    def test_quota_check_exception_fails_open(self):
+        """If check_quota raises, dispatch must still succeed (fail-open)."""
+        mock_rm = MagicMock()
+        mock_rm.check_quota.side_effect = RuntimeError("rm unavailable")
+
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+            result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
+
+        assert result["status"] == "success"
+
+    def test_get_rm_exception_fails_open(self):
+        """If _get_rm() itself raises, dispatch must still succeed (fail-open)."""
+        with patch("kernel.syscall_dispatcher._get_rm", side_effect=RuntimeError("db down")):
+            result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
+
+        assert result["status"] == "success"

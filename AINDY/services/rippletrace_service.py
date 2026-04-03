@@ -8,7 +8,7 @@ from sqlalchemy import or_
 
 from db.models.ripple_edge import RippleEdge
 from db.models.system_event import SystemEvent
-from services.memory_persistence import MemoryNodeModel
+from memory.memory_persistence import MemoryNodeModel
 
 
 def link_events(

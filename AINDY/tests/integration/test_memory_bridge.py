@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 class TestPythonBridgeLayer:
     def test_memory_node_creation(self):
         """MemoryNode must be importable and constructable."""
-        from bridge.bridge import MemoryNode
+        from memory.bridge import MemoryNode
         node = MemoryNode("test content", source="pytest", tags=["test"])
         assert node.content == "test content"
         assert node.source == "pytest"
@@ -26,21 +26,21 @@ class TestPythonBridgeLayer:
         assert node.id is not None
 
     def test_memory_node_has_uuid_id(self):
-        from bridge.bridge import MemoryNode
+        from memory.bridge import MemoryNode
         node = MemoryNode("hello")
         # ID should be a valid UUID string
         parsed = uuid.UUID(node.id)
         assert str(parsed) == node.id
 
     def test_memory_node_link(self):
-        from bridge.bridge import MemoryNode
+        from memory.bridge import MemoryNode
         parent = MemoryNode("parent")
         child = MemoryNode("child")
         parent.link(child)
         assert child in parent.children
 
     def test_memory_node_to_dict(self):
-        from bridge.bridge import MemoryNode
+        from memory.bridge import MemoryNode
         node = MemoryNode("payload", source="src", tags=["a", "b"])
         d = node.to_dict()
         assert d["content"] == "payload"
@@ -50,12 +50,12 @@ class TestPythonBridgeLayer:
         assert "timestamp" in d
 
     def test_memory_trace_creation(self):
-        from bridge.bridge import MemoryTrace
+        from memory.bridge import MemoryTrace
         trace = MemoryTrace()
         assert trace.root_nodes == []
 
     def test_memory_trace_add_and_export(self):
-        from bridge.bridge import MemoryNode, MemoryTrace
+        from memory.bridge import MemoryNode, MemoryTrace
         trace = MemoryTrace()
         node = MemoryNode("node1", tags=["x"])
         trace.add_node(node)
@@ -64,7 +64,7 @@ class TestPythonBridgeLayer:
         assert exported[0]["content"] == "node1"
 
     def test_find_by_tag(self):
-        from bridge.bridge import MemoryNode, MemoryTrace, find_by_tag
+        from memory.bridge import MemoryNode, MemoryTrace, find_by_tag
         trace = MemoryTrace()
         node_a = MemoryNode("A", tags=["solon", "bridge"])
         node_b = MemoryNode("B", tags=["bridge"])
@@ -88,8 +88,8 @@ class TestCreateMemoryNodeWrongTable:
         FIXED: create_memory_node() now writes a MemoryNodeModel row via MemoryNodeDAO.
         Regression guard — ensures CalculationResult is never reintroduced.
         """
-        from bridge.bridge import create_memory_node
-        from services.memory_persistence import MemoryNodeModel
+        from memory.bridge import create_memory_node
+        from memory.memory_persistence import MemoryNodeModel
 
         saved_instances = []
         mock_db = MagicMock()
@@ -125,7 +125,7 @@ class TestCreateMemoryNodeWrongTable:
         )
         # Ensure CalculationResult is not referenced in the function source
         import inspect
-        from bridge import bridge
+        import memory.bridge as bridge
         source = inspect.getsource(bridge.create_memory_node)
         assert "CalculationResult" not in source, (
             "REGRESSION: create_memory_node() must not reference CalculationResult"
@@ -133,7 +133,7 @@ class TestCreateMemoryNodeWrongTable:
 
     def test_create_memory_node_without_db_returns_memory_node(self):
         """When db=None, create_memory_node returns a transient MemoryNode (not persisted)."""
-        from bridge.bridge import create_memory_node, MemoryNode
+        from memory.bridge import create_memory_node, MemoryNode
         result = create_memory_node(content="transient", source="test", tags=["a"])
         assert isinstance(result, MemoryNode), (
             "create_memory_node() without db must return a MemoryNode instance"
@@ -145,20 +145,20 @@ class TestCreateMemoryNodeWrongTable:
 
 class TestMemoryNodeDAO:
     def test_memory_node_dao_importable(self):
-        from services.memory_persistence import MemoryNodeDAO
+        from memory.memory_persistence import MemoryNodeDAO
         assert MemoryNodeDAO is not None
 
     def test_memory_node_model_importable(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         assert MemoryNodeModel.__tablename__ == "memory_nodes"
 
     def test_memory_link_model_importable(self):
-        from services.memory_persistence import MemoryLinkModel
+        from memory.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel.__tablename__ == "memory_links"
 
     def test_dao_save_memory_node_mock(self):
         """MemoryNodeDAO.save_memory_node correctly uses memory_nodes table."""
-        from services.memory_persistence import MemoryNodeDAO, MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeDAO, MemoryNodeModel
 
         mock_db = MagicMock()
         saved_nodes = []

@@ -21,7 +21,7 @@ class TestAgentModel:
         assert Agent.__tablename__ in Agent.metadata.tables
 
     def test_source_agent_column_on_memory_nodes(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         cols = list(MemoryNodeModel.__table__.columns.keys())
         assert "source_agent" in cols
         assert "is_shared" in cols
@@ -108,7 +108,7 @@ class TestFederatedMemoryDAO:
 class TestCaptureEngineNamespacing:
 
     def test_capture_engine_accepts_namespace(self):
-        from services.memory_capture_engine import MemoryCaptureEngine
+        from memory.memory_capture_engine import MemoryCaptureEngine
         import inspect
         sig = inspect.signature(MemoryCaptureEngine.__init__)
         assert "agent_namespace" in sig.parameters
@@ -133,25 +133,25 @@ class TestCaptureEngineNamespacing:
 class TestFederationNodusbridge:
 
     def test_bridge_has_recall_from(self):
-        from bridge.nodus_memory_bridge import NodusMemoryBridge
+        from memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "recall_from")
 
     def test_bridge_has_recall_all_agents(self):
-        from bridge.nodus_memory_bridge import NodusMemoryBridge
+        from memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "recall_all_agents")
 
     def test_bridge_has_share(self):
-        from bridge.nodus_memory_bridge import NodusMemoryBridge
+        from memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "share")
 
     def test_recall_from_without_db_returns_empty(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(db=None)
         result = bridge.recall_from("arm", query="test")
         assert result == []
 
     def test_share_without_db_returns_false(self):
-        from bridge.nodus_memory_bridge import create_nodus_bridge
+        from memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(db=None)
         result = bridge.share("some-node-id")
         assert result is False
@@ -216,7 +216,7 @@ class TestFederationEndpoints:
 
     def test_list_agents_with_auth(self, client, auth_headers, mock_db, test_user):
         from db.models.agent import Agent
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
 
         mock_db.add(
             Agent(

@@ -12,7 +12,7 @@ from core.execution_signal_helper import queue_system_event
 from services.execution_envelope import success
 from services.goal_service import calculate_goal_alignment
 from services.goal_service import rank_goals
-from services.memory_scoring_service import get_relevant_memories
+from memory.memory_scoring_service import get_relevant_memories
 from services.system_event_types import SystemEventTypes
 from services.system_state_service import compute_current_state
 from utils.uuid_utils import normalize_uuid

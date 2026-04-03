@@ -30,7 +30,7 @@ import logging
 from typing import Callable
 
 from core.execution_signal_helper import queue_system_event
-from services.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+from kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
 logger = logging.getLogger(__name__)
 

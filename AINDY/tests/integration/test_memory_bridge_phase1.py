@@ -22,7 +22,7 @@ class TestWritePathFix:
     def test_function_signature_has_content_not_title(self):
         """New signature accepts content= not title=."""
         import inspect
-        from bridge.bridge import create_memory_node
+        from memory.bridge import create_memory_node
         sig = inspect.signature(create_memory_node)
         params = list(sig.parameters.keys())
         assert "content" in params
@@ -30,7 +30,7 @@ class TestWritePathFix:
 
     def test_function_accepts_source_and_user_id(self):
         import inspect
-        from bridge.bridge import create_memory_node
+        from memory.bridge import create_memory_node
         sig = inspect.signature(create_memory_node)
         params = list(sig.parameters.keys())
         assert "source" in params
@@ -40,13 +40,13 @@ class TestWritePathFix:
     def test_no_calculation_result_reference_in_source(self):
         """Regression: CalculationResult must not appear in create_memory_node source."""
         import inspect
-        from bridge import bridge
+        import memory.bridge as bridge
         source = inspect.getsource(bridge.create_memory_node)
         assert "CalculationResult" not in source
 
     def test_no_db_returns_transient_memory_node(self):
         """Without db, returns a MemoryNode (not persisted, no crash)."""
-        from bridge.bridge import create_memory_node, MemoryNode
+        from memory.bridge import create_memory_node, MemoryNode
         result = create_memory_node(content="hello", source="test", tags=["a", "b"])
         assert isinstance(result, MemoryNode)
         assert result.content == "hello"
@@ -55,8 +55,8 @@ class TestWritePathFix:
 
     def test_with_db_calls_dao_save(self):
         """With db provided, calls MemoryNodeDAO.save_memory_node()."""
-        from bridge.bridge import create_memory_node
-        from services.memory_persistence import MemoryNodeModel
+        from memory.bridge import create_memory_node
+        from memory.memory_persistence import MemoryNodeModel
 
         mock_persisted = MagicMock(spec=MemoryNodeModel)
         mock_persisted.id = uuid.uuid4()
@@ -84,18 +84,18 @@ class TestWritePathFix:
 
     def test_create_memory_link_exported_from_bridge(self):
         """create_memory_link must be exported from bridge/__init__.py."""
-        from bridge import create_memory_link
+        from memory.bridge import create_memory_link
         assert callable(create_memory_link)
 
     def test_create_memory_link_without_db_raises_value_error(self):
         """create_memory_link(db=None) must raise ValueError."""
-        from bridge.bridge import create_memory_link
+        from memory.bridge import create_memory_link
         with pytest.raises(ValueError, match="DB session"):
             create_memory_link("a", "b", db=None)
 
     def test_memory_trace_has_transient_docstring(self):
         """MemoryTrace docstring must mention 'transient' and 'not persisted'."""
-        from bridge.bridge import MemoryTrace
+        from memory.bridge import MemoryTrace
         doc = MemoryTrace.__doc__ or ""
         assert "transient" in doc.lower() or "not persisted" in doc.lower() or "not a source of truth" in doc.lower()
 
@@ -106,7 +106,7 @@ class TestMemoryNodeDAOUnit:
     """Unit tests for db/dao/memory_node_dao.py using mocked DB sessions."""
 
     def _make_mock_node(self, **kwargs):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         node = MagicMock(spec=MemoryNodeModel)
         node.id = kwargs.get("id", uuid.uuid4())
         node.content = kwargs.get("content", "test")
@@ -125,7 +125,7 @@ class TestMemoryNodeDAOUnit:
 
     def test_save_returns_dict(self):
         from db.dao.memory_node_dao import MemoryNodeDAO
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
 
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
@@ -349,11 +349,11 @@ class TestCreateMemoryLinkUnit:
     """Unit tests for create_memory_link() bridge function."""
 
     def test_create_memory_link_importable(self):
-        from bridge.bridge import create_memory_link
+        from memory.bridge import create_memory_link
         assert callable(create_memory_link)
 
     def test_create_memory_link_calls_dao(self):
-        from bridge.bridge import create_memory_link
+        from memory.bridge import create_memory_link
 
         mock_db = MagicMock()
         src = str(uuid.uuid4())
@@ -369,7 +369,7 @@ class TestCreateMemoryLinkUnit:
 
     def test_create_memory_link_default_link_type(self):
         """Default link_type is 'related'."""
-        from bridge.bridge import create_memory_link
+        from memory.bridge import create_memory_link
 
         mock_db = MagicMock()
         src = str(uuid.uuid4())
@@ -380,12 +380,12 @@ class TestCreateMemoryLinkUnit:
 
     def test_memory_node_model_has_source_column(self):
         """MemoryNodeModel must have source column (added in Phase 1 migration)."""
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         columns = {c.key for c in MemoryNodeModel.__table__.columns}
         assert "source" in columns
 
     def test_memory_node_model_has_user_id_column(self):
         """MemoryNodeModel must have user_id column (added in Phase 1 migration)."""
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         columns = {c.key for c in MemoryNodeModel.__table__.columns}
         assert "user_id" in columns

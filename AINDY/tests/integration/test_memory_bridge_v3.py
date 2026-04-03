@@ -51,7 +51,7 @@ class TestMemoryNodeHistory:
         """Update with identical values creates no history."""
         from db.dao.memory_node_dao import MemoryNodeDAO
         from db.models.memory_node_history import MemoryNodeHistory
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
 
         node = MemoryNodeModel(
             content="original content",
@@ -80,7 +80,7 @@ class TestMemoryNodeHistory:
         """Update with new content creates history entry."""
         from db.dao.memory_node_dao import MemoryNodeDAO
         from db.models.memory_node_history import MemoryNodeHistory
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
 
         mocker.patch(
             "services.embedding_service.generate_embedding",
@@ -156,7 +156,7 @@ class TestDFSTraversal:
     def test_traverse_cycle_prevention(self):
         """DFS must not loop on A -> B -> A cycles."""
         from db.dao.memory_node_dao import MemoryNodeDAO
-        from services.memory_persistence import MemoryLinkModel
+        from memory.memory_persistence import MemoryLinkModel
         import uuid as _uuid
 
         mock_db = MagicMock()

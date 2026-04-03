@@ -115,7 +115,7 @@ class TestLeadGenServiceBugs:
         """
         import inspect
         from services import leadgen_service
-        from bridge import bridge
+        import memory.bridge as bridge
 
         source = inspect.getsource(leadgen_service.create_lead_results)
         assert "create_memory_node" in source, (

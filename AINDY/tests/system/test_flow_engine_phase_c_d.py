@@ -366,13 +366,13 @@ class TestGenesisWaitResumeRoundTrip:
 class TestFlowCompletionEventSignificance:
 
     def test_flow_completion_in_event_significance(self):
-        from services.memory_capture_engine import EVENT_SIGNIFICANCE
+        from memory.memory_capture_engine import EVENT_SIGNIFICANCE
         assert "flow_completion" in EVENT_SIGNIFICANCE, (
             "flow_completion must be in EVENT_SIGNIFICANCE for Phase D"
         )
 
     def test_flow_completion_significance_value(self):
-        from services.memory_capture_engine import EVENT_SIGNIFICANCE
+        from memory.memory_capture_engine import EVENT_SIGNIFICANCE
         score = EVENT_SIGNIFICANCE["flow_completion"]
         assert 0.3 <= score <= 1.0, (
             f"flow_completion significance must be between 0.3 and 1.0, got {score}"

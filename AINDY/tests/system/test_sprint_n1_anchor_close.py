@@ -180,7 +180,7 @@ class TestDualDAOConsolidation:
         with open(src_file, "r", encoding="utf-8") as f:
             source = f.read()
         assert "from db.dao.memory_node_dao import MemoryNodeDAO" in source
-        assert "from services.memory_persistence import MemoryNodeDAO" not in source
+        assert "from memory.memory_persistence import MemoryNodeDAO" not in source
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ class TestMemoryNodeChildrenPersistence:
         """save() must create MemoryLink rows for node IDs in extra['children']."""
         import uuid
         from db.dao.memory_node_dao import MemoryNodeDAO
-        from services.embedding_service import generate_embedding
+        from memory.embedding_service import generate_embedding
 
         child_id = uuid.uuid4()
         mock_db = MagicMock()
@@ -233,7 +233,7 @@ class TestMemoryNodeChildrenPersistence:
                 # We need the MemoryNodeModel instance that save() creates
                 # to have a valid id — patch MemoryNodeModel
                 import db.dao.memory_node_dao as dao_module
-                from services.memory_persistence import MemoryNodeModel, MemoryLinkModel
+                from memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
 
                 with patch.object(dao_module, "MemoryNodeModel") as MockModel, \
                      patch.object(dao_module, "MemoryLinkModel") as MockLink:

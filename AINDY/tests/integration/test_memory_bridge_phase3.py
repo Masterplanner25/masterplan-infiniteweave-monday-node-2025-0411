@@ -56,7 +56,7 @@ class TestRecallMemoriesBridge:
     """Tests for bridge.recall_memories()"""
 
     def test_recall_no_db_returns_empty_list(self):
-        from bridge import recall_memories
+        from memory.bridge import recall_memories
         result = recall_memories(query="test", db=None)
         assert result == []
 
@@ -80,7 +80,7 @@ class TestRecallMemoriesBridge:
                 metadata={},
             )
 
-            from bridge import recall_memories
+            from memory.bridge import recall_memories
             result = recall_memories(
                 query="test query",
                 tags=["arm"],
@@ -95,7 +95,7 @@ class TestRecallMemoriesBridge:
     def test_recall_returns_empty_list_on_orchestrator_failure(self):
         mock_db = MagicMock()
         with patch(f"{_ORCH_PATH}.get_context", side_effect=Exception("DB down")):
-            from bridge import recall_memories
+            from memory.bridge import recall_memories
             result = recall_memories(query="test", db=mock_db)
 
         assert result == []
@@ -111,7 +111,7 @@ class TestRecallMemoriesBridge:
                 metadata={},
             )
 
-            from bridge import recall_memories
+            from memory.bridge import recall_memories
             recall_memories(query="decision", node_type="decision", db=mock_db)
 
         mock_get_context.assert_called_once()
@@ -125,8 +125,8 @@ class TestCreateMemoryNodeBridge:
     """Tests for updated bridge.create_memory_node() using new DAO."""
 
     def test_create_node_no_db_returns_transient(self):
-        from bridge import create_memory_node
-        from bridge.bridge import MemoryNode
+        from memory.bridge import create_memory_node
+        from memory.bridge import MemoryNode
         result = create_memory_node(content="test", db=None)
         assert isinstance(result, MemoryNode)
         assert result.content == "test"
@@ -138,7 +138,7 @@ class TestCreateMemoryNodeBridge:
             mock_dao_instance.save.return_value = MOCK_NODE_DICT
             MockDAO.return_value = mock_dao_instance
 
-            from bridge import create_memory_node
+            from memory.bridge import create_memory_node
             result = create_memory_node(
                 content="ARM analysis of app.py",
                 source="arm_analysis",
@@ -165,7 +165,7 @@ class TestCreateMemoryNodeBridge:
             mock_dao_instance.save.return_value = MOCK_NODE_DICT
             MockDAO.return_value = mock_dao_instance
 
-            from bridge import create_memory_node
+            from memory.bridge import create_memory_node
             create_memory_node(content="no type set", db=mock_db)
 
         _, kwargs = mock_dao_instance.save.call_args

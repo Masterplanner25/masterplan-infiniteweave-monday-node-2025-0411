@@ -21,13 +21,13 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from services.tenant_context import (
+from kernel.tenant_context import (
     TenantContext,
     TENANT_VIOLATION,
     build_tenant_context,
     tenant_context_from_syscall_context,
 )
-from services.resource_manager import (
+from kernel.resource_manager import (
     MAX_CONCURRENT_PER_TENANT,
     MAX_CPU_TIME_MS,
     MAX_SYSCALLS_PER_EXECUTION,
@@ -35,7 +35,7 @@ from services.resource_manager import (
     ResourceManager,
     ResourceLimitError,
 )
-from services.scheduler_engine import (
+from kernel.scheduler_engine import (
     PRIORITY_HIGH,
     PRIORITY_LOW,
     PRIORITY_NORMAL,
@@ -409,7 +409,7 @@ class TestSchedulerFairness:
         calls = []
         se.enqueue(_item("eu-1", callback=lambda: calls.append("eu-1")))
         se.enqueue(_item("eu-2", callback=lambda: calls.append("eu-2")))
-        with patch("services.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
         assert dispatched == 2
         assert "eu-1" in calls
@@ -500,7 +500,7 @@ class TestSchedulerWaitResume:
 
 class TestSyscallDispatcherOsLayer:
     def _ctx(self, user_id="user-1", caps=None):
-        from services.syscall_registry import SyscallContext
+        from kernel.syscall_registry import SyscallContext
         return SyscallContext(
             execution_unit_id="eu-test",
             user_id=user_id,
@@ -509,8 +509,8 @@ class TestSyscallDispatcherOsLayer:
         )
 
     def test_dispatch_blocks_on_missing_user_id(self):
-        from services.syscall_dispatcher import SyscallDispatcher
-        from services.syscall_registry import register_syscall
+        from kernel.syscall_dispatcher import SyscallDispatcher
+        from kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.noop", lambda p, c: {}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -520,8 +520,8 @@ class TestSyscallDispatcherOsLayer:
         assert "TENANT_VIOLATION" in result["error"]
 
     def test_dispatch_records_syscall_usage(self):
-        from services.syscall_dispatcher import SyscallDispatcher
-        from services.syscall_registry import register_syscall
+        from kernel.syscall_dispatcher import SyscallDispatcher
+        from kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.echo", lambda p, c: {"ok": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -529,7 +529,7 @@ class TestSyscallDispatcherOsLayer:
         ctx = self._ctx(caps=["test.cap"])
         rm.mark_started("user-1", "eu-test")
 
-        with patch("services.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.echo", {}, ctx)
 
         assert result["status"] == "success"
@@ -537,8 +537,8 @@ class TestSyscallDispatcherOsLayer:
         assert snap["syscall_count"] >= 1
 
     def test_dispatch_blocks_on_syscall_quota_exceeded(self):
-        from services.syscall_dispatcher import SyscallDispatcher
-        from services.syscall_registry import register_syscall
+        from kernel.syscall_dispatcher import SyscallDispatcher
+        from kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.heavy", lambda p, c: {}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -548,22 +548,22 @@ class TestSyscallDispatcherOsLayer:
         # Exhaust syscall quota
         rm.record_usage("eu-test", {"syscall_count": MAX_SYSCALLS_PER_EXECUTION + 1})
 
-        with patch("services.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.heavy", {}, ctx)
 
         assert result["status"] == "error"
         assert RESOURCE_LIMIT_EXCEEDED in result["error"]
 
     def test_dispatch_succeeds_with_valid_tenant(self):
-        from services.syscall_dispatcher import SyscallDispatcher
-        from services.syscall_registry import register_syscall
+        from kernel.syscall_dispatcher import SyscallDispatcher
+        from kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.ok", lambda p, c: {"done": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
         rm = ResourceManager()
         ctx = self._ctx(user_id="user-valid", caps=["test.cap"])
 
-        with patch("services.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.ok", {}, ctx)
 
         assert result["status"] == "success"
@@ -571,8 +571,8 @@ class TestSyscallDispatcherOsLayer:
 
     def test_dispatch_rm_failure_is_non_fatal(self):
         """ResourceManager failure must not kill a successful syscall."""
-        from services.syscall_dispatcher import SyscallDispatcher
-        from services.syscall_registry import register_syscall
+        from kernel.syscall_dispatcher import SyscallDispatcher
+        from kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.safe", lambda p, c: {"safe": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -581,7 +581,7 @@ class TestSyscallDispatcherOsLayer:
         broken_rm.check_quota.return_value = (True, None)
         broken_rm.record_usage.side_effect = RuntimeError("DB exploded")
 
-        with patch("services.syscall_dispatcher._get_rm", return_value=broken_rm):
+        with patch("kernel.syscall_dispatcher._get_rm", return_value=broken_rm):
             result = dispatcher.dispatch("sys.v1.test.safe", {}, ctx)
 
         assert result["status"] == "success"
@@ -632,7 +632,7 @@ class TestSchedulerResourceIntegration:
         calls = []
         se.enqueue(_item("eu-blocked", tenant_id="t1", callback=lambda: calls.append("ran")))
 
-        with patch("services.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
 
         assert dispatched == 0
@@ -649,7 +649,7 @@ class TestSchedulerResourceIntegration:
         calls = []
         se.enqueue(_item("eu-ok", tenant_id="t1", callback=lambda: calls.append("ran")))
 
-        with patch("services.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
 
         assert dispatched == 1
@@ -668,7 +668,7 @@ class TestSchedulerResourceIntegration:
         # Tenant B item - should run
         se.enqueue(_item("eu-B", tenant_id="tenant-B", callback=lambda: calls_b.append("B")))
 
-        with patch("services.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
             # First dequeue: A is picked (high in queue), blocked, re-enqueued
             # Scheduler stops because can_execute returned False for A
             # This tests that the scheduler correctly handles partial drainage
@@ -698,13 +698,13 @@ class TestSchedulerResourceIntegration:
         assert resumed == 1
         assert se.queue_depth()[PRIORITY_HIGH] == 1
 
-        with patch("services.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
             se.schedule()
 
         assert "resumed" in results
 
     def test_resource_manager_singleton_is_stable(self):
-        from services.resource_manager import get_resource_manager
+        from kernel.resource_manager import get_resource_manager
         rm1 = get_resource_manager()
         rm2 = get_resource_manager()
         assert rm1 is rm2

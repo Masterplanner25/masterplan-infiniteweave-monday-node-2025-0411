@@ -17,6 +17,15 @@ import logging
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool, create_engine
+
+# Load .env into os.environ so get_database_url() can read DATABASE_URL directly.
+# python-dotenv is already in requirements.txt; override=False so real env vars win.
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+except ImportError:
+    pass
+
 from db.models import metrics_models  # ensures Alembic sees new models
 
 
@@ -64,7 +73,13 @@ except Exception:
 # Bring in Base and model modules
 from db.database import Base     # declarative_base() lives here
 import db.models  # imports all models inside db/models.py
-import services.memory_persistence
+import memory.memory_persistence
+
+# Explicitly import model files not covered by db.models wildcard import.
+# Each import registers its table(s) with Base.metadata so autogenerate sees them.
+import db.models.nodus_scheduled_job   # nodus_scheduled_jobs
+import db.models.nodus_trace_event     # nodus_trace_events
+import db.models.watcher_signal        # watcher_signals
 
 # Combine all known metadata objects
 from sqlalchemy import MetaData

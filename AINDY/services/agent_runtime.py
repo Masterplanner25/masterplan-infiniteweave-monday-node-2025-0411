@@ -219,7 +219,7 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         kpi_block = _build_kpi_context_block(user_id=user_id, db=db)
-        from services.memory_helpers import enrich_context, format_memories_for_prompt
+        from memory.memory_helpers import enrich_context, format_memories_for_prompt
         _plan_ctx = enrich_context({
             "db": db,
             "user_id": str(user_id) if user_id else None,

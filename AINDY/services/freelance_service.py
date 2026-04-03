@@ -25,7 +25,7 @@ from services.automation_execution_service import execute_automation_action
 from core.execution_signal_helper import queue_memory_capture, queue_system_event
 from services.external_call_service import perform_external_call
 from services.trace_context import is_pipeline_active
-from services.memory_scoring_service import get_relevant_memories
+from memory.memory_scoring_service import get_relevant_memories
 from services.async_job_service import submit_autonomous_async_job
 from services.system_event_service import emit_error_event
 from services.system_event_types import SystemEventTypes

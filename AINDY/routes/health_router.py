@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -37,21 +38,42 @@ def _liveness_payload() -> dict:
 
 
 @router.get("/health")
-def liveness(request: Request) -> dict:
-    payload = _liveness_payload()
-    def handler(_ctx):
-        event_db = SessionLocal()
+def liveness() -> dict:
+    """
+    Liveness + shallow DB check.
+
+    Always returns HTTP 200. 'status' is 'ok' when the DB is reachable,
+    'degraded' when the DB check fails or times out (2 s ceiling).
+    HTTP 503 is never returned by this endpoint — a degraded service can
+    still respond, which is all liveness probes require.
+    """
+    db_status = "error"
+    _done = threading.Event()
+
+    def _check_db() -> None:
+        nonlocal db_status
+        db = SessionLocal()
         try:
-            queue_system_event(
-                db=event_db,
-                event_type="health.liveness.completed",
-                payload=payload,
-                required=False,
-            )
+            db.execute(text("SELECT 1"))
+            db_status = "ok"
+        except Exception as exc:
+            logger.warning("[health] DB check failed: %s", exc)
         finally:
-            event_db.close()
-        return payload
-    return _execute_health(request, "health.liveness", handler)
+            db.close()
+            _done.set()
+
+    t = threading.Thread(target=_check_db, daemon=True)
+    t.start()
+    timed_out = not _done.wait(timeout=2.0)
+    if timed_out:
+        logger.warning("[health] DB check did not complete within 2 s")
+
+    overall = "ok" if db_status == "ok" else "degraded"
+    return {
+        "status": overall,
+        "db": db_status,
+        "version": settings.VERSION,
+    }
 
 
 @router.get("/health/")

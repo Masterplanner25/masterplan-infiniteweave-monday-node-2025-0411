@@ -15,6 +15,8 @@ from db.models.masterplan import MasterPlan
 from db.models.task import Task
 from db.mongo_setup import get_mongo_client
 from services.calculation_services import save_calculation
+from core.observability_events import emit_observability_event
+from services.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +424,15 @@ def create_task(
     db.refresh(task)
     logger.info("Created task: %s", task.name)
     try:
+        emit_observability_event(
+            event_type=SystemEventTypes.TASK_CREATED,
+            user_id=str(owner_user_id) if owner_user_id else None,
+            payload={"task_id": task.id, "name": task.name, "category": task.category},
+            source="task",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[task] observability emit failed (create): %s", _obs_exc)
+    try:
         from services.execution_unit_service import ExecutionUnitService
         ExecutionUnitService(db).create(
             eu_type="task",
@@ -458,6 +469,15 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.status = "in_progress"
         db.commit()
         try:
+            emit_observability_event(
+                event_type=SystemEventTypes.TASK_STARTED,
+                user_id=str(_user_uuid(user_id)) if user_id else None,
+                payload={"task_id": task.id, "name": task.name},
+                source="task",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[task] observability emit failed (start): %s", _obs_exc)
+        try:
             from services.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
             _eu = _eus.get_by_source("task", str(task.id))
@@ -481,6 +501,15 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.time_spent += duration
         task.status = "paused"
         db.commit()
+        try:
+            emit_observability_event(
+                event_type=SystemEventTypes.TASK_PAUSED,
+                user_id=str(_user_uuid(user_id)) if user_id else None,
+                payload={"task_id": task.id, "name": task.name},
+                source="task",
+            )
+        except Exception as _obs_exc:
+            logger.warning("[task] observability emit failed (pause): %s", _obs_exc)
         try:
             from services.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
@@ -514,6 +543,15 @@ def complete_task(db: Session, name: str, user_id: str = None):
     task.end_time = now
     unlocked_tasks = _unlock_downstream_tasks(db, task, user_id=user_id)
     db.commit()
+    try:
+        emit_observability_event(
+            event_type=SystemEventTypes.TASK_COMPLETED,
+            user_id=str(owner_user_id) if owner_user_id else None,
+            payload={"task_id": task.id, "name": task.name},
+            source="task",
+        )
+    except Exception as _obs_exc:
+        logger.warning("[task] observability emit failed (complete): %s", _obs_exc)
     try:
         from services.execution_unit_service import ExecutionUnitService
         _eus = ExecutionUnitService(db)

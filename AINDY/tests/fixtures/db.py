@@ -31,7 +31,7 @@ def _compile_vector_sqlite(type_, compiler, **kw):
 
 def _import_model_registry():
     import db.models  # noqa: F401
-    import services.memory_persistence  # noqa: F401
+    import memory.memory_persistence  # noqa: F401
 
 
 @pytest.fixture(scope="session")

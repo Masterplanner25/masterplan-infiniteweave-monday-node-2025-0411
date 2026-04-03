@@ -84,6 +84,12 @@ jobs:
       - name: Run alembic migrations
         run: alembic upgrade head
 
+      - name: Verify migrations at head
+        working-directory: AINDY
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+        run: python -m alembic check
+
       - name: Run tests with coverage
         run: |
           pytest \

@@ -450,7 +450,7 @@ def emit_system_event(
             )
         try:
             from db.models.system_event import SystemEvent
-            from services.memory_capture_engine import capture_system_event_as_memory
+            from memory.memory_capture_engine import capture_system_event_as_memory
 
             persisted_event = db.query(SystemEvent).filter(SystemEvent.id == event_id).first()
             if persisted_event:

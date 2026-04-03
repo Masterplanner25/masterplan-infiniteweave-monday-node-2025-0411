@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from services.memory_persistence import MemoryNodeDAO
+from memory.memory_persistence import MemoryNodeDAO
 from db.models.arm_models import (
     ARMRun,
     ARMLog,

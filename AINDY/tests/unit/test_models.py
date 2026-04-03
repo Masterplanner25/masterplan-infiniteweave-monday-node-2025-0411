@@ -106,7 +106,7 @@ class TestCalculationResultModel:
         )
 
         # The correct table for memory nodes is memory_nodes via MemoryNodeModel
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         mapper2 = sa_inspect(MemoryNodeModel)
         col_names2 = [c.key for c in mapper2.attrs]
         assert "content" in col_names2
@@ -116,15 +116,15 @@ class TestCalculationResultModel:
 
 class TestMemoryPersistenceModels:
     def test_memory_node_model_importable(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         assert MemoryNodeModel is not None
 
     def test_memory_node_model_tablename(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         assert MemoryNodeModel.__tablename__ == "memory_nodes"
 
     def test_memory_node_model_columns(self):
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -136,7 +136,7 @@ class TestMemoryPersistenceModels:
         Memory Bridge Phase 2: MemoryNodeModel has an 'embedding' VECTOR(1536) column.
         Semantic memory search is now operational.
         """
-        from services.memory_persistence import MemoryNodeModel
+        from memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -146,15 +146,15 @@ class TestMemoryPersistenceModels:
         )
 
     def test_memory_link_model_importable(self):
-        from services.memory_persistence import MemoryLinkModel
+        from memory.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel is not None
 
     def test_memory_link_model_tablename(self):
-        from services.memory_persistence import MemoryLinkModel
+        from memory.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel.__tablename__ == "memory_links"
 
     def test_memory_link_model_columns(self):
-        from services.memory_persistence import MemoryLinkModel
+        from memory.memory_persistence import MemoryLinkModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryLinkModel)
         col_names = [c.key for c in mapper.attrs]
