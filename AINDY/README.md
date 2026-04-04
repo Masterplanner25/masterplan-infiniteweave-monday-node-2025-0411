@@ -19,7 +19,9 @@ For the shortest path to a live syscall, use the getting-started guide:
 Local startup:
 
 ```bash
-cd AINDY
+cp .env.example .env
+python -c "import secrets; print(secrets.token_hex(32))"
+# write that value to SECRET_KEY in .env
 docker compose up -d
 ```
 

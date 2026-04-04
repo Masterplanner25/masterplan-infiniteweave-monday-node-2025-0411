@@ -7,11 +7,13 @@ This guide gets a local A.I.N.D.Y. instance running and executes one real platfo
 From the repo root:
 
 ```bash
-cd AINDY
+cp .env.example .env
+python -c "import secrets; print(secrets.token_hex(32))"
+# write that value to SECRET_KEY in .env
 docker compose up -d
 ```
 
-This starts PostgreSQL and the API on `http://localhost:8000`.
+This starts PostgreSQL and the API on `http://localhost:8000`. The default profile skips Mongo startup so the platform API can boot with just Postgres.
 
 Verify health:
 
@@ -63,7 +65,7 @@ curl -X POST http://localhost:8000/platform/syscall \
   -H "Authorization: Bearer $AINDY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "sys.v1.memory.list",
+    "name": "sys.v1.memory.read",
     "payload": {
       "path": "/memory/*",
       "limit": 5
@@ -76,10 +78,10 @@ Expected response shape:
 ```json
 {
   "status": "success",
-  "data": {"items": []},
+  "data": {"nodes": [], "count": 0},
   "trace_id": "<id>",
   "execution_unit_id": "<id>",
-  "syscall": "sys.v1.memory.list"
+  "syscall": "sys.v1.memory.read"
 }
 ```
 
@@ -93,4 +95,5 @@ python cli.py run script.nd --api-url http://localhost:8000 --api-token "$AINDY_
 
 - `401 Authentication required`: token missing or expired.
 - Connection failure on `localhost:8000`: restart the stack with `docker compose up -d`.
+- Startup failure mentioning `SECRET_KEY`: generate a real key and update repo-root `.env`.
 - Schema errors: run `alembic upgrade head` before starting the app outside Docker.
