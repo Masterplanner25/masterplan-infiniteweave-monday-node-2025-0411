@@ -1,570 +1,908 @@
 {
-  "_meta": {
-    "version": "1.0.0",
-    "last_updated": "2026-04-02",
-    "total_tasks": 43,
-    "blocker_count": 18,
-    "critical_count": 19,
-    "important_count": 6,
-    "completed_this_session": ["V1-STAB-005", "V1-STAB-007", "V1-REFACT-001", "V1-CONT-001", "V1-REFACT-013", "V1-CONT-003", "V1-REFACT-008", "V1-PLAT-003", "V1-CONT-004", "V1-REFACT-003", "V1-REFACT-009", "V1-PLAT-001", "V1-PLAT-002", "V1-REFACT-004"]
-  },
-  "tasks": {
-    "V1-STAB-001": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 1,
-      "title": "Make quota enforcement fatal in SyscallDispatcher",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-001",
-      "files": ["AINDY/kernel/syscall_dispatcher.py", "AINDY/kernel/resource_manager.py"],
-      "notes": "try/except/else split at line 193-203. Quota failure returns error_envelope; infra exceptions fail-open with WARNING."
-    },
-    "V1-STAB-002": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 1,
-      "title": "Add max_execution_ms timeout to NodusRuntimeAdapter",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-002",
-      "files": ["AINDY/services/nodus_runtime_adapter.py"],
-      "notes": "NodusTimeoutError + threading.Timer + ctypes.PyThreadState_SetAsyncExc. Default 30,000ms. run_script/run_file/_execute all wired."
-    },
-    "V1-STAB-003": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 1,
-      "title": "Replace SECRET_KEY default in .env.example",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": [".env.example", "AINDY/config.py"],
-      "notes": "AINDY/.env.example uses REPLACE_THIS_... prefix. config.py reject_insecure_secret_key raises RuntimeError on insecure defaults (skipped when ENV=test)."
-    },
-    "V1-STAB-004": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 1,
-      "title": "Implement production-grade /health endpoint",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-007",
-      "files": ["AINDY/routes/health_router.py"],
-      "dependencies": ["V1-STAB-005"],
-      "notes": "Non-blocking 2-second threaded DB check via SELECT 1. Always returns HTTP 200 with {status, db, version}. status=degraded if DB unreachable."
-    },
-    "V1-STAB-005": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 1,
-      "title": "Make version.json the single source of version truth",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-007",
-      "files": ["AINDY/version.json", "AINDY/config.py", "AINDY/routes/health_router.py"],
-      "notes": "_read_version() in config.py reads version.json at import time with 1.0.0 fallback. VERSION: str = Field(default_factory=_read_version, exclude=True) in Settings. health_router.py uses settings.VERSION directly (no getattr fallback)."
-    },
-    "V1-STAB-006": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 1,
-      "title": "Verify all Alembic migrations committed and at head",
-      "started_at": "2026-04-01",
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/alembic/", "AINDY/main.py", ".github/workflows/ci.yml"],
-      "notes": "108 migration files present, latest g5h6i7j8k9l0. Guards added: _check_alembic_head() startup warn (non-fatal) in main.py lifespan; `python -m alembic check` CI step after upgrade head. Remaining: operator must run `alembic current` + `alembic heads` against a live DB to mark complete."
-    },
-    "V1-STAB-007": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 1,
-      "title": "Add structured JSON logging",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": ["AINDY/config.py", "AINDY/requirements.txt"],
-      "notes": "python-json-logger>=2.0.7 added to requirements.txt (UTF-16 preserved). config.py: _build_log_handler() replaces old setup. is_prod -> JsonFormatter (%(asctime)s %(levelname)s %(name)s %(message)s). dev/test -> plain %(asctime)s - %(levelname)s - %(message)s. pythonjsonlogger import inside is_prod block only — not required in dev/test."
-    },
-    "V1-STAB-008": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 1,
-      "title": "Ensure stack traces never returned in API responses",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-013",
-      "files": ["AINDY/main.py"],
-      "notes": "unhandled_exception_handler at main.py:329 returns {error, message, details:null}. No traceback in response body. HTTPException and ValidationError handlers also clean."
-    },
-    "V1-REFACT-001": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Create new package directory skeleton",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": ["AINDY/kernel/__init__.py", "AINDY/memory/__init__.py", "AINDY/agents/__init__.py", "AINDY/platform_layer/__init__.py", "AINDY/analytics/__init__.py", "AINDY/domain/__init__.py"],
-      "dependencies": ["V1-STAB-001", "V1-STAB-002", "V1-STAB-003", "V1-STAB-004", "V1-STAB-006"],
-      "notes": "All 6 packages present. kernel/ fully populated (7 files + __init__.py). memory/, agents/, platform_layer/, analytics/, domain/ are placeholder __init__.py only — contents migrate in V1-REFACT-003 through V1-REFACT-007."
-    },
-    "V1-REFACT-002": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move kernel layer files + create shims",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-003",
-      "files": ["AINDY/kernel/", "AINDY/services/syscall_*.py", "AINDY/services/resource_manager.py", "AINDY/services/tenant_context.py", "AINDY/services/scheduler_engine.py"],
-      "dependencies": ["V1-REFACT-001"],
-      "notes": "All 7 files in kernel/: syscall_dispatcher, syscall_registry, syscall_versioning, syscall_handlers, resource_manager, tenant_context, scheduler_engine. services/ shims re-export including private _handle_* functions. Test patch targets updated to kernel.*."
-    },
-    "V1-REFACT-003": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move memory subsystem files + create shims",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "none",
-      "files": ["AINDY/memory/", "AINDY/services/memory_*.py", "AINDY/services/embedding_*.py", "AINDY/bridge/"],
-      "dependencies": ["V1-REFACT-002"],
-      "notes": "10 files created in memory/: memory_persistence, memory_address_space, memory_capture_engine, memory_helpers, memory_ingest_service, memory_scoring_service, embedding_service, embedding_jobs, bridge, nodus_memory_bridge. Internal cross-refs updated: memory_scoring_service/embedding_jobs use memory.memory_persistence; memory_capture_engine uses memory.bridge; nodus_memory_bridge uses memory.memory_capture_engine; bridge uses memory.memory_persistence. 8 services/ shims + bridge/bridge.py + bridge/nodus_memory_bridge.py replaced with one-liner `from memory.X import *`. bridge/__init__.py updated to import from memory.* directly."
-    },
-    "V1-REFACT-004": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move runtime layer files + create shims",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "none",
-      "files": ["AINDY/runtime/flow_*.py", "AINDY/runtime/nodus_*.py", "AINDY/services/flow_*.py (shims)", "AINDY/services/nodus_*.py (shims)"],
-      "dependencies": ["V1-REFACT-003"],
-      "notes": "12 files moved: flow_definitions, flow_definitions_extended, flow_engine, flow_registry, nodus_adapter, nodus_builtins, nodus_execution_service, nodus_flow_compiler, nodus_runtime_adapter, nodus_schedule_service, nodus_security, nodus_trace_service. Cross-refs between moving files updated (services.X → runtime.X). Shims created in services/ (from runtime.X import * + explicit private exports for _condition_falsy/_condition_truthy in nodus_flow_compiler). KNOWN: 78 intermediate test regressions from mock patches targeting services.* paths — will resolve in V1-REFACT-010."
-    },
-    "V1-REFACT-005": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move agents layer files + create shims",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/agents/", "AINDY/services/agent_runtime.py", "AINDY/services/agent_tools.py", "AINDY/services/agent_coordinator.py", "AINDY/services/autonomous_controller.py", "AINDY/services/capability_service.py", "AINDY/services/agent_event_service.py", "AINDY/services/agent_message_bus.py", "AINDY/services/stuck_run_service.py"],
-      "dependencies": ["V1-REFACT-004"],
-      "notes": "8 files"
-    },
-    "V1-REFACT-006": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move platform layer files + create shims",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/platform_layer/", "AINDY/services/api_key_service.py", "AINDY/services/platform_loader.py", "AINDY/services/flow_registry.py", "AINDY/services/node_registry.py", "AINDY/services/event_service.py", "AINDY/services/external_call_service.py", "AINDY/services/rate_limiter.py", "AINDY/services/scheduler_service.py", "AINDY/services/async_job_service.py", "AINDY/services/system_state_service.py", "AINDY/services/master_index_service.py"],
-      "dependencies": ["V1-REFACT-005"],
-      "notes": "11 files. Fix `from services import scheduler_service` in main.py"
-    },
-    "V1-REFACT-007": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Move analytics + domain + core files + create shims",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/analytics/", "AINDY/domain/", "AINDY/core/"],
-      "dependencies": ["V1-REFACT-006"],
-      "notes": "15 to analytics/, 26 to domain/, 6 to core/, 1 (threadweaver) to utils/"
-    },
-    "V1-REFACT-008": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Update all kernel imports + remove shims",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "V1-VAL-010",
-      "files": ["AINDY/main.py", "AINDY/routes/platform_router.py", "AINDY/services/agent_tools.py", "AINDY/services/flow_definitions.py", "AINDY/services/flow_engine.py", "AINDY/services/memory_address_space.py", "AINDY/services/nodus_runtime_adapter.py", "AINDY/kernel/syscall_dispatcher.py", "AINDY/kernel/syscall_handlers.py", "AINDY/kernel/scheduler_engine.py", "AINDY/tests/unit/test_os_layer.py", "AINDY/tests/unit/test_syscall_dispatcher.py", "AINDY/tests/unit/test_syscall_handlers.py", "AINDY/tests/unit/test_syscall_versioning.py", "AINDY/tests/v1_gates/test_v1_gates.py"],
-      "dependencies": ["V1-REFACT-002"],
-      "notes": "All services.* imports referencing kernel shims updated to kernel.* directly. 7 shim files deleted from services/: syscall_dispatcher.py, syscall_registry.py, syscall_versioning.py, syscall_handlers.py, resource_manager.py, tenant_context.py, scheduler_engine.py. Also fixed internal cross-refs inside kernel/ itself (kernel/syscall_dispatcher.py imported from services.syscall_registry and services.syscall_versioning; kernel/syscall_handlers.py from services.syscall_registry; kernel/scheduler_engine.py from services.resource_manager). All patch() strings in tests updated to kernel.* targets."
-    },
-    "V1-REFACT-009": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Update all memory imports + remove shims",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "V1-VAL-010",
-      "files": ["AINDY/core/execution_pipeline.py", "AINDY/core/execution_signal_helper.py", "AINDY/db/dao/memory_node_dao.py", "AINDY/kernel/syscall_registry.py", "AINDY/routes/platform_router.py", "AINDY/runtime/execution_loop.py", "AINDY/services/agent_runtime.py", "AINDY/services/autonomous_controller.py", "AINDY/services/flow_definitions_extended.py", "AINDY/services/flow_engine.py", "AINDY/services/freelance_service.py", "AINDY/services/identity_boot_service.py", "AINDY/services/infinity_orchestrator.py", "AINDY/services/leadgen_service.py", "AINDY/services/nodus_adapter.py", "AINDY/services/nodus_execution_service.py", "AINDY/services/nodus_runtime_adapter.py", "AINDY/services/rippletrace_service.py", "AINDY/services/system_event_service.py", "AINDY/alembic/env.py", "AINDY/tests/fixtures/db.py", "AINDY/Tools/ingest_memory.py"],
-      "dependencies": ["V1-REFACT-003", "V1-REFACT-008"],
-      "notes": "43 files updated via bulk Python replacement script. Patterns replaced: services.memory_* -> memory.memory_*, services.embedding_* -> memory.embedding_*, import services.memory_persistence -> import memory.memory_persistence, bridge.bridge -> memory.bridge, bridge.nodus_memory_bridge -> memory.nodus_memory_bridge, from bridge import X -> from memory.bridge import X (for create_memory_node/link, recall_memories), from bridge import bridge -> import memory.bridge as bridge. `from bridge import suggest_from_memory` intentionally preserved (suggest_from_memory still lives in bridge/__init__.py). 10 shim files deleted: 8 services/ + bridge/bridge.py + bridge/nodus_memory_bridge.py. Final grep confirmed zero remaining references to old paths."
-    },
-    "V1-REFACT-010": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Update all runtime/agents/platform_layer imports + remove shims",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "V1-VAL-010",
-      "files": [],
-      "dependencies": ["V1-REFACT-004", "V1-REFACT-005", "V1-REFACT-006", "V1-REFACT-008"],
-      "notes": "30 import patterns. Fix `from services import scheduler_service` in main.py"
-    },
-    "V1-REFACT-011": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Update all analytics/domain/core imports + remove shims",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "V1-VAL-009",
-      "files": [],
-      "dependencies": ["V1-REFACT-007", "V1-REFACT-010"],
-      "notes": "After this: services/ contains only auth_service.py. Delete services/services__init__.py"
-    },
-    "V1-REFACT-012": {
-      "status": "pending",
-      "priority": "IMPORTANT",
-      "phase": 2,
-      "title": "Rename execution_loop.py to memory_loop.py",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/runtime/execution_loop.py"],
-      "dependencies": ["V1-REFACT-009"],
-      "notes": "git mv + update all consumers"
-    },
-    "V1-REFACT-013": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 2,
-      "title": "Gate all domain routes behind ENABLE_DOMAIN_APPS flag",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-014",
-      "files": ["AINDY/config.py", "AINDY/routes/__init__.py", "AINDY/.env.example"],
-      "dependencies": ["V1-REFACT-007"],
-      "notes": "ENABLE_DOMAIN_APPS: bool = False added to Settings. routes/__init__.py: _PLATFORM_APP_ROUTERS (18) always mounts; _DOMAIN_APP_ROUTERS (11: arm, freelance, leadgen, seo, social, authorship, research, search_history, rippletrace, network_bridge, main_router) gated. APP_ROUTERS built dynamically from env at import time. AINDY_ENABLE_LEGACY_SURFACE append preserved. .env.example updated."
-    },
-    "V1-REFACT-014": {
-      "status": "pending",
-      "priority": "IMPORTANT",
-      "phase": 2,
-      "title": "Remove root-level debris files",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["fix_backend.py", "script.py", "@echo off.bat", "git_health_check.bat", "AINDY/services/services__init__.py", "AINDY/legacy/"],
-      "dependencies": ["V1-REFACT-011"],
-      "notes": "fix_backend.py, script.py, @echo off.bat, git_health_check.bat all still present at root. services__init__.py and legacy/ still present. Move legacy/ to archive/ with README note, don't delete."
-    },
-    "V1-REFACT-015": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 2,
-      "title": "Verify no stdlib platform collision",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": [],
-      "dependencies": ["V1-REFACT-001"],
-      "notes": "Only `import platform` is in watcher/window_detector.py (stdlib OS detection, legitimate use). No application-level platform package exists. Safe to create platform_layer/."
-    },
-    "V1-CONT-001": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 3,
-      "title": "Add missing SystemEvent types for Genesis and Task",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": ["AINDY/services/system_event_types.py"],
-      "dependencies": ["V1-REFACT-011"],
-      "notes": "TASK_CREATED, TASK_STARTED, TASK_PAUSED, TASK_COMPLETED, TASK_FAILED appended after GENESIS_ACTIVATE_FAILED (lines 67-71). All Genesis constants unchanged."
-    },
-    "V1-CONT-002": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 3,
-      "title": "Wire Genesis routes through execution contract",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "V1-VAL-011",
-      "files": ["AINDY/routes/genesis_router.py"],
-      "dependencies": ["V1-CONT-001"],
-      "notes": "emit_observability_event() at START+terminal for: message, synthesize, lock, activate. Uses core/observability_events.py for DB-backed writes via queue_system_event. Never raises."
-    },
-    "V1-CONT-003": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 3,
-      "title": "Wire Task routes through execution contract",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "V1-VAL-012",
-      "files": ["AINDY/services/task_services.py", "AINDY/schemas/task_schemas.py", "AINDY/routes/task_router.py", "AINDY/tests/v1_gates/conftest.py"],
-      "dependencies": ["V1-CONT-001"],
-      "notes": "emit_observability_event() added to create_task/start_task/pause_task/complete_task in task_services.py with try/except guard. TaskCreate schema: name optional, title alias with @model_validator(mode=before). task_router.py: terminal emit AFTER _execute_tasks() returns, user_id=None (avoids FK), payload includes task_id from closure. tests/v1_gates/conftest.py: _patch_session_local_to_engine autouse fixture re-patches SessionLocal to testing_session_factory after app fixture runs — ensures emit sessions survive pipeline rollbacks."
-    },
-    "V1-CONT-004": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 3,
-      "title": "Add contract enforcement integration tests",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "V1-VAL-011",
-      "files": ["AINDY/tests/integration/test_execution_contract.py", "AINDY/tests/integration/conftest.py"],
-      "dependencies": ["V1-CONT-002", "V1-CONT-003"],
-      "notes": "6 tests: task.created HTTP (payload keys task_id+name), task.started/completed/paused via service layer, genesis.message.started HTTP (skip on 404/422), emit-fault resilience (patch raises, still 2xx). Module-level autouse _patch_session_local_to_engine uses testing_session_factory. tests/integration/conftest.py: ARRAY→JSON shim for SQLite compat."
-    },
-    "V1-PLAT-001": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 4,
-      "title": "Verify platform API key quickstart works end-to-end",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "none",
-      "files": ["AINDY/tests/integration/test_platform_quickstart.py"],
-      "dependencies": ["V1-CONT-004"],
-      "notes": "5-test integration suite: create key (returns aindy_ raw key once), platform key authenticates syscall via X-Platform-Key header, scope enforcement (memory.read key blocked from memory.write syscall → 403), revoked key returns 401, list endpoint never exposes raw key. Also fixed: get_current_user now accepts X-Platform-Key header; syscall endpoint enforces API key scopes as capabilities; runtime/memory/*.py import fixes; async_job_service.py import fix; integration conftest list adapter added."
-    },
-    "V1-PLAT-002": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 4,
-      "title": "Ensure GET /platform/syscalls returns full registry with schemas",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "V1-VAL-008",
-      "files": ["AINDY/kernel/syscall_registry.py", "AINDY/kernel/syscall_handlers.py"],
-      "dependencies": ["V1-REFACT-008"],
-      "notes": "Gate test V1-VAL-008 was already passing (SyscallEntry defaults stable=True). Set stable=False explicitly on: memory.list/tree/trace (MAS extensions), sys.v2.memory.read (v2 not yet stable), and all 23 domain handlers. Core 5 (memory.read/write/search, flow.run, event.emit) remain stable=True. GET /platform/syscalls already returns stable field via SyscallSpec.to_dict()."
-    },
-    "V1-PLAT-003": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 4,
-      "title": "Simplify docker-compose.yml to PostgreSQL + FastAPI only",
-      "started_at": "2026-04-02",
-      "completed_at": "2026-04-02",
-      "validation_check": "none",
-      "files": ["docker-compose.yml"],
-      "dependencies": ["V1-REFACT-013"],
-      "notes": "Usage comment block added at top. api: AINDY_CACHE_BACKEND defaults to memory, depends_on only postgres. worker/frontend/redis: profiles [full]. mongo: profiles [full, social]. `docker compose up` = postgres+api only. `--profile full` = all services. `--profile social` adds mongo."
-    },
-    "V1-PLAT-004": {
-      "status": "completed",
-      "priority": "BLOCKER",
-      "phase": 4,
-      "title": "Verify API keys are hashed at rest",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": ["AINDY/services/api_key_service.py", "AINDY/db/models/api_key.py", "AINDY/tests/unit/test_api_key_service.py"],
-      "dependencies": ["V1-REFACT-006"],
-      "notes": "SHA-256 (64 char hex) stored in key_hash. Raw key returned once on creation only. 17 tests added and passing: TestHashKey(4), TestGenerateKey(5), TestApiKeyNotStoredPlain(3), TestValidateKeyUsesHash(3), TestRevocation(2)."
-    },
-    "V1-PLAT-005": {
-      "status": "completed",
-      "priority": "CRITICAL",
-      "phase": 4,
-      "title": "Configure CORS explicitly for production",
-      "started_at": "2026-04-01",
-      "completed_at": "2026-04-01",
-      "validation_check": "none",
-      "files": ["AINDY/main.py", "AINDY/config.py"],
-      "dependencies": [],
-      "notes": "ALLOWED_ORIGINS read from env at main.py:286-296. CORSMiddleware uses explicit origin list. No wildcard. Defaults to localhost:5173,3000,5000 in dev."
-    },
-    "V1-PLAT-006": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 4,
-      "title": "Write and verify three end-to-end examples",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["aindy-examples/run_all_examples.sh"],
-      "dependencies": ["V1-PLAT-001", "V1-PLAT-003"],
-      "notes": "memory-analyzer, event-automation, scheduled-agent. Must run against docker-compose stack."
-    },
-    "V1-PLAT-007": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 4,
-      "title": "Verify Nodus CLI works against running instance",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/cli.py"],
-      "dependencies": ["V1-PLAT-006"],
-      "notes": "nodus run + nodus trace must work"
-    },
-    "V1-PLAT-008": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 4,
-      "title": "Review and complete OpenAPI spec annotations",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": [],
-      "dependencies": ["V1-REFACT-013"],
-      "notes": "All platform-surface routes need summary + description + response_model"
-    },
-    "V1-REL-001": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Write Getting Started documentation",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["docs/getting-started/index.md"],
-      "dependencies": ["V1-PLAT-003", "V1-PLAT-007"],
-      "notes": "Max 600 words, real curl commands, < 15 min to first syscall"
-    },
-    "V1-REL-002": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Write Syscall Reference documentation",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["docs/syscalls/reference.md"],
-      "dependencies": ["V1-PLAT-002"],
-      "notes": "All v1 syscalls with input/output schema tables and SDK examples"
-    },
-    "V1-REL-003": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 5,
-      "title": "Write Platform API Keys guide",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["docs/getting-started/api-keys.md"],
-      "dependencies": ["V1-PLAT-004"],
-      "notes": ""
-    },
-    "V1-REL-004": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Update README.md with platform-level description",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["README.md"],
-      "dependencies": ["V1-REL-001"],
-      "notes": "Max 400 words. No marketing language."
-    },
-    "V1-REL-005": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Harden CI pipeline for V1 gate",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": [".github/workflows/ci.yml"],
-      "dependencies": ["V1-STAB-006"],
-      "notes": "ruff + pytest --cov-fail-under=69 + docker build. All must pass before merge."
-    },
-    "V1-REL-006": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Perform fresh-clone quickstart verification",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": [],
-      "dependencies": ["V1-REL-001", "V1-REL-004", "V1-PLAT-003"],
-      "notes": "On clean machine. Must complete in < 15 min. Any failures = bug, fix before tagging."
-    },
-    "V1-REL-007": {
-      "status": "pending",
-      "priority": "CRITICAL",
-      "phase": 5,
-      "title": "Write CHANGELOG.md [1.0.0] section",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": ["AINDY/CHANGELOG.md"],
-      "dependencies": [],
-      "notes": "Include: capabilities shipped, known limitations (sync SQLAlchemy, single-node), excluded scope"
-    },
-    "V1-REL-008": {
-      "status": "pending",
-      "priority": "BLOCKER",
-      "phase": 5,
-      "title": "Tag v1.0.0 on green main",
-      "started_at": null,
-      "completed_at": null,
-      "validation_check": "none",
-      "files": [],
-      "dependencies": ["ALL_BLOCKERS_COMPLETE"],
-      "notes": "git tag -a v1.0.0. Cannot execute until release_gate.py exits 0."
-    }
-  },
-  "phases": {
-    "1": {
-      "name": "Stabilization",
-      "status": "in_progress",
-      "blocker_tasks_complete": 3,
-      "blocker_tasks_total": 4,
-      "notes": "V1-STAB-006 (alembic at head) is BLOCKER still pending — guards are in place but needs live-DB operator verification to close.",
-      "task_ids": ["V1-STAB-001","V1-STAB-002","V1-STAB-003","V1-STAB-004","V1-STAB-005","V1-STAB-006","V1-STAB-007","V1-STAB-008"]
-    },
-    "2": {
-      "name": "Structural Alignment",
-      "status": "in_progress",
-      "blocker_tasks_complete": 2,
-      "blocker_tasks_total": 2,
-      "notes": "All Phase 2 BLOCKER tasks complete (V1-REFACT-013, V1-REFACT-008). V1-REFACT-003, V1-REFACT-004, V1-REFACT-008, V1-REFACT-009 complete. Next unblocked: V1-REFACT-005 (agents layer), V1-REFACT-012 (rename execution_loop). V1-REFACT-005 → V1-REFACT-006 → V1-REFACT-007 → V1-REFACT-010 → V1-REFACT-011 sequential chain remains.",
-      "task_ids": ["V1-REFACT-001","V1-REFACT-002","V1-REFACT-003","V1-REFACT-004","V1-REFACT-005","V1-REFACT-006","V1-REFACT-007","V1-REFACT-008","V1-REFACT-009","V1-REFACT-010","V1-REFACT-011","V1-REFACT-012","V1-REFACT-013","V1-REFACT-014","V1-REFACT-015"]
-    },
-    "3": {
-      "name": "Contract Enforcement",
-      "status": "completed",
-      "blocker_tasks_complete": 4,
-      "blocker_tasks_total": 4,
-      "notes": "All Phase 3 tasks complete: V1-CONT-001 through V1-CONT-004.",
-      "task_ids": ["V1-CONT-001","V1-CONT-002","V1-CONT-003","V1-CONT-004"]
-    },
-    "4": {
-      "name": "Platform Surface",
-      "status": "in_progress",
-      "blocker_tasks_complete": 3,
-      "blocker_tasks_total": 3,
-      "notes": "All Phase 4 BLOCKER tasks complete: V1-PLAT-001 (quickstart integration test + API key auth wiring), V1-PLAT-003 (docker-compose), V1-PLAT-004 (API key hashing). V1-PLAT-002 (syscall registry stable flags) complete. V1-PLAT-005 (CORS) complete. Remaining: V1-PLAT-006 (examples run_all.sh), V1-PLAT-007 (CLI live test), V1-PLAT-008 (OpenAPI annotations).",
-      "task_ids": ["V1-PLAT-001","V1-PLAT-002","V1-PLAT-003","V1-PLAT-004","V1-PLAT-005","V1-PLAT-006","V1-PLAT-007","V1-PLAT-008"]
-    },
-    "5": {
-      "name": "Release Prep",
-      "status": "not_started",
-      "blocker_tasks_complete": 0,
-      "blocker_tasks_total": 6,
-      "task_ids": ["V1-REL-001","V1-REL-002","V1-REL-003","V1-REL-004","V1-REL-005","V1-REL-006","V1-REL-007","V1-REL-008"]
-    }
-  },
-  "release_gate": {
-    "all_blockers_complete": false,
-    "all_v1_gate_tests_passing": false,
-    "ci_green_on_main": false,
-    "fresh_clone_verified": false,
-    "v1_0_0_tagged": false
-  }
+    "_meta":  {
+                  "version":  "1.0.0",
+                  "last_updated":  "2026-04-04",
+                  "total_tasks":  43,
+                  "blocker_count":  18,
+                  "critical_count":  19,
+                  "important_count":  6,
+                  "completed_this_session":  [
+                                                 "V1-STAB-005",
+                                                 "V1-STAB-007",
+                                                 "V1-REFACT-001",
+                                                 "V1-CONT-001",
+                                                 "V1-REFACT-013",
+                                                 "V1-CONT-003",
+                                                 "V1-REFACT-008",
+                                                 "V1-PLAT-003",
+                                                 "V1-CONT-004",
+                                                 "V1-REFACT-003",
+                                                 "V1-REFACT-009",
+                                                 "V1-PLAT-001",
+                                                 "V1-PLAT-002",
+                                                 "V1-REFACT-004",
+                                                 "V1-REFACT-005",
+                                                 "V1-REFACT-006",
+                                                 "V1-REFACT-012",
+                                                 "V1-PLAT-006",
+                                                 "V1-PLAT-008",
+                                                 "V1-STAB-006",
+                                                 "V1-PLAT-007",
+                                                 "V1-REL-002",
+                                                 "V1-REL-003"
+                                             ]
+              },
+    "tasks":  {
+                  "V1-STAB-001":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  1,
+                                      "title":  "Make quota enforcement fatal in SyscallDispatcher",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-001",
+                                      "files":  [
+                                                    "AINDY/kernel/syscall_dispatcher.py",
+                                                    "AINDY/kernel/resource_manager.py"
+                                                ],
+                                      "notes":  "try/except/else split at line 193-203. Quota failure returns error_envelope; infra exceptions fail-open with WARNING."
+                                  },
+                  "V1-STAB-002":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  1,
+                                      "title":  "Add max_execution_ms timeout to NodusRuntimeAdapter",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-002",
+                                      "files":  [
+                                                    "AINDY/services/nodus_runtime_adapter.py"
+                                                ],
+                                      "notes":  "NodusTimeoutError + threading.Timer + ctypes.PyThreadState_SetAsyncExc. Default 30,000ms. run_script/run_file/_execute all wired."
+                                  },
+                  "V1-STAB-003":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  1,
+                                      "title":  "Replace SECRET_KEY default in .env.example",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    ".env.example",
+                                                    "AINDY/config.py"
+                                                ],
+                                      "notes":  "AINDY/.env.example uses REPLACE_THIS_... prefix. config.py reject_insecure_secret_key raises RuntimeError on insecure defaults (skipped when ENV=test)."
+                                  },
+                  "V1-STAB-004":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  1,
+                                      "title":  "Implement production-grade /health endpoint",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-007",
+                                      "files":  [
+                                                    "AINDY/routes/health_router.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-STAB-005"
+                                                       ],
+                                      "notes":  "Non-blocking 2-second threaded DB check via SELECT 1. Always returns HTTP 200 with {status, db, version}. status=degraded if DB unreachable."
+                                  },
+                  "V1-STAB-005":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  1,
+                                      "title":  "Make version.json the single source of version truth",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-007",
+                                      "files":  [
+                                                    "AINDY/version.json",
+                                                    "AINDY/config.py",
+                                                    "AINDY/routes/health_router.py"
+                                                ],
+                                      "notes":  "_read_version() in config.py reads version.json at import time with 1.0.0 fallback. VERSION: str = Field(default_factory=_read_version, exclude=True) in Settings. health_router.py uses settings.VERSION directly (no getattr fallback)."
+                                  },
+                  "V1-STAB-006":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  1,
+                                      "title":  "Verify all Alembic migrations committed and at head",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-04",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/alembic/",
+                                                    "AINDY/main.py",
+                                                    ".github/workflows/ci.yml"
+                                                ],
+                                      "notes":  "Live DB verification completed on 2026-04-04 via .\\venv\\Scripts\\alembic.exe heads, current -v, and check. Single head and current revision are both ab83602dd6a9. `alembic check` returned 'No new upgrade operations detected.'"
+                                  },
+                  "V1-STAB-007":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  1,
+                                      "title":  "Add structured JSON logging",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/config.py",
+                                                    "AINDY/requirements.txt"
+                                                ],
+                                      "notes":  "python-json-logger\u003e=2.0.7 added to requirements.txt (UTF-16 preserved). config.py: _build_log_handler() replaces old setup. is_prod -\u003e JsonFormatter (%(asctime)s %(levelname)s %(name)s %(message)s). dev/test -\u003e plain %(asctime)s - %(levelname)s - %(message)s. pythonjsonlogger import inside is_prod block only — not required in dev/test."
+                                  },
+                  "V1-STAB-008":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  1,
+                                      "title":  "Ensure stack traces never returned in API responses",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-013",
+                                      "files":  [
+                                                    "AINDY/main.py"
+                                                ],
+                                      "notes":  "unhandled_exception_handler at main.py:329 returns {error, message, details:null}. No traceback in response body. HTTPException and ValidationError handlers also clean."
+                                  },
+                  "V1-REFACT-001":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Create new package directory skeleton",
+                                        "started_at":  "2026-04-01",
+                                        "completed_at":  "2026-04-01",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/kernel/__init__.py",
+                                                      "AINDY/memory/__init__.py",
+                                                      "AINDY/agents/__init__.py",
+                                                      "AINDY/platform_layer/__init__.py",
+                                                      "AINDY/analytics/__init__.py",
+                                                      "AINDY/domain/__init__.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-STAB-001",
+                                                             "V1-STAB-002",
+                                                             "V1-STAB-003",
+                                                             "V1-STAB-004",
+                                                             "V1-STAB-006"
+                                                         ],
+                                        "notes":  "All 6 packages present. kernel/ fully populated (7 files + __init__.py). memory/, agents/, platform_layer/, analytics/, domain/ are placeholder __init__.py only — contents migrate in V1-REFACT-003 through V1-REFACT-007."
+                                    },
+                  "V1-REFACT-002":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move kernel layer files + create shims",
+                                        "started_at":  "2026-04-01",
+                                        "completed_at":  "2026-04-01",
+                                        "validation_check":  "V1-VAL-003",
+                                        "files":  [
+                                                      "AINDY/kernel/",
+                                                      "AINDY/services/syscall_*.py",
+                                                      "AINDY/services/resource_manager.py",
+                                                      "AINDY/services/tenant_context.py",
+                                                      "AINDY/services/scheduler_engine.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-001"
+                                                         ],
+                                        "notes":  "All 7 files in kernel/: syscall_dispatcher, syscall_registry, syscall_versioning, syscall_handlers, resource_manager, tenant_context, scheduler_engine. services/ shims re-export including private _handle_* functions. Test patch targets updated to kernel.*."
+                                    },
+                  "V1-REFACT-003":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move memory subsystem files + create shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/memory/",
+                                                      "AINDY/services/memory_*.py",
+                                                      "AINDY/services/embedding_*.py",
+                                                      "AINDY/bridge/"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-002"
+                                                         ],
+                                        "notes":  "10 files created in memory/: memory_persistence, memory_address_space, memory_capture_engine, memory_helpers, memory_ingest_service, memory_scoring_service, embedding_service, embedding_jobs, bridge, nodus_memory_bridge. Internal cross-refs updated: memory_scoring_service/embedding_jobs use memory.memory_persistence; memory_capture_engine uses memory.bridge; nodus_memory_bridge uses memory.memory_capture_engine; bridge uses memory.memory_persistence. 8 services/ shims + bridge/bridge.py + bridge/nodus_memory_bridge.py replaced with one-liner `from memory.X import *`. bridge/__init__.py updated to import from memory.* directly."
+                                    },
+                  "V1-REFACT-004":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move runtime layer files + create shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/runtime/flow_*.py",
+                                                      "AINDY/runtime/nodus_*.py",
+                                                      "AINDY/services/flow_*.py (shims)",
+                                                      "AINDY/services/nodus_*.py (shims)"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-003"
+                                                         ],
+                                        "notes":  "12 files moved: flow_definitions, flow_definitions_extended, flow_engine, flow_registry, nodus_adapter, nodus_builtins, nodus_execution_service, nodus_flow_compiler, nodus_runtime_adapter, nodus_schedule_service, nodus_security, nodus_trace_service. Cross-refs between moving files updated (services.X → runtime.X). Shims created in services/ (from runtime.X import * + explicit private exports for _condition_falsy/_condition_truthy in nodus_flow_compiler). KNOWN: 78 intermediate test regressions from mock patches targeting services.* paths — will resolve in V1-REFACT-010."
+                                    },
+                  "V1-REFACT-005":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move agents layer files + create shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/agents/",
+                                                      "AINDY/services/agent_runtime.py",
+                                                      "AINDY/services/agent_tools.py",
+                                                      "AINDY/services/agent_coordinator.py",
+                                                      "AINDY/services/autonomous_controller.py",
+                                                      "AINDY/services/capability_service.py",
+                                                      "AINDY/services/agent_event_service.py",
+                                                      "AINDY/services/agent_message_bus.py",
+                                                      "AINDY/services/stuck_run_service.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-004"
+                                                         ],
+                                        "notes":  "8 files moved into agents/: agent_runtime, agent_tools, agent_coordinator, autonomous_controller, capability_service, agent_event_service, agent_message_bus, stuck_run_service. Intra-batch imports updated from services.* to agents.*. services/ shims added, with explicit private re-exports in services/agent_runtime.py for _requires_approval, _build_kpi_context_block, and _run_to_dict."
+                                    },
+                  "V1-REFACT-006":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move platform layer files + create shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/platform_layer/",
+                                                      "AINDY/services/api_key_service.py",
+                                                      "AINDY/services/platform_loader.py",
+                                                      "AINDY/services/flow_registry.py",
+                                                      "AINDY/services/node_registry.py",
+                                                      "AINDY/services/event_service.py",
+                                                      "AINDY/services/external_call_service.py",
+                                                      "AINDY/services/rate_limiter.py",
+                                                      "AINDY/services/scheduler_service.py",
+                                                      "AINDY/services/async_job_service.py",
+                                                      "AINDY/services/system_state_service.py",
+                                                      "AINDY/services/master_index_service.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-005"
+                                                         ],
+                                        "notes":  "10 non-shim files moved into platform_layer/: api_key_service, platform_loader, node_registry, event_service, external_call_service, rate_limiter, scheduler_service, async_job_service, system_state_service, master_index_service. services/flow_registry.py was already a shim to runtime.flow_registry and was intentionally skipped. services/ shims added; scheduler_service and async_job_service shims include explicit private re-exports. main.py updated to import scheduler_service from platform_layer."
+                                    },
+                  "V1-REFACT-007":  {
+                                        "status":  "pending",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Move analytics + domain + core files + create shims",
+                                        "started_at":  null,
+                                        "completed_at":  null,
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/analytics/",
+                                                      "AINDY/domain/",
+                                                      "AINDY/core/"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-006"
+                                                         ],
+                                        "notes":  "15 to analytics/, 26 to domain/, 6 to core/, 1 (threadweaver) to utils/"
+                                    },
+                  "V1-REFACT-008":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Update all kernel imports + remove shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "V1-VAL-010",
+                                        "files":  [
+                                                      "AINDY/main.py",
+                                                      "AINDY/routes/platform_router.py",
+                                                      "AINDY/services/agent_tools.py",
+                                                      "AINDY/services/flow_definitions.py",
+                                                      "AINDY/services/flow_engine.py",
+                                                      "AINDY/services/memory_address_space.py",
+                                                      "AINDY/services/nodus_runtime_adapter.py",
+                                                      "AINDY/kernel/syscall_dispatcher.py",
+                                                      "AINDY/kernel/syscall_handlers.py",
+                                                      "AINDY/kernel/scheduler_engine.py",
+                                                      "AINDY/tests/unit/test_os_layer.py",
+                                                      "AINDY/tests/unit/test_syscall_dispatcher.py",
+                                                      "AINDY/tests/unit/test_syscall_handlers.py",
+                                                      "AINDY/tests/unit/test_syscall_versioning.py",
+                                                      "AINDY/tests/v1_gates/test_v1_gates.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-002"
+                                                         ],
+                                        "notes":  "All services.* imports referencing kernel shims updated to kernel.* directly. 7 shim files deleted from services/: syscall_dispatcher.py, syscall_registry.py, syscall_versioning.py, syscall_handlers.py, resource_manager.py, tenant_context.py, scheduler_engine.py. Also fixed internal cross-refs inside kernel/ itself (kernel/syscall_dispatcher.py imported from services.syscall_registry and services.syscall_versioning; kernel/syscall_handlers.py from services.syscall_registry; kernel/scheduler_engine.py from services.resource_manager). All patch() strings in tests updated to kernel.* targets."
+                                    },
+                  "V1-REFACT-009":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Update all memory imports + remove shims",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "V1-VAL-010",
+                                        "files":  [
+                                                      "AINDY/core/execution_pipeline.py",
+                                                      "AINDY/core/execution_signal_helper.py",
+                                                      "AINDY/db/dao/memory_node_dao.py",
+                                                      "AINDY/kernel/syscall_registry.py",
+                                                      "AINDY/routes/platform_router.py",
+                                                      "AINDY/runtime/execution_loop.py",
+                                                      "AINDY/services/agent_runtime.py",
+                                                      "AINDY/services/autonomous_controller.py",
+                                                      "AINDY/services/flow_definitions_extended.py",
+                                                      "AINDY/services/flow_engine.py",
+                                                      "AINDY/services/freelance_service.py",
+                                                      "AINDY/services/identity_boot_service.py",
+                                                      "AINDY/services/infinity_orchestrator.py",
+                                                      "AINDY/services/leadgen_service.py",
+                                                      "AINDY/services/nodus_adapter.py",
+                                                      "AINDY/services/nodus_execution_service.py",
+                                                      "AINDY/services/nodus_runtime_adapter.py",
+                                                      "AINDY/services/rippletrace_service.py",
+                                                      "AINDY/services/system_event_service.py",
+                                                      "AINDY/alembic/env.py",
+                                                      "AINDY/tests/fixtures/db.py",
+                                                      "AINDY/Tools/ingest_memory.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-003",
+                                                             "V1-REFACT-008"
+                                                         ],
+                                        "notes":  "43 files updated via bulk Python replacement script. Patterns replaced: services.memory_* -\u003e memory.memory_*, services.embedding_* -\u003e memory.embedding_*, import services.memory_persistence -\u003e import memory.memory_persistence, bridge.bridge -\u003e memory.bridge, bridge.nodus_memory_bridge -\u003e memory.nodus_memory_bridge, from bridge import X -\u003e from memory.bridge import X (for create_memory_node/link, recall_memories), from bridge import bridge -\u003e import memory.bridge as bridge. `from bridge import suggest_from_memory` intentionally preserved (suggest_from_memory still lives in bridge/__init__.py). 10 shim files deleted: 8 services/ + bridge/bridge.py + bridge/nodus_memory_bridge.py. Final grep confirmed zero remaining references to old paths."
+                                    },
+                  "V1-REFACT-010":  {
+                                        "status":  "pending",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Update all runtime/agents/platform_layer imports + remove shims",
+                                        "started_at":  null,
+                                        "completed_at":  null,
+                                        "validation_check":  "V1-VAL-010",
+                                        "files":  [
+
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-004",
+                                                             "V1-REFACT-005",
+                                                             "V1-REFACT-006",
+                                                             "V1-REFACT-008"
+                                                         ],
+                                        "notes":  "30 import patterns. Fix `from services import scheduler_service` in main.py"
+                                    },
+                  "V1-REFACT-011":  {
+                                        "status":  "pending",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Update all analytics/domain/core imports + remove shims",
+                                        "started_at":  null,
+                                        "completed_at":  null,
+                                        "validation_check":  "V1-VAL-009",
+                                        "files":  [
+
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-007",
+                                                             "V1-REFACT-010"
+                                                         ],
+                                        "notes":  "After this: services/ contains only auth_service.py. Delete services/services__init__.py"
+                                    },
+                  "V1-REFACT-012":  {
+                                        "status":  "completed",
+                                        "priority":  "IMPORTANT",
+                                        "phase":  2,
+                                        "title":  "Rename execution_loop.py to memory_loop.py",
+                                        "started_at":  "2026-04-02",
+                                        "completed_at":  "2026-04-02",
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "AINDY/runtime/execution_loop.py"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-009"
+                                                         ],
+                                        "notes":  "runtime/memory_loop.py created with identical body copied from runtime/execution_loop.py. In-tree consumers updated to runtime.memory_loop. runtime/execution_loop.py retained as a one-line compatibility shim to runtime.memory_loop."
+                                    },
+                  "V1-REFACT-013":  {
+                                        "status":  "completed",
+                                        "priority":  "BLOCKER",
+                                        "phase":  2,
+                                        "title":  "Gate all domain routes behind ENABLE_DOMAIN_APPS flag",
+                                        "started_at":  "2026-04-01",
+                                        "completed_at":  "2026-04-01",
+                                        "validation_check":  "V1-VAL-014",
+                                        "files":  [
+                                                      "AINDY/config.py",
+                                                      "AINDY/routes/__init__.py",
+                                                      "AINDY/.env.example"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-007"
+                                                         ],
+                                        "notes":  "ENABLE_DOMAIN_APPS: bool = False added to Settings. routes/__init__.py: _PLATFORM_APP_ROUTERS (18) always mounts; _DOMAIN_APP_ROUTERS (11: arm, freelance, leadgen, seo, social, authorship, research, search_history, rippletrace, network_bridge, main_router) gated. APP_ROUTERS built dynamically from env at import time. AINDY_ENABLE_LEGACY_SURFACE append preserved. .env.example updated."
+                                    },
+                  "V1-REFACT-014":  {
+                                        "status":  "pending",
+                                        "priority":  "IMPORTANT",
+                                        "phase":  2,
+                                        "title":  "Remove root-level debris files",
+                                        "started_at":  null,
+                                        "completed_at":  null,
+                                        "validation_check":  "none",
+                                        "files":  [
+                                                      "fix_backend.py",
+                                                      "script.py",
+                                                      "@echo off.bat",
+                                                      "git_health_check.bat",
+                                                      "AINDY/services/services__init__.py",
+                                                      "AINDY/legacy/"
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-011"
+                                                         ],
+                                        "notes":  "fix_backend.py, script.py, @echo off.bat, git_health_check.bat all still present at root. services__init__.py and legacy/ still present. Move legacy/ to archive/ with README note, don\u0027t delete."
+                                    },
+                  "V1-REFACT-015":  {
+                                        "status":  "completed",
+                                        "priority":  "CRITICAL",
+                                        "phase":  2,
+                                        "title":  "Verify no stdlib platform collision",
+                                        "started_at":  "2026-04-01",
+                                        "completed_at":  "2026-04-01",
+                                        "validation_check":  "none",
+                                        "files":  [
+
+                                                  ],
+                                        "dependencies":  [
+                                                             "V1-REFACT-001"
+                                                         ],
+                                        "notes":  "Only `import platform` is in watcher/window_detector.py (stdlib OS detection, legitimate use). No application-level platform package exists. Safe to create platform_layer/."
+                                    },
+                  "V1-CONT-001":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  3,
+                                      "title":  "Add missing SystemEvent types for Genesis and Task",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/services/system_event_types.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-REFACT-011"
+                                                       ],
+                                      "notes":  "TASK_CREATED, TASK_STARTED, TASK_PAUSED, TASK_COMPLETED, TASK_FAILED appended after GENESIS_ACTIVATE_FAILED (lines 67-71). All Genesis constants unchanged."
+                                  },
+                  "V1-CONT-002":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  3,
+                                      "title":  "Wire Genesis routes through execution contract",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "V1-VAL-011",
+                                      "files":  [
+                                                    "AINDY/routes/genesis_router.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-CONT-001"
+                                                       ],
+                                      "notes":  "emit_observability_event() at START+terminal for: message, synthesize, lock, activate. Uses core/observability_events.py for DB-backed writes via queue_system_event. Never raises."
+                                  },
+                  "V1-CONT-003":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  3,
+                                      "title":  "Wire Task routes through execution contract",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "V1-VAL-012",
+                                      "files":  [
+                                                    "AINDY/services/task_services.py",
+                                                    "AINDY/schemas/task_schemas.py",
+                                                    "AINDY/routes/task_router.py",
+                                                    "AINDY/tests/v1_gates/conftest.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-CONT-001"
+                                                       ],
+                                      "notes":  "emit_observability_event() added to create_task/start_task/pause_task/complete_task in task_services.py with try/except guard. TaskCreate schema: name optional, title alias with @model_validator(mode=before). task_router.py: terminal emit AFTER _execute_tasks() returns, user_id=None (avoids FK), payload includes task_id from closure. tests/v1_gates/conftest.py: _patch_session_local_to_engine autouse fixture re-patches SessionLocal to testing_session_factory after app fixture runs — ensures emit sessions survive pipeline rollbacks."
+                                  },
+                  "V1-CONT-004":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  3,
+                                      "title":  "Add contract enforcement integration tests",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "V1-VAL-011",
+                                      "files":  [
+                                                    "AINDY/tests/integration/test_execution_contract.py",
+                                                    "AINDY/tests/integration/conftest.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-CONT-002",
+                                                           "V1-CONT-003"
+                                                       ],
+                                      "notes":  "6 tests: task.created HTTP (payload keys task_id+name), task.started/completed/paused via service layer, genesis.message.started HTTP (skip on 404/422), emit-fault resilience (patch raises, still 2xx). Module-level autouse _patch_session_local_to_engine uses testing_session_factory. tests/integration/conftest.py: ARRAY→JSON shim for SQLite compat."
+                                  },
+                  "V1-PLAT-001":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  4,
+                                      "title":  "Verify platform API key quickstart works end-to-end",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/tests/integration/test_platform_quickstart.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-CONT-004"
+                                                       ],
+                                      "notes":  "5-test integration suite: create key (returns aindy_ raw key once), platform key authenticates syscall via X-Platform-Key header, scope enforcement (memory.read key blocked from memory.write syscall → 403), revoked key returns 401, list endpoint never exposes raw key. Also fixed: get_current_user now accepts X-Platform-Key header; syscall endpoint enforces API key scopes as capabilities; runtime/memory/*.py import fixes; async_job_service.py import fix; integration conftest list adapter added."
+                                  },
+                  "V1-PLAT-002":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  4,
+                                      "title":  "Ensure GET /platform/syscalls returns full registry with schemas",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "V1-VAL-008",
+                                      "files":  [
+                                                    "AINDY/kernel/syscall_registry.py",
+                                                    "AINDY/kernel/syscall_handlers.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-REFACT-008"
+                                                       ],
+                                      "notes":  "Gate test V1-VAL-008 was already passing (SyscallEntry defaults stable=True). Set stable=False explicitly on: memory.list/tree/trace (MAS extensions), sys.v2.memory.read (v2 not yet stable), and all 23 domain handlers. Core 5 (memory.read/write/search, flow.run, event.emit) remain stable=True. GET /platform/syscalls already returns stable field via SyscallSpec.to_dict()."
+                                  },
+                  "V1-PLAT-003":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  4,
+                                      "title":  "Simplify docker-compose.yml to PostgreSQL + FastAPI only",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "docker-compose.yml"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-REFACT-013"
+                                                       ],
+                                      "notes":  "Usage comment block added at top. api: AINDY_CACHE_BACKEND defaults to memory, depends_on only postgres. worker/frontend/redis: profiles [full]. mongo: profiles [full, social]. `docker compose up` = postgres+api only. `--profile full` = all services. `--profile social` adds mongo."
+                                  },
+                  "V1-PLAT-004":  {
+                                      "status":  "completed",
+                                      "priority":  "BLOCKER",
+                                      "phase":  4,
+                                      "title":  "Verify API keys are hashed at rest",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/services/api_key_service.py",
+                                                    "AINDY/db/models/api_key.py",
+                                                    "AINDY/tests/unit/test_api_key_service.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-REFACT-006"
+                                                       ],
+                                      "notes":  "SHA-256 (64 char hex) stored in key_hash. Raw key returned once on creation only. 17 tests added and passing: TestHashKey(4), TestGenerateKey(5), TestApiKeyNotStoredPlain(3), TestValidateKeyUsesHash(3), TestRevocation(2)."
+                                  },
+                  "V1-PLAT-005":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  4,
+                                      "title":  "Configure CORS explicitly for production",
+                                      "started_at":  "2026-04-01",
+                                      "completed_at":  "2026-04-01",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/main.py",
+                                                    "AINDY/config.py"
+                                                ],
+                                      "dependencies":  [
+
+                                                       ],
+                                      "notes":  "ALLOWED_ORIGINS read from env at main.py:286-296. CORSMiddleware uses explicit origin list. No wildcard. Defaults to localhost:5173,3000,5000 in dev."
+                                  },
+                  "V1-PLAT-006":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  4,
+                                      "title":  "Write and verify three end-to-end examples",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "aindy-examples/run_all_examples.sh"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-PLAT-001",
+                                                           "V1-PLAT-003"
+                                                       ],
+                                      "notes":  "aindy-examples/run_all_examples.sh added. Script checks /health, creates a temporary platform API key, runs memory-analyzer, event-automation, and scheduled-agent sequentially, prints PASS/FAIL per example, and exits nonzero if any example fails."
+                                  },
+                  "V1-PLAT-007":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  4,
+                                      "title":  "Verify Nodus CLI works against running instance",
+                                      "started_at":  "2026-04-04",
+                                      "completed_at":  "2026-04-04",
+                                      "validation_check":  "none",
+                                      "files":  [
+                                                    "AINDY/cli.py"
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-PLAT-006"
+                                                       ],
+                                      "notes":  "Verified live against http://localhost:8000 on 2026-04-04. `python cli.py run <file> --api-token <jwt> --trace` works end-to-end. Direct `python cli.py trace <run_id>` also works. CLI updated to unwrap platform execution envelopes and use run_id for trace lookup; runtime adapter tolerates VM built-in registration collisions."
+                                  },
+                  "V1-PLAT-008":  {
+                                      "status":  "completed",
+                                      "priority":  "CRITICAL",
+                                      "phase":  4,
+                                      "title":  "Review and complete OpenAPI spec annotations",
+                                      "started_at":  "2026-04-02",
+                                      "completed_at":  "2026-04-02",
+                                      "validation_check":  "none",
+                                      "files":  [
+
+                                                ],
+                                      "dependencies":  [
+                                                           "V1-REFACT-013"
+                                                       ],
+                                      "notes":  "routes/platform_router.py annotated so every platform-surface GET/POST/DELETE has summary, description, and response_model=None. routes/health_router.py and routes/genesis_router.py updated with summary and description on platform-visible routes only."
+                                  },
+                  "V1-REL-001":  {
+                                     "status":  "completed",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Write Getting Started documentation",
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   "docs/getting-started/index.md"
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-PLAT-003",
+                                                          "V1-PLAT-007"
+                                                      ],
+                                     "notes":  "Added docs/getting-started/index.md with concrete local startup, auth, syscall discovery, and first syscall curl commands. The guide stays concise and uses a real platform call to reach first success quickly."
+                                 },
+                  "V1-REL-002":  {
+                                     "status":  "completed",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Write Syscall Reference documentation",
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   "docs/syscalls/reference.md"
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-PLAT-002"
+                                                      ],
+                                     "notes":  "Added docs/syscalls/reference.md covering the implemented v1 registry: stable syscalls, experimental v1 syscalls, request shape, auth modes, and concrete curl examples for direct platform execution."
+                                 },
+                  "V1-REL-003":  {
+                                     "status":  "completed",
+                                     "priority":  "CRITICAL",
+                                     "phase":  5,
+                                     "title":  "Write Platform API Keys guide",
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   "docs/getting-started/api-keys.md"
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-PLAT-004"
+                                                      ],
+                                     "notes":  "Added docs/getting-started/api-keys.md with create, use, list, and revoke flows for Platform API keys, including required headers, supported scopes, and the one-time raw-key return behavior."
+                                 },
+                  "V1-REL-004":  {
+                                     "status":  "completed",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Update README.md with platform-level description",
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   "README.md"
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-REL-001"
+                                                      ],
+                                     "notes":  "README.md is now a short platform-level front page: core platform surface, quick local startup, health check, and direct links to Getting Started and the main technical references. Final length is 137 words and stays non-marketing."
+                                 },
+                  "V1-REL-005":  {
+                                     "status":  "completed",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Harden CI pipeline for V1 gate",
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   ".github/workflows/ci.yml"
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-STAB-006"
+                                                      ],
+                                     "notes":  "CI workflow updated on 2026-04-04 to enforce ruff, `alembic check`, pytest coverage floor `--cov-fail-under=69`, and Docker image build (`docker build -f AINDY/Dockerfile -t aindy-ci:latest AINDY`). GitHub Actions success remains a separate release-gate condition."
+                                 },
+                  "V1-REL-006":  {
+                                     "status":  "pending",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Perform fresh-clone quickstart verification",
+                                     "started_at":  null,
+                                     "completed_at":  null,
+                                     "validation_check":  "none",
+                                     "files":  [
+
+                                               ],
+                                     "dependencies":  [
+                                                          "V1-REL-001",
+                                                          "V1-REL-004",
+                                                          "V1-PLAT-003"
+                                                      ],
+                                     "notes":  "On clean machine. Must complete in \u003c 15 min. Any failures = bug, fix before tagging."
+                                 },
+                  "V1-REL-007":  {
+                                     "status":  "pending",
+                                     "priority":  "CRITICAL",
+                                     "phase":  5,
+                                     "title":  "Write CHANGELOG.md [1.0.0] section",
+                                     "started_at":  null,
+                                     "completed_at":  null,
+                                     "validation_check":  "none",
+                                     "files":  [
+                                                   "AINDY/CHANGELOG.md"
+                                               ],
+                                     "dependencies":  [
+
+                                                      ],
+                                     "notes":  "Include: capabilities shipped, known limitations (sync SQLAlchemy, single-node), excluded scope"
+                                 },
+                  "V1-REL-008":  {
+                                     "status":  "pending",
+                                     "priority":  "BLOCKER",
+                                     "phase":  5,
+                                     "title":  "Tag v1.0.0 on green main",
+                                     "started_at":  null,
+                                     "completed_at":  null,
+                                     "validation_check":  "none",
+                                     "files":  [
+
+                                               ],
+                                     "dependencies":  [
+                                                          "ALL_BLOCKERS_COMPLETE"
+                                                      ],
+                                     "notes":  "git tag -a v1.0.0. Cannot execute until release_gate.py exits 0."
+                                 }
+              },
+    "phases":  {
+                   "1":  {
+                             "name":  "Stabilization",
+                             "status":  "completed",
+                             "blocker_tasks_complete":  4,
+                             "blocker_tasks_total":  4,
+                             "notes":  "All Phase 1 tasks complete, including live Alembic verification at head for the target database.",
+                             "task_ids":  [
+                                              "V1-STAB-001",
+                                              "V1-STAB-002",
+                                              "V1-STAB-003",
+                                              "V1-STAB-004",
+                                              "V1-STAB-005",
+                                              "V1-STAB-006",
+                                              "V1-STAB-007",
+                                              "V1-STAB-008"
+                                          ]
+                         },
+                   "2":  {
+                             "name":  "Structural Alignment",
+                             "status":  "in_progress",
+                             "blocker_tasks_complete":  2,
+                             "blocker_tasks_total":  2,
+                             "notes":  "All Phase 2 BLOCKER tasks complete (V1-REFACT-013, V1-REFACT-008). V1-REFACT-003, V1-REFACT-004, V1-REFACT-005, V1-REFACT-006, V1-REFACT-008, V1-REFACT-009, and V1-REFACT-012 complete. Next unblocked structural sequence: V1-REFACT-007 -\u003e V1-REFACT-010 -\u003e V1-REFACT-011 -\u003e V1-REFACT-014.",
+                             "task_ids":  [
+                                              "V1-REFACT-001",
+                                              "V1-REFACT-002",
+                                              "V1-REFACT-003",
+                                              "V1-REFACT-004",
+                                              "V1-REFACT-005",
+                                              "V1-REFACT-006",
+                                              "V1-REFACT-007",
+                                              "V1-REFACT-008",
+                                              "V1-REFACT-009",
+                                              "V1-REFACT-010",
+                                              "V1-REFACT-011",
+                                              "V1-REFACT-012",
+                                              "V1-REFACT-013",
+                                              "V1-REFACT-014",
+                                              "V1-REFACT-015"
+                                          ]
+                         },
+                   "3":  {
+                             "name":  "Contract Enforcement",
+                             "status":  "completed",
+                             "blocker_tasks_complete":  4,
+                             "blocker_tasks_total":  4,
+                             "notes":  "All Phase 3 tasks complete: V1-CONT-001 through V1-CONT-004.",
+                             "task_ids":  [
+                                              "V1-CONT-001",
+                                              "V1-CONT-002",
+                                              "V1-CONT-003",
+                                              "V1-CONT-004"
+                                          ]
+                         },
+                   "4":  {
+                             "name":  "Platform Surface",
+                             "status":  "completed",
+                             "blocker_tasks_complete":  3,
+                             "blocker_tasks_total":  3,
+                             "notes":  "All Phase 4 tasks complete, including live Nodus CLI verification for `nodus run` and `nodus trace` against the local API.",
+                             "task_ids":  [
+                                              "V1-PLAT-001",
+                                              "V1-PLAT-002",
+                                              "V1-PLAT-003",
+                                              "V1-PLAT-004",
+                                              "V1-PLAT-005",
+                                              "V1-PLAT-006",
+                                              "V1-PLAT-007",
+                                              "V1-PLAT-008"
+                                          ]
+                         },
+                   "5":  {
+                             "name":  "Release Prep",
+                             "status":  "in_progress",
+                             "blocker_tasks_complete":  4,
+                             "blocker_tasks_total":  6,
+                             "notes":  "Release docs are mostly in place. Remaining blocker path is fresh-clone verification and final tag on green main.",
+                             "task_ids":  [
+                                              "V1-REL-001",
+                                              "V1-REL-002",
+                                              "V1-REL-003",
+                                              "V1-REL-004",
+                                              "V1-REL-005",
+                                              "V1-REL-006",
+                                              "V1-REL-007",
+                                              "V1-REL-008"
+                                          ]
+                         }
+               },
+    "release_gate":  {
+                         "all_blockers_complete":  false,
+                         "all_v1_gate_tests_passing":  false,
+                         "ci_green_on_main":  false,
+                         "fresh_clone_verified":  false,
+                         "v1_0_0_tagged":  false
+                     }
 }
