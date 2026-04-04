@@ -100,6 +100,22 @@ class TestHttpHelpers:
             _http_post("http://server/run", {}, token="my-token")
 
         assert captured[0].get_header("Authorization") == "Bearer my-token"
+        assert captured[0].get_header("X-Platform-Key") is None
+
+    def test_http_post_sets_platform_key_header(self):
+        from cli import _http_post
+        mock_resp = _make_mock_response({})
+        captured = []
+
+        def fake_urlopen(req, timeout=None):
+            captured.append(req)
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            _http_post("http://server/run", {}, token="aindy_test_key")
+
+        assert captured[0].headers["X-platform-key"] == "aindy_test_key"
+        assert captured[0].get_header("Authorization") is None
 
     def test_http_post_http_error(self):
         from cli import _http_post
@@ -136,6 +152,21 @@ class TestHttpHelpers:
             code, data = _http_get("http://server/trace/missing", token=None)
         assert code == 404
 
+    def test_http_get_sets_platform_key_header(self):
+        from cli import _http_get
+        mock_resp = _make_mock_response({"trace_id": "abc", "count": 1})
+        captured = []
+
+        def fake_urlopen(req, timeout=None):
+            captured.append(req)
+            return mock_resp
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            _http_get("http://server/trace/abc", token="aindy_test_key")
+
+        assert captured[0].headers["X-platform-key"] == "aindy_test_key"
+        assert captured[0].get_header("Authorization") is None
+
     def test_http_post_no_token_omits_header(self):
         from cli import _http_post
         mock_resp = _make_mock_response({})
@@ -156,6 +187,22 @@ class TestHttpHelpers:
 # ===========================================================================
 
 class TestFormatters:
+    def test_unwraps_platform_execution_envelope(self):
+        from cli import _unwrap_platform_response
+        resp = {
+            "status": "success",
+            "data": {
+                "status": "SUCCESS",
+                "trace_id": "trace-1",
+                "run_id": "run-1",
+                "nodus_status": "success",
+                "output_state": {"ok": True},
+                "events": [],
+                "memory_writes": [],
+            },
+        }
+        assert _unwrap_platform_response(resp) == resp["data"]
+
     def test_fmt_run_result_success(self):
         from cli import _fmt_run_result
         resp = {
@@ -343,7 +390,7 @@ class TestCmdRun:
 
         mock_get.assert_called_once()
         call_url = mock_get.call_args.args[0]
-        assert "trace-1234-5678" in call_url
+        assert "run-1234-5678" in call_url
 
     def test_trace_404_warns_not_fails(self, tmp_path, capsys):
         from cli import cmd_run
@@ -379,7 +426,8 @@ class TestCmdRun:
         from cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._http_post", return_value=(200, self._run_resp())):
+        wrapped = {"status": "success", "data": self._run_resp()}
+        with patch("cli._http_post", return_value=(200, wrapped)):
             cmd_run(str(f), api_url="http://s", token=None, json_output=True)
         raw = capsys.readouterr().out
         parsed = json.loads(raw)

@@ -70,6 +70,20 @@ def _api_token(override: str | None = None) -> str | None:
     return override or os.environ.get(_ENV_API_TOKEN) or None
 
 
+def _auth_headers(token: str | None) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    if not token:
+        return headers
+
+    token = str(token).strip()  # 🔥 THIS LINE FIXES IT
+
+    if token.startswith("aindy_"):
+        headers["X-Platform-Key"] = token
+    else:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
 # ---------------------------------------------------------------------------
 # Helpers — HTTP
 # ---------------------------------------------------------------------------
@@ -77,9 +91,11 @@ def _api_token(override: str | None = None) -> str | None:
 def _http_post(url: str, payload: dict, *, token: str | None) -> tuple[int, dict]:
     """POST JSON to *url*, return (status_code, response_dict)."""
     body = json.dumps(payload).encode("utf-8")
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        **_auth_headers(token),
+    }
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -95,9 +111,7 @@ def _http_post(url: str, payload: dict, *, token: str | None) -> tuple[int, dict
 
 def _http_get(url: str, *, token: str | None) -> tuple[int, dict]:
     """GET JSON from *url*, return (status_code, response_dict)."""
-    headers = {"Accept": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    headers = {"Accept": "application/json", **_auth_headers(token)}
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -119,8 +133,19 @@ def _print_err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+def _unwrap_platform_response(resp: dict) -> dict:
+    """Return the inner Nodus payload when the API returns an execution envelope."""
+    data = resp.get("data")
+    if isinstance(data, dict) and any(
+        key in data for key in ("nodus_status", "output_state", "events", "memory_writes", "run_id", "trace_id")
+    ):
+        return data
+    return resp
+
+
 def _fmt_run_result(resp: dict) -> str:
     """Format a /platform/nodus/run response as human-readable text."""
+    resp = _unwrap_platform_response(resp)
     nodus_status = resp.get("nodus_status", "unknown")
     flow_status = resp.get("status", "?")
     trace_id = resp.get("trace_id") or ""
@@ -154,6 +179,7 @@ def _fmt_run_result(resp: dict) -> str:
 
 def _fmt_trace(resp: dict) -> str:
     """Format a /platform/nodus/trace/{id} response."""
+    resp = _unwrap_platform_response(resp)
     trace_id = resp.get("trace_id", "?")
     count = resp.get("count", 0)
     steps = resp.get("steps") or []
@@ -196,6 +222,7 @@ def _fmt_trace(resp: dict) -> str:
 
 
 def _fmt_upload_result(resp: dict) -> str:
+    resp = _unwrap_platform_response(resp)
     name = resp.get("name", "?")
     size = resp.get("size_bytes", 0)
     uploaded_at = resp.get("uploaded_at", "?")
@@ -285,6 +312,8 @@ def cmd_run(
         _print_err(f"[AINDY Nodus] API error {status_code}: {detail}")
         return 1
 
+    resp = _unwrap_platform_response(resp)
+
     if json_output:
         print(json.dumps(resp, indent=2))
     else:
@@ -292,12 +321,12 @@ def cmd_run(
 
     # Fetch and display trace
     if trace:
-        trace_id = resp.get("trace_id")
-        if not trace_id:
-            _print_err("[warn] --trace: no trace_id in response")
+        trace_lookup_id = resp.get("run_id") or resp.get("trace_id")
+        if not trace_lookup_id:
+            _print_err("[warn] --trace: no run_id or trace_id in response")
         else:
             t_status, t_resp = _http_get(
-                f"{api_url}/platform/nodus/trace/{trace_id}",
+                f"{api_url}/platform/nodus/trace/{trace_lookup_id}",
                 token=token,
             )
             if t_status == 404:
@@ -338,6 +367,8 @@ def cmd_trace(
     if status_code >= 400:
         _print_err(f"[AINDY Nodus] API error {status_code}: {resp.get('detail') or resp}")
         return 1
+
+    resp = _unwrap_platform_response(resp)
 
     if json_output:
         print(json.dumps(resp, indent=2))
@@ -389,6 +420,8 @@ def cmd_upload(
     if status_code >= 400:
         _print_err(f"[AINDY Nodus] upload error {status_code}: {resp.get('detail') or resp}")
         return 1
+
+    resp = _unwrap_platform_response(resp)
 
     if json_output:
         print(json.dumps(resp, indent=2))
