@@ -7,7 +7,6 @@ state file (.workflow_state.json). In production you'd use a DB or cache.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 

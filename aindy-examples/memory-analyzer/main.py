@@ -11,6 +11,7 @@ Environment:
     AINDY_BASE_URL   Server URL (default: http://localhost:8000)
     AINDY_API_KEY    Platform API key (required)
 """
+# ruff: noqa: E402
 from __future__ import annotations
 
 import json
@@ -114,7 +115,7 @@ def main() -> None:
                 "analyze_tasks",
                 {"nodes": task_nodes, "context": "memory-analyzer example"},
             )
-            print(f"  Flow:     analyze_tasks")
+            print("  Flow:     analyze_tasks")
             print(f"  Status:   {flow_result['status']}")
             print(f"  Duration: {flow_result['duration_ms']}ms")
             # Merge flow output into analysis if the flow returned a summary
@@ -156,7 +157,7 @@ def main() -> None:
     top_tags_str = ", ".join(analysis["top_tags"][:3]) or "—"
     bottleneck   = analysis["bottleneck_tag"] or "none detected"
 
-    print(f"  ┌─────────────────────────────────────────┐")
+    print("  ┌─────────────────────────────────────────┐")
     print(f"  │  Tasks loaded:      {total:<4}                 │")
     print(f"  │  Completed:         {done:<4} ({analysis['completion_rate']:.1f}%)         │")
     print(f"  │  In progress:       {wip:<4}                 │")
@@ -164,18 +165,18 @@ def main() -> None:
     print(f"  │  Top tags:          {top_tags_str:<22} │")
     print(f"  │  Bottleneck:        {bottleneck:<22} │")
     print(f"  │  Insights written:  {len(insight_ids):<4}                 │")
-    print(f"  └─────────────────────────────────────────┘")
+    print("  └─────────────────────────────────────────┘")
 
     # Emit completion event
     try:
-        ev = client.events.emit("analysis.complete", {
+        client.events.emit("analysis.complete", {
             "namespace":       MEMORY_NAMESPACE,
             "task_count":      total,
             "completion_rate": analysis["completion_rate"],
             "insight_count":   len(insight_ids),
             "bottleneck":      analysis["bottleneck_tag"],
         })
-        print(f"\n  Event emitted: analysis.complete")
+        print("\n  Event emitted: analysis.complete")
     except AINDYError as e:
         print(f"\n  Event skipped: {e.message}")
 

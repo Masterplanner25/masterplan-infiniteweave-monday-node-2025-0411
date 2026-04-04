@@ -80,7 +80,7 @@ def _load_nodes(db: Session, stats: dict[str, int]) -> None:
     from platform_layer.node_registry import register_external_node
 
     try:
-        rows = db.query(DynamicNode).filter(DynamicNode.is_active == True).all()
+        rows = db.query(DynamicNode).filter(DynamicNode.is_active).all()
     except Exception as exc:
         logger.error("platform_loader: cannot query dynamic_nodes: %s", exc)
         return
@@ -124,7 +124,7 @@ def _load_flows(db: Session, stats: dict[str, int]) -> None:
     from runtime.flow_registry import register_dynamic_flow
 
     try:
-        rows = db.query(DynamicFlow).filter(DynamicFlow.is_active == True).all()
+        rows = db.query(DynamicFlow).filter(DynamicFlow.is_active).all()
     except Exception as exc:
         logger.error("platform_loader: cannot query dynamic_flows: %s", exc)
         return
@@ -160,7 +160,7 @@ def _load_webhooks(db: Session, stats: dict[str, int]) -> None:
     from platform_layer.event_service import _SUBSCRIPTIONS, _load_subscription
 
     try:
-        rows = db.query(WS).filter(WS.is_active == True).all()
+        rows = db.query(WS).filter(WS.is_active).all()
     except Exception as exc:
         logger.error("platform_loader: cannot query webhook_subscriptions: %s", exc)
         return

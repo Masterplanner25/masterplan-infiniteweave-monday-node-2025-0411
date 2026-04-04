@@ -6,7 +6,8 @@ Pattern:  read memory → process → write results back
 Fill in the four marked lines and run:
     python template.py
 """
-import os, sys
+import os
+import sys
 from pathlib import Path
 
 # SDK path (adjust if installed differently)

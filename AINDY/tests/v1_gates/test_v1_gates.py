@@ -422,7 +422,7 @@ def test_no_shim_files_remain():
          "--include=*.py", "--exclude-dir=tests", "-l"],
         capture_output=True, text=True,
     )
-    shim_files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+    shim_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     assert not shim_files, (
         f"Migration shims still present ({len(shim_files)} files):\n"

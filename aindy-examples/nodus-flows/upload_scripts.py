@@ -8,6 +8,7 @@ Environment:
     AINDY_BASE_URL   Server URL (default: http://localhost:8000)
     AINDY_API_KEY    Platform API key (required)
 """
+# ruff: noqa: E402
 from __future__ import annotations
 
 import os

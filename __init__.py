@@ -1,1 +1,1 @@
-__init__.py
+"""Repository root package marker."""
