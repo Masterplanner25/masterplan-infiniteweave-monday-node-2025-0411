@@ -311,6 +311,7 @@ def memory_execution_run(state, context):
 
 @register_node("memory_execution_orchestrate")
 def memory_execution_orchestrate(state, context):
+    response = dict(state.get("memory_execution_response") or {})
     try:
         from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
@@ -322,11 +323,12 @@ def memory_execution_orchestrate(state, context):
             trigger_event=f"memory_{workflow}",
             db=db,
         )
-        response = dict(state.get("memory_execution_response") or {})
         response["orchestration"] = orchestration
         return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
     except Exception as e:
-        return {"status": "FAILURE", "error": str(e)}
+        response["orchestration"] = None
+        response["orchestration_error"] = str(e)
+        return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
 
 
 # ── Task Create Flow ──────────────────────────────────────────────────────────

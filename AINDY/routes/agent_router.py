@@ -30,11 +30,30 @@ from utils.uuid_utils import normalize_uuid
 logger = logging.getLogger(__name__)
 
 
+def _run_to_response(run) -> dict:
+    from agents.agent_runtime import _run_to_dict
+
+    return _run_to_dict(run)
+
+
 def _current_user_id(current_user):
     try:
         return normalize_uuid(current_user["sub"])
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid authenticated user id") from exc
+
+
+def _flow_failure(result: dict) -> str:
+    direct_error = result.get("error")
+    if isinstance(direct_error, str) and direct_error:
+        return direct_error
+    for key in ("data", "result"):
+        payload = result.get(key)
+        if isinstance(payload, dict):
+            nested_error = payload.get("error") or payload.get("message")
+            if isinstance(nested_error, str) and nested_error:
+                return nested_error
+    return ""
 
 
 def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
@@ -52,12 +71,15 @@ def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
             return data["_decision_response"]
 
     if result.get("status") == "FAILED":
-        error = result.get("error", "")
+        error = _flow_failure(result)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             status_code = int(parts[0].replace("HTTP_", ""))
             detail = parts[1] if len(parts) > 1 else error
             raise HTTPException(status_code=status_code, detail=detail)
+        if "uuid" in error.lower() or "invalid" in error.lower():
+            detail = "Invalid run_id" if "run_id" in flow_name or "agent_run_" in flow_name else error
+            raise HTTPException(status_code=400, detail=detail)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
 
     return data

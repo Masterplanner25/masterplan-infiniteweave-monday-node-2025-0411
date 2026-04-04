@@ -70,6 +70,9 @@ class ExecutionResult:
             canonical_metadata["error"] = jsonable_encoder(
                 self.metadata.get("detail") or self.error or "Execution failed"
             )
+            status_code = self.metadata.get("status_code")
+            if status_code is not None:
+                canonical_metadata["status_code"] = status_code
         return {
             "status": "success" if self.success else "error",
             "data": None if not self.success else payload_data,
@@ -379,12 +382,26 @@ class ExecutionPipeline:
             event_type = str(event.get("event_type") or event.get("type") or "").strip()
             if not event_type:
                 continue
-            event_id = self._safe_emit_event(
-                ctx,
-                event_type=event_type,
-                payload=dict(event.get("payload") or {}),
-                parent_event_id=event.get("parent_event_id"),
-            )
+            db = ctx.metadata.get("db")
+            if db is None:
+                continue
+            try:
+                from core.system_event_service import emit_system_event
+
+                event_id = emit_system_event(
+                    db=db,
+                    event_type=event_type,
+                    user_id=event.get("user_id") or ctx.user_id,
+                    trace_id=event.get("trace_id") or ctx.request_id,
+                    parent_event_id=event.get("parent_event_id"),
+                    source=str(event.get("source") or ctx.metadata.get("source") or ctx.route_name),
+                    agent_id=event.get("agent_id"),
+                    payload=dict(event.get("payload") or {}),
+                    required=bool(event.get("required", False)),
+                )
+            except Exception:
+                logger.debug("execution.event_emit_skipped", exc_info=True)
+                event_id = None
             if event_id:
                 injected += 1
         if injected:

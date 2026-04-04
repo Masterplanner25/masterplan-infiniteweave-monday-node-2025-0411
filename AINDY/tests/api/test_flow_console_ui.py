@@ -9,6 +9,12 @@ from db.models.automation_log import AutomationLog
 from db.models.flow_run import FlowHistory, FlowRun
 
 
+def _unwrap(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
 def _seed_flow_run(db_session, *, user_id, status="running", waiting_for=None) -> FlowRun:
     run = FlowRun(
         id=str(uuid.uuid4()),
@@ -46,27 +52,27 @@ def _seed_automation_log(db_session, *, user_id, status="failed") -> AutomationL
 
 class TestFlowRunsEndpoints:
     def test_list_runs_requires_auth(self, client):
-        assert client.get("/flows/runs").status_code == 401
+        assert client.get("/platform/flows/runs").status_code == 401
 
     def test_get_run_requires_auth(self, client):
-        assert client.get("/flows/runs/test-id").status_code == 401
+        assert client.get("/platform/flows/runs/test-id").status_code == 401
 
     def test_history_requires_auth(self, client):
-        assert client.get("/flows/runs/test-id/history").status_code == 401
+        assert client.get("/platform/flows/runs/test-id/history").status_code == 401
 
     def test_resume_requires_auth(self, client):
-        assert client.post("/flows/runs/test-id/resume", json={"event_type": "test"}).status_code == 401
+        assert client.post("/platform/flows/runs/test-id/resume", json={"event_type": "test"}).status_code == 401
 
     def test_registry_requires_auth(self, client):
-        assert client.get("/flows/registry").status_code == 401
+        assert client.get("/platform/flows/registry").status_code == 401
 
     def test_list_runs_returns_shape(self, client, auth_headers, db_session, test_user):
         _seed_flow_run(db_session, user_id=test_user.id, status="success")
 
-        response = client.get("/flows/runs", headers=auth_headers)
+        response = client.get("/platform/flows/runs", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert "runs" in data
         assert "count" in data
         assert isinstance(data["runs"], list)
@@ -77,7 +83,7 @@ class TestFlowRunsEndpoints:
         _seed_flow_run(db_session, user_id=test_user.id, status="waiting", waiting_for="user_approval")
 
         for status in ["running", "waiting", "success", "failed"]:
-            response = client.get(f"/flows/runs?status={status}", headers=auth_headers)
+            response = client.get(f"/platform/flows/runs?status={status}", headers=auth_headers)
             assert response.status_code == 200
 
     def test_resume_wrong_event_type_rejected(self, client, auth_headers, db_session, test_user):
@@ -89,7 +95,7 @@ class TestFlowRunsEndpoints:
         )
 
         response = client.post(
-            f"/flows/runs/{run.id}/resume",
+            f"/platform/flows/runs/{run.id}/resume",
             json={"event_type": "wrong_event", "payload": {}},
             headers=auth_headers,
         )
@@ -100,7 +106,7 @@ class TestFlowRunsEndpoints:
         run = _seed_flow_run(db_session, user_id=test_user.id, status="success")
 
         response = client.post(
-            f"/flows/runs/{run.id}/resume",
+            f"/platform/flows/runs/{run.id}/resume",
             json={"event_type": "test"},
             headers=auth_headers,
         )
@@ -108,10 +114,10 @@ class TestFlowRunsEndpoints:
         assert response.status_code == 400
 
     def test_registry_returns_shape(self, client, auth_headers):
-        response = client.get("/flows/registry", headers=auth_headers)
+        response = client.get("/platform/flows/registry", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert "flows" in data
         assert "nodes" in data
         assert "flow_count" in data
@@ -120,10 +126,10 @@ class TestFlowRunsEndpoints:
     def test_get_run_returns_persisted_state(self, client, auth_headers, db_session, test_user):
         run = _seed_flow_run(db_session, user_id=test_user.id, status="waiting", waiting_for="approval")
 
-        response = client.get(f"/flows/runs/{run.id}", headers=auth_headers)
+        response = client.get(f"/platform/flows/runs/{run.id}", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert data["id"] == run.id
         assert data["status"] == "waiting"
         assert data["waiting_for"] == "approval"
@@ -142,10 +148,10 @@ class TestFlowRunsEndpoints:
         db_session.add(history)
         db_session.commit()
 
-        response = client.get(f"/flows/runs/{run.id}/history", headers=auth_headers)
+        response = client.get(f"/platform/flows/runs/{run.id}/history", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert data["run_id"] == run.id
         assert data["node_count"] == 1
         assert data["history"][0]["node_name"] == "memory_execution_run"
@@ -153,21 +159,21 @@ class TestFlowRunsEndpoints:
 
 class TestAutomationEndpoints:
     def test_logs_requires_auth(self, client):
-        assert client.get("/automation/logs").status_code == 401
+        assert client.get("/apps/automation/logs").status_code == 401
 
     def test_scheduler_status_requires_auth(self, client):
-        assert client.get("/automation/scheduler/status").status_code == 401
+        assert client.get("/apps/automation/scheduler/status").status_code == 401
 
     def test_replay_requires_auth(self, client):
-        assert client.post("/automation/logs/test-id/replay").status_code == 401
+        assert client.post("/apps/automation/logs/test-id/replay").status_code == 401
 
     def test_logs_returns_shape(self, client, auth_headers, db_session, test_user):
         _seed_automation_log(db_session, user_id=test_user.id, status="failed")
 
-        response = client.get("/automation/logs", headers=auth_headers)
+        response = client.get("/apps/automation/logs", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert "logs" in data
         assert "count" in data
         assert data["count"] == 1
@@ -177,13 +183,13 @@ class TestAutomationEndpoints:
         _seed_automation_log(db_session, user_id=test_user.id, status="success")
 
         for status in ["pending", "running", "success", "failed", "retrying"]:
-            response = client.get(f"/automation/logs?status={status}", headers=auth_headers)
+            response = client.get(f"/apps/automation/logs?status={status}", headers=auth_headers)
             assert response.status_code == 200
 
     def test_replay_success_log_rejected(self, client, auth_headers, db_session, test_user):
         log = _seed_automation_log(db_session, user_id=test_user.id, status="success")
 
-        response = client.post(f"/automation/logs/{log.id}/replay", headers=auth_headers)
+        response = client.post(f"/apps/automation/logs/{log.id}/replay", headers=auth_headers)
 
         assert response.status_code == 400
 
@@ -202,10 +208,10 @@ class TestAutomationEndpoints:
                 return [_Job()]
 
         with patch("platform_layer.scheduler_service.get_scheduler", return_value=_Scheduler()):
-            response = client.get("/automation/scheduler/status", headers=auth_headers)
+            response = client.get("/apps/automation/scheduler/status", headers=auth_headers)
 
         assert response.status_code == 200
-        data = response.json()
+        data = _unwrap(response.json())
         assert "running" in data
         assert "jobs" in data
         assert "job_count" in data

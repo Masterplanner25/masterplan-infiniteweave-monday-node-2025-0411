@@ -19,6 +19,12 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
             module_name == "main"
             or module_name.startswith("routes.")
             or module_name.startswith("services.")
+            or module_name.startswith("platform_layer.")
+            or module_name.startswith("runtime.")
+            or module_name.startswith("agents.")
+            or module_name.startswith("memory.")
+            or module_name.startswith("domain.")
+            or module_name.startswith("core.")
             or module_name == "worker"
         ):
             continue
@@ -29,11 +35,11 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
 
 
 @pytest.fixture
-def app(db_session_factory, test_engine, monkeypatch):
+def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
     from db.database import get_db
     from main import app as fastapi_app
 
-    _patch_session_aliases(monkeypatch, db_session_factory, test_engine)
+    _patch_session_aliases(monkeypatch, testing_session_factory, test_engine)
 
     def _get_test_db():
         db = db_session_factory()

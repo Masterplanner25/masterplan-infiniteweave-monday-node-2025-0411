@@ -112,7 +112,7 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
 
     shutdown_async_jobs(wait=True)
     try:
-        response = client.post("/agent/run", headers=auth_headers, json={"goal": "follow up"})
+        response = client.post("/apps/agent/run", headers=auth_headers, json={"goal": "follow up"})
         assert response.status_code == 202
         payload = response.json()
         data = payload.get("data", payload)
@@ -143,7 +143,7 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
     monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
-        "/memory/nodes",
+        "/apps/memory/nodes",
         headers=auth_headers,
         json={"content": "tenant secret", "source": "pytest", "tags": ["private"], "node_type": "insight"},
     )
@@ -152,11 +152,11 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
     node = node_payload.get("data", node_payload)
     node_id = node["id"]
 
-    assert client.get(f"/memory/nodes/{node_id}", headers=auth_headers).status_code == 200
-    assert client.get(f"/memory/nodes/{node_id}", headers=other_headers).status_code == 404
+    assert client.get(f"/apps/memory/nodes/{node_id}", headers=auth_headers).status_code == 200
+    assert client.get(f"/apps/memory/nodes/{node_id}", headers=other_headers).status_code == 404
 
     other_run = _make_run(db_session, other_user.id, status="completed")
-    runs_response = client.get("/agent/runs", headers=auth_headers)
+    runs_response = client.get("/apps/agent/runs", headers=auth_headers)
     assert runs_response.status_code == 200
     ran_payload = runs_response.json()
     runs_data = ran_payload.get("data", ran_payload)
@@ -192,11 +192,11 @@ def test_memory_consistency(client, auth_headers, monkeypatch):
         "node_type": "insight",
         "extra": {"kind": "consistency"},
     }
-    created = client.post("/memory/nodes", headers=auth_headers, json=payload)
+    created = client.post("/apps/memory/nodes", headers=auth_headers, json=payload)
     assert created.status_code == 201
 
     node_id = created.json()["id"]
-    fetched = client.get(f"/memory/nodes/{node_id}", headers=auth_headers)
+    fetched = client.get(f"/apps/memory/nodes/{node_id}", headers=auth_headers)
     assert fetched.status_code == 200
 
     body = fetched.json()
@@ -209,10 +209,10 @@ def test_memory_consistency(client, auth_headers, monkeypatch):
 def test_metrics_reflect_actions(client, db_session, test_user, auth_headers):
     before_count = db_session.query(RequestMetric).filter(RequestMetric.user_id == test_user.id).count()
 
-    tools_response = client.get("/agent/tools", headers=auth_headers)
+    tools_response = client.get("/apps/agent/tools", headers=auth_headers)
     assert tools_response.status_code == 200
 
-    dashboard_response = client.get("/observability/dashboard", headers=auth_headers)
+    dashboard_response = client.get("/platform/observability/dashboard", headers=auth_headers)
     assert dashboard_response.status_code == 200
 
     db_session.expire_all()
@@ -223,5 +223,5 @@ def test_metrics_reflect_actions(client, db_session, test_user, auth_headers):
     assert after_count >= before_count + 2
     assert dashboard["summary"]["window_requests"] >= 1
     assert dashboard["request_metrics"]["recent"]
-    assert any(item["path"] == "/agent/tools" for item in dashboard["request_metrics"]["recent"])
+    assert any(item["path"] == "/apps/agent/tools" for item in dashboard["request_metrics"]["recent"])
 

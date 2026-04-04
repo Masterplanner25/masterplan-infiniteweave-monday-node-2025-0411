@@ -289,23 +289,23 @@ class TestAutomationLogModel:
 class TestAutomationEndpoints:
 
     def test_logs_endpoint_requires_auth(self, client):
-        r = client.get("/automation/logs")
+        r = client.get("/apps/automation/logs")
         assert r.status_code == 401
 
     def test_log_detail_requires_auth(self, client):
-        r = client.get("/automation/logs/test-id")
+        r = client.get("/apps/automation/logs/test-id")
         assert r.status_code == 401
 
     def test_replay_requires_auth(self, client):
-        r = client.post("/automation/logs/test-id/replay")
+        r = client.post("/apps/automation/logs/test-id/replay")
         assert r.status_code == 401
 
     def test_scheduler_status_requires_auth(self, client):
-        r = client.get("/automation/scheduler/status")
+        r = client.get("/apps/automation/scheduler/status")
         assert r.status_code == 401
 
     def test_logs_with_auth_returns_200(self, client, auth_headers):
-        r = client.get("/automation/logs", headers=auth_headers)
+        r = client.get("/apps/automation/logs", headers=auth_headers)
         assert r.status_code != 401
         if r.status_code == 200:
             data = r.json()
@@ -314,19 +314,19 @@ class TestAutomationEndpoints:
             assert isinstance(data["logs"], list)
 
     def test_logs_status_filter_accepted(self, client, auth_headers):
-        r = client.get("/automation/logs?status=failed", headers=auth_headers)
+        r = client.get("/apps/automation/logs?status=failed", headers=auth_headers)
         assert r.status_code in (200, 422, 500)
 
     def test_logs_source_filter_accepted(self, client, auth_headers):
-        r = client.get("/automation/logs?source=task_services", headers=auth_headers)
+        r = client.get("/apps/automation/logs?source=task_services", headers=auth_headers)
         assert r.status_code in (200, 422, 500)
 
     def test_log_detail_not_found_returns_404(self, client, auth_headers):
-        r = client.get("/automation/logs/nonexistent-id-xyz", headers=auth_headers)
+        r = client.get("/apps/automation/logs/nonexistent-id-xyz", headers=auth_headers)
         assert r.status_code in (404, 200, 500)
 
     def test_replay_not_found_returns_404(self, client, auth_headers):
-        r = client.post("/automation/logs/nonexistent-id-xyz/replay", headers=auth_headers)
+        r = client.post("/apps/automation/logs/nonexistent-id-xyz/replay", headers=auth_headers)
         assert r.status_code in (404, 400, 500)
 
     def test_scheduler_status_503_when_not_running(self, client, auth_headers):
@@ -335,7 +335,7 @@ class TestAutomationEndpoints:
         original = svc._scheduler
         svc._scheduler = None
         try:
-            r = client.get("/automation/scheduler/status", headers=auth_headers)
+            r = client.get("/apps/automation/scheduler/status", headers=auth_headers)
             assert r.status_code in (503, 200)
         finally:
             svc._scheduler = original
@@ -343,10 +343,10 @@ class TestAutomationEndpoints:
     def test_automation_routes_registered(self, app):
         """All 4 automation routes are registered in the app."""
         routes = [r.path for r in app.routes]
-        assert "/automation/logs" in routes
-        assert "/automation/logs/{log_id}" in routes
-        assert "/automation/logs/{log_id}/replay" in routes
-        assert "/automation/scheduler/status" in routes
+        assert "/apps/automation/logs" in routes
+        assert "/apps/automation/logs/{log_id}" in routes
+        assert "/apps/automation/logs/{log_id}/replay" in routes
+        assert "/apps/automation/scheduler/status" in routes
 
     def test_replay_success_log_rejected_with_400(self, client, auth_headers):
         """
@@ -354,7 +354,7 @@ class TestAutomationEndpoints:
         Uses the real route — log won't be found (404) because the test DB
         is mocked, but if it were found the status guard would reject it.
         """
-        r = client.post("/automation/logs/fake-success-log/replay", headers=auth_headers)
+        r = client.post("/apps/automation/logs/fake-success-log/replay", headers=auth_headers)
         # 404 (not found) or 400 (wrong status) — both acceptable; 401 is not
         assert r.status_code != 401
 

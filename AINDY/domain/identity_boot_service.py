@@ -10,6 +10,7 @@ from db.models.agent_run import AgentRun
 from db.models.flow_run import FlowRun
 from db.models.user_score import UserScore
 from memory.memory_persistence import MemoryNodeModel
+from utils.user_ids import parse_user_id
 
 
 _BOOT_MEMORY_LIMIT = 20
@@ -34,10 +35,11 @@ def get_recent_memory(
     limit: int = _BOOT_MEMORY_LIMIT,
     context: str = "identity_boot",
 ) -> list[dict[str, Any]]:
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     dao = MemoryNodeDAO(db)
     rows = (
         db.query(MemoryNodeModel)
-        .filter(MemoryNodeModel.user_id == user_id)
+        .filter(MemoryNodeModel.user_id == normalized_user_id)
         .order_by(MemoryNodeModel.created_at.desc(), MemoryNodeModel.id.desc())
         .limit(limit)
         .all()
@@ -53,9 +55,10 @@ def get_recent_agent_runs(
 ) -> list[dict[str, Any]]:
     from agents.agent_runtime import _run_to_dict
 
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     rows = (
         db.query(AgentRun)
-        .filter(AgentRun.user_id == user_id)
+        .filter(AgentRun.user_id == normalized_user_id)
         .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
         .limit(limit)
         .all()
@@ -64,7 +67,8 @@ def get_recent_agent_runs(
 
 
 def get_user_metrics(user_id: str | UUID, db: Session) -> dict[str, Any] | None:
-    score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
+    score = db.query(UserScore).filter(UserScore.user_id == normalized_user_id).first()
     if not score:
         return None
     return {
@@ -96,10 +100,11 @@ def get_active_flows(
     *,
     limit: int = _BOOT_FLOW_LIMIT,
 ) -> list[dict[str, Any]]:
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     rows = (
         db.query(FlowRun)
         .filter(
-            FlowRun.user_id == user_id,
+            FlowRun.user_id == normalized_user_id,
             FlowRun.status.in_(("running", "waiting")),
         )
         .order_by(FlowRun.created_at.desc(), FlowRun.id.desc())

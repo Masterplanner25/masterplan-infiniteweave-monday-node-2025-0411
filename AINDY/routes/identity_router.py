@@ -3,12 +3,13 @@ Identity Router - v5 Phase 2
 
 API for viewing and managing user identity profiles.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
+from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
 from domain.identity_boot_service import boot_identity_context
@@ -37,48 +38,70 @@ class UpdateIdentityRequest(BaseModel):
 
 @router.get("/boot")
 async def boot_identity(
+    request: Request,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     user_id = require_user_id(current_user.get("sub"))
-    result = boot_identity_context(user_id, db)
 
-    try:
-        queue_system_event(
-            db=db,
-            event_type="identity.boot",
-            user_id=user_id,
-            payload={
-                "memory_loaded": len(result["memory"]),
-                "runs_loaded": len(result["runs"]),
-                "score": result["system_state"]["score"],
-                "active_flows": len(result["flows"]),
-            },
-            required=True,
-        )
-    except SystemEventEmissionError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="Identity boot event emission failed",
-        ) from exc
+    def handler(ctx):
+        result = boot_identity_context(user_id, db)
+        try:
+            queue_system_event(
+                db=db,
+                event_type="identity.boot",
+                user_id=user_id,
+                payload={
+                    "memory_loaded": len(result["memory"]),
+                    "runs_loaded": len(result["runs"]),
+                    "score": result["system_state"]["score"],
+                    "active_flows": len(result["flows"]),
+                },
+                required=True,
+            )
+        except SystemEventEmissionError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="Identity boot event emission failed",
+            ) from exc
+        return result
 
-    return result
+    return await execute_with_pipeline(
+        request=request,
+        route_name="identity.boot",
+        handler=handler,
+        user_id=str(user_id),
+        metadata={"db": db},
+    )
 
 
 @router.get("/")
 async def get_identity(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Get the current user's identity profile.
     """
-    service = IdentityService(db=db, user_id=str(current_user.get("sub")))
-    return service.get_profile()
+    user_id = str(current_user.get("sub"))
+
+    def handler(ctx):
+        service = IdentityService(db=db, user_id=user_id)
+        return service.get_profile()
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="identity.get",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 
 
 @router.put("/")
 async def update_identity(
+    request: Request,
     body: UpdateIdentityRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -86,39 +109,75 @@ async def update_identity(
     """
     Explicitly update identity preferences.
     """
-    service = IdentityService(db=db, user_id=str(current_user.get("sub")))
-    return service.update_explicit(**body.model_dump(exclude_none=True))
+    user_id = str(current_user.get("sub"))
+
+    def handler(ctx):
+        service = IdentityService(db=db, user_id=user_id)
+        return service.update_explicit(**body.model_dump(exclude_none=True))
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="identity.update",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+        input_payload=body.model_dump(exclude_none=True),
+    )
 
 
 @router.get("/evolution")
 async def get_identity_evolution(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Get the evolution history of the user's identity.
     """
-    service = IdentityService(db=db, user_id=str(current_user.get("sub")))
-    return service.get_evolution_summary()
+    user_id = str(current_user.get("sub"))
+
+    def handler(ctx):
+        service = IdentityService(db=db, user_id=user_id)
+        return service.get_evolution_summary()
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="identity.evolution",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 
 
 @router.get("/context")
 async def get_identity_context(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Get the identity context string used in LLM prompts.
     """
-    service = IdentityService(db=db, user_id=str(current_user.get("sub")))
-    context = service.get_context_for_prompt()
-    return {
-        "context": context,
-        "is_empty": len(context.strip()) == 0,
-        "message": (
-            "This context is injected into AI prompts to personalize responses."
-            if context.strip()
-            else "No identity context yet. Use A.I.N.D.Y. features to build your profile."
-        ),
-    }
+    user_id = str(current_user.get("sub"))
+
+    def handler(ctx):
+        service = IdentityService(db=db, user_id=user_id)
+        context = service.get_context_for_prompt()
+        return {
+            "context": context,
+            "is_empty": len(context.strip()) == 0,
+            "message": (
+                "This context is injected into AI prompts to personalize responses."
+                if context.strip()
+                else "No identity context yet. Use A.I.N.D.Y. features to build your profile."
+            ),
+        }
+
+    return await execute_with_pipeline(
+        request=request,
+        route_name="identity.context",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
 

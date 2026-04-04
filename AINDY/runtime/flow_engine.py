@@ -39,8 +39,8 @@ Key difference from prototype:
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Callable, Optional
+from datetime import date, datetime, timezone
+from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
 from core.execution_envelope import error as execution_error
@@ -103,6 +103,8 @@ FLOW_REGISTRY: dict[str, dict] = {}
 def _json_safe(value):
     if isinstance(value, uuid.UUID):
         return str(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -289,6 +291,46 @@ def _extract_next_action(result: object) -> Optional[str]:
         if nested:
             return nested
     return None
+
+
+def _extract_async_handoff(result: object) -> dict[str, Any] | None:
+    if not isinstance(result, dict):
+        return None
+
+    response = None
+    handoff_status = None
+
+    if result.get("_http_status") == 202 and isinstance(result.get("_http_response"), dict):
+        response = result["_http_response"]
+        handoff_status = str(response.get("status") or "QUEUED").upper()
+    else:
+        status = str(result.get("status") or "").upper()
+        if status in {"QUEUED", "DEFERRED"}:
+            response = result
+            handoff_status = status
+
+    if not isinstance(response, dict) or handoff_status is None:
+        return None
+
+    data = response.get("data")
+    if isinstance(data, dict):
+        nested_result = data.get("result")
+        if not isinstance(nested_result, dict):
+            nested_result = {}
+    else:
+        nested_result = {}
+
+    automation_log_id = (
+        nested_result.get("automation_log_id")
+        or (data.get("automation_log_id") if isinstance(data, dict) else None)
+        or response.get("automation_log_id")
+    )
+
+    return {
+        "status": handoff_status,
+        "response": response,
+        "automation_log_id": automation_log_id,
+    }
 
 
 def _format_execution_response(
@@ -922,8 +964,47 @@ class PersistentFlowRunner:
 
                 if current_node in self.flow.get("end", []):
                     try:
-                        self._capture_flow_completion(run, state)
                         execution_result = _extract_execution_result(self.workflow_type, state)
+                        handoff = _extract_async_handoff(execution_result)
+                        if handoff is not None:
+                            update_count = (
+                                self.db.query(type(run))
+                                .filter(type(run).id == run.id)
+                                .update(
+                                    {
+                                        type(run).status: handoff["status"].lower(),
+                                        type(run).state: _json_safe(state),
+                                        type(run).current_node: current_node,
+                                        type(run).waiting_for: None,
+                                        type(run).automation_log_id: handoff["automation_log_id"] or run.automation_log_id,
+                                    },
+                                    synchronize_session=False,
+                                )
+                            )
+                            if update_count != 1:
+                                return _fail_execution(
+                                    f"FlowRun {run.id} not found during async handoff finalization",
+                                    failed_node=current_node,
+                                    parent_event_id=str(node_started_event_id) if node_started_event_id else None,
+                                )
+                            self.db.commit()
+                            self.db.expire_all()
+                            queued_run = (
+                                self.db.query(type(run))
+                                .filter(type(run).id == run.id)
+                                .first()
+                            )
+                            return _format_execution_response(
+                                status=handoff["status"],
+                                trace_id=queued_run.trace_id or str(queued_run.id),
+                                result=execution_result,
+                                events=_serialize_flow_events(self.db, queued_run.id),
+                                next_action=_extract_next_action(execution_result),
+                                run_id=queued_run.id,
+                                state=state,
+                            )
+
+                        self._capture_flow_completion(run, state)
                         run.status = "success"
                         run.state = _json_safe(state)
                         run.completed_at = datetime.now(timezone.utc)

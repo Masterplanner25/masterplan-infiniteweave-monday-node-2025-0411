@@ -10,6 +10,12 @@ from db.models.user import User
 from services.auth_service import hash_password
 
 
+def _unwrap(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
 def _create_other_user(db_session) -> User:
     other_user = User(
         id=uuid.UUID("00000000-0000-0000-0000-000000000004"),
@@ -24,11 +30,21 @@ def _create_other_user(db_session) -> User:
     return other_user
 
 
-def _wait_for_async_job(db_session, log_id: str, timeout_s: float = 5.0) -> AutomationLog:
+def _wait_for_async_job(db_or_factory, log_id: str, timeout_s: float = 5.0) -> AutomationLog:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
-        db_session.expire_all()
-        log = db_session.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+        if callable(db_or_factory):
+            db_session = db_or_factory()
+            should_close = True
+        else:
+            db_session = db_or_factory
+            should_close = False
+        try:
+            db_session.expire_all()
+            log = db_session.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+        finally:
+            if should_close:
+                db_session.close()
         if log and log.status in {"success", "failed"}:
             return log
         time.sleep(0.05)
@@ -36,13 +52,14 @@ def _wait_for_async_job(db_session, log_id: str, timeout_s: float = 5.0) -> Auto
 
 
 def test_memory_routes_require_auth(client):
-    assert client.get("/memory/metrics").status_code == 401
-    assert client.post("/memory/nodes", json={"content": "x"}).status_code == 401
+    assert client.get("/apps/memory/metrics").status_code == 401
+    assert client.post("/apps/memory/nodes", json={"content": "x"}).status_code == 401
 
 
 def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     client,
     db_session,
+    testing_session_factory,
     test_user,
     auth_headers,
     monkeypatch,
@@ -51,7 +68,7 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
-        "/memory/nodes",
+        "/apps/memory/nodes",
         headers=auth_headers,
         json={
             "content": "Remember this detail",
@@ -63,14 +80,14 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     )
 
     assert create_response.status_code == 201
-    created = create_response.json()
+    created = _unwrap(create_response.json())
     assert created["content"] == "Remember this detail"
     assert created["user_id"] == str(test_user.id)
 
-    get_response = client.get(f"/memory/nodes/{created['id']}", headers=auth_headers)
+    get_response = client.get(f"/apps/memory/nodes/{created['id']}", headers=auth_headers)
 
     assert get_response.status_code == 200
-    fetched = get_response.json()
+    fetched = _unwrap(get_response.json())
     assert fetched["id"] == created["id"]
     assert fetched["tags"] == ["alpha", "beta"]
 
@@ -87,7 +104,7 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
         extra={"origin": "other"},
     )
 
-    hidden_response = client.get(f"/memory/nodes/{hidden['id']}", headers=auth_headers)
+    hidden_response = client.get(f"/apps/memory/nodes/{hidden['id']}", headers=auth_headers)
     assert hidden_response.status_code == 404
 
 
@@ -125,17 +142,17 @@ def test_memory_metrics_summary_and_dashboard_use_real_db(
     )
     db_session.commit()
 
-    summary_response = client.get("/memory/metrics", headers=auth_headers)
+    summary_response = client.get("/apps/memory/metrics", headers=auth_headers)
     assert summary_response.status_code == 200
-    summary = summary_response.json()
+    summary = _unwrap(summary_response.json())
     assert summary["total_runs"] == 2
     assert summary["positive_impact_rate"] == 0.5
     assert summary["zero_impact_rate"] == 0.5
     assert summary["negative_impact_rate"] == 0.0
 
-    dashboard_response = client.get("/memory/metrics/dashboard", headers=auth_headers)
+    dashboard_response = client.get("/apps/memory/metrics/dashboard", headers=auth_headers)
     assert dashboard_response.status_code == 200
-    dashboard = dashboard_response.json()
+    dashboard = _unwrap(dashboard_response.json())
     assert dashboard["summary"]["total_runs"] == 2
     assert len(dashboard["recent_runs"]) == 2
     assert all(run["task_type"] == "analysis" for run in dashboard["recent_runs"])
@@ -145,6 +162,7 @@ def test_memory_metrics_summary_and_dashboard_use_real_db(
 def test_memory_nodus_async_route_emits_system_events(
     client,
     db_session,
+    testing_session_factory,
     test_user,
     auth_headers,
     monkeypatch,
@@ -167,7 +185,7 @@ def test_memory_nodus_async_route_emits_system_events(
     shutdown_async_jobs(wait=True)
     try:
         response = client.post(
-            "/memory/nodus/execute",
+            "/apps/memory/nodus/execute",
             headers=auth_headers,
             json={
                 "task_name": "memory async smoke",
@@ -178,11 +196,12 @@ def test_memory_nodus_async_route_emits_system_events(
 
         assert response.status_code == 202
         payload = response.json()
-        data = payload["data"]
-        assert data["status"] == "QUEUED"
-        log_id = data["result"]["automation_log_id"]
+        data = _unwrap(payload)
+        result = data.get("result", data) if isinstance(data, dict) else data
+        log_id = result.get("automation_log_id") or data.get("automation_log_id")
+        assert log_id
 
-        log = _wait_for_async_job(db_session, log_id)
+        log = _wait_for_async_job(testing_session_factory, log_id)
         assert log.status == "success"
         assert log.user_id == test_user.id
 

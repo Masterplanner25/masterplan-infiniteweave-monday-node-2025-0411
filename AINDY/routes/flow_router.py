@@ -21,6 +21,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/flows", tags=["Flow Engine"])
 
 
+def _flow_failure(result: dict) -> str:
+    direct_error = result.get("error")
+    if isinstance(direct_error, str) and direct_error:
+        return direct_error
+    for key in ("data", "result"):
+        payload = result.get(key)
+        if isinstance(payload, dict):
+            nested_error = payload.get("error") or payload.get("message")
+            if isinstance(nested_error, str) and nested_error:
+                return nested_error
+    return ""
+
+
 async def _execute_flow(request: Request, route_name: str, handler, *, user_id: str, db: Session | None = None):
     metadata = {"source": "flow_router"}
     if db is not None:
@@ -48,7 +61,11 @@ async def list_flow_runs(
         from runtime.flow_engine import run_flow
         result = run_flow("flow_runs_list", {"status": status, "workflow_type": workflow_type, "limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
-            raise HTTPException(status_code=500, detail="Flow runs list failed")
+            error = _flow_failure(result)
+            if error.startswith("HTTP_"):
+                code, _, detail = error.partition(":")
+                raise HTTPException(status_code=int(code.replace("HTTP_", "")), detail=detail or error)
+            raise HTTPException(status_code=500, detail=error or "Flow runs list failed")
         return result.get("data")
     return await _execute_flow(request, "flow.runs.list", handler, user_id=str(current_user["sub"]), db=db)
 
@@ -65,7 +82,7 @@ async def get_flow_run(
         from runtime.flow_engine import run_flow
         result = run_flow("flow_run_get", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
-            error = result.get("error", "")
+            error = _flow_failure(result)
             raise HTTPException(404 if "404" in error else 500, error or "Flow run not found")
         return result.get("data")
     return await _execute_flow(request, "flow.runs.get", handler, user_id=str(current_user["sub"]), db=db)
@@ -83,7 +100,7 @@ async def get_flow_run_history(
         from runtime.flow_engine import run_flow
         result = run_flow("flow_run_history", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
-            error = result.get("error", "")
+            error = _flow_failure(result)
             raise HTTPException(404 if "404" in error else 500, error or "Flow run not found")
         return result.get("data")
     return await _execute_flow(request, "flow.runs.history", handler, user_id=str(current_user["sub"]), db=db)
@@ -112,7 +129,7 @@ async def resume_flow_run(
             user_id=str(current_user["sub"]),
         )
         if result.get("status") == "FAILED":
-            error = result.get("error", "")
+            error = _flow_failure(result)
             if "404" in error:
                 raise HTTPException(404, "Flow run not found")
             if "400" in error:
@@ -125,14 +142,15 @@ async def resume_flow_run(
 @router.get("/registry")
 async def get_flow_registry(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """List all registered flows and nodes."""
     def handler(_ctx):
         from runtime.flow_engine import run_flow
-        result = run_flow("flow_registry_get", {}, user_id=str(current_user["sub"]))
+        result = run_flow("flow_registry_get", {}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             raise HTTPException(status_code=500, detail="Registry fetch failed")
         return result.get("data")
-    return await _execute_flow(request, "flow.registry", handler, user_id=str(current_user["sub"]))
+    return await _execute_flow(request, "flow.registry", handler, user_id=str(current_user["sub"]), db=db)
 

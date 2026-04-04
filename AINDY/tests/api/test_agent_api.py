@@ -12,6 +12,12 @@ from db.models.user import User
 from services.auth_service import hash_password
 
 
+def _unwrap(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
 def _seed_run(*, db_session, user_id, goal: str, status: str, trace_id: str) -> AgentRun:
     run = AgentRun(
         user_id=user_id,
@@ -44,18 +50,18 @@ def _wait_for_async_job(db_session, log_id: str, timeout_s: float = 5.0) -> Auto
 
 
 def test_agent_routes_require_auth(client):
-    assert client.get("/agent/runs").status_code == 401
-    assert client.get("/agent/tools").status_code == 401
-    assert client.get("/agent/trust").status_code == 401
-    assert client.post("/agent/run", json={"goal": "test"}).status_code == 401
+    assert client.get("/apps/agent/runs").status_code == 401
+    assert client.get("/apps/agent/tools").status_code == 401
+    assert client.get("/apps/agent/trust").status_code == 401
+    assert client.post("/apps/agent/run", json={"goal": "test"}).status_code == 401
 
 
 def test_agent_tools_list_authenticated(client, auth_headers):
-    response = client.get("/agent/tools", headers=auth_headers)
+    response = client.get("/apps/agent/tools", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
     assert isinstance(data, list)
     assert any(tool["name"] == "task.create" for tool in data)
 
@@ -66,16 +72,16 @@ def test_agent_trust_get_and_put_use_real_db(
     test_user,
     auth_headers,
 ):
-    get_response = client.get("/agent/trust", headers=auth_headers)
+    get_response = client.get("/apps/agent/trust", headers=auth_headers)
 
     assert get_response.status_code == 200
     initial = get_response.json()
-    initial_data = initial["data"]
+    initial_data = _unwrap(initial)
     assert initial_data["user_id"] == str(test_user.id)
     assert initial_data["auto_execute_low"] is False
 
     put_response = client.put(
-        "/agent/trust",
+        "/apps/agent/trust",
         headers=auth_headers,
         json={
             "auto_execute_low": True,
@@ -86,7 +92,7 @@ def test_agent_trust_get_and_put_use_real_db(
 
     assert put_response.status_code == 200
     payload = put_response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
     assert data["auto_execute_low"] is True
     assert data["auto_execute_medium"] is False
     assert data["allowed_auto_grant_tools"] == ["task.create"]
@@ -135,11 +141,11 @@ def test_agent_runs_are_user_scoped(
         trace_id="trace-hidden",
     )
 
-    response = client.get("/agent/runs", headers=auth_headers)
+    response = client.get("/apps/agent/runs", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
     assert len(data) == 1
     assert data[0]["goal"] == "visible run"
     assert str(data[0]["user_id"]) == str(test_user.id)
@@ -185,14 +191,14 @@ def test_agent_run_async_create_persists_log_run_and_events(
     shutdown_async_jobs(wait=True)
     try:
         response = client.post(
-            "/agent/run",
+            "/apps/agent/run",
             json={"goal": "Create a follow-up task"},
             headers=auth_headers,
         )
 
         assert response.status_code == 202
         payload = response.json()
-        data = payload["data"]
+        data = _unwrap(payload)
         assert payload["status"] == "QUEUED"
         log_id = data["automation_log_id"]
         assert payload["trace_id"] == log_id

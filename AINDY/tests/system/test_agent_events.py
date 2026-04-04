@@ -122,7 +122,7 @@ def test_get_run_events_merges_lifecycle_and_steps(db_session, test_user):
 def test_events_endpoint_requires_auth(client, test_user, db_session):
     run = _make_run(db_session, test_user)
 
-    response = client.get(f"/agent/runs/{run.id}/events")
+    response = client.get(f"/apps/agent/runs/{run.id}/events")
 
     assert response.status_code in (401, 403)
 
@@ -139,7 +139,7 @@ def test_events_endpoint_returns_user_scoped_timeline(client, auth_headers, db_s
         required=True,
     )
 
-    response = client.get(f"/agent/runs/{run.id}/events", headers=auth_headers)
+    response = client.get(f"/apps/agent/runs/{run.id}/events", headers=auth_headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -156,7 +156,7 @@ def test_events_endpoint_forbids_cross_user_access(client, db_session, test_user
         "Authorization": f"Bearer {build_access_token(user_id=test_user.id, email=test_user.email)}"
     }
 
-    response = client.get(f"/agent/runs/{run.id}/events", headers=foreign_headers)
+    response = client.get(f"/apps/agent/runs/{run.id}/events", headers=foreign_headers)
 
     assert response.status_code == 403
 
