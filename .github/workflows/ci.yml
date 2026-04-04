@@ -35,7 +35,6 @@ jobs:
     defaults:
       run:
         working-directory: AINDY
-        
 
     services:
       postgres:
@@ -85,10 +84,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Verify migrations at head
-        working-directory: AINDY
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: python -m alembic check
+        run: alembic check
 
       - name: Run tests with coverage
         run: |
@@ -97,7 +93,7 @@ jobs:
             --cov=. \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
-            --cov-fail-under=64 \
+            --cov-fail-under=69 \
             -q
 
       - name: Upload coverage report
@@ -115,3 +111,13 @@ jobs:
           file: AINDY/coverage.xml
           fail_ci_if_error: false
         continue-on-error: true
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build application image
+        run: docker build -f AINDY/Dockerfile -t aindy-ci:latest AINDY

@@ -1,28 +1,42 @@
 # A.I.N.D.Y.
 
-Backend for the Masterplan Infinite Weave project.
+A.I.N.D.Y. is a FastAPI-based platform backend for versioned syscalls, Nodus execution, memory retrieval and persistence, flow orchestration, agent runs, and execution observability.
 
-See [`AINDY_README.md`](AINDY_README.md) for architecture overview, directory structure, and runtime notes.
+The release-facing entrypoints are the public health routes, the auth routes, and the `/platform/*` surface. The platform surface exposes:
+
+- platform API key management
+- syscall discovery and dispatch
+- dynamic flow and node registration
+- Nodus script execution, trace lookup, and scheduling
+- tenant usage and memory address space queries
 
 ## Quick Start
 
+For the shortest path to a live syscall, use the getting-started guide:
+
+[Getting Started](docs/getting-started/index.md)
+
+Local startup:
+
 ```bash
 cd AINDY
-alembic upgrade head
-uvicorn main:app --reload
+docker compose up -d
 ```
 
-## Documentation
+Health check:
 
-| Doc | Description |
-|-----|-------------|
-| [`AINDY_README.md`](AINDY_README.md) | Architecture overview and runtime notes |
-| [`docs/architecture/SYSCALL_SYSTEM.md`](docs/architecture/SYSCALL_SYSTEM.md) | Syscall layer, ABI versioning, dispatcher pipeline |
-| [`docs/architecture/MEMORY_ADDRESS_SPACE.md`](docs/architecture/MEMORY_ADDRESS_SPACE.md) | Path-addressable memory namespace |
-| [`docs/architecture/OS_ISOLATION_LAYER.md`](docs/architecture/OS_ISOLATION_LAYER.md) | Tenant isolation, quota enforcement, WAIT/RESUME |
-| [`docs/architecture/SYSTEM_SPEC.md`](docs/architecture/SYSTEM_SPEC.md) | Full system specification |
-| [`docs/architecture/RUNTIME_BEHAVIOR.md`](docs/architecture/RUNTIME_BEHAVIOR.md) | Runtime behavior reference |
-| [`docs/architecture/EXECUTION_CONTRACT.md`](docs/architecture/EXECUTION_CONTRACT.md) | Execution pipeline contract |
-| [`docs/interfaces/API_CONTRACTS.md`](docs/interfaces/API_CONTRACTS.md) | Complete API surface |
-| [`docs/engineering/TESTING_STRATEGY.md`](docs/engineering/TESTING_STRATEGY.md) | Test architecture and coverage policy |
-| [`CHANGELOG.md`](CHANGELOG.md) | Sprint-by-sprint change history |
+```bash
+curl http://localhost:8000/health
+```
+
+## Core Docs
+
+- [Getting Started](docs/getting-started/index.md)
+- [API Contracts](docs/interfaces/API_CONTRACTS.md)
+- [Syscall System](docs/architecture/SYSCALL_SYSTEM.md)
+- [System Spec](docs/architecture/SYSTEM_SPEC.md)
+- [Runtime Behavior](docs/architecture/RUNTIME_BEHAVIOR.md)
+- [Execution Contract](docs/architecture/EXECUTION_CONTRACT.md)
+- [Testing Strategy](docs/engineering/TESTING_STRATEGY.md)
+- [Architecture Overview](AINDY_README.md)
+- [Changelog](CHANGELOG.md)
