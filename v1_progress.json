@@ -33,7 +33,8 @@
                                                  "V1-REFACT-007",
                                                  "V1-REFACT-010",
                                                  "V1-REFACT-011",
-                                                 "V1-REFACT-014"
+                                                 "V1-REFACT-014",
+                                                 "V1-REL-006"
                                              ]
               },
     "tasks":  {
@@ -762,12 +763,12 @@
                                      "notes":  "CI workflow updated on 2026-04-04 to enforce ruff, `alembic check`, pytest coverage floor `--cov-fail-under=69`, and Docker image build (`docker build -f AINDY/Dockerfile -t aindy-ci:latest AINDY`). GitHub Actions success remains a separate release-gate condition."
                                  },
                   "V1-REL-006":  {
-                                     "status":  "pending",
+                                     "status":  "completed",
                                      "priority":  "BLOCKER",
                                      "phase":  5,
                                      "title":  "Perform fresh-clone quickstart verification",
-                                     "started_at":  null,
-                                     "completed_at":  null,
+                                     "started_at":  "2026-04-04",
+                                     "completed_at":  "2026-04-04",
                                      "validation_check":  "none",
                                      "files":  [
 
@@ -777,7 +778,7 @@
                                                           "V1-REL-004",
                                                           "V1-PLAT-003"
                                                       ],
-                                     "notes":  "On clean machine. Must complete in \u003c 15 min. Any failures = bug, fix before tagging."
+                                     "notes":  "Verified on 2026-04-04 in a clean git worktree. Fresh path required repo-root `.env` copied from `.env.example`, replacing `SECRET_KEY` with a generated 64-hex secret, then `docker compose up -d` from repo root. Default compose path now skips Mongo ping so postgres + api boots without the social profile. Verified `/health`, `/auth/register`, `/auth/login`, `/platform/syscalls`, and a successful first syscall via `sys.v1.memory.read` returning `{nodes: [], count: 0}`. Docs corrected from `sys.v1.memory.list`, which a fresh JWT user cannot call."
                                  },
                   "V1-REL-007":  {
                                      "status":  "pending",
@@ -832,7 +833,7 @@
                          },
                    "2":  {
                              "name":  "Structural Alignment",
-                             "status":  "in_progress",
+                             "status":  "completed",
                              "blocker_tasks_complete":  2,
                              "blocker_tasks_total":  2,
                              "notes":  "All Phase 2 BLOCKER tasks complete (V1-REFACT-013, V1-REFACT-008). V1-REFACT-003, V1-REFACT-004, V1-REFACT-005, V1-REFACT-006, V1-REFACT-007, V1-REFACT-008, V1-REFACT-009, V1-REFACT-010, V1-REFACT-011, V1-REFACT-012, and V1-REFACT-014 complete.",
@@ -887,9 +888,9 @@
                    "5":  {
                              "name":  "Release Prep",
                              "status":  "in_progress",
-                             "blocker_tasks_complete":  4,
+                             "blocker_tasks_complete":  5,
                              "blocker_tasks_total":  6,
-                             "notes":  "Release docs are mostly in place. Remaining blocker path is fresh-clone verification and final tag on green main.",
+                             "notes":  "Fresh-clone quickstart verification is complete. Remaining blocker path is the final tag on green main.",
                              "task_ids":  [
                                               "V1-REL-001",
                                               "V1-REL-002",
@@ -906,7 +907,7 @@
                          "all_blockers_complete":  false,
                          "all_v1_gate_tests_passing":  false,
                          "ci_green_on_main":  false,
-                         "fresh_clone_verified":  false,
+                         "fresh_clone_verified":  true,
                          "v1_0_0_tagged":  false
                      }
 }
