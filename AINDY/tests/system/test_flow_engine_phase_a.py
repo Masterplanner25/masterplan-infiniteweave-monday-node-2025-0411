@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 class TestSchedulerService:
 
     def test_scheduler_service_importable(self):
-        from services.scheduler_service import (
+        from platform_layer.scheduler_service import (
             start, stop, run_task_now, register_task, replay_task, get_scheduler,
         )
         assert callable(start)
@@ -26,7 +26,7 @@ class TestSchedulerService:
         assert callable(replay_task)
 
     def test_register_task_decorator(self):
-        from services.scheduler_service import register_task, _TASK_REGISTRY
+        from platform_layer.scheduler_service import register_task, _TASK_REGISTRY
 
         @register_task("test_registration_fn_unique_001")
         def test_fn(payload):
@@ -37,7 +37,7 @@ class TestSchedulerService:
 
     def test_get_scheduler_raises_before_start(self):
         """get_scheduler() raises RuntimeError if scheduler has not been started."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -50,8 +50,7 @@ class TestSchedulerService:
     def test_daemon_threads_removed_from_task_services(self):
         """task_services.py must not contain daemon=True anywhere."""
         import inspect
-        from services import task_services
-
+        from domain import task_services
         source = inspect.getsource(task_services)
         assert "daemon=True" not in source, (
             "daemon=True found in task_services.py. "
@@ -61,8 +60,7 @@ class TestSchedulerService:
     def test_threading_thread_not_used_as_daemon_in_task_services(self):
         """No threading.Thread(daemon=True) calls remain in task_services."""
         import inspect
-        from services import task_services
-
+        from domain import task_services
         source = inspect.getsource(task_services)
         # threading module may still be imported by other code — only check
         # that no daemon=True is present (covered by test above, kept explicit)
@@ -70,7 +68,7 @@ class TestSchedulerService:
 
     def test_replay_task_returns_false_for_missing_log(self):
         """replay_task returns False (not raises) when log does not exist."""
-        from services.scheduler_service import replay_task
+        from platform_layer.scheduler_service import replay_task
 
         mock_session = MagicMock()
         mock_session.query.return_value.filter.return_value.first.return_value = None
@@ -86,7 +84,7 @@ class TestSchedulerService:
 
     def test_replay_task_returns_false_for_non_failed_log(self):
         """replay_task returns False when log status is 'success'."""
-        from services.scheduler_service import replay_task
+        from platform_layer.scheduler_service import replay_task
 
         mock_log = MagicMock()
         mock_log.status = "success"
@@ -101,7 +99,7 @@ class TestSchedulerService:
 
     def test_replay_task_returns_false_when_fn_not_registered(self):
         """replay_task returns False when task_name not in _TASK_REGISTRY."""
-        from services.scheduler_service import replay_task
+        from platform_layer.scheduler_service import replay_task
 
         mock_log = MagicMock()
         mock_log.status = "failed"
@@ -123,7 +121,7 @@ class TestSchedulerLifecycle:
 
     def test_start_stop_cycle(self):
         """Scheduler starts and stops cleanly without error."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -144,7 +142,7 @@ class TestSchedulerLifecycle:
 
     def test_double_start_does_not_crash(self):
         """Calling start() twice logs a warning but does not raise."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -157,7 +155,7 @@ class TestSchedulerLifecycle:
 
     def test_system_jobs_registered_on_start(self):
         """cleanup_stale_logs and task_recurrence_check are registered."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -173,7 +171,7 @@ class TestSchedulerLifecycle:
 
     def test_task_reminder_check_job_registered(self):
         """task_reminder_check job is registered on start."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -188,7 +186,7 @@ class TestSchedulerLifecycle:
 
     def test_stop_when_not_started_is_safe(self):
         """stop() when scheduler is already None does not raise."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         original = svc._scheduler
         svc._scheduler = None
@@ -333,7 +331,7 @@ class TestAutomationEndpoints:
 
     def test_scheduler_status_503_when_not_running(self, client, auth_headers):
         """When scheduler is not running, endpoint returns 503."""
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
         original = svc._scheduler
         svc._scheduler = None
         try:
@@ -387,7 +385,7 @@ class TestAutomationEndpoints:
         app.dependency_overrides[get_db] = lambda: db
 
         client = TestClient(app)
-        with patch("services.capability_service.validate_token", return_value={"ok": False, "error": "token mismatch"}):
+        with patch("agents.capability_service.validate_token", return_value={"ok": False, "error": "token mismatch"}):
             resp = client.post("/automation/logs/log-1/replay")
 
         assert resp.status_code == 403
@@ -399,26 +397,28 @@ class TestTaskServicesNoDaemonThreads:
 
     def test_no_daemon_thread_in_start_background_tasks(self):
         import inspect
-        from services import task_services
+        from domain import task_services
         source = inspect.getsource(task_services.start_background_tasks)
         assert "daemon=True" not in source
 
     def test_start_background_tasks_returns_false_when_disabled(self):
         # N+9: start_background_tasks() now returns bool (False = no lease / disabled)
-        from services.task_services import start_background_tasks
+        from domain.task_services import start_background_tasks
         result = start_background_tasks(enable=False)
         assert result is False
 
     def test_stop_background_tasks_importable(self):
-        from services.task_services import stop_background_tasks
+        from domain.task_services import stop_background_tasks
         assert callable(stop_background_tasks)
 
     def test_check_reminders_still_callable(self):
         """check_reminders() public API is preserved (used by scheduler)."""
-        from services.task_services import check_reminders
+        from domain.task_services import check_reminders
         assert callable(check_reminders)
 
     def test_handle_recurrence_still_callable(self):
         """handle_recurrence() public API is preserved (used by scheduler)."""
-        from services.task_services import handle_recurrence
+        from domain.task_services import handle_recurrence
         assert callable(handle_recurrence)
+
+

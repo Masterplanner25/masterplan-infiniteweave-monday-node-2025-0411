@@ -137,14 +137,14 @@ class TestFocusQualityPerUser:
         return mock_db
 
     def test_returns_neutral_when_no_user_sessions(self):
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
         mock_db = self._make_mock_db(sessions=[])
         score, count = calculate_focus_quality("user-xyz", mock_db)
         assert score == 50.0
         assert count == 0
 
     def test_returns_score_when_user_sessions_exist(self):
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
         mock_session = MagicMock()
         mock_session.duration_seconds = 1800.0  # 30 minutes
         mock_db = self._make_mock_db(sessions=[mock_session], distractions=2, focus_achieved=1)
@@ -156,14 +156,14 @@ class TestFocusQualityPerUser:
         """Verify user_id filter is applied in the focus_quality query chain."""
         from db.models.watcher_signal import WatcherSignal
         import inspect
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
         source = inspect.getsource(calculate_focus_quality)
         assert "user_id" in source, "calculate_focus_quality must filter by user_id"
 
     def test_distraction_and_focus_queries_use_user_id(self):
         """All three WatcherSignal queries in focus_quality must include user_id filter."""
         import inspect
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
         source = inspect.getsource(calculate_focus_quality)
         # Count occurrences of user_id == user_id filter in the source
         occurrences = source.count("WatcherSignal.user_id == user_id")
@@ -174,7 +174,7 @@ class TestFocusQualityPerUser:
     def test_no_neutral_return_comment_in_source(self):
         """The old 'return neutral' short-circuit comment should be gone."""
         import inspect
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
         source = inspect.getsource(calculate_focus_quality)
         assert "Until per-user association is added, return neutral" not in source
 
@@ -186,14 +186,14 @@ class TestFocusQualityPerUser:
 class TestGetUserKpiSnapshot:
 
     def test_returns_none_when_no_score_row(self):
-        from services.infinity_service import get_user_kpi_snapshot
+        from domain.infinity_service import get_user_kpi_snapshot
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         result = get_user_kpi_snapshot("user-123", mock_db)
         assert result is None
 
     def test_returns_dict_with_all_kpi_keys(self):
-        from services.infinity_service import get_user_kpi_snapshot
+        from domain.infinity_service import get_user_kpi_snapshot
         mock_score = MagicMock()
         mock_score.master_score = 72.5
         mock_score.execution_speed_score = 80.0
@@ -216,7 +216,7 @@ class TestGetUserKpiSnapshot:
             assert key in result, f"Missing key: {key}"
 
     def test_returns_correct_values(self):
-        from services.infinity_service import get_user_kpi_snapshot
+        from domain.infinity_service import get_user_kpi_snapshot
         mock_score = MagicMock()
         mock_score.master_score = 55.0
         mock_score.execution_speed_score = 40.0
@@ -235,7 +235,7 @@ class TestGetUserKpiSnapshot:
         assert result["confidence"] == "medium"
 
     def test_never_raises_on_db_error(self):
-        from services.infinity_service import get_user_kpi_snapshot
+        from domain.infinity_service import get_user_kpi_snapshot
         mock_db = MagicMock()
         mock_db.query.side_effect = RuntimeError("DB unavailable")
         result = get_user_kpi_snapshot("user-xyz", mock_db)
@@ -257,68 +257,68 @@ class TestBuildKpiContextBlock:
         }
 
     def test_returns_empty_when_no_snapshot(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=None):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = _build_kpi_context_block("user-123", mock_db)
         assert result == ""
 
     def test_returns_block_when_snapshot_exists(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot()
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "Infinity Score" in result
         assert "70.0" in result
 
     def test_includes_low_focus_guidance(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(focus=25.0)
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "memory.recall" in result or "focus" in result.lower()
 
     def test_includes_low_execution_speed_guidance(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(exec_speed=30.0)
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "task.create" in result or "momentum" in result.lower()
 
     def test_includes_low_arm_usage_guidance(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(ai_boost=20.0)
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "arm.analyze" in result
 
     def test_includes_high_score_guidance(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(master=85.0)
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "medium-risk" in result or "strong performance" in result.lower()
 
     def test_no_guidance_lines_for_healthy_kpis(self):
         """Healthy scores → guidance section present but no low-KPI warnings."""
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot()  # all 70.0, master 70.0
-        with patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "Focus quality is low" not in result
         assert "Execution speed is low" not in result
 
     def test_never_raises_on_import_error(self):
-        from services.agent_runtime import _build_kpi_context_block
+        from agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
-        with patch("services.agent_runtime._build_kpi_context_block", wraps=_build_kpi_context_block):
-            with patch("services.infinity_service.get_user_kpi_snapshot", side_effect=RuntimeError("fail")):
+        with patch("agents.agent_runtime._build_kpi_context_block", wraps=_build_kpi_context_block):
+            with patch("domain.infinity_service.get_user_kpi_snapshot", side_effect=RuntimeError("fail")):
                 result = _build_kpi_context_block("user-123", mock_db)
         assert result == ""
 
@@ -339,7 +339,7 @@ class TestGeneratePlanKpiInjection:
 
     def test_kpi_block_injected_into_system_prompt(self):
         """When snapshot exists, system_prompt passed to OpenAI includes KPI block."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
@@ -350,8 +350,8 @@ class TestGeneratePlanKpiInjection:
             captured_messages.extend(kwargs.get("messages", []))
             return mock_response
 
-        with patch("services.agent_runtime._get_client") as mock_client, \
-             patch("services.agent_runtime._build_kpi_context_block",
+        with patch("agents.agent_runtime._get_client") as mock_client, \
+             patch("agents.agent_runtime._build_kpi_context_block",
                    return_value="\n## User Performance Context\nmaster: 75.0"):
             mock_client.return_value.chat.completions.create.side_effect = capture_create
             result = generate_plan("write a test task", "user-123", mock_db)
@@ -363,13 +363,13 @@ class TestGeneratePlanKpiInjection:
 
     def test_plan_generated_without_kpi_block(self):
         """When snapshot is None, plan still generates successfully."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
 
-        with patch("services.agent_runtime._get_client") as mock_client, \
-             patch("services.agent_runtime._build_kpi_context_block", return_value=""):
+        with patch("agents.agent_runtime._get_client") as mock_client, \
+             patch("agents.agent_runtime._build_kpi_context_block", return_value=""):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             result = generate_plan("create a task", "user-abc", mock_db)
 
@@ -378,13 +378,13 @@ class TestGeneratePlanKpiInjection:
 
     def test_plan_structure_unchanged(self):
         """KPI injection does not break plan schema."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
 
-        with patch("services.agent_runtime._get_client") as mock_client, \
-             patch("services.agent_runtime._build_kpi_context_block", return_value="## KPI\nfocus: 30.0"):
+        with patch("agents.agent_runtime._get_client") as mock_client, \
+             patch("agents.agent_runtime._build_kpi_context_block", return_value="## KPI\nfocus: 30.0"):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             result = generate_plan("run analysis", "user-xyz", mock_db)
 
@@ -394,11 +394,11 @@ class TestGeneratePlanKpiInjection:
 
     def test_generate_plan_returns_none_on_openai_failure(self):
         """OpenAI failure still returns None gracefully."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
-        with patch("services.agent_runtime._get_client") as mock_client, \
-             patch("services.agent_runtime._build_kpi_context_block", return_value=""):
+        with patch("agents.agent_runtime._get_client") as mock_client, \
+             patch("agents.agent_runtime._build_kpi_context_block", return_value=""):
             mock_client.return_value.chat.completions.create.side_effect = RuntimeError("API error")
             result = generate_plan("some goal", "user-123", mock_db)
 
@@ -406,7 +406,7 @@ class TestGeneratePlanKpiInjection:
 
     def test_kpi_block_builder_called_with_user_id_and_db(self):
         """_build_kpi_context_block receives the correct user_id and db."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
@@ -417,8 +417,8 @@ class TestGeneratePlanKpiInjection:
             captured_args["db"] = db
             return ""
 
-        with patch("services.agent_runtime._get_client") as mock_client, \
-             patch("services.agent_runtime._build_kpi_context_block", side_effect=capture_block):
+        with patch("agents.agent_runtime._get_client") as mock_client, \
+             patch("agents.agent_runtime._build_kpi_context_block", side_effect=capture_block):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             generate_plan("test goal", "user-target", mock_db)
 
@@ -444,53 +444,53 @@ class TestSuggestTools:
         }
 
     def test_returns_empty_for_none_snapshot(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         assert suggest_tools(None) == []
 
     def test_returns_empty_for_empty_snapshot(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         assert suggest_tools({}) == []
 
     def test_low_focus_triggers_memory_recall(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(focus=30.0))
         tools = [s["tool"] for s in result]
         assert "memory.recall" in tools
 
     def test_low_speed_triggers_task_create(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(speed=35.0))
         tools = [s["tool"] for s in result]
         assert "task.create" in tools
 
     def test_medium_low_speed_triggers_task_create(self):
         """Speed between 40-55 still triggers task.create."""
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(speed=48.0))
         tools = [s["tool"] for s in result]
         assert "task.create" in tools
 
     def test_low_ai_boost_triggers_arm_analyze(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         # Keep focus and speed healthy so arm slot is available
         result = suggest_tools(self._snap(focus=80.0, speed=80.0, ai_boost=25.0))
         tools = [s["tool"] for s in result]
         assert "arm.analyze" in tools
 
     def test_high_master_score_triggers_genesis(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(master=80.0, focus=80.0, speed=80.0, ai_boost=80.0))
         tools = [s["tool"] for s in result]
         assert "genesis.message" in tools
 
     def test_max_three_suggestions(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         # All low → could fire many rules, but must cap at 3
         result = suggest_tools(self._snap(master=30.0, focus=20.0, speed=20.0, ai_boost=20.0))
         assert len(result) <= 3
 
     def test_suggestion_shape(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(focus=20.0))
         assert len(result) > 0
         for s in result:
@@ -503,12 +503,12 @@ class TestSuggestTools:
 
     def test_no_suggestions_for_healthy_scores(self):
         """No low KPIs, master < 70 → no suggestions (no rules trigger)."""
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         result = suggest_tools(self._snap(master=65.0, focus=65.0, speed=65.0, ai_boost=65.0))
         assert result == []
 
     def test_never_raises_on_bad_snapshot(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
         # Snapshot with non-numeric values — should return []
         result = suggest_tools({"focus_quality": "bad", "execution_speed": None})
         assert isinstance(result, list)
@@ -537,7 +537,7 @@ class TestSuggestionsEndpoint:
         mock_db = MagicMock()
 
         with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("services.infinity_service.get_user_kpi_snapshot", return_value=None):
+             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert isinstance(result, list)
@@ -558,7 +558,7 @@ class TestSuggestionsEndpoint:
         }
 
         with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert len(result) >= 1
@@ -571,7 +571,7 @@ class TestSuggestionsEndpoint:
         mock_db = MagicMock()
 
         with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("services.infinity_service.get_user_kpi_snapshot", return_value=None):
+             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert result == []
@@ -606,3 +606,5 @@ class TestAgentConsolePhase3UI:
         src = open("client/src/api.js", encoding="utf-8").read()
         assert "getAgentSuggestions" in src
         assert "/agent/suggestions" in src
+
+

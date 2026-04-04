@@ -252,9 +252,9 @@ class TestEnsureNodusFlowRegistered:
         def mock_register(name, flow):
             captured_registrations.append(name)
 
-        with patch("services.flow_engine.FLOW_REGISTRY", {}), \
-             patch("services.flow_engine.register_flow", side_effect=mock_register), \
-             patch("services.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}):
+        with patch("runtime.flow_engine.FLOW_REGISTRY", {}), \
+             patch("runtime.flow_engine.register_flow", side_effect=mock_register), \
+             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}):
             m = _module()
             m._ensure_nodus_flow_registered()
 
@@ -273,8 +273,8 @@ class TestRunNodusScript:
         mock_runner.start.return_value = {"status": "SUCCESS", "state": {}, "data": {}}
 
         with patch("routes.platform_router._ensure_nodus_flow_registered"), \
-             patch("services.flow_engine.FLOW_REGISTRY", {"nodus_execute": {}}), \
-             patch("services.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
+             patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": {}}), \
+             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
              patch("utils.uuid_utils.normalize_uuid", return_value="user-123"):
             from routes.platform_router import _run_nodus_script
             result = _run_nodus_script(
@@ -592,3 +592,4 @@ class TestListNodusScriptsEndpoint:
         finally:
             m._NODUS_SCRIPT_REGISTRY.clear()
             m._NODUS_SCRIPT_REGISTRY.update(original)
+

@@ -58,7 +58,7 @@ Stability contract
   — Simple edges only (node_name → [next_node_name]) are supported via API.
   — Condition functions cannot be serialised over HTTP; use startup-registered flows.
   — All business logic routes through run_flow() per the HARD EXECUTION BOUNDARY.
-  — Registry CRUD (flows/nodes) calls services.flow_registry directly (infra ops).
+  — Registry CRUD (flows/nodes) calls runtime.flow_registry directly (infra ops).
   — Nodus scripts are sandboxed: no imports, eval, exec, filesystem or network access.
 """
 from __future__ import annotations
@@ -307,7 +307,7 @@ _SCRIPTS_DIR = Path(__file__).parent.parent / "scripts" / "nodus"
 # ---------------------------------------------------------------------------
 
 def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | None) -> dict:
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, state, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -331,9 +331,9 @@ def _ensure_nodus_flow_registered() -> None:
     nodus_record_outcome, nodus_handle_error) are in NODE_REGISTRY.
     Thread-safe; idempotent.
     """
-    import services.nodus_adapter  # noqa: F401 — registers nodes as side-effect
-    from services.flow_engine import FLOW_REGISTRY, register_flow
-    from services.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
+    import runtime.nodus_adapter  # noqa: F401 — registers nodes as side-effect
+    from runtime.flow_engine import FLOW_REGISTRY, register_flow
+    from runtime.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
 
     if "nodus_execute" not in FLOW_REGISTRY:
         register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
@@ -355,7 +355,7 @@ def _run_nodus_script(
     in the returned state).  May raise HTTPException on infrastructure failure
     (VM not installed, DB unreachable, etc.).
     """
-    from services.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+    from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
     from utils.uuid_utils import normalize_uuid
 
     _ensure_nodus_flow_registered()
@@ -430,7 +430,7 @@ def _validate_nodus_source(source: str, field: str = "script") -> None:
     """
     Run nodus_security sandbox checks.  Raises HTTPException(422) on violation.
     """
-    from services.nodus_security import NodusSecurityError, validate_nodus_source
+    from runtime.nodus_security import NodusSecurityError, validate_nodus_source
     try:
         validate_nodus_source(source)
     except NodusSecurityError as exc:
@@ -444,7 +444,13 @@ def _validate_nodus_source(source: str, field: str = "script") -> None:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/flows", status_code=201)
+@router.post(
+    "/flows",
+    status_code=201,
+    summary="Create Dynamic Flow",
+    description="Registers a dynamic flow from the posted flow definition. Returns the persisted flow metadata used by the platform registry.",
+    response_model=None,
+)
 def create_flow(
     body: FlowDefinition,
     db: Session = Depends(get_db),
@@ -456,7 +462,7 @@ def create_flow(
     No application restart required.  Thread-safe.  Persisted to DB.
     All listed nodes must already exist in NODE_REGISTRY.
     """
-    from services.flow_registry import register_dynamic_flow
+    from runtime.flow_registry import register_dynamic_flow
 
     user_id = str(current_user["sub"])
     try:
@@ -479,29 +485,44 @@ def create_flow(
     return meta
 
 
-@router.get("/flows")
+@router.get(
+    "/flows",
+    summary="List Dynamic Flows",
+    description="Returns all dynamically registered platform flows. The response includes flow metadata currently available in the live registry.",
+    response_model=None,
+)
 def list_flows(
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform flows."""
-    from services.flow_registry import list_dynamic_flows
+    from runtime.flow_registry import list_dynamic_flows
     return {"flows": list_dynamic_flows()}
 
 
-@router.get("/flows/{name}")
+@router.get(
+    "/flows/{name}",
+    summary="Get Dynamic Flow",
+    description="Looks up a dynamic flow by its name path parameter. Returns the stored flow definition for that registered flow.",
+    response_model=None,
+)
 def get_flow(
     name: str,
     current_user: dict = Depends(get_current_user),
 ):
     """Return the definition of a dynamic flow."""
-    from services.flow_registry import get_dynamic_flow
+    from runtime.flow_registry import get_dynamic_flow
     meta = get_dynamic_flow(name)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Flow {name!r} not found")
     return meta
 
 
-@router.post("/flows/{name}/run")
+@router.post(
+    "/flows/{name}/run",
+    summary="Run Registered Flow",
+    description="Executes the named flow using the request state payload. Returns the full execution result for that flow run.",
+    response_model=None,
+)
 def run_flow_endpoint(
     request: Request,
     name: str,
@@ -515,7 +536,7 @@ def run_flow_endpoint(
     Returns the full execution envelope:
       { "status": "SUCCESS"|"FAILED", "data": <final_state>, "run_id": ..., "trace_id": ... }
     """
-    from services.flow_engine import FLOW_REGISTRY
+    from runtime.flow_engine import FLOW_REGISTRY
 
     user_id = str(current_user["sub"])
     if name not in FLOW_REGISTRY:
@@ -534,7 +555,13 @@ def run_flow_endpoint(
     )
 
 
-@router.delete("/flows/{name}", status_code=204)
+@router.delete(
+    "/flows/{name}",
+    status_code=204,
+    summary="Delete Dynamic Flow",
+    description="Removes the named dynamic flow from the platform registry. Returns no body when the flow is deleted successfully.",
+    response_model=None,
+)
 def delete_flow(
     name: str,
     db: Session = Depends(get_db),
@@ -546,7 +573,7 @@ def delete_flow(
     Static (startup-registered) flows cannot be deleted via this endpoint.
     Returns 204 on success, 404 if not found or not a dynamic flow.
     """
-    from services.flow_registry import delete_dynamic_flow
+    from runtime.flow_registry import delete_dynamic_flow
     removed = delete_dynamic_flow(name, db=db)
     if not removed:
         raise HTTPException(
@@ -560,7 +587,13 @@ def delete_flow(
 # Node endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/nodes/register", status_code=201)
+@router.post(
+    "/nodes/register",
+    status_code=201,
+    summary="Register Dynamic Node",
+    description="Registers a webhook or plugin node from the posted node definition. Returns the persisted node metadata for the new registry entry.",
+    response_model=None,
+)
 def register_node(
     body: NodeRegistration,
     db: Session = Depends(get_db),
@@ -582,7 +615,7 @@ def register_node(
 
     No application restart required.  Thread-safe.  Persisted to DB.
     """
-    from services.node_registry import register_external_node
+    from platform_layer.node_registry import register_external_node
 
     user_id = str(current_user["sub"])
     try:
@@ -601,29 +634,45 @@ def register_node(
     return meta
 
 
-@router.get("/nodes")
+@router.get(
+    "/nodes",
+    summary="List Dynamic Nodes",
+    description="Returns all dynamically registered platform nodes. The response includes each node definition currently available in the live registry.",
+    response_model=None,
+)
 def list_nodes(
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform nodes."""
-    from services.node_registry import list_dynamic_nodes
+    from platform_layer.node_registry import list_dynamic_nodes
     return {"nodes": list_dynamic_nodes()}
 
 
-@router.get("/nodes/{name}")
+@router.get(
+    "/nodes/{name}",
+    summary="Get Dynamic Node",
+    description="Looks up a dynamic node by its name path parameter. Returns the stored node metadata for that registry entry.",
+    response_model=None,
+)
 def get_node(
     name: str,
     current_user: dict = Depends(get_current_user),
 ):
     """Return the metadata for a dynamic node."""
-    from services.node_registry import get_dynamic_node
+    from platform_layer.node_registry import get_dynamic_node
     meta = get_dynamic_node(name)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Node {name!r} not found")
     return meta
 
 
-@router.delete("/nodes/{name}", status_code=204)
+@router.delete(
+    "/nodes/{name}",
+    status_code=204,
+    summary="Delete Dynamic Node",
+    description="Removes the named dynamic node from the platform registry. Returns no body when the node is deleted successfully.",
+    response_model=None,
+)
 def delete_node(
     name: str,
     db: Session = Depends(get_db),
@@ -634,7 +683,7 @@ def delete_node(
 
     Static (startup-registered) nodes cannot be deleted via this endpoint.
     """
-    from services.node_registry import delete_dynamic_node
+    from platform_layer.node_registry import delete_dynamic_node
     removed = delete_dynamic_node(name, db=db)
     if not removed:
         raise HTTPException(
@@ -648,7 +697,13 @@ def delete_node(
 # Webhook subscription endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/webhooks", status_code=201)
+@router.post(
+    "/webhooks",
+    status_code=201,
+    summary="Create Webhook Subscription",
+    description="Creates a webhook subscription from the posted event type and callback URL. Returns the stored subscription metadata for the new webhook.",
+    response_model=None,
+)
 def create_webhook(
     body: WebhookSubscription,
     db: Session = Depends(get_db),
@@ -684,7 +739,7 @@ def create_webhook(
     - `"execution.*"` — all events starting with `"execution."`
     - `"*"`           — every SystemEvent
     """
-    from services.event_service import subscribe_webhook
+    from platform_layer.event_service import subscribe_webhook
 
     user_id = str(current_user["sub"])
     try:
@@ -700,23 +755,33 @@ def create_webhook(
     return meta
 
 
-@router.get("/webhooks")
+@router.get(
+    "/webhooks",
+    summary="List Webhook Subscriptions",
+    description="Returns all active webhook subscriptions owned by the caller. The response includes subscription metadata and delivery settings.",
+    response_model=None,
+)
 def list_webhook_subscriptions(
     current_user: dict = Depends(get_current_user),
 ):
     """List all webhook subscriptions for the current user."""
-    from services.event_service import list_webhooks
+    from platform_layer.event_service import list_webhooks
     user_id = str(current_user["sub"])
     return {"webhooks": list_webhooks(user_id=user_id)}
 
 
-@router.get("/webhooks/{subscription_id}")
+@router.get(
+    "/webhooks/{subscription_id}",
+    summary="Get Webhook Subscription",
+    description="Looks up a webhook subscription by its subscription ID path parameter. Returns the stored metadata for that subscription.",
+    response_model=None,
+)
 def get_webhook_subscription(
     subscription_id: str,
     current_user: dict = Depends(get_current_user),
 ):
     """Return details for a single webhook subscription."""
-    from services.event_service import get_webhook
+    from platform_layer.event_service import get_webhook
     meta = get_webhook(subscription_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Subscription {subscription_id!r} not found")
@@ -726,14 +791,20 @@ def get_webhook_subscription(
     return meta
 
 
-@router.delete("/webhooks/{subscription_id}", status_code=204)
+@router.delete(
+    "/webhooks/{subscription_id}",
+    status_code=204,
+    summary="Delete Webhook Subscription",
+    description="Cancels the webhook subscription identified by the path parameter. Returns no body when the subscription is deleted successfully.",
+    response_model=None,
+)
 def delete_webhook_subscription(
     subscription_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Cancel a webhook subscription."""
-    from services.event_service import get_webhook, unsubscribe_webhook
+    from platform_layer.event_service import get_webhook, unsubscribe_webhook
     meta = get_webhook(subscription_id)
     if not meta or meta.get("created_by") != str(current_user["sub"]):
         raise HTTPException(status_code=404, detail=f"Subscription {subscription_id!r} not found")
@@ -766,7 +837,13 @@ class APIKeyCreate(BaseModel):
 # API key endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/keys", status_code=201)
+@router.post(
+    "/keys",
+    status_code=201,
+    summary="Create Platform Key",
+    description="Creates a scoped platform API key from the posted name, scopes, and optional expiry. Returns key metadata plus the plaintext key exactly once.",
+    response_model=None,
+)
 def create_key(
     body: APIKeyCreate,
     db: Session = Depends(get_db),
@@ -782,7 +859,7 @@ def create_key(
     Subsequent `GET /platform/keys` calls show only `key_prefix` (first 16 chars).
     """
     from auth.api_key_auth import Scopes
-    from services.api_key_service import create_api_key
+    from platform_layer.api_key_service import create_api_key
     from datetime import datetime, timezone
 
     user_id = str(current_user["sub"])
@@ -827,25 +904,35 @@ def create_key(
     }
 
 
-@router.get("/keys")
+@router.get(
+    "/keys",
+    summary="List Platform Keys",
+    description="Returns all platform API keys owned by the caller. The response includes key metadata, scopes, and usage details without the plaintext key.",
+    response_model=None,
+)
 def list_keys(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """List all API keys owned by the current user (no plaintext, shows prefix/scopes/stats)."""
-    from services.api_key_service import list_api_keys
+    from platform_layer.api_key_service import list_api_keys
     user_id = str(current_user["sub"])
     return {"keys": list_api_keys(user_id=user_id, db=db)}
 
 
-@router.get("/keys/{key_id}")
+@router.get(
+    "/keys/{key_id}",
+    summary="Get Platform Key",
+    description="Looks up a platform API key by its key ID path parameter. Returns the stored metadata for that key without the plaintext value.",
+    response_model=None,
+)
 def get_key(
     key_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Return metadata for a single API key.  Ownership-enforced."""
-    from services.api_key_service import get_api_key
+    from platform_layer.api_key_service import get_api_key
     user_id = str(current_user["sub"])
     meta = get_api_key(key_id=key_id, user_id=user_id, db=db)
     if not meta:
@@ -853,7 +940,13 @@ def get_key(
     return meta
 
 
-@router.delete("/keys/{key_id}", status_code=204)
+@router.delete(
+    "/keys/{key_id}",
+    status_code=204,
+    summary="Delete Platform Key",
+    description="Revokes the platform API key identified by the path parameter. Returns no body when the key is deleted successfully.",
+    response_model=None,
+)
 def revoke_key(
     key_id: str,
     db: Session = Depends(get_db),
@@ -864,7 +957,7 @@ def revoke_key(
 
     Returns 204 on success, 404 if not found or not owned by the current user.
     """
-    from services.api_key_service import revoke_api_key
+    from platform_layer.api_key_service import revoke_api_key
     user_id = str(current_user["sub"])
     revoked = revoke_api_key(key_id=key_id, user_id=user_id, db=db)
     if not revoked:
@@ -876,7 +969,12 @@ def revoke_key(
 # Nodus script execution endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/nodus/run")
+@router.post(
+    "/nodus/run",
+    summary="Run Nodus Script",
+    description="Executes either inline Nodus source or an uploaded script name with the posted input payload. Returns the Nodus execution result and output state.",
+    response_model=None,
+)
 def run_nodus_script(
     request: Request,
     body: NodusRunRequest,
@@ -987,7 +1085,13 @@ def run_nodus_script(
     )
 
 
-@router.post("/nodus/upload", status_code=201)
+@router.post(
+    "/nodus/upload",
+    status_code=201,
+    summary="Upload Nodus Script",
+    description="Stores a named Nodus script from the posted script content. Returns the registered script metadata for future executions.",
+    response_model=None,
+)
 def upload_nodus_script(
     body: NodusScriptUpload,
     current_user: dict = Depends(get_current_user),
@@ -1064,7 +1168,12 @@ def upload_nodus_script(
     }
 
 
-@router.get("/nodus/scripts")
+@router.get(
+    "/nodus/scripts",
+    summary="List Nodus Scripts",
+    description="Returns the uploaded Nodus scripts currently available to the platform. The response includes script metadata without the full source body.",
+    response_model=None,
+)
 def list_nodus_scripts(
     current_user: dict = Depends(get_current_user),
 ):
@@ -1132,7 +1241,12 @@ def list_nodus_scripts(
 # Nodus flow endpoint
 # ---------------------------------------------------------------------------
 
-@router.post("/nodus/flow")
+@router.post(
+    "/nodus/flow",
+    summary="Compile Nodus Flow",
+    description="Compiles the posted Nodus flow source and can optionally run or register it. Returns the compiled flow details or execution result for that request.",
+    response_model=None,
+)
 def compile_and_run_nodus_flow(
     request: Request,
     body: NodusFlowRequest,
@@ -1183,8 +1297,8 @@ def compile_and_run_nodus_flow(
     _validate_nodus_source(body.script, field="script")
 
     def handler(_ctx):
-        from services.nodus_flow_compiler import compile_nodus_flow
-        from services.flow_engine import PersistentFlowRunner, register_flow
+        from runtime.nodus_flow_compiler import compile_nodus_flow
+        from runtime.flow_engine import PersistentFlowRunner, register_flow
         from utils.uuid_utils import normalize_uuid
 
         # Compile the Nodus flow script → flow dict
@@ -1247,7 +1361,13 @@ def compile_and_run_nodus_flow(
 # Nodus scheduled execution endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/nodus/schedule", status_code=201)
+@router.post(
+    "/nodus/schedule",
+    status_code=201,
+    summary="Create Nodus Schedule",
+    description="Creates a scheduled Nodus job from the posted script source or script name and cron settings. Returns the persisted schedule metadata for the new job.",
+    response_model=None,
+)
 def create_nodus_schedule(
     body: NodusScheduleRequest,
     db: Session = Depends(get_db),
@@ -1334,7 +1454,7 @@ def create_nodus_schedule(
             script_source = record["content"]
         _validate_nodus_source(script_source, field="script_name")
 
-    from services.nodus_schedule_service import create_nodus_scheduled_job
+    from runtime.nodus_schedule_service import create_nodus_scheduled_job
 
     try:
         meta = create_nodus_scheduled_job(
@@ -1354,7 +1474,12 @@ def create_nodus_schedule(
     return meta
 
 
-@router.get("/nodus/schedule")
+@router.get(
+    "/nodus/schedule",
+    summary="List Nodus Schedules",
+    description="Returns all active scheduled Nodus jobs owned by the caller. The response includes job metadata and recent run details.",
+    response_model=None,
+)
 def list_nodus_schedules(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -1384,14 +1509,20 @@ def list_nodus_schedules(
     }
     ```
     """
-    from services.nodus_schedule_service import list_nodus_scheduled_jobs
+    from runtime.nodus_schedule_service import list_nodus_scheduled_jobs
 
     user_id = str(current_user["sub"])
     jobs = list_nodus_scheduled_jobs(db=db, user_id=user_id)
     return {"count": len(jobs), "jobs": jobs}
 
 
-@router.delete("/nodus/schedule/{job_id}", status_code=204)
+@router.delete(
+    "/nodus/schedule/{job_id}",
+    status_code=204,
+    summary="Delete Nodus Schedule",
+    description="Cancels the scheduled Nodus job identified by the path parameter. Returns no body when the job is deleted successfully.",
+    response_model=None,
+)
 def delete_nodus_schedule(
     job_id: str,
     db: Session = Depends(get_db),
@@ -1405,7 +1536,7 @@ def delete_nodus_schedule(
 
     Returns 204 on success, 404 if not found or not owned by the caller.
     """
-    from services.nodus_schedule_service import delete_nodus_scheduled_job
+    from runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
     user_id = str(current_user["sub"])
     removed = delete_nodus_scheduled_job(db=db, job_id=job_id, user_id=user_id)
@@ -1421,7 +1552,12 @@ def delete_nodus_schedule(
 # Nodus execution trace endpoint
 # ---------------------------------------------------------------------------
 
-@router.get("/nodus/trace/{trace_id}")
+@router.get(
+    "/nodus/trace/{trace_id}",
+    summary="Get Nodus Trace",
+    description="Returns host-function trace events for the provided trace ID path parameter. The response includes ordered trace steps and a summary for that execution.",
+    response_model=None,
+)
 def get_nodus_trace(
     trace_id: str,
     db: Session = Depends(get_db),
@@ -1468,7 +1604,7 @@ def get_nodus_trace(
 
     **Ownership:** only events belonging to the authenticated user are returned.
     """
-    from services.nodus_trace_service import query_nodus_trace
+    from runtime.nodus_trace_service import query_nodus_trace
 
     user_id = str(current_user["sub"])
     result = query_nodus_trace(db=db, trace_id=trace_id, user_id=user_id, limit=limit)
@@ -1490,7 +1626,12 @@ def get_nodus_trace(
 # ── Tenant resource usage (OS layer) ─────────────────────────────────────────
 
 
-@router.get("/tenants/{tenant_id}/usage")
+@router.get(
+    "/tenants/{tenant_id}/usage",
+    summary="Get Tenant Usage",
+    description="Returns resource usage and quota data for the tenant ID in the path. The response includes execution counts, scheduler stats, and quota limits.",
+    response_model=None,
+)
 def get_tenant_usage(
     tenant_id: str,
     current_user: dict = Depends(get_current_user),
@@ -1550,7 +1691,12 @@ def get_tenant_usage(
 # ── Memory Address Space (MAS) endpoints ─────────────────────────────────────
 
 
-@router.get("/memory")
+@router.get(
+    "/memory",
+    summary="List Memory Path",
+    description="Queries memory nodes under the provided MAS path with optional query and tags filters. Returns matching nodes, the count, and the normalized path.",
+    response_model=None,
+)
 def list_memory_path(
     path: str,
     limit: int = 50,
@@ -1590,7 +1736,12 @@ def list_memory_path(
     return {"nodes": nodes, "count": len(nodes), "path": norm}
 
 
-@router.get("/memory/tree")
+@router.get(
+    "/memory/tree",
+    summary="Get Memory Tree",
+    description="Builds a hierarchical memory tree under the provided MAS path. Returns the tree structure, node count, and normalized path.",
+    response_model=None,
+)
 def memory_tree(
     path: str,
     limit: int = 200,
@@ -1618,7 +1769,12 @@ def memory_tree(
     return {"tree": tree, "node_count": len(nodes), "path": norm}
 
 
-@router.get("/memory/trace")
+@router.get(
+    "/memory/trace",
+    summary="Get Memory Trace",
+    description="Follows the causal chain for the exact memory path passed in the query string. Returns the traced chain, its depth, and the normalized path.",
+    response_model=None,
+)
 def memory_trace(
     path: str,
     depth: int = 5,
@@ -1646,7 +1802,12 @@ def memory_trace(
 # ── Syscall versioning introspection ──────────────────────────────────────────
 
 
-@router.get("/syscalls")
+@router.get(
+    "/syscalls",
+    summary="List Syscalls",
+    description="Returns syscall registry metadata, optionally filtered by the version query parameter. The response includes versions, syscall specs, and a total count.",
+    response_model=None,
+)
 def list_syscalls(
     version: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
@@ -1735,7 +1896,12 @@ class SyscallDispatchRequest(BaseModel):
     )
 
 
-@router.post("/syscall")
+@router.post(
+    "/syscall",
+    summary="Dispatch Syscall",
+    description="Executes the posted syscall name with its payload through the platform dispatcher. Returns the standard syscall execution envelope for that call.",
+    response_model=None,
+)
 def dispatch_syscall(
     body: SyscallDispatchRequest,
     current_user: dict = Depends(get_current_user),
@@ -1813,3 +1979,4 @@ def dispatch_syscall(
             raise HTTPException(status_code=404, detail={"error": msg})
 
     return result
+

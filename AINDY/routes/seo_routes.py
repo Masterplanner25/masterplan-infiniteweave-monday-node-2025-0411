@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
-from services.seo import SEOInput, MetaInput
-from services.calculation_services import save_calculation
+from domain.seo import SEOInput, MetaInput
+from analytics.calculation_services import save_calculation
 from services.auth_service import get_current_user
 from db.database import get_db
-from services.search_service import generate_meta as generate_meta_result, search_seo, suggest_seo_improvements
+from domain.search_service import generate_meta as generate_meta_result, search_seo, suggest_seo_improvements
 
 router = APIRouter(prefix="/seo", tags=["SEO"], dependencies=[Depends(get_current_user)])
 
@@ -78,3 +78,4 @@ def suggest_improvements_compat(request: Request, data: LegacyContentInput):
     def handler(_ctx):
         return suggest_seo_improvements(data.content)
     return _execute_seo(request, "seo.suggest.compat", handler)
+

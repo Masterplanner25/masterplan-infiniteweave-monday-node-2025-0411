@@ -28,9 +28,10 @@ REGISTRY = ExecutionRegistry()
 # NODE_REGISTRY and FLOW_REGISTRY are the canonical registries as of
 # Flow Engine Phase B. Exported here for backwards-compatibility.
 
-from services.flow_engine import (  # noqa: F401, E402
+from runtime.flow_engine import (  # noqa: F401, E402
     NODE_REGISTRY,
     FLOW_REGISTRY,
     register_node,
     register_flow,
 )
+

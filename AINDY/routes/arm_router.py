@@ -21,7 +21,7 @@ from typing import Optional
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.rate_limiter import limiter
+from platform_layer.rate_limiter import limiter
 
 
 router = APIRouter(
@@ -73,7 +73,7 @@ async def analyze_code(
         TP = (Complexity × Urgency) / Resource Cost
     """
     async def handler(ctx):
-        from services.async_job_service import (
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_async_job,
@@ -101,7 +101,7 @@ async def analyze_code(
                 ),
             )
 
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "arm_analysis",
             {
@@ -142,7 +142,7 @@ async def generate_code(
     Optionally link to a previous analysis session via analysis_id.
     """
     async def handler(ctx):
-        from services.async_job_service import (
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_async_job,
@@ -173,7 +173,7 @@ async def generate_code(
                 ),
             )
 
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "arm_generate",
             {
@@ -213,7 +213,7 @@ async def get_arm_logs(
 ):
     """Fetch reasoning session logs for the current user."""
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("arm_logs", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM logs flow failed")
@@ -232,7 +232,7 @@ async def get_config(
 ):
     """Read current ARM configuration."""
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("arm_config_get", {}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config get flow failed")
@@ -252,7 +252,7 @@ async def update_config(
 ):
     """Update ARM configuration parameters."""
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("arm_config_update", {"updates": body.updates}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config update flow failed")
@@ -273,7 +273,7 @@ async def get_arm_metrics(
 ):
     """Get the full Thinking KPI report for this user's ARM sessions."""
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM metrics flow failed")
@@ -294,7 +294,7 @@ async def get_config_suggestions(
 ):
     """Analyze ARM performance metrics and suggest configuration improvements."""
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config suggest flow failed")
@@ -304,3 +304,4 @@ async def get_config_suggestions(
         request=request, route_name="arm.config.suggest", handler=handler,
         user_id=str(current_user["sub"]), metadata={"db": db},
     )
+

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from runtime.memory.memory_feedback import MemoryFeedbackEngine
-from runtime.execution_loop import ExecutionLoop
+from runtime.memory_loop import ExecutionLoop
 from runtime.memory import MemoryOrchestrator, MemoryContext, MemoryItem
 
 
@@ -195,7 +195,7 @@ def test_memory_feedback_updates_counts():
     assert db.committed is True
 
 
-def test_execution_loop_runs_and_feedback(monkeypatch):
+def test_memory_loop_runs_and_feedback(monkeypatch):
     orchestrator = MemoryOrchestrator(FakeDAO)
 
     def executor(task, context):
@@ -209,7 +209,7 @@ def test_execution_loop_runs_and_feedback(monkeypatch):
         called["ids"] = memory_ids
 
     monkeypatch.setattr(loop.feedback, "record_usage", fake_record_usage)
-    monkeypatch.setattr("runtime.execution_loop.create_memory_node", lambda *args, **kwargs: None)
+    monkeypatch.setattr("runtime.memory_loop.create_memory_node", lambda *args, **kwargs: None)
 
     task = SimpleNamespace(type="analysis", input="alpha", tags=["t"])
     result = loop.run(

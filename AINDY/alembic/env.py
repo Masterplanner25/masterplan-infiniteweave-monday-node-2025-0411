@@ -104,7 +104,7 @@ except Exception:
 
 # Updated import for Memory Bridge models
 try:
-    from services import memory_persistence
+    from memory import memory_persistence
 except ImportError:
     import warnings
     warnings.warn("memory_persistence module not found — skipping Memory Bridge model registration")

@@ -110,7 +110,7 @@ def arm_config_update_node(state, context):
 @register_node("arm_metrics_node")
 def arm_metrics_node(state, context):
     try:
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         db = context.get("db")
         user_id = context.get("user_id")
         window = state.get("window", 30)
@@ -124,7 +124,7 @@ def arm_metrics_node(state, context):
 def arm_config_suggest_node(state, context):
     try:
         from modules.deepseek.config_manager_deepseek import ConfigManager
-        from services.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
+        from analytics.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
         db = context.get("db")
         user_id = context.get("user_id")
         window = state.get("window", 30)
@@ -149,7 +149,7 @@ def arm_config_suggest_node(state, context):
 @register_node("goals_list_node")
 def goals_list_node(state, context):
     try:
-        from services.goal_service import get_active_goals
+        from domain.goal_service import get_active_goals
         db = context.get("db")
         user_id = context.get("user_id")
         return {"status": "SUCCESS", "output_patch": {"goals_list_result": get_active_goals(db, user_id)}}
@@ -160,7 +160,7 @@ def goals_list_node(state, context):
 @register_node("goals_state_node")
 def goals_state_node(state, context):
     try:
-        from services.goal_service import detect_goal_drift, get_goal_states
+        from domain.goal_service import detect_goal_drift, get_goal_states
         db = context.get("db")
         user_id = context.get("user_id")
         result = {
@@ -184,7 +184,7 @@ def score_get_node(state, context):
 
         score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
         if not score:
-            from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+            from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
             result = execute_infinity_orchestrator(user_id=user_id, db=db, trigger_event="manual")
             if result:
                 return {"status": "SUCCESS", "output_patch": {"score_get_result": result["score"]}}
@@ -192,7 +192,7 @@ def score_get_node(state, context):
                 "user_id": str(user_id), "master_score": 0.0, "kpis": {}, "message": "No score yet.",
             }}}
 
-        from services.infinity_loop import get_latest_adjustment, serialize_adjustment
+        from domain.infinity_loop import get_latest_adjustment, serialize_adjustment
         latest = get_latest_adjustment(user_id=str(user_id), db=db)
         serialized = serialize_adjustment(latest)
         latest_payload = None
@@ -328,7 +328,7 @@ def leadgen_list_node(state, context):
 @register_node("leadgen_preview_search_node")
 def leadgen_preview_search_node(state, context):
     try:
-        from services.search_service import search_leads
+        from domain.search_service import search_leads
         db = context.get("db")
         user_id = context.get("user_id")
         query = state.get("query", "")
@@ -374,7 +374,7 @@ def tasks_list_node(state, context):
 def tasks_recurrence_check_node(state, context):
     try:
         import threading
-        from services.task_services import handle_recurrence
+        from domain.task_services import handle_recurrence
         t = threading.Thread(target=handle_recurrence, daemon=True)
         t.start()
         return {"status": "SUCCESS", "output_patch": {"tasks_recurrence_check_result": {
@@ -389,15 +389,15 @@ def tasks_recurrence_check_node(state, context):
 @register_node("agent_run_create_node")
 def agent_run_create_node(state, context):
     try:
-        from services.agent_runtime import create_run, execute_run, to_execution_response
-        from services.async_job_service import (
+        from agents.agent_runtime import create_run, execute_run, to_execution_response
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_autonomous_async_job,
         )
-        from services.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
-        from services.async_job_service import defer_async_job
-        from services.trace_context import ensure_trace_id
+        from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
+        from platform_layer.async_job_service import defer_async_job
+        from utils.trace_context import ensure_trace_id
         from utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
@@ -457,7 +457,7 @@ def agent_run_create_node(state, context):
 def agent_runs_list_node(state, context):
     try:
         from db.models.agent_run import AgentRun
-        from services.agent_runtime import _run_to_dict
+        from agents.agent_runtime import _run_to_dict
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -476,7 +476,7 @@ def agent_runs_list_node(state, context):
 def agent_run_get_node(state, context):
     try:
         from db.models.agent_run import AgentRun
-        from services.agent_runtime import _run_to_dict
+        from agents.agent_runtime import _run_to_dict
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -494,11 +494,11 @@ def agent_run_get_node(state, context):
 @register_node("agent_run_approve_node")
 def agent_run_approve_node(state, context):
     try:
-        from services.agent_runtime import approve_run, to_execution_response
-        from services.async_job_service import async_heavy_execution_enabled, submit_autonomous_async_job
-        from services.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
-        from services.async_job_service import defer_async_job
-        from services.trace_context import ensure_trace_id
+        from agents.agent_runtime import approve_run, to_execution_response
+        from platform_layer.async_job_service import async_heavy_execution_enabled, submit_autonomous_async_job
+        from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
+        from platform_layer.async_job_service import defer_async_job
+        from utils.trace_context import ensure_trace_id
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -552,7 +552,7 @@ def agent_run_approve_node(state, context):
 @register_node("agent_run_reject_node")
 def agent_run_reject_node(state, context):
     try:
-        from services.agent_runtime import reject_run, to_execution_response
+        from agents.agent_runtime import reject_run, to_execution_response
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -567,8 +567,8 @@ def agent_run_reject_node(state, context):
 @register_node("agent_run_recover_node")
 def agent_run_recover_node(state, context):
     try:
-        from services.agent_runtime import to_execution_response
-        from services.stuck_run_service import recover_stuck_agent_run
+        from agents.agent_runtime import to_execution_response
+        from agents.stuck_run_service import recover_stuck_agent_run
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -589,7 +589,7 @@ def agent_run_recover_node(state, context):
 @register_node("agent_run_replay_node")
 def agent_run_replay_node(state, context):
     try:
-        from services.agent_runtime import replay_run, to_execution_response
+        from agents.agent_runtime import replay_run, to_execution_response
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -643,7 +643,7 @@ def agent_run_steps_node(state, context):
 def agent_run_events_node(state, context):
     try:
         from db.models.agent_run import AgentRun
-        from services.agent_runtime import get_run_events
+        from agents.agent_runtime import get_run_events
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -663,7 +663,7 @@ def agent_run_events_node(state, context):
 @register_node("agent_tools_list_node")
 def agent_tools_list_node(state, context):
     try:
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         data = [
             {
                 "name": name,
@@ -685,7 +685,7 @@ def agent_tools_list_node(state, context):
 def agent_trust_get_node(state, context):
     try:
         from db.models.agent_run import AgentTrustSettings
-        from services.capability_service import get_auto_grantable_tools
+        from agents.capability_service import get_auto_grantable_tools
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -711,7 +711,7 @@ def agent_trust_update_node(state, context):
     try:
         from datetime import datetime, timezone
         from db.models.agent_run import AgentTrustSettings
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -749,8 +749,8 @@ def agent_trust_update_node(state, context):
 @register_node("agent_suggestions_get_node")
 def agent_suggestions_get_node(state, context):
     try:
-        from services.agent_tools import suggest_tools
-        from services.infinity_service import get_user_kpi_snapshot
+        from agents.agent_tools import suggest_tools
+        from domain.infinity_service import get_user_kpi_snapshot
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -770,7 +770,7 @@ def analytics_linkedin_ingest_node(state, context):
         from db.models import MasterPlan
         from db.models.metrics_models import CanonicalMetricDB
         from schemas.analytics import LinkedInRawInput
-        from services.analytics.linkedin_adapter import linkedin_adapter
+        from analytics.linkedin_adapter import linkedin_adapter
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         data_dict = state.get("data", {})
@@ -1059,12 +1059,12 @@ def genesis_synthesize_node(state, context):
     try:
         import uuid
         from db.models import GenesisSessionDB
-        from services.async_job_service import (
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_async_job,
         )
-        from services.genesis_ai import call_genesis_synthesis_llm
+        from domain.genesis_ai import call_genesis_synthesis_llm
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1100,12 +1100,12 @@ def genesis_audit_node(state, context):
     try:
         import uuid
         from db.models import GenesisSessionDB
-        from services.async_job_service import (
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_async_job,
         )
-        from services.genesis_ai import validate_draft_integrity
+        from domain.genesis_ai import validate_draft_integrity
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1138,7 +1138,7 @@ def genesis_lock_node(state, context):
         import uuid
         from core.execution_signal_helper import queue_memory_capture
         from db.models import GenesisSessionDB
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1851,12 +1851,12 @@ def memory_suggest_node(state, context):
 @register_node("memory_nodus_execute_node")
 def memory_nodus_execute_node(state, context):
     try:
-        from services.async_job_service import (
+        from platform_layer.async_job_service import (
             async_heavy_execution_enabled,
             build_queued_response,
             submit_async_job,
         )
-        from services.execution_envelope import success
+        from core.execution_envelope import success
         from runtime.nodus_execution_service import execute_nodus_task_payload
         from runtime.nodus_security import NodusSecurityError
         from utils.trace_context import ensure_trace_id
@@ -1987,7 +1987,7 @@ def automation_log_replay_node(state, context):
             return {"status": "FAILURE", "error": f"HTTP_400:Cannot replay log with status '{log.status}'. Only failed or retrying logs can be replayed."}
         payload = log.payload or {}
         if isinstance(payload, dict) and payload.get("execution_token"):
-            from services.capability_service import validate_token
+            from agents.capability_service import validate_token
             validation = validate_token(
                 token=payload.get("execution_token"),
                 run_id=str(payload.get("run_id", "")),
@@ -1995,7 +1995,7 @@ def automation_log_replay_node(state, context):
             )
             if not validation["ok"]:
                 return {"status": "FAILURE", "error": f"HTTP_403:Execution token invalid for replay: {validation['error']}"}
-        from services.scheduler_service import replay_task
+        from platform_layer.scheduler_service import replay_task
         result = replay_task(log_id)
         if not result:
             return {"status": "FAILURE", "error": "HTTP_500:Replay failed - task function not registered. Check task registry."}
@@ -2011,7 +2011,7 @@ def automation_log_replay_node(state, context):
 @register_node("automation_scheduler_status_node")
 def automation_scheduler_status_node(state, context):
     try:
-        from services.scheduler_service import get_scheduler
+        from platform_layer.scheduler_service import get_scheduler
         try:
             scheduler = get_scheduler()
             jobs = scheduler.get_jobs()
@@ -2038,7 +2038,7 @@ def automation_scheduler_status_node(state, context):
 @register_node("automation_task_trigger_node")
 def automation_task_trigger_node(state, context):
     try:
-        from services.task_services import get_task_by_id, queue_task_automation
+        from domain.task_services import get_task_by_id, queue_task_automation
         db = context.get("db")
         user_id = context.get("user_id")
         task_id = state.get("task_id")
@@ -2069,7 +2069,7 @@ def automation_task_trigger_node(state, context):
 def freelance_order_create_node(state, context):
     try:
         from schemas.freelance import FreelanceOrderCreate, FreelanceOrderResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order = FreelanceOrderCreate(**state.get("order", {}))
@@ -2087,7 +2087,7 @@ def freelance_order_deliver_node(state, context):
         import uuid as _uuid
         from db.models.freelance import FreelanceOrder
         from schemas.freelance import FreelanceOrderResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order_id = state.get("order_id")
@@ -2110,7 +2110,7 @@ def freelance_order_deliver_node(state, context):
 def freelance_delivery_update_node(state, context):
     try:
         from schemas.freelance import FreelanceOrderResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         try:
@@ -2131,7 +2131,7 @@ def freelance_delivery_update_node(state, context):
 def freelance_feedback_collect_node(state, context):
     try:
         from schemas.freelance import FeedbackCreate, FeedbackResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         feedback = FeedbackCreate(**state.get("feedback", {}))
@@ -2150,7 +2150,7 @@ def freelance_feedback_collect_node(state, context):
 def freelance_orders_list_node(state, context):
     try:
         from schemas.freelance import FreelanceOrderResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         orders = freelance_service.get_all_orders(db, user_id=user_id)
@@ -2165,7 +2165,7 @@ def freelance_orders_list_node(state, context):
 def freelance_feedback_list_node(state, context):
     try:
         from schemas.freelance import FeedbackResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         items = freelance_service.get_all_feedback(db, user_id=user_id)
@@ -2180,7 +2180,7 @@ def freelance_feedback_list_node(state, context):
 def freelance_metrics_latest_node(state, context):
     try:
         from schemas.freelance import RevenueMetricsResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         metric = freelance_service.get_latest_metrics(db)
         if not metric:
@@ -2196,7 +2196,7 @@ def freelance_metrics_latest_node(state, context):
 def freelance_metrics_update_node(state, context):
     try:
         from schemas.freelance import RevenueMetricsResponse
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         metric = freelance_service.update_revenue_metrics(db, user_id=user_id)
@@ -2212,7 +2212,7 @@ def freelance_delivery_generate_node(state, context):
     try:
         import uuid as _uuid
         from db.models.freelance import FreelanceOrder
-        from services import freelance_service
+        from domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order_id = state.get("order_id")
@@ -2237,7 +2237,7 @@ def freelance_delivery_generate_node(state, context):
 def research_create_node(state, context):
     try:
         from schemas.research_results_schema import ResearchResultCreate
-        from services import research_results_service
+        from domain import research_results_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         result_obj = ResearchResultCreate(**state.get("result", {}))
@@ -2257,7 +2257,7 @@ def research_create_node(state, context):
 @register_node("research_list_node")
 def research_list_node(state, context):
     try:
-        from services import research_results_service
+        from domain import research_results_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         items = research_results_service.get_all_research_results(db, user_id=user_id)
@@ -2280,8 +2280,8 @@ def research_query_node(state, context):
         from db.dao.memory_node_dao import MemoryNodeDAO
         from runtime.memory import MemoryOrchestrator
         from schemas.research_results_schema import ResearchResultCreate
-        from services import research_results_service
-        from services.search_service import unified_query
+        from domain import research_results_service
+        from domain.search_service import unified_query
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query_str = state.get("query", "")
@@ -2333,7 +2333,7 @@ def research_query_node(state, context):
 @register_node("search_history_list_node")
 def search_history_list_node(state, context):
     try:
-        from services.search_service import get_search_history
+        from domain.search_service import get_search_history
         db = context.get("db")
         user_id = str(context.get("user_id"))
         limit = state.get("limit", 25)
@@ -2356,7 +2356,7 @@ def search_history_list_node(state, context):
 @register_node("search_history_get_node")
 def search_history_get_node(state, context):
     try:
-        from services.search_service import get_search_history_item
+        from domain.search_service import get_search_history_item
         db = context.get("db")
         user_id = str(context.get("user_id"))
         history_id = state.get("history_id")
@@ -2376,7 +2376,7 @@ def search_history_get_node(state, context):
 @register_node("search_history_delete_node")
 def search_history_delete_node(state, context):
     try:
-        from services.search_service import delete_search_history_item
+        from domain.search_service import delete_search_history_item
         db = context.get("db")
         user_id = str(context.get("user_id"))
         history_id = state.get("history_id")
@@ -2395,9 +2395,9 @@ def search_history_delete_node(state, context):
 @register_node("masterplan_lock_from_genesis_node")
 def masterplan_lock_from_genesis_node(state, context):
     try:
-        from services.masterplan_factory import create_masterplan_from_genesis
-        from services.masterplan_execution_service import sync_masterplan_tasks
-        from services.posture import posture_description
+        from domain.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_execution_service import sync_masterplan_tasks
+        from analytics.posture import posture_description
         db = context.get("db")
         user_id = str(context.get("user_id"))
         session_id = state.get("session_id")
@@ -2428,7 +2428,7 @@ def masterplan_lock_node(state, context):
     try:
         from datetime import datetime
         from db.models import MasterPlan
-        from services.masterplan_execution_service import sync_masterplan_tasks
+        from domain.masterplan_execution_service import sync_masterplan_tasks
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2473,7 +2473,7 @@ def masterplan_list_node(state, context):
 def masterplan_get_node(state, context):
     try:
         from db.models import MasterPlan
-        from services.masterplan_execution_service import get_masterplan_execution_status
+        from domain.masterplan_execution_service import get_masterplan_execution_status
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2531,7 +2531,7 @@ def masterplan_anchor_node(state, context):
 def masterplan_projection_node(state, context):
     try:
         from db.models import MasterPlan
-        from services.eta_service import calculate_eta
+        from analytics.eta_service import calculate_eta
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2552,7 +2552,7 @@ def masterplan_activate_node(state, context):
     try:
         from datetime import datetime
         from db.models import MasterPlan
-        from services.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
+        from domain.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2579,8 +2579,8 @@ def masterplan_activate_node(state, context):
 @register_node("observability_scheduler_status_node")
 def observability_scheduler_status_node(state, context):
     try:
-        import services.scheduler_service as _sched_svc
-        import services.task_services as _task_svc
+        import platform_layer.scheduler_service as _sched_svc
+        import domain.task_services as _task_svc
         from db.models.background_task_lease import BackgroundTaskLease
         db = context.get("db")
         try:
@@ -2704,7 +2704,7 @@ def observability_rippletrace_node(state, context):
     try:
         import uuid as _uuid
         from db.models.system_event import SystemEvent
-        from services.rippletrace_service import (
+        from domain.rippletrace_service import (
             build_trace_graph, calculate_ripple_span,
             detect_root_event, detect_terminal_events, generate_trace_insights,
         )
@@ -2801,7 +2801,7 @@ def dashboard_overview_node(state, context):
 @register_node("autonomy_decisions_list_node")
 def autonomy_decisions_list_node(state, context):
     try:
-        from services.autonomous_controller import list_recent_decisions
+        from agents.autonomous_controller import list_recent_decisions
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -2824,7 +2824,7 @@ def autonomy_decisions_list_node(state, context):
 def watcher_evaluate_trigger_node(state, context):
     """Call evaluate_live_trigger and store the evaluation dict in state."""
     try:
-        from services.autonomous_controller import evaluate_live_trigger
+        from agents.autonomous_controller import evaluate_live_trigger
 
         db = context.get("db")
         user_id = state.get("user_id")
@@ -2856,7 +2856,7 @@ def watcher_record_decision_node(state, context):
     """Persist the autonomy decision and emit the AUTONOMY_DECISION system event."""
     try:
         from utils.trace_context import ensure_trace_id
-        from services.autonomous_controller import record_decision
+        from agents.autonomous_controller import record_decision
 
         db = context.get("db")
         user_id = state.get("user_id")
@@ -2883,7 +2883,7 @@ def watcher_record_decision_node(state, context):
 def watcher_defer_job_node(state, context):
     """Create a deferred AutomationLog entry and build the DEFERRED response."""
     try:
-        from services.async_job_service import build_deferred_response, defer_async_job
+        from platform_layer.async_job_service import build_deferred_response, defer_async_job
 
         user_id = state.get("user_id")
         evaluation = state.get("watcher_evaluation") or {}
@@ -2922,7 +2922,7 @@ def watcher_defer_job_node(state, context):
 def watcher_ignore_node(state, context):
     """Build the IGNORED response — no ingest, no deferred job."""
     try:
-        from services.autonomous_controller import build_decision_response
+        from agents.autonomous_controller import build_decision_response
 
         evaluation = state.get("watcher_evaluation") or {}
         trace_id = state.get("watcher_trace_id") or ""
@@ -3189,3 +3189,5 @@ def register_extended_flows():
         )
 
     logger.info("register_extended_flows: %d flows registered", len(flows))
+
+

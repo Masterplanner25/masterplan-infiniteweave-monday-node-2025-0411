@@ -13,7 +13,7 @@ from runtime.nodus_security import (
     NodusSecurityError,
     authorize_nodus_execution,
 )
-from services.observability_events import emit_observability_event
+from core.observability_events import emit_observability_event
 from utils.user_ids import require_user_id
 
 
@@ -185,3 +185,4 @@ def execute_nodus_task_payload(
             status_code=500,
             detail={"error": "nodus_execute_failed", "message": "Task execution failed", "details": str(exc)},
         ) from exc
+

@@ -85,7 +85,7 @@ class TestSprint7GenesisMemoryHook:
 
     def test_call_genesis_llm_accepts_user_id(self):
         """call_genesis_llm must accept user_id param."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         sig = inspect.signature(call_genesis_llm)
         assert "user_id" in sig.parameters, (
             "call_genesis_llm missing user_id parameter"
@@ -93,7 +93,7 @@ class TestSprint7GenesisMemoryHook:
 
     def test_call_genesis_llm_accepts_db(self):
         """call_genesis_llm must accept db param."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         sig = inspect.signature(call_genesis_llm)
         assert "db" in sig.parameters, (
             "call_genesis_llm missing db parameter"
@@ -101,19 +101,19 @@ class TestSprint7GenesisMemoryHook:
 
     def test_call_genesis_llm_user_id_defaults_none(self):
         """user_id must default to None for backward compatibility."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         sig = inspect.signature(call_genesis_llm)
         assert sig.parameters["user_id"].default is None
 
     def test_call_genesis_llm_db_defaults_none(self):
         """db must default to None for backward compatibility."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         sig = inspect.signature(call_genesis_llm)
         assert sig.parameters["db"].default is None
 
     def test_genesis_llm_recalls_before_call(self):
         """Genesis LLM must recall memories before the OpenAI call."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         source = inspect.getsource(call_genesis_llm)
         assert "MemoryOrchestrator" in source or "get_context" in source, (
             "call_genesis_llm missing memory recall"
@@ -121,7 +121,7 @@ class TestSprint7GenesisMemoryHook:
 
     def test_genesis_llm_writes_after_call(self):
         """Genesis LLM must write memory node after successful call."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         source = inspect.getsource(call_genesis_llm)
         assert "MemoryCaptureEngine" in source or "evaluate_and_capture" in source, (
             "call_genesis_llm missing memory write"
@@ -129,7 +129,7 @@ class TestSprint7GenesisMemoryHook:
 
     def test_genesis_llm_writes_insight_node(self):
         """Genesis conversation memory node must use node_type='insight'."""
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
         source = inspect.getsource(call_genesis_llm)
         assert "insight" in source, (
             "call_genesis_llm does not write node_type='insight'"
@@ -157,7 +157,7 @@ class TestSprint7GenesisMemoryHook:
             return_value=mock_response,
         )
 
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
 
         try:
             result = call_genesis_llm(
@@ -188,7 +188,7 @@ class TestSprint7GenesisMemoryHook:
             return_value=mock_response,
         )
 
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
 
         try:
             call_genesis_llm(message="hello", current_state={})
@@ -217,7 +217,7 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_run_ai_search_accepts_user_id(self):
         """run_ai_search must accept user_id param."""
-        from services.leadgen_service import run_ai_search
+        from domain.leadgen_service import run_ai_search
         sig = inspect.signature(run_ai_search)
         assert "user_id" in sig.parameters, (
             "run_ai_search missing user_id parameter"
@@ -225,7 +225,7 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_run_ai_search_accepts_db(self):
         """run_ai_search must accept db param."""
-        from services.leadgen_service import run_ai_search
+        from domain.leadgen_service import run_ai_search
         sig = inspect.signature(run_ai_search)
         assert "db" in sig.parameters, (
             "run_ai_search missing db parameter"
@@ -233,13 +233,13 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_run_ai_search_user_id_defaults_none(self):
         """user_id must default to None for backward compatibility."""
-        from services.leadgen_service import run_ai_search
+        from domain.leadgen_service import run_ai_search
         sig = inspect.signature(run_ai_search)
         assert sig.parameters["user_id"].default is None
 
     def test_create_lead_results_accepts_user_id(self):
         """create_lead_results pipeline must accept user_id param."""
-        from services.leadgen_service import create_lead_results
+        from domain.leadgen_service import create_lead_results
         sig = inspect.signature(create_lead_results)
         assert "user_id" in sig.parameters, (
             "create_lead_results missing user_id parameter"
@@ -247,7 +247,7 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_leadgen_service_recalls_before_search(self):
         """leadgen_service must recall memories before search."""
-        from services import leadgen_service
+        from domain import leadgen_service
         source = inspect.getsource(leadgen_service)
         assert "MemoryOrchestrator" in source or "get_context" in source, (
             "leadgen_service missing memory recall"
@@ -255,7 +255,7 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_leadgen_service_writes_after_search(self):
         """leadgen_service must write memory node after results."""
-        from services import leadgen_service
+        from domain import leadgen_service
         source = inspect.getsource(leadgen_service)
         assert "MemoryCaptureEngine" in source or "evaluate_and_capture" in source, (
             "leadgen_service missing memory write"
@@ -263,7 +263,7 @@ class TestSprint7LeadGenMemoryHook:
 
     def test_leadgen_writes_outcome_node(self):
         """LeadGen memory node must use node_type='outcome'."""
-        from services.leadgen_service import run_ai_search
+        from domain.leadgen_service import run_ai_search
         source = inspect.getsource(run_ai_search)
         assert "outcome" in source, (
             "run_ai_search does not write node_type='outcome'"
@@ -280,8 +280,7 @@ class TestSprint7LeadGenMemoryHook:
             side_effect=Exception("db down"),
         )
 
-        from services import leadgen_service
-
+        from domain import leadgen_service
         try:
             result = leadgen_service.run_ai_search(
                 query="test query",
@@ -302,7 +301,7 @@ class TestSprint7LeadGenMemoryHook:
         )
         mock_save = mocker.patch(f"{_DAO_PATH}.save")
 
-        from services.leadgen_service import run_ai_search
+        from domain.leadgen_service import run_ai_search
         run_ai_search(query="test query")
 
         mock_recall.assert_not_called()
@@ -314,3 +313,4 @@ class TestSprint7LeadGenMemoryHook:
         assert "user_id=" in source, (
             "leadgen_router does not pass user_id to create_lead_results"
         )
+

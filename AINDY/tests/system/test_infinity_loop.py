@@ -86,29 +86,29 @@ class TestInfinityLoopMigration:
 class TestInfinityLoopHelpers:
 
     def test_normalize_trigger_event_task_completion(self):
-        from services.infinity_loop import _normalize_trigger_event
+        from domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("task_completion") == "task_completed"
 
     def test_normalize_trigger_event_arm_analysis(self):
-        from services.infinity_loop import _normalize_trigger_event
+        from domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("arm_analysis") == "arm_analyzed"
 
     def test_normalize_trigger_event_passthrough(self):
-        from services.infinity_loop import _normalize_trigger_event
+        from domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("scheduled") == "scheduled"
 
     def test_serialize_adjustment_none(self):
-        from services.infinity_loop import serialize_adjustment
+        from domain.infinity_loop import serialize_adjustment
 
         assert serialize_adjustment(None) is None
 
     def test_serialize_adjustment_shape(self):
         from datetime import datetime, timezone
 
-        from services.infinity_loop import serialize_adjustment
+        from domain.infinity_loop import serialize_adjustment
 
         adjustment = MagicMock()
         adjustment.id = uuid.uuid4()
@@ -124,14 +124,14 @@ class TestInfinityLoopHelpers:
     def test_latest_adjustment_payload_helper_returns_none_without_adjustment(self):
         from routes.score_router import _latest_adjustment_payload
 
-        with patch("services.infinity_loop.get_latest_adjustment", return_value=None):
+        with patch("domain.infinity_loop.get_latest_adjustment", return_value=None):
             assert _latest_adjustment_payload("u1", MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
         from routes.score_router import _latest_adjustment_payload
 
-        with patch("services.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
-             patch("services.infinity_loop.serialize_adjustment", return_value={
+        with patch("domain.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
+             patch("domain.infinity_loop.serialize_adjustment", return_value={
                  "id": "adj-1",
                  "decision_type": "continue_highest_priority_task",
                  "applied_at": "2026-01-01T00:00:00+00:00",
@@ -149,7 +149,7 @@ class TestInfinityLoopHelpers:
 class TestInfinityLoopDecisions:
 
     def test_decide_task_reprioritization_for_low_execution_speed(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 30.0,
@@ -161,7 +161,7 @@ class TestInfinityLoopDecisions:
         assert payload["reason"] == "execution_or_decision_below_threshold"
 
     def test_decide_task_reprioritization_for_low_decision_efficiency(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, _ = _decide({
             "execution_speed": 55.0,
@@ -172,7 +172,7 @@ class TestInfinityLoopDecisions:
         assert decision == "reprioritize_tasks"
 
     def test_decide_review_plan_for_low_focus(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -185,7 +185,7 @@ class TestInfinityLoopDecisions:
         assert payload["suggestions"][0]["tool"] == "memory.recall"
 
     def test_decide_review_plan_for_low_ai_boost(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -198,7 +198,7 @@ class TestInfinityLoopDecisions:
         assert payload["suggestions"][0]["tool"] == "arm.analyze"
 
     def test_decide_continue_highest_priority_task_for_neutral_scores(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -210,7 +210,7 @@ class TestInfinityLoopDecisions:
         assert payload["reason"] == "kpis_stable"
 
     def test_decide_review_plan_for_missing_snapshot(self):
-        from services.infinity_loop import _decide
+        from domain.infinity_loop import _decide
 
         decision, payload = _decide(None)
         assert decision == "review_plan"
@@ -220,7 +220,7 @@ class TestInfinityLoopDecisions:
 class TestTaskReprioritization:
 
     def test_reprioritize_tasks_updates_top_tasks_to_high(self):
-        from services.infinity_loop import _reprioritize_tasks
+        from domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         task1 = MagicMock(id=1, name="A", priority="low")
@@ -242,7 +242,7 @@ class TestTaskReprioritization:
         db.commit.assert_called_once()
 
     def test_reprioritize_tasks_handles_invalid_user_id(self):
-        from services.infinity_loop import _reprioritize_tasks
+        from domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         payload = _reprioritize_tasks(user_id="not-a-uuid", db=db)
@@ -250,7 +250,7 @@ class TestTaskReprioritization:
         assert payload["task_ids"] == []
 
     def test_reprioritize_tasks_returns_no_tasks_reason(self):
-        from services.infinity_loop import _reprioritize_tasks
+        from domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         query = db.query.return_value
@@ -269,13 +269,13 @@ class TestTaskReprioritization:
 class TestRunLoop:
 
     def test_run_loop_persists_adjustment_with_next_action(self, monkeypatch):
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         db = MagicMock()
         db.refresh.return_value = None
 
         monkeypatch.setattr(
-            "services.infinity_service.get_user_kpi_snapshot",
+            "domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 55.0,
                 "decision_efficiency": 55.0,
@@ -284,7 +284,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "services.infinity_loop.get_latest_adjustment",
+            "domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -296,7 +296,7 @@ class TestRunLoop:
     def test_run_loop_uses_thrash_guard(self, monkeypatch):
         from datetime import datetime, timezone
 
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         existing = MagicMock()
         existing.decision_type = "review_plan"
@@ -304,7 +304,7 @@ class TestRunLoop:
 
         db = MagicMock()
         monkeypatch.setattr(
-            "services.infinity_service.get_user_kpi_snapshot",
+            "domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 55.0,
                 "decision_efficiency": 55.0,
@@ -313,7 +313,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "services.infinity_loop.get_latest_adjustment",
+            "domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: existing,
         )
 
@@ -322,11 +322,11 @@ class TestRunLoop:
         db.add.assert_not_called()
 
     def test_run_loop_reprioritize_tasks_calls_helper(self, monkeypatch):
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         db = MagicMock()
         monkeypatch.setattr(
-            "services.infinity_service.get_user_kpi_snapshot",
+            "domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 30.0,
                 "decision_efficiency": 55.0,
@@ -335,7 +335,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "services.infinity_loop.get_latest_adjustment",
+            "domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
         called = {}
@@ -344,23 +344,23 @@ class TestRunLoop:
             called["user_id"] = user_id
             return {"task_ids": [1, 2, 3]}
 
-        monkeypatch.setattr("services.infinity_loop._reprioritize_tasks", fake_reprio)
+        monkeypatch.setattr("domain.infinity_loop._reprioritize_tasks", fake_reprio)
         adjustment = run_loop("u1", "task_completed", db)
         assert adjustment is not None
         assert called["user_id"] == "u1"
 
     def test_run_loop_never_raises(self, monkeypatch):
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         db = MagicMock()
         monkeypatch.setattr(
-            "services.infinity_service.get_user_kpi_snapshot",
+            "domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         assert run_loop("u1", "manual", db) is None
 
     def test_run_loop_normalizes_trigger_event_before_persist(self, monkeypatch):
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         db = MagicMock()
         captured = {}
@@ -370,11 +370,11 @@ class TestRunLoop:
 
         db.add.side_effect = capture_add
         monkeypatch.setattr(
-            "services.infinity_service.get_user_kpi_snapshot",
+            "domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: None,
         )
         monkeypatch.setattr(
-            "services.infinity_loop.get_latest_adjustment",
+            "domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -382,16 +382,16 @@ class TestRunLoop:
         assert captured["trigger_event"] == "arm_analyzed"
 
     def test_run_loop_never_returns_empty_next_action(self, monkeypatch):
-        from services.infinity_loop import run_loop
+        from domain.infinity_loop import run_loop
 
         db = MagicMock()
         db.refresh.return_value = None
         monkeypatch.setattr(
-            "services.infinity_loop._decide",
+            "domain.infinity_loop._decide",
             lambda score_snapshot, feedback_context=None: ("review_plan", {"reason": "x"}),
         )
         monkeypatch.setattr(
-            "services.infinity_loop.get_latest_adjustment",
+            "domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -401,7 +401,7 @@ class TestRunLoop:
 class TestPersistedSuggestions:
 
     def test_suggest_tools_uses_latest_loop_adjustment_when_present(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
 
         db = MagicMock()
         latest = MagicMock()
@@ -411,19 +411,19 @@ class TestPersistedSuggestions:
             ]
         }
 
-        with patch("services.infinity_loop.get_latest_adjustment", return_value=latest):
+        with patch("domain.infinity_loop.get_latest_adjustment", return_value=latest):
             result = suggest_tools({}, user_id="u1", db=db)
 
         assert result[0]["tool"] == "memory.recall"
 
     def test_suggest_tools_falls_back_to_transient_rules_without_payload(self):
-        from services.agent_tools import suggest_tools
+        from agents.agent_tools import suggest_tools
 
         db = MagicMock()
         latest = MagicMock()
         latest.adjustment_payload = {"task_ids": [1, 2]}
 
-        with patch("services.infinity_loop.get_latest_adjustment", return_value=latest):
+        with patch("domain.infinity_loop.get_latest_adjustment", return_value=latest):
             result = suggest_tools(
                 {
                     "focus_quality": 20.0,
@@ -475,7 +475,7 @@ class TestScoreRouterLoopSurface:
 
     def test_recalculate_calls_orchestrator(self, client, auth_headers, mock_db, mocker):
         orchestrator_mock = mocker.patch(
-            "services.infinity_orchestrator.execute",
+            "domain.infinity_orchestrator.execute",
             return_value={
                 "score": {
                     "user_id": "u1",
@@ -623,10 +623,10 @@ class TestLoopTriggerWiring:
 class TestInfinityOrchestrator:
 
     def test_execute_returns_score_adjustment_and_next_action(self, monkeypatch):
-        from services.infinity_orchestrator import execute
+        from domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
-            "services.infinity_orchestrator.calculate_infinity_score",
+            "domain.infinity_orchestrator.calculate_infinity_score",
             lambda user_id, db, trigger_event: {
                 "user_id": user_id,
                 "master_score": 60.0,
@@ -643,11 +643,11 @@ class TestInfinityOrchestrator:
         )
         fake_adjustment = MagicMock()
         monkeypatch.setattr(
-            "services.infinity_orchestrator.run_loop",
+            "domain.infinity_orchestrator.run_loop",
             lambda user_id, trigger_event, db, score_snapshot=None: fake_adjustment,
         )
         monkeypatch.setattr(
-            "services.infinity_orchestrator.serialize_adjustment",
+            "domain.infinity_orchestrator.serialize_adjustment",
             lambda adjustment: {
                 "id": "adj-1",
                 "decision_type": "continue_highest_priority_task",
@@ -662,10 +662,10 @@ class TestInfinityOrchestrator:
         assert result["next_action"]["type"] == "continue_highest_priority_task"
 
     def test_execute_raises_when_adjustment_has_no_next_action(self, monkeypatch):
-        from services.infinity_orchestrator import execute
+        from domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
-            "services.infinity_orchestrator.calculate_infinity_score",
+            "domain.infinity_orchestrator.calculate_infinity_score",
             lambda user_id, db, trigger_event: {
                 "user_id": user_id,
                 "master_score": 60.0,
@@ -681,11 +681,11 @@ class TestInfinityOrchestrator:
             },
         )
         monkeypatch.setattr(
-            "services.infinity_orchestrator.run_loop",
+            "domain.infinity_orchestrator.run_loop",
             lambda user_id, trigger_event, db, score_snapshot=None: MagicMock(),
         )
         monkeypatch.setattr(
-            "services.infinity_orchestrator.serialize_adjustment",
+            "domain.infinity_orchestrator.serialize_adjustment",
             lambda adjustment: {
                 "id": "adj-1",
                 "decision_type": "review_plan",
@@ -729,3 +729,5 @@ class TestFrontendLoopSurfaces:
         src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "Helpful" in src
         assert "Not Helpful" in src
+
+

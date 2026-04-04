@@ -48,7 +48,7 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     monkeypatch,
 ):
     other_user = _create_other_user(db_session)
-    monkeypatch.setattr("services.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
         "/memory/nodes",
@@ -149,13 +149,13 @@ def test_memory_nodus_async_route_emits_system_events(
     auth_headers,
     monkeypatch,
 ):
-    from services.async_job_service import shutdown_async_jobs
+    from platform_layer.async_job_service import shutdown_async_jobs
 
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
     monkeypatch.setattr(
-        "services.nodus_execution_service.execute_nodus_task_payload",
+        "runtime.nodus_execution_service.execute_nodus_task_payload",
         lambda **kwargs: {
             "task_name": kwargs["task_name"],
             "status": "executed",
@@ -198,3 +198,4 @@ def test_memory_nodus_async_route_emits_system_events(
         assert "execution.completed" in event_types
     finally:
         shutdown_async_jobs(wait=True)
+

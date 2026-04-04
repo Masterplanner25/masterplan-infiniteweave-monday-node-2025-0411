@@ -151,7 +151,7 @@ def _resolve_jwt(token: str) -> AuthPrincipal:
 
 
 def _resolve_api_key(raw_key: str, db: Session) -> AuthPrincipal:
-    from services.api_key_service import hash_key, touch_last_used
+    from platform_layer.api_key_service import hash_key, touch_last_used
     from db.models.api_key import PlatformAPIKey
 
     key_hash = hash_key(raw_key)
@@ -208,3 +208,4 @@ def require_scope(scope: str):
     # Give the dependency a meaningful name for OpenAPI docs
     _dependency.__name__ = f"require_scope_{scope.replace('.', '_')}"
     return _dependency
+

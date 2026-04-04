@@ -301,7 +301,7 @@ Infinity today is best understood as:
 
 #### Current reality
 
-- the orchestrator loads recent memory through `services.identity_boot_service.get_recent_memory()`
+- the orchestrator loads recent memory through `domain.identity_boot_service.get_recent_memory()`
 - `services/memory_scoring_service.py` now ranks relevant memories into failure/success/pattern signals
 - task completion and major flows write to memory via `services/memory_capture_engine.py`
 - memory is therefore no longer just surrounding context; it now changes `next_action` selection in the loop
@@ -606,3 +606,4 @@ What is not real today:
 The correct description is:
 
 > Infinity is an operational feedback subsystem with real scoring and real adjustment logic, but it is not yet the full foundational engine the architecture intends.
+

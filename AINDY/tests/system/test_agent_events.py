@@ -7,7 +7,7 @@ from db.models.agent_run import AgentRun, AgentStep
 from db.models.system_event import SystemEvent
 from db.models.user import User
 from core.execution_signal_helper import record_agent_event
-from services.agent_runtime import get_run_events, replay_run
+from agents.agent_runtime import get_run_events, replay_run
 from tests.fixtures.auth import build_access_token
 
 
@@ -185,3 +185,4 @@ def test_replay_run_persists_replay_event(db_session, test_user):
     assert replay_event.payload["mode"] == "same_plan"
     assert system_event is not None
     assert system_event.payload["mode"] == "same_plan"
+

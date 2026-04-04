@@ -8,7 +8,7 @@ from core.observability_events import emit_observability_event
 from db.database import get_db
 from schemas.task_schemas import TaskCreate, TaskAction
 from services.auth_service import get_current_user
-from services.system_event_types import SystemEventTypes
+from core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def create_task(
     _task_result: dict = {}
 
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "task_create",
             {
@@ -118,7 +118,7 @@ def start_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "task_start",
             {"task_name": task.name},
@@ -143,7 +143,7 @@ def pause_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "task_pause",
             {"task_name": task.name},
@@ -168,7 +168,7 @@ def complete_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "task_completion",
             {"task_name": task.name},
@@ -191,7 +191,7 @@ def list_tasks(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("tasks_list", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Tasks list flow failed"))
@@ -207,10 +207,12 @@ def trigger_recurrence(
     """Triggers the recurrence check job asynchronously."""
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("tasks_recurrence_check", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Recurrence check failed"))
         return result.get("data")
     return _execute_tasks(request, "tasks.recurrence.check", handler, db=db, user_id=user_id)
+
+
 

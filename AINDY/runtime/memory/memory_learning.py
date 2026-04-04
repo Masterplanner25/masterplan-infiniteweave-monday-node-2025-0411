@@ -7,7 +7,7 @@ import uuid
 from memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
-from services.observability_events import emit_observability_event
+from core.observability_events import emit_observability_event
 
 
 class MemoryLearningEngine:
@@ -125,3 +125,4 @@ def _clamp(value) -> float:
     except (TypeError, ValueError):
         return 0.5
     return max(0.0, min(1.0, v))
+

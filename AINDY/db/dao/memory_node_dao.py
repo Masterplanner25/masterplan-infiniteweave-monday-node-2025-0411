@@ -3,7 +3,7 @@ MemoryNodeDAO - canonical data-access object for memory_nodes and memory_links.
 
 All memory persistence goes through this class. Import and use from routes and
 services; do not instantiate MemoryNodeDAO from bridge.py (bridge calls are
-routed through services.memory_persistence.MemoryNodeDAO for backward compat).
+routed through memory.memory_persistence.MemoryNodeDAO for backward compat).
 """
 from __future__ import annotations
 

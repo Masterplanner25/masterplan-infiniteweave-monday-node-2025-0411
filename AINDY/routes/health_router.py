@@ -37,7 +37,11 @@ def _liveness_payload() -> dict:
     }
 
 
-@router.get("/health")
+@router.get(
+    "/health",
+    summary="Check Liveness",
+    description="Performs a liveness check with a shallow database probe. Returns the current service status and database reachability.",
+)
 def liveness() -> dict:
     """
     Liveness + shallow DB check.
@@ -76,7 +80,11 @@ def liveness() -> dict:
     }
 
 
-@router.get("/health/")
+@router.get(
+    "/health/",
+    summary="Check Legacy Liveness",
+    description="Provides the legacy slash-suffixed liveness endpoint. Returns the basic health payload used by older callers.",
+)
 def liveness_legacy_alias(request: Request) -> dict:
     payload = _liveness_payload()
     def handler(_ctx):
@@ -94,7 +102,11 @@ def liveness_legacy_alias(request: Request) -> dict:
     return _execute_health(request, "health.liveness.legacy", handler)
 
 
-@router.get("/ready")
+@router.get(
+    "/ready",
+    summary="Check Readiness",
+    description="Runs readiness checks for required infrastructure such as the database and cache. Returns the readiness status and component results.",
+)
 def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
@@ -153,7 +165,12 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     return _execute_health(request, "health.readiness", handler, db=db)
 
 
-@router.get("/health/details", dependencies=[Depends(verify_api_key)])
+@router.get(
+    "/health/details",
+    dependencies=[Depends(verify_api_key)],
+    summary="Get Health Details",
+    description="Runs detailed health diagnostics for the API, database, and supporting components. Returns a component-by-component health report.",
+)
 def health_details(request: Request, db: Session = Depends(get_db)) -> dict:
     status = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -184,8 +201,7 @@ def health_details(request: Request, db: Session = Depends(get_db)) -> dict:
         status["status"] = "degraded"
 
     try:
-        from services import memory_persistence
-
+        from memory import memory_persistence
         status["components"]["memory_bridge"] = (
             "ready" if hasattr(memory_persistence, "MemoryNodeDAO") else "not_loaded"
         )

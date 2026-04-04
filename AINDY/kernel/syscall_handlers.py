@@ -57,7 +57,7 @@ def _handle_task_create(payload: dict, context: SyscallContext) -> dict:
         recurrence        (str | None)
     """
     from db.database import SessionLocal
-    from services.task_services import create_task
+    from domain.task_services import create_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -107,7 +107,7 @@ def _handle_task_complete(payload: dict, context: SyscallContext) -> dict:
         task_name / name  (str) — required
     """
     from db.database import SessionLocal
-    from services.task_services import complete_task
+    from domain.task_services import complete_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -128,7 +128,7 @@ def _handle_task_complete_full(payload: dict, context: SyscallContext) -> dict:
         task_name / name  (str) — required
     """
     from db.database import SessionLocal
-    from services.task_services import execute_task_completion
+    from domain.task_services import execute_task_completion
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -149,7 +149,7 @@ def _handle_task_start(payload: dict, context: SyscallContext) -> dict:
         task_name / name  (str) — required
     """
     from db.database import SessionLocal
-    from services.task_services import start_task
+    from domain.task_services import start_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -170,7 +170,7 @@ def _handle_task_pause(payload: dict, context: SyscallContext) -> dict:
         task_name / name  (str) — required
     """
     from db.database import SessionLocal
-    from services.task_services import pause_task
+    from domain.task_services import pause_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -191,7 +191,7 @@ def _handle_task_orchestrate(payload: dict, context: SyscallContext) -> dict:
         task_name / name  (str) — required
     """
     from db.database import SessionLocal
-    from services.task_services import orchestrate_task_completion
+    from domain.task_services import orchestrate_task_completion
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -216,7 +216,7 @@ def _handle_leadgen_search(payload: dict, context: SyscallContext) -> dict:
         query  (str) — required
     """
     from db.database import SessionLocal
-    from services.leadgen_service import create_lead_results
+    from domain.leadgen_service import create_lead_results
 
     query = payload.get("query", "")
     if not query:
@@ -255,7 +255,7 @@ def _handle_leadgen_search_ai(payload: dict, context: SyscallContext) -> dict:
         query  (str) — required
     """
     from db.database import SessionLocal
-    from services.leadgen_service import run_ai_search
+    from domain.leadgen_service import run_ai_search
 
     query = payload.get("query", "")
     if not query:
@@ -297,7 +297,7 @@ def _handle_leadgen_store(payload: dict, context: SyscallContext) -> dict:
 
         if context.user_id and query and results:
             try:
-                from services.search_service import persist_search_result
+                from domain.search_service import persist_search_result
                 persist_search_result(
                     db=db,
                     user_id=context.user_id,
@@ -447,7 +447,7 @@ def _handle_genesis_execute_llm(payload: dict, context: SyscallContext) -> dict:
 
     from db.database import SessionLocal
     from db.models import GenesisSessionDB
-    from services.genesis_ai import call_genesis_llm
+    from domain.genesis_ai import call_genesis_llm
 
     session_id = payload.get("session_id")
     message = payload.get("message")
@@ -512,7 +512,7 @@ def _handle_genesis_message(payload: dict, context: SyscallContext) -> dict:
         message     (str) — required
     """
     from db.database import SessionLocal
-    from services.flow_engine import execute_intent
+    from runtime.flow_engine import execute_intent
 
     session_id = payload.get("session_id")
     message = payload.get("message")
@@ -548,7 +548,7 @@ def _handle_score_recalculate(payload: dict, context: SyscallContext) -> dict:
         trigger_event  (str) — default "manual"
     """
     from db.database import SessionLocal
-    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
     trigger = payload.get("trigger_event", "manual")
 
@@ -694,7 +694,7 @@ def _handle_goal_create(payload: dict, context: SyscallContext) -> dict:
         success_metric  (dict)  — optional
     """
     from db.database import SessionLocal
-    from services.goal_service import create_goal
+    from domain.goal_service import create_goal
 
     name = payload.get("name")
     if not name:
@@ -757,7 +757,7 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
     try:
         if context.user_id:
             try:
-                from services.infinity_loop import get_latest_adjustment
+                from domain.infinity_loop import get_latest_adjustment
                 latest = get_latest_adjustment(user_id=context.user_id, db=db)
                 if latest and latest.adjustment_payload:
                     persisted = latest.adjustment_payload.get("suggestions")
@@ -896,3 +896,5 @@ def register_all_domain_handlers() -> None:
     logger.info(
         "[syscall_handlers] registered %d domain handlers", len(_registrations)
     )
+
+

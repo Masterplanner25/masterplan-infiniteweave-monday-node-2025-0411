@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from services.task_services import build_task_graph
+from domain.task_services import build_task_graph
 
 
 def _task(task_id, name, status="pending", priority="medium", parent_task_id=None, depends_on=None):
@@ -34,3 +34,4 @@ def test_build_task_graph_detects_cycles():
 
     with pytest.raises(ValueError, match="task_dependency_cycle_detected"):
         build_task_graph([a, b])
+

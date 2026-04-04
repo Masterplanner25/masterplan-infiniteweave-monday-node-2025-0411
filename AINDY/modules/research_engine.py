@@ -5,7 +5,7 @@ import requests, openai
 from datetime import datetime
 from sqlalchemy.orm import Session
 from db import models
-from services.external_call_service import perform_external_call
+from platform_layer.external_call_service import perform_external_call
 
 def web_search(query: str) -> str:
     """External web or API search."""
@@ -46,3 +46,4 @@ def save_result(db: Session, query, summary, source):
     db.commit()
     db.refresh(record)
     return record
+

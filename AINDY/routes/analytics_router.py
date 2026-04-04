@@ -23,7 +23,7 @@ async def ingest_linkedin_manual(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "analytics_linkedin_ingest",
             {"data": data.model_dump()},
@@ -58,7 +58,7 @@ async def get_masterplan_analytics(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "analytics_masterplan_get",
             {"masterplan_id": masterplan_id, "period_type": period_type, "platform": platform, "scope_type": scope_type},
@@ -86,7 +86,7 @@ async def get_masterplan_summary(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "analytics_masterplan_summary",
             {"masterplan_id": masterplan_id, "group_by": group_by},
@@ -103,5 +103,6 @@ async def get_masterplan_summary(
         request=request, route_name="analytics.masterplan.summary", handler=handler,
         user_id=str(current_user["sub"]), metadata={"db": db},
     )
+
 
 

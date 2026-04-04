@@ -28,8 +28,8 @@ Anything outside that shape is legacy behavior and should be treated as non-cano
 - `POST /apps/agent/run`
 - `POST /apps/agent/runs/{run_id}/approve`
 - `POST /apps/agent/runs/{run_id}/replay`
-- Runtime: `services.agent_runtime`
-- Executor: `services.nodus_adapter.NodusAgentAdapter.execute_with_flow()`
+- Runtime: `agents.agent_runtime`
+- Executor: `runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow()`
 
 Current behavior:
 
@@ -42,7 +42,7 @@ Current behavior:
 - `POST /apps/tasks/start`
 - `POST /apps/tasks/pause`
 - `POST /apps/tasks/complete`
-- Runtime: `services.task_services`
+- Runtime: `domain.task_services`
 
 Current behavior:
 
@@ -73,7 +73,7 @@ Current behavior:
 - `POST /apps/genesis/synthesize`
 - `POST /apps/genesis/lock`
 - `POST /apps/genesis/{plan_id}/activate`
-- Runtime: `services.genesis_ai`, `services.masterplan_factory`
+- Runtime: `domain.genesis_ai`, `domain.masterplan_factory`
 
 Current behavior:
 
@@ -599,3 +599,5 @@ Implication:
 
 - the frontend should hydrate from identity boot first, then refresh domain panels opportunistically
 - blank post-login dashboards are non-canonical behavior
+
+

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Identity Router - v5 Phase 2
 
 API for viewing and managing user identity profiles.
@@ -11,9 +11,9 @@ from typing import Optional
 
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.identity_boot_service import boot_identity_context
-from services.identity_service import IdentityService
-from services.system_event_service import (
+from domain.identity_boot_service import boot_identity_context
+from domain.identity_service import IdentityService
+from core.system_event_service import (
     SystemEventEmissionError,
 )
 from utils.user_ids import require_user_id
@@ -121,3 +121,4 @@ async def get_identity_context(
             else "No identity context yet. Use A.I.N.D.Y. features to build your profile."
         ),
     }
+

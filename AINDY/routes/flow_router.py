@@ -45,7 +45,7 @@ async def list_flow_runs(
 ):
     """List flow runs for the current user."""
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("flow_runs_list", {"status": status, "workflow_type": workflow_type, "limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             raise HTTPException(status_code=500, detail="Flow runs list failed")
@@ -62,7 +62,7 @@ async def get_flow_run(
 ):
     """Get a single flow run with full state."""
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("flow_run_get", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             error = result.get("error", "")
@@ -80,7 +80,7 @@ async def get_flow_run_history(
 ):
     """Get the node execution history for a flow run."""
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("flow_run_history", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             error = result.get("error", "")
@@ -104,7 +104,7 @@ async def resume_flow_run(
 ):
     """Resume a waiting flow run with an event."""
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "flow_run_resume",
             {"run_id": run_id, "event_type": body.event_type, "payload": body.payload},
@@ -129,9 +129,10 @@ async def get_flow_registry(
 ):
     """List all registered flows and nodes."""
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("flow_registry_get", {}, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             raise HTTPException(status_code=500, detail="Registry fetch failed")
         return result.get("data")
     return await _execute_flow(request, "flow.registry", handler, user_id=str(current_user["sub"]))
+

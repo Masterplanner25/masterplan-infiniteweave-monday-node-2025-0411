@@ -43,18 +43,18 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
-from services.execution_envelope import error as execution_error
-from services.execution_envelope import success as execution_success
-from services.goal_service import update_goals_from_execution
+from core.execution_envelope import error as execution_error
+from core.execution_envelope import success as execution_success
+from domain.goal_service import update_goals_from_execution
 from core.execution_signal_helper import queue_memory_capture, queue_system_event
-from services.system_event_service import emit_error_event
-from services.system_event_types import SystemEventTypes
-from services.trace_context import ensure_trace_id
-from services.trace_context import get_trace_id
-from services.trace_context import reset_parent_event_id
-from services.trace_context import reset_trace_id
-from services.trace_context import set_parent_event_id
-from services.trace_context import set_trace_id
+from core.system_event_service import emit_error_event
+from core.system_event_types import SystemEventTypes
+from utils.trace_context import ensure_trace_id
+from utils.trace_context import get_trace_id
+from utils.trace_context import reset_parent_event_id
+from utils.trace_context import reset_trace_id
+from utils.trace_context import set_parent_event_id
+from utils.trace_context import set_trace_id
 from utils.uuid_utils import normalize_uuid
 from utils.user_ids import parse_user_id
 
@@ -517,7 +517,7 @@ class PersistentFlowRunner:
         self.db.commit()
         self.db.refresh(run)
         try:
-            from services.execution_unit_service import ExecutionUnitService
+            from core.execution_unit_service import ExecutionUnitService
             _tenant_id = str(self.user_id) if self.user_id else ""
             _eu = ExecutionUnitService(self.db).create(
                 eu_type="flow",
@@ -638,7 +638,7 @@ class PersistentFlowRunner:
             run.completed_at = datetime.now(timezone.utc)
             self.db.commit()
             try:
-                from services.execution_unit_service import ExecutionUnitService
+                from core.execution_unit_service import ExecutionUnitService
                 _eus = ExecutionUnitService(self.db)
                 _eu_id = getattr(self, "_eu_id", None)
                 if _eu_id:
@@ -1047,7 +1047,7 @@ class PersistentFlowRunner:
                 context={"run_id": run.id, "total_ms": total_ms},
             )
             try:
-                from services.execution_unit_service import ExecutionUnitService
+                from core.execution_unit_service import ExecutionUnitService
                 _eus = ExecutionUnitService(self.db)
                 _eu_id = getattr(self, "_eu_id", None)
                 if _eu_id:
@@ -1430,3 +1430,4 @@ def run_flow(flow_name: str, state: dict, db: Session, user_id: str = None) -> d
         workflow_type=flow_name,
     )
     return runner.start(initial_state=dict(state), flow_name=flow_name)
+

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
-from services.execution_envelope import success as legacy_success
+from core.execution_envelope import success as legacy_success
 
 
 def _legacy_error_response(canonical: dict[str, Any], *, status_code: int) -> JSONResponse:
@@ -68,3 +68,4 @@ def adapt_response(route_name: str, canonical: dict[str, Any], *, status_code: i
         content=jsonable_encoder(canonical),
         headers=_trace_headers(canonical),
     )
+

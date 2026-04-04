@@ -408,7 +408,7 @@ Score = (Impact × Risk) / Effort. Range 1–5 per dimension.
 - Approval gate: `POST /agent/runs/{id}/approve` for high-risk plans; risk scoring via `risk_level` in plan schema
 - New routes: `POST /agent/runs`, `GET /agent/runs`, `POST /agent/runs/{id}/approve`, `GET /agent/runs/{id}`
 - Frontend: `AgentConsole.jsx` — goal input, plan preview, approve/execute, step timeline
-- ThreadWeaver v1–v3: detects time-to-response patterns, deltas, predictions, and narratives across Ping sequences; service `services.threadweaver.py` is fully implemented.
+- ThreadWeaver v1–v3: detects time-to-response patterns, deltas, predictions, and narratives across Ping sequences; service `utils.threadweaver.py` is fully implemented.
 - Frontend: `RippleTraceViewer.jsx` — signal timeline, ripple chain visualization (§15.16)
 - Frontend: `ObservabilityDashboard.jsx` — request latency, memory node counts, flow run counts (§15.17)
 
@@ -519,3 +519,4 @@ Before Sprint N+2 can be written with full precision, the following strategic qu
 4. **MasterPlan anchor type**: Should the anchor be (a) a target completion date ("I want to hit this goal by 2026-12-31"), (b) a goal value ("I want $10k MRR"), or (c) both? The ETA projection formula differs for date-anchored vs value-anchored plans.
 
 5. **RippleTrace vs Social overlap**: RippleTrace and the Social Layer both track content interactions. Should they merge into a single signal surface (one unified "influence layer"), or remain separate systems serving different purposes (RippleTrace = external/invisible signals; Social = internal/explicit interactions)? This affects Sprint N+3 scope.
+

@@ -30,7 +30,7 @@ from modules.deepseek.file_processor_deepseek import FileProcessor
 from modules.deepseek.config_manager_deepseek import ConfigManager
 from db.models.arm_models import AnalysisResult, CodeGeneration
 from config import settings
-from services.external_call_service import perform_external_call
+from platform_layer.external_call_service import perform_external_call
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ class DeepSeekCodeAnalyzer:
             # Step 2c — Inject identity context (non-blocking)
             identity_context = ""
             try:
-                from services.identity_service import IdentityService
+                from domain.identity_service import IdentityService
                 id_service = IdentityService(db=db, user_id=user_id)
                 identity_context = id_service.get_context_for_prompt()
                 id_service.observe(
@@ -304,7 +304,7 @@ class DeepSeekCodeAnalyzer:
             # Trigger Infinity score recalculation (fire-and-forget)
             try:
                 if user_id and db:
-                    from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+                    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
                     execute_infinity_orchestrator(
                         user_id=str(user_id),
@@ -513,3 +513,5 @@ class DeepSeekCodeAnalyzer:
 
         except Exception:
             raise
+
+

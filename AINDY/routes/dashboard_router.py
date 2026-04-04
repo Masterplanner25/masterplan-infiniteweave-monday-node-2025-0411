@@ -10,7 +10,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard Overview"], dependencie
 
 
 def _run_flow_dashboard(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -49,3 +49,4 @@ def get_system_overview(
     def handler(_ctx):
         return _run_flow_dashboard("dashboard_overview", {}, db, user_id)
     return _execute_dashboard(request, "dashboard.overview", handler, db=db, user_id=user_id)
+

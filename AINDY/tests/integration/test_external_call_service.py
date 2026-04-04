@@ -14,15 +14,15 @@ class _FakeDB:
 
 
 def test_perform_external_call_success_emits_start_and_complete(monkeypatch):
-    from services.external_call_service import perform_external_call
+    from platform_layer.external_call_service import perform_external_call
 
     events = []
     monkeypatch.setattr(
-        "services.external_call_service.emit_system_event",
+        "platform_layer.external_call_service.emit_system_event",
         lambda **kwargs: events.append(kwargs["event_type"]),
     )
     monkeypatch.setattr(
-        "services.external_call_service.emit_error_event",
+        "platform_layer.external_call_service.emit_error_event",
         lambda **kwargs: events.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -41,15 +41,15 @@ def test_perform_external_call_success_emits_start_and_complete(monkeypatch):
 
 
 def test_perform_external_call_failure_emits_failed_and_error(monkeypatch):
-    from services.external_call_service import perform_external_call
+    from platform_layer.external_call_service import perform_external_call
 
     events = []
     monkeypatch.setattr(
-        "services.external_call_service.emit_system_event",
+        "platform_layer.external_call_service.emit_system_event",
         lambda **kwargs: events.append(kwargs["event_type"]),
     )
     monkeypatch.setattr(
-        "services.external_call_service.emit_error_event",
+        "platform_layer.external_call_service.emit_error_event",
         lambda **kwargs: events.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -70,14 +70,14 @@ def test_perform_external_call_failure_emits_failed_and_error(monkeypatch):
 
 
 def test_perform_external_call_raises_when_required_event_emission_fails(monkeypatch):
-    from services.external_call_service import perform_external_call
-    from services.system_event_service import SystemEventEmissionError
+    from platform_layer.external_call_service import perform_external_call
+    from core.system_event_service import SystemEventEmissionError
 
     def _emit_system_event(**kwargs):
         raise SystemEventEmissionError("missing event")
 
-    monkeypatch.setattr("services.external_call_service.emit_system_event", _emit_system_event)
-    monkeypatch.setattr("services.external_call_service.emit_error_event", lambda **kwargs: None)
+    monkeypatch.setattr("platform_layer.external_call_service.emit_system_event", _emit_system_event)
+    monkeypatch.setattr("platform_layer.external_call_service.emit_error_event", lambda **kwargs: None)
 
     with pytest.raises(SystemEventEmissionError, match="missing event"):
         perform_external_call(
@@ -91,8 +91,7 @@ def test_perform_external_call_raises_when_required_event_emission_fails(monkeyp
 
 
 def test_generate_embedding_routes_through_external_call_wrapper(monkeypatch):
-    from services import embedding_service
-
+    from memory import embedding_service
     captured = {}
 
     monkeypatch.setattr(embedding_service, "get_client", lambda: SimpleNamespace())
@@ -119,3 +118,5 @@ def test_generate_embedding_routes_through_external_call_wrapper(monkeypatch):
         "model": embedding_service.EMBEDDING_MODEL,
         "method": "openai.embeddings",
     }
+
+

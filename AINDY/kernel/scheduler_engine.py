@@ -23,7 +23,7 @@ at normal priority so the resumed run can be picked up on the next
 
 Usage
 -----
-    from services.scheduler_engine import get_scheduler_engine, ScheduledItem
+    from kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
 
     se = get_scheduler_engine()
 

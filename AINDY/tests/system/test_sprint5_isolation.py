@@ -73,7 +73,7 @@ class TestFreelanceIsolation:
 
     def test_freelance_service_passes_user_id(self):
         """freelance_service create_order and collect_feedback accept user_id."""
-        from services.freelance_service import create_order, collect_feedback, get_all_orders, get_all_feedback
+        from domain.freelance_service import create_order, collect_feedback, get_all_orders, get_all_feedback
         import inspect
         for fn in [create_order, collect_feedback, get_all_orders, get_all_feedback]:
             sig = inspect.signature(fn)
@@ -122,7 +122,7 @@ class TestResearchIsolation:
 
     def test_research_service_passes_user_id(self):
         """research_results_service functions accept user_id."""
-        from services.research_results_service import (
+        from domain.research_results_service import (
             create_research_result, get_all_research_results
         )
         for fn in [create_research_result, get_all_research_results]:
@@ -186,7 +186,7 @@ class TestRippletraceIsolation:
 
     def test_rippletrace_service_passes_user_id(self):
         """rippletrace_services functions accept user_id."""
-        from services.rippletrace_services import (
+        from domain.rippletrace_services import (
             add_drop_point, add_ping, get_all_drop_points,
             get_all_pings, get_recent_ripples, get_ripples,
         )
@@ -225,3 +225,4 @@ class TestUserIdColumnPresence:
         from db.models.drop import PingDB
         cols = [c.name for c in PingDB.__table__.columns]
         assert 'user_id' in cols, "PingDB model missing user_id column"
+

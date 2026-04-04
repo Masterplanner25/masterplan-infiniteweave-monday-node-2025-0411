@@ -201,7 +201,7 @@ class TestAutomationEndpoints:
             def get_jobs():
                 return [_Job()]
 
-        with patch("services.scheduler_service.get_scheduler", return_value=_Scheduler()):
+        with patch("platform_layer.scheduler_service.get_scheduler", return_value=_Scheduler()):
             response = client.get("/automation/scheduler/status", headers=auth_headers)
 
         assert response.status_code == 200
@@ -233,3 +233,4 @@ class TestFlowConsoleAPIFunctions:
 
     def test_components_exist(self):
         assert pathlib.Path("client/src/components/FlowEngineConsole.jsx").exists()
+

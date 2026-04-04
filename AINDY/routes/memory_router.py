@@ -17,7 +17,7 @@ NodeType = Literal["decision", "outcome", "insight", "relationship"]
 
 def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
     """Run a memory flow and decode node HTTP errors."""
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     data = result.get("data")
 
@@ -459,7 +459,7 @@ async def execute_with_memory(
 
     return await _execute_memory(request, "memory.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute/complete")
-async def complete_execution_loop(
+async def complete_memory_loop(
     request: Request,
     body: ExecutionCompleteRequest,
     db: Session = Depends(get_db),
@@ -475,3 +475,4 @@ async def complete_execution_loop(
         )
 
     return await _execute_memory(request, "memory.execute.complete", handler, db=db, current_user=current_user, input_payload=body.model_dump())
+

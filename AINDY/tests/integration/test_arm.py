@@ -563,7 +563,7 @@ class TestARMMetricsService:
 
     def test_empty_metrics_structure(self):
         """Empty metrics returns correct structure."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         service = ARMMetricsService.__new__(ARMMetricsService)
         result = service._empty_metrics()
         assert "execution_speed" in result
@@ -574,7 +574,7 @@ class TestARMMetricsService:
 
     def test_decision_efficiency_perfect(self):
         """100% success rate = 100% efficiency."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -594,7 +594,7 @@ class TestARMMetricsService:
 
     def test_decision_efficiency_partial(self):
         """3/5 success = 60% efficiency."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -606,7 +606,7 @@ class TestARMMetricsService:
 
     def test_execution_speed_calculation(self):
         """tokens/seconds = execution speed."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -625,7 +625,7 @@ class TestARMMetricsService:
 
     def test_lost_potential_no_failures(self):
         """No failures = 0% waste."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -644,7 +644,7 @@ class TestARMMetricsService:
 
     def test_lost_potential_with_failures(self):
         """Failed sessions contribute to waste %."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -668,7 +668,7 @@ class TestARMMetricsService:
 
     def test_ai_productivity_boost_ratio(self):
         """Output/input token ratio calculation."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -682,7 +682,7 @@ class TestARMMetricsService:
 
     def test_learning_efficiency_insufficient_data(self):
         """Less than 4 sessions = insufficient data."""
-        from services.arm_metrics_service import ARMMetricsService
+        from analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -702,7 +702,7 @@ class TestARMConfigSuggestions:
 
     def test_no_suggestions_when_metrics_healthy(self):
         """Healthy metrics = no config changes recommended."""
-        from services.arm_metrics_service import ARMConfigSuggestionEngine
+        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         healthy_metrics = {
             "decision_efficiency": {"score": 95.0},
@@ -727,7 +727,7 @@ class TestARMConfigSuggestions:
 
     def test_suggests_lower_temperature_on_high_failure(self):
         """Critical efficiency triggers temperature reduction."""
-        from services.arm_metrics_service import ARMConfigSuggestionEngine
+        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         bad_metrics = {
             "decision_efficiency": {"score": 50.0},  # critical
@@ -756,7 +756,7 @@ class TestARMConfigSuggestions:
 
     def test_low_risk_suggestions_in_auto_apply(self):
         """Low-risk suggestions appear in auto_apply_safe."""
-        from services.arm_metrics_service import ARMConfigSuggestionEngine
+        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         metrics = {
             "decision_efficiency": {"score": 70.0},  # warning
@@ -781,7 +781,7 @@ class TestARMConfigSuggestions:
 
     def test_combined_config_contains_all_changes(self):
         """combined_suggested_config merges all suggestions."""
-        from services.arm_metrics_service import ARMConfigSuggestionEngine
+        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         bad_metrics = {
             "decision_efficiency": {"score": 50.0},
@@ -807,3 +807,4 @@ class TestARMConfigSuggestions:
         combined = result["combined_suggested_config"]
         # Should have multiple changes
         assert isinstance(combined, dict)
+

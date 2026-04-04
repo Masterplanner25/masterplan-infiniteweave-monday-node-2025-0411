@@ -128,7 +128,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_create({"task_name": "Write tests"}, _ctx())
 
@@ -162,7 +162,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_create({"name": "Review PR"}, _ctx())
 
@@ -176,7 +176,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_complete({"task_name": "Write tests"}, _ctx())
 
@@ -196,7 +196,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_complete_full({"task_name": "Write tests"}, _ctx())
 
@@ -210,7 +210,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_start({"task_name": "Write tests"}, _ctx())
 
@@ -224,7 +224,7 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.task_services": mock_task_svc,
+            "domain.task_services": mock_task_svc,
         }):
             result = _handle_task_pause({"task_name": "Write tests"}, _ctx())
 
@@ -252,7 +252,7 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.leadgen_service": mock_leadgen_svc,
+            "domain.leadgen_service": mock_leadgen_svc,
         }):
             result = _handle_leadgen_search({"query": "fintech startup"}, _ctx())
 
@@ -272,7 +272,7 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.leadgen_service": mock_svc,
+            "domain.leadgen_service": mock_svc,
         }):
             result = _handle_leadgen_search_ai({"query": "saas companies"}, _ctx())
 
@@ -288,7 +288,7 @@ class TestLeadgenHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.execution_signal_helper": MagicMock(queue_memory_capture=mock_qmc),
-            "services.search_service": MagicMock(persist_search_result=MagicMock()),
+            "domain.search_service": MagicMock(persist_search_result=MagicMock()),
         }):
             result = _handle_leadgen_store(
                 {"query": "test", "results": []},
@@ -306,7 +306,7 @@ class TestLeadgenHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.execution_signal_helper": MagicMock(queue_memory_capture=MagicMock()),
-            "services.search_service": MagicMock(persist_search_result=MagicMock()),
+            "domain.search_service": MagicMock(persist_search_result=MagicMock()),
         }):
             result = _handle_leadgen_store(
                 {"query": "test", "results": [{"name": "A"}, {"name": "B"}]},
@@ -420,7 +420,7 @@ class TestGenesisHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
-            "services.genesis_ai": mock_genesis_ai,
+            "domain.genesis_ai": mock_genesis_ai,
         }):
             result = _handle_genesis_execute_llm(
                 {"session_id": "sess-1", "message": "Plan my week"},
@@ -450,7 +450,7 @@ class TestGenesisHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
-            "services.genesis_ai": MagicMock(),
+            "domain.genesis_ai": MagicMock(),
         }):
             with pytest.raises(ValueError, match="not found"):
                 _handle_genesis_execute_llm(
@@ -467,7 +467,7 @@ class TestGenesisHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.flow_engine": mock_flow_engine,
+            "runtime.flow_engine": mock_flow_engine,
         }):
             result = _handle_genesis_message(
                 {"session_id": "sess-1", "message": "Run plan"},
@@ -492,7 +492,7 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.infinity_orchestrator": mock_orch,
+            "domain.infinity_orchestrator": mock_orch,
         }):
             result = _handle_score_recalculate({}, _ctx())
 
@@ -506,7 +506,7 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.infinity_orchestrator": mock_orch,
+            "domain.infinity_orchestrator": mock_orch,
         }):
             with pytest.raises(ValueError, match="empty result"):
                 _handle_score_recalculate({}, _ctx())
@@ -520,7 +520,7 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.infinity_orchestrator": mock_orch,
+            "domain.infinity_orchestrator": mock_orch,
         }):
             _handle_score_recalculate({}, _ctx())
 
@@ -679,7 +679,7 @@ class TestGoalHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.goal_service": mock_goal_svc,
+            "domain.goal_service": mock_goal_svc,
         }):
             result = _handle_goal_create({"name": "Ship v2"}, _ctx())
 
@@ -694,7 +694,7 @@ class TestGoalHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.goal_service": mock_goal_svc,
+            "domain.goal_service": mock_goal_svc,
         }):
             _handle_goal_create({"name": "N"}, _ctx())
 
@@ -744,7 +744,7 @@ class TestResearchAndAgentHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.infinity_loop": mock_infinity,
+            "domain.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({}, _ctx())
 
@@ -760,10 +760,12 @@ class TestResearchAndAgentHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.infinity_loop": mock_infinity,
+            "domain.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({"kpi_snapshot": kpi}, _ctx())
 
         suggestions = result["suggestions"]
         assert len(suggestions) >= 1
         assert suggestions[0]["tool"] == "memory.recall"
+
+

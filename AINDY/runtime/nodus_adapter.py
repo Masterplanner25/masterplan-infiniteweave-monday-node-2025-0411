@@ -47,15 +47,15 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from core.execution_signal_helper import queue_system_event, record_agent_event
-from services.capability_service import check_execution_capability, check_tool_capability
-from services.agent_tools import execute_tool
+from agents.capability_service import check_execution_capability, check_tool_capability
+from agents.agent_tools import execute_tool
 from runtime.flow_engine import PersistentFlowRunner, register_node
-from services.system_event_service import emit_error_event
-from services.system_event_types import SystemEventTypes
+from core.system_event_service import emit_error_event
+from core.system_event_types import SystemEventTypes
 from utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
-from services.observability_events import emit_observability_event
+from core.observability_events import emit_observability_event
 
 MAX_STEP_RETRIES = 3
 
@@ -175,7 +175,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             agent_run.current_step = idx + 1
         db.commit()
 
-        from services.agent_event_service import emit_event
+        from agents.agent_event_service import emit_event
         record_agent_event(
             run_id=agent_run_id,
             user_id=user_id,
@@ -361,7 +361,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
 
     result_payload = {"steps": step_results}
     if agent_run and state.get("user_id"):
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         orchestration = execute_infinity_orchestrator(
             user_id=state["user_id"],
@@ -386,7 +386,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
         )
 
     # Emit COMPLETED lifecycle event
-    from services.agent_event_service import emit_event
+    from agents.agent_event_service import emit_event
     record_agent_event(
         run_id=agent_run_id,
         user_id=state.get("user_id", ""),
@@ -475,7 +475,7 @@ class NodusAgentAdapter:
                 )
             if not flow_capability_check["ok"]:
                 from db.models.agent_run import AgentRun
-                from services.agent_event_service import emit_event
+                from agents.agent_event_service import emit_event
 
                 agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
                 if agent_run and agent_run.status == "executing":
@@ -597,7 +597,7 @@ class NodusAgentAdapter:
                         agent_run.error_message,
                     )
                     # Emit EXECUTION_FAILED lifecycle event
-                    from services.agent_event_service import emit_event
+                    from agents.agent_event_service import emit_event
                     record_agent_event(
                         run_id=run_id,
                         user_id=user_id,
@@ -624,7 +624,7 @@ class NodusAgentAdapter:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     agent_run.error_message = f"Adapter error: {exc}"
                     db.commit()
-                    from services.agent_event_service import emit_event
+                    from agents.agent_event_service import emit_event
                     record_agent_event(
                         run_id=run_id,
                         user_id=user_id,
@@ -713,7 +713,7 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
         _flush_memory_writes,
     )
     from core.execution_signal_helper import queue_system_event
-    from services.system_event_types import SystemEventTypes
+    from core.system_event_types import SystemEventTypes
 
     db = context["db"]
     user_id: str = str(context.get("user_id") or "")
@@ -1140,3 +1140,5 @@ NODUS_COMPILE_AND_RUN_FLOW = {
     },
     "end": ["nodus.flow.run"],
 }
+
+

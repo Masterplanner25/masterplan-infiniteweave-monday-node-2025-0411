@@ -29,9 +29,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Importing nodus_adapter triggers node registration in NODE_REGISTRY
-import services.nodus_adapter  # noqa: F401  — side-effect: registers nodes
-from services.flow_engine import NODE_REGISTRY
-from services.nodus_runtime_adapter import (
+import runtime.nodus_adapter  # noqa: F401  — side-effect: registers nodes
+from runtime.flow_engine import NODE_REGISTRY
+from runtime.nodus_runtime_adapter import (
     NODUS_SCRIPT_FLOW,
     NodusExecutionResult,
 )
@@ -91,9 +91,9 @@ class TestNodeRegistration:
 # ── nodus.execute — source validation ─────────────────────────────────────────
 
 # The node uses lazy imports so patches must target the source modules, not nodus_adapter.
-_ADAPTER_PATH = "services.nodus_runtime_adapter.NodusRuntimeAdapter"
-_SINK_PATH = "services.nodus_runtime_adapter._build_event_sink"
-_FLUSH_PATH = "services.nodus_runtime_adapter._flush_memory_writes"
+_ADAPTER_PATH = "runtime.nodus_runtime_adapter.NodusRuntimeAdapter"
+_SINK_PATH = "runtime.nodus_runtime_adapter._build_event_sink"
+_FLUSH_PATH = "runtime.nodus_runtime_adapter._flush_memory_writes"
 _EVENT_PATH = "core.execution_signal_helper.queue_system_event"
 
 
@@ -245,7 +245,7 @@ class TestNodusExecuteFailure:
 
 # ── nodus.execute — context injection ─────────────────────────────────────────
 
-_CTX_PATH = "services.nodus_runtime_adapter.NodusExecutionContext"
+_CTX_PATH = "runtime.nodus_runtime_adapter.NodusExecutionContext"
 
 
 class TestNodusExecuteContextInjection:
@@ -458,3 +458,4 @@ class TestNodusScriptFlow:
                     all_nodes.add(edge["target"])
         for name in all_nodes:
             assert name in NODE_REGISTRY, f"Node '{name}' not in NODE_REGISTRY"
+

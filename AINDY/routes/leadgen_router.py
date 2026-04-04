@@ -17,8 +17,8 @@ from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from schemas.leadgen_schema import LeadGenItem
 from services.auth_service import get_current_user
-from services.rate_limiter import limiter
-from services.search_service import get_cached_search_result
+from platform_layer.rate_limiter import limiter
+from domain.search_service import get_cached_search_result
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def generate_b2b_leads(
                 "_execution_meta": {"cached": True, "count": len(cached_results)},
             }
 
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow(
             "leadgen_search",
             {"query": query},
@@ -102,7 +102,7 @@ def preview_lead_search(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("leadgen_preview_search", {"query": query}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Lead search failed"))
@@ -119,10 +119,12 @@ def list_all_leads(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from services.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
         result = run_flow("leadgen_list", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Failed to load leads"))
         return result.get("data")
 
     return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)
+
+

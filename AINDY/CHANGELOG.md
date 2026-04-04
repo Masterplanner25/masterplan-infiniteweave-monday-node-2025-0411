@@ -529,7 +529,7 @@ Implements Phase v2 of the Support System evolution plan.
 
 **FIX 2 — Dual DAO consolidation (§15.5)**
 - `db/dao/memory_node_dao.py` — added `load_memory_node()` (alias for `get_by_id()`) and `find_by_tags()` (alias for `get_by_tags()`) for API compatibility
-- `routes/bridge_router.py` — updated import from legacy `services.memory_persistence.MemoryNodeDAO` → canonical `db.dao.memory_node_dao.MemoryNodeDAO`
+- `routes/bridge_router.py` — updated import from legacy `memory.memory_persistence.MemoryNodeDAO` → canonical `db.dao.memory_node_dao.MemoryNodeDAO`
 
 **FIX 3 — MemoryNode.children silent trace loss (§10.1)**
 - `db/dao/memory_node_dao.py` `save()` — after persisting the node, reads `extra["children"]` and creates `MemoryLink` rows for each valid child UUID, so child references are no longer silently discarded
@@ -657,7 +657,7 @@ Implements Phase v2 of the Support System evolution plan.
 
 ### Changed (2026-03-22 - Flow Engine Phase B)
 
-- `runtime/execution_loop.py` — added `PersistentFlowRunner`, `execute_intent`, `register_node`, `register_flow`, `route_event` re-exports from `services/flow_engine`. Existing `ExecutionLoop` class preserved.
+- `runtime/memory_loop.py` — added `PersistentFlowRunner`, `execute_intent`, `register_node`, `register_flow`, `route_event` re-exports from `services/flow_engine`. Existing `ExecutionLoop` class preserved.
 - `runtime/execution_registry.py` — added `NODE_REGISTRY`, `FLOW_REGISTRY`, `register_node`, `register_flow` re-exports from `services/flow_engine`. Existing `REGISTRY` singleton preserved.
 - `db/models/__init__.py` — exports `FlowRun`, `FlowHistory`, `EventOutcome`, `Strategy`
 - `routes/__init__.py` — registers `flow_router`

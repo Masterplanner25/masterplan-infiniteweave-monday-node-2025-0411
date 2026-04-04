@@ -67,7 +67,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
     """
     # ── 1. Leader election ────────────────────────────────────────────────────
     try:
-        from services.task_services import is_background_leader
+        from domain.task_services import is_background_leader
         if not is_background_leader():
             logger.debug("[NodusSchedule] Not leader — skipping job %s", job_id)
             return
@@ -426,7 +426,7 @@ def _next_run(trigger) -> Optional[str]:
 
 def _register_with_scheduler(job_row: Any, trigger: Any) -> None:
     """Add/replace the job in the live APScheduler instance."""
-    from services.scheduler_service import get_scheduler
+    from platform_layer.scheduler_service import get_scheduler
 
     scheduler = get_scheduler()
     job_id_str = str(job_row.id)
@@ -448,7 +448,7 @@ def _register_with_scheduler(job_row: Any, trigger: Any) -> None:
 def _remove_from_scheduler(job_id: str) -> None:
     """Remove a job from APScheduler (best-effort — never raises)."""
     try:
-        from services.scheduler_service import get_scheduler
+        from platform_layer.scheduler_service import get_scheduler
         scheduler = get_scheduler()
         aps_id = f"{_JOB_ID_PREFIX}{job_id}"
         try:
@@ -475,3 +475,5 @@ def _serialize_job(row: Any, next_run_at: Optional[str] = None) -> dict:
         "next_run_at": next_run_at,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+

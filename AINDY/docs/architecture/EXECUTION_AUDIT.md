@@ -63,7 +63,7 @@ Audit criteria:
 **What follows the contract**
 
 - Structured input exists at the router boundary in `routes/agent_router.py:70-96`.
-- Execution is routed through `services.agent_runtime.create_run()` and `services.agent_runtime.execute_run()` in `services/agent_runtime.py:254-333` and `services/agent_runtime.py:342-430`.
+- Execution is routed through `agents.agent_runtime.create_run()` and `agents.agent_runtime.execute_run()` in `services/agent_runtime.py:254-333` and `services/agent_runtime.py:342-430`.
 - Persistence exists through `AgentRun`, `AgentStep`, `AgentEvent`, and `FlowRun`.
 - Observability exists via lifecycle events and flow history.
 - Flow-backed execution exists via `PersistentFlowRunner` in `services/flow_engine.py:195-415`.
@@ -352,3 +352,4 @@ Until every domain obeys:
 `Input -> Execution -> Persist -> Orchestrator -> Observability`
 
 the system does not have a single canonical execution model.
+

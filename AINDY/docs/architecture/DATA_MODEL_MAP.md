@@ -873,7 +873,7 @@ Defined in `AINDY/services/memory_persistence.py`.
 - PostgreSQL is used by all SQLAlchemy ORM models in `AINDY/db/models/` and by Memory Bridge models in `AINDY/services/memory_persistence.py`.
 - MongoDB is used by the Social Layer in `AINDY/routes/social_router.py` and by task completion logic in `AINDY/services/task_services.py`.
 - Cross-database coordination occurs in:
-- `AINDY/routes/social_router.py`: writes to MongoDB (`posts`) and uses `services.memory_capture_engine.MemoryCaptureEngine` to persist related memory records into PostgreSQL when social content or performance signals should be captured.
+- `AINDY/routes/social_router.py`: writes to MongoDB (`posts`) and uses `memory.memory_capture_engine.MemoryCaptureEngine` to persist related memory records into PostgreSQL when social content or performance signals should be captured.
 - `AINDY/services/task_services.py`: writes to PostgreSQL `tasks` and updates MongoDB `profiles` metrics snapshot.
 
 ## 7. Known Structural Risks

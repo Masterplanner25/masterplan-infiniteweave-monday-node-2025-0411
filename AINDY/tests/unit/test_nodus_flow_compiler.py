@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock, patch
 
-from services.nodus_flow_compiler import (
+from runtime.nodus_flow_compiler import (
     NodusFlowGraph,
     _condition_falsy,
     _condition_truthy,
@@ -395,44 +395,44 @@ def _make_node_context():
 
 class TestNodusFlowCompileNode:
     def test_returns_failure_when_no_script(self):
-        from services.nodus_adapter import nodus_flow_compile_node
+        from runtime.nodus_adapter import nodus_flow_compile_node
         result = nodus_flow_compile_node({"nodus_flow_name": "f"}, _make_node_context())
         assert result["status"] == "FAILURE"
         assert "nodus_flow_script" in result["error"]
 
     def test_returns_success_and_compiled_flow(self):
-        from services.nodus_adapter import nodus_flow_compile_node
+        from runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": [], "b": []}, "end": ["b"]}
-        with patch("services.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
+        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "SUCCESS"
         assert result["output_patch"]["nodus_compiled_flow"] == mock_flow
 
     def test_echoes_flow_name_in_output_patch(self):
-        from services.nodus_adapter import nodus_flow_compile_node
+        from runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": []}, "end": ["a"]}
-        with patch("services.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
+        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["output_patch"]["nodus_flow_name"] == "my_flow"
 
     def test_defaults_flow_name_to_nodus_flow(self):
-        from services.nodus_adapter import nodus_flow_compile_node
+        from runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": []}, "end": ["a"]}
-        with patch("services.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow) as mock_compile:
+        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow) as mock_compile:
             nodus_flow_compile_node({"nodus_flow_script": "flow.step('a')"}, _make_node_context())
         mock_compile.assert_called_once_with("flow.step('a')", "nodus_flow")
 
     def test_returns_failure_on_value_error_from_compiler(self):
-        from services.nodus_adapter import nodus_flow_compile_node
-        with patch("services.nodus_flow_compiler.compile_nodus_flow", side_effect=ValueError("bad script")):
+        from runtime.nodus_adapter import nodus_flow_compile_node
+        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=ValueError("bad script")):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "bad script" in result["error"]
         assert "bad script" in result["output_patch"]["nodus_flow_compile_error"]
 
     def test_returns_failure_on_runtime_error_from_compiler(self):
-        from services.nodus_adapter import nodus_flow_compile_node
-        with patch("services.nodus_flow_compiler.compile_nodus_flow", side_effect=RuntimeError("not installed")):
+        from runtime.nodus_adapter import nodus_flow_compile_node
+        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=RuntimeError("not installed")):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "not installed" in result["error"]
@@ -455,73 +455,74 @@ def _make_run_state(**overrides):
 
 class TestNodusFlowRunNode:
     def test_returns_failure_when_no_compiled_flow(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         result = nodus_flow_run_node({}, _make_node_context())
         assert result["status"] == "FAILURE"
         assert "nodus_compiled_flow" in result["error"]
 
     def test_returns_success_on_successful_inner_run(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         mock_runner = MagicMock()
         mock_runner.start.return_value = {
             "status": "SUCCESS",
             "run_id": "inner-run-1",
             "trace_id": "trace-1",
         }
-        with patch("services.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "SUCCESS"
         assert result["output_patch"]["nodus_flow_status"] == "SUCCESS"
         assert result["output_patch"]["nodus_flow_run_id"] == "inner-run-1"
 
     def test_returns_failure_on_failed_inner_run(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         mock_runner = MagicMock()
         mock_runner.start.return_value = {
             "status": "FAILED",
             "error": "inner node failed",
             "run_id": "inner-run-2",
         }
-        with patch("services.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "inner node failed" in result["error"]
 
     def test_passes_nodus_flow_input_as_initial_state(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         mock_runner = MagicMock()
         mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "r"}
         state = _make_run_state(nodus_flow_input={"my_key": "my_val"})
-        with patch("services.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             nodus_flow_run_node(state, _make_node_context())
         call_args = mock_runner.start.call_args
         assert call_args.kwargs.get("initial_state") == {"my_key": "my_val"} or \
                call_args.args[0] == {"my_key": "my_val"}
 
     def test_runner_exception_returns_failure(self):
-        from services.nodus_adapter import nodus_flow_run_node
-        with patch("services.nodus_adapter.PersistentFlowRunner", side_effect=RuntimeError("db down")):
+        from runtime.nodus_adapter import nodus_flow_run_node
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", side_effect=RuntimeError("db down")):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "db down" in result["error"]
         assert "db down" in result["output_patch"]["nodus_flow_run_error"]
 
     def test_result_includes_full_run_result(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         full_result = {"status": "SUCCESS", "run_id": "r", "trace_id": "t", "state": {"x": 1}}
         mock_runner = MagicMock()
         mock_runner.start.return_value = full_result
-        with patch("services.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["output_patch"]["nodus_flow_result"] == full_result
 
     def test_defaults_flow_name_to_nodus_flow_in_runner_start(self):
-        from services.nodus_adapter import nodus_flow_run_node
+        from runtime.nodus_adapter import nodus_flow_run_node
         mock_runner = MagicMock()
         mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "r"}
         state = _make_run_state()
         state.pop("nodus_flow_name")  # omit name — should default
-        with patch("services.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             nodus_flow_run_node(state, _make_node_context())
         call_kwargs = mock_runner.start.call_args.kwargs
         assert call_kwargs.get("flow_name") == "nodus_flow"
+

@@ -10,9 +10,9 @@ This document describes the current runtime behavior of the FastAPI backend as i
   2. Enforce `SECRET_KEY` safety rules. Production startup fails if the placeholder secret is still configured.
   3. Enforce schema drift guard when `AINDY_ENFORCE_SCHEMA=true` by comparing the current Alembic revision to head.
   4. Attempt to acquire the background-task leadership lease via `task_services.start_background_tasks(...)`.
-   5. Start APScheduler only on the lease-holder instance via `services.scheduler_service.start()`.
+   5. Start APScheduler only on the lease-holder instance via `platform_layer.scheduler_service.start()`.
       - If APScheduler is unavailable (e.g., lightweight test runs), `start()` simply logs that the scheduler is disabled and the rest of the stack continues without background jobs.
-  6. Register canonical flow-engine nodes and flows via `services.flow_definitions.register_all_flows()`.
+  6. Register canonical flow-engine nodes and flows via `runtime.flow_definitions.register_all_flows()`.
   7. Optionally scan and recover stuck flow/agent runs.
   8. Seed or refresh the internal `author-system` identity row.
 - Router registration occurs by iterating `ROUTERS` from `AINDY/routes/__init__.py`.
@@ -35,7 +35,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - MongoDB uses a process-level client singleton in `AINDY/db/mongo_setup.py`; there is still no explicit shutdown close.
 
 ## 4. Execution Registration
-- Canonical flow execution is registered during startup from `services.flow_definitions`.
+- Canonical flow execution is registered during startup from `runtime.flow_definitions`.
 - The flow engine is a first-class runtime component and is not a side utility.
 - Current execution-facing domains route through flows and/or orchestrators rather than ad hoc route logic:
   - task
@@ -101,3 +101,4 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - The app is still a monolith: API, scheduler leadership, orchestration, and some execution logic share the same process.
 - Memory auto-link enrichment is now cross-dialect aware: PostgreSQL uses native tag containment, while SQLite/non-PostgreSQL verification falls back to Python-side tag filtering.
 - Not every domain has a first-class execution-record model yet, even though trace propagation and `SystemEvent` coverage are much stronger.
+

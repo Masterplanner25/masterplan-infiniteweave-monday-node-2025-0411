@@ -10,9 +10,9 @@ from db.models.automation_log import AutomationLog
 from db.models.request_metric import RequestMetric
 from db.models.system_event import SystemEvent
 from db.models.user import User
-from services.agent_runtime import execute_run
+from agents.agent_runtime import execute_run
 from services.auth_service import hash_password
-from services.capability_service import mint_token
+from agents.capability_service import mint_token
 from tests.fixtures.auth import build_access_token
 
 
@@ -84,7 +84,7 @@ def _make_run(db_session, user_id, *, status: str = "approved", plan: dict | Non
 
 
 def test_every_execution_emits_events(client, db_session, test_user, auth_headers, monkeypatch):
-    from services.async_job_service import shutdown_async_jobs
+    from platform_layer.async_job_service import shutdown_async_jobs
 
     db_session.add(
         AgentTrustSettings(
@@ -99,7 +99,7 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
-    monkeypatch.setattr("services.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
+    monkeypatch.setattr("agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
 
     def _complete_run(**kwargs):
         run = db_session.get(AgentRun, uuid.UUID(str(kwargs["run_id"])))
@@ -108,7 +108,7 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
         db_session.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    monkeypatch.setattr("services.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
+    monkeypatch.setattr("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
 
     shutdown_async_jobs(wait=True)
     try:
@@ -140,7 +140,7 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
     other_headers = {
         "Authorization": f"Bearer {build_access_token(user_id=other_user.id, email=other_user.email)}"
     }
-    monkeypatch.setattr("services.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
         "/memory/nodes",
@@ -183,7 +183,7 @@ def test_capability_enforcement_changes_execution_path(db_session, test_user):
 
 
 def test_memory_consistency(client, auth_headers, monkeypatch):
-    monkeypatch.setattr("services.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     payload = {
         "content": "Persistent memory invariant",
@@ -224,3 +224,4 @@ def test_metrics_reflect_actions(client, db_session, test_user, auth_headers):
     assert dashboard["summary"]["window_requests"] >= 1
     assert dashboard["request_metrics"]["recent"]
     assert any(item["path"] == "/agent/tools" for item in dashboard["request_metrics"]["recent"])
+

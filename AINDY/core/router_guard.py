@@ -34,19 +34,19 @@ logger = logging.getLogger(__name__)
 # and must be accessed exclusively via run_flow().
 _FORBIDDEN_MODULES: frozenset[str] = frozenset(
     [
-        "services.agent_runtime",
+        "agents.agent_runtime",
         "services.arm_service",
         "services.analytics_service",
-        "services.flow_engine_intent",
+        "runtime.flow_engine_intent",
         "services.genesis_service",
-        "services.goal_service",
-        "services.leadgen_service",
-        "services.memory_helpers",
+        "domain.goal_service",
+        "domain.leadgen_service",
+        "memory.memory_helpers",
         "services.memory_service",
-        "services.nodus_adapter",
-        "services.nodus_execution_service",
+        "runtime.nodus_adapter",
+        "runtime.nodus_execution_service",
         "services.score_service",
-        "services.task_services",
+        "domain.task_services",
         "services.watcher_service",
     ]
 )
@@ -64,7 +64,7 @@ _FORBIDDEN_MODULE_PREFIXES: tuple[str, ...] = (
 # Specific names whose presence in a top-level router import indicates a
 # boundary violation regardless of which module they came from.
 # NOTE: Only names removed during the execution-boundary refactor are listed
-# here. Routers that pre-date the refactor and still use services.execution_service
+# here. Routers that pre-date the refactor and still use core.execution_service
 # directly are tracked separately and will be migrated in a future sprint.
 _FORBIDDEN_NAMES: frozenset[str] = frozenset(
     [
@@ -100,15 +100,15 @@ _PENDING_MIGRATION: frozenset[str] = frozenset(
     [
         # Converted in next sprint:
         "legacy_surface_router.py",   # uses many legacy engine services
-        "main_router.py",             # uses services.calculations
-        "network_bridge_router.py",   # uses services.calculation_services
-        "seo_routes.py",              # uses services.seo + services.calculation_services
-        "identity_router.py",         # uses services.identity_service
-        "coordination_router.py",     # uses services.agent_coordinator
-        "system_state_router.py",     # uses services.system_state_service
-        "social_router.py",           # uses services.social_performance_service
-        "rippletrace_router.py",      # uses services.rippletrace_service
-        "authorship_router.py",       # uses services.authorship_services
+        "main_router.py",             # uses analytics.calculations
+        "network_bridge_router.py",   # uses analytics.calculation_services
+        "seo_routes.py",              # uses domain.seo + analytics.calculation_services
+        "identity_router.py",         # uses domain.identity_service
+        "coordination_router.py",     # uses agents.agent_coordinator
+        "system_state_router.py",     # uses platform_layer.system_state_service
+        "social_router.py",           # uses domain.social_performance_service
+        "rippletrace_router.py",      # uses domain.rippletrace_service
+        "authorship_router.py",       # uses domain.authorship_services
         "bridge_router.py",           # uses MemoryNodeDAO directly
         "memory_trace_router.py",     # uses MemoryNodeDAO directly
     ]
@@ -233,3 +233,5 @@ def validate_router_boundary(routes_dir: Path | None = None) -> None:
         lines.append(f"  {rel}:{v.lineno}  module={v.module!r}  names={v.names}")
     message = "\n".join(lines)
     raise RouterBoundaryViolation(message)
+
+

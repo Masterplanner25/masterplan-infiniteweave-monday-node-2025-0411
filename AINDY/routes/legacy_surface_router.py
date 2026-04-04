@@ -5,38 +5,38 @@ from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from services.auth_service import verify_api_key
 
-from services.causal_engine import build_causal_graph, get_causal_chain
-from services.content_generator import (
+from analytics.causal_engine import build_causal_graph, get_causal_chain
+from domain.content_generator import (
     generate_content,
     generate_content_for_drop,
     generate_variations,
 )
-from services.delta_engine import compute_deltas, emerging_drops, find_momentum_leaders
-from services.influence_graph import build_influence_graph, influence_chain
-from services.learning_engine import adjust_thresholds, evaluate_outcome, learning_stats
-from services.narrative_engine import generate_narrative, narrative_summary
-from services.playbook_engine import (
+from analytics.delta_engine import compute_deltas, emerging_drops, find_momentum_leaders
+from analytics.influence_graph import build_influence_graph, influence_chain
+from analytics.learning_engine import adjust_thresholds, evaluate_outcome, learning_stats
+from analytics.narrative_engine import generate_narrative, narrative_summary
+from analytics.playbook_engine import (
     build_playbook,
     get_playbook,
     list_playbooks,
     match_playbooks,
 )
-from services.prediction_engine import (
+from analytics.prediction_engine import (
     predict_drop_point,
     prediction_summary,
     scan_drop_point_predictions,
 )
-from services.recommendation_engine import (
+from analytics.recommendation_engine import (
     recommend_for_drop_point,
     recommendations_summary,
 )
-from services.strategy_engine import (
+from domain.strategy_engine import (
     build_strategies,
     get_strategy,
     list_strategies,
     match_strategies,
 )
-from services.threadweaver import (
+from utils.threadweaver import (
     analyze_drop_point,
     get_dashboard_snapshot,
     get_top_drop_points,
@@ -241,3 +241,4 @@ def evaluate_drop_point(request: Request, drop_point_id: str, db: Session = Depe
         adjust_thresholds(db)
         return result
     return wrap(request, "evaluate", fn)
+

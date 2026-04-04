@@ -174,8 +174,8 @@ def test_agent_run_async_create_persists_log_run_and_events(
     class _FakeResponse:
         choices = [_FakeChoice()]
 
-    from services.async_job_service import shutdown_async_jobs
-    import services.agent_runtime as agent_runtime
+    from platform_layer.async_job_service import shutdown_async_jobs
+    import agents.agent_runtime as agent_runtime
 
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
@@ -225,3 +225,4 @@ def test_agent_run_async_create_persists_log_run_and_events(
         assert "execution.completed" in event_types
     finally:
         shutdown_async_jobs(wait=True)
+

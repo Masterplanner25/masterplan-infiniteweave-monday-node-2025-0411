@@ -9,7 +9,7 @@ router = APIRouter(prefix="/autonomy", tags=["Autonomy"])
 
 
 def _run_flow_autonomy(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -36,3 +36,4 @@ def get_recent_autonomy_decisions(
         user_id=user_id,
         metadata={"db": db},
     )
+

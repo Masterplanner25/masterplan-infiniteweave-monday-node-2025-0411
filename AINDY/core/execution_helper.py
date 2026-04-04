@@ -9,7 +9,7 @@ from fastapi import Request
 
 from core.execution_pipeline import ExecutionContext, ExecutionPipeline
 from core.response_adapter import adapt_response
-from services.trace_context import get_current_request
+from utils.trace_context import get_current_request
 
 logger = logging.getLogger(__name__)
 
@@ -72,3 +72,4 @@ def execute_with_pipeline_sync(
             return_result=return_result,
         )
     )
+

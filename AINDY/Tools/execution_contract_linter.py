@@ -186,7 +186,7 @@ def lint_memory_usage() -> list[Violation]:
             continue
         imported_memory_engine = False
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module == "services.memory_capture_engine":
+            if isinstance(node, ast.ImportFrom) and node.module == "memory.memory_capture_engine":
                 imported_memory_engine = True
             if isinstance(node, ast.Call):
                 if _is_memory_capture_call(node) and imported_memory_engine:

@@ -50,6 +50,21 @@ class NodusTimeoutError(Exception):
     """Raised asynchronously in the Nodus VM worker thread when max_execution_ms is exceeded."""
 
 
+def _register_function_if_possible(runtime: Any, name: str, fn: Callable, *, arity: Any) -> None:
+    """
+    Register a host function unless the VM already provides the same built-in.
+
+    The live Nodus runtime rejects overriding some built-ins (for example
+    ``recall``), while the mocked runtime used in tests accepts all calls.
+    """
+    try:
+        runtime.register_function(name, fn, arity=arity)
+    except Exception as exc:
+        if "Cannot override built-in function" not in str(exc):
+            raise
+        logger.info("[NodusRuntimeAdapter] Using existing VM built-in for %s", name)
+
+
 # ── Execution Contract Dataclasses ────────────────────────────────────────────
 
 @dataclass
@@ -292,11 +307,11 @@ class NodusRuntimeAdapter:
             # ── Register A.I.N.D.Y. callbacks as Nodus builtins ───────────────
 
             # Memory read operations (read_memory capability)
-            runtime.register_function("recall", _make_traced("recall", bridge.recall), arity=(0, 1, 2, 3, 4))
-            runtime.register_function("recall_tool", _make_traced("recall_tool", bridge.recall_tool), arity=(0, 1, 2, 3))
-            runtime.register_function("recall_from", _make_traced("recall_from", bridge.recall_from), arity=(1, 2, 3, 4))
-            runtime.register_function("recall_all", _make_traced("recall_all", bridge.recall_all_agents), arity=(0, 1, 2, 3))
-            runtime.register_function("suggest", _make_traced("suggest", bridge.get_suggestions), arity=(0, 1, 2, 3))
+            _register_function_if_possible(runtime, "recall", _make_traced("recall", bridge.recall), arity=(0, 1, 2, 3, 4))
+            _register_function_if_possible(runtime, "recall_tool", _make_traced("recall_tool", bridge.recall_tool), arity=(0, 1, 2, 3))
+            _register_function_if_possible(runtime, "recall_from", _make_traced("recall_from", bridge.recall_from), arity=(1, 2, 3, 4))
+            _register_function_if_possible(runtime, "recall_all", _make_traced("recall_all", bridge.recall_all_agents), arity=(0, 1, 2, 3))
+            _register_function_if_possible(runtime, "suggest", _make_traced("suggest", bridge.get_suggestions), arity=(0, 1, 2, 3))
 
             # Memory write operations — wrap to capture writes before forwarding
             def _remember_with_capture(*args: Any, **kwargs: Any) -> Any:
@@ -309,9 +324,9 @@ class NodusRuntimeAdapter:
                 })
                 return result
 
-            runtime.register_function("remember", _make_traced("remember", _remember_with_capture), arity=(1, 2, 3, 4, 5))
-            runtime.register_function("record_outcome", _make_traced("record_outcome", bridge.record_outcome), arity=2)
-            runtime.register_function("share", _make_traced("share", bridge.share), arity=1)
+            _register_function_if_possible(runtime, "remember", _make_traced("remember", _remember_with_capture), arity=(1, 2, 3, 4, 5))
+            _register_function_if_possible(runtime, "record_outcome", _make_traced("record_outcome", bridge.record_outcome), arity=2)
+            _register_function_if_possible(runtime, "share", _make_traced("share", bridge.share), arity=1)
 
             # Event emission — capture + route to event_sink / default queue
             def _emit_with_capture(
@@ -358,7 +373,7 @@ class NodusRuntimeAdapter:
                             event_type, exc,
                         )
 
-            runtime.register_function("emit", _make_traced("emit", _emit_with_capture), arity=(1, 2))
+            _register_function_if_possible(runtime, "emit", _make_traced("emit", _emit_with_capture), arity=(1, 2))
 
             # State mutation — scripts call set_state(k, v) to write back
             def _set_state(key: str, value: Any) -> None:
@@ -367,8 +382,8 @@ class NodusRuntimeAdapter:
             def _get_state(key: str, default: Any = None) -> Any:
                 return context.state.get(key, default)
 
-            runtime.register_function("set_state", _make_traced("set_state", _set_state), arity=(1, 2))
-            runtime.register_function("get_state", _make_traced("get_state", _get_state), arity=(1, 2))
+            _register_function_if_possible(runtime, "set_state", _make_traced("set_state", _set_state), arity=(1, 2))
+            _register_function_if_possible(runtime, "get_state", _make_traced("get_state", _get_state), arity=(1, 2))
 
             # ── Syscall binding ───────────────────────────────────────────────
             # Build a SyscallContext from this execution context so Nodus scripts

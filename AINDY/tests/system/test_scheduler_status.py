@@ -8,7 +8,7 @@ from db.models.background_task_lease import BackgroundTaskLease
 
 class TestIsBackgroundLeader:
     def test_returns_false_when_no_owner(self):
-        import services.task_services as ts
+        import domain.task_services as ts
 
         original = ts._BACKGROUND_OWNER_ID
         try:
@@ -18,7 +18,7 @@ class TestIsBackgroundLeader:
             ts._BACKGROUND_OWNER_ID = original
 
     def test_returns_true_when_owner_matches_instance(self):
-        import services.task_services as ts
+        import domain.task_services as ts
 
         original = ts._BACKGROUND_OWNER_ID
         try:
@@ -31,8 +31,8 @@ class TestIsBackgroundLeader:
 
 class TestSchedulerStatusEndpoint:
     def test_returns_200_and_required_keys(self, client, auth_headers):
-        with patch("services.scheduler_service.get_scheduler", side_effect=RuntimeError("not started")), patch(
-            "services.task_services.is_background_leader", return_value=False
+        with patch("platform_layer.scheduler_service.get_scheduler", side_effect=RuntimeError("not started")), patch(
+            "domain.task_services.is_background_leader", return_value=False
         ):
             response = client.get("/observability/scheduler/status", headers=auth_headers)
 
@@ -51,7 +51,7 @@ class TestSchedulerStatusEndpoint:
         db_session,
         auth_headers,
     ):
-        import services.task_services as task_services
+        import domain.task_services as task_services
 
         lease = BackgroundTaskLease(
             name=task_services._BACKGROUND_LEASE_NAME,
@@ -66,8 +66,8 @@ class TestSchedulerStatusEndpoint:
         class _Scheduler:
             running = True
 
-        with patch("services.scheduler_service.get_scheduler", return_value=_Scheduler()), patch(
-            "services.task_services.is_background_leader", return_value=True
+        with patch("platform_layer.scheduler_service.get_scheduler", return_value=_Scheduler()), patch(
+            "domain.task_services.is_background_leader", return_value=True
         ):
             response = client.get("/observability/scheduler/status", headers=auth_headers)
 
@@ -78,3 +78,5 @@ class TestSchedulerStatusEndpoint:
         assert data["is_leader"] is True
         assert data["lease"]["owner_id"] == "leader-1"
         assert data["lease"]["expires_at"] is not None
+
+

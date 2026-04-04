@@ -108,7 +108,7 @@ def test_nodus_timeout_returns_envelope(db_session):
     This test WILL FAIL with TypeError until V1-STAB-002 adds the parameter.
     """
     import time
-    from services.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
+    from runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
 
     adapter = NodusRuntimeAdapter(db=db_session)
     ctx = NodusExecutionContext(
@@ -593,3 +593,4 @@ def test_domain_routes_gated_by_flag(client):
         + "\n".join(f"  - {r}" for r in sorted(exposed_domain_routes)[:15])
         + "\nV1-REFACT-013: ENABLE_DOMAIN_APPS=false must hide all domain routes."
     )
+
