@@ -9,7 +9,7 @@ from db.models.automation_log import AutomationLog
 from db.models.background_task_lease import BackgroundTaskLease
 from db.models.system_event import SystemEvent
 from db.models.user_identity import UserIdentity
-from services.async_job_service import _JOB_REGISTRY, submit_async_job
+from platform_layer.async_job_service import _JOB_REGISTRY, submit_async_job
 
 
 VALID_PLAN = {
@@ -51,12 +51,12 @@ def test_async_job_never_disappears(client, db_session, test_user, auth_headers,
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
-    monkeypatch.setattr("services.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
+    monkeypatch.setattr("agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
 
     def _complete_run(**kwargs):
         return {"status": "SUCCESS", "run_id": str(uuid.uuid4())}
 
-    monkeypatch.setattr("services.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
+    monkeypatch.setattr("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
 
     response = client.post("/agent/run", headers=auth_headers, json={"goal": "Harden async execution"})
     assert response.status_code == 202
@@ -83,7 +83,7 @@ def test_async_job_never_disappears(client, db_session, test_user, auth_headers,
 
 
 def test_db_rollback_works_on_async_job_failure(db_session, db_session_factory, test_user, monkeypatch):
-    import services.async_job_service as async_job_service
+    import platform_layer.async_job_service as async_job_service
 
     monkeypatch.setattr(async_job_service, "SessionLocal", db_session_factory)
     job_name = "hardening.rollback"
@@ -131,7 +131,7 @@ def test_db_rollback_works_on_async_job_failure(db_session, db_session_factory, 
 
 
 def test_lease_exclusivity(db_session, db_session_factory, monkeypatch):
-    import services.task_services as task_services
+    import domain.task_services as task_services
 
     monkeypatch.setattr(task_services, "SessionLocal", db_session_factory)
 
@@ -162,7 +162,7 @@ def test_lease_exclusivity(db_session, db_session_factory, monkeypatch):
 
 
 def test_event_completeness_for_successful_job(db_session, db_session_factory, test_user, monkeypatch):
-    import services.async_job_service as async_job_service
+    import platform_layer.async_job_service as async_job_service
 
     monkeypatch.setattr(async_job_service, "SessionLocal", db_session_factory)
     job_name = "hardening.success"
@@ -203,3 +203,5 @@ def test_invalid_uuid_input_fails_cleanly(client, auth_headers):
     payload = agent_response.json()
     data = payload.get("data", payload)
     assert "Invalid run_id" in str(data)
+
+

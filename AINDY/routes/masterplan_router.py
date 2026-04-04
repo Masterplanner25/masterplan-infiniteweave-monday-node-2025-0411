@@ -11,7 +11,7 @@ router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
 
 
 def _run_flow_masterplan(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -134,3 +134,4 @@ def activate_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     return _run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"]))
+

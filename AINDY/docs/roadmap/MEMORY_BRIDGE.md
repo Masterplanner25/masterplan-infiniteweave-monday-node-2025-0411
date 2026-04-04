@@ -141,7 +141,7 @@ recall -> execute -> capture -> feedback
 Current implementation note:
 * `runtime/memory/orchestrator.py` coordinates recall (strategy -> scoring -> filtering -> token budget).
 * `runtime/memory/memory_feedback.py` records usage/success signals.
-* `runtime/execution_loop.py` wraps recall -> execute -> capture -> feedback (pluggable executor).
+* `runtime/memory_loop.py` wraps recall -> execute -> capture -> feedback (pluggable executor).
 * `runtime/memory/memory_learning.py` updates per-execution success_rate and low-value flags to adapt recall quality.
 * `runtime/memory/memory_metrics.py` + `runtime/memory/metrics_store.py` compute and persist memory impact metrics.
 * `tests/system/test_memory_loop_e2e.py` validates the full loop (execution -> memory -> recall -> improved execution).
@@ -224,7 +224,7 @@ It is NOT:
 
 **Actions:**
 
-* Remove legacy DAO (`services.memory_persistence.MemoryNodeDAO`)
+* Remove legacy DAO (`memory.memory_persistence.MemoryNodeDAO`)
 * Standardize all operations on `db/dao/memory_node_dao.py`
 * Eliminate dual write paths (`bridge/*` vs `/memory/*`)
 * Normalize schema:
@@ -343,7 +343,7 @@ It is NOT:
 
 **Actions:**
 
-* Implemented `runtime/execution_loop.py`
+* Implemented `runtime/memory_loop.py`
 * Enforced `recall -> execute -> capture -> feedback`
 * Routed `/memory/execute` and workflow handlers via execution registry
 
@@ -418,7 +418,7 @@ It is NOT:
 **Outcome:** trace context affects recall more meaningfully than a flat bonus on matching nodes.
 
 ### Step 3 - Route more execution through the memory loop
-**Files:** `runtime/execution_loop.py`, `services/flow_engine.py`, `services/agent_runtime.py`  
+**Files:** `runtime/memory_loop.py`, `services/flow_engine.py`, `services/agent_runtime.py`  
 **Outcome:** memory-informed execution becomes true for a larger share of runtime behavior.
 
 ### Step 4 - Move embeddings off the synchronous write path

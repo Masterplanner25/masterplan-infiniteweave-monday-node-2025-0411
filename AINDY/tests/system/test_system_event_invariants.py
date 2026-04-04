@@ -112,17 +112,17 @@ class _FakeDB:
 
 
 def test_flow_success_emits_start_and_end_events(monkeypatch):
-    from services.flow_engine import PersistentFlowRunner
+    from runtime.flow_engine import PersistentFlowRunner
 
     events = []
 
     def _capture(**kwargs):
         events.append(kwargs["event_type"])
 
-    monkeypatch.setattr("services.flow_engine.emit_system_event", _capture)
-    monkeypatch.setattr("services.flow_engine.emit_error_event", lambda **kwargs: None)
+    monkeypatch.setattr("runtime.flow_engine.emit_system_event", _capture)
+    monkeypatch.setattr("runtime.flow_engine.emit_error_event", lambda **kwargs: None)
     monkeypatch.setattr(
-        "services.flow_engine.execute_node",
+        "runtime.flow_engine.execute_node",
         lambda node_name, state, context: {"status": "SUCCESS", "output_patch": {"done": True}},
     )
     monkeypatch.setattr(PersistentFlowRunner, "_capture_flow_completion", lambda *args, **kwargs: None)
@@ -138,7 +138,7 @@ def test_flow_success_emits_start_and_end_events(monkeypatch):
 
 
 def test_flow_failure_emits_failure_and_error_events(monkeypatch):
-    from services.flow_engine import PersistentFlowRunner
+    from runtime.flow_engine import PersistentFlowRunner
 
     events = []
 
@@ -148,10 +148,10 @@ def test_flow_failure_emits_failure_and_error_events(monkeypatch):
     def _capture_error(**kwargs):
         events.append(f"error.{kwargs['error_type']}")
 
-    monkeypatch.setattr("services.flow_engine.emit_system_event", _capture_event)
-    monkeypatch.setattr("services.flow_engine.emit_error_event", _capture_error)
+    monkeypatch.setattr("runtime.flow_engine.emit_system_event", _capture_event)
+    monkeypatch.setattr("runtime.flow_engine.emit_error_event", _capture_error)
     monkeypatch.setattr(
-        "services.flow_engine.execute_node",
+        "runtime.flow_engine.execute_node",
         lambda node_name, state, context: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
@@ -168,16 +168,16 @@ def test_flow_failure_emits_failure_and_error_events(monkeypatch):
 
 
 def test_loop_execution_emits_started_and_decision_events(monkeypatch):
-    from services.infinity_orchestrator import execute
+    from domain.infinity_orchestrator import execute
 
     events = []
 
     def _capture(**kwargs):
         events.append((kwargs["event_type"], kwargs.get("payload", {})))
 
-    monkeypatch.setattr("services.infinity_orchestrator.emit_system_event", _capture)
+    monkeypatch.setattr("domain.infinity_orchestrator.emit_system_event", _capture)
     monkeypatch.setattr(
-        "services.infinity_orchestrator.calculate_infinity_score",
+        "domain.infinity_orchestrator.calculate_infinity_score",
         lambda **kwargs: {
             "master_score": 71.0,
             "kpis": {
@@ -191,7 +191,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        "services.infinity_orchestrator.run_loop",
+        "domain.infinity_orchestrator.run_loop",
         lambda **kwargs: SimpleNamespace(
             id=uuid.uuid4(),
             trace_id="trace-loop",
@@ -201,7 +201,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "services.infinity_orchestrator.serialize_adjustment",
+        "domain.infinity_orchestrator.serialize_adjustment",
         lambda adjustment: {
             "id": str(adjustment.id),
             "trace_id": adjustment.trace_id,
@@ -219,7 +219,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
 
 
 def test_agent_step_success_emits_system_event(monkeypatch):
-    from services.nodus_adapter import agent_execute_step
+    from runtime.nodus_adapter import agent_execute_step
 
     events = []
     agent_run = SimpleNamespace(id=uuid.uuid4(), steps_completed=0, current_step=0)
@@ -244,9 +244,9 @@ def test_agent_step_success_emits_system_event(monkeypatch):
 
             return _Query()
 
-    monkeypatch.setattr("services.nodus_adapter.check_tool_capability", lambda **kwargs: {"ok": True})
-    monkeypatch.setattr("services.nodus_adapter.execute_tool", lambda **kwargs: {"success": True, "result": {"ok": True}, "error": None})
-    monkeypatch.setattr("services.nodus_adapter.emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
+    monkeypatch.setattr("runtime.nodus_adapter.check_tool_capability", lambda **kwargs: {"ok": True})
+    monkeypatch.setattr("runtime.nodus_adapter.execute_tool", lambda **kwargs: {"success": True, "result": {"ok": True}, "error": None})
+    monkeypatch.setattr("runtime.nodus_adapter.emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
 
     state = {
         "steps": [{"tool": "task.create", "args": {}, "risk_level": "low", "description": "d"}],
@@ -267,7 +267,7 @@ def test_agent_step_success_emits_system_event(monkeypatch):
 
 def test_memory_write_requires_system_event(monkeypatch):
     from memory.memory_capture_engine import MemoryCaptureEngine
-    from services.system_event_service import SystemEventEmissionError
+    from core.system_event_service import SystemEventEmissionError
 
     class _Dao:
         def save(self, **kwargs):
@@ -281,12 +281,12 @@ def test_memory_write_requires_system_event(monkeypatch):
     monkeypatch.setattr(engine, "_is_duplicate", lambda content: False)
     monkeypatch.setattr(engine, "_auto_link", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "services.memory_capture_engine.emit_system_event",
+        "memory.memory_capture_engine.emit_system_event",
         lambda **kwargs: (_ for _ in ()).throw(SystemEventEmissionError("missing memory event")),
     )
     emitted_errors = []
     monkeypatch.setattr(
-        "services.memory_capture_engine.emit_error_event",
+        "memory.memory_capture_engine.emit_error_event",
         lambda **kwargs: emitted_errors.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -303,7 +303,7 @@ def test_memory_write_requires_system_event(monkeypatch):
 
 def test_async_job_success_persists_execution_events(monkeypatch):
     from db.models.automation_log import AutomationLog
-    from services.async_job_service import _execute_job
+    from platform_layer.async_job_service import _execute_job
 
     db = _FakeDB()
     log = AutomationLog(
@@ -316,9 +316,9 @@ def test_async_job_success_persists_execution_events(monkeypatch):
     )
     db.add(log)
 
-    monkeypatch.setattr("services.async_job_service.SessionLocal", lambda: db)
+    monkeypatch.setattr("platform_layer.async_job_service.SessionLocal", lambda: db)
     monkeypatch.setitem(
-        __import__("services.async_job_service", fromlist=["_JOB_REGISTRY"])._JOB_REGISTRY,
+        __import__("platform_layer.async_job_service", fromlist=["_JOB_REGISTRY"])._JOB_REGISTRY,
         "test.job",
         lambda payload, session: {"ok": True, "payload": payload},
     )
@@ -370,3 +370,5 @@ def test_health_success_routes_emit_system_events(monkeypatch):
     assert health_router.liveness()["status"] == "ok"
     assert health_router.liveness_legacy_alias()["status"] == "ok"
     assert events == ["health.liveness.completed", "health.liveness.completed"]
+
+

@@ -10,7 +10,7 @@ from db.models.user_identity import (
     VALID_SPEED_VS_QUALITY,
     VALID_TONES,
 )
-from services.identity_service import IdentityService
+from domain.identity_service import IdentityService
 
 
 class TestUserIdentityModel:
@@ -95,3 +95,4 @@ class TestIdentityService:
         identity = service.get_or_create()
         assert result["changes_recorded"] == 1
         assert identity.evolution_log
+

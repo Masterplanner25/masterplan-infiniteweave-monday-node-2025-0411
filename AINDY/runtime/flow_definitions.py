@@ -204,7 +204,7 @@ def genesis_message_execute(state, context):
 @register_node("genesis_message_orchestrate")
 def genesis_message_orchestrate(state, context):
     try:
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -235,11 +235,11 @@ def memory_execution_run(state, context):
         from types import SimpleNamespace
 
         from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.execution_loop import ExecutionLoop
+        from runtime.memory_loop import ExecutionLoop
         from runtime.execution_registry import REGISTRY
         from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-        from services.genesis_ai import call_genesis_llm
-        from services.leadgen_service import create_lead_results
+        from domain.genesis_ai import call_genesis_llm
+        from domain.leadgen_service import create_lead_results
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -278,7 +278,7 @@ def memory_execution_run(state, context):
         task = SimpleNamespace(
             type=workflow,
             input=execution_input,
-            source=f"execution_loop:{workflow}",
+            source=f"memory_loop:{workflow}",
             tags=session_tags,
             metadata={
                 "trace_enabled": True,
@@ -312,7 +312,7 @@ def memory_execution_run(state, context):
 @register_node("memory_execution_orchestrate")
 def memory_execution_orchestrate(state, context):
     try:
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -448,8 +448,8 @@ def watcher_ingest_orchestrate(state, context):
     try:
         from uuid import UUID
 
-        from services.eta_service import recalculate_all_etas
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from analytics.eta_service import recalculate_all_etas
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         session_ended_count = state.get("watcher_session_ended_count") or 0
@@ -663,3 +663,4 @@ def register_all_flows() -> None:
         len(FLOW_REGISTRY),
         len(NODE_REGISTRY),
     )
+

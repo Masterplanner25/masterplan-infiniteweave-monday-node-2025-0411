@@ -11,7 +11,7 @@ router = APIRouter(prefix="/observability", tags=["Observability"])
 
 
 def _run_flow_observability(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -111,3 +111,4 @@ def get_rippletrace_graph(
         return _run_flow_observability("observability_rippletrace", {"trace_id": trace_id}, db, user_id)
     return _execute_observability(request, "observability_rippletrace", handler, db=db, user_id=user_id,
                                   input_payload={"trace_id": trace_id})
+

@@ -7,10 +7,10 @@ from typing import Any
 
 from core.execution_signal_helper import queue_system_event
 from db.database import SessionLocal
-from services.async_job_service import register_async_job, submit_async_job
+from platform_layer.async_job_service import register_async_job, submit_async_job
 from memory.embedding_service import generate_embedding
-from services.system_event_service import emit_error_event
-from services.system_event_types import SystemEventTypes
+from core.system_event_service import emit_error_event
+from core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -139,3 +139,5 @@ def process_pending_embedding(memory_id: str) -> dict[str, Any]:
         return process_embedding_job({"memory_id": memory_id, "trace_id": memory_id}, db)
     finally:
         db.close()
+
+

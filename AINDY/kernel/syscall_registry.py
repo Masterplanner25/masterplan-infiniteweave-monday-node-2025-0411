@@ -449,7 +449,7 @@ def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
         workflow_type (str)  — optional; default "syscall"
     """
     from db.database import SessionLocal
-    from services.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+    from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
 
     flow_name: str = payload.get("flow_name", "")
     if not flow_name:
@@ -484,7 +484,7 @@ def _handle_event_emit(payload: dict, context: SyscallContext) -> dict:
         payload    (dict) — optional; merged into the event payload
     """
     from db.database import SessionLocal
-    from services.system_event_service import emit_system_event
+    from core.system_event_service import emit_system_event
 
     event_type: str = payload.get("event_type", "")
     if not event_type:
@@ -769,3 +769,5 @@ def register_syscall(
         "[syscall_registry] registered '%s' (capability=%s, deprecated=%s)",
         name, capability, deprecated,
     )
+
+

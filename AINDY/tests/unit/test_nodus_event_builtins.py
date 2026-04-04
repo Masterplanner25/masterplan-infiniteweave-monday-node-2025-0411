@@ -35,7 +35,7 @@ def _make_event_builtins(
     context_state=None,
     raise_on_queue=False,
 ):
-    from services.nodus_builtins import NodusEventBuiltins
+    from runtime.nodus_builtins import NodusEventBuiltins
 
     ctx_state = context_state if context_state is not None else {}
     db = MagicMock()
@@ -61,21 +61,21 @@ def _make_event_builtins(
 
 class TestNodusWaitSignal:
     def test_carries_event_type(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         sig = NodusWaitSignal("approval.received")
         assert sig.event_type == "approval.received"
 
     def test_message_contains_event_type(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         sig = NodusWaitSignal("my.event")
         assert "my.event" in str(sig)
 
     def test_is_exception(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         assert issubclass(NodusWaitSignal, Exception)
 
     def test_can_be_caught_as_exception(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         caught = None
         try:
             raise NodusWaitSignal("x")
@@ -124,7 +124,7 @@ class TestEventEmit:
 
     def test_calls_queue_system_event_when_no_sink(self):
         b, _ = _make_event_builtins()
-        with patch("services.nodus_builtins.NodusEventBuiltins._queue") as mock_q:
+        with patch("runtime.nodus_builtins.NodusEventBuiltins._queue") as mock_q:
             b.emit("event.a", {"data": 1})
         mock_q.assert_called_once()
         args = mock_q.call_args
@@ -154,28 +154,28 @@ class TestEventEmit:
 
 class TestEventWaitWaitPath:
     def test_raises_nodus_wait_signal(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         b, _ = _make_event_builtins()
         with pytest.raises(NodusWaitSignal) as exc_info:
             b.wait("approval.received")
         assert exc_info.value.event_type == "approval.received"
 
     def test_sets_wait_requested_flag(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         b, ctx_state = _make_event_builtins()
         with pytest.raises(NodusWaitSignal):
             b.wait("foo.event")
         assert ctx_state.get("nodus_wait_requested") is True
 
     def test_sets_wait_event_type_flag(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         b, ctx_state = _make_event_builtins()
         with pytest.raises(NodusWaitSignal):
             b.wait("bar.event")
         assert ctx_state.get("nodus_wait_event_type") == "bar.event"
 
     def test_emits_wait_requested_system_event(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         emitted_types = []
 
         def spy_sink(event_type, payload):
@@ -188,7 +188,7 @@ class TestEventWaitWaitPath:
         assert "nodus.event.wait_requested" in emitted_types
 
     def test_queue_error_during_wait_does_not_prevent_signal(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         b, _ = _make_event_builtins(raise_on_queue=True)
         with pytest.raises(NodusWaitSignal):
             b.wait("x")  # _queue raises, but NodusWaitSignal still propagates
@@ -222,7 +222,7 @@ class TestEventWaitResumePath:
         assert "nodus.event.wait_resumed" in emitted_types
 
     def test_different_event_still_waits(self):
-        from services.nodus_builtins import NodusWaitSignal
+        from runtime.nodus_builtins import NodusWaitSignal
         ctx_state = {"nodus_received_events": {"other.event": {}}}
         b, _ = _make_event_builtins(context_state=ctx_state)
         with pytest.raises(NodusWaitSignal) as exc_info:
@@ -243,7 +243,7 @@ class TestAdapterEventIntegration:
 
     def _run_with_flags(self, *, set_wait_flag=False, raise_wait_signal=False, event_type="foo.event"):
         """Run adapter._execute() with controlled wait behaviour."""
-        from services.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
+        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
 
         captured_globals: dict = {}
 
@@ -255,7 +255,7 @@ class TestAdapterEventIntegration:
                 initial_globals["event"]._context_state["nodus_wait_requested"] = True
                 initial_globals["event"]._context_state["nodus_wait_event_type"] = event_type
             if raise_wait_signal:
-                from services.nodus_builtins import NodusWaitSignal
+                from runtime.nodus_builtins import NodusWaitSignal
                 raise NodusWaitSignal(event_type)
             return {"ok": True, "error": None}
 
@@ -271,8 +271,8 @@ class TestAdapterEventIntegration:
 
         with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
              patch("bridge.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("services.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("services.nodus_builtins.NodusEventBuiltins") as MockEvent:
+             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("runtime.nodus_builtins.NodusEventBuiltins") as MockEvent:
             real_builtins, _ = _make_event_builtins()
             real_builtins._context_state = ctx.state
             MockEvent.return_value = real_builtins
@@ -295,7 +295,7 @@ class TestAdapterEventIntegration:
         assert result.raw_result["wait_for"] == "my.event"
 
     def test_state_flag_cleared_after_wait(self):
-        from services.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
+        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu-1")
         ctx.state["nodus_wait_requested"] = True
         ctx.state["nodus_wait_event_type"] = "x"
@@ -310,8 +310,8 @@ class TestAdapterEventIntegration:
 
         with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
              patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("services.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("services.nodus_builtins.NodusEventBuiltins", return_value=mock_event):
+             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("runtime.nodus_builtins.NodusEventBuiltins", return_value=mock_event):
             adapter = NodusRuntimeAdapter(db=MagicMock())
             adapter._execute("x", "<t>", ctx)
 
@@ -319,7 +319,7 @@ class TestAdapterEventIntegration:
         assert "nodus_wait_event_type" not in ctx.state
 
     def test_emitted_merged_into_result(self):
-        from services.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
+        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
 
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu-1")
         mock_runtime = MagicMock()
@@ -336,8 +336,8 @@ class TestAdapterEventIntegration:
 
         with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
              patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("services.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("services.nodus_builtins.NodusEventBuiltins", return_value=real_event):
+             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("runtime.nodus_builtins.NodusEventBuiltins", return_value=real_event):
             result = NodusRuntimeAdapter(db=MagicMock())._execute("x", "<t>", ctx)
 
         assert any(e["event_type"] == "injected.event" for e in result.emitted_events)
@@ -355,7 +355,7 @@ class TestNodusExecuteNodeWait:
 
     def _make_waiting_result(self, wait_for="approval.received"):
         """Create a NodusExecutionResult with status='waiting'."""
-        from services.nodus_runtime_adapter import NodusExecutionResult
+        from runtime.nodus_runtime_adapter import NodusExecutionResult
         return NodusExecutionResult(
             output_state={},
             emitted_events=[],
@@ -366,7 +366,7 @@ class TestNodusExecuteNodeWait:
 
     def _run_node(self, state: dict, wait_for="approval.received"):
         """Call nodus_execute_node with adapter returning waiting status."""
-        from services.nodus_adapter import nodus_execute_node
+        from runtime.nodus_adapter import nodus_execute_node
 
         context = {
             "db": MagicMock(),
@@ -380,8 +380,8 @@ class TestNodusExecuteNodeWait:
 
         waiting_result = self._make_waiting_result(wait_for=wait_for)
 
-        with patch("services.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
-             patch("services.nodus_adapter.queue_system_event"):
+        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
+             patch("runtime.nodus_adapter.queue_system_event"):
             mock_adapter = MagicMock()
             mock_adapter.run_script.return_value = waiting_result
             mock_adapter.run_file.return_value = waiting_result
@@ -409,8 +409,8 @@ class TestNodusExecuteNodeWait:
         assert result["output_patch"]["nodus_wait_event_type"] == "my.event"
 
     def test_wait_without_wait_for_returns_failure(self):
-        from services.nodus_runtime_adapter import NodusExecutionResult
-        from services.nodus_adapter import nodus_execute_node
+        from runtime.nodus_runtime_adapter import NodusExecutionResult
+        from runtime.nodus_adapter import nodus_execute_node
 
         bad_result = NodusExecutionResult(
             output_state={},
@@ -423,8 +423,8 @@ class TestNodusExecuteNodeWait:
             "db": MagicMock(), "user_id": "u1", "run_id": "r1",
             "trace_id": "t1", "flow_name": "f", "memory_context": {}, "attempts": {},
         }
-        with patch("services.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
-             patch("services.nodus_adapter.queue_system_event"):
+        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
+             patch("runtime.nodus_adapter.queue_system_event"):
             MockA.return_value.run_script.return_value = bad_result
             result = nodus_execute_node(
                 state={"nodus_script": "x"},
@@ -440,8 +440,8 @@ class TestNodusExecuteResumeBridge:
 
     def _run_node_with_resume_state(self, extra_state: dict | None = None):
         """Run the node with a state that simulates route_event() injection."""
-        from services.nodus_adapter import nodus_execute_node
-        from services.nodus_runtime_adapter import NodusExecutionResult
+        from runtime.nodus_adapter import nodus_execute_node
+        from runtime.nodus_runtime_adapter import NodusExecutionResult
 
         # Simulate the state after route_event() injects the received event
         state = {
@@ -465,8 +465,8 @@ class TestNodusExecuteResumeBridge:
 
         captured_ctx: list = []
 
-        with patch("services.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
-             patch("services.nodus_adapter.queue_system_event"):
+        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
+             patch("runtime.nodus_adapter.queue_system_event"):
             mock_adapter = MagicMock()
             mock_adapter.run_script.return_value = success_result
 
@@ -498,8 +498,8 @@ class TestNodusExecuteResumeBridge:
         assert received["approval.received"]["user"] == "alice"
 
     def test_no_bridge_when_no_pending_wait(self):
-        from services.nodus_adapter import nodus_execute_node
-        from services.nodus_runtime_adapter import NodusExecutionResult
+        from runtime.nodus_adapter import nodus_execute_node
+        from runtime.nodus_runtime_adapter import NodusExecutionResult
 
         # State has event but no nodus_wait_event_type — should NOT bridge
         state = {
@@ -516,8 +516,8 @@ class TestNodusExecuteResumeBridge:
         }
         captured_ctx: list = []
 
-        with patch("services.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
-             patch("services.nodus_adapter.queue_system_event"):
+        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
+             patch("runtime.nodus_adapter.queue_system_event"):
             def cap(script, ctx):
                 captured_ctx.append(ctx)
                 return success
@@ -527,3 +527,4 @@ class TestNodusExecuteResumeBridge:
 
         ctx = captured_ctx[0]
         assert ctx.state.get("nodus_received_events", {}) == {}
+

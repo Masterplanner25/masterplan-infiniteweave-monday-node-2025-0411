@@ -227,7 +227,7 @@ class TestExecutionLoopEndpoints:
         self, client, auth_headers, mock_db, mocker
     ):
         mocker.patch(
-            "services.embedding_service.generate_query_embedding",
+            "memory.embedding_service.generate_query_embedding",
             return_value=[0.1] * 1536,
         )
         mocker.patch(
@@ -293,7 +293,7 @@ class TestCaptureEngineIntegration:
 
     def test_task_services_uses_capture_engine(self):
         import inspect
-        from services import task_services
+        from domain import task_services
         source = inspect.getsource(task_services)
         assert (
             "MemoryCaptureEngine" in source
@@ -303,7 +303,7 @@ class TestCaptureEngineIntegration:
 
     def test_genesis_uses_capture_engine(self):
         import inspect
-        from services import genesis_ai
+        from domain import genesis_ai
         source = inspect.getsource(genesis_ai)
         assert (
             "MemoryCaptureEngine" in source

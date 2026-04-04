@@ -224,7 +224,7 @@ class ExecutionPipeline:
         if db is None:
             return None
         try:
-            from services.system_event_service import emit_system_event
+            from core.system_event_service import emit_system_event
 
             event_id = emit_system_event(
                 db=db,
@@ -245,7 +245,7 @@ class ExecutionPipeline:
         if not parent_event_id:
             return None
         try:
-            from services.trace_context import set_parent_event_id
+            from utils.trace_context import set_parent_event_id
 
             return set_parent_event_id(parent_event_id)
         except Exception:
@@ -256,7 +256,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from services.trace_context import reset_parent_event_id
+            from utils.trace_context import reset_parent_event_id
 
             reset_parent_event_id(token)
         except Exception:
@@ -476,7 +476,7 @@ class ExecutionPipeline:
 
     def _safe_set_pipeline_active(self) -> Any:
         try:
-            from services.trace_context import set_pipeline_active
+            from utils.trace_context import set_pipeline_active
 
             return set_pipeline_active(True)
         except Exception:
@@ -487,7 +487,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from services.trace_context import reset_pipeline_active
+            from utils.trace_context import reset_pipeline_active
 
             reset_pipeline_active(token)
         except Exception:
@@ -495,7 +495,7 @@ class ExecutionPipeline:
 
     def _safe_set_current_execution_context(self, ctx: ExecutionContext) -> Any:
         try:
-            from services.trace_context import set_current_execution_context
+            from utils.trace_context import set_current_execution_context
 
             return set_current_execution_context(ctx)
         except Exception:
@@ -506,8 +506,9 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from services.trace_context import reset_current_execution_context
+            from utils.trace_context import reset_current_execution_context
 
             reset_current_execution_context(token)
         except Exception:
             logger.debug("execution.current_ctx_reset_skipped", exc_info=True)
+

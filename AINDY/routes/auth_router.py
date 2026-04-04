@@ -14,7 +14,7 @@ from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from services.auth_service import create_access_token, register_user, authenticate_user
-from services.signup_initialization_service import initialize_signup_state
+from domain.signup_initialization_service import initialize_signup_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -90,3 +90,4 @@ async def login(
         metadata={"db": db},
         input_payload=body.model_dump(),
     )
+

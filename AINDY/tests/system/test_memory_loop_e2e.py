@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from runtime.execution_loop import ExecutionLoop
+from runtime.memory_loop import ExecutionLoop
 from runtime.memory import MemoryOrchestrator
 
 
@@ -136,7 +136,7 @@ class TestMemoryLoopE2E:
                 "node_type": node.node_type,
             }
 
-        monkeypatch.setattr("runtime.execution_loop.create_memory_node", fake_create_memory_node)
+        monkeypatch.setattr("runtime.memory_loop.create_memory_node", fake_create_memory_node)
 
         orchestrator = MemoryOrchestrator(InMemoryDAO)
 
@@ -203,7 +203,7 @@ class TestMemoryLoopE2E:
             db.nodes[node_id] = node
             return {"id": str(node_id)}
 
-        monkeypatch.setattr("runtime.execution_loop.create_memory_node", fake_create_memory_node)
+        monkeypatch.setattr("runtime.memory_loop.create_memory_node", fake_create_memory_node)
 
         orchestrator = MemoryOrchestrator(FailingDAO)
 

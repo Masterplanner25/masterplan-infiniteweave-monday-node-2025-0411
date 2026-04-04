@@ -27,7 +27,7 @@ import pytest
 
 def _make_builtins(dao_return_recall=None, dao_raise=None, dao_save_return=None):
     """Return a NodusMemoryBuiltins with a mocked DAO injected via instance override."""
-    from services.nodus_builtins import NodusMemoryBuiltins
+    from runtime.nodus_builtins import NodusMemoryBuiltins
 
     db = MagicMock()
     user_id = "user-abc"
@@ -76,17 +76,17 @@ def _node_dict(**overrides):
 
 class TestConstruction:
     def test_stores_user_id(self):
-        from services.nodus_builtins import NodusMemoryBuiltins
+        from runtime.nodus_builtins import NodusMemoryBuiltins
         b = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         assert b._user_id == "u1"
 
     def test_writes_starts_empty(self):
-        from services.nodus_builtins import NodusMemoryBuiltins
+        from runtime.nodus_builtins import NodusMemoryBuiltins
         b = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         assert b._writes == []
 
     def test_separate_instances_dont_share_writes(self):
-        from services.nodus_builtins import NodusMemoryBuiltins
+        from runtime.nodus_builtins import NodusMemoryBuiltins
         b1 = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         b2 = NodusMemoryBuiltins(db=MagicMock(), user_id="u2")
         b1._writes.append({"x": 1})
@@ -97,7 +97,7 @@ class TestConstruction:
 
 class TestSafeNode:
     def _safe(self, node):
-        from services.nodus_builtins import NodusMemoryBuiltins
+        from runtime.nodus_builtins import NodusMemoryBuiltins
         return NodusMemoryBuiltins._safe_node(node)
 
     def test_dict_all_fields_extracted(self):
@@ -382,7 +382,7 @@ class TestAdapterIntegration:
         Run NodusRuntimeAdapter._execute() with all external dependencies mocked.
         Returns (result, captured_initial_globals).
         """
-        from services.nodus_runtime_adapter import (
+        from runtime.nodus_runtime_adapter import (
             NodusRuntimeAdapter,
             NodusExecutionContext,
         )
@@ -415,7 +415,7 @@ class TestAdapterIntegration:
         # All three are lazy imports inside _execute() — patch at source module
         with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
              patch("bridge.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("services.nodus_builtins.NodusMemoryBuiltins", return_value=mock_builtins):
+             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_builtins):
             adapter = NodusRuntimeAdapter(db=db)
             result = adapter._execute("let x = 1", "<test>", ctx)
 
@@ -457,7 +457,7 @@ class TestAdapterIntegration:
         assert result.memory_writes == []
 
     def test_builtins_constructed_with_correct_user_id(self):
-        from services.nodus_runtime_adapter import (
+        from runtime.nodus_runtime_adapter import (
             NodusRuntimeAdapter,
             NodusExecutionContext,
         )
@@ -466,7 +466,7 @@ class TestAdapterIntegration:
 
         with patch("nodus.runtime.embedding.NodusRuntime") as MockRuntime, \
              patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("services.nodus_builtins.NodusMemoryBuiltins") as MockBuiltins:
+             patch("runtime.nodus_builtins.NodusMemoryBuiltins") as MockBuiltins:
             MockRuntime.return_value.run_source.return_value = {"ok": True, "error": None}
             mock_instance = MagicMock()
             mock_instance._writes = []
@@ -476,3 +476,4 @@ class TestAdapterIntegration:
             adapter._execute("let x = 1", "<t>", ctx)
 
             MockBuiltins.assert_called_once_with(db=db, user_id="specific-user")
+

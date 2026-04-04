@@ -457,7 +457,7 @@ class TestFlowRunHandler:
         mock_registry = {}
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock()),
-            "services.flow_engine": MagicMock(
+            "runtime.flow_engine": MagicMock(
                 FLOW_REGISTRY=mock_registry,
                 PersistentFlowRunner=MagicMock(),
             ),
@@ -474,7 +474,7 @@ class TestFlowRunHandler:
         mock_flow = {"start": "node_a", "edges": {}}
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.flow_engine": MagicMock(
+            "runtime.flow_engine": MagicMock(
                 FLOW_REGISTRY={"MY_FLOW": mock_flow},
                 PersistentFlowRunner=MagicMock(return_value=mock_runner),
             ),
@@ -505,7 +505,7 @@ class TestEventEmitHandler:
         mock_emit = MagicMock(return_value="ev-123")
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.system_event_service": MagicMock(emit_system_event=mock_emit),
+            "core.system_event_service": MagicMock(emit_system_event=mock_emit),
         }):
             result = _handle_event_emit({"event_type": "task.done"}, ctx)
         mock_emit.assert_called_once()
@@ -523,7 +523,7 @@ class TestEventEmitHandler:
         mock_emit = MagicMock(return_value=ev_id)
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "services.system_event_service": MagicMock(emit_system_event=mock_emit),
+            "core.system_event_service": MagicMock(emit_system_event=mock_emit),
         }):
             result = _handle_event_emit({"event_type": "x"}, ctx)
         assert result["event_id"] == str(ev_id)
@@ -553,7 +553,7 @@ class TestNodusIntegration:
 
     def test_sys_key_in_initial_globals(self):
         """After _execute() builds initial_globals, 'sys' must be callable."""
-        from services.nodus_runtime_adapter import NodusRuntimeAdapter
+        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter
         # We check that the code path to build initial_globals includes 'sys'
         # by inspecting the source rather than running the VM (VM not required).
         import inspect
@@ -656,3 +656,5 @@ class TestQuotaEnforcement:
             result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
 
         assert result["status"] == "success"
+
+

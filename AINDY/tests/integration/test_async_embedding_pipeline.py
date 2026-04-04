@@ -81,7 +81,7 @@ def test_memory_recall_falls_back_to_text_when_embedding_missing(
     )
 
     monkeypatch.setattr(
-        "services.embedding_service.generate_query_embedding",
+        "memory.embedding_service.generate_query_embedding",
         lambda query: [0.0] * 1536,
     )
     monkeypatch.setattr(dao, "find_similar", lambda **kwargs: [])
@@ -113,7 +113,7 @@ def test_embedding_job_updates_memory_status_after_background_processing(
     )
 
     monkeypatch.setattr(
-        "services.embedding_jobs.generate_embedding",
+        "memory.embedding_jobs.generate_embedding",
         lambda text: [0.25] * 1536,
     )
 

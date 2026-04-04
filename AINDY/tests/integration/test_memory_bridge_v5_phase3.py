@@ -123,7 +123,7 @@ class TestCaptureEngineNamespacing:
 
     def test_genesis_uses_genesis_namespace(self):
         import inspect
-        from services import genesis_ai
+        from domain import genesis_ai
         source = inspect.getsource(genesis_ai)
         assert "genesis" in source and "agent_namespace" in source, (
             "Genesis should use agent_namespace='genesis'"

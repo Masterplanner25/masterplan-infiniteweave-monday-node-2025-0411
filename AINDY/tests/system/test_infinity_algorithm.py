@@ -92,52 +92,52 @@ class TestScoreModels:
 class TestKPICalculators:
 
     def test_normalize_min(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         assert _normalize(0, 0, 100) == 0.0
 
     def test_normalize_max(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         assert _normalize(100, 0, 100) == 100.0
 
     def test_normalize_mid(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         assert _normalize(50, 0, 100) == 50.0
 
     def test_normalize_clamp_below(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         assert _normalize(-10, 0, 100) == 0.0
 
     def test_normalize_clamp_above(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         assert _normalize(110, 0, 100) == 100.0
 
     def test_normalize_degenerate_range(self):
-        from services.infinity_service import _normalize
+        from domain.infinity_service import _normalize
         # min == max → neutral
         assert _normalize(5, 5, 5) == 50.0
 
     def test_sigmoid_at_midpoint(self):
-        from services.infinity_service import _sigmoid_score
+        from domain.infinity_service import _sigmoid_score
         score = _sigmoid_score(5.0, 5.0)
         assert abs(score - 50.0) < 1.0
 
     def test_sigmoid_above_midpoint(self):
-        from services.infinity_service import _sigmoid_score
+        from domain.infinity_service import _sigmoid_score
         assert _sigmoid_score(8.0, 5.0) > 50.0
 
     def test_sigmoid_below_midpoint(self):
-        from services.infinity_service import _sigmoid_score
+        from domain.infinity_service import _sigmoid_score
         assert _sigmoid_score(2.0, 5.0) < 50.0
 
     def test_sigmoid_no_overflow(self):
-        from services.infinity_service import _sigmoid_score
+        from domain.infinity_service import _sigmoid_score
         # Very large values should not raise
         score = _sigmoid_score(1e9, 0.0, steepness=1.0)
         assert 0.0 <= score <= 100.0
 
     def test_execution_speed_no_tasks(self):
         """No tasks → neutral score (50.0)."""
-        from services.infinity_service import calculate_execution_speed
+        from domain.infinity_service import calculate_execution_speed
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.count.return_value = 0
@@ -149,7 +149,7 @@ class TestKPICalculators:
 
     def test_focus_quality_no_watcher_data(self):
         """No watcher sessions → neutral score (50.0)."""
-        from services.infinity_service import calculate_focus_quality
+        from domain.infinity_service import calculate_focus_quality
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = []
@@ -160,7 +160,7 @@ class TestKPICalculators:
 
     def test_masterplan_progress_no_plan(self):
         """No active plan → neutral score (50.0)."""
-        from services.infinity_service import calculate_masterplan_progress
+        from domain.infinity_service import calculate_masterplan_progress
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -172,7 +172,7 @@ class TestKPICalculators:
 
     def test_decision_efficiency_no_tasks_no_arm(self):
         """No tasks, no ARM → score uses neutral defaults."""
-        from services.infinity_service import calculate_decision_efficiency
+        from domain.infinity_service import calculate_decision_efficiency
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.count.return_value = 0
@@ -183,7 +183,7 @@ class TestKPICalculators:
 
     def test_ai_productivity_boost_no_arm(self):
         """No ARM analyses → score near 50 (sigmoid at 0 vs midpoint=5)."""
-        from services.infinity_service import calculate_ai_productivity_boost
+        from domain.infinity_service import calculate_ai_productivity_boost
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.order_by.return_value.all.return_value = []
@@ -194,7 +194,7 @@ class TestKPICalculators:
 
     def test_all_calculators_return_0_to_100(self):
         """All KPI scores must be 0-100."""
-        import services.infinity_service as svc
+        import domain.infinity_service as svc
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.count.return_value = 0
@@ -219,7 +219,7 @@ class TestKPICalculators:
 
     def test_all_calculators_return_tuple(self):
         """All KPI calculators must return (float, int)."""
-        import services.infinity_service as svc
+        import domain.infinity_service as svc
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.count.return_value = 0
@@ -283,26 +283,26 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_returns_dict(self, mocker):
         """calculate_infinity_score returns expected shape."""
-        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+        from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
-            "services.infinity_service.calculate_execution_speed",
+            "domain.infinity_service.calculate_execution_speed",
             return_value=(75.0, 10)
         )
         mocker.patch(
-            "services.infinity_service.calculate_decision_efficiency",
+            "domain.infinity_service.calculate_decision_efficiency",
             return_value=(65.0, 15)
         )
         mocker.patch(
-            "services.infinity_service.calculate_ai_productivity_boost",
+            "domain.infinity_service.calculate_ai_productivity_boost",
             return_value=(80.0, 5)
         )
         mocker.patch(
-            "services.infinity_service.calculate_focus_quality",
+            "domain.infinity_service.calculate_focus_quality",
             return_value=(70.0, 8)
         )
         mocker.patch(
-            "services.infinity_service.calculate_masterplan_progress",
+            "domain.infinity_service.calculate_masterplan_progress",
             return_value=(60.0, 20)
         )
 
@@ -341,7 +341,7 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_trigger_event_stored(self, mocker):
         """trigger_event is passed through to result."""
-        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+        from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         for kpi in [
             "calculate_execution_speed",
@@ -350,7 +350,7 @@ class TestMasterScoreCalculation:
             "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"services.infinity_service.{kpi}", return_value=(50.0, 5))
+            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(50.0, 5))
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -361,10 +361,10 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_never_raises(self, mocker):
         """calculate_infinity_score returns None on exception, never raises."""
-        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+        from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
-            "services.infinity_service.calculate_execution_speed",
+            "domain.infinity_service.calculate_execution_speed",
             side_effect=Exception("deliberate failure"),
         )
 
@@ -375,14 +375,14 @@ class TestMasterScoreCalculation:
 
     def test_calculate_infinity_score_master_in_range(self, mocker):
         """Master score is always 0-100."""
-        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+        from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         for kpi in [
             "calculate_execution_speed", "calculate_decision_efficiency",
             "calculate_ai_productivity_boost", "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"services.infinity_service.{kpi}", return_value=(100.0, 1))
+            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(100.0, 1))
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -394,7 +394,7 @@ class TestMasterScoreCalculation:
 
     def test_score_delta_computed(self, mocker):
         """score_delta = new master - previous master."""
-        from services.infinity_service import calculate_infinity_score, orchestrator_score_context
+        from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
         from db.models.user_score import UserScore
 
         for kpi in [
@@ -402,7 +402,7 @@ class TestMasterScoreCalculation:
             "calculate_ai_productivity_boost", "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"services.infinity_service.{kpi}", return_value=(80.0, 5))
+            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(80.0, 5))
 
         prev = MagicMock(spec=UserScore)
         prev.master_score = 70.0
@@ -420,7 +420,7 @@ class TestMasterScoreCalculation:
         assert abs(result["metadata"]["score_delta"] - expected_delta) < 0.1
 
     def test_calculate_infinity_score_raises_outside_orchestrator(self):
-        from services.infinity_service import calculate_infinity_score
+        from domain.infinity_service import calculate_infinity_score
 
         assert calculate_infinity_score("u1", MagicMock()) is None
 
@@ -447,7 +447,7 @@ class TestScoreEndpoints:
         self, client, auth_headers, mocker
     ):
         mocker.patch(
-            "services.infinity_orchestrator.execute",
+            "domain.infinity_orchestrator.execute",
             return_value=None,
         )
 
@@ -490,7 +490,7 @@ class TestEventTriggers:
     def test_task_services_triggers_score(self):
         """task_services.py calls the Infinity orchestrator on task completion."""
         import inspect
-        from services import task_services
+        from domain import task_services
         src = inspect.getsource(task_services)
         assert "infinity_orchestrator" in src, "task_services not using Infinity orchestrator"
 
@@ -516,7 +516,7 @@ class TestEventTriggers:
     def test_daily_score_job_registered(self):
         """Daily Infinity score job is wired in _register_system_jobs."""
         import inspect
-        import services.scheduler_service as svc
+        import platform_layer.scheduler_service as svc
 
         src = inspect.getsource(svc._register_system_jobs)
         assert "daily_infinity_score_recalculation" in src, \
@@ -527,13 +527,13 @@ class TestEventTriggers:
     def test_task_completion_trigger_is_fire_and_forget(self):
         """Task completion orchestration is wrapped so side effects remain non-fatal."""
         import inspect
-        from services import task_services
+        from domain import task_services
         src = inspect.getsource(task_services.orchestrate_task_completion)
         assert "except" in src, "orchestrate_task_completion missing exception handler"
 
     def test_recalculate_all_scores_function_exists(self):
         """_recalculate_all_scores is defined in scheduler_service."""
-        from services import scheduler_service
+        from platform_layer import scheduler_service
         assert hasattr(scheduler_service, "_recalculate_all_scores"), \
             "_recalculate_all_scores not in scheduler_service"
 
@@ -641,3 +641,5 @@ class TestAPIFunctionsInApiJs:
         import pathlib
         src = pathlib.Path("client/src/components/Dashboard.jsx").read_text()
         assert "ScoreRing" in src or "master_score" in src or "master" in src.lower()
+
+

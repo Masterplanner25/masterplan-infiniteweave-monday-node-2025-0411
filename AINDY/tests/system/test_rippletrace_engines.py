@@ -59,16 +59,15 @@ from db.models import (
     ScoreSnapshotDB,
     StrategyDB,
 )
-from services import (
-    content_generator,
+from analytics import (
+    causal_engine,
     delta_engine,
     learning_engine,
     playbook_engine,
     prediction_engine,
     recommendation_engine,
-    strategy_engine,
-    causal_engine,
 )
+from domain import content_generator, strategy_engine
 
 
 class FakeQuery:

@@ -6,13 +6,13 @@ from unittest.mock import patch
 from db.models.agent_event import AgentEvent
 from db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
 from db.models.system_event import SystemEvent
-from services.agent_runtime import approve_run, create_run, execute_run
-from services.capability_service import (
+from agents.agent_runtime import approve_run, create_run, execute_run
+from agents.capability_service import (
     check_tool_capability,
     get_auto_grantable_tools,
     mint_token,
 )
-from services.nodus_adapter import agent_execute_step
+from runtime.nodus_adapter import agent_execute_step
 
 
 VALID_PLAN = {
@@ -80,7 +80,7 @@ def test_create_run_auto_mints_capability_token(db_session, test_user):
     db_session.add(trust)
     db_session.commit()
 
-    with patch("services.agent_runtime.generate_plan", return_value=VALID_PLAN):
+    with patch("agents.agent_runtime.generate_plan", return_value=VALID_PLAN):
         run = create_run("follow up with prospect", test_user.id, db_session)
 
     persisted = db_session.get(AgentRun, uuid.UUID(run["run_id"]))
@@ -106,7 +106,7 @@ def test_approve_run_mints_token_and_executes_real_path(db_session, test_user):
         db_session.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    with patch("services.nodus_adapter.NodusAgentAdapter.execute_with_flow", side_effect=_complete_run):
+    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", side_effect=_complete_run):
         approved = approve_run(run.id, test_user.id, db_session)
 
     db_session.refresh(run)
@@ -201,3 +201,4 @@ def test_agent_execute_step_denial_persists_failed_step_and_events(db_session, t
     assert "Capability denied" in step.error_message
     assert denied.payload["tool_name"] == "arm.generate"
     assert system_event.payload["tool_name"] == "arm.generate"
+

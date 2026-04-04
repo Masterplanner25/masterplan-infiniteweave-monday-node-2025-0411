@@ -111,7 +111,7 @@ class TestCreateMemoryNodeWrongTable:
 
         mock_db.refresh.side_effect = lambda obj: None
 
-        with patch("services.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=refreshed):
+        with patch("memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=refreshed):
             result = create_memory_node(
                 content="Some content",
                 source="pytest",
@@ -296,13 +296,13 @@ class TestPythonFallbackSimilarity:
     """
 
     def test_python_identical_vectors(self):
-        from services.calculation_services import semantic_similarity
+        from analytics.calculation_services import semantic_similarity
         v = [1.0, 2.0, 3.0]
         result = semantic_similarity(v, v)
         assert result == pytest.approx(1.0, abs=1e-9)
 
     def test_python_orthogonal_vectors(self):
-        from services.calculation_services import semantic_similarity
+        from analytics.calculation_services import semantic_similarity
         a = [1.0, 0.0, 0.0]
         b = [0.0, 1.0, 0.0]
         result = semantic_similarity(a, b)
@@ -310,14 +310,14 @@ class TestPythonFallbackSimilarity:
 
     def test_python_empty_vectors_returns_zero(self):
         """Empty vectors → denom=0 → returns 0.0 (no error)."""
-        from services.calculation_services import semantic_similarity
+        from analytics.calculation_services import semantic_similarity
         result = semantic_similarity([], [])
         assert result == 0.0
 
     def test_python_mismatched_length_behavior(self):
 
         """Tests behavior for mismatched vector lengths."""
-        from services import calculation_services
+        from analytics import calculation_services
         a = [1.0, 0.0, 0.0]
         b = [1.0, 0.0, 0.0, 99.0]
         try:

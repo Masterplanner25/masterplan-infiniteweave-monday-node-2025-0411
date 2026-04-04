@@ -19,10 +19,10 @@ from typing import Optional
 
 from sqlalchemy import text
 from core.execution_signal_helper import queue_memory_capture, queue_system_event
-from services.observability_events import emit_observability_event
-from services.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
-from services.system_event_service import emit_error_event
-from services.system_event_types import SystemEventTypes
+from core.observability_events import emit_observability_event
+from domain.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
+from core.system_event_service import emit_error_event
+from core.system_event_types import SystemEventTypes
 from utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ class MemoryCaptureEngine:
         force: bypass significance check (always store)
         """
         try:
-            from services.trace_context import is_pipeline_active
+            from utils.trace_context import is_pipeline_active
 
             if is_pipeline_active() and not allow_when_pipeline_active:
                 return None
@@ -541,3 +541,4 @@ def capture_system_event_as_memory(db, event) -> Optional[dict]:
         },
         force=True,
     )
+

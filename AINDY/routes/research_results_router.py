@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -134,3 +134,4 @@ def delete_search_history_detail(
         return _run_flow_research("search_history_delete", {"history_id": history_id}, db, user_id)
     return _execute_research(request, "search.history.delete", handler, db=db, user_id=user_id,
                              input_payload={"history_id": history_id})
+

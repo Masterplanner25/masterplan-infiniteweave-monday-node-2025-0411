@@ -69,7 +69,7 @@ class TestWritePathFix:
 
         mock_db = MagicMock()
 
-        with patch("services.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=mock_persisted):
+        with patch("memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=mock_persisted):
             result = create_memory_node(
                 content="test content",
                 source="unittest",
@@ -360,8 +360,8 @@ class TestCreateMemoryLinkUnit:
         tgt = str(uuid.uuid4())
         expected = {"id": str(uuid.uuid4()), "link_type": "related"}
 
-        # create_memory_link uses services.memory_persistence.MemoryNodeDAO
-        with patch("services.memory_persistence.MemoryNodeDAO.create_link", return_value=expected) as mock_create:
+        # create_memory_link uses memory.memory_persistence.MemoryNodeDAO
+        with patch("memory.memory_persistence.MemoryNodeDAO.create_link", return_value=expected) as mock_create:
             result = create_memory_link(src, tgt, link_type="related", db=mock_db)
             mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 
@@ -374,7 +374,7 @@ class TestCreateMemoryLinkUnit:
         mock_db = MagicMock()
         src = str(uuid.uuid4())
         tgt = str(uuid.uuid4())
-        with patch("services.memory_persistence.MemoryNodeDAO.create_link", return_value={}) as mock_create:
+        with patch("memory.memory_persistence.MemoryNodeDAO.create_link", return_value={}) as mock_create:
             create_memory_link(src, tgt, db=mock_db)
             mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 

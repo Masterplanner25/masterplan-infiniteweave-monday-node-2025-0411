@@ -15,7 +15,7 @@ import threading
 from openai import OpenAI
 
 from config import settings
-from services.external_call_service import perform_external_call
+from platform_layer.external_call_service import perform_external_call
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
@@ -112,3 +112,4 @@ def cosine_similarity(a: list, b: list) -> float:
         return _mbr.semantic_similarity(a, b)
     except (ImportError, AttributeError, Exception):
         return cosine_similarity_python(a, b)
+

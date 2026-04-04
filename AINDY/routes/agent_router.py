@@ -39,7 +39,7 @@ def _current_user_id(current_user):
 
 def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
     """Run a flow and interpret special response markers from agent nodes."""
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=str(user_id))
     data = result.get("data") or {}
 
@@ -226,3 +226,4 @@ def update_trust_settings(
         "auto_execute_medium": body.auto_execute_medium,
         "allowed_auto_grant_tools": body.allowed_auto_grant_tools,
     }, db, user_id)
+

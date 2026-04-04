@@ -47,7 +47,7 @@ FastAPI app (main.py)
 - `main.py` owns app bootstrapping, middleware, lifespan, and root route only.
 - Routers are registered from `routes/__init__.py`.
 - Background scheduling is lease-gated and APScheduler-backed.
-- Canonical execution flows are registered at startup via `services.flow_definitions.register_all_flows()`.
+- Canonical execution flows are registered at startup via `runtime.flow_definitions.register_all_flows()`.
 - Compatibility routes that used to live directly in `main.py` now live in `routes/legacy_surface_router.py`.
 
 ## 4. Core Execution Layers
@@ -133,3 +133,4 @@ System-wide activity ledger:
 - Mongo side effects are not coordinated with Postgres through an outbox/event bus.
 - Legacy compatibility routes preserve old clients, but they also preserve historical surface area.
 - Watcher signal delivery is background-threaded and retrying; required outbound event emission fails the send attempt, but the emitter still follows its retry/drop policy instead of crashing the producer path.
+

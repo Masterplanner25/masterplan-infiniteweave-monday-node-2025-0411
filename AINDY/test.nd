@@ -1,0 +1,13 @@
+// Step 1 — write something to memory
+memory.write({
+  key: "test_key",
+  value: "Hello from Nodus runtime"
+})
+
+// Step 2 — read it back (proves persistence layer)
+let result = memory.read({
+  key: "test_key"
+})
+
+// Step 3 — emit something observable
+print(result)

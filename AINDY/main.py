@@ -14,11 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from services.rate_limiter import limiter
-from services import scheduler_service
-from services import task_services
-from services.observability_events import emit_observability_event
-from services.system_event_service import emit_error_event
+from platform_layer.rate_limiter import limiter
+from platform_layer import scheduler_service
+from domain import task_services
+from core.observability_events import emit_observability_event
+from core.system_event_service import emit_error_event
 from db.database import SessionLocal
 from db.mongo_setup import init_mongo
 from core.execution_guard import require_execution_context, validate_execution_contract
@@ -120,6 +120,59 @@ def _check_alembic_head() -> None:
     except Exception as exc:
         logger.warning("[startup] Could not verify Alembic schema: %s", exc)
 
+def _ensure_dev_api_key():
+    try:
+        from platform_layer.api_key_service import hash_key
+        from db.models.api_key import PlatformAPIKey
+        from db.models.user import User   # ✅ ADD THIS
+        import uuid
+
+        db = SessionLocal()
+        try:
+            raw_key = settings.AINDY_API_KEY
+            if not raw_key:
+                logger.warning("No AINDY_API_KEY set; skipping dev key bootstrap")
+                return
+
+            key_hash = hash_key(raw_key)
+
+            existing = db.query(PlatformAPIKey).filter_by(key_hash=key_hash).first()
+            if existing:
+                logger.info("Dev API key already exists.")
+                return
+
+            # 🔥 ensure a valid user exists
+            user = db.query(User).first()
+            if not user:
+                user = User(
+                    id=uuid.uuid4(),
+                    email="dev@aindy.local",
+                    hashed_password="dev",
+                    is_active=True,
+                )
+                db.add(user)
+                db.commit()
+                logger.info("Dev user created.")
+
+            dev_key = PlatformAPIKey(
+                key_hash=key_hash,
+                key_prefix=raw_key[:12],
+                name="dev-key",
+                user_id=user.id,
+                scopes=["platform.admin"],
+                is_active=True,
+            )
+
+            db.add(dev_key)
+            db.commit()
+            logger.info("Dev API key created and registered.")
+
+        finally:
+            db.close()
+
+    except Exception as e:
+        logger.warning(f"Dev API key bootstrap skipped (non-fatal): {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -144,6 +197,9 @@ async def lifespan(app: FastAPI):
         logger.info("Cache backend initialized: memory")
 
     init_mongo()
+
+    if settings.ENV == "dev":
+        _ensure_dev_api_key()
 
     # SECRET_KEY guard — reject insecure placeholder in production
     _placeholder = "dev-secret-change-in-production"
@@ -199,13 +255,13 @@ async def lifespan(app: FastAPI):
     register_all_domain_handlers()
 
     # Register Flow Engine flows and nodes (static startup definitions)
-    from services.flow_definitions import register_all_flows
+    from runtime.flow_definitions import register_all_flows
     register_all_flows()
 
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from services.platform_loader import load_dynamic_registry
+        from platform_layer.platform_loader import load_dynamic_registry
         _loader_db = SessionLocal()
         try:
             _loader_stats = load_dynamic_registry(_loader_db)
@@ -231,7 +287,7 @@ async def lifespan(app: FastAPI):
 
     # Sprint N+7: Recover any FlowRun/AgentRun rows stranded by prior crash
     if enable_background and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from services.stuck_run_service import scan_and_recover_stuck_runs
+        from agents.stuck_run_service import scan_and_recover_stuck_runs
         _scan_db = SessionLocal()
         try:
             scan_and_recover_stuck_runs(_scan_db)
@@ -281,7 +337,7 @@ async def lifespan(app: FastAPI):
     task_services.stop_background_tasks(log=logger)
     scheduler_service.stop()
     try:
-        from services.async_job_service import shutdown_async_jobs
+        from platform_layer.async_job_service import shutdown_async_jobs
 
         shutdown_async_jobs(wait=True)
     except Exception as exc:
@@ -471,3 +527,5 @@ async def log_requests(request, call_next):
 @app.get("/")
 def home():
     return {"message": "A.I.N.D.Y. API is running!"}
+
+

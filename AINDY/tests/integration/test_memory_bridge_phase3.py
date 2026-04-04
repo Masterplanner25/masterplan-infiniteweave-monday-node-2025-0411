@@ -421,15 +421,15 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("services.task_services.find_task", return_value=mock_task), \
-             patch("services.task_services.calculate_twr", return_value=8.5), \
-             patch("services.task_services.save_calculation"), \
-             patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
+        with patch("domain.task_services.find_task", return_value=mock_task), \
+             patch("domain.task_services.calculate_twr", return_value=8.5), \
+             patch("domain.task_services.save_calculation"), \
+             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
              patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
-            from services.task_services import orchestrate_task_completion
+            from domain.task_services import orchestrate_task_completion
             result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # returned something
@@ -443,13 +443,13 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("services.task_services.find_task", return_value=mock_task), \
-             patch("services.task_services.calculate_twr", return_value=5.0), \
-             patch("services.task_services.save_calculation"), \
-             patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
+        with patch("domain.task_services.find_task", return_value=mock_task), \
+             patch("domain.task_services.calculate_twr", return_value=5.0), \
+             patch("domain.task_services.save_calculation"), \
+             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
 
-            from services.task_services import orchestrate_task_completion
+            from domain.task_services import orchestrate_task_completion
             orchestrate_task_completion(mock_db, "Test Task", None)
 
         mock_capture.assert_not_called()
@@ -458,15 +458,15 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("services.task_services.find_task", return_value=mock_task), \
-             patch("services.task_services.calculate_twr", return_value=5.0), \
-             patch("services.task_services.save_calculation"), \
-             patch("services.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
+        with patch("domain.task_services.find_task", return_value=mock_task), \
+             patch("domain.task_services.calculate_twr", return_value=5.0), \
+             patch("domain.task_services.save_calculation"), \
+             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
              patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
-            from services.task_services import orchestrate_task_completion
+            from domain.task_services import orchestrate_task_completion
             result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # did not raise
@@ -474,7 +474,7 @@ class TestTaskCompletionMemoryHook:
     def test_complete_task_signature_accepts_user_id(self):
         """Verify backward-compat: user_id is optional, existing callers unaffected."""
         import inspect
-        from services.task_services import complete_task
+        from domain.task_services import complete_task
         sig = inspect.signature(complete_task)
         params = sig.parameters
         assert "user_id" in params
@@ -607,3 +607,4 @@ class TestGenesisMemoryHooks:
             response = client.post("/genesis/99/activate")
 
         assert response.status_code == 200
+

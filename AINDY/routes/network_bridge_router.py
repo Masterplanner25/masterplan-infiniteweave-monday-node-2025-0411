@@ -7,12 +7,12 @@ from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from datetime import datetime
 import uuid
-from services.calculation_services import save_calculation
+from analytics.calculation_services import save_calculation
 from services.auth_service import verify_api_key
 
 # Internal service imports
-from services import rippletrace_services, network_bridge_services
-
+from domain import rippletrace_services
+from domain import network_bridge_services
 router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
 
@@ -125,3 +125,4 @@ def list_authors(
     def handler(_ctx):
         return {"authors": authors, "count": len(authors), "platform": platform}
     return _execute_network_bridge(request, "network_bridge.authors.list", handler, db=db)
+

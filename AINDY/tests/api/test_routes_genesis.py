@@ -94,7 +94,7 @@ class TestGenesisMessageEndpoint:
         This test verifies call_genesis_llm() is NOT a stub.
         """
         import inspect
-        from services.genesis_ai import call_genesis_llm
+        from domain.genesis_ai import call_genesis_llm
 
         source = inspect.getsource(call_genesis_llm)
         # Confirm it calls the OpenAI client
@@ -148,7 +148,7 @@ class TestGenesisSynthesizeEndpoint:
         )
 
         # Verify the function exists in genesis_ai
-        from services.genesis_ai import call_genesis_synthesis_llm
+        from domain.genesis_ai import call_genesis_synthesis_llm
         assert callable(call_genesis_synthesis_llm), (
             "call_genesis_synthesis_llm does not exist in genesis_ai.py — it should"
         )
@@ -243,7 +243,7 @@ class TestGenesisBlock1:
     def test_create_masterplan_from_genesis_accepts_user_id(self):
         """create_masterplan_from_genesis must accept user_id keyword argument."""
         import inspect
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         sig = inspect.signature(create_masterplan_from_genesis)
         assert "user_id" in sig.parameters, (
             "create_masterplan_from_genesis does not accept user_id parameter"
@@ -316,7 +316,7 @@ class TestGenesisBlock3:
     def test_call_genesis_synthesis_llm_is_real_not_stub(self):
         """call_genesis_synthesis_llm must make a real OpenAI call, not return a static dict."""
         import inspect
-        from services.genesis_ai import call_genesis_synthesis_llm
+        from domain.genesis_ai import call_genesis_synthesis_llm
         source = inspect.getsource(call_genesis_synthesis_llm)
         assert "client.chat.completions.create" in source, (
             "call_genesis_synthesis_llm appears to be a stub — does not call OpenAI"
@@ -339,7 +339,7 @@ class TestGenesisBlock3:
 
     def test_determine_posture_returns_valid_labels(self):
         """determine_posture must return one of four valid posture labels."""
-        from services.posture import determine_posture
+        from analytics.posture import determine_posture
         valid = {"Stable", "Accelerated", "Aggressive", "Reduced"}
         test_cases = [
             {"time_horizon_years": 1, "ambition_score": 0.9},   # → Aggressive
@@ -355,19 +355,20 @@ class TestGenesisBlock3:
 
     def test_determine_posture_aggressive_short_high(self):
         """Short horizon + high ambition → Aggressive."""
-        from services.posture import determine_posture
+        from analytics.posture import determine_posture
         assert determine_posture({"time_horizon_years": 1, "ambition_score": 0.9}) == "Aggressive"
 
     def test_determine_posture_reduced_long_low(self):
         """Long horizon + low ambition → Reduced."""
-        from services.posture import determine_posture
+        from analytics.posture import determine_posture
         assert determine_posture({"time_horizon_years": 8, "ambition_score": 0.2}) == "Reduced"
 
     def test_posture_description_exists(self):
         """posture_description() helper must exist and return non-empty strings."""
-        from services.posture import posture_description
+        from analytics.posture import posture_description
         for posture in ("Stable", "Accelerated", "Aggressive", "Reduced"):
             desc = posture_description(posture)
             assert isinstance(desc, str) and len(desc) > 0, (
                 f"posture_description('{posture}') returned empty/non-string"
             )
+

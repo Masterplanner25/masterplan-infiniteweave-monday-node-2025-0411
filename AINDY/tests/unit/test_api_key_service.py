@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services.api_key_service import (
+from platform_layer.api_key_service import (
     create_api_key,
     generate_key,
     hash_key,
@@ -206,3 +206,4 @@ class TestRevocation:
         )
         result = revoke_api_key(str(record.id), str(uuid.uuid4()), db_session)
         assert result is False
+

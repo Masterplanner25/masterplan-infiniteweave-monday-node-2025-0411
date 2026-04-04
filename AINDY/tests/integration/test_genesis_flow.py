@@ -66,29 +66,29 @@ class TestValidateDraftIntegrity:
     """Unit tests for the validate_draft_integrity() service function."""
 
     def test_function_exists_in_genesis_ai(self):
-        from services.genesis_ai import validate_draft_integrity
+        from domain.genesis_ai import validate_draft_integrity
         assert callable(validate_draft_integrity)
 
     def test_audit_system_prompt_exists(self):
-        from services.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         assert isinstance(AUDIT_SYSTEM_PROMPT, str) and len(AUDIT_SYSTEM_PROMPT) > 50
 
     def test_audit_system_prompt_contains_required_fields(self):
-        from services.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for field in ("audit_passed", "findings", "overall_confidence", "audit_summary"):
             assert field in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing required field: {field}"
             )
 
     def test_audit_system_prompt_contains_severity_levels(self):
-        from services.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for level in ("critical", "warning", "advisory"):
             assert level in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing severity level: {level}"
             )
 
     def test_audit_system_prompt_contains_finding_types(self):
-        from services.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for ftype in ("mechanism_gap", "contradiction", "timeline_risk", "asset_gap", "confidence_concern"):
             assert ftype in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing finding type: {ftype}"
@@ -120,8 +120,8 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_has_failsafe(self):
         """If OpenAI fails, function must return a valid fallback dict."""
-        from services.genesis_ai import validate_draft_integrity
-        with patch("services.genesis_ai.client") as mock_client:
+        from domain.genesis_ai import validate_draft_integrity
+        with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.side_effect = Exception("Network error")
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert isinstance(result, dict), "Fail-safe must return a dict"
@@ -132,19 +132,19 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_failsafe_audit_passed_false(self):
         """Fail-safe result must have audit_passed=False."""
-        from services.genesis_ai import validate_draft_integrity
-        with patch("services.genesis_ai.client") as mock_client:
+        from domain.genesis_ai import validate_draft_integrity
+        with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.side_effect = Exception("fail")
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is False
 
     def test_validate_draft_integrity_happy_path(self):
         """With a valid OpenAI response, function returns parsed JSON."""
-        from services.genesis_ai import validate_draft_integrity
+        from domain.genesis_ai import validate_draft_integrity
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT)
-        with patch("services.genesis_ai.client") as mock_client:
+        with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.return_value = mock_response
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is True
@@ -153,11 +153,11 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_failed_audit(self):
         """Function correctly returns a failed audit with critical findings."""
-        from services.genesis_ai import validate_draft_integrity
+        from domain.genesis_ai import validate_draft_integrity
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT_FAILED)
-        with patch("services.genesis_ai.client") as mock_client:
+        with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.return_value = mock_response
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is False
@@ -174,11 +174,11 @@ class TestValidateDraftIntegrity:
         )
 
     def test_genesis_ai_exports_validate_draft_integrity(self):
-        """validate_draft_integrity must be importable from services.genesis_ai."""
+        """validate_draft_integrity must be importable from domain.genesis_ai."""
         try:
-            from services.genesis_ai import validate_draft_integrity
+            from domain.genesis_ai import validate_draft_integrity
         except ImportError:
-            pytest.fail("validate_draft_integrity not importable from services.genesis_ai")
+            pytest.fail("validate_draft_integrity not importable from domain.genesis_ai")
 
 
 # ─── Block 4: POST /genesis/audit route ───────────────────────────────────────
@@ -225,7 +225,7 @@ class TestGenesisAuditRoute:
             r"from\s+services\.genesis_ai\s+import\s+[\s\S]*validate_draft_integrity",
             source,
         ), (
-            "validate_draft_integrity not imported from services.genesis_ai in genesis_router.py"
+            "validate_draft_integrity not imported from domain.genesis_ai in genesis_router.py"
         )
 
     def test_audit_uses_session_draft_json(self):
@@ -268,17 +268,17 @@ class TestMasterplanFactoryHardening:
         return session
 
     def test_factory_accepts_user_id(self):
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         sig = inspect.signature(create_masterplan_from_genesis)
         assert "user_id" in sig.parameters
 
     def test_factory_raises_on_missing_session(self, db_session, test_user):
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         with pytest.raises(Exception, match="not found"):
             create_masterplan_from_genesis(999, {}, db_session, user_id=test_user.id)
 
     def test_factory_raises_on_already_locked(self, db_session, test_user):
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -291,7 +291,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_raises_if_not_synthesis_ready(self, db_session, test_user):
         """Factory must gate on synthesis_ready — raise if False."""
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -331,7 +331,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_rollback_called_on_db_failure(self, db_session, test_user, monkeypatch):
         """db.rollback() must be called when db.commit() raises."""
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -361,7 +361,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_returns_masterplan_object(self, db_session, test_user):
         """Factory must return a MasterPlan instance on success."""
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         from db.models import MasterPlan
         session = self._seed_session(
             db_session,
@@ -371,8 +371,8 @@ class TestMasterplanFactoryHardening:
             draft_json=SAMPLE_DRAFT,
         )
 
-        with patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
-            "services.identity_service.IdentityService.observe"
+        with patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
+            "domain.identity_service.IdentityService.observe"
         ):
             result = create_masterplan_from_genesis(session.id, SAMPLE_DRAFT, db_session, user_id=test_user.id)
 
@@ -381,7 +381,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_sets_posture_from_draft(self, db_session, test_user):
         """Factory must set posture based on draft ambition/horizon."""
-        from services.masterplan_factory import create_masterplan_from_genesis
+        from domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -389,8 +389,8 @@ class TestMasterplanFactoryHardening:
             synthesis_ready=True,
             draft_json={"time_horizon_years": 1, "ambition_score": 0.9},
         )
-        with patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
-            "services.identity_service.IdentityService.observe"
+        with patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture"), patch(
+            "domain.identity_service.IdentityService.observe"
         ):
             result = create_masterplan_from_genesis(session.id, {}, db_session, user_id=test_user.id)
         assert result.posture == "Aggressive"
@@ -535,7 +535,7 @@ class TestSynthesisPromptSchema:
     """Verify SYNTHESIS_SYSTEM_PROMPT includes synthesis_notes field."""
 
     def test_synthesis_prompt_schema_complete(self):
-        from services.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
+        from domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
         required = [
             "vision_statement", "time_horizon_years", "primary_mechanism",
             "ambition_score", "core_domains", "phases", "key_assets",
@@ -548,7 +548,7 @@ class TestSynthesisPromptSchema:
             )
 
     def test_synthesis_notes_rule_in_prompt(self):
-        from services.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
+        from domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
         assert "synthesis_notes" in SYNTHESIS_SYSTEM_PROMPT
         # Confirm there's a rule describing it
         assert "inferred" in SYNTHESIS_SYSTEM_PROMPT or "confident" in SYNTHESIS_SYSTEM_PROMPT
@@ -557,26 +557,26 @@ class TestSynthesisPromptSchema:
 # ─── Block 5: posture_description helper ──────────────────────────────────────
 
 class TestPostureDescriptionHelper:
-    """Tests for posture_description() from services.posture."""
+    """Tests for posture_description() from analytics.posture."""
 
     def test_posture_description_returns_string_for_all_postures(self):
-        from services.posture import posture_description
+        from analytics.posture import posture_description
         for posture in ("Stable", "Accelerated", "Aggressive", "Reduced"):
             desc = posture_description(posture)
             assert isinstance(desc, str) and len(desc) > 0
 
     def test_posture_description_stable(self):
-        from services.posture import posture_description
+        from analytics.posture import posture_description
         desc = posture_description("Stable")
         assert "stable" in desc.lower() or "balanced" in desc.lower() or "steady" in desc.lower()
 
     def test_posture_description_aggressive(self):
-        from services.posture import posture_description
+        from analytics.posture import posture_description
         desc = posture_description("Aggressive")
         assert len(desc) > 0
 
     def test_posture_description_unknown(self):
-        from services.posture import posture_description
+        from analytics.posture import posture_description
         desc = posture_description("Unknown")
         assert isinstance(desc, str)
 
@@ -610,3 +610,4 @@ class TestGenesisFlowRouteRegistration:
         ]
         for path in expected:
             assert path in paths, f"Missing route: {path}. Routes: {paths}"
+

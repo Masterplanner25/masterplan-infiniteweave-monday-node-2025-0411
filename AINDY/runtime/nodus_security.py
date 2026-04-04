@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from services.capability_service import check_execution_capability, validate_token
+from agents.capability_service import check_execution_capability, validate_token
 
 
 class NodusSecurityError(ValueError):
@@ -178,3 +178,4 @@ def authorize_nodus_execution(
         "token_used": token_used,
         "restricted_operations": RESTRICTED_OPERATION_SUMMARY,
     }
+

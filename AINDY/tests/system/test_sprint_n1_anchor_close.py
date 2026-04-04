@@ -220,7 +220,7 @@ class TestMemoryNodeChildrenPersistence:
         child_mock.id = child_id
         mock_db.query.return_value.filter.return_value.first.return_value = child_mock
 
-        with patch("services.embedding_service.generate_embedding", return_value=None):
+        with patch("memory.embedding_service.generate_embedding", return_value=None):
             dao = MemoryNodeDAO(mock_db)
             # Manually assign the parent node after add (simulates refresh)
             with patch.object(dao, "_node_to_dict", return_value={"id": str(parent_node.id)}):
@@ -452,14 +452,14 @@ class TestETAService:
         return plan
 
     def test_calculate_eta_raises_for_missing_plan(self):
-        from services.eta_service import calculate_eta
+        from analytics.eta_service import calculate_eta
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         with pytest.raises(ValueError, match="not found"):
             calculate_eta(db=mock_db, masterplan_id=9999, user_id=uuid4())
 
     def test_calculate_eta_returns_dict_keys(self):
-        from services.eta_service import calculate_eta
+        from analytics.eta_service import calculate_eta
         from db.models.masterplan import MasterPlan
         from db.models.task import Task
 
@@ -487,7 +487,7 @@ class TestETAService:
 
     def test_calculate_eta_zero_velocity_no_projection(self):
         """When velocity=0, projected_completion_date must be None."""
-        from services.eta_service import calculate_eta
+        from analytics.eta_service import calculate_eta
         from db.models.masterplan import MasterPlan
         from db.models.task import Task
 
@@ -511,7 +511,7 @@ class TestETAService:
 
     def test_calculate_eta_days_ahead_positive_when_early(self):
         """days_ahead_behind is positive when projected date is before anchor."""
-        from services.eta_service import calculate_eta
+        from analytics.eta_service import calculate_eta
         from db.models.masterplan import MasterPlan
         from db.models.task import Task
 
@@ -548,7 +548,7 @@ class TestETAService:
 
     def test_recalculate_all_etas_updates_anchored_plans(self):
         """recalculate_all_etas must process all plans with anchor_date set."""
-        from services.eta_service import recalculate_all_etas
+        from analytics.eta_service import recalculate_all_etas
         from db.models.masterplan import MasterPlan
 
         mock_db = MagicMock()
@@ -557,7 +557,7 @@ class TestETAService:
         plan2 = self._make_plan(plan_id=2, user_id=uuid4(), anchor_date=datetime(2028, 6, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1, plan2]
 
-        with patch("services.eta_service.calculate_eta") as mock_calc:
+        with patch("analytics.eta_service.calculate_eta") as mock_calc:
             mock_calc.return_value = {"velocity": 1.0}
             count = recalculate_all_etas(mock_db)
 
@@ -566,14 +566,14 @@ class TestETAService:
 
     def test_recalculate_all_etas_skips_on_error(self):
         """recalculate_all_etas must continue past individual plan failures."""
-        from services.eta_service import recalculate_all_etas
+        from analytics.eta_service import recalculate_all_etas
         from db.models.masterplan import MasterPlan
 
         mock_db = MagicMock()
         plan1 = self._make_plan(plan_id=1, user_id=uuid4(), anchor_date=datetime(2027, 1, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1]
 
-        with patch("services.eta_service.calculate_eta", side_effect=RuntimeError("DB down")):
+        with patch("analytics.eta_service.calculate_eta", side_effect=RuntimeError("DB down")):
             count = recalculate_all_etas(mock_db)
 
         assert count == 0  # failed, but no exception raised
@@ -604,7 +604,7 @@ class TestProjectionEndpoint:
             "remaining_tasks": 70,
             "eta_last_calculated": "2026-03-23T06:00:00+00:00",
         }
-        with patch("services.eta_service.calculate_eta", return_value=eta_result):
+        with patch("analytics.eta_service.calculate_eta", return_value=eta_result):
             resp = client.get("/masterplans/1/projection", headers=auth_headers)
 
         assert resp.status_code == 200
@@ -626,9 +626,9 @@ class TestSchedulerETAJob:
         """_register_system_jobs must add the daily_eta_recalculation job."""
         from apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
-        from services.scheduler_service import _register_system_jobs
+        from platform_layer.scheduler_service import _register_system_jobs
 
-        with patch("services.scheduler_service._recalculate_all_etas_job"):
+        with patch("platform_layer.scheduler_service._recalculate_all_etas_job"):
             _register_system_jobs(scheduler)
 
         job_ids = [j.id for j in scheduler.get_jobs()]
@@ -636,12 +636,12 @@ class TestSchedulerETAJob:
 
     def test_eta_job_callable_exists(self):
         """_recalculate_all_etas_job must be importable."""
-        from services.scheduler_service import _recalculate_all_etas_job
+        from platform_layer.scheduler_service import _recalculate_all_etas_job
         assert callable(_recalculate_all_etas_job)
 
     def test_eta_job_handles_db_error_gracefully(self):
         """_recalculate_all_etas_job must not raise even if DB is unavailable."""
-        from services.scheduler_service import _recalculate_all_etas_job
+        from platform_layer.scheduler_service import _recalculate_all_etas_job
         # SessionLocal is a local import inside the job — patch at the db.database level
         with patch("db.database.SessionLocal", side_effect=RuntimeError("no DB")):
             # Should not raise
@@ -655,8 +655,7 @@ class TestSchedulerETAJob:
 class TestCompleteTaskETAHook:
     def test_orchestrate_task_completion_triggers_eta_for_active_plan_with_anchor(self):
         """orchestrate_task_completion must call calculate_eta when active plan has anchor_date."""
-        from services import task_services
-
+        from domain import task_services
         mock_db = MagicMock()
         mock_task = MagicMock()
         mock_task.name = "test-task"
@@ -673,12 +672,12 @@ class TestCompleteTaskETAHook:
         fake_plan.anchor_date = datetime(2027, 1, 1)
         fake_plan.user_id = "00000000-0000-0000-0000-000000000001"
 
-        with patch("services.task_services.find_task", return_value=mock_task), \
-             patch("services.task_services.get_mongo_client", return_value=None), \
-             patch("services.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
+        with patch("domain.task_services.find_task", return_value=mock_task), \
+             patch("domain.task_services.get_mongo_client", return_value=None), \
+             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
              patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \
-             patch("services.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
-             patch("services.eta_service.calculate_eta") as mock_eta:
+             patch("domain.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
+             patch("analytics.eta_service.calculate_eta") as mock_eta:
             mock_context.return_value.ids = []
             mock_db.query.return_value.filter.return_value.first.return_value = fake_plan
 
@@ -689,3 +688,5 @@ class TestCompleteTaskETAHook:
             )
 
             mock_eta.assert_called_once()
+
+

@@ -87,8 +87,8 @@ class TestGenesisNodesRegistered:
     """All genesis Phase C nodes must be in NODE_REGISTRY."""
 
     def test_genesis_nodes_registered(self):
-        from services.flow_engine import NODE_REGISTRY
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import NODE_REGISTRY
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
         expected = [
             "genesis_validate_session",
@@ -99,14 +99,14 @@ class TestGenesisNodesRegistered:
             assert name in NODE_REGISTRY, f"Node not registered: {name}"
 
     def test_genesis_conversation_flow_registered(self):
-        from services.flow_engine import FLOW_REGISTRY
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
         assert "genesis_conversation" in FLOW_REGISTRY
 
     def test_genesis_conversation_flow_structure(self):
-        from services.flow_engine import FLOW_REGISTRY
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         assert flow["start"] == "genesis_validate_session"
@@ -115,8 +115,8 @@ class TestGenesisNodesRegistered:
         assert flow["end"] == ["genesis_store_synthesis"]
 
     def test_genesis_conversation_has_conditional_edge(self):
-        from services.flow_engine import FLOW_REGISTRY
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         edges = flow["edges"]["genesis_record_exchange"]
@@ -129,12 +129,12 @@ class TestGenesisNodesRegistered:
 class TestGenesisValidateSession:
 
     def test_passes_with_session_id(self):
-        from services.flow_definitions import genesis_validate_session
+        from runtime.flow_definitions import genesis_validate_session
         result = genesis_validate_session({"session_id": 42}, {"attempts": {}})
         assert result["status"] == "SUCCESS"
 
     def test_fails_without_session_id(self):
-        from services.flow_definitions import genesis_validate_session
+        from runtime.flow_definitions import genesis_validate_session
         result = genesis_validate_session({}, {"attempts": {}})
         assert result["status"] == "FAILURE"
         assert "session_id" in result["error"]
@@ -143,7 +143,7 @@ class TestGenesisValidateSession:
 class TestGenesisRecordExchange:
 
     def test_returns_wait_when_not_ready(self):
-        from services.flow_definitions import genesis_record_exchange
+        from runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange(
             {"session_id": 1, "synthesis_ready": False},
             {"attempts": {}},
@@ -152,13 +152,13 @@ class TestGenesisRecordExchange:
         assert result["wait_for"] == "genesis_user_message"
 
     def test_returns_wait_when_no_synthesis_ready_key(self):
-        from services.flow_definitions import genesis_record_exchange
+        from runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange({"session_id": 1}, {"attempts": {}})
         assert result["status"] == "WAIT"
         assert result["wait_for"] == "genesis_user_message"
 
     def test_returns_success_when_ready_in_state(self):
-        from services.flow_definitions import genesis_record_exchange
+        from runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange(
             {"session_id": 1, "synthesis_ready": True},
             {"attempts": {}},
@@ -168,7 +168,7 @@ class TestGenesisRecordExchange:
 
     def test_returns_success_when_ready_in_event(self):
         """After WAIT resume, synthesis_ready comes from state['event'] payload."""
-        from services.flow_definitions import genesis_record_exchange
+        from runtime.flow_definitions import genesis_record_exchange
         state = {
             "session_id": 1,
             "synthesis_ready": False,
@@ -180,8 +180,8 @@ class TestGenesisRecordExchange:
 
     def test_conditional_edge_matches_when_ready(self):
         """The conditional edge lambda evaluates correctly for synthesis_ready."""
-        from services.flow_engine import FLOW_REGISTRY
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         condition = flow["edges"]["genesis_record_exchange"][0]["condition"]
@@ -200,8 +200,8 @@ class TestGenesisRecordExchange:
 class TestGenesisStoreSynthesis:
 
     def test_returns_success_normally(self, mock_db):
-        from services.flow_definitions import genesis_store_synthesis
-        with patch("services.flow_definitions.logger"):
+        from runtime.flow_definitions import genesis_store_synthesis
+        with patch("runtime.flow_definitions.logger"):
             result = genesis_store_synthesis(
                 {"session_id": 1},
                 {"db": None, "user_id": None, "attempts": {}},
@@ -210,10 +210,10 @@ class TestGenesisStoreSynthesis:
 
     def test_returns_success_even_on_exception(self, mock_db):
         """Storage failure is non-fatal — must return SUCCESS."""
-        from services.flow_definitions import genesis_store_synthesis
+        from runtime.flow_definitions import genesis_store_synthesis
 
         with patch(
-            "services.memory_capture_engine.MemoryCaptureEngine",
+            "memory.memory_capture_engine.MemoryCaptureEngine",
             side_effect=Exception("DB down"),
         ):
             result = genesis_store_synthesis(
@@ -306,8 +306,8 @@ class TestGenesisWaitResumeRoundTrip:
         First message starts a genesis_conversation FlowRun.
         synthesis_ready=False → flow enters WAIT.
         """
-        from services.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
 
         run = self._create_flow_run(
@@ -334,8 +334,8 @@ class TestGenesisWaitResumeRoundTrip:
         When synthesis_ready=True in state, genesis_record_exchange returns SUCCESS
         and the flow advances to genesis_store_synthesis (end node → SUCCESS).
         """
-        from services.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-        from services.flow_definitions import register_all_flows
+        from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+        from runtime.flow_definitions import register_all_flows
         register_all_flows()
 
         run = self._create_flow_run(
@@ -382,7 +382,7 @@ class TestFlowCompletionEventSignificance:
 class TestCaptureFlowCompletionMethod:
 
     def test_method_exists_on_runner(self, db_session, test_user):
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -395,7 +395,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_skipped_when_no_user_id(self, db_session):
         """No user_id → capture skipped, no exception."""
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -407,7 +407,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_skipped_when_no_workflow_type(self, db_session, test_user):
         """No workflow_type → capture skipped, no exception."""
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -419,7 +419,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_non_fatal_when_memory_capture_raises(self, db_session, test_user):
         """Exception in MemoryCaptureEngine must not propagate."""
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -435,14 +435,14 @@ class TestCaptureFlowCompletionMethod:
         )
 
         with patch(
-            "services.memory_capture_engine.MemoryCaptureEngine",
+            "memory.memory_capture_engine.MemoryCaptureEngine",
             side_effect=Exception("capture failed"),
         ):
             runner._capture_flow_completion(mock_run, {})
 
     def test_skipped_when_no_history(self, db_session, test_user):
         """Empty FlowHistory → capture skipped gracefully."""
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -452,7 +452,7 @@ class TestCaptureFlowCompletionMethod:
         )
         mock_run = _make_mock_run(run_id=str(uuid.uuid4()))
 
-        with patch("services.memory_capture_engine.MemoryCaptureEngine") as mock_engine:
+        with patch("memory.memory_capture_engine.MemoryCaptureEngine") as mock_engine:
             runner._capture_flow_completion(mock_run, {})
             mock_engine.assert_not_called()
 
@@ -461,7 +461,7 @@ class TestCaptureFlowCompletionEventTypeMapping:
     """Correct event_type is passed to MemoryCaptureEngine for each workflow."""
 
     def _run_capture(self, workflow_type, db_session, test_user):
-        from services.flow_engine import PersistentFlowRunner
+        from runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -488,7 +488,7 @@ class TestCaptureFlowCompletionEventTypeMapping:
 
         # MemoryCaptureEngine is imported lazily inside _capture_flow_completion.
         # Patch at the source module so the lazy import picks up the mock.
-        with patch("services.memory_capture_engine.MemoryCaptureEngine", _MockEngine):
+        with patch("memory.memory_capture_engine.MemoryCaptureEngine", _MockEngine):
             runner._capture_flow_completion(mock_run, {})
 
         return captured_calls
@@ -562,7 +562,7 @@ class TestPhaseDAuto:
 
     def test_capture_called_on_success(self, db_session, test_user):
         """_capture_flow_completion must be called when flow reaches end node."""
-        from services.flow_engine import PersistentFlowRunner, register_node
+        from runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("phase_d_success_node")
         def success_node(state, context):
@@ -592,7 +592,7 @@ class TestPhaseDAuto:
 
     def test_capture_not_called_on_failure(self, db_session, test_user):
         """_capture_flow_completion must NOT be called when flow fails."""
-        from services.flow_engine import PersistentFlowRunner, register_node
+        from runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("phase_d_fail_node")
         def fail_node(state, context):
@@ -617,3 +617,4 @@ class TestPhaseDAuto:
 
         assert result["status"] == "FAILED"
         mock_capture.assert_not_called()
+

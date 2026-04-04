@@ -22,7 +22,7 @@ router = APIRouter(prefix="/automation", tags=["Automation"])
 
 
 def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -128,3 +128,4 @@ async def trigger_task_automation(
         )
     return _execute_automation(request, "automation.tasks.trigger", handler, db=db, user_id=user_id,
                                input_payload={"task_id": task_id, "automation_type": body.automation_type})
+

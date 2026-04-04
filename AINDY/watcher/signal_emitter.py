@@ -22,7 +22,7 @@ from collections import deque
 from dataclasses import asdict
 from typing import List, Optional
 
-from services.external_call_service import perform_external_call
+from platform_layer.external_call_service import perform_external_call
 from watcher.session_tracker import SessionEvent
 
 logger = logging.getLogger(__name__)
@@ -205,3 +205,4 @@ class SignalEmitter:
         logger.error(
             "Dropped %d signals after %d failed attempts", len(batch), _MAX_RETRIES
         )
+

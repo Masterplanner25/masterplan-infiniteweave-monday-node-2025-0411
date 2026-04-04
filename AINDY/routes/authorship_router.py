@@ -10,7 +10,7 @@ reclaimed, watermarked version with a visible + invisible authorship signature.
 # /routes/authorship_router.py
 from fastapi import APIRouter, Depends, Request
 from core.execution_helper import execute_with_pipeline_sync
-from services.authorship_services import reclaim_authorship
+from domain.authorship_services import reclaim_authorship
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depends(get_current_user)])
@@ -28,4 +28,5 @@ def reclaim_authorship_endpoint(request: Request, content: str, author: str = "L
     def handler(_ctx):
         return reclaim_authorship(content, author, motto)
     return _execute_authorship(request, "authorship.reclaim", handler)
+
 

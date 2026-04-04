@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
-from services.agent_coordinator import coordination_graph
-from services.agent_coordinator import get_agent_status
-from services.agent_coordinator import list_agents
+from agents.agent_coordinator import coordination_graph
+from agents.agent_coordinator import get_agent_status
+from agents.agent_coordinator import list_agents
 from services.auth_service import get_current_user
 
 
@@ -52,3 +52,4 @@ def get_coordination_graph(
         user_id=str(current_user["sub"]),
         metadata={"db": db},
     )
+

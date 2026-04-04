@@ -39,15 +39,14 @@ def make_mock_openai_response(embedding=None):
 class TestEmbeddingService:
 
     def test_embedding_service_importable(self):
-        from services import embedding_service
+        from memory import embedding_service
         assert embedding_service is not None
-
     def test_generate_embedding_returns_1536_dims(self):
         """generate_embedding returns 1536-dim list, mocking OpenAI."""
         mock_client = MagicMock()
         mock_client.embeddings.create.return_value = make_mock_openai_response()
 
-        with patch("services.embedding_service._client", mock_client):
+        with patch("memory.embedding_service._client", mock_client):
             from memory.embedding_service import generate_embedding
             result = generate_embedding("hello world")
 
@@ -116,8 +115,8 @@ class TestEmbeddingService:
         mock_client = MagicMock()
         mock_client.embeddings.create.side_effect = Exception("API down")
 
-        with patch("services.embedding_service._client", mock_client):
-            with patch("services.embedding_service.time.sleep"):
+        with patch("memory.embedding_service._client", mock_client):
+            with patch("memory.embedding_service.time.sleep"):
                 from memory.embedding_service import generate_embedding
                 result = generate_embedding("test content")
 
@@ -291,7 +290,7 @@ class TestMemoryRoutePhase2:
         mock_dao = MagicMock()
         mock_dao.recall.return_value = []
 
-        with patch("services.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
+        with patch("memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
             with patch("routes.memory_router.MemoryNodeDAO", return_value=mock_dao):
                 with patch("db.database.get_db"):
                     response = client.post(
@@ -317,7 +316,7 @@ class TestMemoryRoutePhase2:
         mock_dao = MagicMock()
         mock_dao.find_similar.return_value = []
 
-        with patch("services.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
+        with patch("memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
             with patch("routes.memory_router.MemoryNodeDAO", return_value=mock_dao):
                 with patch("db.database.get_db"):
                     response = client.post(

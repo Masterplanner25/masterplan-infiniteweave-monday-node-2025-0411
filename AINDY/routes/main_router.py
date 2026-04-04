@@ -27,8 +27,8 @@ from schemas.analytics_inputs import (
     ViralityInput,
 )
 from schemas.batch import BatchInput
-from services.calculations import process_batch
-from services.calculation_services import (
+from analytics.calculations import process_batch
+from analytics.calculation_services import (
     calculate_effort,
     calculate_productivity,
     calculate_virality,
@@ -98,7 +98,7 @@ async def process_task(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         try:
             result = execute_infinity_orchestrator(
@@ -463,6 +463,7 @@ async def create_masterplan(
         return plan
 
     return await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+
 
 
 

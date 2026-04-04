@@ -369,7 +369,7 @@ class TestFeedbackEndpoints:
         self, client, auth_headers, mock_db, mocker
     ):
         mocker.patch(
-            "services.embedding_service"
+            "memory.embedding_service"
             ".generate_query_embedding",
             return_value=[0.1] * 1536
         )

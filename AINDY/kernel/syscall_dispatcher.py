@@ -34,7 +34,7 @@ The dispatcher NEVER raises. Every code path returns the envelope.
 
 Usage
 -----
-    from services.syscall_dispatcher import get_dispatcher, SyscallContext
+    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
 
     ctx = SyscallContext(
         execution_unit_id="run-123",
@@ -307,8 +307,8 @@ class SyscallDispatcher:
         """
         try:
             from db.database import SessionLocal
-            from services.system_event_service import emit_system_event
-            from services.system_event_types import SystemEventTypes
+            from core.system_event_service import emit_system_event
+            from core.system_event_types import SystemEventTypes
 
             db = SessionLocal()
             try:
@@ -404,3 +404,4 @@ def make_syscall_ctx_from_tool(
         capabilities=list(capabilities) if capabilities is not None else list(DEFAULT_NODUS_CAPABILITIES),
         trace_id=execution_unit_id,
     )
+

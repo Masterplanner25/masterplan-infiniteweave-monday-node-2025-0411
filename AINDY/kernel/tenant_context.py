@@ -24,7 +24,7 @@ Callers that violate this raise TENANT_VIOLATION.
 
 Usage
 -----
-    from services.tenant_context import TenantContext, build_tenant_context
+    from kernel.tenant_context import TenantContext, build_tenant_context
 
     ctx = build_tenant_context(user_id="user-123", capability_scope=["memory.read"])
     ctx.assert_memory_path(f"/memory/{ctx.tenant_id}/node-abc")  # OK
@@ -160,7 +160,7 @@ def tenant_context_from_syscall_context(syscall_ctx) -> TenantContext:
     """Derive a TenantContext from an existing SyscallContext.
 
     Args:
-        syscall_ctx: A ``SyscallContext`` instance (services.syscall_registry).
+        syscall_ctx: A ``SyscallContext`` instance (kernel.syscall_registry).
 
     Returns:
         TenantContext with tenant_id == syscall_ctx.user_id.

@@ -123,21 +123,21 @@ EXPECTED_RISKS = {
 class TestToolRegistry:
 
     def test_tool_registry_importable(self):
-        from services.agent_tools import TOOL_REGISTRY, register_tool, execute_tool
+        from agents.agent_tools import TOOL_REGISTRY, register_tool, execute_tool
         assert isinstance(TOOL_REGISTRY, dict)
 
     def test_all_nine_tools_registered(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         for name in EXPECTED_TOOLS:
             assert name in TOOL_REGISTRY, f"Tool '{name}' not in TOOL_REGISTRY"
 
     def test_tool_registry_has_nine_entries(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         assert len(TOOL_REGISTRY) == 9, \
             f"Expected 9 tools, found {len(TOOL_REGISTRY)}: {list(TOOL_REGISTRY.keys())}"
 
     def test_each_tool_has_fn_risk_description(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         for name, entry in TOOL_REGISTRY.items():
             assert callable(entry["fn"]), f"Tool '{name}' fn is not callable"
             assert entry["risk"] in ("low", "medium", "high"), \
@@ -145,40 +145,40 @@ class TestToolRegistry:
             assert entry["description"], f"Tool '{name}' has no description"
 
     def test_risk_classifications_correct(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         for name, expected_risk in EXPECTED_RISKS.items():
             actual = TOOL_REGISTRY[name]["risk"]
             assert actual == expected_risk, \
                 f"Tool '{name}' risk: expected '{expected_risk}', got '{actual}'"
 
     def test_genesis_message_is_high_risk(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         assert TOOL_REGISTRY["genesis.message"]["risk"] == "high"
 
     def test_low_risk_tools_are_read_or_additive(self):
-        from services.agent_tools import TOOL_REGISTRY
+        from agents.agent_tools import TOOL_REGISTRY
         low_risk = [n for n, e in TOOL_REGISTRY.items() if e["risk"] == "low"]
         expected_low = {"task.create", "memory.recall", "memory.write", "research.query"}
         assert set(low_risk) == expected_low, f"Low-risk tools: {set(low_risk)}"
 
     def test_get_tool_risk_known(self):
-        from services.agent_tools import get_tool_risk
+        from agents.agent_tools import get_tool_risk
         assert get_tool_risk("task.create") == "low"
         assert get_tool_risk("genesis.message") == "high"
         assert get_tool_risk("arm.analyze") == "medium"
 
     def test_get_tool_risk_unknown_returns_high(self):
-        from services.agent_tools import get_tool_risk
+        from agents.agent_tools import get_tool_risk
         assert get_tool_risk("nonexistent.tool") == "high"
 
     def test_execute_tool_unknown_returns_failure(self):
-        from services.agent_tools import execute_tool
+        from agents.agent_tools import execute_tool
         result = execute_tool("nonexistent.tool", {}, "user_1", MagicMock())
         assert result["success"] is False
         assert "not found" in result["error"]
 
     def test_execute_tool_wraps_exceptions(self):
-        from services.agent_tools import TOOL_REGISTRY, execute_tool
+        from agents.agent_tools import TOOL_REGISTRY, execute_tool
         # Patch task.create to raise
         original = TOOL_REGISTRY["task.create"]["fn"]
         TOOL_REGISTRY["task.create"]["fn"] = lambda **kwargs: (_ for _ in ()).throw(
@@ -208,7 +208,7 @@ VALID_PLAN = {
 class TestAgentRuntime:
 
     def test_runtime_importable(self):
-        from services.agent_runtime import (
+        from agents.agent_runtime import (
             generate_plan,
             create_run,
             execute_run,
@@ -219,7 +219,7 @@ class TestAgentRuntime:
         assert generate_plan is not None
 
     def test_requires_approval_high_risk_always_true(self):
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         # High risk: always requires approval regardless of trust
         db.query.return_value.filter.return_value.first.return_value = MagicMock(
@@ -229,7 +229,7 @@ class TestAgentRuntime:
         assert _requires_approval("high", "user_1", db) is True
 
     def test_requires_approval_no_trust_settings(self):
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
         # No trust settings → require approval for all levels
@@ -237,37 +237,37 @@ class TestAgentRuntime:
         assert _requires_approval("medium", "user_1", db) is True
 
     def test_requires_approval_low_risk_auto_execute(self):
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=False)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("low", "user_1", db) is False
 
     def test_requires_approval_medium_risk_auto_execute(self):
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("medium", "user_1", db) is False
 
     def test_requires_approval_medium_risk_no_auto(self):
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=False)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("medium", "user_1", db) is True
 
     def test_generate_plan_returns_none_on_openai_failure(self):
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
         db = MagicMock()
-        with patch("services.agent_runtime._get_client") as mock_client:
+        with patch("agents.agent_runtime._get_client") as mock_client:
             mock_client.return_value.chat.completions.create.side_effect = RuntimeError("api error")
             result = generate_plan("some goal", "user_1", db)
         assert result is None
 
     def test_generate_plan_enforces_overall_risk_invariant(self):
         """If a step has high risk, overall_risk must be high."""
-        from services.agent_runtime import generate_plan
+        from agents.agent_runtime import generate_plan
         db = MagicMock()
         import json
         bad_plan = {
@@ -279,21 +279,21 @@ class TestAgentRuntime:
         }
         mock_resp = MagicMock()
         mock_resp.choices[0].message.content = json.dumps(bad_plan)
-        with patch("services.agent_runtime._get_client") as mock_client:
+        with patch("agents.agent_runtime._get_client") as mock_client:
             mock_client.return_value.chat.completions.create.return_value = mock_resp
             result = generate_plan("some goal", "user_1", db)
         assert result is not None
         assert result["overall_risk"] == "high"
 
     def test_create_run_returns_none_on_plan_failure(self):
-        from services.agent_runtime import create_run
+        from agents.agent_runtime import create_run
         db = MagicMock()
-        with patch("services.agent_runtime.generate_plan", return_value=None):
+        with patch("agents.agent_runtime.generate_plan", return_value=None):
             result = create_run("goal", "user_1", db)
         assert result is None
 
     def test_create_run_sets_pending_approval_when_required(self):
-        from services.agent_runtime import create_run
+        from agents.agent_runtime import create_run
         db = MagicMock()
         db.add = MagicMock()
         db.commit = MagicMock()
@@ -316,8 +316,8 @@ class TestAgentRuntime:
         fake_run.started_at = None
         fake_run.completed_at = None
 
-        with patch("services.agent_runtime.generate_plan", return_value=VALID_PLAN), \
-             patch("services.agent_runtime._requires_approval", return_value=True), \
+        with patch("agents.agent_runtime.generate_plan", return_value=VALID_PLAN), \
+             patch("agents.agent_runtime._requires_approval", return_value=True), \
              patch("db.models.agent_run.AgentRun", return_value=fake_run):
             db.refresh.side_effect = lambda r: None
             result = create_run("test goal", "user_1", db)
@@ -409,7 +409,7 @@ class TestTrustInvariants:
 
     def test_high_risk_always_blocked_regardless_of_trust(self):
         """The hardcoded high-risk invariant cannot be bypassed by trust settings."""
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         # Even with full trust enabled
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
@@ -419,7 +419,7 @@ class TestTrustInvariants:
 
     def test_trust_default_requires_approval_for_all_levels(self):
         """Without trust settings, all levels require approval."""
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
         for level in ("low", "medium", "high"):
@@ -428,7 +428,7 @@ class TestTrustInvariants:
 
     def test_auto_execute_medium_does_not_affect_high(self):
         """Enabling medium auto-execute must NOT affect high-risk gate."""
-        from services.agent_runtime import _requires_approval
+        from agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
         db.query.return_value.filter.return_value.first.return_value = trust
@@ -515,3 +515,4 @@ class TestAPIFunctions:
             content = f.read()
         assert "/agent" in content
         assert "Agent Console" in content
+

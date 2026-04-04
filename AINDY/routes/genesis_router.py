@@ -9,9 +9,9 @@ from sqlalchemy.orm import Session
 from core.observability_events import emit_observability_event
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.flow_engine import run_flow
-from services.rate_limiter import limiter
-from services.system_event_types import SystemEventTypes
+from runtime.flow_engine import run_flow
+from platform_layer.rate_limiter import limiter
+from core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,11 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
     return data
 
 
-@router.post("/session")
+@router.post(
+    "/session",
+    summary="Create Genesis Session",
+    description="Creates a new Genesis session for the authenticated user. Returns the created session payload and identifiers.",
+)
 def create_genesis_session(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -47,7 +51,11 @@ def create_genesis_session(
     return _genesis_run_flow("genesis_session_create", {}, db, user_id)
 
 
-@router.post("/message")
+@router.post(
+    "/message",
+    summary="Send Genesis Message",
+    description="Submits a session ID and user message to the Genesis workflow. Returns the execution result for that message step.",
+)
 @limiter.limit("20/minute")
 def genesis_message(
     request: Request,
@@ -104,7 +112,11 @@ def genesis_message(
     return result
 
 
-@router.get("/session/{session_id}")
+@router.get(
+    "/session/{session_id}",
+    summary="Get Genesis Session",
+    description="Looks up a Genesis session by the session ID path parameter. Returns the stored session payload for that user.",
+)
 def get_genesis_session(
     session_id: int,
     db: Session = Depends(get_db),
@@ -113,7 +125,11 @@ def get_genesis_session(
     return _genesis_run_flow("genesis_session_get", {"session_id": session_id}, db, str(current_user["sub"]))
 
 
-@router.get("/draft/{session_id}")
+@router.get(
+    "/draft/{session_id}",
+    summary="Get Genesis Draft",
+    description="Fetches the persisted draft for the session ID path parameter. Returns the current Genesis draft payload for that session.",
+)
 def get_genesis_draft(
     session_id: int,
     db: Session = Depends(get_db),
@@ -122,7 +138,11 @@ def get_genesis_draft(
     return _genesis_run_flow("genesis_draft_get", {"session_id": session_id}, db, str(current_user["sub"]))
 
 
-@router.post("/synthesize")
+@router.post(
+    "/synthesize",
+    summary="Synthesize Genesis Draft",
+    description="Runs synthesis for the posted Genesis session ID. Returns the synthesized draft or queued execution response.",
+)
 @limiter.limit("5/minute")
 def synthesize_genesis(
     request: Request,
@@ -180,7 +200,11 @@ class AuditRequest(BaseModel):
     session_id: int
 
 
-@router.post("/audit")
+@router.post(
+    "/audit",
+    summary="Audit Genesis Draft",
+    description="Runs a strategic audit for the posted Genesis session ID. Returns the audit result for the persisted draft.",
+)
 @limiter.limit("5/minute")
 def audit_genesis_draft(
     request: Request,
@@ -192,7 +216,11 @@ def audit_genesis_draft(
     return _genesis_run_flow("genesis_audit", {"session_id": body.session_id}, db, str(current_user["sub"]))
 
 
-@router.post("/lock")
+@router.post(
+    "/lock",
+    summary="Lock Masterplan Draft",
+    description="Locks a Genesis draft into a masterplan using the posted session ID and draft payload. Returns the lock result for the created masterplan state.",
+)
 def lock_masterplan(
     payload: dict,
     db: Session = Depends(get_db),
@@ -245,7 +273,11 @@ def lock_masterplan(
     return result
 
 
-@router.post("/{plan_id}/activate")
+@router.post(
+    "/{plan_id}/activate",
+    summary="Activate Masterplan",
+    description="Activates the masterplan identified by the plan ID path parameter. Returns the activation result for that plan.",
+)
 def activate_masterplan(
     plan_id: int,
     db: Session = Depends(get_db),
@@ -291,3 +323,5 @@ def activate_masterplan(
         logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
 
     return result
+
+

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depend
 
 
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str):
-    from services.flow_engine import run_flow
+    from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -168,3 +168,4 @@ def generate_delivery(
         return _run_flow_freelance("freelance_delivery_generate", {"order_id": order_id}, db, user_id)
     return _execute_freelance(request, "freelance.delivery.generate", handler, db=db, user_id=user_id,
                               input_payload={"order_id": order_id})
+

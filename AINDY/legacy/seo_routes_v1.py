@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from seo import SEOInput, MetaInput
 from seo_services import seo_analysis, generate_meta_description
-from services import save_calculation
+from analytics.calculation_services import save_calculation
 from app.db.database import get_db  # Assuming this is your DB session handler
 
 router = APIRouter()

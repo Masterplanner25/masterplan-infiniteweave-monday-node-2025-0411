@@ -4,8 +4,8 @@ from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from services.auth_service import get_current_user
-from services.system_state_service import compute_current_state
-from services.system_state_service import get_latest_snapshot
+from platform_layer.system_state_service import compute_current_state
+from platform_layer.system_state_service import get_latest_snapshot
 
 
 router = APIRouter(prefix="/system", tags=["System State"])
@@ -27,3 +27,4 @@ def get_system_state(
         user_id=str(current_user["sub"]),
         metadata={"db": db},
     )
+

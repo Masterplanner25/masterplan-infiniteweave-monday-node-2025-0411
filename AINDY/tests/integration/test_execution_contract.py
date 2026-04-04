@@ -23,7 +23,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from services.system_event_types import SystemEventTypes
+from core.system_event_types import SystemEventTypes
 
 
 # ── Session patching ──────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def test_task_start_emits_task_started_event(db_session, test_user):
     """
     Calling start_task() via the service layer must emit a 'task.started' event.
     """
-    from services.task_services import create_task, start_task
+    from domain.task_services import create_task, start_task
 
     name = _task_name("start")
     create_task(db_session, name, user_id=_TEST_USER_ID)
@@ -142,7 +142,7 @@ def test_task_complete_emits_task_completed_event(db_session, test_user):
     """
     Calling complete_task() via the service layer must emit a 'task.completed' event.
     """
-    from services.task_services import create_task, start_task, complete_task
+    from domain.task_services import create_task, start_task, complete_task
 
     name = _task_name("complete")
     create_task(db_session, name, user_id=_TEST_USER_ID)
@@ -165,7 +165,7 @@ def test_task_pause_emits_task_paused_event(db_session, test_user):
     """
     Calling pause_task() via the service layer must emit a 'task.paused' event.
     """
-    from services.task_services import create_task, start_task, pause_task
+    from domain.task_services import create_task, start_task, pause_task
 
     name = _task_name("pause")
     create_task(db_session, name, user_id=_TEST_USER_ID)
@@ -231,3 +231,4 @@ def test_contract_events_are_never_fatal(client, auth_headers, test_user):
         f"Emit failure must not propagate to the caller — "
         f"got {response.status_code}: {response.text}"
     )
+

@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
-from services.observability_events import emit_observability_event
+from core.observability_events import emit_observability_event
 
 
 class MemoryFeedbackEngine:
@@ -61,3 +61,4 @@ class MemoryFeedbackEngine:
                 )
         except Exception as exc:
             logger.warning("[MemoryFeedback] update failed: %s", exc)
+

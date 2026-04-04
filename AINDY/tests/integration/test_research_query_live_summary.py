@@ -36,7 +36,7 @@ def test_research_query_uses_ai_analyze(monkeypatch):
         return _Result(result.query, result.summary, source=source, data=data)
 
     monkeypatch.setattr(
-        "services.research_results_service.create_research_result",
+        "domain.research_results_service.create_research_result",
         _fake_create,
     )
 
@@ -47,3 +47,4 @@ def test_research_query_uses_ai_analyze(monkeypatch):
     )
     assert result["summary"] == "Summarized content"
     assert "search_score" in result
+

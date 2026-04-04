@@ -44,7 +44,7 @@ engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = logging.getLogger(__name__)
-from services.observability_events import emit_observability_event
+from core.observability_events import emit_observability_event
 _session_guard_lock = threading.Lock()
 _active_sessions: set[int] = set()
 
@@ -101,6 +101,7 @@ def test_connection():
             print("✅ Database connected at:", list(result)[0][0])
     except Exception as e:
         print("❌ Database connection failed:", e)
+
 
 
 

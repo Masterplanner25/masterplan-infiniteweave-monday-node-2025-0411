@@ -25,8 +25,8 @@ import pytest
 import db.models.nodus_trace_event
 import db.database
 import utils.uuid_utils
-import services.nodus_trace_service
-import services.nodus_runtime_adapter
+import runtime.nodus_trace_service
+import runtime.nodus_runtime_adapter
 
 
 # ===========================================================================
@@ -35,19 +35,19 @@ import services.nodus_runtime_adapter
 
 class TestSanitizeArgs:
     def test_none_passthrough(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         assert _sanitize_args((None,)) == [None]
 
     def test_numeric_passthrough(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         assert _sanitize_args((42, 3.14, True)) == [42, 3.14, True]
 
     def test_short_string_unchanged(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         assert _sanitize_args(("hello",)) == ["hello"]
 
     def test_long_string_truncated(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         long_str = "x" * 300
         result = _sanitize_args((long_str,))
         assert len(result) == 1
@@ -55,24 +55,24 @@ class TestSanitizeArgs:
         assert len(result[0]) == 201  # 200 chars + ellipsis
 
     def test_dict_summarised(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         d = {"key": "value", "num": 99}
         result = _sanitize_args((d,))
         assert isinstance(result[0], dict)
         assert "key" in result[0]
 
     def test_list_replaced_with_count(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         result = _sanitize_args(([1, 2, 3],))
         assert result == ["[3 items]"]
 
     def test_object_replaced_with_type_name(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         result = _sanitize_args((object(),))
         assert result == ["object"]
 
     def test_dict_truncated_to_ten_keys(self):
-        from services.nodus_runtime_adapter import _sanitize_args
+        from runtime.nodus_runtime_adapter import _sanitize_args
         d = {str(i): i for i in range(20)}
         result = _sanitize_args((d,))
         assert isinstance(result[0], dict)
@@ -85,38 +85,38 @@ class TestSanitizeArgs:
 
 class TestSanitizeResult:
     def test_none(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         assert _sanitize_result(None) == {"value": None}
 
     def test_bool(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         assert _sanitize_result(True) == {"value": True}
 
     def test_int(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         assert _sanitize_result(42) == {"value": 42}
 
     def test_short_string(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         assert _sanitize_result("ok") == {"value": "ok"}
 
     def test_long_string_truncated(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         result = _sanitize_result("x" * 300)
         assert result["value"].endswith("\u2026")
 
     def test_dict(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         result = _sanitize_result({"a": 1, "b": 2})
         assert result["size"] == 2
         assert "keys" in result
 
     def test_list(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         assert _sanitize_result([1, 2, 3]) == {"length": 3}
 
     def test_unknown_type(self):
-        from services.nodus_runtime_adapter import _sanitize_result
+        from runtime.nodus_runtime_adapter import _sanitize_result
         result = _sanitize_result(object())
         assert result == {"type": "object"}
 
@@ -127,13 +127,13 @@ class TestSanitizeResult:
 
 class TestFlushNodusTraces:
     def test_empty_list_is_noop(self):
-        from services.nodus_runtime_adapter import _flush_nodus_traces
+        from runtime.nodus_runtime_adapter import _flush_nodus_traces
         with patch("db.database.SessionLocal") as mock_sl:
             _flush_nodus_traces([])
         mock_sl.assert_not_called()
 
     def test_single_trace_creates_row(self):
-        from services.nodus_runtime_adapter import _flush_nodus_traces
+        from runtime.nodus_runtime_adapter import _flush_nodus_traces
         trace = {
             "execution_unit_id": "exec-1",
             "trace_id": "exec-1",
@@ -156,7 +156,7 @@ class TestFlushNodusTraces:
         mock_db.close.assert_called_once()
 
     def test_multiple_traces_all_added(self):
-        from services.nodus_runtime_adapter import _flush_nodus_traces
+        from runtime.nodus_runtime_adapter import _flush_nodus_traces
         traces = [
             {
                 "execution_unit_id": "exec-1",
@@ -180,7 +180,7 @@ class TestFlushNodusTraces:
         assert mock_db.add.call_count == 3
 
     def test_db_error_swallowed(self):
-        from services.nodus_runtime_adapter import _flush_nodus_traces
+        from runtime.nodus_runtime_adapter import _flush_nodus_traces
         trace = {
             "execution_unit_id": "exec-1",
             "trace_id": "exec-1",
@@ -199,7 +199,7 @@ class TestFlushNodusTraces:
             _flush_nodus_traces([trace])
 
     def test_invalid_user_id_handled_gracefully(self):
-        from services.nodus_runtime_adapter import _flush_nodus_traces
+        from runtime.nodus_runtime_adapter import _flush_nodus_traces
         trace = {
             "execution_unit_id": "exec-1",
             "trace_id": "exec-1",
@@ -241,7 +241,7 @@ class TestQueryNodusTrace:
         return row
 
     def test_returns_matching_events(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         row = self._make_row(sequence=1)
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
@@ -254,7 +254,7 @@ class TestQueryNodusTrace:
         assert len(result["steps"]) == 1
 
     def test_empty_result(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
@@ -265,7 +265,7 @@ class TestQueryNodusTrace:
         assert result["steps"] == []
 
     def test_summary_included(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         rows = [self._make_row(i, "recall") for i in range(3)]
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = rows
@@ -277,7 +277,7 @@ class TestQueryNodusTrace:
         assert result["summary"]["total_calls"] == 3
 
     def test_limit_applied(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
@@ -287,7 +287,7 @@ class TestQueryNodusTrace:
         db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(10)
 
     def test_invalid_user_id_handled(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
@@ -297,7 +297,7 @@ class TestQueryNodusTrace:
         assert result["count"] == 0
 
     def test_execution_unit_id_in_response(self):
-        from services.nodus_trace_service import query_nodus_trace
+        from runtime.nodus_trace_service import query_nodus_trace
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
@@ -313,7 +313,7 @@ class TestQueryNodusTrace:
 
 class TestBuildTraceSummary:
     def test_empty_steps(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         result = build_trace_summary([])
         assert result == {
             "total_calls": 0,
@@ -324,7 +324,7 @@ class TestBuildTraceSummary:
         }
 
     def test_counts_by_fn_name(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         steps = [
             {"fn_name": "recall", "duration_ms": 5, "status": "ok"},
             {"fn_name": "recall", "duration_ms": 3, "status": "ok"},
@@ -334,7 +334,7 @@ class TestBuildTraceSummary:
         assert result["fn_counts"] == {"recall": 2, "emit": 1}
 
     def test_total_duration(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         steps = [
             {"fn_name": "recall", "duration_ms": 10, "status": "ok"},
             {"fn_name": "set_state", "duration_ms": 5, "status": "ok"},
@@ -343,7 +343,7 @@ class TestBuildTraceSummary:
         assert result["total_duration_ms"] == 15
 
     def test_error_count(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         steps = [
             {"fn_name": "recall", "duration_ms": 5, "status": "ok"},
             {"fn_name": "remember", "duration_ms": 1, "status": "error"},
@@ -352,7 +352,7 @@ class TestBuildTraceSummary:
         assert result["error_count"] == 1
 
     def test_fn_names_deduplicated_in_order(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         steps = [
             {"fn_name": "recall", "duration_ms": 5, "status": "ok"},
             {"fn_name": "emit", "duration_ms": 2, "status": "ok"},
@@ -362,7 +362,7 @@ class TestBuildTraceSummary:
         assert result["fn_names"] == ["recall", "emit"]
 
     def test_none_duration_treated_as_zero(self):
-        from services.nodus_trace_service import build_trace_summary
+        from runtime.nodus_trace_service import build_trace_summary
         steps = [{"fn_name": "get_state", "duration_ms": None, "status": "ok"}]
         result = build_trace_summary(steps)
         assert result["total_duration_ms"] == 0
@@ -409,7 +409,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=trace_result):
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=trace_result):
             resp = client.get("/platform/nodus/trace/exec-1")
 
         assert resp.status_code == 200
@@ -430,7 +430,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=empty):
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=empty):
             resp = client.get("/platform/nodus/trace/missing")
 
         assert resp.status_code == 404
@@ -470,7 +470,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/my-trace")
 
         mock_q.assert_called_once()
@@ -496,7 +496,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/exec-1")
 
         kwargs = mock_q.call_args.kwargs
@@ -521,7 +521,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=result):
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result):
             resp = client.get("/platform/nodus/trace/exec-1")
 
         body = resp.json()
@@ -547,7 +547,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("services.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/exec-1?limit=50")
 
         kwargs = mock_q.call_args.kwargs
@@ -596,3 +596,4 @@ class TestNodusTraceEventModel:
     def test_tablename(self):
         from db.models.nodus_trace_event import NodusTraceEvent
         assert NodusTraceEvent.__tablename__ == "nodus_trace_events"
+

@@ -20,7 +20,7 @@ These can be overridden via environment variables:
 
 Usage
 -----
-    from services.resource_manager import get_resource_manager
+    from kernel.resource_manager import get_resource_manager
 
     rm = get_resource_manager()
 

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 
 # ── Import the module under test ──────────────────────────────────────────────
-from services import calculation_services
+from analytics import calculation_services
 from schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
