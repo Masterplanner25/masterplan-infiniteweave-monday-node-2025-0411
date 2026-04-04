@@ -29,7 +29,11 @@
                                                  "V1-STAB-006",
                                                  "V1-PLAT-007",
                                                  "V1-REL-002",
-                                                 "V1-REL-003"
+                                                 "V1-REL-003",
+                                                 "V1-REFACT-007",
+                                                 "V1-REFACT-010",
+                                                 "V1-REFACT-011",
+                                                 "V1-REFACT-014"
                                              ]
               },
     "tasks":  {
@@ -282,12 +286,12 @@
                                         "notes":  "10 non-shim files moved into platform_layer/: api_key_service, platform_loader, node_registry, event_service, external_call_service, rate_limiter, scheduler_service, async_job_service, system_state_service, master_index_service. services/flow_registry.py was already a shim to runtime.flow_registry and was intentionally skipped. services/ shims added; scheduler_service and async_job_service shims include explicit private re-exports. main.py updated to import scheduler_service from platform_layer."
                                     },
                   "V1-REFACT-007":  {
-                                        "status":  "pending",
+                                        "status":  "completed",
                                         "priority":  "CRITICAL",
                                         "phase":  2,
                                         "title":  "Move analytics + domain + core files + create shims",
-                                        "started_at":  null,
-                                        "completed_at":  null,
+                                        "started_at":  "2026-04-04",
+                                        "completed_at":  "2026-04-04",
                                         "validation_check":  "none",
                                         "files":  [
                                                       "AINDY/analytics/",
@@ -297,7 +301,7 @@
                                         "dependencies":  [
                                                              "V1-REFACT-006"
                                                          ],
-                                        "notes":  "15 to analytics/, 26 to domain/, 6 to core/, 1 (threadweaver) to utils/"
+                                        "notes":  "analytics/, domain/, and core/ are now the canonical packages. Completed the remaining analytics move by relocating linkedin_adapter.py and rate_calculator.py from services/analytics into analytics/ and removing the leftover services/analytics shim files. threadweaver and trace_context already live in utils/."
                                     },
                   "V1-REFACT-008":  {
                                         "status":  "completed",
@@ -368,12 +372,12 @@
                                         "notes":  "43 files updated via bulk Python replacement script. Patterns replaced: services.memory_* -\u003e memory.memory_*, services.embedding_* -\u003e memory.embedding_*, import services.memory_persistence -\u003e import memory.memory_persistence, bridge.bridge -\u003e memory.bridge, bridge.nodus_memory_bridge -\u003e memory.nodus_memory_bridge, from bridge import X -\u003e from memory.bridge import X (for create_memory_node/link, recall_memories), from bridge import bridge -\u003e import memory.bridge as bridge. `from bridge import suggest_from_memory` intentionally preserved (suggest_from_memory still lives in bridge/__init__.py). 10 shim files deleted: 8 services/ + bridge/bridge.py + bridge/nodus_memory_bridge.py. Final grep confirmed zero remaining references to old paths."
                                     },
                   "V1-REFACT-010":  {
-                                        "status":  "pending",
+                                        "status":  "completed",
                                         "priority":  "CRITICAL",
                                         "phase":  2,
                                         "title":  "Update all runtime/agents/platform_layer imports + remove shims",
-                                        "started_at":  null,
-                                        "completed_at":  null,
+                                        "started_at":  "2026-04-04",
+                                        "completed_at":  "2026-04-04",
                                         "validation_check":  "V1-VAL-010",
                                         "files":  [
 
@@ -384,15 +388,15 @@
                                                              "V1-REFACT-006",
                                                              "V1-REFACT-008"
                                                          ],
-                                        "notes":  "30 import patterns. Fix `from services import scheduler_service` in main.py"
+                                        "notes":  "Verified runtime/, agents/, and platform_layer/ no longer import legacy services.* shim modules. Remaining active services usage is auth_service.py by design. Import smoke test passed for analytics.linkedin_adapter and analytics.rate_calculator after the final analytics move."
                                     },
                   "V1-REFACT-011":  {
-                                        "status":  "pending",
+                                        "status":  "completed",
                                         "priority":  "CRITICAL",
                                         "phase":  2,
                                         "title":  "Update all analytics/domain/core imports + remove shims",
-                                        "started_at":  null,
-                                        "completed_at":  null,
+                                        "started_at":  "2026-04-04",
+                                        "completed_at":  "2026-04-04",
                                         "validation_check":  "V1-VAL-009",
                                         "files":  [
 
@@ -401,7 +405,7 @@
                                                              "V1-REFACT-007",
                                                              "V1-REFACT-010"
                                                          ],
-                                        "notes":  "After this: services/ contains only auth_service.py. Delete services/services__init__.py"
+                                        "notes":  "Verified active imports now target analytics/, domain/, and core/ directly. Removed the remaining tracked analytics shim files under services/analytics/. services/ now contains only auth_service.py as an intentional exception; services/services__init__.py is not present."
                                     },
                   "V1-REFACT-012":  {
                                         "status":  "completed",
@@ -438,12 +442,12 @@
                                         "notes":  "ENABLE_DOMAIN_APPS: bool = False added to Settings. routes/__init__.py: _PLATFORM_APP_ROUTERS (18) always mounts; _DOMAIN_APP_ROUTERS (11: arm, freelance, leadgen, seo, social, authorship, research, search_history, rippletrace, network_bridge, main_router) gated. APP_ROUTERS built dynamically from env at import time. AINDY_ENABLE_LEGACY_SURFACE append preserved. .env.example updated."
                                     },
                   "V1-REFACT-014":  {
-                                        "status":  "pending",
+                                        "status":  "completed",
                                         "priority":  "IMPORTANT",
                                         "phase":  2,
                                         "title":  "Remove root-level debris files",
-                                        "started_at":  null,
-                                        "completed_at":  null,
+                                        "started_at":  "2026-04-04",
+                                        "completed_at":  "2026-04-04",
                                         "validation_check":  "none",
                                         "files":  [
                                                       "fix_backend.py",
@@ -456,7 +460,7 @@
                                         "dependencies":  [
                                                              "V1-REFACT-011"
                                                          ],
-                                        "notes":  "fix_backend.py, script.py, @echo off.bat, git_health_check.bat all still present at root. services__init__.py and legacy/ still present. Move legacy/ to archive/ with README note, don\u0027t delete."
+                                        "notes":  "Removed root-level debris files fix_backend.py, script.py, @echo off.bat, and git_health_check.bat. Moved AINDY/legacy/ to AINDY/archive/legacy/ and added archive/README.md. Ruff exclude updated from legacy/ to archive/."
                                     },
                   "V1-REFACT-015":  {
                                         "status":  "completed",
@@ -831,7 +835,7 @@
                              "status":  "in_progress",
                              "blocker_tasks_complete":  2,
                              "blocker_tasks_total":  2,
-                             "notes":  "All Phase 2 BLOCKER tasks complete (V1-REFACT-013, V1-REFACT-008). V1-REFACT-003, V1-REFACT-004, V1-REFACT-005, V1-REFACT-006, V1-REFACT-008, V1-REFACT-009, and V1-REFACT-012 complete. Next unblocked structural sequence: V1-REFACT-007 -\u003e V1-REFACT-010 -\u003e V1-REFACT-011 -\u003e V1-REFACT-014.",
+                             "notes":  "All Phase 2 BLOCKER tasks complete (V1-REFACT-013, V1-REFACT-008). V1-REFACT-003, V1-REFACT-004, V1-REFACT-005, V1-REFACT-006, V1-REFACT-007, V1-REFACT-008, V1-REFACT-009, V1-REFACT-010, V1-REFACT-011, V1-REFACT-012, and V1-REFACT-014 complete.",
                              "task_ids":  [
                                               "V1-REFACT-001",
                                               "V1-REFACT-002",
