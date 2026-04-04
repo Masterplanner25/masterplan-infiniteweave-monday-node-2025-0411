@@ -104,7 +104,7 @@ def analyze(nodes: list[dict[str, Any]]) -> dict[str, Any]:
         insights.append({
             "type":    "tag_frequency",
             "content": (
-                f"Most active work areas this sprint: "
+                "Most active work areas this sprint: "
                 + ", ".join(top_tags[:3]) + ". "
                 + f"Total unique tags: {len(tag_counter)}."
             ),

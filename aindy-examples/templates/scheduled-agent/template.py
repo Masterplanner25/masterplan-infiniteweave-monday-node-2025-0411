@@ -10,7 +10,9 @@ Fill in the four marked lines and run:
     python template.py run-now   # test without waiting for cron
     python template.py cancel
 """
-import argparse, os, sys
+import argparse
+import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "sdk"))
@@ -85,7 +87,7 @@ def cmd_setup() -> None:
     })
     print(f"Schedule created: {CRON_EXPR}")
     print(f"Next run:         {sched.get('next_run_at', '—')}")
-    print(f"\nDone. Run `python template.py run-now` to test immediately.")
+    print("\nDone. Run `python template.py run-now` to test immediately.")
 
 
 def cmd_run_now() -> None:

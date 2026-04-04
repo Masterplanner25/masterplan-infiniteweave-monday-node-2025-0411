@@ -16,6 +16,7 @@ Environment:
     AINDY_BASE_URL   Server URL (default: http://localhost:8000)
     AINDY_API_KEY    Platform API key (required)
 """
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -108,7 +109,7 @@ def cmd_setup(client: AINDYClient, cron_override: str | None, webhook_override: 
             "cron_expr": cron_expr,
             "state":     {"namespace": namespace},
         })
-        print(f"  ✓ Schedule created")
+        print("  ✓ Schedule created")
         print(f"    name:     {schedule.get('name', sched['name'])}")
         print(f"    cron:     {cron_expr}")
         print(f"    next run: {schedule.get('next_run_at', 'calculated at next tick')}")
@@ -118,12 +119,12 @@ def cmd_setup(client: AINDYClient, cron_override: str | None, webhook_override: 
     # 4. Subscribe webhook
     print("\n[setup] Subscribing webhook...")
     if "webhook.site/replace" in webhook_url:
-        print(f"  ⚠ Webhook URL not configured.")
-        print(f"    Edit data/schedule_config.json → webhook.callback_url")
-        print(f"    or run: python main.py setup --webhook https://your-url/hook")
+        print("  ⚠ Webhook URL not configured.")
+        print("    Edit data/schedule_config.json → webhook.callback_url")
+        print("    or run: python main.py setup --webhook https://your-url/hook")
     else:
         try:
-            sub = client.post("/platform/webhooks", {
+            client.post("/platform/webhooks", {
                 "event_type":   wh["event_type"],
                 "callback_url": webhook_url,
                 "secret":       wh.get("secret", ""),
@@ -156,9 +157,9 @@ def cmd_run_now(client: AINDYClient) -> None:
         print("\n  Briefing written to memory:")
         print_briefing_box(result.get("output_state", {}))
         ev_count = result.get("events_emitted", 0)
-        print(f"  Event emitted: daily.briefing.ready")
+        print("  Event emitted: daily.briefing.ready")
         if ev_count:
-            print(f"  Webhook queued: checking subscriptions...")
+            print("  Webhook queued: checking subscriptions...")
     else:
         err = result.get("error") or result.get("output_state", {})
         print(f"  Error: {err}")
@@ -205,7 +206,7 @@ def cmd_cancel(client: AINDYClient) -> None:
     print(f"\nCancelling schedule '{name}'...")
     try:
         client.delete(f"/platform/nodus/schedule/{name}")
-        print(f"  ✓ Schedule cancelled.")
+        print("  ✓ Schedule cancelled.")
     except AINDYError as e:
         print(f"  ✗ {e.message}")
 

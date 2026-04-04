@@ -16,6 +16,7 @@ Environment:
     AINDY_BASE_URL   Server URL (default: http://localhost:8000)
     AINDY_API_KEY    Platform API key (required)
 """
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,7 @@ if SDK_PATH.exists() and str(SDK_PATH) not in sys.path:
     sys.path.insert(0, str(SDK_PATH))
 
 from aindy import AINDYClient, AINDYError
-from workflow import clear_state, get_run_id, load_state, print_separator, save_state
+from workflow import clear_state, load_state, print_separator, save_state
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ def cmd_start(client: AINDYClient) -> None:
 
     save_state({"run_id": run_id, "namespace": MEMORY_NAMESPACE})
 
-    print(f"  Script:  approval_flow")
+    print("  Script:  approval_flow")
     print(f"  Run ID:  {run_id}")
     print(f"  Status:  {status}")
 
@@ -219,7 +220,7 @@ def _poll_for_completion(client: AINDYClient, run_id: str, max_wait: int = 600) 
             pass  # server may still be processing — keep polling
 
     print(f"\nTimed out after {max_wait}s. The workflow is still waiting.")
-    print(f"Run `python main.py approve` to complete it, or `python main.py status` to check.")
+    print("Run `python main.py approve` to complete it, or `python main.py status` to check.")
 
 
 def _print_memory_outcome(client: AINDYClient) -> None:

@@ -9,7 +9,8 @@ Each time the event fires, the handler flow runs.
 Fill in the three marked lines and run:
     python template.py
 """
-import os, sys, time
+import os
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[3] / "sdk"))
@@ -67,7 +68,7 @@ while running {{
 def run() -> None:
     # Upload the listener
     client.nodus.upload_script("event_listener", LISTENER_SCRIPT, overwrite=True)
-    print(f"Listener uploaded.")
+    print("Listener uploaded.")
     print(f"  Trigger:  {TRIGGER_EVENT}")
     print(f"  Handler:  {HANDLER_FLOW}")
     print(f"  Output:   {WRITE_PATH}")

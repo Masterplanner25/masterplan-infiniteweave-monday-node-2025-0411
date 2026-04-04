@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import io
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -96,7 +95,7 @@ def gate_v1_gate_tests() -> None:
         capture_output=True, text=True, cwd=str(AINDY_DIR)
     )
     if result.returncode == 0:
-        last_line = [l for l in result.stdout.strip().splitlines() if l.strip()]
+        last_line = [line for line in result.stdout.strip().splitlines() if line.strip()]
         ok(f"V1 gate tests passed: {last_line[-1] if last_line else 'OK'}")
     else:
         # Show only last 40 lines of output to keep readable
@@ -114,7 +113,7 @@ def gate_full_test_suite() -> None:
         capture_output=True, text=True, cwd=str(AINDY_DIR)
     )
     if result.returncode == 0:
-        cov_lines = [l for l in result.stdout.splitlines() if "%" in l and "TOTAL" in l]
+        cov_lines = [line for line in result.stdout.splitlines() if "%" in line and "TOTAL" in line]
         ok(f"Full test suite passed. {cov_lines[-1].strip() if cov_lines else 'Coverage OK'}")
     else:
         tail = "\n".join((result.stdout + result.stderr).splitlines()[-25:])
@@ -136,7 +135,7 @@ def gate_services_directory() -> None:
     extra = set(py_files) - allowed
 
     if extra:
-        fail(f"services/ must contain only auth_service.py, also found:\n"
+        fail("services/ must contain only auth_service.py, also found:\n"
              + "\n".join(f"  - {f}" for f in sorted(extra)))
     else:
         ok("services/ contains only auth_service.py")
@@ -151,7 +150,7 @@ def gate_no_shim_files() -> None:
          "--include=*.py", "--exclude-dir=tests", "-l"],
         capture_output=True, text=True
     )
-    shim_files = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+    shim_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     if shim_files:
         fail(f"Migration shims still present ({len(shim_files)} files):\n"
              + "\n".join(f"  - {f}" for f in shim_files))
@@ -295,7 +294,7 @@ def gate_docs_exist() -> None:
     ]
     missing = [str(p) for p in required_docs if not p.exists()]
     if missing:
-        fail(f"Required docs missing:\n" + "\n".join(f"  - {p}" for p in missing))
+        fail("Required docs missing:\n" + "\n".join(f"  - {p}" for p in missing))
     else:
         ok("Required documentation files exist")
 

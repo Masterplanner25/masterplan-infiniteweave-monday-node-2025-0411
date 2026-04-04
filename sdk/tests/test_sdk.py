@@ -370,7 +370,7 @@ class TestNodusAPI(unittest.TestCase):
     def test_run_script_inline_posts_to_nodus_run(self):
         nodus_response = {"status": "SUCCESS", "nodus_status": "success", "output_state": {"x": 1}}
         with patch.object(self.client, "post", return_value=nodus_response) as m:
-            result = self.client.nodus.run_script(script='set_state("x", 1)')
+            self.client.nodus.run_script(script='set_state("x", 1)')
         m.assert_called_once()
         call_args = m.call_args[0]
         self.assertEqual(call_args[0], "/platform/nodus/run")
