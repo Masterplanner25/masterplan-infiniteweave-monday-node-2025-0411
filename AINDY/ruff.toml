@@ -1,7 +1,7 @@
 line-length = 120
 target-version = "py311"
 exclude = [
-    "legacy/",
+    "archive/",
     "bridge/memory_bridge_rs/",
     "alembic/",
     ".venv/",

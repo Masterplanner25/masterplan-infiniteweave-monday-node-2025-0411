@@ -1,8 +1,7 @@
-from services.analytics.rate_calculator import calculate_rates
+from analytics.rate_calculator import calculate_rates
 
 
 def linkedin_adapter(raw):
-
     interaction_volume = raw.likes + raw.comments + raw.shares
     intent_signals = raw.profile_views + raw.link_clicks
 
@@ -14,7 +13,6 @@ def linkedin_adapter(raw):
         "period_type": raw.period_type,
         "period_start": raw.period_start,
         "period_end": raw.period_end,
-
         "passive_visibility": raw.impressions,
         "active_discovery": raw.search_appearances,
         "unique_reach": raw.members_reached,
@@ -27,5 +25,4 @@ def linkedin_adapter(raw):
     }
 
     canonical_data.update(calculate_rates(canonical_data))
-
     return canonical_data

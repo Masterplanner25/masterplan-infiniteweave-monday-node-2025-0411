@@ -1,5 +1,4 @@
 def calculate_rates(data: dict):
-
     visibility = data.get("passive_visibility", 0)
     interactions = data.get("interaction_volume", 0)
     attention = data.get("deep_attention_units", 0)
