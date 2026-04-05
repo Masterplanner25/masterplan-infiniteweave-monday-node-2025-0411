@@ -15,4 +15,9 @@ export * from "../../AINDY/client/src/api.js";
 // postScoreFeedback
 // getScoreFeedback
 // /scores/feedback
-
+// getMyScore
+// recalculateScore
+// getScoreHistory
+// /scores/me
+// /scores/me/recalculate
+// /scores/me/history

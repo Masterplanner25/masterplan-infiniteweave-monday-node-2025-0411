@@ -209,6 +209,17 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
     except Exception as exc:
         logger.warning("[AgentTools] suggest_tools dispatch failed: %s", exc)
 
+    if user_id and db is not None:
+        try:
+            from domain.infinity_loop import get_latest_adjustment
+
+            latest = get_latest_adjustment(user_id=user_id, db=db)
+            persisted_suggestions = (getattr(latest, "adjustment_payload", {}) or {}).get("suggestions", [])
+            if persisted_suggestions:
+                return persisted_suggestions[:3]
+        except Exception as exc:
+            logger.warning("[AgentTools] latest adjustment lookup failed: %s", exc)
+
     if not kpi_snapshot:
         return []
 
