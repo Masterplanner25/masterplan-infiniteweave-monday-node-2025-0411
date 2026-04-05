@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
+from core.execution_service import ExecutionContext
+from core.execution_service import run_execution
 from db.database import get_db
 from services.auth_service import get_current_user
 
@@ -11,13 +12,15 @@ router = APIRouter(prefix="/goals", tags=["Goals"])
 
 
 def _execute_goals(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None, success_status_code: int = 200):
-    return execute_with_pipeline_sync(
-        request=request,
-        route_name=route_name,
-        handler=handler,
-        user_id=user_id,
-        input_payload=input_payload,
-        metadata={"db": db, "source": "goals_router"},
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="goals_router",
+            operation=route_name,
+            start_payload=input_payload or {},
+        ),
+        lambda: handler(None),
         success_status_code=success_status_code,
     )
 

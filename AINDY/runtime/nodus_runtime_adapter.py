@@ -88,6 +88,8 @@ class NodusExecutionContext:
                         to write values that surface in NodusExecutionResult.output_state
                         after the run.  A read-only snapshot is also exposed as
                         the global ``state`` for convenience.
+    allowed_operations  Optional compatibility gate for legacy callers that
+                        expose only a restricted subset of memory built-ins.
     event_sink          Optional callable(event_type: str, payload: dict) that
                         receives every Nodus emit() call.  When None the adapter
                         falls back to queue_system_event() so events land on the
@@ -98,6 +100,7 @@ class NodusExecutionContext:
     memory_context: dict[str, Any] = field(default_factory=dict)
     input_payload: dict[str, Any] = field(default_factory=dict)
     state: dict[str, Any] = field(default_factory=dict)
+    allowed_operations: Optional[list[str]] = None
     event_sink: Optional[Callable[[str, dict], None]] = None
     max_execution_ms: Optional[int] = None
 
@@ -318,12 +321,20 @@ class NodusRuntimeAdapter:
 
             # ── Register A.I.N.D.Y. callbacks as Nodus builtins ───────────────
 
+            allowed_operations = set(context.allowed_operations or [])
+            allow_all_operations = not allowed_operations
+
             # Memory read operations (read_memory capability)
-            _register_function_if_possible(runtime, "recall", _make_traced("recall", bridge.recall), arity=(0, 1, 2, 3, 4))
-            _register_function_if_possible(runtime, "recall_tool", _make_traced("recall_tool", bridge.recall_tool), arity=(0, 1, 2, 3))
-            _register_function_if_possible(runtime, "recall_from", _make_traced("recall_from", bridge.recall_from), arity=(1, 2, 3, 4))
-            _register_function_if_possible(runtime, "recall_all", _make_traced("recall_all", bridge.recall_all_agents), arity=(0, 1, 2, 3))
-            _register_function_if_possible(runtime, "suggest", _make_traced("suggest", bridge.get_suggestions), arity=(0, 1, 2, 3))
+            if allow_all_operations or "recall" in allowed_operations:
+                _register_function_if_possible(runtime, "recall", _make_traced("recall", bridge.recall), arity=(0, 1, 2, 3, 4))
+            if allow_all_operations or "recall_tool" in allowed_operations:
+                _register_function_if_possible(runtime, "recall_tool", _make_traced("recall_tool", bridge.recall_tool), arity=(0, 1, 2, 3))
+            if allow_all_operations or "recall_from" in allowed_operations:
+                _register_function_if_possible(runtime, "recall_from", _make_traced("recall_from", bridge.recall_from), arity=(1, 2, 3, 4))
+            if allow_all_operations or "recall_all" in allowed_operations:
+                _register_function_if_possible(runtime, "recall_all", _make_traced("recall_all", bridge.recall_all_agents), arity=(0, 1, 2, 3))
+            if allow_all_operations or "suggest" in allowed_operations:
+                _register_function_if_possible(runtime, "suggest", _make_traced("suggest", bridge.get_suggestions), arity=(0, 1, 2, 3))
 
             # Memory write operations — wrap to capture writes before forwarding
             def _remember_with_capture(*args: Any, **kwargs: Any) -> Any:
@@ -336,9 +347,12 @@ class NodusRuntimeAdapter:
                 })
                 return result
 
-            _register_function_if_possible(runtime, "remember", _make_traced("remember", _remember_with_capture), arity=(1, 2, 3, 4, 5))
-            _register_function_if_possible(runtime, "record_outcome", _make_traced("record_outcome", bridge.record_outcome), arity=2)
-            _register_function_if_possible(runtime, "share", _make_traced("share", bridge.share), arity=1)
+            if allow_all_operations or "remember" in allowed_operations:
+                _register_function_if_possible(runtime, "remember", _make_traced("remember", _remember_with_capture), arity=(1, 2, 3, 4, 5))
+            if allow_all_operations or "record_outcome" in allowed_operations:
+                _register_function_if_possible(runtime, "record_outcome", _make_traced("record_outcome", bridge.record_outcome), arity=2)
+            if allow_all_operations or "share" in allowed_operations:
+                _register_function_if_possible(runtime, "share", _make_traced("share", bridge.share), arity=1)
 
             # Event emission — capture + route to event_sink / default queue
             def _emit_with_capture(
@@ -434,6 +448,7 @@ class NodusRuntimeAdapter:
             initial_globals: dict[str, Any] = {
                 "memory_context": context.memory_context,
                 "input_payload": context.input_payload,
+                "allowed_operations": list(context.allowed_operations or []),
                 "state": dict(context.state),   # read-only snapshot; mutations via set_state()
                 "execution_unit_id": context.execution_unit_id,
                 "user_id": context.user_id,

@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
+from core.execution_service import ExecutionContext
+from core.execution_service import run_execution
 from db.database import get_db
 from schemas.freelance import (
     FeedbackCreate,
@@ -31,13 +32,15 @@ def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str
 
 def _execute_freelance(request: Request, route_name: str, handler, *, db: Session, user_id: str,
                        input_payload=None, success_status_code: int = 200):
-    return execute_with_pipeline_sync(
-        request=request,
-        route_name=route_name,
-        handler=handler,
-        user_id=user_id,
-        input_payload=input_payload,
-        metadata={"db": db, "source": "freelance"},
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation=route_name,
+            start_payload=input_payload or {},
+        ),
+        lambda: handler(None),
         success_status_code=success_status_code,
     )
 
