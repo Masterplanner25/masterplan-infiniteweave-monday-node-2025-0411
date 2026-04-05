@@ -30,12 +30,12 @@ FastAPI app (main.py)
         |     - analytics / rippletrace / dashboard
         |     - legacy compatibility surface
         |
-        +--> services/*
-        |     - flow engine
-        |     - infinity orchestrator
-        |     - agent runtime
-        |     - scheduler / automation
-        |     - memory services
+        +--> core/*, runtime/*, platform_layer/*, agents/*, domain/*
+        |     - route execution pipeline and envelopes
+        |     - flow engine and Nodus runtime integration
+        |     - scheduler / async jobs / external-call instrumentation
+        |     - agent runtime and coordination
+        |     - domain orchestration and memory-facing services
         |
         +--> data layer
               - PostgreSQL via SQLAlchemy/Alembic
@@ -53,10 +53,11 @@ FastAPI app (main.py)
 ## 4. Core Execution Layers
 - API layer: `routes/*`
 - Route execution pipeline: `core/execution_pipeline.py`, `core/execution_helper.py`
-- Service/orchestration layer: `services/*`
-- Flow execution layer: `services/flow_engine.py`
-- Agent runtime: `services/agent_runtime.py`, `services/nodus_adapter.py`
+- Orchestration layer: `domain/*`, `platform_layer/*`, `agents/*`
+- Flow execution layer: `runtime/flow_engine.py`
+- Agent runtime: `agents/agent_runtime.py`, `runtime/nodus_adapter.py`
 - Memory runtime: `runtime/memory/*`
+- Scheduler / external-call instrumentation: `platform_layer/scheduler_service.py`, `platform_layer/external_call_service.py`
 - Data layer: `db/models/*`, `db/dao/*`, Alembic migrations
 
 ## 5. Data Systems
@@ -92,7 +93,7 @@ System-wide activity ledger:
 - RippleTrace now structures execution causality on top of `SystemEvent` through `ripple_edges`, including event-to-event and event-to-memory links.
 - Core execution paths emit required lifecycle events. Route-layer execution is now split between the newer fail-open route pipeline in `core/execution_pipeline.py` and older service-level wrappers/canonical envelopes, so execution normalization is stronger but still not perfectly single-path across the repo.
 - Successful health, auth, and async heavy-execution paths now emit durable success events in addition to core flow execution paths.
-- External interactions now also emit required lifecycle events through `services/external_call_service.py`.
+- External interactions now also emit required lifecycle events through `platform_layer/external_call_service.py`.
 - Required outbound event types:
   - `external.call.started`
   - `external.call.completed`

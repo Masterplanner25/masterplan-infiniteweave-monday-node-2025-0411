@@ -4,9 +4,9 @@ This document distinguishes current testing reality from required policy going f
 
 ## 1. Current Testing Landscape
 
-### Current State (as of 2026-03-27)
+### Current State (as of 2026-04-05)
 
-The historical breakdown below is preserved, but the current validated baseline has moved substantially since the early CI rollout.
+This section describes the currently validated test baseline. Older sprint-by-sprint counts and file inventories are preserved later in this document as historical traceability only.
 
 **Current test architecture**
 - Pytest runs in `TEST_MODE=true` by default.
@@ -48,24 +48,11 @@ The historical breakdown below is preserved, but the current validated baseline 
   - invalid agent run IDs fail cleanly as `400` instead of surfacing as `500`
 - These suites use real persisted `AgentRun`, `AgentStep`, `AgentEvent`, `SystemEvent`, and `AutomationLog` rows with only boundary mocks for external planners/executors.
 
-**Current validated baseline** — local `pytest -q --tb=short` after Syscall Versioning sprint (2026-04-01):
-- **~1,378 passed** (287 sprint-owned tests added across OS Layer, MAS, and Syscall Versioning sprints since N+11)
-- **4 skipped**
-- **0 failed**
-- full suite green under `pytest -q --no-cov`
-
-Sprint test additions since N+11:
-- Nodus memory builtins: +49 (total 1,339 after)
-- Nodus event builtins: +39
-- Nodus flow compiler: +57
-- Nodus scheduler: +39
-- Nodus observability: +44
-- Nodus CLI: +46
-- Syscall dispatcher: +54
-- Syscall refactor: +44
-- MAS (Memory Address Space): +61 (`tests/unit/test_memory_address_space.py`)
-- OS Isolation Layer: +64
-- Syscall Versioning: +64 (`tests/unit/test_syscall_versioning.py`)
+**Current validated baseline**
+- Local `pytest -o addopts='' --tb=no` on 2026-04-05: **2064 passed, 19 skipped, 0 failed**
+- Local `pytest --cov=. -q` on 2026-04-05: **69% total coverage**
+- Discovery root remains `tests/` via `pytest.ini`
+- Coverage policy remains enforced at **69%**
 
 **Current runtime guarantees validated by the green suite**
 - UUID identity normalization holds across route/service/system paths.
@@ -77,6 +64,10 @@ Sprint test additions since N+11:
   - `execution.started` at submission
   - `async_job.started` / `async_job.completed` / `async_job.failed` for queued worker execution
   - `execution.completed` / `execution.failed` as canonical ledger events
+
+## 1A. Historical Traceability
+
+The inventory below is retained as an archived progress record from earlier sprints. It is not the authoritative current suite map and should not be read as a live count of the present repository.
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -103,7 +94,7 @@ Sprint test additions since N+11:
 
 Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `pytest-cov==7.0.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery and coverage configured in `pytest.ini` and `AINDY/.coveragerc`.
 
-**New test files (Sprint 6+7 / CI Sprint):**
+**Historical sprint note (Sprint 6+7 / CI Sprint):**
 
 | File | Tests | Coverage |
 |------|-------|----------|
@@ -113,7 +104,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 
 **Execution-contract lint (current):** `.github/workflows/lint.yml` now runs `python tools/execution_contract_linter.py --strict`. The same check is available locally through `.pre-commit-config.yaml`. This is architecture enforcement rather than behavioral test coverage; it statically rejects route-entry, direct-memory, and direct-event patterns that bypass the execution pipeline.
 
-**Root test files**
+**Historical note on root test files**
 - Legacy root-level test files have been migrated out of `tests/` and replaced by the structured layout above.
 
 **Phase 2 security tests** — all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth → 401) and the acceptance path (valid JWT → expected status). No intentional failures remain in the test suite.
@@ -127,7 +118,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 - Any change affecting invariants requires updated tests.
 
 ### B. Service-Level Unit Tests
-- All business logic in `AINDY/services/` must have unit tests.
+- All business logic in `AINDY/core/`, `AINDY/runtime/`, `AINDY/platform_layer/`, `AINDY/agents/`, and `AINDY/domain/` must have unit tests.
 - Pure logic must be isolated from DB where possible.
 - DB interactions must be tested using transactional test sessions.
 
@@ -149,7 +140,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 
 ## 3. Mocking Policy for External Model Providers
 
-### A. OpenAI (`AINDY/services/genesis_ai.py`)
+### A. OpenAI (`AINDY/domain/genesis_ai.py`)
 - Tests must not call real OpenAI APIs.
 - Use dependency injection or patching to mock responses.
 - Validate:
@@ -157,7 +148,7 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 - Malformed JSON path.
 - Model error path.
 
-### B. DeepSeek Integration (`AINDY/services/deepseek_arm_service.py`)
+### B. DeepSeek Integration (`AINDY/modules/deepseek/deepseek_code_analyzer.py`)
 - No real external calls during unit tests.
 - Mock module behavior.
 - Validate fallback/error behavior.
@@ -197,11 +188,11 @@ A change cannot be merged if:
 
 ## 8. Known Gaps
 - Some structured tests still retain targeted mocks for external boundaries, especially older memory-bridge and model-provider coverage. That is acceptable only where the boundary is truly external or nondeterministic.
-- The historical counts below are preserved for traceability, but they do not describe the current suite layout anymore.
+- The historical counts above are preserved for traceability, but they do not describe the current suite layout anymore.
 - ✅ **Resolved (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured — `pytest-cov`, `.coveragerc`, and `--cov-fail-under=64` in `pytest.ini`. Baseline: 69%.
 - ✅ **Resolved (2026-03-18 CI/CD Sprint):** CI enforcement live — GitHub Actions `ci.yml` enforces lint + test + coverage on every push/PR.
 - No migration validation tests (`AINDY/alembic/` has no test harness).
-- No tests for background task loops (`AINDY/services/task_services.py`).
+- No tests for background task loops (`AINDY/domain/task_services.py`).
 - No error handling contract tests validating JSON error structure per `docs/governance/ERROR_HANDLING_POLICY.md`.
 - ✅ **Resolved (2026-03-22):** Duplicate `test_get_results` names in `test_routes.py` renamed to unique identifiers. Other root tests still mirror names across files but are unique within each file.
 - ✅ **Resolved (2026-03-22):** Migration drift guard added via `tests/test_migrations.py` (asserts `alembic current` equals `alembic heads`).
