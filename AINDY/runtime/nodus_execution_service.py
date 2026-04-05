@@ -7,7 +7,8 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from memory.nodus_memory_bridge import create_nodus_bridge
+from runtime.nodus_runtime_adapter import NodusExecutionContext
+from runtime.nodus_runtime_adapter import NodusRuntimeAdapter
 from runtime.nodus_security import (
     ALLOWED_OPERATION_CAPABILITIES,
     NodusSecurityError,
@@ -29,11 +30,6 @@ def execute_nodus_task_payload(
     logger=None,
 ) -> dict[str, Any]:
     normalized_user_id = str(require_user_id(user_id))
-    bridge = create_nodus_bridge(
-        db=db,
-        user_id=normalized_user_id,
-        session_tags=session_tags,
-    )
 
     try:
         security_context = authorize_nodus_execution(
@@ -51,7 +47,7 @@ def execute_nodus_task_payload(
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
 
-        from nodus.runtime.embedding import NodusRuntime
+        from nodus.runtime.embedding import NodusRuntime  # noqa: F401
 
         from db.dao.memory_node_dao import MemoryNodeDAO
         from runtime.memory import MemoryOrchestrator
@@ -74,39 +70,40 @@ def execute_nodus_task_payload(
             },
         )
 
-        runtime = NodusRuntime()
-        available_operations = {
-            "recall": (bridge.recall, (0, 1, 2, 3, 4)),
-            "recall_tool": (bridge.recall_tool, (0, 1, 2, 3)),
-            "remember": (bridge.remember, (1, 2, 3, 4, 5)),
-            "suggest": (bridge.get_suggestions, (0, 1, 2, 3)),
-            "record_outcome": (bridge.record_outcome, 2),
-            "recall_from": (bridge.recall_from, (1, 2, 3, 4)),
-            "recall_all": (bridge.recall_all_agents, (0, 1, 2, 3)),
-            "share": (bridge.share, 1),
-        }
-        for operation_name in security_context["allowed_operations"]:
-            fn, arity = available_operations[operation_name]
-            runtime.register_function(operation_name, fn, arity=arity)
-
-        result = runtime.run_source(
-            task_code,
-            filename=f"<nodus:{task_name}>",
-            initial_globals={
-                "memory_context": memory_context.formatted,
+        adapter = NodusRuntimeAdapter(db=db)
+        execution_context = NodusExecutionContext(
+            user_id=normalized_user_id,
+            execution_unit_id=execution_id or f"memory.nodus.{task_name}",
+            memory_context=memory_context.formatted,
+            input_payload={
+                "task_name": task_name,
+                "memory_ids": memory_context.ids,
+                "allowed_operations": security_context["allowed_operations"],
+                "required_capabilities": security_context["required_capabilities"],
+                "restricted_operations": security_context["restricted_operations"],
+            },
+            state={
                 "memory_ids": memory_context.ids,
                 "allowed_operations": security_context["allowed_operations"],
             },
-            host_globals={
-                "memory_context": memory_context.formatted,
-                "memory_ids": memory_context.ids,
-                "allowed_operations": security_context["allowed_operations"],
-            },
+            allowed_operations=security_context["allowed_operations"],
         )
+        nodus_result = adapter.run_script(task_code, execution_context)
+
+        result = {
+            "ok": nodus_result.status == "success",
+            "status": nodus_result.status,
+            "error": nodus_result.error,
+            "output_state": nodus_result.output_state,
+            "events": nodus_result.emitted_events,
+            "memory_writes": nodus_result.memory_writes,
+            "allowed_operations": security_context["allowed_operations"],
+        }
 
         try:
+            result_preview = result.get("output_state") or result.get("error") or result.get("status")
             create_memory_node(
-                content=f"Nodus task '{task_name}' executed: {result.get('stdout', '')[:500]}",
+                content=f"Nodus task '{task_name}' executed: {str(result_preview)[:500]}",
                 source="nodus_task",
                 tags=(session_tags or []) + ["nodus", "task_execution"],
                 user_id=normalized_user_id,
