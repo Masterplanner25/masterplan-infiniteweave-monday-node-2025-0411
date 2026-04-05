@@ -16,7 +16,7 @@ This section is the canonical current-state view. Historical notes below are ret
 
 - **PARTIAL:** Nodus/runtime execution is now materially more converged. `runtime/nodus_execution_service.py` provides the canonical adapter-backed Nodus execution entrypoint, and both `runtime/nodus_adapter.py` flow execution and `/memory/nodus/execute` delegate to it. The remaining debt is above that runtime layer: `runtime/flow_engine.py` and `routes/platform_router.py` still own orchestration semantics such as WAIT/RETRY and flow envelopes, so execution is not yet a single model end-to-end. Primary files: `runtime/nodus_execution_service.py`, `runtime/nodus_adapter.py`, `runtime/nodus_runtime_adapter.py`, `runtime/flow_engine.py`, `routes/platform_router.py`, `routes/memory_router.py`.
 - **PARTIAL:** Flow orchestration and VM execution still drift semantically even after canonical runtime convergence. The system now shares one Nodus execution substrate, but flow scheduling, observability envelopes, and persistent run semantics still live partly above it in orchestration code. Primary files: `runtime/flow_engine.py`, `runtime/nodus_adapter.py`, `runtime/nodus_execution_service.py`, `runtime/nodus_runtime_adapter.py`, `routes/platform_router.py`.
-- **PARTIAL:** Search is materially more unified now that `domain/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `domain/search_service.py`, `domain/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
+- **PARTIAL:** Search orchestration is now materially unified. `domain/search_service.py` is the canonical durable, memory-aware search layer for SEO analysis, LeadGen preview, and Research query fallback, with shared cache/history reuse through `search_history`. The remaining gaps are narrower: LeadGen full generation still persists through the flow/syscall path, SEO meta generation is still route-local, and richer provider-backed parsing/ranking is still incomplete. Primary files: `domain/search_service.py`, `routes/seo_routes.py`, `routes/leadgen_router.py`, `routes/research_results_router.py`, `db/models/search_history.py`, `routes/memory_router.py`.
 - **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis now run through the centralized execution wrapper or canonical execution envelopes, and `/system/state` now returns the shared success envelope, but other route groups in the repo still return raw JSON or direct route-level envelopes outside the same wrapper/event lifecycle. Primary files: `core/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
 
 #### Medium
@@ -50,6 +50,7 @@ The following historical items below should now be treated as resolved or update
 - `IdentityService.get_evolution_summary()` now returns a normalized new-user shape and should no longer be treated as open.
 - `WatcherSignal.user_id` is now UUID-backed with a foreign key, so the older String-based note is stale.
 - Canonical Nodus runtime execution now flows through runtime/nodus_execution_service.py::execute_nodus_runtime(), so older notes that describe /memory/nodus/execute and nodus.execute as fully separate runtime paths are stale.
+- Shared durable search orchestration now lives in domain/search_service.py, so older notes that describe SEO, LeadGen preview, and Research fallback as fully separate route-local search implementations are stale.
 
 ## 1. Structural Debt
 - ? **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
@@ -59,7 +60,7 @@ The following historical items below should now be treated as resolved or update
 -
 - ? **PARTIALLY RESOLVED (2026-03-22):** Cache backend can be configured for Redis via `AINDY_CACHE_BACKEND=redis` and `REDIS_URL`. Default remains in-memory, so multi-instance consistency requires explicit config.
 - ARM analyzer config updates are process-local; multi-instance propagation requires restarts or explicit reload across instances (`AINDY/routes/arm_router.py`).
-- Search System remains fragmented across SEO, LeadGen, and Research modules; Memory Orchestrator recall is integrated in LeadGen + Research query flow. Leadgen uses best-effort external retrieval with minimal structured parsing; richer provider-backed parsing is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
+- Search System is now materially more unified across SEO, LeadGen, and Research through `domain/search_service.py`, with durable history/cache reuse in `search_history` and consistent memory-aware context for shared search flows. Remaining gaps: LeadGen full generation still splits between the durable shared layer and the flow/syscall persistence path, SEO meta generation is not part of durable search history, and richer provider-backed parsing/ranking is still missing. Canonical reference: `docs/roadmap/SEARCH_SYSTEM.md`.
 - Freelancing System lacks automation and AI generation; metrics are incomplete. Canonical reference: `docs/roadmap/FREELANCING_SYSTEM.md`.
 - ? **RESOLVED (2026-03-21):** Social Layer visibility scoring + bridge event persistence implemented; social posts now log to Memory Bridge with DB session. Canonical reference: `docs/roadmap/SOCIAL_LAYER.md`.
 - RippleTrace is **partially implemented** beyond signal capture; pattern services, graph logic, and a frontend viewer now exist, but execution-causality tracing and the full insight layer remain incomplete. Canonical reference: `docs/roadmap/RIPPLETRACE.md`.
@@ -611,8 +612,8 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 ## 17. Current Workspace Audit — Newly Documented Debt
 
 ### §17.1 Search / SEO frontend-backend contract drift
-- ? **RESOLVED (current workspace):** Compatibility routes now exist for `/analyze_seo/`, `/generate_meta/`, and `/suggest_improvements/`, and shared search orchestration lives in `services/search_service.py`.
-  - Location: `AINDY/client/src/api.js`, `AINDY/routes/seo_routes.py`, `AINDY/services/search_service.py`
+- ? **RESOLVED (current workspace):** Compatibility routes now exist for `/analyze_seo/`, `/generate_meta/`, and `/suggest_improvements/`, and shared durable search orchestration now lives in `domain/search_service.py`.
+  - Location: `AINDY/client/src/api.js`, `AINDY/routes/seo_routes.py`, `AINDY/domain/search_service.py`
 
 ### §17.2 Logging standardization is incomplete
 - **`print(...)` remains in database/bootstrap code paths.** Core routes/services mostly use `logger`, but `db/database.py` and `db/create_all.py` still emit raw prints, so logging is not fully standardized.

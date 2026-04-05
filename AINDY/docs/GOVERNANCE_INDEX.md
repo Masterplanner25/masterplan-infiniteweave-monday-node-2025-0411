@@ -1,5 +1,5 @@
 ﻿# Governance Index
-Last updated: 2026-04-05 (Tech debt reconciliation after canonical Nodus runtime convergence)
+Last updated: 2026-04-05 (Tech debt updated after durable search orchestration unification)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.
