@@ -14,24 +14,24 @@ This section is the canonical current-state view. Historical notes below are ret
 
 #### High
 
-- **UNRESOLVED:** Real Nodus execution is not the primary execution path for Agentics. Core agent execution still runs through `services/flow_engine.py` via `services/nodus_adapter.py`, while embedded Nodus execution remains isolated behind `services/nodus_execution_service.py`. Primary files: `services/nodus_adapter.py`, `services/flow_engine.py`, `services/nodus_execution_service.py`.
-- **UNRESOLVED:** Dual execution surfaces continue to drift architecturally. The internal flow engine and embedded Nodus execution expose different runtime models, semantics, and observability envelopes. Primary files: `services/flow_engine.py`, `services/nodus_adapter.py`, `services/nodus_execution_service.py`, `routes/memory_router.py`.
-- **PARTIAL:** Search is materially more unified now that `services/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `services/search_service.py`, `services/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
-- **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis now run through the centralized execution wrapper or canonical execution envelopes, and `/system/state` now returns the shared success envelope, but other route groups in the repo still return raw JSON or direct route-level envelopes outside the same wrapper/event lifecycle. Primary files: `services/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
+- **PARTIAL:** Nodus/runtime execution is now materially more converged. `runtime/nodus_execution_service.py` provides the canonical adapter-backed Nodus execution entrypoint, and both `runtime/nodus_adapter.py` flow execution and `/memory/nodus/execute` delegate to it. The remaining debt is above that runtime layer: `runtime/flow_engine.py` and `routes/platform_router.py` still own orchestration semantics such as WAIT/RETRY and flow envelopes, so execution is not yet a single model end-to-end. Primary files: `runtime/nodus_execution_service.py`, `runtime/nodus_adapter.py`, `runtime/nodus_runtime_adapter.py`, `runtime/flow_engine.py`, `routes/platform_router.py`, `routes/memory_router.py`.
+- **PARTIAL:** Flow orchestration and VM execution still drift semantically even after canonical runtime convergence. The system now shares one Nodus execution substrate, but flow scheduling, observability envelopes, and persistent run semantics still live partly above it in orchestration code. Primary files: `runtime/flow_engine.py`, `runtime/nodus_adapter.py`, `runtime/nodus_execution_service.py`, `runtime/nodus_runtime_adapter.py`, `routes/platform_router.py`.
+- **PARTIAL:** Search is materially more unified now that `domain/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `domain/search_service.py`, `domain/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
+- **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis now run through the centralized execution wrapper or canonical execution envelopes, and `/system/state` now returns the shared success envelope, but other route groups in the repo still return raw JSON or direct route-level envelopes outside the same wrapper/event lifecycle. Primary files: `core/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
 
 #### Medium
 
-- **PARTIAL:** RippleTrace now includes execution-causality structure on top of `SystemEvent`, including parent-child edges, event->memory links, and a proofboard-style viewer, but broader productization and deeper scenario coverage remain incomplete. Primary files: `services/system_event_service.py`, `services/rippletrace_service.py`, `db/models/ripple_edge.py`, `client/src/components/RippleTraceViewer.jsx`.
-- **PARTIAL:** Freelancing remains incomplete. AI delivery generation, execution metrics, and external email/webhook delivery now exist, but payment-provider integration is still stubbed and broader commercial workflow automation remains incomplete. Primary files: `services/freelance_service.py`, `routes/freelance_router.py`, `db/models/freelance.py`, `services/automation_execution_service.py`.
-- **PARTIAL:** Infinity is now memory-weighted, system-state-aware, goal-aware, and expected-vs-actual-aware, but optimization depth remains shallow. Watcher, feedback, ranked memory signals, and prediction accuracy now feed decisions, yet KPI-weight learning and broader policy adaptation are still missing. Primary files: `services/infinity_service.py`, `services/infinity_loop.py`, `services/memory_scoring_service.py`, `services/system_state_service.py`, `routes/main_router.py`.
+- **PARTIAL:** RippleTrace now includes execution-causality structure on top of `SystemEvent`, including parent-child edges, event->memory links, and a proofboard-style viewer, but broader productization and deeper scenario coverage remain incomplete. Primary files: `core/system_event_service.py`, `domain/rippletrace_service.py`, `db/models/ripple_edge.py`, `client/src/components/RippleTraceViewer.jsx`.
+- **PARTIAL:** Freelancing remains incomplete. AI delivery generation, execution metrics, and external email/webhook delivery now exist, but payment-provider integration is still stubbed and broader commercial workflow automation remains incomplete. Primary files: `domain/freelance_service.py`, `routes/freelance_router.py`, `db/models/freelance.py`.
+- **PARTIAL:** Infinity is now memory-weighted, system-state-aware, goal-aware, and expected-vs-actual-aware, but optimization depth remains shallow. Watcher, feedback, ranked memory signals, and prediction accuracy now feed decisions, yet KPI-weight learning and broader policy adaptation are still missing. Primary files: `domain/infinity_service.py`, `domain/infinity_loop.py`, `memory/memory_scoring_service.py`, `platform_layer/system_state_service.py`, `routes/main_router.py`.
 - **UNRESOLVED:** ARM analyzer config updates remain process-local across instances. Primary file: `routes/arm_router.py`.
 - **RESOLVED:** Mongo is now a fail-fast runtime dependency. `config.py` rejects missing `MONGO_URL`, `db/mongo_setup.py` eagerly pings on startup, and `main.py` initializes Mongo during lifespan. Primary files: `config.py`, `db/mongo_setup.py`, `main.py`.
 - **UNRESOLVED:** Logging is still not fully standardized. `print(...)` remains in database/bootstrap paths. Primary files: `db/database.py`, `db/create_all.py`.
-- **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `services/embedding_jobs.py`, `services/async_job_service.py`, `services/memory_persistence.py`.
-- **PARTIAL:** Multi-agent coordination primitives now exist, including registry, coordinator, message bus, cross-agent trace fields, and coordination endpoints, but real distributed execution and conflict-heavy runtime behavior remain immature. Primary files: `services/agent_coordinator.py`, `services/agent_message_bus.py`, `services/agent_runtime.py`, `db/models/agent_registry.py`, `routes/coordination_router.py`.
+- **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `platform_layer/async_job_service.py`, `services/memory_persistence.py`.
+- **PARTIAL:** Multi-agent coordination primitives now exist, including registry, coordinator, message bus, cross-agent trace fields, and coordination endpoints, but real distributed execution and conflict-heavy runtime behavior remain immature. Primary files: `agents/agent_coordinator.py`, `agents/agent_message_bus.py`, `agents/agent_runtime.py`, `db/models/agent_registry.py`, `routes/coordination_router.py`.
 - **PARTIAL:** Rust/C++ memory scoring acceleration is now integrated into the runtime hot path with Python fallback, but release-build deployment and broader traversal-side acceleration are still incomplete. Primary files: `runtime/memory/scorer.py`, `runtime/memory/native_scorer.py`, `bridge/memory_bridge_rs/src/lib.rs`.
-- **RESOLVED:** Memory auto-link tag lookup is now cross-dialect aware. PostgreSQL keeps native tag containment queries, while SQLite/non-PostgreSQL backends fall back to Python-side tag filtering for consistent auto-link candidate lookup. Primary files: `services/memory_capture_engine.py`, `db/dao/memory_node_dao.py`, `services/memory_persistence.py`.
-- **PARTIAL:** Live route-level learning behavior is not yet consistently visible even though the causal-learning loop tests pass. Repeated real API executions can succeed without showing recalled memory in route payload context. Primary files: `routes/research_results_router.py`, `runtime/memory/*`, `services/memory_scoring_service.py`, `services/infinity_orchestrator.py`.
+- **RESOLVED:** Memory auto-link tag lookup is now cross-dialect aware. PostgreSQL keeps native tag containment queries, while SQLite/non-PostgreSQL backends fall back to Python-side tag filtering for consistent auto-link candidate lookup. Primary files: `memory/memory_capture_engine.py`, `db/dao/memory_node_dao.py`, `services/memory_persistence.py`.
+- **PARTIAL:** Live route-level learning behavior is not yet consistently visible even though the causal-learning loop tests pass. Repeated real API executions can succeed without showing recalled memory in route payload context. Primary files: `routes/research_results_router.py`, `runtime/memory/*`, `memory/memory_scoring_service.py`, `domain/infinity_orchestrator.py`.
 
 #### Low
 
@@ -49,6 +49,7 @@ The following historical items below should now be treated as resolved or update
 - Agent approval inbox is implemented.
 - `IdentityService.get_evolution_summary()` now returns a normalized new-user shape and should no longer be treated as open.
 - `WatcherSignal.user_id` is now UUID-backed with a foreign key, so the older String-based note is stale.
+- Canonical Nodus runtime execution now flows through runtime/nodus_execution_service.py::execute_nodus_runtime(), so older notes that describe /memory/nodus/execute and nodus.execute as fully separate runtime paths are stale.
 
 ## 1. Structural Debt
 - ? **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
@@ -570,24 +571,24 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 - ? **RESOLVED (current workspace):** A dedicated approval surface now exists in `AINDY/client/src/components/AgentApprovalInbox.jsx`, routed at `/agent/approvals` from `AINDY/client/src/App.jsx`.
 - ? **RESOLVED (current workspace):** Sidebar-level pending approval visibility now exists in `AINDY/client/src/components/Sidebar.jsx` via the approval count badge and `APPROVAL_EVENT` refresh hook.
 
-### §16.6 [AGENTICS] Real Nodus execution is not the primary execution path — Open
-- **Agentics currently runs on A.I.N.D.Y.'s internal flow engine, not on the installed Nodus DSL/VM runtime.** `services/nodus_adapter.py` is a wrapper over `PersistentFlowRunner` in `services/flow_engine.py`. The actual installed `nodus` runtime is only used by `services/nodus_execution_service.py` behind `POST /memory/nodus/execute`.
-  - Current consequence: the system has working deterministic execution, but it is not yet aligned with the intended architecture where Nodus is the primary execution substrate.
-  - Missing pieces:
-    - no `.nd` workflow assets in the repo
-    - no agent-plan-to-Nodus compilation path
-    - no VM trace mapping into `FlowRun`, `AgentEvent`, or `SystemEvent`
-  - Status: Open. High architectural importance.
+### Section 16.6 [AGENTICS] Canonical Nodus runtime exists, but orchestration still spans two layers - Partial
+- `runtime/nodus_execution_service.py::execute_nodus_runtime()` is now the canonical adapter-backed Nodus execution entrypoint.
+- `runtime/nodus_adapter.py::nodus_execute_node()` and `POST /memory/nodus/execute` both delegate to that canonical runtime path rather than constructing separate execution engines.
+- Remaining gaps are above the VM/runtime layer:
+  - no `.nd` workflow assets in the repo
+  - no agent-plan-to-Nodus compilation path
+  - no unified durable execution record that maps `FlowRun`, `AgentEvent`, `SystemEvent`, and VM trace into one model
+- Status: Partial. High architectural importance.
 
-### §16.7 [AGENTICS] Dual execution model causes architectural drift — Open
-- **There are now two workflow/execution surfaces with different semantics:**
-  - `services/flow_engine.py` for core runtime orchestration
-  - `services/nodus_execution_service.py` for embedded Nodus source execution
-- This split is manageable short-term, but it creates naming confusion, duplicated execution concepts, and drift away from the intended Nodus-centered execution architecture.
-  - Primary files: `AINDY/services/flow_engine.py`, `AINDY/services/nodus_adapter.py`, `AINDY/services/nodus_execution_service.py`, `AINDY/routes/memory_router.py`
-  - Status: Open. Structural debt.
+### Section 16.7 [AGENTICS] Flow orchestration vs VM execution still creates semantic drift - Partial
+- There is now one canonical Nodus execution substrate, but orchestration semantics still live in a separate layer:
+  - `runtime/flow_engine.py` for persistent flow orchestration, WAIT/RESUME, and strategy-driven routing
+  - `runtime/nodus_execution_service.py` plus `runtime/nodus_runtime_adapter.py` for canonical VM/source execution
+- This split is narrower than before, but it still creates naming confusion and envelope drift between orchestration runs and direct runtime execution.
+  - Primary files: `AINDY/runtime/flow_engine.py`, `AINDY/runtime/nodus_adapter.py`, `AINDY/runtime/nodus_execution_service.py`, `AINDY/runtime/nodus_runtime_adapter.py`, `AINDY/routes/platform_router.py`, `AINDY/routes/memory_router.py`
+  - Status: Partial. Structural debt.
 
-### §16.8 [AGENTICS] Infinity loop is integrated but not autonomous — Open
+### Section 16.8 [AGENTICS] Infinity loop is integrated but not autonomous - Open
 - **The Infinity loop is now closed and memory-weighted, but the decision engine is still shallow and post-hoc.** `services/infinity_loop.py` now consumes ranked memory signals in addition to KPI and feedback context, and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
   - create bounded autonomous agent runs from its own decisions
   - learn from `UserFeedback` to change decision thresholds or KPI weights
