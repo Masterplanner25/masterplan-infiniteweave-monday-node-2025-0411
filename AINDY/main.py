@@ -6,6 +6,7 @@ import time
 import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from fastapi_cache import FastAPICache
@@ -22,7 +23,13 @@ from core.system_event_service import emit_error_event
 from db.database import SessionLocal
 from db.mongo_setup import init_mongo
 from core.execution_guard import require_execution_context, validate_execution_contract
-from routes import ROOT_ROUTERS, PLATFORM_ROUTERS, APP_ROUTERS, platform_router
+from routes import (
+    APP_ROUTERS,
+    LEGACY_ROOT_ROUTERS,
+    PLATFORM_ROUTERS,
+    ROOT_ROUTERS,
+    platform_router,
+)
 from config import settings
 from db.models.metrics_models import *
 from db.models.request_metric import RequestMetric
@@ -370,6 +377,8 @@ for route in APP_ROUTERS:
 if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
     for route in APP_ROUTERS:
         app.include_router(route, dependencies=[Depends(require_execution_context)])
+    for route in LEGACY_ROOT_ROUTERS:
+        app.include_router(route, dependencies=[Depends(require_execution_context)])
 
 # CORS — explicit origins only (wildcard + credentials is a security violation)
 import os as _os
@@ -410,7 +419,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={
             "error": "validation_error",
             "message": "Invalid request",
-            "details": exc.errors(),
+            "details": jsonable_encoder(exc.errors()),
         },
     )
 

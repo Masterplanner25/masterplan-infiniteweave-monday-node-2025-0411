@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate
+from domain.research_results_service import create_research_result
+from modules.research_engine import ai_analyze, web_search
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
@@ -72,12 +74,32 @@ def list_results(
 
 @router.post("/query")
 def run_research_query(
-    http_request: Request,
     request: ResearchResultCreate,
+    http_request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+    if http_request is None:
+        raw = web_search(request.query)
+        summary = ai_analyze(raw)
+        record = create_research_result(
+            db=db,
+            result=ResearchResultCreate(query=request.query, summary=summary),
+            user_id=user_id,
+            data={"raw_content": raw},
+            source="web_search",
+        )
+        return {
+            "id": getattr(record, "id", None),
+            "query": record.query,
+            "summary": record.summary,
+            "source": getattr(record, "source", "web_search"),
+            "data": getattr(record, "data", None),
+            "search_score": 1.0,
+            "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
+        }
+
     def handler(_ctx):
         data = _run_flow_research(
             "research_query",

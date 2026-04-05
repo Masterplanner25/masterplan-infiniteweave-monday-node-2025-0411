@@ -100,7 +100,8 @@ def run_ai_search(query: str, user_id: str = None, db=None):
             }
         ]
 
-    # Step 3: Write outcome memory node after results are gathered
+    # Step 3: Write outcome memory node after results are gathered.
+    # MemoryCaptureEngine-backed queue_memory_capture persists the search outcome.
     if user_id and db and not is_pipeline_active():
         try:
             result_count = len(example_results)

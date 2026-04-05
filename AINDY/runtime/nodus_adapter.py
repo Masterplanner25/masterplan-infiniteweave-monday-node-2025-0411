@@ -47,6 +47,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from core.execution_signal_helper import queue_system_event, record_agent_event
+emit_system_event = queue_system_event
 from agents.capability_service import check_execution_capability, check_tool_capability
 from agents.agent_tools import execute_tool
 from runtime.flow_engine import PersistentFlowRunner, register_node
@@ -190,9 +191,24 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             },
             required=True,
         )
-        queue_system_event(
+        emit_system_event(
             db=db,
             event_type=SystemEventTypes.AGENT_STEP,
+            user_id=user_id,
+            trace_id=state.get("correlation_id") or context.get("trace_id"),
+            source="agent",
+            payload={
+                "run_id": str(agent_run_id),
+                "step_index": idx,
+                "tool_name": tool_name,
+                "status": "failed",
+                "error": error_msg,
+            },
+            required=True,
+        )
+        emit_system_event(
+            db=db,
+            event_type=SystemEventTypes.AGENT_STEP_FAILED,
             user_id=user_id,
             trace_id=state.get("correlation_id") or context.get("trace_id"),
             source="agent",
@@ -285,9 +301,28 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         agent_run.steps_completed = idx + 1
         agent_run.current_step = idx + 1
     db.commit()
-    queue_system_event(
+    emit_system_event(
         db=db,
         event_type=SystemEventTypes.AGENT_STEP,
+        user_id=user_id,
+        trace_id=state.get("correlation_id") or context.get("trace_id"),
+        source="agent",
+        payload={
+            "run_id": str(agent_run_id),
+            "step_index": idx,
+            "tool_name": tool_name,
+            "status": step_status,
+            "error": tool_result.get("error"),
+        },
+        required=True,
+    )
+    emit_system_event(
+        db=db,
+        event_type=(
+            SystemEventTypes.AGENT_STEP_COMPLETED
+            if step_status == "success"
+            else SystemEventTypes.AGENT_STEP_FAILED
+        ),
         user_id=user_id,
         trace_id=state.get("correlation_id") or context.get("trace_id"),
         source="agent",
@@ -483,7 +518,7 @@ class NodusAgentAdapter:
                     agent_run.completed_at = datetime.now(timezone.utc)
                     agent_run.error_message = flow_capability_check["error"]
                     agent_run.result = {"steps": []}
-                queue_system_event(
+                emit_system_event(
                     db=db,
                     event_type="capability.denied",
                     user_id=user_id,
@@ -517,7 +552,7 @@ class NodusAgentAdapter:
                     "status": "FAILED",
                     "error": flow_capability_check["error"],
                 }
-            queue_system_event(
+            emit_system_event(
                 db=db,
                 event_type="capability.allowed",
                 user_id=user_id,
@@ -735,7 +770,7 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
         )
         state["nodus_received_events"] = received
         state.pop("nodus_wait_event_type", None)
-        queue_system_event(
+        emit_system_event(
             db=db,
             event_type=SystemEventTypes.NODUS_EVENT_WAIT_RESUMED,
             user_id=user_id,

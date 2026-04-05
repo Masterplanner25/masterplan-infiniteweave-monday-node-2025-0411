@@ -136,8 +136,9 @@ async def create_node(
 
     return await execute_with_pipeline(
         request=request,
-        route_name="bridge_create_node",
+        route_name="bridge.create_node",
         handler=handler,
+        success_status_code=status.HTTP_201_CREATED,
     )
 
 
@@ -175,7 +176,7 @@ async def search_nodes(
 
     return await execute_with_pipeline(
         request=request,
-        route_name="bridge_search_nodes",
+        route_name="bridge.search_nodes",
         handler=handler,
     )
 
@@ -238,8 +239,9 @@ async def create_link(
 
     return await execute_with_pipeline(
         request=request,
-        route_name="bridge_create_link",
+        route_name="bridge.create_link",
         handler=handler,
+        success_status_code=status.HTTP_201_CREATED,
     )
 
 
@@ -296,16 +298,14 @@ async def bridge_user_event(
             logger.warning("Failed to persist bridge user event: %s", exc)
 
         return {
-            "data": {
-                "status": "logged",
-                "user": event.user,
-                "origin": event.origin,
-                "timestamp": timestamp,
-            }
+            "status": "logged",
+            "user": event.user,
+            "origin": event.origin,
+            "timestamp": timestamp,
         }
 
     return await execute_with_pipeline(
         request=request,
-        route_name="bridge_user_event",
+        route_name="bridge.user_event",
         handler=handler,
     )

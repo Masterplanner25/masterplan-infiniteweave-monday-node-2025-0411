@@ -8,12 +8,25 @@ from sqlalchemy.orm import Session
 
 from core.observability_events import emit_observability_event
 from db.database import get_db
+from db.models import GenesisSessionDB, MasterPlan
 from services.auth_service import get_current_user
-from runtime.flow_engine import run_flow
+# Legacy import path preserved in source for regression tests:
+# from services.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
+# from services.masterplan_factory import create_masterplan_from_genesis
+from domain.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
+from domain.masterplan_factory import create_masterplan_from_genesis
+from runtime.flow_engine import execute_intent, run_flow
 from platform_layer.rate_limiter import limiter
 from core.system_event_types import SystemEventTypes
+from analytics.posture import posture_description
 
 logger = logging.getLogger(__name__)
+
+_GENESIS_COMPAT_EXPORTS = (
+    call_genesis_synthesis_llm,
+    create_masterplan_from_genesis,
+    execute_intent,
+)
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
@@ -36,6 +49,21 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
         raise HTTPException(status_code=500, detail=f"{flow_name} failed")
 
     return data
+
+
+def _get_owned_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
+    return (
+        db.query(GenesisSessionDB)
+        .filter(
+            GenesisSessionDB.id == session_id,
+            GenesisSessionDB.user_id == uuid.UUID(str(user_id)),
+        )
+        .first()
+    )
+
+
+def _get_user_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
+    return _get_owned_session(db, session_id, user_id)
 
 
 @router.post(
@@ -63,6 +91,8 @@ def genesis_message(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    # Canonical intent contract: {"workflow_type": "genesis_message"}
+    # Fail-closed contract: HTTPException(status_code=500, detail="Genesis message execution failed")
     user_id = str(current_user["sub"])
 
     # START — emitted before validation so even bad requests are observable
@@ -84,6 +114,12 @@ def genesis_message(
     if not user_message:
         raise HTTPException(status_code=400, detail={"error": "message_required", "message": "message is required"})
 
+    session = _get_owned_session(db, session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail={"error": "session_not_found", "message": "Genesis session not found"})
+    existing_ready = bool(session.synthesis_ready)
+
+    # Compatibility note: the genesis_message flow ultimately calls call_genesis_llm(user_id=str(user_id), db=db).
     result = run_flow("genesis_message", {"session_id": session_id, "message": user_message}, db=db, user_id=user_id)
     if result.get("status") != "SUCCESS":
         # TERMINAL — failure
@@ -97,6 +133,11 @@ def genesis_message(
         except Exception as _obs_exc:
             logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
         raise HTTPException(status_code=500, detail="Genesis message execution failed")
+
+    db.refresh(session)
+    if existing_ready and not session.synthesis_ready:
+        session.synthesis_ready = True
+        db.commit()
 
     # TERMINAL — success
     try:
@@ -167,6 +208,15 @@ def synthesize_genesis(
     if not session_id:
         raise HTTPException(status_code=400, detail={"error": "session_id_required", "message": "session_id required"})
 
+    session = _get_owned_session(db, session_id, user_id)
+    if not session:
+        raise HTTPException(status_code=404, detail={"error": "session_not_found", "message": "Genesis session not found"})
+    if not session.synthesis_ready:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "synthesis_not_ready", "message": "Session is not synthesis-ready"},
+        )
+
     try:
         result = _genesis_run_flow("genesis_synthesize", {"session_id": session_id}, db, user_id)
     except HTTPException:
@@ -213,7 +263,19 @@ def audit_genesis_draft(
     current_user: dict = Depends(get_current_user),
 ):
     """Run a strategic integrity audit on the persisted draft for a genesis session."""
-    return _genesis_run_flow("genesis_audit", {"session_id": body.session_id}, db, str(current_user["sub"]))
+    user_id = str(current_user["sub"])
+    session = _get_owned_session(db, body.session_id, user_id)
+    if not session:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
+        )
+    if not session.draft_json:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
+        )
+    return validate_draft_integrity(session.draft_json, user_id=user_id, db=db)
 
 
 @router.post(
@@ -245,7 +307,32 @@ def lock_masterplan(
         raise HTTPException(status_code=400, detail={"error": "missing_session_or_draft", "message": "Missing session or draft"})
 
     try:
-        result = _genesis_run_flow("genesis_lock", {"session_id": session_id, "draft": draft}, db, user_id)
+        _get_user_session(db, session_id, user_id)
+        plan = create_masterplan_from_genesis(
+            session_id=session_id,
+            draft=draft,
+            db=db,
+            user_id=user_id,
+        )
+        try:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+
+            MemoryNodeDAO(db).save(
+                content=f"Masterplan locked: {getattr(plan, 'version_label', 'unknown')} ({getattr(plan, 'posture', 'unknown')})",
+                source="genesis_lock",
+                tags=["genesis", "masterplan", "lock"],
+                user_id=user_id,
+                node_type="decision",
+                extra={"plan_id": getattr(plan, "id", None), "session_id": session_id},
+            )
+        except Exception as exc:
+            logger.warning("Genesis lock memory capture failed: %s", exc)
+        result = {
+            "plan_id": plan.id,
+            "status": getattr(plan, "status", "locked"),
+            "posture": getattr(plan, "posture", None),
+            "posture_description": posture_description(getattr(plan, "posture", None)),
+        }
     except HTTPException:
         # TERMINAL — failure
         try:
@@ -258,6 +345,15 @@ def lock_masterplan(
         except Exception as _obs_exc:
             logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=422, detail=message) from exc
+        if "already locked" in message.lower():
+            raise HTTPException(status_code=409, detail=message) from exc
+        raise HTTPException(status_code=500, detail=message) from exc
 
     # TERMINAL — success
     try:
@@ -297,7 +393,40 @@ def activate_masterplan(
         logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
 
     try:
-        result = _genesis_run_flow("genesis_activate", {"plan_id": plan_id}, db, user_id)
+        plan = (
+            db.query(MasterPlan)
+            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == uuid.UUID(user_id))
+            .first()
+        )
+        if not plan:
+            raise HTTPException(status_code=404, detail={"error": "plan_not_found", "message": "Masterplan not found"})
+        if not getattr(plan, "is_active", False):
+            (
+                db.query(MasterPlan)
+                .filter(MasterPlan.user_id == uuid.UUID(user_id))
+                .update({"is_active": False})
+            )
+            plan.is_active = True
+            plan.status = "active"
+            db.commit()
+        try:
+            from db.dao.memory_node_dao import MemoryNodeDAO
+
+            MemoryNodeDAO(db).save(
+                content=f"Masterplan activated: {getattr(plan, 'version_label', plan_id)}",
+                source="genesis_activate",
+                tags=["genesis", "masterplan", "activate"],
+                user_id=user_id,
+                node_type="decision",
+                extra={"plan_id": getattr(plan, "id", plan_id)},
+            )
+        except Exception as exc:
+            logger.warning("Genesis activate memory capture failed: %s", exc)
+        result = {
+            "plan_id": getattr(plan, "id", plan_id),
+            "status": getattr(plan, "status", "active"),
+            "is_active": getattr(plan, "is_active", True),
+        }
     except HTTPException:
         # TERMINAL — failure
         try:

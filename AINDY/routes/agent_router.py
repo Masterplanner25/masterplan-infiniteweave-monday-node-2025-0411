@@ -18,7 +18,7 @@ Endpoints:
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -112,6 +112,22 @@ def create_agent_run(
     if not body.goal or not body.goal.strip():
         raise HTTPException(status_code=400, detail="goal is required")
     user_id = _current_user_id(current_user)
+    from platform_layer.async_job_service import async_heavy_execution_enabled, submit_autonomous_async_job
+
+    if async_heavy_execution_enabled():
+        response = submit_autonomous_async_job(
+            task_name="agent.create_run",
+            payload={"goal": body.goal.strip(), "user_id": str(user_id)},
+            user_id=user_id,
+            source="agent_router",
+            trigger_type="user",
+            trigger_context={"goal": body.goal.strip(), "importance": 0.95},
+        )
+        status = str(response.get("status") or "").lower()
+        if status in {"queued", "deferred"}:
+            return JSONResponse(status_code=202, content=response)
+        return response
+
     return _run_flow_agent("agent_run_create", {"goal": body.goal.strip()}, db, user_id)
 
 
@@ -227,11 +243,18 @@ def get_trust_settings(
 
 @router.get("/suggestions")
 def get_tool_suggestions(
+    request: Request = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return up to 3 KPI-driven tool suggestions for the current user."""
     user_id = _current_user_id(current_user)
+    if request is None:
+        from agents.agent_tools import suggest_tools
+        from domain.infinity_service import get_user_kpi_snapshot
+
+        snapshot = get_user_kpi_snapshot(user_id, db)
+        return suggest_tools(snapshot, user_id=user_id, db=db)
     return _run_flow_agent("agent_suggestions_get", {}, db, user_id)
 
 

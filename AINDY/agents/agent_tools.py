@@ -203,10 +203,59 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
             ctx,
         )
         if result["status"] == "success":
-            return result["data"].get("suggestions", [])
+            suggestions = result["data"].get("suggestions", [])
+            if suggestions:
+                return suggestions
     except Exception as exc:
         logger.warning("[AgentTools] suggest_tools dispatch failed: %s", exc)
-    return []
+
+    if not kpi_snapshot:
+        return []
+
+    try:
+        suggestions: list[dict] = []
+        focus = float(kpi_snapshot.get("focus_quality", 50.0) or 50.0)
+        speed = float(kpi_snapshot.get("execution_speed", 50.0) or 50.0)
+        ai_boost = float(kpi_snapshot.get("ai_productivity_boost", 50.0) or 50.0)
+        master = float(kpi_snapshot.get("master_score", 50.0) or 50.0)
+    except (TypeError, ValueError):
+        return []
+
+    if focus < 40:
+        suggestions.append({
+            "tool": "memory.recall",
+            "reason": f"Focus quality is low ({focus:.0f}/100) - recall past context before starting new work",
+            "suggested_goal": "Recall recent memories and notes to regain context on current priorities",
+        })
+
+    if speed < 40:
+        suggestions.append({
+            "tool": "task.create",
+            "reason": f"Execution speed is low ({speed:.0f}/100) - create a concrete next action to rebuild momentum",
+            "suggested_goal": "Create a focused task for the most important thing I need to do today",
+        })
+    elif speed < 55:
+        suggestions.append({
+            "tool": "task.create",
+            "reason": f"Execution pace is below average ({speed:.0f}/100) - a new task could help",
+            "suggested_goal": "Create a small, completable task to get back on track",
+        })
+
+    if ai_boost < 40 and len(suggestions) < 3:
+        suggestions.append({
+            "tool": "arm.analyze",
+            "reason": f"ARM usage is low ({ai_boost:.0f}/100) - analyzing code could boost quality scores",
+            "suggested_goal": "Analyze the current codebase for architecture and integrity improvements",
+        })
+
+    if master >= 70 and len(suggestions) < 3:
+        suggestions.append({
+            "tool": "genesis.message",
+            "reason": f"Strong overall performance ({master:.0f}/100) - review strategic direction with Genesis",
+            "suggested_goal": "Review my current MasterPlan progress and refine next priorities with Genesis",
+        })
+
+    return suggestions[:3]
 
 
 # ── Tool Implementations ─────────────────────────────────────────────────────

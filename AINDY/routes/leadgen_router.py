@@ -15,12 +15,14 @@ from sqlalchemy.orm import Session
 
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
+from db.models.leadgen_model import LeadGenResult
 from schemas.leadgen_schema import LeadGenItem
 from services.auth_service import get_current_user
 from platform_layer.rate_limiter import limiter
 from domain.search_service import get_cached_search_result
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
+legacy_router = APIRouter(tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
 
 
@@ -119,12 +121,41 @@ def list_all_leads(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
-        result = run_flow("leadgen_list", {}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Failed to load leads"))
-        return result.get("data")
+        rows = (
+            db.query(LeadGenResult)
+            .filter(LeadGenResult.user_id == current_user["sub"])
+            .order_by(LeadGenResult.created_at.desc(), LeadGenResult.id.desc())
+            .all()
+        )
+        return [
+            {
+                "id": row.id,
+                "query": row.query,
+                "company": row.company,
+                "url": row.url,
+                "context": row.context,
+                "fit_score": row.fit_score,
+                "intent_score": row.intent_score,
+                "search_score": row.overall_score,
+                "reasoning": row.reasoning,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
 
     return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)
+
+
+for _route in list(router.routes):
+    _path = getattr(_route, "path", None)
+    if not _path or not _path.startswith("/leadgen"):
+        continue
+    legacy_router.add_api_route(
+        _path.removeprefix("/leadgen") or "/",
+        _route.endpoint,
+        methods=list(_route.methods or []),
+        name=f"legacy_{_route.name}",
+        include_in_schema=False,
+    )
 
 

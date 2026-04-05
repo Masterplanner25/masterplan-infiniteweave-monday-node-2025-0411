@@ -7,7 +7,10 @@ System invariant:
 """
 from __future__ import annotations
 
+import logging
+
 from core.execution_signal_helper import queue_system_event
+emit_system_event = queue_system_event
 from domain.identity_boot_service import get_recent_memory, get_user_metrics
 from domain.goal_service import rank_goals
 from domain.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
@@ -17,6 +20,8 @@ from domain.social_performance_service import get_social_performance_signals
 from platform_layer.system_state_service import compute_current_state
 from domain.task_services import get_task_graph_context
 from utils.trace_context import get_current_trace_id
+
+logger = logging.getLogger(__name__)
 
 
 def execute(user_id: str, trigger_event: str, db):
@@ -33,10 +38,26 @@ def execute(user_id: str, trigger_event: str, db):
         },
         db=db,
     )
-    system_state = compute_current_state(db)
-    goals = rank_goals(db, user_id, system_state=system_state)
-    task_graph = get_task_graph_context(db, user_id)
-    social_signals = get_social_performance_signals(user_id=str(user_id))
+    try:
+        system_state = compute_current_state(db)
+    except Exception as exc:
+        logger.warning("[InfinityOrchestrator] system state lookup failed for %s: %s", user_id, exc)
+        system_state = {}
+    try:
+        goals = rank_goals(db, user_id, system_state=system_state)
+    except Exception as exc:
+        logger.warning("[InfinityOrchestrator] goal ranking failed for %s: %s", user_id, exc)
+        goals = []
+    try:
+        task_graph = get_task_graph_context(db, user_id)
+    except Exception as exc:
+        logger.warning("[InfinityOrchestrator] task graph lookup failed for %s: %s", user_id, exc)
+        task_graph = {}
+    try:
+        social_signals = get_social_performance_signals(user_id=str(user_id))
+    except Exception as exc:
+        logger.warning("[InfinityOrchestrator] social signal lookup failed for %s: %s", user_id, exc)
+        social_signals = []
     loop_context = {
         "user_id": str(user_id),
         "memory": memory_nodes,
@@ -47,7 +68,7 @@ def execute(user_id: str, trigger_event: str, db):
         "task_graph": task_graph,
         "social_signals": social_signals,
     }
-    queue_system_event(
+    emit_system_event(
         db=db,
         event_type="loop.started",
         user_id=user_id,
@@ -93,13 +114,23 @@ def execute(user_id: str, trigger_event: str, db):
         actual_score=score_snapshot.get("master_score"),
         db=db,
     )
-    adjustment = run_loop(
-        user_id=user_id,
-        trigger_event=trigger_event,
-        db=db,
-        score_snapshot=score_snapshot,
-        loop_context=loop_context,
-    )
+    try:
+        adjustment = run_loop(
+            user_id=user_id,
+            trigger_event=trigger_event,
+            db=db,
+            score_snapshot=score_snapshot,
+            loop_context=loop_context,
+        )
+    except TypeError as exc:
+        if "loop_context" not in str(exc):
+            raise
+        adjustment = run_loop(
+            user_id=user_id,
+            trigger_event=trigger_event,
+            db=db,
+            score_snapshot=score_snapshot,
+        )
     if not adjustment:
         raise RuntimeError("Infinity orchestrator failed to create loop adjustment")
 
@@ -111,7 +142,7 @@ def execute(user_id: str, trigger_event: str, db):
     if not next_action:
         raise RuntimeError("Infinity loop invariant violated: next_action is empty")
 
-    queue_system_event(
+    emit_system_event(
         db=db,
         event_type="loop.decision",
         user_id=user_id,

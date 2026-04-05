@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from core.execution_helper import execute_with_pipeline_sync
 from core.observability_events import emit_observability_event
 from db.database import get_db
+from db.models.task import Task
 from schemas.task_schemas import TaskCreate, TaskAction
 from services.auth_service import get_current_user
 from core.system_event_types import SystemEventTypes
@@ -191,11 +192,13 @@ def list_tasks(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
-        result = run_flow("tasks_list", {}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Tasks list flow failed"))
-        return result.get("data")
+        tasks = (
+            db.query(Task)
+            .filter(Task.user_id == current_user["sub"])
+            .order_by(Task.id.desc())
+            .all()
+        )
+        return [_serialize_task(task) for task in tasks]
     return _execute_tasks(request, "tasks.list", handler, db=db, user_id=user_id)
 
 @router.post("/recurrence/check")

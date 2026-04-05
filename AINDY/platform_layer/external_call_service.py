@@ -3,8 +3,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from core.execution_signal_helper import queue_system_event
-from core.system_event_service import emit_error_event
+from core.system_event_service import emit_error_event, emit_system_event
 from utils.trace_context import get_current_trace_id
 
 
@@ -57,7 +56,7 @@ def perform_external_call(
         status="started",
         extra=extra,
     )
-    queue_system_event(
+    emit_system_event(
         db=active_db,
         event_type="external.call.started",
         user_id=user_id,
@@ -79,7 +78,7 @@ def perform_external_call(
             latency_ms=latency_ms,
             extra=extra,
         )
-        queue_system_event(
+        emit_system_event(
             db=active_db,
             event_type="external.call.completed",
             user_id=user_id,
@@ -100,7 +99,7 @@ def perform_external_call(
             error=str(exc),
             extra=extra,
         )
-        queue_system_event(
+        emit_system_event(
             db=active_db,
             event_type="external.call.failed",
             user_id=user_id,

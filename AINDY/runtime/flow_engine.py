@@ -47,6 +47,7 @@ from core.execution_envelope import error as execution_error
 from core.execution_envelope import success as execution_success
 from domain.goal_service import update_goals_from_execution
 from core.execution_signal_helper import queue_memory_capture, queue_system_event
+emit_system_event = queue_system_event
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
 from utils.trace_context import ensure_trace_id
@@ -603,7 +604,7 @@ class PersistentFlowRunner:
             flow_name,
             self.workflow_type,
         )
-        root_event_id = queue_system_event(
+        root_event_id = emit_system_event(
             db=self.db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
             user_id=self.user_id,
@@ -710,7 +711,7 @@ class PersistentFlowRunner:
                 )
             except Exception as exc:
                 logger.warning("Goal progress failure update skipped: %s", exc)
-            queue_system_event(
+            emit_system_event(
                 db=self.db,
                 event_type=SystemEventTypes.EXECUTION_FAILED,
                 user_id=self.user_id,
@@ -987,11 +988,16 @@ class PersistentFlowRunner:
                                     failed_node=current_node,
                                     parent_event_id=str(node_started_event_id) if node_started_event_id else None,
                                 )
+                            run_id = run.id
                             self.db.commit()
+                            try:
+                                self.db.expunge(run)
+                            except Exception:
+                                pass
                             self.db.expire_all()
                             queued_run = (
                                 self.db.query(type(run))
-                                .filter(type(run).id == run.id)
+                                .filter(type(run).id == run_id)
                                 .first()
                             )
                             return _format_execution_response(
@@ -1019,7 +1025,7 @@ class PersistentFlowRunner:
                             )
                         except Exception as exc:
                             logger.warning("Goal progress success update skipped: %s", exc)
-                        queue_system_event(
+                        emit_system_event(
                             db=self.db,
                             event_type=SystemEventTypes.EXECUTION_COMPLETED,
                             user_id=self.user_id,

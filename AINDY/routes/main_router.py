@@ -49,6 +49,7 @@ from analytics.calculation_services import (
 )
 
 router = APIRouter(prefix="/compute", tags=["Compute"], dependencies=[Depends(get_current_user)])
+legacy_router = APIRouter(tags=["Compute"])
 
 
 async def _execute_main(
@@ -463,6 +464,19 @@ async def create_masterplan(
         return plan
 
     return await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+
+
+for _route in list(router.routes):
+    _path = getattr(_route, "path", None)
+    if not _path or not _path.startswith("/compute/"):
+        continue
+    legacy_router.add_api_route(
+        _path.removeprefix("/compute"),
+        _route.endpoint,
+        methods=list(_route.methods or []),
+        name=f"legacy_{_route.name}",
+        include_in_schema=False,
+    )
 
 
 

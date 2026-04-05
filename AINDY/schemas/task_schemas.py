@@ -31,5 +31,11 @@ class TaskCreate(BaseModel):
             values["name"] = values["title"]
         return values
 
+    @model_validator(mode="after")
+    def validate_name_present(self):
+        if not self.name:
+            raise ValueError("name is required")
+        return self
+
 class TaskAction(BaseModel):
     name: str
