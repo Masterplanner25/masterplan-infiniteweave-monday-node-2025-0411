@@ -9,6 +9,7 @@ lead discovery and scoring engine.
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ from db.models.leadgen_model import LeadGenResult
 from schemas.leadgen_schema import LeadGenItem
 from services.auth_service import get_current_user
 from platform_layer.rate_limiter import limiter
-from domain.search_service import get_cached_search_result
+from domain.search_service import get_cached_search_result, search_leads
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 legacy_router = APIRouter(tags=["Lead Generation"])
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
-    return run_execution(
+    result = run_execution(
         ExecutionContext(
             db=db,
             user_id=user_id,
@@ -38,6 +39,9 @@ def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session,
         ),
         lambda: handler(None),
     )
+    if isinstance(result, dict) and "data" in result and str(result.get("status", "")).upper() == "SUCCESS":
+        return result["data"]
+    return result
 
 
 @router.post("/")
@@ -107,11 +111,7 @@ def preview_lead_search(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
-        result = run_flow("leadgen_preview_search", {"query": query}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError((result.get("data") or {}).get("message", "Lead search failed"))
-        return result.get("data")
+        return search_leads(query=query, db=db, user_id=user_id)
     return _execute_leadgen(request, "leadgen.search", handler, db=db, user_id=user_id, input_payload={"query": query})
 
 

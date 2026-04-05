@@ -6,7 +6,11 @@ from domain.seo import SEOInput, MetaInput
 from analytics.calculation_services import save_calculation
 from services.auth_service import get_current_user
 from db.database import get_db
-from domain.search_service import generate_meta as generate_meta_result, search_seo, suggest_seo_improvements
+from domain.search_service import (
+    analyze_seo_content,
+    generate_meta as generate_meta_result,
+    suggest_seo_improvements,
+)
 
 router = APIRouter(prefix="/seo", tags=["SEO"], dependencies=[Depends(get_current_user)])
 
@@ -28,8 +32,13 @@ class LegacyContentInput(BaseModel):
 
 
 @router.post("/analyze")
-def analyze_seo(request: Request, data: SEOInput, db: Session = Depends(get_db)):
-    results = search_seo(data.text, data.top_n)
+def analyze_seo(
+    request: Request,
+    data: SEOInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    results = analyze_seo_content(data.text, data.top_n, db=db, user_id=str(current_user["sub"]))
 
     # Save key SEO metrics
     save_calculation(db, "seo_readability", results["readability"])
@@ -53,16 +62,21 @@ def generate_meta(request: Request, data: MetaInput):
 
 
 @router.post("/suggest")
-def suggest_improvements(request: Request, data: SEOInput):
+def suggest_improvements(
+    request: Request,
+    data: SEOInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
     def handler(_ctx):
-        return suggest_seo_improvements(data.text, data.top_n)
-    return _execute_seo(request, "seo.suggest", handler)
+        return suggest_seo_improvements(data.text, data.top_n, db=db, user_id=str(current_user["sub"]))
+    return _execute_seo(request, "seo.suggest", handler, db=db)
 
 
 @router.post("/analyze_seo/")
 def analyze_seo_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
     def handler(_ctx):
-        return search_seo(data.content, 10)
+        return analyze_seo_content(data.content, 10, db=db)
     return _execute_seo(request, "seo.analyze.compat", handler, db=db)
 
 
@@ -74,8 +88,8 @@ def generate_meta_compat(request: Request, data: LegacyContentInput):
 
 
 @router.post("/suggest_improvements/")
-def suggest_improvements_compat(request: Request, data: LegacyContentInput):
+def suggest_improvements_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
     def handler(_ctx):
-        return suggest_seo_improvements(data.content)
-    return _execute_seo(request, "seo.suggest.compat", handler)
+        return suggest_seo_improvements(data.content, db=db)
+    return _execute_seo(request, "seo.suggest.compat", handler, db=db)
 
