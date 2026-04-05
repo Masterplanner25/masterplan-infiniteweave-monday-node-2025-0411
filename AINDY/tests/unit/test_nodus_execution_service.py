@@ -11,6 +11,46 @@ def _memory_context():
     return SimpleNamespace(formatted={"m1": {"content": "prior"}}, ids=["m1"])
 
 
+def test_build_nodus_execution_record_normalizes_runtime_metadata():
+    from runtime import nodus_execution_service as service
+
+    nodus_result = NodusExecutionResult(
+        output_state={"answer": 42},
+        emitted_events=[{"event_type": "done"}],
+        memory_writes=[{"args": ["remembered"]}],
+        status="success",
+        error=None,
+    )
+
+    summary = service.build_nodus_execution_summary(nodus_result)
+    record = service.build_nodus_execution_record(
+        flow_status="SUCCESS",
+        trace_id="trace-1",
+        run_id="run-1",
+        nodus_summary=summary,
+        nodus_status=nodus_result.status,
+        output_state=nodus_result.output_state,
+        events=nodus_result.emitted_events,
+        memory_writes=nodus_result.memory_writes,
+        error=nodus_result.error,
+    )
+
+    assert summary == {
+        "status": "success",
+        "output_state": {"answer": 42},
+        "events_emitted": 1,
+        "memory_writes": 1,
+        "error": None,
+    }
+    assert record["status"] == "SUCCESS"
+    assert record["trace_id"] == "trace-1"
+    assert record["run_id"] == "run-1"
+    assert record["nodus_status"] == "success"
+    assert record["events_emitted"] == 1
+    assert record["memory_writes_count"] == 1
+    assert record["memory_writes"] == [{"args": ["remembered"]}]
+
+
 def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
     from runtime import nodus_execution_service as service
 
@@ -69,9 +109,12 @@ def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
     assert result["required_capabilities"] == ["memory.read"]
     assert result["restricted_operations"] == ["share"]
     assert result["result"]["ok"] is True
+    assert result["result"]["nodus_status"] == "success"
     assert result["result"]["output_state"] == {"answer": 42}
     assert result["result"]["events"][0]["event_type"] == "done"
+    assert result["result"]["events_emitted"] == 1
     assert result["result"]["memory_writes"] == [{"args": ["remembered"]}]
+    assert result["result"]["memory_writes_count"] == 1
     create_memory_node.assert_called_once()
     feedback_engine.record_usage.assert_called_once()
 

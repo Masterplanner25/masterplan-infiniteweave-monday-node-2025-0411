@@ -18,6 +18,62 @@ from utils.user_ids import parse_user_id
 from utils.user_ids import require_user_id
 
 
+def build_nodus_execution_summary(nodus_result) -> dict[str, Any]:
+    """
+    Normalize a Nodus runtime result into the shared summary shape used by flow
+    execution, platform formatting, and direct route helpers.
+    """
+    return {
+        "status": getattr(nodus_result, "status", None),
+        "output_state": getattr(nodus_result, "output_state", {}) or {},
+        "events_emitted": len(getattr(nodus_result, "emitted_events", []) or []),
+        "memory_writes": len(getattr(nodus_result, "memory_writes", []) or []),
+        "error": getattr(nodus_result, "error", None),
+    }
+
+
+def build_nodus_execution_record(
+    *,
+    flow_status: str | None = None,
+    trace_id: str | None = None,
+    run_id: str | None = None,
+    nodus_summary: dict[str, Any] | None = None,
+    nodus_status: str | None = None,
+    output_state: dict[str, Any] | None = None,
+    events: list[Any] | None = None,
+    memory_writes: list[Any] | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """
+    Build the canonical Nodus execution record used across flow-backed and
+    direct runtime entrypoints. Callers can wrap this record in route-specific
+    envelopes without re-deriving execution metadata.
+    """
+    summary = dict(nodus_summary or {})
+    normalized_output = output_state
+    if normalized_output is None:
+        normalized_output = summary.get("output_state") or {}
+    normalized_events = list(events or [])
+    normalized_writes = list(memory_writes or [])
+    normalized_status = nodus_status or summary.get("status")
+    normalized_error = error
+    if normalized_error is None:
+        normalized_error = summary.get("error")
+
+    return {
+        "status": flow_status,
+        "trace_id": trace_id,
+        "run_id": run_id,
+        "nodus_status": normalized_status,
+        "output_state": normalized_output,
+        "events": normalized_events,
+        "memory_writes": normalized_writes,
+        "events_emitted": summary.get("events_emitted", len(normalized_events)),
+        "memory_writes_count": summary.get("memory_writes", len(normalized_writes)),
+        "error": normalized_error,
+    }
+
+
 def execute_nodus_runtime(
     *,
     db: Session,
@@ -144,15 +200,17 @@ def execute_nodus_task_payload(
             context_cls=NodusExecutionContext,
         )
 
-        result = {
-            "ok": nodus_result.status == "success",
-            "status": nodus_result.status,
-            "error": nodus_result.error,
-            "output_state": nodus_result.output_state,
-            "events": nodus_result.emitted_events,
-            "memory_writes": nodus_result.memory_writes,
-            "allowed_operations": security_context["allowed_operations"],
-        }
+        summary = build_nodus_execution_summary(nodus_result)
+        result = build_nodus_execution_record(
+            nodus_summary=summary,
+            nodus_status=nodus_result.status,
+            output_state=nodus_result.output_state,
+            events=nodus_result.emitted_events,
+            memory_writes=nodus_result.memory_writes,
+            error=nodus_result.error,
+        )
+        result["ok"] = nodus_result.status == "success"
+        result["allowed_operations"] = security_context["allowed_operations"]
 
         try:
             result_preview = result.get("output_state") or result.get("error") or result.get("status")
