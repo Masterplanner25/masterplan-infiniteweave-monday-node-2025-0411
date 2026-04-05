@@ -13,7 +13,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
+from core.execution_service import ExecutionContext
+from core.execution_service import run_execution
 from db.database import get_db
 from db.models.leadgen_model import LeadGenResult
 from schemas.leadgen_schema import LeadGenItem
@@ -27,13 +28,15 @@ logger = logging.getLogger(__name__)
 
 
 def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
-    return execute_with_pipeline_sync(
-        request=request,
-        route_name=route_name,
-        handler=handler,
-        user_id=user_id,
-        input_payload=input_payload,
-        metadata={"db": db, "source": "leadgen"},
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="leadgen",
+            operation=route_name,
+            start_payload=input_payload or {},
+        ),
+        lambda: handler(None),
     )
 
 

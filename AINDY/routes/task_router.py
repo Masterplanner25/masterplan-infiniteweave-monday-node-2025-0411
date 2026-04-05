@@ -3,7 +3,8 @@ import logging
 
 from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline_sync
+from core.execution_service import ExecutionContext
+from core.execution_service import run_execution
 from core.observability_events import emit_observability_event
 from db.database import get_db
 from db.models.task import Task
@@ -18,13 +19,15 @@ router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
 def _execute_tasks(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
-    return execute_with_pipeline_sync(
-        request=request,
-        route_name=route_name,
-        handler=handler,
-        user_id=user_id,
-        input_payload=input_payload,
-        metadata={"db": db, "source": "task_router"},
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="task_router",
+            operation=route_name,
+            start_payload=input_payload or {},
+        ),
+        lambda: handler(None),
     )
 
 
