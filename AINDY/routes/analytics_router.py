@@ -23,7 +23,23 @@ async def ingest_linkedin_manual(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        from db.models import MasterPlan
         from runtime.flow_engine import run_flow
+
+        plan = (
+            db.query(MasterPlan)
+            .filter(
+                MasterPlan.id == data.masterplan_id,
+                MasterPlan.user_id == current_user["sub"],
+            )
+            .first()
+        )
+        if not plan:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "masterplan_not_found", "message": "MasterPlan not found"},
+            )
+
         result = run_flow(
             "analytics_linkedin_ingest",
             {"data": data.model_dump()},
@@ -58,7 +74,20 @@ async def get_masterplan_analytics(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        from db.models import MasterPlan
         from runtime.flow_engine import run_flow
+
+        plan = (
+            db.query(MasterPlan)
+            .filter(
+                MasterPlan.id == masterplan_id,
+                MasterPlan.user_id == current_user["sub"],
+            )
+            .first()
+        )
+        if not plan:
+            raise HTTPException(status_code=404, detail={"error": "masterplan_not_found", "message": "MasterPlan not found"})
+
         result = run_flow(
             "analytics_masterplan_get",
             {"masterplan_id": masterplan_id, "period_type": period_type, "platform": platform, "scope_type": scope_type},
@@ -86,7 +115,20 @@ async def get_masterplan_summary(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        from db.models import MasterPlan
         from runtime.flow_engine import run_flow
+
+        plan = (
+            db.query(MasterPlan)
+            .filter(
+                MasterPlan.id == masterplan_id,
+                MasterPlan.user_id == current_user["sub"],
+            )
+            .first()
+        )
+        if not plan:
+            raise HTTPException(status_code=404, detail={"error": "masterplan_not_found", "message": "MasterPlan not found"})
+
         result = run_flow(
             "analytics_masterplan_summary",
             {"masterplan_id": masterplan_id, "group_by": group_by},

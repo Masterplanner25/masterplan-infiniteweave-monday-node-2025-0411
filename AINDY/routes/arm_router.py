@@ -213,11 +213,63 @@ async def get_arm_logs(
 ):
     """Fetch reasoning session logs for the current user."""
     def handler(ctx):
-        from runtime.flow_engine import run_flow
-        result = run_flow("arm_logs", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise RuntimeError("ARM logs flow failed")
-        return result.get("data")
+        from uuid import UUID
+        from db.models.arm_models import AnalysisResult, CodeGeneration
+
+        user_id = UUID(str(current_user["sub"]))
+        analyses = (
+            db.query(AnalysisResult)
+            .filter(AnalysisResult.user_id == user_id)
+            .order_by(AnalysisResult.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        generations = (
+            db.query(CodeGeneration)
+            .filter(CodeGeneration.user_id == user_id)
+            .order_by(CodeGeneration.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return {
+            "analyses": [
+                {
+                    "session_id": str(a.session_id),
+                    "file": (a.file_path or "").split("/")[-1].split("\\")[-1],
+                    "status": a.status,
+                    "execution_seconds": a.execution_seconds,
+                    "input_tokens": a.input_tokens,
+                    "output_tokens": a.output_tokens,
+                    "task_priority": a.task_priority,
+                    "execution_speed": round(
+                        ((a.input_tokens or 0) + (a.output_tokens or 0))
+                        / max(a.execution_seconds or 0.001, 0.001),
+                        1,
+                    ),
+                    "summary": a.result_summary,
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                }
+                for a in analyses
+            ],
+            "generations": [
+                {
+                    "session_id": str(g.session_id),
+                    "language": g.language,
+                    "generation_type": g.generation_type,
+                    "execution_seconds": g.execution_seconds,
+                    "input_tokens": g.input_tokens,
+                    "output_tokens": g.output_tokens,
+                    "created_at": g.created_at.isoformat() if g.created_at else None,
+                }
+                for g in generations
+            ],
+            "summary": {
+                "total_analyses": len(analyses),
+                "total_generations": len(generations),
+                "total_tokens_used": sum((a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses)
+                + sum((g.input_tokens or 0) + (g.output_tokens or 0) for g in generations),
+            },
+        }
 
     return await execute_with_pipeline(
         request=request, route_name="arm.logs", handler=handler,

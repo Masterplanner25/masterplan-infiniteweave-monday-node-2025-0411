@@ -19,6 +19,7 @@ from typing import Optional
 
 from sqlalchemy import text
 from core.execution_signal_helper import queue_memory_capture, queue_system_event
+emit_system_event = queue_system_event
 from core.observability_events import emit_observability_event
 from domain.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
 from core.system_event_service import emit_error_event
@@ -230,7 +231,7 @@ class MemoryCaptureEngine:
                 score,
                 content[:50],
             )
-            queue_system_event(
+            emit_system_event(
                 db=self.db,
                 event_type=SystemEventTypes.MEMORY_WRITE,
                 user_id=self.user_id,

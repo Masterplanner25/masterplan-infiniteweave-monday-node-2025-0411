@@ -2670,15 +2670,20 @@ def observability_requests_node(state, context):
 def observability_dashboard_node(state, context):
     try:
         import uuid as _uuid
+        from collections import Counter
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import func
+        from db.models.agent_event import AgentEvent
         from db.models.flow_run import FlowRun
         from db.models.request_metric import RequestMetric
         from db.models.system_event import SystemEvent
+        from db.models.system_health_log import SystemHealthLog
         db = context.get("db")
         user_id = _uuid.UUID(str(context.get("user_id")))
         window_hours = state.get("window_hours", 24)
         event_limit = state.get("event_limit", 60)
+        agent_limit = state.get("agent_limit", 30)
+        health_limit = state.get("health_limit", 20)
         request_window_start = datetime.utcnow() - timedelta(hours=window_hours)
         event_window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         req_q = db.query(RequestMetric).filter(RequestMetric.user_id == user_id)
@@ -2689,12 +2694,34 @@ def observability_dashboard_node(state, context):
         window_errors = req_q.filter(
             RequestMetric.created_at >= request_window_start, RequestMetric.status_code >= 500
         ).count()
+        recent_requests = req_q.order_by(RequestMetric.created_at.desc()).limit(20).all()
+        recent_request_errors = (
+            req_q.filter(RequestMetric.status_code >= 500)
+            .order_by(RequestMetric.created_at.desc())
+            .limit(20)
+            .all()
+        )
         system_events = db.query(SystemEvent).filter(
             SystemEvent.user_id == user_id, SystemEvent.timestamp >= event_window_start
         ).order_by(SystemEvent.timestamp.desc()).limit(event_limit).all()
+        visible_system_events = [
+            event for event in system_events
+            if not str(event.type or "").startswith("execution.")
+        ]
+        agent_events = db.query(AgentEvent).filter(
+            AgentEvent.user_id == user_id, AgentEvent.occurred_at >= event_window_start
+        ).order_by(AgentEvent.occurred_at.desc()).limit(agent_limit).all()
+        health_logs = db.query(SystemHealthLog).filter(
+            SystemHealthLog.timestamp >= request_window_start
+        ).order_by(SystemHealthLog.timestamp.desc()).limit(health_limit).all()
         flow_rows = db.query(FlowRun).filter(
-            FlowRun.user_id == user_id, FlowRun.created_at >= event_window_start
+            FlowRun.user_id == user_id,
+            FlowRun.created_at >= event_window_start,
+            FlowRun.flow_name != "observability_dashboard",
         ).order_by(FlowRun.created_at.desc()).limit(100).all()
+        flow_status_counts = Counter(str(row.status or "unknown") for row in flow_rows)
+        system_event_counts = Counter(str(event.type or "unknown") for event in visible_system_events)
+        latest_health = health_logs[0] if health_logs else None
         return {"status": "SUCCESS", "output_patch": {"observability_dashboard_result": {
             "summary": {
                 "window_hours": window_hours,
@@ -2703,8 +2730,104 @@ def observability_dashboard_node(state, context):
                 "window_errors": window_errors,
                 "error_rate_pct": round((window_errors / window_requests) * 100, 2) if window_requests else 0.0,
                 "active_flows": sum(1 for r in flow_rows if r.status in {"running", "waiting"}),
-                "system_event_total": len(system_events),
-            }
+                "loop_events": sum(1 for event in visible_system_events if str(event.type).startswith("loop.")),
+                "agent_events": len(agent_events),
+                "system_event_total": len(visible_system_events),
+                "health_status": str(getattr(latest_health, "status", "unknown")),
+            },
+            "loop_activity": [
+                {
+                    "type": event.type,
+                    "trace_id": event.trace_id,
+                    "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                    "payload": event.payload or {},
+                }
+                for event in visible_system_events
+                if str(event.type).startswith("loop.")
+            ],
+            "agent_timeline": [
+                {
+                    "run_id": str(event.run_id),
+                    "event_type": event.event_type,
+                    "correlation_id": event.correlation_id,
+                    "occurred_at": event.occurred_at.isoformat() if event.occurred_at else None,
+                    "payload": event.payload or {},
+                }
+                for event in agent_events
+            ],
+            "system_events": {
+                "counts": dict(system_event_counts),
+                "recent": [
+                    {
+                        "type": event.type,
+                        "trace_id": event.trace_id,
+                        "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                    }
+                    for event in visible_system_events[:20]
+                ],
+            },
+            "system_health": {
+                "latest": (
+                    {
+                        "status": latest_health.status,
+                        "timestamp": latest_health.timestamp.isoformat() if latest_health.timestamp else None,
+                        "components": latest_health.components or {},
+                        "api_endpoints": latest_health.api_endpoints or {},
+                        "avg_latency_ms": latest_health.avg_latency_ms,
+                    }
+                    if latest_health
+                    else None
+                ),
+                "recent": [
+                    {
+                        "status": row.status,
+                        "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                        "avg_latency_ms": row.avg_latency_ms,
+                    }
+                    for row in health_logs
+                ],
+            },
+            "request_metrics": {
+                "recent": [
+                    {
+                        "request_id": row.request_id,
+                        "trace_id": row.trace_id,
+                        "method": row.method,
+                        "path": row.path,
+                        "status_code": row.status_code,
+                        "duration_ms": row.duration_ms,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                    }
+                    for row in recent_requests
+                ],
+                "recent_errors": [
+                    {
+                        "request_id": row.request_id,
+                        "trace_id": row.trace_id,
+                        "method": row.method,
+                        "path": row.path,
+                        "status_code": row.status_code,
+                        "duration_ms": row.duration_ms,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                    }
+                    for row in recent_request_errors
+                ],
+            },
+            "flows": {
+                "status_counts": dict(flow_status_counts),
+                "recent": [
+                    {
+                        "id": str(row.id),
+                        "trace_id": row.trace_id,
+                        "flow_name": row.flow_name,
+                        "workflow_type": row.workflow_type,
+                        "status": row.status,
+                        "current_node": row.current_node,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                    }
+                    for row in flow_rows[:20]
+                ],
+            },
         }}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

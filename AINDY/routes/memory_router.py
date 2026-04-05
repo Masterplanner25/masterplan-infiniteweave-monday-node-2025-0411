@@ -7,6 +7,8 @@ import logging
 
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
+from db.dao.memory_node_dao import MemoryNodeDAO
+from runtime.nodus_security import NodusSecurityError
 from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
@@ -194,10 +196,15 @@ async def create_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        return _mem_run_flow("memory_node_create", {
-            "content": body.content, "source": body.source,
-            "tags": body.tags, "node_type": body.node_type, "extra": body.extra,
-        }, db, str(current_user["sub"]))
+        dao = MemoryNodeDAO(db)
+        return dao.save(
+            content=body.content,
+            source=body.source,
+            tags=body.tags or [],
+            user_id=str(current_user["sub"]),
+            node_type=body.node_type,
+            extra=body.extra or {},
+        )
 
     return await _execute_memory(request, "memory.nodes.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}")
@@ -259,8 +266,15 @@ async def search_nodes_by_tags(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(ctx):
-        return _mem_run_flow("memory_nodes_search_tags", {"tags": tags, "mode": mode, "limit": limit}, db, str(current_user["sub"]))
+        return _mem_run_flow(
+            "memory_nodes_search_tags",
+            {"tags": tags, "mode": mode, "limit": limit},
+            db,
+            user_id,
+        )
 
     return await _execute_memory(request, "memory.nodes.search_tags", handler, db=db, current_user=current_user)
 @router.post("/links", status_code=201)
@@ -270,11 +284,26 @@ async def create_link(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(ctx):
-        return _mem_run_flow("memory_link_create", {
-            "source_id": body.source_id, "target_id": body.target_id,
-            "link_type": body.link_type, "weight": body.weight,
-        }, db, str(current_user["sub"]))
+        dao = MemoryNodeDAO(db)
+        source_node = dao.get_by_id(body.source_id, user_id=user_id)
+        target_node = dao.get_by_id(body.target_id, user_id=user_id)
+        # Source node not found
+        # Target node not found
+        try:
+            return dao.create_link(
+                body.source_id,
+                body.target_id,
+                body.link_type or "related",
+                body.weight or 0.5,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "invalid_memory_link", "message": str(exc)},
+            ) from exc
 
     return await _execute_memory(request, "memory.links.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}/traverse")
@@ -316,10 +345,22 @@ async def search_similar_nodes(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        return _mem_run_flow("memory_nodes_search_similar", {
-            "query": body.query, "limit": body.limit,
-            "node_type": body.node_type, "min_similarity": body.min_similarity,
-        }, db, str(current_user["sub"]))
+        from memory.embedding_service import generate_query_embedding
+
+        query_embedding = generate_query_embedding(body.query)
+        dao = MemoryNodeDAO(db)
+        results = dao.find_similar(
+            query_embedding=query_embedding,
+            limit=body.limit,
+            user_id=str(current_user["sub"]),
+            node_type=body.node_type,
+            min_similarity=body.min_similarity,
+        )
+        return {
+            "query": body.query,
+            "results": results,
+            "count": len(results),
+        }
 
     return await _execute_memory(request, "memory.nodes.search_similar", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall")
@@ -330,10 +371,34 @@ async def recall_memories(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        return _mem_run_flow("memory_recall", {
-            "query": body.query, "tags": body.tags,
-            "limit": body.limit, "node_type": body.node_type,
-        }, db, str(current_user["sub"]))
+        if not body.query and not body.tags:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
+            )
+
+        dao = MemoryNodeDAO(db)
+        results = dao.recall(
+            query=body.query,
+            tags=body.tags,
+            limit=body.limit,
+            user_id=str(current_user["sub"]),
+            node_type=body.node_type,
+        )
+        return {
+            "query": body.query,
+            "tags": body.tags,
+            "results": results,
+            "count": len(results),
+            "scoring_version": "v2",
+            "formula": {
+                "semantic": 0.40,
+                "graph": 0.15,
+                "recency": 0.15,
+                "success_rate": 0.20,
+                "usage_frequency": 0.10,
+            },
+        }
 
     return await _execute_memory(request, "memory.recall", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall/v3")
@@ -442,20 +507,71 @@ async def get_suggestions(
     return await _execute_memory(request, "memory.suggest", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodus/execute")
 async def execute_nodus_task(
-    request: Request,
     body: NodusTaskRequest,
+    request: Request = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    async def _run_nodus():
+        from platform_layer.async_job_service import (
+            async_heavy_execution_enabled,
+            build_queued_response,
+            submit_async_job,
+        )
+        from runtime.nodus_execution_service import execute_nodus_task_payload
+        from utils.user_ids import require_user_id
+
+        user_id = str(require_user_id(current_user["sub"]))
+        if request is not None and async_heavy_execution_enabled():
+            log_id = submit_async_job(
+                task_name="memory.nodus.execute",
+                payload={
+                    "task_name": body.task_name,
+                    "task_code": body.task_code,
+                    "user_id": user_id,
+                    "session_tags": body.session_tags,
+                    "allowed_operations": body.allowed_operations,
+                    "execution_id": body.execution_id,
+                    "capability_token": body.capability_token,
+                },
+                user_id=user_id,
+                source="memory_router",
+            )
+            return JSONResponse(
+                status_code=202,
+                content=build_queued_response(
+                    log_id,
+                    task_name="memory.nodus.execute",
+                    source="memory_router",
+                ),
+            )
+
+        try:
+            return execute_nodus_task_payload(
+                task_name=body.task_name,
+                task_code=body.task_code,
+                db=db,
+                user_id=user_id,
+                session_tags=body.session_tags,
+                allowed_operations=body.allowed_operations,
+                execution_id=body.execution_id,
+                capability_token=body.capability_token,
+                logger=logger,
+            )
+        except NodusSecurityError as exc:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "nodus_security_violation",
+                    "message": str(exc),
+                },
+            )
+
+    if request is None:
+        return await _run_nodus()
+
     def handler(ctx):
-        return _mem_run_flow("memory_nodus_execute", {
-            "task_name": body.task_name,
-            "task_code": body.task_code,
-            "session_tags": body.session_tags,
-            "allowed_operations": body.allowed_operations,
-            "execution_id": body.execution_id,
-            "capability_token": body.capability_token,
-        }, db, str(current_user["sub"]))
+        return _run_nodus()
 
     return await _execute_memory(request, "memory.nodus.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute")

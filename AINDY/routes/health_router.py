@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from core.execution_helper import execute_with_pipeline_sync
-from core.execution_signal_helper import queue_system_event
+from core.system_event_service import emit_system_event
 from db.database import SessionLocal, engine, get_db
 from services.auth_service import verify_api_key
 
@@ -37,12 +37,7 @@ def _liveness_payload() -> dict:
     }
 
 
-@router.get(
-    "/health",
-    summary="Check Liveness",
-    description="Performs a liveness check with a shallow database probe. Returns the current service status and database reachability.",
-)
-def liveness() -> dict:
+def _compute_liveness() -> dict:
     """
     Liveness + shallow DB check.
 
@@ -80,17 +75,70 @@ def liveness() -> dict:
     }
 
 
+def liveness() -> dict:
+    payload = {"status": "ok"}
+    event_db = SessionLocal()
+    try:
+        emit_system_event(
+            db=event_db,
+            event_type="health.liveness.completed",
+            payload=payload,
+            required=False,
+        )
+    finally:
+        event_db.close()
+    return payload
+
+
+@router.get(
+    "/health",
+    summary="Check Liveness",
+    description="Performs a liveness check with a shallow database probe. Returns the current service status and database reachability.",
+)
+def liveness_http(request: Request) -> dict:
+    payload = _compute_liveness()
+    def handler(_ctx):
+        event_db = SessionLocal()
+        try:
+            emit_system_event(
+                db=event_db,
+                event_type="health.liveness.completed",
+                payload=payload,
+                required=False,
+            )
+        finally:
+            event_db.close()
+        return payload
+
+    return _execute_health(request, "health.liveness", handler)
+
+
+def liveness_legacy_alias() -> dict:
+    payload = _liveness_payload()
+    event_db = SessionLocal()
+    try:
+        emit_system_event(
+            db=event_db,
+            event_type="health.liveness.completed",
+            payload=payload,
+            required=False,
+        )
+    finally:
+        event_db.close()
+    return payload
+
+
 @router.get(
     "/health/",
     summary="Check Legacy Liveness",
     description="Provides the legacy slash-suffixed liveness endpoint. Returns the basic health payload used by older callers.",
 )
-def liveness_legacy_alias(request: Request) -> dict:
+def liveness_legacy_alias_http(request: Request) -> dict:
     payload = _liveness_payload()
     def handler(_ctx):
         event_db = SessionLocal()
         try:
-            queue_system_event(
+            emit_system_event(
                 db=event_db,
                 event_type="health.liveness.completed",
                 payload=payload,
@@ -155,7 +203,7 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
         "components": components,
     }
     def handler(_ctx):
-        queue_system_event(
+        emit_system_event(
             db=db,
             event_type="health.readiness.completed",
             payload=payload,

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
+from runtime.flow_engine import execute_intent
 from services.auth_service import verify_api_key
 
 router = APIRouter(
@@ -157,15 +158,27 @@ def receive_signals(
     def handler(ctx):
         for idx, sig in enumerate(batch.signals):
             _validate_signal(sig, idx)
-        return _run_flow_watcher(
-            "watcher_evaluate_trigger",
-            {
+        result = execute_intent(
+            intent_data={
+                "workflow_type": "watcher_ingest",
                 "signals": [sig.model_dump() for sig in batch.signals],
                 "user_id": user_id,
             },
-            db,
-            user_id,
+            db=db,
+            user_id=user_id,
         )
+        if result.get("status") == "FAILED":
+            error = result.get("error", "")
+            if error.startswith("HTTP_"):
+                parts = error.split(":", 1)
+                code = int(parts[0].replace("HTTP_", ""))
+                msg = parts[1] if len(parts) > 1 else error
+                raise HTTPException(status_code=code, detail=msg)
+            raise HTTPException(status_code=500, detail=error or "watcher_ingest failed")
+        payload = result.get("result") or result.get("data") or {}
+        if isinstance(payload, dict) and "accepted" in payload:
+            return payload
+        return payload
 
     return execute_with_pipeline_sync(
         request=None,
@@ -189,20 +202,48 @@ def list_signals(
 ) -> Dict[str, Any]:
     """Query stored watcher signals."""
     def handler(ctx):
+        from db.models.watcher_signal import WatcherSignal
+
         if signal_type and signal_type not in _VALID_SIGNAL_TYPES:
             raise HTTPException(status_code=422, detail=f"Unknown signal_type: {signal_type!r}")
-        return _run_flow_watcher(
-            "watcher_signals_list",
-            {
-                "session_id": session_id,
-                "signal_type": signal_type,
-                "user_id_filter": user_id,
-                "limit": limit,
-                "offset": offset,
-            },
-            db,
-            user_id,
+        parsed_user_id = None
+        if user_id:
+            try:
+                parsed_user_id = UUID(str(user_id))
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail=f"Invalid user_id: {user_id!r}") from exc
+
+        query = db.query(WatcherSignal)
+        if session_id:
+            query = query.filter(WatcherSignal.session_id == session_id)
+        if signal_type:
+            query = query.filter(WatcherSignal.signal_type == signal_type)
+        if parsed_user_id is not None:
+            query = query.filter(WatcherSignal.user_id == parsed_user_id)
+
+        signals = (
+            query.order_by(WatcherSignal.signal_timestamp.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
         )
+
+        return [
+            {
+                "id": s.id,
+                "signal_type": s.signal_type,
+                "session_id": s.session_id,
+                "app_name": s.app_name,
+                "window_title": s.window_title,
+                "activity_type": s.activity_type,
+                "signal_timestamp": s.signal_timestamp.isoformat(),
+                "received_at": s.received_at.isoformat(),
+                "duration_seconds": s.duration_seconds,
+                "focus_score": s.focus_score,
+                "metadata": s.signal_metadata,
+            }
+            for s in signals
+        ]
 
     return execute_with_pipeline_sync(
         request=None,

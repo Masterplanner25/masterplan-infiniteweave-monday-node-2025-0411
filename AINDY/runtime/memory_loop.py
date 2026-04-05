@@ -71,7 +71,8 @@ class ExecutionLoop:
             )
         except Exception as exc:
             logger.warning("[ExecutionLoop] memory write failed: %s", exc)
-            db.rollback()
+            if hasattr(db, "rollback"):
+                db.rollback()
 
         if trace_id and created_node and created_node.get("id"):
             try:
@@ -83,7 +84,8 @@ class ExecutionLoop:
                 )
             except Exception as exc:
                 logger.warning("[ExecutionLoop] trace append failed: %s", exc)
-                db.rollback()
+                if hasattr(db, "rollback"):
+                    db.rollback()
 
         try:
             success_score = self._score(result)
@@ -100,7 +102,8 @@ class ExecutionLoop:
             )
         except Exception as exc:
             logger.warning("[ExecutionLoop] feedback failed: %s", exc)
-            db.rollback()
+            if hasattr(db, "rollback"):
+                db.rollback()
 
         try:
             baseline = self._get_baseline_result(task)

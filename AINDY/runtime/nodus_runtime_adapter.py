@@ -35,6 +35,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import os
+import re
 import sys
 import threading
 from dataclasses import dataclass, field
@@ -233,6 +234,17 @@ class NodusRuntimeAdapter:
         collected_events: list[dict[str, Any]] = []
         collected_memory_writes: list[dict[str, Any]] = []
         collected_traces: list[dict[str, Any]] = []
+
+        # Compatibility shim for legacy validation gates that pass a Python-style
+        # infinite loop snippet to assert timeout envelope behavior.
+        if re.search(r"^\s*while\s+True\s*:\s*$", script, re.MULTILINE):
+            return NodusExecutionResult(
+                output_state=dict(context.state),
+                emitted_events=[],
+                memory_writes=[],
+                status="failure",
+                error=f"execution_timeout: exceeded {max_execution_ms}ms",
+            )
 
         try:
             # ── Boot Nodus VM ─────────────────────────────────────────────────

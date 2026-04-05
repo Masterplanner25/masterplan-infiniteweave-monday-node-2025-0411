@@ -20,6 +20,7 @@ import time
 import uuid
 
 from core.execution_signal_helper import queue_memory_capture
+# ARM memory capture is routed through a MemoryCaptureEngine-backed helper.
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)

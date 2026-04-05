@@ -14,7 +14,7 @@ from db.models.background_task_lease import BackgroundTaskLease
 from db.models.masterplan import MasterPlan
 from db.models.task import Task
 from db.mongo_setup import get_mongo_client
-from analytics.calculation_services import save_calculation
+from analytics.calculation_services import calculate_twr, save_calculation
 from core.observability_events import emit_observability_event
 from core.system_event_types import SystemEventTypes
 
@@ -642,6 +642,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
 
     try:
         from core.execution_signal_helper import queue_memory_capture
+        # Task completion memory capture is routed through a MemoryCaptureEngine-backed helper.
 
         node = queue_memory_capture(
             db=db,
@@ -726,13 +727,17 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
     except Exception as exc:
         logger.warning("Task completion ETA recalculation failed: %s", exc)
 
-    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+    orchestration = {"next_action": None}
+    try:
+        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
-    orchestration = execute_infinity_orchestrator(
-        user_id=owner_user_id,
-        trigger_event="task_completion",
-        db=db,
-    )
+        orchestration = execute_infinity_orchestrator(
+            user_id=owner_user_id,
+            trigger_event="task_completion",
+            db=db,
+        )
+    except Exception as exc:
+        logger.warning("Task completion orchestration failed: %s", exc)
 
     try:
         current_task_automation = queue_task_automation(
@@ -770,6 +775,12 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
     except Exception as exc:
         logger.warning("Task automation dispatch failed: %s", exc)
 
+    task_graph = {}
+    try:
+        task_graph = get_task_graph_context(db, user_id=owner_user_id)
+    except Exception as exc:
+        logger.warning("Task graph refresh failed: %s", exc)
+
     return {
         "memory_captured": memory_captured,
         "feedback_recorded": feedback_recorded,
@@ -779,7 +790,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         "next_action": orchestration["next_action"],
         "unlocked_tasks": unlocked_tasks,
         "automation_runs": automation_runs,
-        "task_graph": get_task_graph_context(db, user_id=owner_user_id),
+        "task_graph": task_graph,
     }
 
 

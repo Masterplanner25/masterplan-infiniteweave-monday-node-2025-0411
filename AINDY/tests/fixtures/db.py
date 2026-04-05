@@ -5,6 +5,7 @@ import sys
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy import event
 from sqlalchemy import types as sqltypes
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
@@ -157,4 +158,8 @@ def cleanup_committed_test_state(test_engine):
 
     with test_engine.begin() as connection:
         for table in reversed(Base.metadata.sorted_tables):
-            connection.execute(table.delete())
+            try:
+                connection.execute(table.delete())
+            except OperationalError as exc:
+                if "no such table" not in str(exc).lower():
+                    raise

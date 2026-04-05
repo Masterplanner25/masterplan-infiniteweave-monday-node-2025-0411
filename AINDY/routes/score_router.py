@@ -11,6 +11,8 @@ from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/scores", tags=["Infinity Score"])
 
+# Compatibility note: manual score recalculation is orchestrated via infinity_orchestrator.
+
 
 class FeedbackRequest(BaseModel):
     source_type: Literal["arm", "agent", "manual"]
@@ -18,6 +20,17 @@ class FeedbackRequest(BaseModel):
     feedback_value: int = Field(..., ge=-1, le=1)
     feedback_text: Optional[str] = None
     loop_adjustment_id: Optional[str] = None
+
+
+def _latest_adjustment_payload(user_id: str, db: Session):
+    from domain.infinity_loop import get_latest_adjustment, serialize_adjustment
+
+    latest = get_latest_adjustment(user_id, db)
+    if latest is None:
+        return None
+    payload = dict(serialize_adjustment(latest))
+    payload.pop("id", None)
+    return payload
 
 
 # ------------------------------
@@ -31,12 +44,19 @@ async def get_my_score(
 ):
     def handler(ctx):
         from runtime.flow_engine import run_flow
+
         result = run_flow("score_get", {}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise HTTPException(status_code=500, detail="Score fetch failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if isinstance(data, dict) and not data.get("latest_adjustment"):
+            data["latest_adjustment"] = _latest_adjustment_payload(
+                str(current_user["sub"]),
+                db,
+            )
+        return data
 
-    return execute_with_pipeline(request, "scores_get_me", handler)
+    return await execute_with_pipeline(request, "scores_get_me", handler)
 
 
 # ------------------------------
@@ -60,7 +80,7 @@ async def recalculate_my_score(
             raise HTTPException(status_code=500, detail="Score recalculation flow failed")
         return result.get("data")
 
-    return execute_with_pipeline(request, "scores_recalculate", handler)
+    return await execute_with_pipeline(request, "scores_recalculate", handler)
 
 
 # ------------------------------
@@ -80,7 +100,7 @@ async def get_score_history(
             raise HTTPException(status_code=500, detail="Score history fetch failed")
         return result.get("data")
 
-    return execute_with_pipeline(request, "scores_history", handler)
+    return await execute_with_pipeline(request, "scores_history", handler)
 
 
 # ------------------------------
@@ -111,7 +131,7 @@ async def record_score_feedback(
             raise HTTPException(status_code=500, detail="Score feedback flow failed")
         return result.get("data")
 
-    return execute_with_pipeline(request, "scores_feedback", handler)
+    return await execute_with_pipeline(request, "scores_feedback", handler)
 
 
 @router.get("/feedback")
@@ -128,4 +148,4 @@ async def get_score_feedback(
             raise HTTPException(status_code=500, detail="Score feedback list failed")
         return result.get("data")
 
-    return execute_with_pipeline(request, "scores_feedback_list", handler)
+    return await execute_with_pipeline(request, "scores_feedback_list", handler)

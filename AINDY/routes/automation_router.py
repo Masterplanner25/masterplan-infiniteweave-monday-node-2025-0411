@@ -21,11 +21,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/automation", tags=["Automation"])
 
 
+def _flow_failure(result: dict) -> str:
+    direct_error = result.get("error")
+    if isinstance(direct_error, str) and direct_error:
+        return direct_error
+    for key in ("data", "result"):
+        payload = result.get(key)
+        if isinstance(payload, dict):
+            nested_error = payload.get("error") or payload.get("message")
+            if isinstance(nested_error, str) and nested_error:
+                return nested_error
+    return ""
+
+
 def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: str):
     from runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
-        error = result.get("error", "")
+        error = _flow_failure(result)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -93,6 +106,24 @@ async def replay_automation_log(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+    from db.models.automation_log import AutomationLog
+    from agents.capability_service import validate_token
+
+    log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+    if log and getattr(log, "payload", None):
+        payload = log.payload if isinstance(log.payload, dict) else {}
+        if payload.get("execution_token"):
+            validation = validate_token(
+                token=payload.get("execution_token"),
+                run_id=payload.get("run_id"),
+                user_id=user_id,
+            )
+            if not validation.get("ok"):
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": validation.get("error", "invalid_execution_token")},
+                )
+
     def handler(_ctx):
         return _run_flow_automation("automation_log_replay", {"log_id": log_id}, db, user_id)
     return await _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id,

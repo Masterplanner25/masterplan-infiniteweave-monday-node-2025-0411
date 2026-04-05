@@ -7,7 +7,6 @@ import uuid
 from memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
-from core.observability_events import emit_observability_event
 
 
 class MemoryLearningEngine:
@@ -60,7 +59,8 @@ class MemoryLearningEngine:
 
                 updated.append({"id": str(node.id), "success_rate": new_rate})
 
-            db.commit()
+            if hasattr(db, "commit"):
+                db.commit()
 
             logger.info(
                 "[MemoryLearning] updated=%s score=%.3f flagged=%s",
@@ -70,14 +70,12 @@ class MemoryLearningEngine:
             )
         except Exception as exc:
             logger.warning("[MemoryLearning] update failed: %s", exc)
+            if not hasattr(db, "rollback"):
+                return
             try:
                 db.rollback()
             except Exception as rollback_exc:
-                emit_observability_event(
-                    logger,
-                    event="memory_learning_rollback_failed",
-                    error=str(rollback_exc),
-                )
+                logger.warning("[MemoryLearning] rollback failed: %s", rollback_exc)
 
     def _get_success_rate(self, node: MemoryNodeModel) -> float:
         extra = node.extra or {}

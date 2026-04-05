@@ -13,7 +13,6 @@ from runtime.nodus_security import (
     NodusSecurityError,
     authorize_nodus_execution,
 )
-from core.observability_events import emit_observability_event
 from utils.user_ids import require_user_id
 
 
@@ -57,7 +56,7 @@ def execute_nodus_task_payload(
         from db.dao.memory_node_dao import MemoryNodeDAO
         from runtime.memory import MemoryOrchestrator
         from runtime.memory.memory_feedback import MemoryFeedbackEngine
-        from memory.bridge import create_memory_node
+        from bridge import create_memory_node
 
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)
         feedback_engine = MemoryFeedbackEngine()
@@ -114,16 +113,9 @@ def execute_nodus_task_payload(
                 db=db,
                 node_type="outcome",
             )
-        except Exception:
+        except Exception as exc:
             if logger:
-                emit_observability_event(
-                    logger,
-                    event="nodus_memory_capture_failed",
-                    route="/memory/nodus/execute",
-                    task_name=task_name,
-                    user_id=normalized_user_id,
-                )
-            raise
+                logger.warning("nodus_memory_capture_failed task=%s user=%s: %s", task_name, normalized_user_id, exc)
 
         try:
             success_score = 1.0 if result.get("ok") else 0.0
@@ -132,17 +124,15 @@ def execute_nodus_task_payload(
                 success_score=success_score,
                 db=db,
             )
-        except Exception:
+        except Exception as exc:
             if logger:
-                emit_observability_event(
-                    logger,
-                    event="nodus_feedback_failed",
-                    route="/memory/nodus/execute",
-                    task_name=task_name,
-                    user_id=normalized_user_id,
-                    memory_ids=memory_context.ids,
+                logger.warning(
+                    "nodus_feedback_failed task=%s user=%s memory_ids=%s: %s",
+                    task_name,
+                    normalized_user_id,
+                    memory_context.ids,
+                    exc,
                 )
-            raise
 
         return {
             "task_name": task_name,

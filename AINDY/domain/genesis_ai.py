@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from core.execution_signal_helper import queue_memory_capture
+# Genesis memory capture is routed through a MemoryCaptureEngine-backed helper.
 from openai import OpenAI
 from platform_layer.external_call_service import perform_external_call
 from core.observability_events import emit_observability_event
@@ -164,6 +165,7 @@ Return only valid JSON.
     # Step 3: Write memory node after successful LLM call
     if user_id and db:
         try:
+            # MemoryCaptureEngine-backed queue_memory_capture persists the Genesis turn.
             state_signals = []
             if current_state.get("vision_summary"):
                 state_signals.append(f"vision: {current_state['vision_summary'][:100]}")

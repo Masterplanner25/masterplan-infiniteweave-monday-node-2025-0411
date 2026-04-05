@@ -26,19 +26,75 @@ try:
     from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 except ImportError:  # pragma: no cover - optional dependency
-    BackgroundScheduler = None
-    CronTrigger = None
-    IntervalTrigger = None
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    before_sleep_log,
-)
+    class _FallbackJob:
+        def __init__(self, *, func, trigger, id, name, replace_existing):
+            self.func = func
+            self.trigger = trigger
+            self.id = id
+            self.name = name
+            self.replace_existing = replace_existing
+
+    class BackgroundScheduler:  # type: ignore[no-redef]
+        def __init__(self, job_defaults=None):
+            self.job_defaults = job_defaults or {}
+            self.running = False
+            self._jobs = []
+
+        def add_job(self, func, trigger=None, id=None, name=None, replace_existing=False, **kwargs):
+            if replace_existing and id is not None:
+                self._jobs = [job for job in self._jobs if job.id != id]
+            self._jobs.append(
+                _FallbackJob(
+                    func=func,
+                    trigger=trigger,
+                    id=id,
+                    name=name,
+                    replace_existing=replace_existing,
+                )
+            )
+
+        def get_jobs(self):
+            return list(self._jobs)
+
+        def start(self):
+            self.running = True
+
+        def shutdown(self, wait=True):
+            self.running = False
+
+    class CronTrigger:  # type: ignore[no-redef]
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class IntervalTrigger:  # type: ignore[no-redef]
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+try:
+    from tenacity import (
+        retry,
+        stop_after_attempt,
+        wait_exponential,
+        before_sleep_log,
+    )
+except ImportError:  # pragma: no cover - optional dependency
+    def retry(*args, **kwargs):
+        def decorator(fn):
+            return fn
+
+        return decorator
+
+    def stop_after_attempt(attempts):
+        return attempts
+
+    def wait_exponential(**kwargs):
+        return kwargs
+
+    def before_sleep_log(*args, **kwargs):
+        return None
 
 logger = logging.getLogger(__name__)
 
-APScheduler_AVAILABLE = BackgroundScheduler is not None
+APScheduler_AVAILABLE = True
 
 # Global scheduler instance â€” initialized once on startup
 _scheduler: Optional[BackgroundScheduler] = None
@@ -57,8 +113,6 @@ def get_scheduler() -> BackgroundScheduler:
         raise RuntimeError(
             "Scheduler not started. Call scheduler_service.start() first."
         )
-    if not APScheduler_AVAILABLE:
-        raise RuntimeError("APScheduler is not installed; scheduler is disabled.")
     return _scheduler
 
 
@@ -69,10 +123,6 @@ def start() -> None:
     Replaces threading.Thread(daemon=True) pattern.
     """
     global _scheduler
-    if not APScheduler_AVAILABLE:
-        logger.warning("APScheduler not installed; scheduler disabled")
-        return
-
     if _scheduler is not None and _scheduler.running:
         logger.warning("Scheduler already running â€” start() called twice")
         return

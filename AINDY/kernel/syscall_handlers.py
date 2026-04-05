@@ -577,15 +577,17 @@ def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
         feedback_text      (str)   — optional
         loop_adjustment_id (str)   — optional
     """
+    from datetime import datetime, timezone
     from uuid import UUID
 
     from db.database import SessionLocal
-    from db.models.infinity_loop import UserFeedback
+    from db.models.infinity_loop import LoopAdjustment, UserFeedback
 
     db = SessionLocal()
     try:
+        user_id = UUID(str(context.user_id))
         feedback = UserFeedback(
-            user_id=UUID(str(context.user_id)),
+            user_id=user_id,
             source_type=payload.get("source_type"),
             source_id=payload.get("source_id"),
             feedback_value=payload.get("feedback_value"),
@@ -593,6 +595,19 @@ def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
             loop_adjustment_id=payload.get("loop_adjustment_id"),
         )
         db.add(feedback)
+        loop_adjustment_id = payload.get("loop_adjustment_id")
+        if loop_adjustment_id:
+            adjustment = (
+                db.query(LoopAdjustment)
+                .filter(
+                    LoopAdjustment.id == UUID(str(loop_adjustment_id)),
+                    LoopAdjustment.user_id == user_id,
+                )
+                .first()
+            )
+            if adjustment is not None and adjustment.evaluated_at is None:
+                adjustment.evaluated_at = datetime.now(timezone.utc)
+                db.add(adjustment)
         db.commit()
         db.refresh(feedback)
         return {"score_feedback_result": {"id": str(feedback.id)}}

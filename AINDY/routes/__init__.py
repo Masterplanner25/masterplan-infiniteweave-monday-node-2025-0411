@@ -32,7 +32,7 @@ from .rippletrace_router import router as rippletrace_router
 from .network_bridge_router import router as network_bridge_router
 from .db_verify_router import router as db_verify_router
 from .research_results_router import router as research_router, search_history_router
-from .main_router import router as main_router
+from .main_router import legacy_router as legacy_main_router, router as main_router
 from .freelance_router import router as freelance_router
 from .arm_router import router as arm_router
 from .leadgen_router import router as leadgen_router
@@ -68,7 +68,13 @@ from routes.platform_router import router as platform_router
 ROOT_ROUTERS = [
     health_router,   # GET /health, /health/, /ready, /health/details
     auth_router,     # POST /auth/register, /auth/login
+    db_verify_router,  # GET /db/verify
 ]
+
+# Legacy root aliases intentionally exposed only when compatibility mode is on.
+# These preserve old flat endpoints such as /calculate_twr without re-enabling
+# the full /apps/compute domain surface when ENABLE_DOMAIN_APPS=false.
+LEGACY_ROOT_ROUTERS = []
 
 # ---------------------------------------------------------------------------
 # Platform — runtime infrastructure (mounted at /platform)
@@ -131,9 +137,22 @@ APP_ROUTERS = _PLATFORM_APP_ROUTERS + (_DOMAIN_APP_ROUTERS if _enable_domain els
 
 if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
     APP_ROUTERS.append(legacy_surface_router)
+    LEGACY_ROOT_ROUTERS.append(legacy_main_router)
+    LEGACY_ROOT_ROUTERS.append(leadgen_router)
+    LEGACY_ROOT_ROUTERS.append(arm_router)
+    LEGACY_ROOT_ROUTERS.append(freelance_router)
+    LEGACY_ROOT_ROUTERS.append(seo_router)
+    LEGACY_ROOT_ROUTERS.append(social_router)
+    LEGACY_ROOT_ROUTERS.append(authorship_router)
+    LEGACY_ROOT_ROUTERS.append(research_router)
+    LEGACY_ROOT_ROUTERS.append(search_history_router)
+    LEGACY_ROOT_ROUTERS.append(rippletrace_router)
+    LEGACY_ROOT_ROUTERS.append(network_bridge_router)
+    LEGACY_ROOT_ROUTERS.append(flow_router)
+    LEGACY_ROOT_ROUTERS.append(observability_router)
 
 # ---------------------------------------------------------------------------
 # ROUTERS — backward-compat flat list consumed by tests and legacy callers.
 # main.py uses the layered groups above; this shim keeps existing imports valid.
 # ---------------------------------------------------------------------------
-ROUTERS = ROOT_ROUTERS + [platform_router] + PLATFORM_ROUTERS + APP_ROUTERS
+ROUTERS = ROOT_ROUTERS + [platform_router] + PLATFORM_ROUTERS + APP_ROUTERS + LEGACY_ROOT_ROUTERS

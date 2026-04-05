@@ -260,16 +260,16 @@ def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
 
 
 def _get_top_incomplete_task(user_id: str, db) -> dict | None:
-    next_ready = get_next_ready_task(db=db, user_id=user_id)
-    if next_ready:
-        return next_ready
+    try:
+        next_ready = get_next_ready_task(db=db, user_id=user_id)
+        if next_ready:
+            return next_ready
+    except Exception as exc:
+        logger.warning("[InfinityLoop] next ready task lookup failed for %s: %s", user_id, exc)
 
     from db.models.task import Task
 
-    try:
-        user_uuid = uuid.UUID(str(user_id))
-    except (TypeError, ValueError):
-        return None
+    user_uuid = _normalize_user_id(user_id) or user_id
 
     priority_rank = case(
         (Task.priority == "high", 3),
@@ -717,9 +717,8 @@ def _decide(
 def _reprioritize_tasks(user_id: str, db) -> dict:
     from db.models.task import Task
 
-    try:
-        user_uuid = uuid.UUID(str(user_id))
-    except (TypeError, ValueError):
+    user_uuid = _normalize_user_id(user_id)
+    if user_uuid is None:
         return {"reason": "invalid_user_id", "task_ids": []}
 
     priority_rank = case(
@@ -769,9 +768,8 @@ def run_loop(
 
     try:
         normalized_trigger = _normalize_trigger_event(trigger_event)
-        owner_user_id = _normalize_user_id(user_id)
-        if owner_user_id is None:
-            raise ValueError("Infinity loop requires a valid user_id")
+        persisted_user_id = _normalize_user_id(user_id)
+        owner_user_id = persisted_user_id or user_id
         if score_snapshot is None:
             from domain.infinity_service import get_user_kpi_snapshot
 
@@ -857,7 +855,7 @@ def run_loop(
         expected_outcome, expected_score = _build_expectation(decision_type, score_snapshot)
 
         adjustment = LoopAdjustment(
-            user_id=owner_user_id,
+            user_id=persisted_user_id,
             trace_id=get_current_trace_id(),
             trigger_event=normalized_trigger,
             score_snapshot=score_snapshot,
