@@ -10,7 +10,8 @@ from core.execution_service import ExecutionContext
 from core.execution_service import run_execution
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate
-from domain.research_results_service import create_research_result
+from domain.search_service import unified_query
+from domain import research_results_service
 from modules.research_engine import ai_analyze, web_search
 from services.auth_service import get_current_user
 
@@ -84,14 +85,21 @@ def run_research_query(
 ):
     user_id = str(current_user["sub"])
     if http_request is None:
-        raw = web_search(request.query)
-        summary = ai_analyze(raw)
-        record = create_research_result(
+        unified = unified_query(
+            request.query,
+            db=db,
+            user_id=user_id,
+            web_search_fn=web_search,
+            ai_analyze_fn=ai_analyze,
+        )
+        raw = unified.get("raw_excerpt") or ""
+        summary = unified.get("summary") or request.summary or ""
+        record = research_results_service.create_research_result(
             db=db,
             result=ResearchResultCreate(query=request.query, summary=summary),
             user_id=user_id,
             data={"raw_content": raw},
-            source="web_search",
+            source=unified.get("source") or "web_search",
         )
         return {
             "id": getattr(record, "id", None),
@@ -99,7 +107,7 @@ def run_research_query(
             "summary": record.summary,
             "source": getattr(record, "source", "web_search"),
             "data": getattr(record, "data", None),
-            "search_score": 1.0,
+            "search_score": unified.get("search_score") or 1.0,
             "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
         }
 

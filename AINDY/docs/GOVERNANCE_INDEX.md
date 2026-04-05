@@ -1,3 +1,5 @@
+﻿# Governance Index
+Last updated: 2026-04-05 (Tech debt updated after durable search orchestration unification)
 # Governance Index
 Last updated: 2026-04-05 (TECH_DEBT authority reconciliation and docs path alignment)
 Update rule: Change this date whenever any file under `docs/` is modified.

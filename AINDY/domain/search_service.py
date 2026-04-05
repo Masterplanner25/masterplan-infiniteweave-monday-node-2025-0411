@@ -3,6 +3,7 @@ import logging
 import math
 import re
 import uuid
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
@@ -15,6 +16,10 @@ from domain.seo_services import generate_meta_description, seo_analysis
 logger = logging.getLogger(__name__)
 
 
+def _normalized_search_query(query: str) -> str:
+    return (query or "").strip()
+
+
 def persist_search_result(
     *,
     db,
@@ -23,7 +28,8 @@ def persist_search_result(
     result: dict[str, Any],
     search_type: str,
 ) -> dict[str, Any]:
-    if not db or not user_id or not query.strip():
+    normalized_query = _normalized_search_query(query)
+    if not db or not user_id or not normalized_query or not hasattr(db, "add"):
         return result
     try:
         payload = dict(result or {})
@@ -31,7 +37,7 @@ def persist_search_result(
         history = SearchHistory(
             id=str(uuid.uuid4()),
             user_id=uuid.UUID(str(user_id)),
-            query=query.strip(),
+            query=normalized_query,
             result=payload,
         )
         db.add(history)
@@ -87,13 +93,14 @@ def get_cached_search_result(
     query: str,
     search_type: str,
 ) -> dict[str, Any] | None:
-    if not db or not user_id or not query.strip():
+    normalized_query = _normalized_search_query(query)
+    if not db or not user_id or not normalized_query or not hasattr(db, "query"):
         return None
     item = (
         db.query(SearchHistory)
         .filter(
             SearchHistory.user_id == uuid.UUID(str(user_id)),
-            SearchHistory.query == query.strip(),
+            SearchHistory.query == normalized_query,
         )
         .order_by(SearchHistory.created_at.desc())
         .first()
@@ -105,6 +112,45 @@ def get_cached_search_result(
         return None
     payload["history_id"] = item.id
     return payload
+
+
+def execute_durable_search(
+    *,
+    db,
+    user_id: str | None,
+    query: str,
+    search_type: str,
+    memory_tags: list[str] | None,
+    builder: Callable[[dict[str, Any]], dict[str, Any]],
+    memory_limit: int = 3,
+) -> dict[str, Any]:
+    normalized_query = _normalized_search_query(query)
+    cached = get_cached_search_result(
+        db=db,
+        user_id=user_id,
+        query=normalized_query,
+        search_type=search_type,
+    )
+    if cached:
+        return cached
+
+    memory = search_memory(
+        normalized_query,
+        db=db,
+        user_id=user_id,
+        tags=memory_tags or [],
+        limit=memory_limit,
+    )
+    result = dict(builder(memory) or {})
+    result.setdefault("query", normalized_query)
+    result.setdefault("memory", memory)
+    return persist_search_result(
+        db=db,
+        user_id=user_id,
+        query=normalized_query,
+        result=result,
+        search_type=search_type,
+    )
 
 
 def search_memory(query: str, db, user_id: str | None = None, tags: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
@@ -147,8 +193,25 @@ def search_seo(text: str, top_n: int = 10) -> dict[str, Any]:
     return results
 
 
-def suggest_seo_improvements(text: str, top_n: int = 5) -> dict[str, str]:
-    analysis = search_seo(text, top_n=top_n)
+def analyze_seo_content(text: str, top_n: int = 10, *, db=None, user_id: str | None = None) -> dict[str, Any]:
+    def _build(memory: dict[str, Any]) -> dict[str, Any]:
+        analysis = search_seo(text, top_n=top_n)
+        analysis["memory"] = memory
+        return analysis
+
+    return execute_durable_search(
+        db=db,
+        user_id=user_id,
+        query=text,
+        search_type="seo_analysis",
+        memory_tags=["seo", "search", "content"],
+        builder=_build,
+        memory_limit=2,
+    )
+
+
+def suggest_seo_improvements(text: str, top_n: int = 5, *, db=None, user_id: str | None = None) -> dict[str, str]:
+    analysis = analyze_seo_content(text, top_n=top_n, db=db, user_id=user_id)
     suggestions: list[str] = []
     readability = float(analysis.get("readability", 0.0) or 0.0)
     word_count = int(analysis.get("word_count", 0) or 0)
@@ -224,87 +287,100 @@ def _extract_leads_from_text(text: str, max_results: int = 3) -> list[dict[str, 
 
 
 def search_leads(query: str, db=None, user_id: str | None = None, max_results: int = 3) -> dict[str, Any]:
-    cached = get_cached_search_result(db=db, user_id=user_id, query=query, search_type="lead_preview")
-    if cached:
-        return cached
-    memory = search_memory(query, db=db, user_id=user_id, tags=["leadgen", "search", "outcome"], limit=2)
-    raw = ""
-    leads: list[dict[str, str]] = []
-    try:
-        from modules.research_engine import web_search
-
-        raw = web_search(query)
-        parsed = None
+    def _build(memory: dict[str, Any]) -> dict[str, Any]:
+        raw = ""
+        leads: list[dict[str, str]] = []
         try:
-            parsed = json.loads(raw)
-        except Exception:
+            from modules.research_engine import web_search
+
+            raw = web_search(query)
             parsed = None
-        if parsed is not None:
-            leads = _extract_leads_from_response(parsed, max_results=max_results)
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = None
+            if parsed is not None:
+                leads = _extract_leads_from_response(parsed, max_results=max_results)
+            if not leads:
+                leads = _extract_leads_from_text(raw, max_results=max_results)
+        except Exception as exc:
+            logger.warning("search_leads external retrieval failed: %s", exc)
+
         if not leads:
-            leads = _extract_leads_from_text(raw, max_results=max_results)
-    except Exception as exc:
-        logger.warning("search_leads external retrieval failed: %s", exc)
+            leads = [
+                {
+                    "company": "External Search",
+                    "url": "",
+                    "context": (raw or query)[:240],
+                }
+            ]
 
-    if not leads:
-        leads = [
-            {
-                "company": "External Search",
-                "url": "",
-                "context": (raw or query)[:240],
-            }
-        ]
+        return {
+            "query": query,
+            "results": leads[:max_results],
+            "memory": memory,
+            "raw_excerpt": (raw or "")[:1000],
+        }
 
-    result = {
-        "query": query,
-        "results": leads[:max_results],
-        "memory": memory,
-        "raw_excerpt": (raw or "")[:1000],
-    }
-    return persist_search_result(
+    return execute_durable_search(
         db=db,
         user_id=user_id,
         query=query,
-        result=result,
         search_type="lead_preview",
+        memory_tags=["leadgen", "search", "outcome"],
+        builder=_build,
+        memory_limit=2,
     )
 
 
-def unified_query(query: str, db=None, user_id: str | None = None) -> dict[str, Any]:
-    cached = get_cached_search_result(db=db, user_id=user_id, query=query, search_type="research")
-    if cached:
-        return cached
-    memory = search_memory(query, db=db, user_id=user_id, tags=["research", "insight"], limit=3)
-    raw = ""
-    summary = ""
-    source = None
-    try:
-        from modules.research_engine import web_search, ai_analyze
+def unified_query(
+    query: str,
+    db=None,
+    user_id: str | None = None,
+    *,
+    web_search_fn: Callable[[str], str] | None = None,
+    ai_analyze_fn: Callable[[str], str] | None = None,
+) -> dict[str, Any]:
+    def _build(memory: dict[str, Any]) -> dict[str, Any]:
+        raw = ""
+        summary = ""
+        source = None
+        try:
+            _web_search = web_search_fn
+            _ai_analyze = ai_analyze_fn
+            if _web_search is None or _ai_analyze is None:
+                from modules.research_engine import web_search, ai_analyze
 
-        raw = web_search(query)
-        summary = ai_analyze(raw)
-        source = "external_search"
-    except Exception as exc:
-        logger.warning("unified_query external analysis failed: %s", exc)
+                _web_search = _web_search or web_search
+                _ai_analyze = _ai_analyze or ai_analyze
 
-    search_score = score_research_result(
-        summary=summary or raw or query,
-        memory_context_count=memory["count"],
-    )
-    result = {
-        "query": query,
-        "summary": summary,
-        "source": source,
-        "raw_excerpt": (raw or "")[:2000],
-        "memory": memory,
-        "search_score": search_score,
-    }
-    return persist_search_result(
+            raw = _web_search(query)
+            summary = _ai_analyze(raw)
+            source = "external_search"
+        except Exception as exc:
+            logger.warning("unified_query external analysis failed: %s", exc)
+
+        search_score = score_research_result(
+            summary=summary or raw or query,
+            memory_context_count=memory["count"],
+        )
+        return {
+            "query": query,
+            "summary": summary,
+            "source": source,
+            "raw_excerpt": (raw or "")[:2000],
+            "memory": memory,
+            "search_score": search_score,
+        }
+
+    return execute_durable_search(
         db=db,
         user_id=user_id,
         query=query,
-        result=result,
         search_type="research",
+        memory_tags=["research", "insight"],
+        builder=_build,
+        memory_limit=3,
     )
 
 
