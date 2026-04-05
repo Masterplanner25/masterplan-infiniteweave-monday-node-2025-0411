@@ -246,9 +246,20 @@ class TestNodusExecuteFailure:
 # ── nodus.execute — context injection ─────────────────────────────────────────
 
 _CTX_PATH = "runtime.nodus_runtime_adapter.NodusExecutionContext"
+_CANONICAL_EXEC_PATH = "runtime.nodus_adapter.execute_nodus_runtime"
 
 
 class TestNodusExecuteContextInjection:
+    def test_delegates_to_canonical_runtime_helper(self):
+        nodus_result = _make_nodus_result(status="success")
+
+        with patch(_CANONICAL_EXEC_PATH, return_value=nodus_result) as mock_execute, \
+             patch(_EVENT_PATH), \
+             patch(_FLUSH_PATH):
+            NODE_REGISTRY["nodus.execute"]({"nodus_script": "let x = 1"}, _make_context())
+
+        mock_execute.assert_called_once()
+
     def test_execution_unit_id_from_state_override(self):
         custom_eu = "custom-eu-id"
         captured_ctx: list = []

@@ -51,6 +51,7 @@ emit_system_event = queue_system_event
 from agents.capability_service import check_execution_capability, check_tool_capability
 from agents.agent_tools import execute_tool
 from runtime.flow_engine import PersistentFlowRunner, register_node
+from runtime.nodus_execution_service import execute_nodus_runtime
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
 from utils.user_ids import parse_user_id
@@ -741,12 +742,7 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     * RETRY status lets the flow engine's attempt counter and max_retries gate
       apply exactly as they do for any other node that returns RETRY.
     """
-    from runtime.nodus_runtime_adapter import (
-        NodusExecutionContext,
-        NodusRuntimeAdapter,
-        _build_event_sink,
-        _flush_memory_writes,
-    )
+    from runtime.nodus_runtime_adapter import _build_event_sink, _flush_memory_writes
     from core.execution_signal_helper import queue_system_event
     from core.system_event_types import SystemEventTypes
 
@@ -814,20 +810,6 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     if state.get("nodus_received_events"):
         nodus_initial_state["nodus_received_events"] = dict(state["nodus_received_events"])
 
-    nodus_ctx = NodusExecutionContext(
-        user_id=user_id,
-        execution_unit_id=execution_unit_id,
-        memory_context=context.get("memory_context") or {},
-        input_payload=state.get("nodus_input_payload") or {},
-        state=nodus_initial_state,
-        event_sink=_build_event_sink(
-            db=db,
-            user_id=user_id,
-            trace_id=trace_id,
-            execution_unit_id=execution_unit_id,
-        ),
-    )
-
     # ── Emit nodus.execute.started ────────────────────────────────────────────
     queue_system_event(
         db=db,
@@ -846,11 +828,22 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     )
 
     # ── Execute via NodusRuntimeAdapter ──────────────────────────────────────
-    adapter = NodusRuntimeAdapter(db=db)
-    if script:
-        nodus_result = adapter.run_script(script, nodus_ctx)
-    else:
-        nodus_result = adapter.run_file(file_path, nodus_ctx)  # type: ignore[arg-type]
+    nodus_result = execute_nodus_runtime(
+        db=db,
+        user_id=user_id,
+        execution_unit_id=execution_unit_id,
+        script=script,
+        file_path=file_path,
+        memory_context=context.get("memory_context") or {},
+        input_payload=state.get("nodus_input_payload") or {},
+        state=nodus_initial_state,
+        event_sink=_build_event_sink(
+            db=db,
+            user_id=user_id,
+            trace_id=trace_id,
+            execution_unit_id=execution_unit_id,
+        ),
+    )
 
     # ── WAIT path ─────────────────────────────────────────────────────────────
     if nodus_result.status == "waiting":
