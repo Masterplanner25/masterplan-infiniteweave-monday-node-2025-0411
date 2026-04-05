@@ -344,6 +344,8 @@ def _format_execution_response(
     run_id: object = None,
     state: Optional[dict] = None,
 ) -> dict:
+    from core.execution_record_service import build_execution_record
+
     if str(status).upper() == "ERROR":
         response = execution_error(
             message=(
@@ -364,6 +366,22 @@ def _format_execution_response(
         response["status"] = status
     response["run_id"] = str(run_id) if run_id is not None else None
     response["state"] = state if isinstance(state, dict) else None
+    workflow_type = None
+    if isinstance(state, dict):
+        workflow_type = state.get("workflow_type")
+    result_summary = result if isinstance(result, (dict, list, str, int, float, bool)) or result is None else str(result)
+    response["execution_record"] = build_execution_record(
+        run_id=str(run_id) if run_id is not None else None,
+        trace_id=trace_id,
+        execution_unit_id=str(run_id) if run_id is not None else trace_id,
+        workflow_type=workflow_type,
+        status=str(status).lower() if status is not None else None,
+        error=(result.get("message") if isinstance(result, dict) else None) if str(status).upper() == "ERROR" else None,
+        actor="flow",
+        source="flow",
+        result_summary=result_summary,
+        correlation_id=trace_id,
+    )
     return response
 
 

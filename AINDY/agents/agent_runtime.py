@@ -523,6 +523,14 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         execution_plan["memory_context"] = execution_memory_context
         run.plan = execution_plan
         db.commit()
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+
+            _eu = ExecutionUnitService(db).get_by_source("agent_run", str(run.id))
+            if _eu:
+                ExecutionUnitService(db).update_status(_eu.id, "executing")
+        except Exception:
+            logger.debug("[EU] agent execute hook start skipped", exc_info=True)
 
         # Emit EXECUTION_STARTED lifecycle event
         execution_started_event_id = record_agent_event(
@@ -578,6 +586,16 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             "[AgentRuntime] Run %s %s (%d/%d steps)",
             run_id, run.status, run.steps_completed, run.steps_total,
         )
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+
+            _eu = ExecutionUnitService(db).get_by_source("agent_run", str(run.id))
+            if _eu:
+                final_status = "completed" if run.status == "completed" else "failed" if run.status == "failed" else None
+                if final_status:
+                    ExecutionUnitService(db).update_status(_eu.id, final_status)
+        except Exception:
+            logger.debug("[EU] agent execute hook finish skipped", exc_info=True)
         return _run_to_dict(run)
 
     except Exception as exc:
@@ -778,6 +796,8 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _run_to_dict(run) -> dict:
+    from core.execution_record_service import record_from_agent_run
+
     capability_token = getattr(run, "capability_token", None)
     if not isinstance(capability_token, dict):
         capability_token = {}
@@ -787,6 +807,7 @@ def _run_to_dict(run) -> dict:
     execution_token = getattr(run, "execution_token", None)
     if not isinstance(execution_token, str):
         execution_token = None
+    execution_record = record_from_agent_run(run)
     return {
         "run_id": str(run.id),
         "user_id": run.user_id,
@@ -811,6 +832,7 @@ def _run_to_dict(run) -> dict:
         "allowed_capabilities": capability_token.get("allowed_capabilities", []),
         "correlation_id": getattr(run, "correlation_id", None),
         "trace_id": getattr(run, "trace_id", None),
+        "execution_record": execution_record,
         "created_at": run.created_at.isoformat() if run.created_at else None,
         "approved_at": run.approved_at.isoformat() if run.approved_at else None,
         "started_at": run.started_at.isoformat() if run.started_at else None,
@@ -855,6 +877,7 @@ def to_execution_response(run: dict, db: Session) -> dict:
         "events": _normalize_agent_events(timeline),
         "next_action": next_action,
         "trace_id": run.get("trace_id") or run.get("correlation_id") or run_id,
+        "execution_record": run.get("execution_record"),
     }
 
 

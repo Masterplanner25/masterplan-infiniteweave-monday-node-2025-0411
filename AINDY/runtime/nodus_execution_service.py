@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from core.execution_record_service import build_execution_record as build_canonical_execution_record
 from runtime.nodus_runtime_adapter import NodusExecutionContext
 from runtime.nodus_runtime_adapter import NodusRuntimeAdapter
 from runtime.nodus_security import (
@@ -71,6 +72,18 @@ def build_nodus_execution_record(
         "events_emitted": summary.get("events_emitted", len(normalized_events)),
         "memory_writes_count": summary.get("memory_writes", len(normalized_writes)),
         "error": normalized_error,
+        "execution_record": build_canonical_execution_record(
+            run_id=run_id,
+            trace_id=trace_id or run_id or normalized_status,
+            execution_unit_id=run_id or trace_id,
+            workflow_type="nodus_execute",
+            status=flow_status or normalized_status,
+            error=normalized_error,
+            actor="nodus",
+            source="nodus",
+            result_summary=summary,
+            correlation_id=trace_id or run_id,
+        ),
     }
 
 
@@ -138,6 +151,7 @@ def execute_nodus_task_payload(
     logger=None,
 ) -> dict[str, Any]:
     normalized_user_id = str(require_user_id(user_id))
+    eu_id = execution_id or f"memory.nodus.{task_name}"
 
     try:
         security_context = authorize_nodus_execution(
@@ -181,7 +195,7 @@ def execute_nodus_task_payload(
         nodus_result = execute_nodus_runtime(
             db=db,
             user_id=normalized_user_id,
-            execution_unit_id=execution_id or f"memory.nodus.{task_name}",
+            execution_unit_id=eu_id,
             script=task_code,
             memory_context=memory_context.formatted,
             input_payload={
@@ -199,9 +213,31 @@ def execute_nodus_task_payload(
             adapter_cls=NodusRuntimeAdapter,
             context_cls=NodusExecutionContext,
         )
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+
+            eus = ExecutionUnitService(db)
+            eu = eus.get_by_source("memory_nodus_execute", eu_id)
+            if eu is None:
+                eu = eus.create(
+                    eu_type="job",
+                    user_id=normalized_user_id,
+                    source_type="memory_nodus_execute",
+                    source_id=eu_id,
+                    correlation_id=eu_id,
+                    status="executing",
+                    extra={"task_name": task_name, "workflow_type": "memory_nodus_execute"},
+                )
+            if eu:
+                eus.update_status(eu.id, "completed" if nodus_result.status == "success" else "failed")
+        except Exception:
+            pass
 
         summary = build_nodus_execution_summary(nodus_result)
         result = build_nodus_execution_record(
+            flow_status="executed" if nodus_result.status == "success" else "failed",
+            trace_id=eu_id,
+            run_id=eu_id,
             nodus_summary=summary,
             nodus_status=nodus_result.status,
             output_state=nodus_result.output_state,
