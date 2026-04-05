@@ -480,7 +480,10 @@ def agent_run_get_node(state, context):
         from utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
-        run_id = normalize_uuid(state.get("run_id"))
+        try:
+            run_id = normalize_uuid(state.get("run_id"))
+        except Exception:
+            return {"status": "FAILURE", "error": "HTTP_400:Invalid run_id"}
         run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
         if not run:
             return {"status": "FAILURE", "error": "HTTP_404:Run not found"}
@@ -648,10 +651,13 @@ def agent_run_events_node(state, context):
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         run_id = state.get("run_id")
+        try:
+            normalized_run_id = normalize_uuid(run_id)
+        except Exception:
+            return {"status": "FAILURE", "error": "HTTP_400:Invalid run_id"}
         result = get_run_events(run_id=run_id, user_id=user_id, db=db)
         if result is None:
-            from utils.uuid_utils import normalize_uuid as _nu
-            run = db.query(AgentRun).filter(AgentRun.id == _nu(run_id)).first()
+            run = db.query(AgentRun).filter(AgentRun.id == normalized_run_id).first()
             if not run:
                 return {"status": "FAILURE", "error": "HTTP_404:Run not found"}
             return {"status": "FAILURE", "error": "HTTP_403:Not authorized"}
@@ -1220,7 +1226,10 @@ def flow_runs_list_node(state, context):
         status_filter = state.get("status")
         workflow_type = state.get("workflow_type")
         limit = state.get("limit", 20)
-        query = db.query(FlowRun).filter(FlowRun.user_id == user_id)
+        query = db.query(FlowRun).filter(
+            FlowRun.user_id == user_id,
+            FlowRun.flow_name != "flow_runs_list",
+        )
         if status_filter:
             query = query.filter(FlowRun.status == status_filter)
         if workflow_type:
@@ -1402,6 +1411,8 @@ def memory_node_get_node(state, context):
         dao = MemoryNodeDAO(db)
         node = dao.get_by_id(state.get("node_id"), user_id=user_id)
         if not node:
+            return {"status": "FAILURE", "error": "HTTP_404:Memory node not found"}
+        if user_id is not None and str(node.get("user_id")) != str(user_id):
             return {"status": "FAILURE", "error": "HTTP_404:Memory node not found"}
         return {"status": "SUCCESS", "output_patch": {"memory_node_get_result": node}}
     except Exception as e:

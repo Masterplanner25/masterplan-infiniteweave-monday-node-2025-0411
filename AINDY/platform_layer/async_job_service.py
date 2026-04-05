@@ -115,6 +115,41 @@ def build_deferred_response(
     return response
 
 
+def _duration_ms(started_at: datetime | None, completed_at: datetime | None) -> float | None:
+    if not started_at or not completed_at:
+        return None
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    if completed_at.tzinfo is None:
+        completed_at = completed_at.replace(tzinfo=timezone.utc)
+    return round((completed_at - started_at).total_seconds() * 1000, 2)
+
+
+def _session_dialect_name(db) -> str | None:
+    bind = getattr(db, "bind", None)
+    if bind is None:
+        try:
+            bind = db.get_bind()
+        except Exception:
+            bind = None
+    return getattr(getattr(bind, "dialect", None), "name", None)
+
+
+def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
+    from core.system_event_service import emit_system_event
+
+    return emit_system_event(
+        db=db,
+        event_type=event_type,
+        user_id=user_id,
+        trace_id=trace_id,
+        parent_event_id=parent_event_id,
+        source=source,
+        payload=payload,
+        required=True,
+    )
+
+
 def build_ignored_response(
     *,
     trace_id: str,
@@ -164,7 +199,7 @@ def submit_async_job(
         db.add(log)
         db.commit()
         db.refresh(log)
-        queue_system_event(
+        _emit_async_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
             user_id=user_uuid,
@@ -178,12 +213,14 @@ def submit_async_job(
                 "execution_mode": "async_job",
                 "dispatch_state": "queued" if not settings.TEST_MODE else "inline",
             },
-            required=True,
         )
         if settings.TEST_MODE and execute_inline_in_test_mode:
-            _execute_job(log_id, task_name, payload)
+            _execute_job_inline(db, log_id, task_name, payload)
             return log_id
         if settings.TEST_MODE and not execute_inline_in_test_mode:
+            return log_id
+        if _session_dialect_name(db) == "sqlite":
+            _execute_job_inline(db, log_id, task_name, payload)
             return log_id
         future = _get_executor().submit(_execute_job, log_id, task_name, payload)
         if future.cancelled():
@@ -197,7 +234,7 @@ def submit_async_job(
                     log.status = "failed"
                     log.error_message = str(exc)
                     log.completed_at = datetime.now(timezone.utc)
-                    queue_system_event(
+                    _emit_async_system_event(
                         db=db,
                         event_type=SystemEventTypes.EXECUTION_FAILED,
                         user_id=log.user_id,
@@ -211,7 +248,6 @@ def submit_async_job(
                             "execution_mode": "async_job",
                             "error": str(exc),
                         },
-                        required=True,
                     )
                     emit_error_event(
                         db=db,
@@ -469,8 +505,7 @@ def _get_root_execution_event_id(db, trace_id: str) -> str | None:
         return None
 
 
-def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
-    db = SessionLocal()
+def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]) -> None:
     trace_token = set_trace_id(str(log_id))
     parent_token = set_parent_event_id(_get_root_execution_event_id(db, str(log_id)))
     try:
@@ -486,7 +521,7 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
         if queued_event_exists:
-            started_event_id = queue_system_event(
+            started_event_id = _emit_async_system_event(
                 db=db,
                 event_type=SystemEventTypes.ASYNC_JOB_STARTED,
                 user_id=log.user_id,
@@ -500,10 +535,9 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                     "execution_mode": "async_job",
                     "attempt_count": log.attempt_count,
                 },
-                required=True,
             )
         else:
-            started_event_id = queue_system_event(
+            started_event_id = _emit_async_system_event(
                 db=db,
                 event_type=SystemEventTypes.EXECUTION_STARTED,
                 user_id=log.user_id,
@@ -518,7 +552,6 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                     "dispatch_state": "direct",
                     "attempt_count": log.attempt_count,
                 },
-                required=True,
             )
         job_parent_token = set_parent_event_id(str(started_event_id) if started_event_id else get_parent_event_id())
 
@@ -532,11 +565,9 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         log.status = "success"
         log.result = _normalize_result(result)
         log.completed_at = datetime.now(timezone.utc)
-        duration_ms = None
-        if log.started_at and log.completed_at:
-            duration_ms = round((log.completed_at - log.started_at).total_seconds() * 1000, 2)
+        duration_ms = _duration_ms(log.started_at, log.completed_at)
         if queued_event_exists:
-            queue_system_event(
+            _emit_async_system_event(
                 db=db,
                 event_type=SystemEventTypes.ASYNC_JOB_COMPLETED,
                 user_id=log.user_id,
@@ -552,9 +583,8 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                     "duration_ms": duration_ms,
                     "result": _normalize_result(result),
                 },
-                required=True,
             )
-        queue_system_event(
+        _emit_async_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_COMPLETED,
             user_id=log.user_id,
@@ -570,8 +600,8 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                 "duration_ms": duration_ms,
                 "result": _normalize_result(result),
             },
-            required=True,
         )
+        db.commit()
         db.refresh(log)
     except Exception as exc:
         db.rollback()
@@ -582,11 +612,9 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
             log.error_message = str(exc)
             log.result = _normalize_result(failure_response)
             log.completed_at = datetime.now(timezone.utc)
-            duration_ms = None
-            if log.started_at and log.completed_at:
-                duration_ms = round((log.completed_at - log.started_at).total_seconds() * 1000, 2)
+            duration_ms = _duration_ms(log.started_at, log.completed_at)
             if _has_existing_execution_started(db, str(log_id)):
-                queue_system_event(
+                _emit_async_system_event(
                     db=db,
                     event_type=SystemEventTypes.ASYNC_JOB_FAILED,
                     user_id=log.user_id,
@@ -602,9 +630,8 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                         "duration_ms": duration_ms,
                         "error": str(exc),
                     },
-                    required=True,
                 )
-            queue_system_event(
+            _emit_async_system_event(
                 db=db,
                 event_type=SystemEventTypes.EXECUTION_FAILED,
                 user_id=log.user_id,
@@ -620,7 +647,6 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                     "duration_ms": duration_ms,
                     "error": str(exc),
                 },
-                required=True,
             )
             emit_error_event(
                 db=db,
@@ -637,10 +663,18 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
                 },
                 required=True,
             )
+            db.commit()
             db.refresh(log)
     finally:
         reset_parent_event_id(parent_token)
         reset_trace_id(trace_token)
+
+
+def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
+    db = SessionLocal()
+    try:
+        _execute_job_inline(db, log_id, task_name, payload)
+    finally:
         db.close()
 
 

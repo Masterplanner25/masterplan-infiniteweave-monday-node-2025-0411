@@ -10,8 +10,14 @@ from db.models.system_event import SystemEvent
 from db.models.system_health_log import SystemHealthLog
 
 
+def _unwrap(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
 def test_observability_requires_auth(client):
-    response = client.get("/observability/requests")
+    response = client.get("/platform/observability/requests")
 
     assert response.status_code == 401
 
@@ -48,12 +54,12 @@ def test_observability_requests_returns_real_db_summary(
     )
     db_session.commit()
 
-    response = client.get("/observability/requests", headers=auth_headers)
+    response = client.get("/platform/observability/requests", headers=auth_headers)
 
     assert response.status_code == 200
 
     payload = response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
 
     assert data["summary"]["total_requests"] == 2
     assert data["summary"]["total_errors"] == 1
@@ -81,7 +87,7 @@ def test_observability_dashboard_returns_real_db_sections(
             trace_id=trace_id,
             user_id=test_user.id,
             method="GET",
-            path="/agent/tools",
+            path="/apps/agent/tools",
             status_code=200,
             duration_ms=20.0,
             created_at=datetime.utcnow(),
@@ -130,12 +136,12 @@ def test_observability_dashboard_returns_real_db_sections(
     )
     db_session.commit()
 
-    response = client.get("/observability/dashboard", headers=auth_headers)
+    response = client.get("/platform/observability/dashboard", headers=auth_headers)
 
     assert response.status_code == 200
 
     payload = response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
 
     assert data["summary"]["window_requests"] == 1
     assert data["summary"]["window_errors"] == 0

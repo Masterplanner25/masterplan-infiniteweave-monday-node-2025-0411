@@ -9,6 +9,7 @@ from db.models.agent_run import AgentRun, AgentStep
 from db.models.system_event import SystemEvent
 from agents.agent_runtime import execute_run
 from agents.capability_service import mint_token
+from core.system_event_types import SystemEventTypes
 from runtime.nodus_adapter import (
     NodusAgentAdapter,
     agent_execute_step,
@@ -80,7 +81,7 @@ def test_agent_execute_step_persists_step_and_updates_run(db_session, test_user)
     step = db_session.query(AgentStep).filter(AgentStep.run_id == run.id).one()
     system_event = (
         db_session.query(SystemEvent)
-        .filter(SystemEvent.type == "agent.step.completed", SystemEvent.user_id == test_user.id)
+        .filter(SystemEvent.type == SystemEventTypes.AGENT_STEP, SystemEvent.user_id == test_user.id)
         .one()
     )
 
@@ -90,6 +91,7 @@ def test_agent_execute_step_persists_step_and_updates_run(db_session, test_user)
     assert step.status == "success"
     assert step.result["task_id"] == "t1"
     assert system_event.payload["tool_name"] == "task.create"
+    assert system_event.payload["status"] == "success"
 
 
 def test_agent_finalize_run_marks_completed_and_emits_events(db_session, test_user):

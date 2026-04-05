@@ -12,6 +12,7 @@ from agents.capability_service import (
     get_auto_grantable_tools,
     mint_token,
 )
+from core.system_event_types import SystemEventTypes
 from runtime.nodus_adapter import agent_execute_step
 
 
@@ -191,7 +192,7 @@ def test_agent_execute_step_denial_persists_failed_step_and_events(db_session, t
     )
     system_event = (
         db_session.query(SystemEvent)
-        .filter(SystemEvent.type == "agent.step.failed", SystemEvent.user_id == test_user.id)
+        .filter(SystemEvent.type == SystemEventTypes.AGENT_STEP, SystemEvent.user_id == test_user.id)
         .order_by(SystemEvent.timestamp.desc())
         .first()
     )
@@ -201,4 +202,5 @@ def test_agent_execute_step_denial_persists_failed_step_and_events(db_session, t
     assert "Capability denied" in step.error_message
     assert denied.payload["tool_name"] == "arm.generate"
     assert system_event.payload["tool_name"] == "arm.generate"
+    assert system_event.payload["status"] == "failed"
 

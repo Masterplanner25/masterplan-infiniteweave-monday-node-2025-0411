@@ -68,14 +68,14 @@ def test_metrics_store_record_and_summary():
 
 
 def test_memory_metrics_api_endpoints(client, auth_headers):
-    response = client.get("/memory/metrics", headers=auth_headers)
+    response = client.get("/apps/memory/metrics", headers=auth_headers)
     assert response.status_code == 200
     payload = response.json()
     data = payload.get("data", payload)
     assert "avg_impact_score" in data
     assert "total_runs" in data
 
-    response = client.get("/memory/metrics/detail", headers=auth_headers)
+    response = client.get("/apps/memory/metrics/detail", headers=auth_headers)
     assert response.status_code == 200
     detail_payload = response.json()
     detail_data = (
@@ -85,7 +85,7 @@ def test_memory_metrics_api_endpoints(client, auth_headers):
     )
     assert isinstance(detail_data, list)
 
-    response = client.get("/memory/metrics/dashboard", headers=auth_headers)
+    response = client.get("/apps/memory/metrics/dashboard", headers=auth_headers)
     assert response.status_code == 200
     dashboard = response.json()
     dashboard_data = dashboard.get("data", dashboard)

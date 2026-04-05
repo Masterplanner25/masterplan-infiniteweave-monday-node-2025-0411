@@ -356,14 +356,20 @@ for route in ROOT_ROUTERS:
     app.include_router(route, dependencies=[Depends(require_execution_context)])
 
 # Platform — runtime API  (/platform/*)
-# platform_router carries /platform internally; mount without extra prefix.
-app.include_router(platform_router, dependencies=[Depends(require_execution_context)])
 for route in PLATFORM_ROUTERS:
     app.include_router(route, prefix="/platform", dependencies=[Depends(require_execution_context)])
+# platform_router carries /platform internally; mount without extra prefix.
+# Mount it after the static platform routers so /platform/flows/runs and other
+# fixed console routes are not shadowed by dynamic path params like /flows/{name}.
+app.include_router(platform_router, dependencies=[Depends(require_execution_context)])
 
 # Apps — domain features  (/apps/*)
 for route in APP_ROUTERS:
     app.include_router(route, prefix="/apps", dependencies=[Depends(require_execution_context)])
+
+if os.getenv("AINDY_ENABLE_LEGACY_SURFACE", "false").lower() in {"1", "true", "yes"}:
+    for route in APP_ROUTERS:
+        app.include_router(route, dependencies=[Depends(require_execution_context)])
 
 # CORS — explicit origins only (wildcard + credentials is a security violation)
 import os as _os

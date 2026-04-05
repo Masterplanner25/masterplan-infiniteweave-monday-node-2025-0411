@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
+from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
 
@@ -35,8 +35,8 @@ def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: st
     return result.get("data")
 
 
-def _execute_automation(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
-    return execute_with_pipeline_sync(
+async def _execute_automation(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
+    return await execute_with_pipeline(
         request=request,
         route_name=route_name,
         handler=handler,
@@ -67,8 +67,8 @@ async def get_automation_logs(
             {"status": status, "source_filter": source, "limit": limit},
             db, user_id,
         )
-    return _execute_automation(request, "automation.logs.list", handler, db=db, user_id=user_id,
-                               input_payload={"status": status, "source_filter": source})
+    return await _execute_automation(request, "automation.logs.list", handler, db=db, user_id=user_id,
+                                     input_payload={"status": status, "source_filter": source})
 
 
 @router.get("/logs/{log_id}")
@@ -81,8 +81,8 @@ async def get_automation_log(
     user_id = str(current_user["sub"])
     def handler(_ctx):
         return _run_flow_automation("automation_log_get", {"log_id": log_id}, db, user_id)
-    return _execute_automation(request, "automation.logs.get", handler, db=db, user_id=user_id,
-                               input_payload={"automation_log_id": log_id})
+    return await _execute_automation(request, "automation.logs.get", handler, db=db, user_id=user_id,
+                                     input_payload={"automation_log_id": log_id})
 
 
 @router.post("/logs/{log_id}/replay")
@@ -95,8 +95,8 @@ async def replay_automation_log(
     user_id = str(current_user["sub"])
     def handler(_ctx):
         return _run_flow_automation("automation_log_replay", {"log_id": log_id}, db, user_id)
-    return _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id,
-                               input_payload={"automation_log_id": log_id})
+    return await _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id,
+                                     input_payload={"automation_log_id": log_id})
 
 
 @router.get("/scheduler/status")
@@ -108,7 +108,7 @@ async def get_scheduler_status(
     user_id = str(current_user["sub"])
     def handler(_ctx):
         return _run_flow_automation("automation_scheduler_status", {}, db, user_id)
-    return _execute_automation(request, "automation.scheduler.status", handler, db=db, user_id=user_id)
+    return await _execute_automation(request, "automation.scheduler.status", handler, db=db, user_id=user_id)
 
 
 @router.post("/tasks/{task_id}/trigger")
@@ -126,6 +126,6 @@ async def trigger_task_automation(
             {"task_id": task_id, "automation_type": body.automation_type, "automation_config": body.automation_config},
             db, user_id,
         )
-    return _execute_automation(request, "automation.tasks.trigger", handler, db=db, user_id=user_id,
-                               input_payload={"task_id": task_id, "automation_type": body.automation_type})
+    return await _execute_automation(request, "automation.tasks.trigger", handler, db=db, user_id=user_id,
+                                     input_payload={"task_id": task_id, "automation_type": body.automation_type})
 

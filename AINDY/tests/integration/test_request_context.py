@@ -147,7 +147,7 @@ class TestLogRequestsMiddleware:
 
         mock_request = MagicMock()
         mock_request.method = "POST"
-        mock_request.url.path = "/agent/run"
+        mock_request.url.path = "/apps/agent/run"
 
         await log_requests(mock_request, fake_call_next)
 

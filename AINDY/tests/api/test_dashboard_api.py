@@ -9,8 +9,14 @@ from db.models.user import User
 from services.auth_service import hash_password
 
 
+def _unwrap(payload):
+    if isinstance(payload, dict) and "data" in payload:
+        return payload["data"]
+    return payload
+
+
 def test_dashboard_requires_auth(client):
-    response = client.get("/dashboard/overview")
+    response = client.get("/apps/dashboard/overview")
 
     assert response.status_code == 401
 
@@ -100,11 +106,11 @@ def test_dashboard_overview_returns_real_db_snapshot(
     )
     db_session.commit()
 
-    response = client.get("/dashboard/overview", headers=auth_headers)
+    response = client.get("/apps/dashboard/overview", headers=auth_headers)
 
     assert response.status_code == 200
     payload = response.json()
-    data = payload["data"]
+    data = _unwrap(payload)
     assert payload["status"] == "success"
     overview = data["overview"]
     assert overview["author_count"] == 1

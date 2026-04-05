@@ -15,6 +15,19 @@ logger = logging.getLogger(__name__)
 NodeType = Literal["decision", "outcome", "insight", "relationship"]
 
 
+def _flow_failure(result: dict) -> str:
+    direct_error = result.get("error")
+    if isinstance(direct_error, str) and direct_error:
+        return direct_error
+    for key in ("data", "result"):
+        payload = result.get(key)
+        if isinstance(payload, dict):
+            nested_error = payload.get("error") or payload.get("message")
+            if isinstance(nested_error, str) and nested_error:
+                return nested_error
+    return ""
+
+
 def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
     """Run a memory flow and decode node HTTP errors."""
     from runtime.flow_engine import run_flow
@@ -25,7 +38,7 @@ def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
         return JSONResponse(status_code=202, content=data.get("_http_response", {}))
 
     if result.get("status") == "FAILED":
-        error = result.get("error", "")
+        error = _flow_failure(result)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -37,6 +50,8 @@ def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
                 403: {"error": "forbidden", "message": msg},
             }
             raise HTTPException(status_code=code, detail=detail_map.get(code, msg))
+        if "uuid" in error.lower() or "invalid" in error.lower():
+            raise HTTPException(status_code=400, detail={"error": "invalid_request", "message": error})
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
 
     return data
@@ -452,8 +467,8 @@ async def execute_with_memory(
 ):
     def handler(ctx):
         return _mem_run_flow("memory_execute_loop", {
-            "workflow": body.workflow,
-            "input": body.input,
+            "original_workflow": body.workflow,
+            "execution_input": body.input,
             "session_tags": body.session_tags,
         }, db, str(current_user["sub"]))
 

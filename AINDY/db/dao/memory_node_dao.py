@@ -80,7 +80,12 @@ class MemoryNodeDAO:
         owner_user_id = parse_user_id(user_id)
         if owner_user_id:
             query = query.filter(MemoryNodeModel.user_id == owner_user_id)
-        return query.first()
+        node = query.first()
+        if node is None:
+            return None
+        if owner_user_id and node.user_id != owner_user_id:
+            return None
+        return node
 
     def _strength_value(self, strength) -> float:
         if strength is None:

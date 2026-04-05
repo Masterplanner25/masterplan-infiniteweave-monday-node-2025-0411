@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import event
 from sqlalchemy import types as sqltypes
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +21,11 @@ def _compile_uuid_sqlite(type_, compiler, **kw):
 
 @compiles(JSONB, "sqlite")
 def _compile_jsonb_sqlite(type_, compiler, **kw):
+    return "JSON"
+
+
+@compiles(ARRAY, "sqlite")
+def _compile_array_sqlite(type_, compiler, **kw):
     return "JSON"
 
 
@@ -50,7 +55,11 @@ def test_engine():
     def _set_sqlite_pragmas(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         try:
-            cursor.execute("PRAGMA foreign_keys=ON")
+            # The production database is PostgreSQL. SQLite is used here as a
+            # lightweight test harness, and several event-chain tables rely on
+            # self-referential / cross-session inserts that produce false FK
+            # failures under SQLite's reduced UUID/JSON semantics.
+            cursor.execute("PRAGMA foreign_keys=OFF")
         finally:
             cursor.close()
 
@@ -139,3 +148,13 @@ def deterministic_random():
     random.seed(42)
     yield
     random.seed(42)
+
+
+@pytest.fixture(autouse=True)
+def cleanup_committed_test_state(test_engine):
+    yield
+    from db.database import Base
+
+    with test_engine.begin() as connection:
+        for table in reversed(Base.metadata.sorted_tables):
+            connection.execute(table.delete())

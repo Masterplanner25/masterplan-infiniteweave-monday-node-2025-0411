@@ -1,55 +1,8 @@
 import json
 import importlib
-import sys
 from datetime import datetime, timedelta
-from types import ModuleType
 
 import pytest
-
-aps_module = ModuleType("apscheduler")
-aps_sched = ModuleType("apscheduler.schedulers")
-aps_bg = ModuleType("apscheduler.schedulers.background")
-aps_bg.BackgroundScheduler = type(
-    "BackgroundScheduler",
-    (),
-    {
-        "__init__": lambda self, **kwargs: setattr(self, "_jobs", []),
-        "add_job": lambda self, *args, **kwargs: self._jobs.append(
-            type("Job", (), {"id": kwargs.get("id")})()
-        ),
-        "remove_job": lambda self, job_id=None, **kwargs: setattr(
-            self,
-            "_jobs",
-            [job for job in self._jobs if getattr(job, "id", None) != job_id],
-        ),
-        "get_jobs": lambda self: list(getattr(self, "_jobs", [])),
-        "start": lambda self, **kwargs: None,
-        "shutdown": lambda self, **kwargs: None,
-        "running": False,
-    },
-)
-aps_singleton = ModuleType("apscheduler.schedulers.background")
-aps_singleton.BackgroundScheduler = aps_bg.BackgroundScheduler
-aps_triggers = ModuleType("apscheduler.triggers")
-aps_triggers_cron = ModuleType("apscheduler.triggers.cron")
-aps_triggers_cron.CronTrigger = type("CronTrigger", (), {"__init__": lambda self, **kwargs: None})
-aps_triggers_interval = ModuleType("apscheduler.triggers.interval")
-aps_triggers_interval.IntervalTrigger = type("IntervalTrigger", (), {"__init__": lambda self, **kwargs: None})
-sys.modules["apscheduler.triggers"] = aps_triggers
-sys.modules["apscheduler.triggers.cron"] = aps_triggers_cron
-sys.modules["apscheduler.triggers.interval"] = aps_triggers_interval
-
-tenacity_module = ModuleType("tenacity")
-tenacity_module.retry = lambda *args, **kwargs: (lambda func: func)
-tenacity_module.stop_after_attempt = lambda *args, **kwargs: ("stop_after_attempt", args, kwargs)
-tenacity_module.wait_exponential = lambda *args, **kwargs: ("wait_exponential", args, kwargs)
-tenacity_module.before_sleep_log = lambda *args, **kwargs: (lambda func, retry_state: None)
-sys.modules["tenacity"] = tenacity_module
-sys.modules["apscheduler"] = aps_module
-sys.modules["apscheduler.schedulers"] = aps_sched
-sys.modules["apscheduler.schedulers.background"] = aps_singleton
-
-import main
 
 from db.models import (
     DropPointDB,
@@ -551,7 +504,7 @@ def test_learning_engine_stats_reports_rates():
     "endpoint,patches",
     [
         (
-            "/dashboard",
+            "/apps/dashboard",
             [
                 ("get_dashboard_snapshot", lambda db: {"overview": {"foo": "bar"}}),
                 ("find_momentum_leaders", lambda db: {"fastest_accelerating": None, "biggest_spike": None}),
@@ -559,15 +512,15 @@ def test_learning_engine_stats_reports_rates():
                 ("recommendations_summary", lambda db, limit=10: {"high_priority_actions": [], "medium_priority_actions": [], "low_priority_actions": []}),
             ],
         ),
-        ("/ripple_deltas/fake", [("compute_deltas", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "rates": {"velocity_rate": 0.1}})]),
-        ("/predict/fake", [("predict_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "prediction": "stable"})]),
-        ("/recommend/fake", [("recommend_for_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "action": "monitor", "priority": "low"})]),
-        ("/influence_graph", [("build_influence_graph", lambda db: {"nodes": [], "edges": []})]),
-        ("/causal_graph", [("build_causal_graph", lambda db: {"nodes": [], "causal_edges": []})]),
-        ("/narrative/fake", [("generate_narrative", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "timeline": []})]),
-        ("/strategies", [("build_strategies", lambda db: []), ("list_strategies", lambda db: [])]),
-        ("/playbooks", [("list_playbooks", lambda db: [])]),
-        ("/generate_content/play-1", [("generate_content", lambda playbook_id, db: {"playbook_id": playbook_id, "content": {}})]),
+        ("/apps/ripple_deltas/fake", [("compute_deltas", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "rates": {"velocity_rate": 0.1}})]),
+        ("/apps/predict/fake", [("predict_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "prediction": "stable"})]),
+        ("/apps/recommend/fake", [("recommend_for_drop_point", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "action": "monitor", "priority": "low"})]),
+        ("/apps/influence_graph", [("build_influence_graph", lambda db: {"nodes": [], "edges": []})]),
+        ("/apps/causal_graph", [("build_causal_graph", lambda db: {"nodes": [], "causal_edges": []})]),
+        ("/apps/narrative/fake", [("generate_narrative", lambda drop_point_id, db: {"drop_point_id": drop_point_id, "timeline": []})]),
+        ("/apps/strategies", [("build_strategies", lambda db: []), ("list_strategies", lambda db: [])]),
+        ("/apps/playbooks", [("list_playbooks", lambda db: [])]),
+        ("/apps/generate_content/play-1", [("generate_content", lambda playbook_id, db: {"playbook_id": playbook_id, "content": {}})]),
     ],
 )
 def test_endpoints_return_success(client, monkeypatch, endpoint, patches, api_key_headers):
