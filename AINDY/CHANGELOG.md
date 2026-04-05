@@ -1,5 +1,25 @@
 ## [Unreleased] — feat/infinity-algorithm-loop
 
+## [1.0.0] - 2026-04-05
+
+### Added
+- Platform-facing V1 surface for authenticated health, auth, and `/platform/*` operations.
+- Versioned syscall discovery and dispatch, including stable v1 memory syscalls and registry inspection.
+- Nodus execution, trace lookup, scheduling, and CLI integration against a running A.I.N.D.Y. instance.
+- Modular runtime/package layout across `kernel/`, `memory/`, `runtime/`, `agents/`, `platform_layer/`, `analytics/`, and `domain/`.
+- Getting-started, API key, and syscall reference documentation for first-run platform usage.
+
+### Changed
+- Execution contracts, route execution wrappers, and test harnesses were stabilized around the current platform runtime.
+- CI now enforces lint, Alembic drift checks, and a 69% coverage floor for the V1 gate.
+- README and release-facing docs were reduced to the platform surface and current operational entrypoints.
+
+### Known Limitations
+- The backend remains a single deployable monolith with synchronous SQLAlchemy request paths in several domains.
+- Some external model-provider calls are still synchronous and can increase request latency.
+- Mongo-backed social/document flows still depend on runtime Mongo availability unless the explicit startup skip flag is used for tests or constrained local runs.
+- `v1.0.0` tagging still depends on a green `main` branch and final release-gate confirmation.
+
 ### Added (2026-04-01 - Syscall Versioning and ABI Stability)
 
 **`services/syscall_versioning.py`** — NEW; ABI stability module:

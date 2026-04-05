@@ -22,9 +22,9 @@ This is a **utility audit**, not a system layer.
 | YAML insight encoding | Not implemented | Missing | N/A |
 | Scribalicious refinement pipeline | Not implemented | Missing | N/A |
 | Center-of-gravity tagging | Not implemented | Missing | N/A |
-| Authorship watermarking | Implemented | Implemented | `Tools/authorship/Authorship.py`, `services/authorship_services.py`, `routes/authorship_router.py` |
+| Authorship watermarking | Implemented | Implemented | `Tools/authorship/Authorship.py`, `domain/authorship_services.py`, `routes/authorship_router.py` |
 | Dedicated word-limit generator | Not implemented | Missing | N/A |
-| Word count utility (basic) | Implemented only in SEO routes | Partial | `routes/seo_routes.py`, `services/seo_services.py` |
+| Word count utility (basic) | Implemented only in SEO routes | Partial | `routes/seo_routes.py`, `domain/seo_services.py` |
 
 ---
 

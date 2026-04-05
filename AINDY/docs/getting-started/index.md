@@ -13,7 +13,19 @@ python -c "import secrets; print(secrets.token_hex(32))"
 docker compose up -d
 ```
 
-This starts PostgreSQL and the API on `http://localhost:8000`. The default profile skips Mongo startup so the platform API can boot with just Postgres.
+This starts PostgreSQL and the API on `http://localhost:8000`.
+
+MongoDB is part of the normal runtime startup path. On application boot, `main.py` eagerly calls `db.mongo_setup.init_mongo()`, so a real `MONGO_URL` must be configured unless you are intentionally using the explicit bypass for tests or constrained local verification.
+
+For a normal local run, set `MONGO_URL` in `.env` to a reachable MongoDB instance before starting the stack.
+
+If you need a short-lived API boot without Mongo for local debugging, set:
+
+```bash
+export AINDY_SKIP_MONGO_PING=1
+```
+
+That bypass is intended for tests and constrained environments. Any route that requires Mongo-backed social data will still fail at execution time without a working Mongo connection.
 
 Verify health:
 
@@ -96,4 +108,5 @@ python cli.py run script.nd --api-url http://localhost:8000 --api-token "$AINDY_
 - `401 Authentication required`: token missing or expired.
 - Connection failure on `localhost:8000`: restart the stack with `docker compose up -d`.
 - Startup failure mentioning `SECRET_KEY`: generate a real key and update repo-root `.env`.
+- Startup failure mentioning `MONGO_URL` or Mongo connectivity: configure `MONGO_URL` to a reachable MongoDB instance, or set `AINDY_SKIP_MONGO_PING=1` only for local/test-only verification.
 - Schema errors: run `alembic upgrade head` before starting the app outside Docker.
