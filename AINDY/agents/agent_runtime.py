@@ -409,11 +409,11 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
 
 def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """
-    Execute an approved AgentRun via the NodusAgentAdapter (Sprint N+6).
+    Execute an approved AgentRun via the canonical Nodus runtime entrypoint.
 
     Requires run.status == "approved".
-    Marks the run as "executing", then delegates entirely to
-    NodusAgentAdapter.execute_with_flow() which handles:
+    Marks the run as "executing", then delegates entirely to the canonical
+    runtime helper which currently uses flow-backed Nodus execution and handles:
       - Per-step retry (low/medium: 3x; high-risk: halt immediately)
       - AgentStep persistence after each step
       - AgentRun finalisation (completed / failed)
@@ -424,7 +424,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         from db.models.agent_run import AgentRun
-        from runtime.nodus_adapter import NodusAgentAdapter
+        from runtime.nodus_execution_service import execute_agent_run_via_nodus
         user_db_id = _db_user_id(user_id)
 
         db_run_id = _db_run_id(run_id)
@@ -546,7 +546,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         # Delegate entirely to the deterministic adapter
         parent_token = set_parent_event_id(execution_started_event_id)
         try:
-            NodusAgentAdapter.execute_with_flow(
+            execute_agent_run_via_nodus(
                 run_id=str(run.id),
                 plan=execution_plan,
                 user_id=user_id,

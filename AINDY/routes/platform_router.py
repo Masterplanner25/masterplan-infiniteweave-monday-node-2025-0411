@@ -331,12 +331,9 @@ def _ensure_nodus_flow_registered() -> None:
     nodus_record_outcome, nodus_handle_error) are in NODE_REGISTRY.
     Thread-safe; idempotent.
     """
-    import runtime.nodus_adapter  # noqa: F401 — registers nodes as side-effect
-    from runtime.flow_engine import FLOW_REGISTRY, register_flow
-    from runtime.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
+    from runtime.nodus_execution_service import ensure_nodus_script_flow_registered
 
-    if "nodus_execute" not in FLOW_REGISTRY:
-        register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
+    ensure_nodus_script_flow_registered()
 
 
 def _run_nodus_script(
@@ -355,25 +352,14 @@ def _run_nodus_script(
     in the returned state).  May raise HTTPException on infrastructure failure
     (VM not installed, DB unreachable, etc.).
     """
-    from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-    from utils.uuid_utils import normalize_uuid
+    from runtime.nodus_execution_service import run_nodus_script_via_flow
 
-    _ensure_nodus_flow_registered()
-
-    flow = FLOW_REGISTRY["nodus_execute"]
-    runner = PersistentFlowRunner(
-        flow=flow,
+    return run_nodus_script_via_flow(
+        script=script,
+        input_payload=input_payload,
+        error_policy=error_policy,
         db=db,
-        user_id=normalize_uuid(user_id) if user_id else None,
-        workflow_type="nodus_execute",
-    )
-    return runner.start(
-        initial_state={
-            "nodus_script": script,
-            "nodus_input_payload": input_payload,
-            "nodus_error_policy": error_policy,
-        },
-        flow_name="nodus_execute",
+        user_id=user_id,
     )
 
 
@@ -395,29 +381,9 @@ def _format_nodus_response(flow_result: dict) -> dict:
     memory_writes_count int
     error               str | None — script error message (if nodus_status="failure")
     """
-    from runtime.nodus_execution_service import build_nodus_execution_record
+    from runtime.nodus_execution_service import format_nodus_flow_result
 
-    final_state = flow_result.get("state") or {}
-    # _extract_execution_result maps "nodus_execute" → state["nodus_execute_result"]
-    nodus_result = flow_result.get("data") or {}
-    if not isinstance(nodus_result, dict) or "status" not in nodus_result:
-        nodus_result = final_state.get("nodus_execute_result") or {}
-
-    return build_nodus_execution_record(
-        flow_status=flow_result.get("status"),
-        trace_id=flow_result.get("trace_id"),
-        run_id=flow_result.get("run_id"),
-        nodus_summary=nodus_result,
-        nodus_status=final_state.get("nodus_status") or nodus_result.get("status"),
-        output_state=nodus_result.get("output_state") or final_state.get("nodus_output_state") or {},
-        events=final_state.get("nodus_events") or [],
-        memory_writes=final_state.get("nodus_memory_writes") or [],
-        error=(
-            nodus_result.get("error")
-            or final_state.get("nodus_handled_error")
-            or (None if flow_result.get("status") != "FAILED" else flow_result.get("error"))
-        ),
-    )
+    return format_nodus_flow_result(flow_result)
 
 
 def _validate_nodus_source(source: str, field: str = "script") -> None:

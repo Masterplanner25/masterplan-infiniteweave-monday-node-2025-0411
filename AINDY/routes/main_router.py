@@ -74,6 +74,7 @@ async def _execute_main(
 def _legacy_twr_response(*, task: TaskInput, infinity_result: dict) -> dict:
     score = (infinity_result or {}).get("score") or {}
     adjustment = (infinity_result or {}).get("adjustment") or {}
+    memory_influence = (infinity_result or {}).get("memory_influence") or score.get("metadata", {}).get("memory_influence")
     latest_adjustment = {
         "decision_type": adjustment.get("decision_type"),
         "applied_at": adjustment.get("applied_at"),
@@ -88,6 +89,12 @@ def _legacy_twr_response(*, task: TaskInput, infinity_result: dict) -> dict:
         "next_action": (infinity_result or {}).get("next_action"),
         "latest_adjustment": latest_adjustment,
         "prior_evaluation": (infinity_result or {}).get("prior_evaluation"),
+        "memory_influence": memory_influence,
+        "learning_context": {
+            "memory_context_count": (infinity_result or {}).get("memory_context_count", score.get("metadata", {}).get("memory_context_count", 0)),
+            "memory_signal_count": (infinity_result or {}).get("memory_signal_count", score.get("metadata", {}).get("memory_signal_count", 0)),
+            "has_memory_influence": bool(memory_influence),
+        },
     }
 
 @router.post("/calculate_twr")

@@ -1,11 +1,5 @@
-﻿# Governance Index
-<<<<<<< HEAD
-Last updated: 2026-04-05 (Tech debt updated after Nodus execution-record convergence)
-=======
-Last updated: 2026-04-05 (Tech debt updated after durable search orchestration unification)
 # Governance Index
-Last updated: 2026-04-05 (TECH_DEBT authority reconciliation and docs path alignment)
->>>>>>> eedb2d05e145a79b913aeb56539f2b041a5acc79
+Last updated: 2026-04-05 (Tech debt updated for execution, agentics, and route-learning convergence)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.
@@ -89,7 +83,6 @@ This file is the first document AI agents must read before performing architectu
 ## 8. Doc Ownership
 - Governance documents require explicit human sign-off by the project owner or designated maintainer.
 - Designated maintainer: Shawn Knight.
-
 
 
 

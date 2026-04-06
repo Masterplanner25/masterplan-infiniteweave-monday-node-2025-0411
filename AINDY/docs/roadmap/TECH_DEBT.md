@@ -14,12 +14,10 @@ This section is the canonical current-state view. Historical notes below are ret
 
 #### High
 
-- **PARTIAL:** Nodus/runtime execution is now converged at the runtime-result layer. Shared helpers in `runtime/nodus_execution_service.py` now normalize Nodus execution summaries/records across direct runtime execution, `runtime/nodus_adapter.py` flow execution, and `/memory/nodus/execute`. The remaining debt is above that runtime boundary: `runtime/flow_engine.py`, async-job linkage, agent-run lineage, and `routes/platform_router.py` still do not form one end-to-end execution-record model. Primary files: `runtime/nodus_execution_service.py`, `runtime/nodus_adapter.py`, `runtime/nodus_runtime_adapter.py`, `runtime/flow_engine.py`, `routes/platform_router.py`, `routes/memory_router.py`, `platform_layer/async_job_service.py`.
-- **PARTIAL:** Flow orchestration and VM execution still drift semantically even after canonical runtime-result convergence. One normalized Nodus execution-record builder now exists, but flow scheduling, higher-level observability envelopes, async-job linkage, and persistent run semantics still live partly above it in orchestration code. Primary files: `runtime/flow_engine.py`, `runtime/nodus_adapter.py`, `runtime/nodus_execution_service.py`, `runtime/nodus_runtime_adapter.py`, `routes/platform_router.py`, `platform_layer/async_job_service.py`.
+- **PARTIAL:** Nodus/runtime execution is now converged at the execution-record layer as well as the runtime-result layer. Shared helpers in `runtime/nodus_execution_service.py` and `core/execution_record_service.py` now normalize Nodus execution summaries and `execution_record` blocks across direct runtime execution, `runtime/nodus_adapter.py` flow execution, `/memory/nodus/execute`, async-job responses, agent-run payloads, and `routes/platform_router.py`. The remaining debt is above that runtime boundary: `runtime/flow_engine.py`, `PersistentFlowRunner`, and route-level orchestration surfaces still do not form one end-to-end execution model. Primary files: `runtime/nodus_execution_service.py`, `runtime/nodus_adapter.py`, `runtime/nodus_runtime_adapter.py`, `runtime/flow_engine.py`, `routes/platform_router.py`, `routes/memory_router.py`, `platform_layer/async_job_service.py`, `agents/agent_runtime.py`, `core/execution_record_service.py`.
+- **PARTIAL:** Flow orchestration and VM execution still drift semantically even after canonical runtime-result and execution-record convergence. One normalized Nodus execution-record builder now exists, but WAIT/RETRY semantics, persistent flow lifecycle, and route-level orchestration envelopes still live partly above it in `PersistentFlowRunner` and related router code. Primary files: `runtime/flow_engine.py`, `runtime/nodus_adapter.py`, `runtime/nodus_execution_service.py`, `runtime/nodus_runtime_adapter.py`, `routes/platform_router.py`, `platform_layer/async_job_service.py`.
+- **PARTIAL:** Agentics now enters the canonical Nodus/runtime path through `runtime/nodus_execution_service.py::execute_agent_run_via_nodus()`, but higher-level agent planning and orchestration still depend on the flow-engine shell and adapter layer. The remaining debt is no longer the primary runtime entrypoint; it is the residual flow-shell behavior above that entrypoint. Primary files: `runtime/nodus_adapter.py`, `runtime/flow_engine.py`, `runtime/nodus_execution_service.py`, `agents/agent_runtime.py`.
 - **PARTIAL:** Search orchestration is now materially unified. `domain/search_service.py` is the canonical durable, memory-aware search layer for SEO analysis, LeadGen preview, and Research query fallback, with shared cache/history reuse through `search_history`. The remaining gaps are narrower: LeadGen full generation still persists through the flow/syscall path, SEO meta generation is still route-local, and richer provider-backed parsing/ranking is still incomplete. Primary files: `domain/search_service.py`, `routes/seo_routes.py`, `routes/leadgen_router.py`, `routes/research_results_router.py`, `db/models/search_history.py`, `routes/memory_router.py`.
-- **UNRESOLVED:** Real Nodus execution is not the primary execution path for Agentics. Core agent execution still runs through `runtime/flow_engine.py` via `runtime/nodus_adapter.py`, while embedded Nodus execution remains isolated behind `runtime/nodus_execution_service.py`. Primary files: `runtime/nodus_adapter.py`, `runtime/flow_engine.py`, `runtime/nodus_execution_service.py`.
-- **UNRESOLVED:** Dual execution surfaces continue to drift architecturally. The internal flow engine and embedded Nodus execution expose different runtime models, semantics, and observability envelopes. Primary files: `runtime/flow_engine.py`, `runtime/nodus_adapter.py`, `runtime/nodus_execution_service.py`, `routes/memory_router.py`.
-- **PARTIAL:** Search is materially more unified now that `domain/search_service.py` fronts SEO, LeadGen, and Research, but result history/reuse and full system-wide orchestration are still incomplete. Primary files: `domain/search_service.py`, `domain/leadgen_service.py`, `routes/seo_routes.py`, `routes/research_results_router.py`, `routes/memory_router.py`.
 - **PARTIAL:** Execution normalization is still incomplete at the system boundary. Research, LeadGen, Freelance, Agent, Automation, Task, Goals, and Genesis now run through the centralized execution wrapper or canonical execution envelopes, and `/system/state` now returns the shared success envelope, but other route groups in the repo still return raw JSON or direct route-level envelopes outside the same wrapper/event lifecycle. Primary files: `core/execution_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/freelance_router.py`, `routes/system_state_router.py`, `routes/agent_router.py`, `routes/automation_router.py`, `routes/task_router.py`, `routes/goals_router.py`, `routes/genesis_router.py`.
 
 #### Medium
@@ -30,11 +28,11 @@ This section is the canonical current-state view. Historical notes below are ret
 - **UNRESOLVED:** ARM analyzer config updates remain process-local across instances. Primary file: `routes/arm_router.py`.
 - **RESOLVED:** Mongo is now a fail-fast runtime dependency. `config.py` rejects missing `MONGO_URL`, `db/mongo_setup.py` eagerly pings on startup, and `main.py` initializes Mongo during lifespan. Primary files: `config.py`, `db/mongo_setup.py`, `main.py`.
 - **UNRESOLVED:** Logging is still not fully standardized. `print(...)` remains in database/bootstrap paths. Primary files: `db/database.py`, `db/create_all.py`.
-- **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `platform_layer/async_job_service.py`, `services/memory_persistence.py`.
+- **RESOLVED:** Memory embedding generation is now asynchronous and retryable. Memory writes persist immediately with `embedding_status`, enqueue background embedding work, and retrieval falls back when embeddings are not ready. Primary files: `db/dao/memory_node_dao.py`, `platform_layer/async_job_service.py`, `memory/memory_persistence.py`.
 - **PARTIAL:** Multi-agent coordination primitives now exist, including registry, coordinator, message bus, cross-agent trace fields, and coordination endpoints, but real distributed execution and conflict-heavy runtime behavior remain immature. Primary files: `agents/agent_coordinator.py`, `agents/agent_message_bus.py`, `agents/agent_runtime.py`, `db/models/agent_registry.py`, `routes/coordination_router.py`.
 - **PARTIAL:** Rust/C++ memory scoring acceleration is now integrated into the runtime hot path with Python fallback, but release-build deployment and broader traversal-side acceleration are still incomplete. Primary files: `runtime/memory/scorer.py`, `runtime/memory/native_scorer.py`, `bridge/memory_bridge_rs/src/lib.rs`.
-- **RESOLVED:** Memory auto-link tag lookup is now cross-dialect aware. PostgreSQL keeps native tag containment queries, while SQLite/non-PostgreSQL backends fall back to Python-side tag filtering for consistent auto-link candidate lookup. Primary files: `memory/memory_capture_engine.py`, `db/dao/memory_node_dao.py`, `services/memory_persistence.py`.
-- **PARTIAL:** Live route-level learning behavior is not yet consistently visible even though the causal-learning loop tests pass. Repeated real API executions can succeed without showing recalled memory in route payload context. Primary files: `routes/research_results_router.py`, `runtime/memory/*`, `memory/memory_scoring_service.py`, `domain/infinity_orchestrator.py`.
+- **RESOLVED:** Memory auto-link tag lookup is now cross-dialect aware. PostgreSQL keeps native tag containment queries, while SQLite/non-PostgreSQL backends fall back to Python-side tag filtering for consistent auto-link candidate lookup. Primary files: `memory/memory_capture_engine.py`, `db/dao/memory_node_dao.py`, `memory/memory_persistence.py`.
+- **PARTIAL:** Live route-level learning behavior is now additive but still incomplete. Shared search flows now expose a stable `learning_context` block in Research, LeadGen preview/cached responses, and SEO analysis, and the legacy Infinity compute route now surfaces `memory_influence`; however, other route groups and some non-preview LeadGen paths still do not expose recalled memory or learning influence consistently. Primary files: `domain/search_service.py`, `routes/research_results_router.py`, `routes/leadgen_router.py`, `routes/seo_routes.py`, `routes/main_router.py`, `memory/memory_scoring_service.py`, `domain/infinity_orchestrator.py`.
 
 #### Low
 
@@ -54,7 +52,9 @@ The following historical items below should now be treated as resolved or update
 - `WatcherSignal.user_id` is now UUID-backed with a foreign key, so the older String-based note is stale.
 - Canonical Nodus runtime execution now flows through runtime/nodus_execution_service.py::execute_nodus_runtime(), so older notes that describe /memory/nodus/execute and nodus.execute as fully separate runtime paths are stale.
 - Canonical Nodus execution metadata now flows through shared helpers in runtime/nodus_execution_service.py, so older notes that describe platform_router, nodus.execute, and /memory/nodus/execute as independently shaping Nodus result summaries are stale.
+- Canonical Nodus execution records now flow through `core/execution_record_service.py` plus shared helpers in `runtime/nodus_execution_service.py`, so older notes that describe FlowRun/async-job/agent payloads as having no shared execution-record model are stale.
 - Shared durable search orchestration now lives in domain/search_service.py, so older notes that describe SEO, LeadGen preview, and Research fallback as fully separate route-local search implementations are stale.
+- Shared route-level search learning context now flows from `domain/search_service.py` into Research, LeadGen preview/cached responses, and SEO analysis, so older notes that describe those route payloads as having no visible recalled-memory context are stale.
 
 ## 1. Structural Debt
 - ? **FULLY RESOLVED (2026-03-22 Flow Engine Phase A):** All 3 daemon threads (`threading.Thread(daemon=True)`) eliminated from `task_services.py`. Replaced with APScheduler `BackgroundScheduler` + tenacity retry. `AutomationLog` model provides full audit trail and replay via `POST /automation/logs/{id}/replay`. System jobs (`task_reminder_check`, `cleanup_stale_logs`, `task_recurrence_check`) registered in `scheduler_service._register_system_jobs()`.
@@ -152,13 +152,13 @@ The following historical items below should now be treated as resolved or update
 - ? **RESOLVED (2026-03-21):** Structured JSON error format enforced via global exception handlers in `main.py`.
 - ? **RESOLVED (2026-03-22):** Structured JSON error responses standardized across remaining core routes (analytics, masterplan, genesis, memory, memory_trace, freelance, bridge, social).
 - ? **RESOLVED (current workspace):** Silent `except ...: pass` blocks removed from production code under `routes/`, `services/`, `runtime/`, `db/`, `modules/`, and `watcher/`. Replacement behavior is structured logging, observability events, or explicit propagation depending on callsite criticality.
-- ? **RESOLVED (current workspace):** Outbound OpenAI/HTTP/watcher/health-probe calls are wrapped by `services/external_call_service.py` and now emit required `SystemEvent` lifecycle records (`external.call.started|completed|failed`, `error.external_call`).
+- ? **RESOLVED (current workspace):** Outbound OpenAI/HTTP/watcher/health-probe calls are wrapped by `platform_layer/external_call_service.py` and now emit required `SystemEvent` lifecycle records (`external.call.started|completed|failed`, `error.external_call`).
 - ~~Missing retry logic for external model providers (`AINDY/services/genesis_ai.py`).~~ **FIXED (2026-03-17 Genesis Block 4):** `validate_draft_integrity()` implements 3-attempt retry loop with fail-safe fallback. ~~`deepseek_arm_service.py`~~  **FIXED (2026-03-17 ARM Phase 1):** `DeepSeekCodeAnalyzer._call_openai()` implements retry with configurable `retry_limit` and `retry_delay_seconds`.
 - Logging is mixed between `print(...)` and logging module; core routes/services now use `logger` but structured logging is not yet standardized (`AINDY/config.py`, multiple routes/services).
 
 ## 5. Concurrency Debt
 - ? **RESOLVED (2026-03-25 Sprint N+9):** Background task runner uses a DB lease (`background_task_leases`) to gate APScheduler startup  `start_background_tasks()` returns `bool`; `scheduler_service.start()` only called by the leader. Heartbeat job (`background_lease_heartbeat`, 60s interval) keeps the lease alive so it doesn't expire (TTL=120s). `is_background_leader()` public helper + `GET /observability/scheduler/status` endpoint expose current state. APScheduler no longer starts on follower instances.
-- ? **RESOLVED (current workspace):** Lease timestamps in `services/task_services.py` now use timezone-aware UTC and normalize loaded DB values before comparison. The worker startup warning `can't compare offset-naive and offset-aware datetimes` is eliminated in live compose startup.
+- ? **RESOLVED (current workspace):** Lease timestamps in `domain/task_services.py` now use timezone-aware UTC and normalize loaded DB values before comparison. The worker startup warning `can't compare offset-naive and offset-aware datetimes` is eliminated in live compose startup.
 - ? **RESOLVED (2026-03-22):** Process-level singletons in ARM analyzer and embedding client now use thread-safe initialization guards.
 - ? **RESOLVED (2026-03-22):** Per-request session reuse warning added to `db/database.py`.
 - ? **RESOLVED (2026-03-22):** Daemon threads eliminated  APScheduler replaces all `threading.Thread(daemon=True)` patterns.
@@ -475,7 +475,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 - **`runtime/memory_loop.py` and `runtime/execution_registry.py` are production code paths with zero test coverage.** The memory loop was the original runtime for the memory execution system and is still relevant as compatibility/runtime residue. This is not a dev tool  untested execution code is a reliability risk.
   - Location: `AINDY/runtime/memory_loop.py`, `AINDY/runtime/execution_registry.py`
   - Fix: Add unit tests for the execution loop state machine and registry. Minimum: test state transitions, error handling, and session lifecycle.
-  - Status: ? **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` (PersistentFlowRunner) is the new canonical execution backbone, fully covered by `tests/test_flow_engine_phase_b.py` (62 tests). `runtime/memory_loop.py` and `runtime/execution_registry.py` now re-export from `flow_engine` for backward compatibility. Existing `ExecutionLoop` class and `REGISTRY` singleton preserved intact.
+  - Status: ? **RESOLVED (2026-03-22 Flow Engine Phase B):** `runtime/flow_engine.py` (PersistentFlowRunner) is the new canonical execution backbone, fully covered by `tests/test_flow_engine_phase_b.py` (62 tests). `runtime/memory_loop.py` and `runtime/execution_registry.py` now re-export from `flow_engine` for backward compatibility. Existing `ExecutionLoop` class and `REGISTRY` singleton preserved intact.
 
 ### §15.7 Coverage threshold floor is stale
 - ? **RESOLVED (2026-03-22 Quick Wins):** `--cov-fail-under` raised from 64 to 69 in `pytest.ini`. Actual coverage: 69.62%.
@@ -524,7 +524,7 @@ ARM Phase 1 shipped the core engine (analysis, generation, security, DB, router,
 
 ### §15.18 Flow Engine Phase B  Single File Engine integration
 - **Flow Engine Phase A replaces daemon threads with APScheduler. Phase B integrates the Nodus Single File Engine**  tasks defined in `.nodus` files should be parseable and executable by the scheduler via `run_task_now()`.
-  - Status: ? **RESOLVED (2026-03-22 Flow Engine Phase B):** `services/flow_engine.py` is a clean rewrite of the Single File Engine (`Single File Engine.py`) prototype architecture. `PersistentFlowRunner`, `NODE_REGISTRY`, `FLOW_REGISTRY`, `route_event`, `select_strategy`, `record_outcome`, and `execute_intent` are all implemented and tested. DB-backed execution with WAIT/RESUME, per-node audit trail (flow_history), and adaptive strategy learning (strategies table). ARM analysis, task completion, and LeadGen search flows registered at startup.
+  - Status: ? **RESOLVED (2026-03-22 Flow Engine Phase B):** `runtime/flow_engine.py` is a clean rewrite of the Single File Engine (`Single File Engine.py`) prototype architecture. `PersistentFlowRunner`, `NODE_REGISTRY`, `FLOW_REGISTRY`, `route_event`, `select_strategy`, `record_outcome`, and `execute_intent` are all implemented and tested. DB-backed execution with WAIT/RESUME, per-node audit trail (flow_history), and adaptive strategy learning (strategies table). ARM analysis, task completion, and LeadGen search flows registered at startup.
 
 ### §15.19 Flow Engine Phase C  Genesis ? executable flow
 - **Genesis conversation and synthesis are not yet wired to the Flow Engine.** Genesis is a multi-turn, stateful workflow that would benefit from WAIT/RESUME (wait for user message, resume on response). Currently it is a direct LLM call in `genesis_ai.py` with no execution state in DB.
@@ -556,7 +556,7 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 ## 16. Sprint N+4N+7 Audit  2026-03-25
 
 ### §16.1 Agentics Phase 13 + Observability + Event Log  RESOLVED
-- ? **RESOLVED (Sprint N+4, 2026-03-24):** Agent runtime Phase 1 (goal?plan?execute) and Phase 2 (dry-run preview + approval gate) implemented. `services/agent_runtime.py`, `services/agent_tools.py`, `db/models/agent_run.py`, `routes/agent_router.py`.
+- ? **RESOLVED (Sprint N+4, 2026-03-24):** Agent runtime Phase 1 (goal?plan?execute) and Phase 2 (dry-run preview + approval gate) implemented. `agents/agent_runtime.py`, `agents/agent_tools.py`, `db/models/agent_run.py`, `routes/agent_router.py`.
 - ? **RESOLVED (Sprint N+6, 2026-03-25):** Agentics Phase 3 (deterministic execution). `NodusAgentAdapter` + `AGENT_FLOW` wired to `PersistentFlowRunner`. Per-step retry policy. `flow_run_id` linkage. Nodus pip package confirmed NOT usable (separate scripting-language VM).
 - ? **RESOLVED (Sprint N+7, 2026-03-25):** Agentics Phase 5 (observability). Stuck-run startup scan, `/recover` and `/replay` endpoints, `replayed_from_run_id` lineage, serializer unification.
 - ? **RESOLVED (Sprint N+8, 2026-03-25):** Agent Event Log. `AgentEvent` table, `correlation_id` threading through `AgentRun`/`AgentStep`/`AgentEvent`, `emit_event()`, `GET /agent/runs/{id}/events` merged timeline, `AgentConsole.jsx` Timeline tab + pending-approval badge.
@@ -565,8 +565,8 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 - ? **RESOLVED (Sprint N+8, 2026-03-25):** `replay_run(mode="new_plan")` re-calls GPT-4o with the original goal to generate a fresh plan. New run is created via `_create_run_from_plan()` with new `correlation_id` and `REPLAY_CREATED` event emitted with `{original_run_id, mode: "new_plan"}`. The prior approval does not carry forward  trust gate re-evaluated on new run.
 
 ### §16.3 Agent capability/policy system missing  Resolved
-- ? **RESOLVED (Sprint N+10, 2026-03-26):** Scoped capability enforcement now exists. Tool registry entries carry capability metadata, `AgentTrustSettings.allowed_auto_grant_tools` defines static policy, `AgentRun.capability_token` stores per-run scoped grants, approve-time preflight blocks ungrantable plans, and step-time enforcement in `services/nodus_adapter.py` fails closed with `CAPABILITY_DENIED`.
-  - Location: `AINDY/services/capability_service.py`, `AINDY/services/agent_runtime.py`, `AINDY/services/nodus_adapter.py`
+- ? **RESOLVED (Sprint N+10, 2026-03-26):** Scoped capability enforcement now exists. Tool registry entries carry capability metadata, `AgentTrustSettings.allowed_auto_grant_tools` defines static policy, `AgentRun.capability_token` stores per-run scoped grants, approve-time preflight blocks ungrantable plans, and step-time enforcement in `runtime/nodus_adapter.py` fails closed with `CAPABILITY_DENIED`.
+  - Location: `AINDY/agents/capability_service.py`, `AINDY/agents/agent_runtime.py`, `AINDY/runtime/nodus_adapter.py`
   - Outcome: approved runs can no longer invoke arbitrary tools outside their scoped token; `genesis.message` remains manual-approval only.
 
 ### §16.4 `WatcherSignal.user_id` migration not chained cleanly  Low priority
@@ -580,10 +580,11 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 ### Section 16.6 [AGENTICS] Canonical Nodus runtime exists, but orchestration still spans two layers - Partial
 - `runtime/nodus_execution_service.py::execute_nodus_runtime()` is now the canonical adapter-backed Nodus execution entrypoint.
 - `runtime/nodus_adapter.py::nodus_execute_node()` and `POST /memory/nodus/execute` both delegate to that canonical runtime path rather than constructing separate execution engines.
+- `agents/agent_runtime.py::execute_run()` now enters the runtime through `runtime/nodus_execution_service.py::execute_agent_run_via_nodus()` instead of calling `NodusAgentAdapter` directly.
 - Remaining gaps are above the VM/runtime layer:
   - no `.nd` workflow assets in the repo
   - no agent-plan-to-Nodus compilation path
-  - no unified durable execution record that maps `FlowRun`, `AgentEvent`, `SystemEvent`, and VM trace into one model
+  - no fully unified durable execution surface that makes `FlowRun`, `AgentEvent`, `SystemEvent`, and VM trace look like one end-to-end orchestration model
 - Status: Partial. High architectural importance.
 
 ### Section 16.7 [AGENTICS] Flow orchestration vs VM execution still creates semantic drift - Partial
@@ -595,7 +596,7 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
   - Status: Partial. Structural debt.
 
 ### Section 16.8 [AGENTICS] Infinity loop is integrated but not autonomous - Open
-- **The Infinity loop is now closed and memory-weighted, but the decision engine is still shallow and post-hoc.** `services/infinity_loop.py` now consumes ranked memory signals in addition to KPI and feedback context, and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
+- **The Infinity loop is now closed and memory-weighted, but the decision engine is still shallow and post-hoc.** `domain/infinity_loop.py` now consumes ranked memory signals in addition to KPI and feedback context, and persists `LoopAdjustment` / `UserFeedback`, but it does not yet:
   - create bounded autonomous agent runs from its own decisions
   - learn from `UserFeedback` to change decision thresholds or KPI weights
   - implement expected-vs-actual scoring across agent outcomes
@@ -606,12 +607,12 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
 - ? **PARTIALLY RESOLVED (current workspace):** `SystemEvent` is now the canonical durable activity ledger for core execution plus outbound external interactions. External OpenAI/HTTP/watcher/health-probe calls fail closed on missing required event emission.
 - ? **Further resolved (current workspace):** successful health/auth/async heavy-execution paths now also emit durable success events (`health.liveness.completed`, `health.readiness.completed`, `auth.register.completed`, `auth.login.completed`, `execution.started`, `execution.completed`) and were verified against a live compose deployment.
 - ? **Further resolved (current workspace):** parent-child event stitching, causal `RippleEdge` creation, and `stored_as_memory` links now make execution traces reconstructable across `SystemEvent` and Memory Bridge.
-- Current state: embedded Nodus execution now shares one normalized runtime execution-record builder across direct and flow-backed Nodus entrypoints, but that record still does not unify FlowRun, async-job status, agent-run lineage, and SystemEvent durability into one end-to-end execution model.
+- Current state: embedded Nodus execution now shares one normalized runtime execution-record builder across direct and flow-backed Nodus entrypoints, and `ExecutionUnit`-backed `execution_record` metadata now appears across runtime, async-job, and agent-run surfaces. The remaining debt is above that layer: FlowRun orchestration, async-job lifecycle, and SystemEvent durability still do not read as one end-to-end execution model.
   - Status: Open. Structural follow-through still required.
 
 ### §16.10 [AGENTICS] Multi-agent coordination is still absent  Open
 - **Agentics is still effectively single-agent.** Memory federation exists (`/memory/agents`, federated recall, shared/private memory), but there is no runtime delegation model, no parent/child run structure, and no inter-agent approval/capability boundary.
-  - Primary files: `AINDY/routes/memory_router.py`, `AINDY/bridge/nodus_memory_bridge.py`, `AINDY/services/agent_runtime.py`, `AINDY/db/models/agent.py`
+  - Primary files: `AINDY/routes/memory_router.py`, `AINDY/bridge/nodus_memory_bridge.py`, `AINDY/agents/agent_runtime.py`, `AINDY/db/models/agent.py`
   - Status: Open. Major functional gap.
 
 ## 17. Current Workspace Audit  Newly Documented Debt
@@ -635,13 +636,13 @@ Detected by `alembic revision --autogenerate` on 2026-03-22 post migration `a4c9
   - Status: Open. Low priority documentation debt.
 
 ### §17.5 New causal-memory and memory-weighted Infinity path lacks end-to-end scenario coverage
-- **The new SystemEvent -> RippleTrace -> Memory Bridge -> Infinity signal path is implemented, but it does not yet have dedicated end-to-end tests that prove a high-impact failure changes the next Infinity decision on a subsequent run.**
-  - Location: `AINDY/services/system_event_service.py`, `AINDY/services/memory_capture_engine.py`, `AINDY/services/rippletrace_service.py`, `AINDY/services/memory_scoring_service.py`, `AINDY/services/infinity_orchestrator.py`, `AINDY/services/infinity_loop.py`
-  - Status: Open. Medium priority because this is now a strategic behavior path.
+- ? **RESOLVED (current workspace):** Dedicated scenario coverage now proves that a high-impact failure can be emitted as a `SystemEvent`, linked through RippleTrace and memory capture, and change the next Infinity decision on a later run.
+  - Location: `AINDY/tests/system/test_memory_driven_infinity_decisions.py`, `AINDY/core/system_event_service.py`, `AINDY/domain/rippletrace_service.py`, `AINDY/memory/memory_scoring_service.py`, `AINDY/domain/infinity_orchestrator.py`, `AINDY/domain/infinity_loop.py`
+  - Status: Resolved in the current workspace; broader behavioral-feedback scenarios still remain below.
 
 ### §17.6 Automatic behavioral feedback path lacks scenario coverage
-- **Retries, latency spikes, abandonment detection, and repeated-failure signals now emit feedback events and auto-capture into memory, but they do not yet have dedicated scenario tests proving signal emission and downstream decision impact.**
-  - Location: `AINDY/services/system_event_service.py`, `AINDY/services/async_job_service.py`, `AINDY/services/memory_capture_engine.py`, `AINDY/services/memory_scoring_service.py`
+- **Retries, latency spikes, abandonment detection, and repeated-failure signals still lack dedicated scenario coverage proving signal emission and downstream decision impact beyond the newly covered failure-to-Infinity path.**
+  - Location: `AINDY/core/system_event_service.py`, `AINDY/platform_layer/async_job_service.py`, `AINDY/memory/memory_capture_engine.py`, `AINDY/memory/memory_scoring_service.py`
   - Status: Open. Medium priority.
 
 ### §17.7 Native memory scorer is integrated, but production hardening is incomplete

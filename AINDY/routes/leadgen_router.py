@@ -21,7 +21,7 @@ from db.models.leadgen_model import LeadGenResult
 from schemas.leadgen_schema import LeadGenItem
 from services.auth_service import get_current_user
 from platform_layer.rate_limiter import limiter
-from domain.search_service import get_cached_search_result, search_leads
+from domain.search_service import build_learning_context, get_cached_search_result, search_leads
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 legacy_router = APIRouter(tags=["Lead Generation"])
@@ -69,6 +69,8 @@ def generate_b2b_leads(
                 "query": query,
                 "count": len(cached_results),
                 "results": [LeadGenItem(**row).model_dump() for row in cached_results],
+                "learning_context": cached.get("learning_context")
+                or build_learning_context(cached, default_search_type="leadgen"),
                 "_execution_meta": {"cached": True, "count": len(cached_results)},
             }
 

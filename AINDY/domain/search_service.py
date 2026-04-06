@@ -20,6 +20,34 @@ def _normalized_search_query(query: str) -> str:
     return (query or "").strip()
 
 
+def build_learning_context(result: dict[str, Any] | None, *, default_search_type: str | None = None) -> dict[str, Any]:
+    payload = result if isinstance(result, dict) else {}
+    memory = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
+    memory_ids = list(memory.get("ids") or [])
+    memory_count = memory.get("count")
+    if memory_count is None:
+        items = memory.get("items") or []
+        memory_count = len(items) if isinstance(items, list) else 0
+    memory_count = int(memory_count or 0)
+    return {
+        "search_type": payload.get("search_type") or default_search_type,
+        "history_id": payload.get("history_id"),
+        "search_score": payload.get("search_score"),
+        "memory_count": memory_count,
+        "memory_ids": memory_ids,
+        "recalled_memory": memory_count > 0,
+    }
+
+
+def attach_learning_context(result: dict[str, Any] | None, *, default_search_type: str | None = None) -> dict[str, Any]:
+    payload = result if isinstance(result, dict) else {}
+    payload.setdefault(
+        "learning_context",
+        build_learning_context(payload, default_search_type=default_search_type),
+    )
+    return payload
+
+
 def persist_search_result(
     *,
     db,
@@ -132,7 +160,7 @@ def execute_durable_search(
         search_type=search_type,
     )
     if cached:
-        return cached
+        return attach_learning_context(cached, default_search_type=search_type)
 
     memory = search_memory(
         normalized_query,
@@ -144,13 +172,14 @@ def execute_durable_search(
     result = dict(builder(memory) or {})
     result.setdefault("query", normalized_query)
     result.setdefault("memory", memory)
-    return persist_search_result(
+    persisted = persist_search_result(
         db=db,
         user_id=user_id,
         query=normalized_query,
         result=result,
         search_type=search_type,
     )
+    return attach_learning_context(persisted, default_search_type=search_type)
 
 
 def search_memory(query: str, db, user_id: str | None = None, tags: list[str] | None = None, limit: int = 5) -> dict[str, Any]:
@@ -210,7 +239,7 @@ def analyze_seo_content(text: str, top_n: int = 10, *, db=None, user_id: str | N
     )
 
 
-def suggest_seo_improvements(text: str, top_n: int = 5, *, db=None, user_id: str | None = None) -> dict[str, str]:
+def suggest_seo_improvements(text: str, top_n: int = 5, *, db=None, user_id: str | None = None) -> dict[str, Any]:
     analysis = analyze_seo_content(text, top_n=top_n, db=db, user_id=user_id)
     suggestions: list[str] = []
     readability = float(analysis.get("readability", 0.0) or 0.0)
@@ -237,7 +266,11 @@ def suggest_seo_improvements(text: str, top_n: int = 5, *, db=None, user_id: str
     if not suggestions:
         suggestions.append("SEO baseline looks healthy; focus on stronger headings, internal linking, and clearer search intent matching.")
 
-    return {"seo_suggestions": "\n".join(f"- {item}" for item in suggestions)}
+    return {
+        "seo_suggestions": "\n".join(f"- {item}" for item in suggestions),
+        "learning_context": analysis.get("learning_context")
+        or build_learning_context(analysis, default_search_type="seo_analysis"),
+    }
 
 
 def _extract_leads_from_response(payload: Any, max_results: int = 3) -> list[dict[str, str]]:
