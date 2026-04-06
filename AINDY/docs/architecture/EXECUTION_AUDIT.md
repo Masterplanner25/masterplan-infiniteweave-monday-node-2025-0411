@@ -13,6 +13,8 @@ Several issues called out here have been improved in the current workspace:
 - silent `except ...: pass` blocks were removed from active production code
 - auth, analytics, ARM, main-calculation, and memory routes now enter a shared route-layer execution pipeline
 - a static execution-contract linter now exists at `tools/execution_contract_linter.py`
+- all retry decisions are now unified through `core/retry_policy.py` — hardcoded values removed from flow_engine, nodus_adapter, and async_job_service
+- scheduled Nodus jobs now honor `NodusScheduledJob.max_retries` via `run_nodus_script_via_flow(node_max_retries=...)` and per-run `flow["node_configs"]` injection (previously the flow engine always defaulted to 3 regardless of job config)
 
 The remaining FAIL verdicts are about missing system-wide execution-envelope normalization, not absence of observability or eventing.
 

@@ -409,10 +409,16 @@ def register_flow(name: str, flow: dict) -> None:
 # ── Policy ─────────────────────────────────────────────────────────────────────
 
 POLICY: dict = {
-    "max_retries": 3,
+    "max_retries": 3,   # kept for backward-compat; retry gate now reads _FLOW_RETRY_POLICY
     "blocked_nodes": [],
     "max_flow_duration_seconds": 300,
 }
+
+# Retry decisions for flow-node retries are now resolved through RetryPolicy so
+# the central definition in core/retry_policy.py is the single source of truth.
+# _FLOW_RETRY_POLICY is resolved once at module load; it matches POLICY["max_retries"].
+from core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
+_FLOW_RETRY_POLICY = _resolve_retry_policy(execution_type="flow")
 
 
 def enforce_policy(node_name: str) -> None:
@@ -929,7 +935,15 @@ class PersistentFlowRunner:
                     state.update(patch)
                 elif node_status == "RETRY":
                     attempts = context["attempts"].get(current_node, 0)
-                    if attempts < POLICY["max_retries"]:
+                    # Per-node override: flow dicts may carry node_configs["<node>"]["max_retries"].
+                    # resolve_retry_policy(node_max_retries=...) returns a policy with that limit;
+                    # when None it falls back to _FLOW_RETRY_POLICY (module default = 3).
+                    _node_cfg = self.flow.get("node_configs", {}).get(current_node, {})
+                    _run_policy = _resolve_retry_policy(
+                        execution_type="flow",
+                        node_max_retries=_node_cfg.get("max_retries"),
+                    )
+                    if attempts < _run_policy.max_attempts:
                         logger.warning("Node %s retrying (attempt %d)", current_node, attempts)
                         continue
                     return _fail_execution(

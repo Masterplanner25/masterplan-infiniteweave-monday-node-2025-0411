@@ -112,16 +112,35 @@ def run_nodus_script_via_flow(
     workflow_type: str = "nodus_execute",
     trace_id: str | None = None,
     extra_initial_state: dict[str, Any] | None = None,
+    node_max_retries: Optional[int] = None,
 ) -> dict[str, Any]:
     """
     Execute a Nodus script through the canonical flow-backed orchestration path.
+
+    node_max_retries
+        When provided, overrides the default flow-node retry limit for the
+        ``nodus.execute`` node in this run.  The value is injected as
+        ``flow["node_configs"]["nodus.execute"]["max_retries"]`` so the flow
+        engine's retry gate can resolve the correct RetryPolicy per-run without
+        touching the shared NODUS_SCRIPT_FLOW constant.
+
+        None (default) → the flow-engine default (3 attempts) applies unchanged.
     """
     from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
     from utils.uuid_utils import normalize_uuid
 
     ensure_nodus_script_flow_registered()
 
+    # Build a per-run flow dict.  When node_max_retries is supplied we inject
+    # node_configs so the retry gate in PersistentFlowRunner can honour it.
+    # The shared NODUS_SCRIPT_FLOW constant is never mutated.
     flow = FLOW_REGISTRY["nodus_execute"]
+    if node_max_retries is not None:
+        flow = {
+            **flow,
+            "node_configs": {"nodus.execute": {"max_retries": node_max_retries}},
+        }
+
     runner = PersistentFlowRunner(
         flow=flow,
         db=db,
@@ -333,6 +352,11 @@ def execute_agent_run_via_nodus(
     Agentics still relies on flow orchestration for retry and checkpoint
     semantics, but agent_runtime should enter that execution path through this
     runtime service instead of importing the adapter directly.
+
+    Retry policy: no custom retry logic here — retry decisions are owned by
+    the flow wrapper (flow_engine._FLOW_RETRY_POLICY) and the per-step adapter
+    (_step_policy in nodus_adapter._execute_agent_step). This function executes
+    exactly once per invocation; the flow engine controls whether it is retried.
     """
     from runtime.nodus_adapter import NodusAgentAdapter
 

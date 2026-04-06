@@ -60,7 +60,9 @@ from utils.user_ids import parse_user_id
 logger = logging.getLogger(__name__)
 from core.observability_events import emit_observability_event
 
-MAX_STEP_RETRIES = 3
+MAX_STEP_RETRIES = 3  # kept for reference; retry gate now reads RetryPolicy
+
+from core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
 
 
 def _db_run_id(run_id):
@@ -249,7 +251,9 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     # ──────────────────────────────────────────────────────────────────────────
 
     # Execute with per-step retry
-    max_attempts = 1 if risk_level == "high" else MAX_STEP_RETRIES
+    # REPLACED: hardcoded risk branches → RetryPolicy resolution
+    _step_policy = _resolve_retry_policy(execution_type="agent", risk_level=risk_level)
+    max_attempts = _step_policy.max_attempts
     tool_result = None
     exec_ms = 0
 
@@ -268,7 +272,8 @@ def agent_execute_step(state: dict, context: dict) -> dict:
         if tool_result["success"]:
             break
 
-        if risk_level == "high":
+        # REPLACED: if risk_level == "high": break → policy.high_risk_immediate_fail
+        if _step_policy.high_risk_immediate_fail:
             break  # High-risk: no retry regardless
 
         if attempt < max_attempts:

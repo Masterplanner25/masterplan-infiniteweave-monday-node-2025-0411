@@ -689,6 +689,21 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         db.rollback()
         log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
         if log:
+            # REPLACED: implicit always-fail → consult retry policy via log.max_attempts
+            # log.max_attempts is set at submission time (default 1, matching ASYNC_JOB_DEFAULT).
+            # When a caller supplies max_attempts > 1 at submit, the retry infrastructure
+            # here will honour it without any further changes.
+            if log.attempt_count < log.max_attempts:
+                log.status = "pending"
+                log.error_message = str(exc)
+                db.commit()
+                logger.warning(
+                    "[AsyncJob] %s attempt %d/%d failed — rescheduling: %s",
+                    task_name, log.attempt_count, log.max_attempts, exc,
+                )
+                _get_executor().submit(_execute_job, log_id, task_name, payload)
+                return
+
             failure_response = execution_error(str(exc), [], str(log_id))
             log.status = "failed"
             log.error_message = str(exc)

@@ -15,6 +15,12 @@ Enforce two invariants without rewriting any runtime:
      The adapter functions below normalise each runtime's native result type
      into the canonical envelope without modifying the runtimes themselves.
 
+  3. Every ExecutionUnit carries a ``retry_policy`` in its ``extra`` field.
+     The policy is resolved from ``eu_type`` + caller-supplied context and
+     stored as a plain dict under ``extra["retry_policy"]`` so any code that
+     has access to the EU can read the intended retry semantics without
+     importing RetryPolicy directly.
+
 ExecutionEnvelope shape
 -----------------------
     {
@@ -40,7 +46,9 @@ Usage
     eu = require_execution_unit(
         db=db, eu_type="job", user_id=user_id,
         source_type="memory_nodus_execute", source_id=eu_id,
+        extra={"task_name": task_name, "workflow_type": "memory_nodus_execute"},
     )
+    # eu.extra["retry_policy"] is now populated.
 
     # After execution, normalise the result:
     envelope = nodus_result_to_envelope(nodus_result, eu_id=str(eu.id), trace_id=eu_id)
@@ -50,11 +58,53 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+# ── Retry-policy resolution ───────────────────────────────────────────────────
+
+# Map eu_type to the execution_type expected by resolve_retry_policy().
+# "job" covers both AutomationLog jobs and bare Nodus execution.
+_EU_TYPE_TO_EXEC_TYPE: dict[str, str] = {
+    "flow": "flow",
+    "agent": "agent",
+    "job": "job",
+    "nodus": "nodus",
+}
+
+
+def _resolve_policy_for_eu(eu_type: str, extra: dict[str, Any]) -> dict[str, Any]:
+    """
+    Derive a RetryPolicy for an ExecutionUnit and return it serialised as a
+    plain dict (safe for JSONB storage).
+
+    Resolution order:
+      1. ``extra["risk_level"]``  — agent risk (low / medium / high)
+      2. ``extra["workflow_type"]`` — checked for "nodus_*" to route to nodus
+      3. ``eu_type`` mapped to execution_type via ``_EU_TYPE_TO_EXEC_TYPE``
+    """
+    from core.retry_policy import resolve_retry_policy
+
+    exec_type = _EU_TYPE_TO_EXEC_TYPE.get((eu_type or "").lower(), "job")
+
+    # Nodus scheduled jobs carry workflow_type="nodus_*"
+    workflow_type = extra.get("workflow_type") or ""
+    if workflow_type.startswith("nodus"):
+        exec_type = "nodus"
+
+    risk_level: Optional[str] = extra.get("risk_level")
+
+    policy = resolve_retry_policy(execution_type=exec_type, risk_level=risk_level)
+    return {
+        "max_attempts": policy.max_attempts,
+        "backoff_ms": policy.backoff_ms,
+        "exponential_backoff": policy.exponential_backoff,
+        "high_risk_immediate_fail": policy.high_risk_immediate_fail,
+    }
 
 
 # ── EU gate ───────────────────────────────────────────────────────────────────
@@ -79,10 +129,22 @@ def require_execution_unit(
     - Returns None on failure (non-fatal — callers must not block on this).
 
     This is idempotent: calling it twice for the same source is safe.
+
+    RetryPolicy
+    -----------
+    A ``retry_policy`` dict is always embedded in ``eu.extra`` so any code
+    that holds the EU can read the intended retry semantics without importing
+    ``RetryPolicy`` directly.  The policy is resolved from ``eu_type`` plus
+    any ``risk_level`` / ``workflow_type`` keys already present in ``extra``.
+    Callers that need a non-default policy should set those keys in ``extra``
+    before calling this function.
     """
     from core.execution_unit_service import ExecutionUnitService
 
     try:
+        merged_extra: dict[str, Any] = dict(extra or {})
+        merged_extra["retry_policy"] = _resolve_policy_for_eu(eu_type, merged_extra)
+
         eus = ExecutionUnitService(db)
         eu = eus.get_by_source(source_type, source_id)
         if eu is None:
@@ -93,21 +155,32 @@ def require_execution_unit(
                 source_id=source_id,
                 correlation_id=correlation_id or source_id,
                 status="executing",
-                extra=extra or {},
+                extra=merged_extra,
             )
             logger.debug(
-                "[ExecutionGate] EU created source=%s/%s eu_id=%s",
+                "[ExecutionGate] EU created source=%s/%s eu_id=%s policy=%s",
                 source_type,
                 source_id,
                 getattr(eu, "id", None),
+                merged_extra["retry_policy"],
             )
         else:
             eus.update_status(eu.id, "executing")
+            # Backfill retry_policy on existing EU if not yet stored.
+            if eu.extra is None or "retry_policy" not in eu.extra:
+                current_extra = dict(eu.extra or {})
+                current_extra["retry_policy"] = merged_extra["retry_policy"]
+                eu.extra = current_extra
+                try:
+                    db.flush()
+                except Exception:
+                    pass  # non-fatal; policy is still readable from merged_extra
             logger.debug(
-                "[ExecutionGate] EU transitioned→executing source=%s/%s eu_id=%s",
+                "[ExecutionGate] EU transitioned→executing source=%s/%s eu_id=%s policy=%s",
                 source_type,
                 source_id,
                 eu.id,
+                (eu.extra or {}).get("retry_policy"),
             )
         return eu
     except Exception as exc:

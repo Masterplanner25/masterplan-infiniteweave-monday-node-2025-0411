@@ -10,6 +10,25 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Unified RetryPolicy System — 2026-04-05
+
+### Added
+* **`core/retry_policy.py`** — central retry policy definition. `RetryPolicy` frozen dataclass (`max_attempts`, `backoff_ms`, `exponential_backoff`, `high_risk_immediate_fail`). Named constants: `FLOW_NODE_DEFAULT`, `AGENT_LOW_MEDIUM`, `AGENT_HIGH_RISK`, `ASYNC_JOB_DEFAULT`, `NODUS_SCHEDULED_DEFAULT`, `NO_RETRY`. `resolve_retry_policy(execution_type, risk_level, node_max_retries, job_max_retries)` is the single resolver. `is_retryable_error()` classifies error strings.
+
+### Changed
+* **`core/execution_gate.py`** — `require_execution_unit()` now resolves and persists a `retry_policy` dict into `ExecutionUnit.extra` for every execution. `_resolve_policy_for_eu()` maps `eu_type` + `workflow_type` + `risk_level` to the correct policy. Existing EUs are backfilled on the executing transition.
+* **`runtime/flow_engine.py`** — module-level `_FLOW_RETRY_POLICY` resolved from `resolve_retry_policy(execution_type="flow")`. Retry gate at `node_status == "RETRY"` replaced `POLICY["max_retries"]` with `_run_policy.max_attempts`, where `_run_policy` is resolved per-node from `self.flow.get("node_configs", {})` supporting per-run overrides. `POLICY["max_retries"]` retained for backward compatibility but no longer gates retries.
+* **`runtime/nodus_adapter.py`** — `_execute_agent_step()` replaces `max_attempts = 1 if risk_level == "high" else MAX_STEP_RETRIES` with `_step_policy = resolve_retry_policy(execution_type="agent", risk_level=risk_level)`. High-risk break condition replaced from `if risk_level == "high"` to `if _step_policy.high_risk_immediate_fail`. `MAX_STEP_RETRIES` retained as reference constant.
+* **`platform_layer/async_job_service.py`** — `_execute_job_inline()` exception handler now checks `log.attempt_count < log.max_attempts` before marking a job failed. If true: resets status to `"pending"`, commits, and resubmits via executor. Current default `max_attempts=1` preserves existing no-retry behavior; callers that submit with `max_attempts > 1` now get actual retries.
+* **`runtime/nodus_execution_service.py`** — `run_nodus_script_via_flow()` adds `node_max_retries: Optional[int] = None`. When provided, injects `node_configs = {"nodus.execute": {"max_retries": node_max_retries}}` into a per-run copy of the flow dict. The shared `NODUS_SCRIPT_FLOW` constant is never mutated.
+* **`runtime/nodus_schedule_service.py`** — `_run_scheduled_job()` now passes `node_max_retries=job.max_retries` to `run_nodus_script_via_flow()`. Resolves the audit WARNING: scheduled jobs previously stored `max_retries` correctly in `AutomationLog` but the flow engine always defaulted to 3 retries regardless of the job's configured limit.
+
+### Results
+* Tests: 2,088 passing, 19 skipped — all green
+* Audit: 0 violations, 0 warnings (nodus_schedule_service WARNING resolved)
+
+---
+
 ## Execution Unification Layer — 2026-04-05
 
 ### Added

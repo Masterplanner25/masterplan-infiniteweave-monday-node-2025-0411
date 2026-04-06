@@ -127,6 +127,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
             user_id=user_id_str,
             workflow_type="nodus_schedule",
             trace_id=trace_id,
+            node_max_retries=job.max_retries,  # honour per-job retry config
         )
         formatted_result = format_nodus_flow_result(result)
 
