@@ -58,7 +58,7 @@ Audit criteria:
 
 ### Agent
 
-**Verdict:** FAIL
+**Verdict:** FAIL (partially improved)
 
 **What follows the contract**
 
@@ -67,13 +67,13 @@ Audit criteria:
 - Persistence exists through `AgentRun`, `AgentStep`, `AgentEvent`, and `FlowRun`.
 - Observability exists via lifecycle events and flow history.
 - Flow-backed execution exists via `PersistentFlowRunner` in `services/flow_engine.py:195-415`.
+- **NEW:** `_run_flow_agent()` in `routes/agent_router.py` now embeds a canonical `execution_envelope` (`eu_id`, `trace_id`, `status`, `output`, `error`, `duration_ms`, `attempt_count`) in all dict-typed agent responses via `core/execution_gate.to_envelope()`.
 
 **Where it bypasses the contract**
 
 - Auto-execution can still be initiated from the route after creation, but the synchronous execution path now enters the shared route execution wrapper and the canonical runtime entrypoint rather than a fully separate adapter-owned path.
-- The canonical contract still requires one execution envelope for the whole system. Agent now exposes shared `execution_record` metadata, but `AgentRun` plus `FlowRun` still do not read as one fully unified orchestration surface.
-- Agent execution now enters a shared execution-record model before runtime work begins, but orchestration ownership is still split above that layer.
-- Orchestration ownership is still split across the runtime service and the flow shell, not the runtime service and adapter layers.
+- `AgentRun` plus `FlowRun` still do not read as one fully unified orchestration surface above the envelope layer.
+- Orchestration ownership is still split across the runtime service and the flow shell.
 
 **Unstructured side effects**
 
@@ -91,10 +91,10 @@ Audit criteria:
 
 **Recommended fixes**
 
-1. Replace route-level `create -> maybe execute` with one `ExecutionRunner.run()` entrypoint for agent work.
-2. Move all post-completion orchestration into one shared orchestrator stage.
-3. Remove the remaining split ownership between `agent_runtime`, `flow_engine`, and `nodus_execution_service`; keep exactly one owner above the runtime layer.
-4. Introduce a system-wide execution envelope and map `AgentRun` to domain state inside it.
+1. ~~Introduce a system-wide execution envelope~~ **Done** — `core/execution_gate.py` + `execution_envelope` in agent/automation/flow/platform responses.
+2. Replace route-level `create -> maybe execute` with one `ExecutionRunner.run()` entrypoint for agent work.
+3. Move all post-completion orchestration into one shared orchestrator stage.
+4. Remove the remaining split ownership between `agent_runtime`, `flow_engine`, and `nodus_execution_service`; keep exactly one owner above the runtime layer.
 
 ### Task
 
@@ -321,20 +321,15 @@ But even agent still fails the canonical contract because the cross-system execu
 
 ## Recommended Remediation Order
 
-1. Introduce a shared `ExecutionRecord` model and `ExecutionRunner`.
-2. Make every execution route create an execution record before domain mutation.
+1. ~~Introduce a shared `ExecutionRecord` model and `ExecutionRunner`.~~ **Done** — `core/execution_gate.py` provides `require_execution_unit()` (EU creation before execution), `to_envelope()` (canonical shape), and adapter functions for all domain record types. Agent, automation, flow, and platform routes now create/attach ExecutionUnit before dispatch and embed `execution_envelope` in responses.
+2. ~~Make every execution route create an execution record before domain mutation.~~ **Done** for: `flow_router.resume_flow_run`, `automation_router.replay_automation_log`, `automation_router.trigger_task_automation`, `platform_router.compile_and_run_nodus_flow`, `nodus_execution_service.execute_nodus_task_payload`. Remaining: Task, Genesis, Watcher, ARM domain routes.
 3. Centralize post-execution work behind one `ExecutionOrchestrator`.
 4. Remove split or mirrored runtimes:
    - route-level auto-execute
    - deprecated `/memory/execute/complete` compatibility path
    - genesis observability-only flow mirroring
 5. Keep silent-failure paths out of execution-critical code and require explicit logging/observability on degraded side effects.
-6. Standardize all responses on canonical execution output:
-   - status
-   - persisted domain result
-   - orchestration result
-   - next action
-   - observability references
+6. ~~Standardize all responses on canonical execution output~~ **Partial** — agent, automation, flow, and platform responses now include `execution_envelope`. Task, Genesis, Watcher, ARM remain on domain-only payloads.
 
 ## Bottom Line
 
