@@ -1,5 +1,5 @@
 # Governance Index
-Last updated: 2026-04-05 (Tech debt and execution docs updated for orchestration, route-boundary, and agentics convergence)
+Last updated: 2026-04-05 (RetryPolicy system unified; RETRY_POLICY.md created; RUNTIME_BEHAVIOR, EXECUTION_AUDIT, TECH_DEBT, CHANGELOG updated)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.
@@ -12,6 +12,7 @@ This file is the authoritative registry of documentation scope and authority. It
 
 ### Level 2 – Operational Authority
 - `docs/architecture/RUNTIME_BEHAVIOR.md`
+- `docs/architecture/RETRY_POLICY.md` — unified retry semantics, data-flow diagrams, per-path behavior
 - `docs/architecture/DATA_MODEL_MAP.md`
 - `docs/architecture/MEMORY_BRIDGE.md`
 - `docs/governance/ERROR_HANDLING_POLICY.md`

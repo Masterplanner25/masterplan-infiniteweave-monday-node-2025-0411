@@ -47,6 +47,20 @@ This document describes the current runtime behavior of the FastAPI backend as i
   - watcher ingest
   - agent runtime
 
+## 4.1 Unified Retry Policy
+- All retry decisions across flow, agent, async-job, and Nodus scheduled execution are now resolved through `core/retry_policy.py`.
+- `RetryPolicy` is a frozen dataclass: `max_attempts`, `backoff_ms`, `exponential_backoff`, `high_risk_immediate_fail`.
+- `resolve_retry_policy(execution_type, ...)` is the single resolver. Hardcoded values in `flow_engine`, `nodus_adapter`, and `async_job_service` have been replaced with calls to the resolver.
+- Per-run node overrides: `run_nodus_script_via_flow(node_max_retries=N)` injects `flow["node_configs"]["nodus.execute"]["max_retries"] = N`. The flow engine reads this at the retry gate via `resolve_retry_policy(node_max_retries=...)`. The shared `NODUS_SCRIPT_FLOW` constant is never mutated.
+- Every `ExecutionUnit` carries `extra["retry_policy"]` (JSONB) populated by `require_execution_unit()` at gate time, making the policy observable without importing `RetryPolicy` at the read site.
+- Current defaults (all `backoff_ms=0` — no sleep between retries anywhere in the execution layer):
+  - Flow nodes: `max_attempts=3`
+  - Agent low/medium risk: `max_attempts=3`
+  - Agent high risk: `max_attempts=1`, `high_risk_immediate_fail=True`
+  - Async jobs: `max_attempts=1` (no retry by default)
+  - Nodus scheduled: `max_attempts=3`, overridable per `NodusScheduledJob.max_retries`
+- See `docs/architecture/RETRY_POLICY.md` for full data-flow diagrams and per-path behavior.
+
 ## 5. Middleware, Logging, and Error Handling
 - Rate limiting is enabled via SlowAPI middleware.
 - CORS is explicit-origin only via `ALLOWED_ORIGINS`; wildcard origins are not used.
