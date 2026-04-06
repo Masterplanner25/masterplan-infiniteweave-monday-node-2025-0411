@@ -29,12 +29,14 @@ Anything outside that shape is legacy behavior and should be treated as non-cano
 - `POST /apps/agent/runs/{run_id}/approve`
 - `POST /apps/agent/runs/{run_id}/replay`
 - Runtime: `agents.agent_runtime`
-- Executor: `runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow()`
+- Canonical executor entrypoint: `runtime.nodus_execution_service.execute_agent_run_via_nodus()`
+- Compatibility wrapper: `runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow()`
 
 Current behavior:
 
 - Closest subsystem to a canonical contract
-- Has explicit run records, approval, step persistence, lifecycle events, and flow-backed execution
+- Has explicit run records, approval, step persistence, lifecycle events, and canonical runtime entry through `nodus_execution_service`
+- Flow-backed orchestration still remains above that canonical runtime entrypoint for retry and lifecycle semantics
 
 ### Task
 
@@ -57,7 +59,7 @@ Current behavior:
 - `POST /apps/memory/nodus/execute`
 - `POST /apps/memory/recall`
 - `POST /apps/memory/recall/v3`
-- Runtime: canonical flow-backed execution for `/apps/memory/execute`; separate Nodus execution surface for `/apps/memory/nodus/execute`
+- Runtime: shared route-boundary execution wrapper plus canonical Nodus runtime/result helpers for memory execution surfaces
 
 Current behavior:
 
@@ -65,7 +67,7 @@ Current behavior:
 - Route entry now goes through the shared route-layer execution pipeline for memory APIs
 - `/memory/execute` is the active memory execution path
 - `/memory/execute/complete` is deprecated compatibility surface and not the canonical pattern
-- `/memory/nodus/execute` is still a separate execution surface, but it is now restricted by source validation, allowed-operation registration, and optional scoped capability tokens for write operations
+- `/memory/nodus/execute` still has a route-specific outer envelope, but it now reuses the canonical Nodus runtime/result helpers and shared execution metadata while remaining restricted by source validation, allowed-operation registration, and optional scoped capability tokens for write operations
 
 ### Genesis
 

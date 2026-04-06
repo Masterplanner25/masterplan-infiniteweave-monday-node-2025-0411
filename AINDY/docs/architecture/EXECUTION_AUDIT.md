@@ -70,10 +70,10 @@ Audit criteria:
 
 **Where it bypasses the contract**
 
-- Auto-execution still happens from the route after creation instead of through one unified execution entrypoint: `routes/agent_router.py:92-95`.
-- The canonical contract requires one execution envelope for the whole system. Agent uses `AgentRun` plus `FlowRun`, but not a shared `ExecutionRecord`.
-- Agent execution still does not enter a system-wide `ExecutionRecord` model before domain work begins.
-- Orchestration ownership is still split across the runtime and adapter layers.
+- Auto-execution can still be initiated from the route after creation, but the synchronous execution path now enters the shared route execution wrapper and the canonical runtime entrypoint rather than a fully separate adapter-owned path.
+- The canonical contract still requires one execution envelope for the whole system. Agent now exposes shared `execution_record` metadata, but `AgentRun` plus `FlowRun` still do not read as one fully unified orchestration surface.
+- Agent execution now enters a shared execution-record model before runtime work begins, but orchestration ownership is still split above that layer.
+- Orchestration ownership is still split across the runtime service and the flow shell, not the runtime service and adapter layers.
 
 **Unstructured side effects**
 
@@ -82,18 +82,18 @@ Audit criteria:
 
 **Exact violations**
 
-- `routes/agent_router.py:92-95`
-  Route decides whether to execute immediately instead of always entering a single execution pipeline.
-- `services/agent_runtime.py:403-427`
-  Agent completion still relies on runtime-specific post-processing rather than a single shared execution-orchestrator abstraction.
-- `services/nodus_adapter.py:319-339`
-  Adapter-level orchestration duplicates runtime responsibility.
+- `routes/agent_router.py`
+  Route still chooses between immediate and queued execution paths instead of always entering one identical orchestration surface.
+- `agents/agent_runtime.py`
+  Agent completion still relies on agent-specific post-processing rather than a single shared execution-orchestrator abstraction.
+- `runtime/flow_engine.py` and `runtime/nodus_execution_service.py`
+  Flow-shell orchestration and runtime orchestration are narrower than before, but still split responsibility above the canonical runtime entrypoint.
 
 **Recommended fixes**
 
 1. Replace route-level `create -> maybe execute` with one `ExecutionRunner.run()` entrypoint for agent work.
 2. Move all post-completion orchestration into one shared orchestrator stage.
-3. Remove duplicate orchestration from `agent_runtime` and `nodus_adapter`; keep exactly one owner.
+3. Remove the remaining split ownership between `agent_runtime`, `flow_engine`, and `nodus_execution_service`; keep exactly one owner above the runtime layer.
 4. Introduce a system-wide execution envelope and map `AgentRun` to domain state inside it.
 
 ### Task
@@ -152,9 +152,9 @@ Audit criteria:
 
 **Where it bypasses the contract**
 
-- `/memory/execute` has been moved into the canonical flow path, but `/memory/nodus/execute` remains a separate executor surface.
+- `/memory/execute` has been moved into the canonical flow path, and `/memory/nodus/execute` now reuses the same canonical Nodus runtime/result helpers, but the route still preserves a separate top-level outer envelope.
 - `/memory/execute/complete` is deprecated compatibility surface and not part of the canonical path.
-- `/memory/nodus/execute` is a separate execution system with its own lifecycle and no canonical orchestration stage, even though source validation and operation allowlists are now enforced at the route boundary: `routes/memory_router.py:842-918`.
+- `/memory/nodus/execute` is no longer a fully separate execution engine, but it still has route-specific lifecycle and envelope handling above the canonical runtime helpers: `routes/memory_router.py`.
 
 **Unstructured side effects**
 
@@ -162,8 +162,8 @@ Audit criteria:
 
 **Exact violations**
 
-- `routes/memory_router.py:842-918`
-  Nodus path is its own bypass executor.
+- `routes/memory_router.py`
+  Nodus path still keeps route-specific outer handling even though the inner runtime path is now canonical.
 - `routes/memory_router.py:1021-1088`
   Deprecated completion endpoint still exposes the old split-path model.
 

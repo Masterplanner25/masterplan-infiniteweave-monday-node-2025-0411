@@ -1,5 +1,5 @@
 # Governance Index
-Last updated: 2026-04-05 (Tech debt updated for execution, agentics, and route-learning convergence)
+Last updated: 2026-04-05 (Tech debt and execution docs updated for orchestration, route-boundary, and agentics convergence)
 Update rule: Change this date whenever any file under `docs/` is modified.
 
 This file is the authoritative registry of documentation scope and authority. It defines hierarchy, change protocols, and agent obligations.
@@ -83,7 +83,6 @@ This file is the first document AI agents must read before performing architectu
 ## 8. Doc Ownership
 - Governance documents require explicit human sign-off by the project owner or designated maintainer.
 - Designated maintainer: Shawn Knight.
-
 
 
 
