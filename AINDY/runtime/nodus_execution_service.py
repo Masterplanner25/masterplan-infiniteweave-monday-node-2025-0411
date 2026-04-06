@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import logging
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -17,6 +18,8 @@ from runtime.nodus_security import (
 )
 from utils.user_ids import parse_user_id
 from utils.user_ids import require_user_id
+
+logger = logging.getLogger(__name__)
 
 
 def build_nodus_execution_summary(nodus_result) -> dict[str, Any]:
@@ -165,6 +168,154 @@ def format_nodus_flow_result(flow_result: dict[str, Any]) -> dict[str, Any]:
         ),
     )
 
+def execute_agent_flow_orchestration(
+    *,
+    run_id: str,
+    plan: dict[str, Any],
+    user_id: str,
+    db: Session,
+    correlation_id: str | None = None,
+    execution_token: dict[str, Any] | None = None,
+    capability_token: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Canonical flow-backed agent execution path.
+
+    The adapter remains import-compatible, but actual flow orchestration lives
+    here so agent_runtime and any compatibility wrappers converge on one
+    runtime-owned execution shell.
+    """
+    from datetime import datetime, timezone
+
+    from agents.capability_service import check_execution_capability
+    from core.execution_signal_helper import queue_system_event, record_agent_event
+    from db.models.agent_run import AgentRun, AgentStep
+    from runtime.flow_engine import PersistentFlowRunner
+    from runtime.nodus_adapter import AGENT_FLOW, _db_run_id
+
+    emit_system_event = queue_system_event
+
+    try:
+        steps = (plan or {}).get("steps", [])
+        scoped_token = execution_token or capability_token
+        flow_capability_check = {"ok": False, "error": "missing scoped capability token"}
+        if scoped_token is not None:
+            flow_capability_check = check_execution_capability(
+                token=scoped_token,
+                run_id=run_id,
+                user_id=user_id,
+                capability_name="execute_flow",
+            )
+        if not flow_capability_check["ok"]:
+            agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
+            if agent_run and agent_run.status == "executing":
+                agent_run.status = "failed"
+                agent_run.completed_at = datetime.now(timezone.utc)
+                agent_run.error_message = flow_capability_check["error"]
+                agent_run.result = {"steps": []}
+            emit_system_event(
+                db=db,
+                event_type="capability.denied",
+                user_id=user_id,
+                trace_id=correlation_id,
+                source="agent",
+                payload={
+                    "run_id": str(run_id),
+                    "capability": "execute_flow",
+                    "error": flow_capability_check["error"],
+                },
+                required=True,
+            )
+            record_agent_event(
+                run_id=run_id,
+                user_id=user_id,
+                event_type="CAPABILITY_DENIED",
+                db=db,
+                correlation_id=correlation_id,
+                payload={
+                    "capability": "execute_flow",
+                    "error": flow_capability_check["error"],
+                },
+                required=True,
+            )
+            logger.warning(
+                "[NodusExecutionService] Flow capability denied for AgentRun %s: %s",
+                run_id,
+                flow_capability_check["error"],
+            )
+            return {"status": "FAILED", "error": flow_capability_check["error"]}
+        emit_system_event(
+            db=db,
+            event_type="capability.allowed",
+            user_id=user_id,
+            trace_id=correlation_id,
+            source="agent",
+            payload={"run_id": str(run_id), "capability": "execute_flow"},
+            required=True,
+        )
+
+        initial_state = {
+            "agent_run_id": run_id,
+            "user_id": user_id,
+            "steps": steps,
+            "memory_context": (plan or {}).get("memory_context", {}),
+            "current_step_index": 0,
+            "step_results": [],
+            "correlation_id": correlation_id,
+            "execution_token": scoped_token,
+        }
+
+        runner = PersistentFlowRunner(
+            flow=AGENT_FLOW,
+            db=db,
+            user_id=user_id,
+            workflow_type="agent_execution",
+        )
+
+        logger.info(
+            "[NodusExecutionService] Starting flow for AgentRun %s (%d steps)",
+            run_id,
+            len(steps),
+        )
+        flow_result = runner.start(initial_state, flow_name="agent_execution")
+
+        flow_run_id = flow_result.get("run_id")
+        if flow_run_id:
+            agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
+            if agent_run:
+                agent_run.flow_run_id = str(flow_run_id)
+                db.commit()
+
+        if flow_result.get("status") != "SUCCESS":
+            agent_run = db.query(AgentRun).filter(AgentRun.id == _db_run_id(run_id)).first()
+            if agent_run and agent_run.status == "executing":
+                completed_steps = (
+                    db.query(AgentStep)
+                    .filter(AgentStep.run_id == _db_run_id(run_id))
+                    .order_by(AgentStep.step_index.asc())
+                    .all()
+                )
+                step_results = [
+                    {
+                        "step_index": s.step_index,
+                        "tool": s.tool_name,
+                        "status": s.status,
+                        "result": s.result,
+                        "error": s.error_message,
+                    }
+                    for s in completed_steps
+                ]
+                agent_run.status = "failed"
+                agent_run.completed_at = datetime.now(timezone.utc)
+                agent_run.result = {"steps": step_results}
+                agent_run.error_message = flow_result.get("error", "Flow execution failed")
+                db.commit()
+
+        return flow_result
+    except Exception as exc:
+        logger.warning("[NodusExecutionService] execute_agent_flow_orchestration failed: %s", exc)
+        return {"status": "FAILED", "error": str(exc)}
+
 
 def execute_agent_run_via_nodus(
     *,
@@ -185,7 +336,19 @@ def execute_agent_run_via_nodus(
     """
     from runtime.nodus_adapter import NodusAgentAdapter
 
-    return NodusAgentAdapter.execute_with_flow(
+    adapter_entrypoint = NodusAgentAdapter.execute_with_flow
+    if not getattr(adapter_entrypoint, "__aindy_compat_wrapper__", False):
+        return adapter_entrypoint(
+            run_id=run_id,
+            plan=plan,
+            user_id=user_id,
+            db=db,
+            correlation_id=correlation_id,
+            execution_token=execution_token,
+            capability_token=capability_token,
+        )
+
+    return execute_agent_flow_orchestration(
         run_id=run_id,
         plan=plan,
         user_id=user_id,
