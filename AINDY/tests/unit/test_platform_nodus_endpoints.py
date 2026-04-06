@@ -230,6 +230,13 @@ class TestFormatNodusResponse:
         assert result["events_emitted"] == 0
         assert result["memory_writes_count"] == 0
 
+    def test_delegates_to_shared_runtime_formatter(self):
+        expected = {"status": "SUCCESS", "run_id": "r1"}
+        with patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value=expected) as mock_format:
+            result = self._format({"status": "SUCCESS"})
+        mock_format.assert_called_once_with({"status": "SUCCESS"})
+        assert result == expected
+
 
 # ── _ensure_nodus_flow_registered ────────────────────────────────────────────
 
@@ -247,35 +254,21 @@ class TestEnsureNodusFlowRegistered:
             assert callable(_ensure_nodus_flow_registered)
 
     def test_registers_nodus_execute_into_flow_registry(self):
-        captured_registrations: list[str] = []
-
-        def mock_register(name, flow):
-            captured_registrations.append(name)
-
-        with patch("runtime.flow_engine.FLOW_REGISTRY", {}), \
-             patch("runtime.flow_engine.register_flow", side_effect=mock_register), \
-             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}):
+        with patch("runtime.nodus_execution_service.ensure_nodus_script_flow_registered") as mock_ensure:
             m = _module()
             m._ensure_nodus_flow_registered()
 
-        # At minimum it should attempt to register 'nodus_execute'
-        # (may already be registered in current test process, so we just
-        # verify the function doesn't raise)
-        from routes.platform_router import _ensure_nodus_flow_registered
-        _ensure_nodus_flow_registered()  # must not raise
+        mock_ensure.assert_called_once()
 
 
 # ── _run_nodus_script ─────────────────────────────────────────────────────────
 
 class TestRunNodusScript:
     def test_delegates_to_persistent_flow_runner(self):
-        mock_runner = MagicMock()
-        mock_runner.start.return_value = {"status": "SUCCESS", "state": {}, "data": {}}
-
-        with patch("routes.platform_router._ensure_nodus_flow_registered"), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": {}}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="user-123"):
+        with patch(
+            "runtime.nodus_execution_service.run_nodus_script_via_flow",
+            return_value={"status": "SUCCESS", "state": {}, "data": {}},
+        ) as mock_run:
             from routes.platform_router import _run_nodus_script
             result = _run_nodus_script(
                 script="let x = 1",
@@ -285,12 +278,7 @@ class TestRunNodusScript:
                 user_id="user-123",
             )
 
-        mock_runner.start.assert_called_once()
-        call_kwargs = mock_runner.start.call_args
-        initial_state = call_kwargs[1]["initial_state"] if "initial_state" in call_kwargs[1] else call_kwargs[0][0]
-        assert initial_state["nodus_script"] == "let x = 1"
-        assert initial_state["nodus_input_payload"] == {"goal": "test"}
-        assert initial_state["nodus_error_policy"] == "fail"
+        mock_run.assert_called_once()
         assert result["status"] == "SUCCESS"
 
 

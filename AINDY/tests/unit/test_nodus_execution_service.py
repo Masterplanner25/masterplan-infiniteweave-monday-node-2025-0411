@@ -146,3 +146,66 @@ def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(mo
     assert result["status"] == "bridge_ready"
     assert "Nodus runtime not found" in result["message"]
     assert "POST /memory/recall/v3" in result["available_operations"]
+
+
+def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
+    from runtime import nodus_execution_service as service
+
+    mock_runner = MagicMock()
+    mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "run-1", "trace_id": "trace-1"}
+    runner_cls = MagicMock(return_value=mock_runner)
+
+    monkeypatch.setattr(service, "ensure_nodus_script_flow_registered", lambda: None)
+
+    with patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": {"start": "nodus.execute"}}), \
+         patch("runtime.flow_engine.PersistentFlowRunner", runner_cls), \
+         patch("utils.uuid_utils.normalize_uuid", return_value="user-1"):
+        result = service.run_nodus_script_via_flow(
+            script="let x = 1",
+            input_payload={"value": 1},
+            error_policy="fail",
+            db=MagicMock(),
+            user_id="user-1",
+        )
+
+    runner_cls.assert_called_once()
+    mock_runner.start.assert_called_once_with(
+        initial_state={
+            "nodus_script": "let x = 1",
+            "nodus_input_payload": {"value": 1},
+            "nodus_error_policy": "fail",
+        },
+        flow_name="nodus_execute",
+    )
+    assert result["status"] == "SUCCESS"
+
+
+def test_format_nodus_flow_result_uses_shared_execution_record_shape():
+    from runtime import nodus_execution_service as service
+
+    result = service.format_nodus_flow_result(
+        {
+            "status": "SUCCESS",
+            "trace_id": "trace-1",
+            "run_id": "run-1",
+            "state": {
+                "nodus_status": "success",
+                "nodus_output_state": {"value": 2},
+                "nodus_events": [{"event_type": "done"}],
+                "nodus_memory_writes": [{"args": ["memo"]}],
+                "nodus_execute_result": {
+                    "status": "success",
+                    "output_state": {"value": 2},
+                    "events_emitted": 1,
+                    "memory_writes": 1,
+                    "error": None,
+                },
+            },
+            "data": {},
+        }
+    )
+
+    assert result["status"] == "SUCCESS"
+    assert result["nodus_status"] == "success"
+    assert result["execution_record"]["workflow_type"] == "nodus_execute"
+    assert result["execution_record"]["trace_id"] == "trace-1"
