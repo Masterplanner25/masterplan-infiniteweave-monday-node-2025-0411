@@ -166,6 +166,9 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
             error_policy="fail",
             db=MagicMock(),
             user_id="user-1",
+            workflow_type="nodus_schedule",
+            trace_id="trace-9",
+            extra_initial_state={"schedule_id": "job-1"},
         )
 
     runner_cls.assert_called_once()
@@ -174,6 +177,8 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
             "nodus_script": "let x = 1",
             "nodus_input_payload": {"value": 1},
             "nodus_error_policy": "fail",
+            "trace_id": "trace-9",
+            "schedule_id": "job-1",
         },
         flow_name="nodus_execute",
     )
@@ -211,10 +216,10 @@ def test_format_nodus_flow_result_uses_shared_execution_record_shape():
     assert result["execution_record"]["trace_id"] == "trace-1"
 
 
-def test_execute_agent_run_via_nodus_delegates_to_adapter():
+def test_execute_agent_run_via_nodus_delegates_to_canonical_agent_flow_helper():
     from runtime import nodus_execution_service as service
 
-    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS"}) as mock_execute:
+    with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
         result = service.execute_agent_run_via_nodus(
             run_id="run-1",
             plan={"steps": []},
@@ -234,3 +239,53 @@ def test_execute_agent_run_via_nodus_delegates_to_adapter():
         capability_token=None,
     )
     assert result["status"] == "SUCCESS"
+
+
+def test_adapter_execute_with_flow_is_compatibility_wrapper():
+    from runtime.nodus_adapter import NodusAgentAdapter
+
+    with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
+        result = NodusAgentAdapter.execute_with_flow(
+            run_id="run-2",
+            plan={"steps": [{"tool": "task.create"}]},
+            user_id="user-2",
+            db=MagicMock(),
+            correlation_id="corr-2",
+            capability_token={"capability_token": "token"},
+        )
+
+    mock_execute.assert_called_once_with(
+        run_id="run-2",
+        plan={"steps": [{"tool": "task.create"}]},
+        user_id="user-2",
+        db=mock_execute.call_args.kwargs["db"],
+        correlation_id="corr-2",
+        execution_token=None,
+        capability_token={"capability_token": "token"},
+    )
+    assert result["status"] == "SUCCESS"
+
+
+def test_execute_agent_run_via_nodus_honors_patched_adapter_entrypoint():
+    from runtime import nodus_execution_service as service
+
+    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS", "patched": True}) as mock_execute:
+        result = service.execute_agent_run_via_nodus(
+            run_id="run-3",
+            plan={"steps": [{"tool": "task.create"}]},
+            user_id="user-3",
+            db=MagicMock(),
+            correlation_id="corr-3",
+            capability_token={"capability_token": "token"},
+        )
+
+    mock_execute.assert_called_once_with(
+        run_id="run-3",
+        plan={"steps": [{"tool": "task.create"}]},
+        user_id="user-3",
+        db=mock_execute.call_args.kwargs["db"],
+        correlation_id="corr-3",
+        execution_token=None,
+        capability_token={"capability_token": "token"},
+    )
+    assert result == {"status": "SUCCESS", "patched": True}
