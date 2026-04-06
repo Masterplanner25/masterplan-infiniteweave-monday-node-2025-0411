@@ -18,6 +18,7 @@ from agents.autonomous_controller import evaluate_live_trigger
 from agents.autonomous_controller import record_decision
 from core.execution_envelope import error as execution_error
 from core.execution_envelope import success as execution_success
+from core.execution_record_service import record_from_automation_log
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
 from utils.trace_context import get_parent_event_id
@@ -69,12 +70,30 @@ def register_async_job(name: str):
 
 
 def build_queued_response(log_id: str, *, task_name: str, source: str) -> dict[str, Any]:
+    execution_record = record_from_automation_log(
+        type("QueuedLog", (), {
+            "id": log_id,
+            "trace_id": log_id,
+            "status": "pending",
+            "error_message": None,
+            "result": None,
+            "source": source,
+            "task_name": task_name,
+            "user_id": None,
+            "created_at": None,
+            "updated_at": None,
+            "completed_at": None,
+        })(),
+        workflow_type=task_name,
+        source=source,
+    )
     response = execution_success(
         result={
             "automation_log_id": log_id,
             "task_name": task_name,
             "source": source,
             "poll_url": f"/automation/logs/{log_id}",
+            "execution_record": execution_record,
         },
         events=[],
         trace_id=log_id,
@@ -84,6 +103,7 @@ def build_queued_response(log_id: str, *, task_name: str, source: str) -> dict[s
         },
     )
     response["status"] = "QUEUED"
+    response["execution_record"] = execution_record
     return response
 
 
@@ -94,6 +114,24 @@ def build_deferred_response(
     source: str,
     decision: dict[str, Any],
 ) -> dict[str, Any]:
+    execution_record = record_from_automation_log(
+        type("DeferredLog", (), {
+            "id": log_id,
+            "trace_id": log_id,
+            "status": "deferred",
+            "error_message": None,
+            "result": decision,
+            "source": source,
+            "task_name": task_name,
+            "user_id": None,
+            "created_at": None,
+            "updated_at": None,
+            "completed_at": None,
+        })(),
+        workflow_type=task_name,
+        source=source,
+        result_summary=decision,
+    )
     response = build_decision_response(
         decision,
         trace_id=log_id,
@@ -105,6 +143,7 @@ def build_deferred_response(
             "decision": decision.get("decision"),
             "priority": decision.get("priority"),
             "reason": decision.get("reason"),
+            "execution_record": execution_record,
         },
         next_action={
             "type": "retry_when_system_state_improves",
@@ -112,6 +151,7 @@ def build_deferred_response(
         },
     )
     response["status"] = "DEFERRED"
+    response["execution_record"] = execution_record
     return response
 
 
@@ -199,6 +239,20 @@ def submit_async_job(
         db.add(log)
         db.commit()
         db.refresh(log)
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+            ExecutionUnitService(db).create(
+                eu_type="job",
+                user_id=user_uuid,
+                source_type="automation_log",
+                source_id=log_id,
+                correlation_id=log_id,
+                status="pending",
+                extra={"task_name": task_name, "source": source, "workflow_type": task_name},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         _emit_async_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
@@ -298,6 +352,20 @@ def defer_async_job(
         db.add(log)
         db.commit()
         db.refresh(log)
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+            ExecutionUnitService(db).create(
+                eu_type="job",
+                user_id=user_uuid,
+                source_type="automation_log",
+                source_id=log_id,
+                correlation_id=log_id,
+                status="pending",
+                extra={"task_name": task_name, "source": source, "workflow_type": task_name},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         record_decision(
             db=db,
             trigger={
@@ -520,6 +588,13 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         log.status = "running"
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+            _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+            if _eu:
+                ExecutionUnitService(db).update_status(_eu.id, "executing")
+        except Exception:
+            pass
         if queued_event_exists:
             started_event_id = _emit_async_system_event(
                 db=db,
@@ -565,6 +640,13 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         log.status = "success"
         log.result = _normalize_result(result)
         log.completed_at = datetime.now(timezone.utc)
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+            _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+            if _eu:
+                ExecutionUnitService(db).update_status(_eu.id, "completed")
+        except Exception:
+            pass
         duration_ms = _duration_ms(log.started_at, log.completed_at)
         if queued_event_exists:
             _emit_async_system_event(
@@ -612,6 +694,13 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             log.error_message = str(exc)
             log.result = _normalize_result(failure_response)
             log.completed_at = datetime.now(timezone.utc)
+            try:
+                from core.execution_unit_service import ExecutionUnitService
+                _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+                if _eu:
+                    ExecutionUnitService(db).update_status(_eu.id, "failed")
+            except Exception:
+                pass
             duration_ms = _duration_ms(log.started_at, log.completed_at)
             if _has_existing_execution_started(db, str(log_id)):
                 _emit_async_system_event(

@@ -214,7 +214,12 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
             from domain.infinity_loop import get_latest_adjustment
 
             latest = get_latest_adjustment(user_id=user_id, db=db)
-            persisted_suggestions = (getattr(latest, "adjustment_payload", {}) or {}).get("suggestions", [])
+            payload = getattr(latest, "adjustment_payload", {}) if latest is not None else {}
+            if not isinstance(payload, dict):
+                payload = {}
+            persisted_suggestions = payload.get("suggestions", [])
+            if not isinstance(persisted_suggestions, list):
+                persisted_suggestions = []
             if persisted_suggestions:
                 return persisted_suggestions[:3]
         except Exception as exc:

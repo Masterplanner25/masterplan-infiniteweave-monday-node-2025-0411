@@ -51,6 +51,7 @@ emit_system_event = queue_system_event
 from agents.capability_service import check_execution_capability, check_tool_capability
 from agents.agent_tools import execute_tool
 from runtime.flow_engine import PersistentFlowRunner, register_node
+from runtime.nodus_execution_service import build_nodus_execution_summary
 from runtime.nodus_execution_service import execute_nodus_runtime
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
@@ -907,18 +908,13 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     )
 
     # ── Map NodusExecutionResult → flow node contract ─────────────────────────
+    execution_summary = build_nodus_execution_summary(nodus_result)
     output_patch: dict = {
         "nodus_status": nodus_result.status,
         "nodus_output_state": nodus_result.output_state,
         "nodus_events": nodus_result.emitted_events,
         "nodus_memory_writes": nodus_result.memory_writes,
-        "nodus_execute_result": {
-            "status": nodus_result.status,
-            "output_state": nodus_result.output_state,
-            "events_emitted": len(nodus_result.emitted_events),
-            "memory_writes": len(nodus_result.memory_writes),
-            "error": nodus_result.error,
-        },
+        "nodus_execute_result": execution_summary,
     }
 
     if success:

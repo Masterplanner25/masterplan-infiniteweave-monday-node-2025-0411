@@ -395,35 +395,29 @@ def _format_nodus_response(flow_result: dict) -> dict:
     memory_writes_count int
     error               str | None — script error message (if nodus_status="failure")
     """
+    from runtime.nodus_execution_service import build_nodus_execution_record
+
     final_state = flow_result.get("state") or {}
     # _extract_execution_result maps "nodus_execute" → state["nodus_execute_result"]
     nodus_result = flow_result.get("data") or {}
     if not isinstance(nodus_result, dict) or "status" not in nodus_result:
         nodus_result = final_state.get("nodus_execute_result") or {}
 
-    return {
-        "status": flow_result.get("status"),
-        "trace_id": flow_result.get("trace_id"),
-        "run_id": flow_result.get("run_id"),
-        "nodus_status": (
-            final_state.get("nodus_status")
-            or nodus_result.get("status")
-        ),
-        "output_state": (
-            nodus_result.get("output_state")
-            or final_state.get("nodus_output_state")
-            or {}
-        ),
-        "events": final_state.get("nodus_events") or [],
-        "memory_writes": final_state.get("nodus_memory_writes") or [],
-        "events_emitted": nodus_result.get("events_emitted", 0),
-        "memory_writes_count": nodus_result.get("memory_writes", 0),
-        "error": (
+    return build_nodus_execution_record(
+        flow_status=flow_result.get("status"),
+        trace_id=flow_result.get("trace_id"),
+        run_id=flow_result.get("run_id"),
+        nodus_summary=nodus_result,
+        nodus_status=final_state.get("nodus_status") or nodus_result.get("status"),
+        output_state=nodus_result.get("output_state") or final_state.get("nodus_output_state") or {},
+        events=final_state.get("nodus_events") or [],
+        memory_writes=final_state.get("nodus_memory_writes") or [],
+        error=(
             nodus_result.get("error")
             or final_state.get("nodus_handled_error")
             or (None if flow_result.get("status") != "FAILED" else flow_result.get("error"))
         ),
-    }
+    )
 
 
 def _validate_nodus_source(source: str, field: str = "script") -> None:

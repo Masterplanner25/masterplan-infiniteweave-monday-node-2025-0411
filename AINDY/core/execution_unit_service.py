@@ -293,6 +293,30 @@ class ExecutionUnitService:
             "completed_at": _iso(getattr(flow_run, "completed_at", None)),
         }
 
+    @staticmethod
+    def view_from_automation_log(log) -> dict:
+        """Return an EU-shaped dict from an AutomationLog ORM object without touching the DB."""
+        return {
+            "id": None,
+            "type": "job",
+            "status": _map_job_status(getattr(log, "status", "pending")),
+            "user_id": str(log.user_id) if getattr(log, "user_id", None) else None,
+            "source_type": "automation_log",
+            "source_id": str(log.id),
+            "parent_id": None,
+            "flow_run_id": None,
+            "correlation_id": str(getattr(log, "trace_id", None) or getattr(log, "id", None) or ""),
+            "memory_context_ids": [],
+            "output_memory_ids": [],
+            "extra": {
+                "task_name": getattr(log, "task_name", None),
+                "source": getattr(log, "source", None),
+            },
+            "created_at": _iso(getattr(log, "created_at", None)),
+            "updated_at": _iso(getattr(log, "updated_at", None)),
+            "completed_at": _iso(getattr(log, "completed_at", None)),
+        }
+
     # ── Serializer ────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -363,5 +387,19 @@ def _map_flow_status(status: str) -> str:
         "waiting": "waiting",
         "success": "completed",
         "failed": "failed",
+    }.get(status, "pending")
+
+
+def _map_job_status(status: str) -> str:
+    return {
+        "pending": "pending",
+        "queued": "pending",
+        "deferred": "pending",
+        "ignored": "pending",
+        "running": "executing",
+        "success": "completed",
+        "completed": "completed",
+        "failed": "failed",
+        "error": "failed",
     }.get(status, "pending")
 
