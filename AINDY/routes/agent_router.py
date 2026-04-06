@@ -61,8 +61,11 @@ def _flow_failure(result: dict) -> str:
 def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
     """Run a flow and interpret special response markers from agent nodes."""
     from runtime.flow_engine import run_flow
+    from core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, payload, db=db, user_id=str(user_id))
-    data = result.get("data") or {}
+    data = result.get("data")
+    if data is None:
+        data = {}
 
     if isinstance(data, dict):
         # 202 deferred
@@ -84,6 +87,19 @@ def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
             raise HTTPException(status_code=400, detail=detail)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
 
+    if isinstance(data, dict):
+        # Use to_envelope with output=None: data IS the output, embedding
+        # flow_result_to_envelope() would create a circular reference via output→data.
+        from core.execution_gate import to_envelope
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"),
+            trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None,
+            error=result.get("error"),
+            duration_ms=None,
+            attempt_count=None,
+        ))
     return data
 
 

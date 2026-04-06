@@ -10,6 +10,25 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Execution Unification Layer — 2026-04-05
+
+### Added
+* **`core/execution_gate.py`** — new unification layer. `require_execution_unit()` creates or attaches an `ExecutionUnit` record before any execution begins (idempotent, non-fatal). `to_envelope()` produces the canonical `{eu_id, trace_id, status, output, error, duration_ms, attempt_count}` shape. Adapter functions `flow_result_to_envelope()`, `agent_result_to_envelope()`, `nodus_result_to_envelope()`, and `job_result_to_envelope()` map existing domain records to that shape without model deletion.
+* **`core/execution_envelope.py`** — added `unified()` function alongside existing `success()` and `error()` helpers.
+
+### Changed
+* **`runtime/nodus_execution_service.py`** — EU creation moved before `execute_nodus_runtime()` call (was created after completion). Pre-EU lifecycle: create EU → execute → update status. Ensures stuck runs are tracked even if the process dies mid-execution.
+* **`routes/agent_router.py`** — `_run_flow_agent()` embeds `execution_envelope` in dict-typed results using `to_envelope(..., output=None)`. Fixed `data = result.get("data") or {}` coercing empty lists to dicts (now uses explicit `if data is None` guard — fixes `test_no_cross_user_leakage`).
+* **`routes/automation_router.py`** — `_run_flow_automation()` embeds `execution_envelope`; `replay_automation_log` and `trigger_task_automation` handlers now call `require_execution_unit()` before dispatch.
+* **`routes/flow_router.py`** — `resume_flow_run` handler calls `require_execution_unit()` before dispatch and embeds `execution_envelope` in response.
+* **`routes/platform_router.py`** — `compile_and_run_nodus_flow` now runs full EU lifecycle around `PersistentFlowRunner.start()` (the only route that called it directly). `_run_flow_platform()` and `run_nodus_script` embed `execution_envelope` in responses.
+
+### Results
+* Tests: 2,088 passing, 19 skipped — all green
+* No new test failures introduced
+
+---
+
 ## Current Workspace
 
 ### Fixed

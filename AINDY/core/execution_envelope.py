@@ -34,6 +34,34 @@ def error(message: str, events: list[Any] | None, trace_id: str) -> dict[str, An
     }
 
 
+def unified(
+    *,
+    eu_id: str | None,
+    trace_id: str | None,
+    status: str,
+    output: Any,
+    error: str | None,
+    duration_ms: Any = None,
+    attempt_count: Any = None,
+) -> dict[str, Any]:
+    """
+    Canonical ExecutionEnvelope used by the unification layer (execution_gate.py).
+
+    This is the single, stable shape that all execution paths must produce.
+    Existing ``success()`` / ``error()`` helpers are preserved for backward
+    compatibility with current route handlers — new code should use this.
+    """
+    return {
+        "eu_id": eu_id,
+        "trace_id": str(trace_id) if trace_id else None,
+        "status": status,
+        "output": output,
+        "error": error,
+        "duration_ms": duration_ms,
+        "attempt_count": attempt_count,
+    }
+
+
 def adapt_pipeline_result(result: Any, *, next_action: Any = None) -> dict[str, Any] | JSONResponse | Response:
     trace_id = str(getattr(result, "metadata", {}).get("trace_id") or "")
     status_code = int(

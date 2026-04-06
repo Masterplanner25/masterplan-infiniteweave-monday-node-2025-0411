@@ -36,6 +36,7 @@ def _flow_failure(result: dict) -> str:
 
 def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: str):
     from runtime.flow_engine import run_flow
+    from core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = _flow_failure(result)
@@ -45,7 +46,21 @@ def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: st
             msg = parts[1] if len(parts) > 1 else error
             raise HTTPException(status_code=code, detail=msg)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
-    return result.get("data")
+    data = result.get("data")
+    if isinstance(data, dict):
+        # Use to_envelope with output=None: data IS the output, embedding
+        # flow_result_to_envelope() would create a circular reference via output→data.
+        from core.execution_gate import to_envelope
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"),
+            trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None,
+            error=result.get("error"),
+            duration_ms=None,
+            attempt_count=None,
+        ))
+    return data
 
 
 async def _execute_automation(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
@@ -125,6 +140,17 @@ async def replay_automation_log(
                 )
 
     def handler(_ctx):
+        from core.execution_gate import require_execution_unit
+        # EU gate: attach to existing AutomationLog EU (idempotent; non-fatal)
+        require_execution_unit(
+            db=db,
+            eu_type="job",
+            user_id=user_id,
+            source_type="automation_log",
+            source_id=log_id,
+            correlation_id=log_id,
+            extra={"workflow_type": "automation_replay"},
+        )
         return _run_flow_automation("automation_log_replay", {"log_id": log_id}, db, user_id)
     return await _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id,
                                      input_payload={"automation_log_id": log_id})
@@ -152,6 +178,18 @@ async def trigger_task_automation(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
+        import uuid as _uuid
+        from core.execution_gate import require_execution_unit
+        # EU gate: create before trigger dispatch (non-fatal)
+        require_execution_unit(
+            db=db,
+            eu_type="job",
+            user_id=user_id,
+            source_type="automation_task_trigger",
+            source_id=str(task_id),
+            correlation_id=str(task_id),
+            extra={"task_id": task_id, "automation_type": body.automation_type, "workflow_type": "automation_trigger"},
+        )
         return _run_flow_automation(
             "automation_task_trigger",
             {"task_id": task_id, "automation_type": body.automation_type, "automation_config": body.automation_config},

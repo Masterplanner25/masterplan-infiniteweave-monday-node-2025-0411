@@ -122,6 +122,17 @@ async def resume_flow_run(
     """Resume a waiting flow run with an event."""
     def handler(_ctx):
         from runtime.flow_engine import run_flow
+        from core.execution_gate import require_execution_unit
+        # EU gate: attach to the existing FlowRun being resumed (non-fatal)
+        require_execution_unit(
+            db=db,
+            eu_type="flow",
+            user_id=str(current_user["sub"]),
+            source_type="flow_run",
+            source_id=run_id,
+            correlation_id=run_id,
+            extra={"workflow_type": "flow_resume", "event_type": body.event_type},
+        )
         result = run_flow(
             "flow_run_resume",
             {"run_id": run_id, "event_type": body.event_type, "payload": body.payload},
@@ -135,7 +146,21 @@ async def resume_flow_run(
             if "400" in error:
                 raise HTTPException(400, error.split(":", 1)[-1] if ":" in error else error)
             raise HTTPException(500, "Resume failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if isinstance(data, dict):
+            # Use to_envelope with output=None: data IS the output, embedding
+            # flow_result_to_envelope() would create a circular reference via output→data.
+            from core.execution_gate import to_envelope
+            data.setdefault("execution_envelope", to_envelope(
+                eu_id=result.get("run_id"),
+                trace_id=result.get("trace_id"),
+                status=str(result.get("status") or "UNKNOWN").upper(),
+                output=None,
+                error=result.get("error"),
+                duration_ms=None,
+                attempt_count=None,
+            ))
+        return data
     return await _execute_flow(request, "flow.runs.resume", handler, user_id=str(current_user["sub"]), db=db)
 
 

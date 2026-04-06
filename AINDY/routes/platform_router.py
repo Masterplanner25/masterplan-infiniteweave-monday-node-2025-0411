@@ -308,6 +308,7 @@ _SCRIPTS_DIR = Path(__file__).parent.parent / "scripts" / "nodus"
 
 def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | None) -> dict:
     from runtime.flow_engine import run_flow
+    from core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, state, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -317,9 +318,9 @@ def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | 
             msg = parts[1] if len(parts) > 1 else error
             raise HTTPException(status_code=code, detail=msg)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
-    # Return full execution envelope for dynamic flows — caller sees status, data,
-    # run_id, trace_id.  _extract_execution_result returns the full final state for
-    # unknown flow names, which is the most useful response for dynamic callers.
+    # Embed execution_envelope so callers get the canonical shape alongside the
+    # full flow result (status, data, run_id, trace_id remain unchanged).
+    result.setdefault("execution_envelope", flow_result_to_envelope(result))
     return result
 
 
@@ -1021,6 +1022,7 @@ def run_nodus_script(
             script_source = record["content"]
 
     def handler(_ctx):
+        from core.execution_gate import flow_result_to_envelope
         flow_result = _run_nodus_script(
             script=script_source,
             input_payload=body.input,
@@ -1028,7 +1030,9 @@ def run_nodus_script(
             db=db,
             user_id=user_id,
         )
-        return _format_nodus_response(flow_result)
+        formatted = _format_nodus_response(flow_result)
+        formatted.setdefault("execution_envelope", flow_result_to_envelope(flow_result))
+        return formatted
 
     return execute_with_pipeline_sync(
         request=request,
@@ -1287,7 +1291,21 @@ def compile_and_run_nodus_flow(
             response["registered"] = True
 
         if body.run:
+            import uuid as _uuid
+            from core.execution_gate import require_execution_unit, flow_result_to_envelope
             uid = normalize_uuid(user_id) if user_id else None
+            # EU gate: create BEFORE the runner starts so the execution is
+            # always DB-tracked, even if the process dies mid-run.
+            _eu_correlation = str(_uuid.uuid4())
+            _pre_eu = require_execution_unit(
+                db=db,
+                eu_type="flow",
+                user_id=user_id or "",
+                source_type="nodus_flow_run",
+                source_id=_eu_correlation,
+                correlation_id=_eu_correlation,
+                extra={"flow_name": body.flow_name, "workflow_type": "nodus_flow"},
+            )
             runner = PersistentFlowRunner(
                 flow=compiled_flow,
                 db=db,
@@ -1298,11 +1316,25 @@ def compile_and_run_nodus_flow(
                 initial_state=dict(body.input),
                 flow_name=body.flow_name,
             )
+            # Finalize EU: link to the FlowRun and set terminal status.
+            try:
+                if _pre_eu is not None:
+                    from core.execution_unit_service import ExecutionUnitService
+                    _eus = ExecutionUnitService(db)
+                    if result.get("run_id"):
+                        _eus.link_flow_run(_pre_eu.id, result["run_id"])
+                    _eus.update_status(
+                        _pre_eu.id,
+                        "completed" if result.get("status") == "SUCCESS" else "failed",
+                    )
+            except Exception:
+                pass
             response["run_result"] = {
                 "status": result.get("status"),
                 "run_id": result.get("run_id"),
                 "trace_id": result.get("trace_id"),
                 "error": result.get("error"),
+                "execution_envelope": flow_result_to_envelope(result),
             }
 
         return response

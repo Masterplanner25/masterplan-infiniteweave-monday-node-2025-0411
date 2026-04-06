@@ -425,6 +425,23 @@ def execute_nodus_task_payload(
     normalized_user_id = str(require_user_id(user_id))
     eu_id = execution_id or f"memory.nodus.{task_name}"
 
+    # Gate: ensure a DB-backed ExecutionUnit exists BEFORE the VM starts so the
+    # run is always recoverable even if the process dies mid-execution.
+    _pre_eu = None
+    try:
+        from core.execution_gate import require_execution_unit as _require_eu
+        _pre_eu = _require_eu(
+            db=db,
+            eu_type="job",
+            user_id=normalized_user_id,
+            source_type="memory_nodus_execute",
+            source_id=eu_id,
+            correlation_id=eu_id,
+            extra={"task_name": task_name, "workflow_type": "memory_nodus_execute"},
+        )
+    except Exception:
+        pass  # EU gate is non-fatal; execution proceeds regardless
+
     try:
         security_context = authorize_nodus_execution(
             task_code=task_code,
@@ -486,22 +503,12 @@ def execute_nodus_task_payload(
             context_cls=NodusExecutionContext,
         )
         try:
-            from core.execution_unit_service import ExecutionUnitService
-
-            eus = ExecutionUnitService(db)
-            eu = eus.get_by_source("memory_nodus_execute", eu_id)
-            if eu is None:
-                eu = eus.create(
-                    eu_type="job",
-                    user_id=normalized_user_id,
-                    source_type="memory_nodus_execute",
-                    source_id=eu_id,
-                    correlation_id=eu_id,
-                    status="executing",
-                    extra={"task_name": task_name, "workflow_type": "memory_nodus_execute"},
+            if _pre_eu is not None:
+                from core.execution_unit_service import ExecutionUnitService
+                ExecutionUnitService(db).update_status(
+                    _pre_eu.id,
+                    "completed" if nodus_result.status == "success" else "failed",
                 )
-            if eu:
-                eus.update_status(eu.id, "completed" if nodus_result.status == "success" else "failed")
         except Exception:
             pass
 

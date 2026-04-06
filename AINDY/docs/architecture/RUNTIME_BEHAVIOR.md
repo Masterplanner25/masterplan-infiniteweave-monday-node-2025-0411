@@ -84,7 +84,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
 - Agent execution now performs pre-run memory recall and injects categorized context (`similar_past_outcomes`, `relevant_failures`, `successful_patterns`) before deterministic execution begins.
 - Required `SystemEvent` persistence failures now attempt a fallback `error.system_event_failure` record and then raise fail-closed.
 - Infinity loop decisions can now be memory-weighted in addition to KPI- and feedback-weighted, using ranked memory signals built before `run_loop()`.
-- Execution-envelope normalization is still incomplete across `SystemEvent`, agent runs, flow runs, async jobs, and some remaining route groups. The major execution-facing routes now use either the service-level wrapper, the route-layer execution pipeline, or canonical execution envelopes, but not every route in the repo goes through the same centralized implementation.
+- A canonical execution-envelope unification layer now exists at `core/execution_gate.py`. `require_execution_unit()` gates execution before dispatch at route entry points (non-fatal, idempotent). `to_envelope()` produces the shared `{eu_id, trace_id, status, output, error, duration_ms, attempt_count}` shape. Agent, automation, flow, and platform routes now embed `execution_envelope` in responses. Execution-envelope normalization remains incomplete for Task, Genesis, Watcher, and ARM domain routes, which still return domain-only payloads.
 - Global exception handlers normalize responses for:
   - `HTTPException`
   - `RequestValidationError`
