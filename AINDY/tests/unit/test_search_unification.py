@@ -49,6 +49,14 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
             "source": "external_search",
             "raw_excerpt": "raw body",
             "search_score": 0.87,
+            "learning_context": {
+                "search_type": "research",
+                "history_id": "hist-1",
+                "search_score": 0.87,
+                "memory_count": 2,
+                "memory_ids": ["mem-1", "mem-2"],
+                "recalled_memory": True,
+            },
         }
 
     class _Record:
@@ -77,6 +85,8 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
 
     assert result["summary"] == "Shared summary"
     assert result["search_score"] == 0.87
+    assert result["learning_context"]["search_type"] == "research"
+    assert result["learning_context"]["memory_count"] == 2
     assert captured["query"] == "durable search"
     assert captured["user_id"] == "00000000-0000-0000-0000-000000000001"
 
@@ -94,6 +104,16 @@ def test_preview_lead_search_route_uses_shared_search_service(client, auth_heade
             "results": [{"company": "Acme", "url": "https://acme.test", "context": "match"}],
             "memory": {"items": [], "ids": [], "formatted": "", "count": 0},
             "raw_excerpt": "raw",
+            "history_id": "lead-1",
+            "search_score": 0.63,
+            "learning_context": {
+                "search_type": "lead_preview",
+                "history_id": "lead-1",
+                "search_score": 0.63,
+                "memory_count": 0,
+                "memory_ids": [],
+                "recalled_memory": False,
+            },
         }
 
     monkeypatch.setattr(leadgen_router, "search_leads", _fake_search_leads)
@@ -104,6 +124,8 @@ def test_preview_lead_search_route_uses_shared_search_service(client, auth_heade
     payload = response.json()
     assert payload["query"] == "agency"
     assert payload["results"][0]["company"] == "Acme"
+    assert payload["learning_context"]["search_type"] == "lead_preview"
+    assert payload["learning_context"]["history_id"] == "lead-1"
     assert captured["query"] == "agency"
     assert captured["user_id"]
 
@@ -124,6 +146,14 @@ def test_seo_analyze_route_uses_shared_search_contract(client, auth_headers, mon
             "top_keywords": ["ai"],
             "search_score": 0.91,
             "memory": {"items": [], "ids": [], "formatted": "", "count": 0},
+            "learning_context": {
+                "search_type": "seo_analysis",
+                "history_id": "seo-1",
+                "search_score": 0.91,
+                "memory_count": 0,
+                "memory_ids": [],
+                "recalled_memory": False,
+            },
         }
 
     monkeypatch.setattr(seo_routes, "analyze_seo_content", _fake_analyze)
@@ -138,6 +168,38 @@ def test_seo_analyze_route_uses_shared_search_contract(client, auth_headers, mon
     payload = response.json()
     assert payload["readability"] == 81.0
     assert payload["search_score"] == 0.91
+    assert payload["learning_context"]["search_type"] == "seo_analysis"
+    assert payload["learning_context"]["history_id"] == "seo-1"
     assert captured["text"] == "search friendly content"
     assert captured["top_n"] == 4
     assert captured["user_id"]
+
+
+def test_legacy_twr_response_exposes_memory_learning_context():
+    from routes.main_router import _legacy_twr_response
+
+    class _Task:
+        task_name = "Ship v1"
+
+    payload = _legacy_twr_response(
+        task=_Task(),
+        infinity_result={
+            "score": {
+                "master_score": 87.0,
+                "metadata": {
+                    "memory_context_count": 3,
+                    "memory_signal_count": 2,
+                },
+            },
+            "next_action": {"title": "Stabilize routing"},
+            "memory_influence": {
+                "memory_adjustment": {"reason": "high_impact_failures_detected"},
+                "memory_summary": {"signals_considered": 2},
+            },
+        },
+    )
+
+    assert payload["memory_influence"]["memory_adjustment"]["reason"] == "high_impact_failures_detected"
+    assert payload["learning_context"]["memory_context_count"] == 3
+    assert payload["learning_context"]["memory_signal_count"] == 2
+    assert payload["learning_context"]["has_memory_influence"] is True

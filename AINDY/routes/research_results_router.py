@@ -10,7 +10,7 @@ from core.execution_service import ExecutionContext
 from core.execution_service import run_execution
 from db.database import get_db
 from schemas.research_results_schema import ResearchResultCreate
-from domain.search_service import unified_query
+from domain.search_service import build_learning_context, unified_query
 from domain import research_results_service
 from modules.research_engine import ai_analyze, web_search
 from services.auth_service import get_current_user
@@ -108,6 +108,8 @@ def run_research_query(
             "source": getattr(record, "source", "web_search"),
             "data": getattr(record, "data", None),
             "search_score": unified.get("search_score") or 1.0,
+            "learning_context": unified.get("learning_context")
+            or build_learning_context(unified, default_search_type="research"),
             "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
         }
 
