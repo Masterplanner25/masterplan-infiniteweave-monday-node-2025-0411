@@ -430,18 +430,22 @@ class TestRunScheduledNodusJob:
         _job = job or _make_job_row()
         mock_db = _make_db_with_result(_job)
         mock_log = MagicMock()
-        mock_runner = MagicMock()
-        mock_runner.start.return_value = flow_result
 
         with patch("domain.task_services.is_background_leader", return_value=True), \
              patch("db.database.SessionLocal", return_value=mock_db), \
              patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
              patch("db.models.automation_log.AutomationLog", return_value=mock_log), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": MagicMock()}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
-             patch("runtime.flow_engine.register_flow"), \
-             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
+             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+                 "status": flow_result.get("status"),
+                 "trace_id": flow_result.get("trace_id"),
+                 "run_id": flow_result.get("run_id"),
+                 "nodus_status": (flow_result.get("state") or {}).get("nodus_status"),
+                 "events_emitted": len((flow_result.get("state") or {}).get("nodus_events") or []),
+                 "memory_writes_count": len((flow_result.get("state") or {}).get("nodus_memory_writes") or []),
+                 "error": (flow_result.get("state") or {}).get("nodus_error") or flow_result.get("error"),
+                 "execution_record": {"run_id": flow_result.get("run_id")},
+             }):
             _run_scheduled_nodus_job(str(_job.id))
 
         return _job, mock_log
@@ -481,11 +485,7 @@ class TestRunScheduledNodusJob:
              patch("db.database.SessionLocal", return_value=mock_db), \
              patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
              patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": MagicMock()}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", side_effect=RuntimeError("boom")), \
-             patch("runtime.flow_engine.register_flow"), \
-             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", side_effect=RuntimeError("boom")):
             _run_scheduled_nodus_job(str(job.id))  # must not raise
 
         assert job.last_run_status == "error"
@@ -495,9 +495,8 @@ class TestRunScheduledNodusJob:
 
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
-        mock_runner = MagicMock()
-        mock_runner.start.return_value = {
-            "status": "SUCCESS", "run_id": "r",
+        flow_result = {
+            "status": "SUCCESS", "run_id": "r", "trace_id": "trace-r",
             "state": {"nodus_status": "success", "nodus_events": [], "nodus_memory_writes": []},
         }
 
@@ -505,39 +504,51 @@ class TestRunScheduledNodusJob:
              patch("db.database.SessionLocal", return_value=mock_db), \
              patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
              patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": MagicMock()}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
-             patch("runtime.flow_engine.register_flow"), \
-             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {}), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
+             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+                 "status": "SUCCESS",
+                 "trace_id": "trace-r",
+                 "run_id": "r",
+                 "nodus_status": "success",
+                 "events_emitted": 0,
+                 "memory_writes_count": 0,
+                 "error": None,
+                 "execution_record": {"run_id": "r"},
+             }):
             _run_scheduled_nodus_job(str(job.id))
 
         mock_db.close.assert_called_once()
 
-    def test_registers_nodus_execute_flow_when_missing(self):
+    def test_uses_shared_nodus_flow_runner(self):
         from runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
-        mock_runner = MagicMock()
-        mock_runner.start.return_value = {
-            "status": "SUCCESS", "run_id": "r",
+        flow_result = {
+            "status": "SUCCESS", "run_id": "r", "trace_id": "trace-r",
             "state": {"nodus_status": "success", "nodus_events": [], "nodus_memory_writes": []},
         }
-        mock_registry = {}  # empty — nodus_execute not present
 
         with patch("domain.task_services.is_background_leader", return_value=True), \
              patch("db.database.SessionLocal", return_value=mock_db), \
              patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
              patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", mock_registry), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner), \
-             patch("runtime.flow_engine.register_flow") as mock_rf, \
-             patch("runtime.nodus_runtime_adapter.NODUS_SCRIPT_FLOW", {"start": "nodus.execute"}), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result) as mock_run, \
+             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+                 "status": "SUCCESS",
+                 "trace_id": "trace-r",
+                 "run_id": "r",
+                 "nodus_status": "success",
+                 "events_emitted": 0,
+                 "memory_writes_count": 0,
+                 "error": None,
+                 "execution_record": {"run_id": "r"},
+             }):
             _run_scheduled_nodus_job(str(job.id))
 
-        mock_rf.assert_called_once()
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["workflow_type"] == "nodus_schedule"
+        assert mock_run.call_args.kwargs["trace_id"] is not None
 
     def test_leader_check_exception_skips_gracefully(self):
         from runtime.nodus_schedule_service import _run_scheduled_nodus_job

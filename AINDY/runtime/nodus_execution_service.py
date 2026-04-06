@@ -106,6 +106,9 @@ def run_nodus_script_via_flow(
     error_policy: str,
     db: Session,
     user_id: str,
+    workflow_type: str = "nodus_execute",
+    trace_id: str | None = None,
+    extra_initial_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Execute a Nodus script through the canonical flow-backed orchestration path.
@@ -120,14 +123,19 @@ def run_nodus_script_via_flow(
         flow=flow,
         db=db,
         user_id=normalize_uuid(user_id) if user_id else None,
-        workflow_type="nodus_execute",
+        workflow_type=workflow_type,
     )
+    initial_state = {
+        "nodus_script": script,
+        "nodus_input_payload": input_payload,
+        "nodus_error_policy": error_policy,
+    }
+    if trace_id is not None:
+        initial_state["trace_id"] = trace_id
+    if extra_initial_state:
+        initial_state.update(extra_initial_state)
     return runner.start(
-        initial_state={
-            "nodus_script": script,
-            "nodus_input_payload": input_payload,
-            "nodus_error_policy": error_policy,
-        },
+        initial_state=initial_state,
         flow_name="nodus_execute",
     )
 

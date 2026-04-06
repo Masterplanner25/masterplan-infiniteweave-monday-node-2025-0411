@@ -114,47 +114,38 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         db.add(log)
         db.commit()
 
-        # ── 4. Execute via PersistentFlowRunner ───────────────────────────────
-        from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner, register_flow
-        from runtime.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
-        from utils.uuid_utils import normalize_uuid
-
-        if "nodus_execute" not in FLOW_REGISTRY:
-            register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
+        # ── 4. Execute via the shared Nodus orchestration helper ─────────────
+        from runtime.nodus_execution_service import format_nodus_flow_result
+        from runtime.nodus_execution_service import run_nodus_script_via_flow
 
         user_id_str = str(job.user_id) if job.user_id else ""
-        runner = PersistentFlowRunner(
-            flow=FLOW_REGISTRY["nodus_execute"],
+        result = run_nodus_script_via_flow(
+            script=job.script,
+            input_payload=dict(job.input_payload or {}),
+            error_policy=job.error_policy,
             db=db,
-            user_id=normalize_uuid(user_id_str) if user_id_str else None,
+            user_id=user_id_str,
             workflow_type="nodus_schedule",
+            trace_id=trace_id,
         )
-
-        result = runner.start(
-            initial_state={
-                "nodus_script": job.script,
-                "nodus_input_payload": dict(job.input_payload or {}),
-                "nodus_error_policy": job.error_policy,
-                "trace_id": trace_id,
-            },
-            flow_name="nodus_execute",
-        )
+        formatted_result = format_nodus_flow_result(result)
 
         # ── 5. Record outcome ─────────────────────────────────────────────────
         flow_succeeded = result.get("status") == "SUCCESS"
-        final_state = result.get("state") or {}
-        nodus_ok = final_state.get("nodus_status") != "failure"
+        nodus_ok = formatted_result.get("nodus_status") != "failure"
 
         run_status = "success" if (flow_succeeded and nodus_ok) else "failure"
 
         log.status = "success" if run_status == "success" else "failed"
         log.result = {
-            "flow_status": result.get("status"),
-            "nodus_status": final_state.get("nodus_status"),
-            "run_id": result.get("run_id"),
-            "events_emitted": len(final_state.get("nodus_events") or []),
-            "memory_writes": len(final_state.get("nodus_memory_writes") or []),
-            "error": final_state.get("nodus_error") or result.get("error"),
+            "flow_status": formatted_result.get("status"),
+            "nodus_status": formatted_result.get("nodus_status"),
+            "run_id": formatted_result.get("run_id"),
+            "trace_id": formatted_result.get("trace_id"),
+            "events_emitted": formatted_result.get("events_emitted"),
+            "memory_writes": formatted_result.get("memory_writes_count"),
+            "error": formatted_result.get("error"),
+            "execution_record": formatted_result.get("execution_record"),
         }
         log.completed_at = datetime.now(timezone.utc)
 

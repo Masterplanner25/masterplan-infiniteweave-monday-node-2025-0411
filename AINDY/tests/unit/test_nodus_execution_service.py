@@ -166,6 +166,9 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
             error_policy="fail",
             db=MagicMock(),
             user_id="user-1",
+            workflow_type="nodus_schedule",
+            trace_id="trace-9",
+            extra_initial_state={"schedule_id": "job-1"},
         )
 
     runner_cls.assert_called_once()
@@ -174,6 +177,8 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
             "nodus_script": "let x = 1",
             "nodus_input_payload": {"value": 1},
             "nodus_error_policy": "fail",
+            "trace_id": "trace-9",
+            "schedule_id": "job-1",
         },
         flow_name="nodus_execute",
     )
