@@ -158,6 +158,36 @@ def format_nodus_flow_result(flow_result: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def execute_agent_run_via_nodus(
+    *,
+    run_id: str,
+    plan: dict[str, Any],
+    user_id: str,
+    db: Session,
+    correlation_id: str | None = None,
+    execution_token: dict[str, Any] | None = None,
+    capability_token: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Canonical Nodus/runtime entrypoint for agent execution.
+
+    Agentics still relies on flow orchestration for retry and checkpoint
+    semantics, but agent_runtime should enter that execution path through this
+    runtime service instead of importing the adapter directly.
+    """
+    from runtime.nodus_adapter import NodusAgentAdapter
+
+    return NodusAgentAdapter.execute_with_flow(
+        run_id=run_id,
+        plan=plan,
+        user_id=user_id,
+        db=db,
+        correlation_id=correlation_id,
+        execution_token=execution_token,
+        capability_token=capability_token,
+    )
+
+
 def execute_nodus_runtime(
     *,
     db: Session,

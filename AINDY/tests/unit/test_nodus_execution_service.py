@@ -209,3 +209,28 @@ def test_format_nodus_flow_result_uses_shared_execution_record_shape():
     assert result["nodus_status"] == "success"
     assert result["execution_record"]["workflow_type"] == "nodus_execute"
     assert result["execution_record"]["trace_id"] == "trace-1"
+
+
+def test_execute_agent_run_via_nodus_delegates_to_adapter():
+    from runtime import nodus_execution_service as service
+
+    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS"}) as mock_execute:
+        result = service.execute_agent_run_via_nodus(
+            run_id="run-1",
+            plan={"steps": []},
+            user_id="user-1",
+            db=MagicMock(),
+            correlation_id="corr-1",
+            execution_token={"execution_token": "token"},
+        )
+
+    mock_execute.assert_called_once_with(
+        run_id="run-1",
+        plan={"steps": []},
+        user_id="user-1",
+        db=mock_execute.call_args.kwargs["db"],
+        correlation_id="corr-1",
+        execution_token={"execution_token": "token"},
+        capability_token=None,
+    )
+    assert result["status"] == "SUCCESS"

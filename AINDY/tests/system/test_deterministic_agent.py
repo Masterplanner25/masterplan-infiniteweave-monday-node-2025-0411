@@ -146,7 +146,7 @@ def test_execute_run_persists_started_and_completed_state(db_session, test_user)
         db_session.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", side_effect=_complete_run):
+    with patch("runtime.nodus_execution_service.execute_agent_run_via_nodus", side_effect=_complete_run):
         result = execute_run(run.id, test_user.id, db_session)
 
     db_session.refresh(run)
