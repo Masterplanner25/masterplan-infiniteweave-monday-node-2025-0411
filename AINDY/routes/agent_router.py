@@ -23,6 +23,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_service import ExecutionContext
+from core.execution_service import run_execution
 from db.database import get_db
 from services.auth_service import get_current_user
 from utils.uuid_utils import normalize_uuid
@@ -85,6 +87,19 @@ def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
     return data
 
 
+def _execute_agent(route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
+    return run_execution(
+        ExecutionContext(
+            db=db,
+            user_id=str(user_id),
+            source="agent",
+            operation=route_name,
+            start_payload=input_payload or {},
+        ),
+        lambda: handler(None),
+    )
+
+
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
 
@@ -128,7 +143,10 @@ def create_agent_run(
             return JSONResponse(status_code=202, content=response)
         return response
 
-    return _run_flow_agent("agent_run_create", {"goal": body.goal.strip()}, db, user_id)
+    def handler(_ctx):
+        return _run_flow_agent("agent_run_create", {"goal": body.goal.strip()}, db, user_id)
+
+    return _execute_agent("agent.run.create", handler, db=db, user_id=str(user_id), input_payload={"goal": body.goal.strip()})
 
 
 @router.get("/runs")
@@ -140,7 +158,13 @@ def list_agent_runs(
 ):
     """List the current user's agent runs, newest first."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_runs_list", {"status": status, "limit": limit}, db, user_id)
+    return _execute_agent(
+        "agent.runs.list",
+        lambda _ctx: _run_flow_agent("agent_runs_list", {"status": status, "limit": limit}, db, user_id),
+        db=db,
+        user_id=str(user_id),
+        input_payload={"status": status, "limit": limit},
+    )
 
 
 @router.get("/runs/{run_id}")
@@ -151,7 +175,7 @@ def get_agent_run(
 ):
     """Get a single agent run by ID."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_get", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.get", lambda _ctx: _run_flow_agent("agent_run_get", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.post("/runs/{run_id}/approve")
@@ -162,7 +186,7 @@ def approve_agent_run(
 ):
     """Approve a pending_approval run. Immediately executes the plan."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_approve", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.approve", lambda _ctx: _run_flow_agent("agent_run_approve", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.post("/runs/{run_id}/reject")
@@ -173,7 +197,7 @@ def reject_agent_run(
 ):
     """Reject a pending_approval run without executing it."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_reject", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.reject", lambda _ctx: _run_flow_agent("agent_run_reject", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.post("/runs/{run_id}/recover")
@@ -185,7 +209,7 @@ def recover_agent_run(
 ):
     """Manually recover a stuck AgentRun."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_recover", {"run_id": run_id, "force": force}, db, user_id)
+    return _execute_agent("agent.run.recover", lambda _ctx: _run_flow_agent("agent_run_recover", {"run_id": run_id, "force": force}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id, "force": force})
 
 
 @router.post("/runs/{run_id}/replay")
@@ -196,7 +220,7 @@ def replay_agent_run(
 ):
     """Replay an existing run using the same plan."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_replay", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.replay", lambda _ctx: _run_flow_agent("agent_run_replay", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.get("/runs/{run_id}/steps")
@@ -207,7 +231,7 @@ def get_run_steps(
 ):
     """Return execution steps for a completed run."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_steps", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.steps", lambda _ctx: _run_flow_agent("agent_run_steps", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.get("/runs/{run_id}/events")
@@ -218,7 +242,7 @@ def get_run_events(
 ):
     """Return the unified event timeline for a run."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_run_events", {"run_id": run_id}, db, user_id)
+    return _execute_agent("agent.run.events", lambda _ctx: _run_flow_agent("agent_run_events", {"run_id": run_id}, db, user_id), db=db, user_id=str(user_id), input_payload={"run_id": run_id})
 
 
 @router.get("/tools")
@@ -228,7 +252,7 @@ def list_tools(
 ):
     """List all registered tools with risk levels and descriptions."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_tools_list", {}, db, user_id)
+    return _execute_agent("agent.tools.list", lambda _ctx: _run_flow_agent("agent_tools_list", {}, db, user_id), db=db, user_id=str(user_id))
 
 
 @router.get("/trust")
@@ -238,7 +262,7 @@ def get_trust_settings(
 ):
     """Get the current user's agent trust settings."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_trust_get", {}, db, user_id)
+    return _execute_agent("agent.trust.get", lambda _ctx: _run_flow_agent("agent_trust_get", {}, db, user_id), db=db, user_id=str(user_id))
 
 
 @router.get("/suggestions")
@@ -255,7 +279,7 @@ def get_tool_suggestions(
 
         snapshot = get_user_kpi_snapshot(user_id, db)
         return suggest_tools(snapshot, user_id=user_id, db=db)
-    return _run_flow_agent("agent_suggestions_get", {}, db, user_id)
+    return _execute_agent("agent.suggestions.get", lambda _ctx: _run_flow_agent("agent_suggestions_get", {}, db, user_id), db=db, user_id=str(user_id))
 
 
 @router.put("/trust")
@@ -266,9 +290,10 @@ def update_trust_settings(
 ):
     """Update the current user's agent trust settings."""
     user_id = _current_user_id(current_user)
-    return _run_flow_agent("agent_trust_update", {
+    payload = {
         "auto_execute_low": body.auto_execute_low,
         "auto_execute_medium": body.auto_execute_medium,
         "allowed_auto_grant_tools": body.allowed_auto_grant_tools,
-    }, db, user_id)
+    }
+    return _execute_agent("agent.trust.update", lambda _ctx: _run_flow_agent("agent_trust_update", payload, db, user_id), db=db, user_id=str(user_id), input_payload=payload)
 
