@@ -65,6 +65,67 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
+# ── Cross-type WAIT signal ────────────────────────────────────────────────────
+
+
+class ExecutionWaitSignal(Exception):
+    """
+    Raise from any handler to request an EU-level WAIT transition without
+    going through the flow engine.
+
+    The existing flow-engine WAIT mechanism (a flow node returns
+    ``{"status": "WAIT", "wait_for": "event_type"}``) is preserved and
+    continues to trigger the EU transition via dict-based detection in the
+    pipeline.  This signal provides the same capability to agents, jobs,
+    and bare task handlers that do not run inside a ``FlowRun``.
+
+    The pipeline catches this *before* ``HTTPException`` and ``Exception``
+    so it is never misclassified as a failure.  The EU is transitioned to
+    ``"waiting"`` and an ``execution.waiting`` SystemEvent is emitted.
+
+    Usage
+    -----
+        from core.execution_gate import ExecutionWaitSignal
+
+        # Inside any handler closure:
+        raise ExecutionWaitSignal(
+            "payment.confirmed",
+            resume_key="invoice_123",
+            payload={"invoice_id": "inv_123"},
+        )
+
+    Parameters
+    ----------
+    wait_for:
+        The event type that will resume this EU (e.g. ``"payment.confirmed"``,
+        ``"approval.granted"``).  Stored in the ``execution.waiting`` event
+        payload and on ``ctx.metadata["eu_wait_for"]``.
+    resume_key:
+        Optional idempotency / targeting key so resume endpoints can locate
+        this EU by key rather than by id (e.g. an invoice id, a task id).
+    payload:
+        Arbitrary extra context stored alongside the wait event for the
+        resume handler to read.
+
+    Note
+    ----
+    Do NOT use this to signal errors — raise ``HTTPException`` or a plain
+    ``Exception`` instead.  WAIT is a non-terminal, resumable execution state.
+    """
+
+    def __init__(
+        self,
+        wait_for: str,
+        *,
+        resume_key: str | None = None,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        self.wait_for = wait_for        # event type the EU is waiting for
+        self.resume_key = resume_key    # optional resume targeting / idempotency key
+        self.payload = dict(payload or {})
+        super().__init__(f"execution.wait:{wait_for}")
+
+
 # ── Retry-policy resolution ───────────────────────────────────────────────────
 
 # Map eu_type to the execution_type expected by resolve_retry_policy().

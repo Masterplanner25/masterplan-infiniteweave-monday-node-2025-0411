@@ -6,8 +6,12 @@ that EU failures never break the surrounding Task / AgentRun / FlowRun operation
 
 Status machine
 --------------
-  pending → executing → waiting → completed
-                               └→ failed
+  pending → executing → waiting → resumed → executing → completed
+                                                      └→ failed
+                                └→ executing  (backward compat)
+                                └→ failed
+                      └→ completed
+                      └→ failed
   (completed and failed are terminal)
 """
 import logging
@@ -20,11 +24,12 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 _STATUS_TRANSITIONS: dict[str, set] = {
-    "pending": {"executing", "failed"},
-    "executing": {"waiting", "completed", "failed"},
-    "waiting": {"executing", "failed"},
+    "pending":   {"executing", "failed"},
+    "executing": {"waiting", "resumed", "completed", "failed"},
+    "waiting":   {"resumed", "executing", "failed"},  # "executing" kept for backward compat
+    "resumed":   {"executing", "failed"},
     "completed": set(),
-    "failed": set(),
+    "failed":    set(),
 }
 
 
@@ -117,6 +122,23 @@ class ExecutionUnitService:
         except Exception as exc:
             logger.warning("[EU] update_status failed — non-fatal | id=%s error=%s", eu_id, exc)
             return False
+
+    def resume_execution_unit(self, eu_id) -> bool:
+        """
+        Transition a waiting EU through ``resumed → executing``.
+
+        Two-step so audit queries can observe the ``resumed`` state between
+        the wake signal being received and execution actually restarting.
+
+        Returns True when both steps succeed, False on any failure (non-fatal).
+        The caller does not need to transition to "executing" separately —
+        this method does both.
+        """
+        ok = self.update_status(eu_id, "resumed")
+        if not ok:
+            logger.warning("[EU] resume_execution_unit: waiting→resumed failed id=%s", eu_id)
+            return False
+        return self.update_status(eu_id, "executing")
 
     # ── Link helpers ──────────────────────────────────────────────────────────
 
