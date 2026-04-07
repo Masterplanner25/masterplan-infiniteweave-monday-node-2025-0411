@@ -237,10 +237,51 @@ class ExecutionPipeline:
                 metadata=ctx.metadata,
             )
         except ExecutionWaitSignal as exc:
-            # Handler explicitly requested WAIT via raise — not a failure.
-            self._safe_transition_eu_waiting(
-                ctx, wait_for=exc.wait_for, wait_condition=exc.wait_condition
-            )
+            # Handler explicitly requested WAIT via raise — not a failure,
+            # UNLESS the EU context is missing (no eu_id or no db).
+            # _safe_transition_eu_waiting() raises RuntimeError in that case.
+            # We catch it here so the error stays inside run() and becomes a
+            # proper failure result rather than propagating to the caller.
+            try:
+                self._safe_transition_eu_waiting(
+                    ctx, wait_for=exc.wait_for, wait_condition=exc.wait_condition
+                )
+            except Exception as _wait_guard_exc:
+                # EU context absent — WAIT cannot be tracked and is unresumable.
+                # Convert to a failure; do not silently swallow.
+                logger.critical(
+                    "execution.wait_untrackable eu=%s route=%s wait_for=%s: %s",
+                    ctx.metadata.get("eu_id"),
+                    ctx.route_name,
+                    exc.wait_for,
+                    _wait_guard_exc,
+                )
+                _guard_fail_event_id = self._safe_emit_event(
+                    ctx,
+                    event_type="execution.failed",
+                    parent_event_id=started_event_id,
+                    payload={
+                        "route_name": ctx.route_name,
+                        "detail": str(_wait_guard_exc),
+                    },
+                )
+                self._set_event_refs(
+                    ctx,
+                    started_event_id,
+                    terminal_event_id=_guard_fail_event_id,
+                    completed=False,
+                )
+                self._safe_finalize_eu(ctx, "failed")
+                return ExecutionResult(
+                    success=False,
+                    error=str(_wait_guard_exc),
+                    metadata={
+                        **ctx.metadata,
+                        "status_code": 500,
+                        "detail": str(_wait_guard_exc),
+                    },
+                )
+
             wait_event_id = self._safe_emit_event(
                 ctx,
                 event_type="execution.waiting",
@@ -700,7 +741,16 @@ class ExecutionPipeline:
         Transition the route-level EU from ``executing`` to ``waiting`` and
         register the wait with SchedulerEngine — the single WAIT authority.
 
-        Non-fatal: any exception is caught and logged at DEBUG level.
+        **WAIT requires an ExecutionUnit.**  If ``eu_id`` or ``db`` is absent
+        this method raises ``RuntimeError`` rather than silently returning.
+        A WAIT without an EU can never be resumed — allowing it would create
+        permanently lost executions.  Callers must convert the raised error
+        into a failure result; both WAIT paths in ``run()`` do this.
+
+        Raises:
+            RuntimeError: When ``eu_id`` is absent (EU was never created —
+                          unauthenticated or DB-less route) or when ``db`` is
+                          absent (cannot persist the waiting status).
 
         Args:
             ctx:            Current ExecutionContext.
@@ -718,11 +768,27 @@ class ExecutionPipeline:
           wait_condition  = structured WaitCondition (event or time)
         """
         eu_id = ctx.metadata.get("eu_id")
-        if not eu_id:
-            return
         db = ctx.metadata.get("db")
+
+        # ── Guard: WAIT requires ExecutionUnit context ─────────────────────────
+        # Missing eu_id → EU was never created (route has no user_id or no db).
+        # Missing db    → cannot persist waiting status or WaitCondition.
+        # Either condition makes the WAIT permanently unresumable — fail early.
+        if not eu_id:
+            raise RuntimeError(
+                f"WAIT requires ExecutionUnit context — eu_id is absent "
+                f"(route={ctx.route_name!r}, wait_for={wait_for!r}). "
+                "Ensure the route has an authenticated user_id and a DB session "
+                "so an ExecutionUnit can be created before entering WAIT."
+            )
         if db is None:
-            return
+            raise RuntimeError(
+                f"WAIT requires ExecutionUnit context — db session is absent "
+                f"(route={ctx.route_name!r}, eu_id={eu_id!r}, wait_for={wait_for!r}). "
+                "Cannot persist waiting status without a database session."
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         try:
             from core.execution_unit_service import ExecutionUnitService
             from core.wait_condition import WaitCondition

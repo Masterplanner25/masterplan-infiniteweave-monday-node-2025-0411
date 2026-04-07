@@ -1245,50 +1245,95 @@ def route_event(
     user_id: str = None,
 ) -> list[dict]:
     """
-    Route an external event to waiting flow runs.
+    Deliver an external event to waiting flow runs and hand resume authority
+    to SchedulerEngine.
 
-    Finds all flow runs waiting for this event type
-    (scoped to user if provided) and resumes them.
+    This function has exactly two responsibilities and nothing more:
 
-    Returns list of resume results.
+    1. **Event payload delivery** (state preparation only):
+       Inject ``payload`` into each waiting FlowRun's ``state["event"]`` so
+       that Nodus ``event.wait()`` can retrieve it on re-execution.
+       No status fields are mutated; no resume is triggered here.
+
+    2. **Resume delegation**:
+       Call ``SchedulerEngine.notify_event(event_type)`` which matches
+       registered ``_waiting`` entries by ``wait_condition.event_name``,
+       applies correlation-id filtering, and re-enqueues matched runs
+       through ``ExecutionDispatcher``.
+
+    All resume authority — matching, ordering, dispatching, duplicate
+    prevention — belongs exclusively to SchedulerEngine.  The old pattern
+    of ``run.status = "running"`` / ``runner.resume()`` is removed.
+
+    Args:
+        event_type:  The event type to deliver (e.g. ``"approval.received"``).
+        payload:     Arbitrary event payload forwarded into FlowRun state.
+        db:          Active SQLAlchemy session for state write.
+        user_id:     Optional owner filter (limits which FlowRuns receive the
+                     payload injection — does not limit the scheduler match).
+
+    Returns:
+        List of per-run payload acknowledgements ``{run_id, payload_injected}``.
+        The caller receives an ack per run that got the state update; the actual
+        resume count is determined by the scheduler.
     """
     from db.models.flow_run import FlowRun
+    from kernel.scheduler_engine import get_scheduler_engine
+
+    # ── 1. Event payload delivery ─────────────────────────────────────────────
+    # Inject payload into FlowRun.state["event"] so the Nodus resume bridge
+    # (nodus_adapter.py) finds it when runner.resume() re-enters the script.
+    # This is the ONLY permitted interaction with the FlowRun table.
+    # Status fields (status, waiting_for) are intentionally NOT mutated here —
+    # the flow runner handles its own checkpoint transitions on resume.
+    results: list[dict] = []
 
     query = db.query(FlowRun).filter(
         FlowRun.waiting_for == event_type,
         FlowRun.status == "waiting",
     )
-
     owner_user_id = parse_user_id(user_id)
     if owner_user_id:
         query = query.filter(FlowRun.user_id == owner_user_id)
 
-    runs = query.all()
-    results = []
-
-    for run in runs:
-        run.state["event"] = payload
-        run.status = "running"
-        run.waiting_for = None
-        db.commit()
-
-        flow = FLOW_REGISTRY.get(run.flow_name)
-        if not flow:
-            logger.warning(
-                "Flow '%s' not in registry — cannot resume %s",
-                run.flow_name,
-                run.id,
+    for run in query.all():
+        try:
+            state = dict(run.state or {})
+            state["event"] = payload
+            run.state = _json_safe(state)
+            db.flush()
+            results.append({"run_id": str(run.id), "payload_injected": True})
+            logger.debug(
+                "[route_event] payload injected run=%s event=%s", run.id, event_type
             )
-            continue
+        except Exception as _inj_exc:
+            logger.warning(
+                "[route_event] payload inject failed run=%s: %s", run.id, _inj_exc
+            )
 
-        runner = PersistentFlowRunner(
-            flow=flow,
-            db=db,
-            user_id=run.user_id,
-            workflow_type=run.workflow_type,
+    try:
+        db.commit()
+    except Exception as _commit_exc:
+        logger.warning(
+            "[route_event] state commit failed event=%s: %s", event_type, _commit_exc
         )
-        result = runner.resume(run.id)
-        results.append(result)
+
+    # ── 2. Resume delegation ──────────────────────────────────────────────────
+    # SchedulerEngine is the sole resume authority.  notify_event() matches
+    # waiting entries by wait_condition.event_name, guards against duplicates
+    # under its internal lock, and re-enqueues through ExecutionDispatcher.
+    # No runner.resume() calls, no FLOW_REGISTRY lookups, no status mutations.
+    corr = (payload or {}).get("correlation_id") or None
+    try:
+        resumed = get_scheduler_engine().notify_event(event_type, correlation_id=corr)
+        logger.info(
+            "[route_event] SchedulerEngine.notify_event resumed=%d event=%s corr=%s",
+            resumed, event_type, corr,
+        )
+    except Exception as _sched_exc:
+        logger.warning(
+            "[route_event] notify_event failed event=%s: %s", event_type, _sched_exc
+        )
 
     return results
 
