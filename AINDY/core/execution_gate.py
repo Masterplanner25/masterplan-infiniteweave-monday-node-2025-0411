@@ -58,7 +58,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
 
@@ -191,6 +191,138 @@ def require_execution_unit(
             exc,
         )
         return None
+
+
+# ── Gate + dispatch ───────────────────────────────────────────────────────────
+
+
+def gate_and_dispatch(
+    *,
+    db: Session,
+    eu_type: str,
+    user_id: str,
+    source_type: str,
+    source_id: str,
+    handler_fn: Callable[[], Any],
+    trace_id: Optional[str] = None,
+    correlation_id: Optional[str] = None,
+    extra: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """
+    Combined gate + dispatch entry point.
+
+    Sequence
+    --------
+    1. ``require_execution_unit()`` — ensure a DB-backed EU exists and is set
+       to "executing" before any work starts.  Non-fatal on failure.
+    2. ``dispatch(eu, handler_fn, context)`` — delegate to ExecutionDispatcher
+       for the INLINE vs ASYNC decision.
+    3. Return a canonical ExecutionEnvelope:
+       - **INLINE**: handler completed synchronously; ``status`` reflects the
+         result (SUCCESS / FAILURE).  ``output`` is the handler's return value.
+       - **ASYNC**: handler was submitted to the shared ThreadPoolExecutor;
+         returns immediately with ``status="QUEUED"`` so the caller can respond
+         without blocking.  ``trace_id`` and ``eu_id`` are preserved so the
+         client can poll for the result.
+
+    Handler contract
+    ----------------
+    ``handler_fn`` must be a zero-argument callable whose return value becomes
+    ``output`` in the INLINE envelope.  Build any closures you need before
+    calling this function.  Suggested mapping by ``eu_type``:
+
+        flow   → lambda: run_flow(...)
+        agent  → lambda: execute_run(...)
+        nodus  → lambda: run_nodus_script_via_flow(...)
+        job    → lambda: _execute_job_inline(...)
+        task   → lambda: task_service.complete_task(...)
+
+    Parameters
+    ----------
+    db:
+        Active SQLAlchemy session for EU creation / status update.
+    eu_type:
+        One of "flow", "agent", "nodus", "job", "task".  Drives both the
+        retry-policy resolution in ``require_execution_unit()`` and the
+        INLINE/ASYNC decision in ``ExecutionDispatcher``.
+    user_id:
+        Owner of the execution; stored on the EU row.
+    source_type / source_id:
+        Idempotency key pair — same pair returns the existing EU if one
+        already exists.
+    handler_fn:
+        Zero-argument callable.  Closed over all runtime arguments it needs.
+    trace_id:
+        Propagated into the returned envelope.  If None, falls back to
+        ``source_id`` so the envelope always carries a traceable ID.
+    correlation_id:
+        Optional correlation id stored on the EU.  Defaults to ``source_id``.
+    extra:
+        Arbitrary JSONB metadata forwarded to ``require_execution_unit()``.
+        Keys ``risk_level`` and ``workflow_type`` influence retry-policy
+        resolution; ``async_hint`` overrides the dispatch-mode decision.
+    """
+    from core.execution_dispatcher import ExecutionMode, dispatch
+
+    start = time.monotonic()
+
+    eu = require_execution_unit(
+        db=db,
+        eu_type=eu_type,
+        user_id=user_id,
+        source_type=source_type,
+        source_id=source_id,
+        correlation_id=correlation_id,
+        extra=extra,
+    )
+
+    eu_id_str: Optional[str] = str(eu.id) if eu is not None else None
+    effective_trace_id = trace_id or source_id
+
+    context: dict[str, Any] = {
+        "eu_id": eu_id_str,
+        "trace_id": effective_trace_id,
+    }
+
+    result = dispatch(eu, handler_fn=handler_fn, context=context)
+
+    if result.mode is ExecutionMode.ASYNC:
+        # Work is running in the background — return a QUEUED envelope so the
+        # caller can respond immediately.  trace_id and eu_id are preserved so
+        # the client can use them to poll.
+        return to_envelope(
+            eu_id=eu_id_str,
+            trace_id=effective_trace_id,
+            status="QUEUED",
+            output=None,
+            error=None,
+            duration_ms=None,
+            attempt_count=None,
+        )
+
+    # INLINE — handler completed synchronously.
+    duration_ms = round((time.monotonic() - start) * 1000, 2)
+    handler_result = result.envelope  # raw return value of handler_fn()
+
+    # If the handler already returned an envelope-shaped dict, pass it through
+    # enriched with our eu_id / trace_id so callers always see those fields.
+    if isinstance(handler_result, dict) and "status" in handler_result:
+        handler_result.setdefault("eu_id", eu_id_str)
+        handler_result.setdefault("trace_id", effective_trace_id)
+        if handler_result.get("duration_ms") is None:
+            handler_result["duration_ms"] = duration_ms
+        return handler_result
+
+    # Plain return value — wrap it in a SUCCESS envelope.
+    return to_envelope(
+        eu_id=eu_id_str,
+        trace_id=effective_trace_id,
+        status="SUCCESS",
+        output=handler_result,
+        error=None,
+        duration_ms=duration_ms,
+        attempt_count=1,
+    )
 
 
 # ── Canonical envelope ────────────────────────────────────────────────────────

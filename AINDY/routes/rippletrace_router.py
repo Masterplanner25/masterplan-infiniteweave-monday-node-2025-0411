@@ -8,7 +8,6 @@ from uuid import UUID
 from core.execution_helper import execute_with_pipeline
 
 from db.database import get_db
-from db.models.system_event import SystemEvent
 
 from domain import rippletrace_services
 from services.auth_service import get_current_user
@@ -186,13 +185,10 @@ def get_trace_graph(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        user_id = UUID(str(current_user["sub"]))
+        from domain.rippletrace_service import count_trace_events
 
-        events = (
-            db.query(SystemEvent)
-            .filter(SystemEvent.trace_id == trace_id, SystemEvent.user_id == user_id)
-            .count()
-        )
+        user_id = str(current_user["sub"])
+        events = count_trace_events(db, trace_id, user_id)
 
         if events == 0:
             return {

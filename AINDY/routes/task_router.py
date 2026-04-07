@@ -3,11 +3,11 @@ import logging
 
 from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
+from core.execution_gate import to_envelope
 from core.execution_service import ExecutionContext
 from core.execution_service import run_execution
 from core.observability_events import emit_observability_event
 from db.database import get_db
-from db.models.task import Task
 from schemas.task_schemas import TaskCreate, TaskAction
 from services.auth_service import get_current_user
 from core.system_event_types import SystemEventTypes
@@ -29,6 +29,23 @@ def _execute_tasks(request: Request, route_name: str, handler, *, db: Session, u
         ),
         lambda: handler(None),
     )
+
+
+def _flow_envelope(result: dict) -> dict:
+    """Embed execution_envelope into flow result data. Returns the data dict."""
+    data = result.get("data")
+    if not isinstance(data, dict):
+        data = {} if data is None else {"result": data}
+    data.setdefault("execution_envelope", to_envelope(
+        eu_id=result.get("run_id"),
+        trace_id=result.get("trace_id"),
+        status=str(result.get("status") or "UNKNOWN").upper(),
+        output=None,
+        error=result.get("error"),
+        duration_ms=None,
+        attempt_count=None,
+    ))
+    return data
 
 
 def _serialize_task(task) -> dict:
@@ -87,7 +104,7 @@ def create_task(
         data = result.get("data")
         if isinstance(data, dict):
             _task_result.update(data)
-        return data
+        return _flow_envelope(result)
 
     response = _execute_tasks(request, "tasks.create", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
@@ -133,7 +150,7 @@ def start_task(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "Task start flow failed")
             )
-        return result.get("data")
+        return _flow_envelope(result)
 
     return _execute_tasks(request, "tasks.start", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
@@ -158,7 +175,7 @@ def pause_task(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "Task pause flow failed")
             )
-        return result.get("data")
+        return _flow_envelope(result)
 
     return _execute_tasks(request, "tasks.pause", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
@@ -183,7 +200,7 @@ def complete_task(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "Task completion flow failed")
             )
-        return result.get("data")
+        return _flow_envelope(result)
 
     return _execute_tasks(request, "tasks.complete", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
@@ -195,13 +212,15 @@ def list_tasks(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        tasks = (
-            db.query(Task)
-            .filter(Task.user_id == current_user["sub"])
-            .order_by(Task.id.desc())
-            .all()
-        )
-        return [_serialize_task(task) for task in tasks]
+        from domain.task_services import list_tasks
+        tasks = list_tasks(db, user_id=current_user["sub"])
+        return {
+            "tasks": [_serialize_task(task) for task in tasks],
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
+        }
     return _execute_tasks(request, "tasks.list", handler, db=db, user_id=user_id)
 
 @router.post("/recurrence/check")
@@ -217,7 +236,7 @@ def trigger_recurrence(
         result = run_flow("tasks_recurrence_check", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Recurrence check failed"))
-        return result.get("data")
+        return _flow_envelope(result)
     return _execute_tasks(request, "tasks.recurrence.check", handler, db=db, user_id=user_id)
 
 

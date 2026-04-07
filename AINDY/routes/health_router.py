@@ -3,7 +3,6 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -51,14 +50,15 @@ def _compute_liveness() -> dict:
 
     def _check_db() -> None:
         nonlocal db_status
-        db = SessionLocal()
+        _db = SessionLocal()
         try:
-            db.execute(text("SELECT 1"))
+            from domain.health_service import check_db_connectivity
+            check_db_connectivity(_db)
             db_status = "ok"
         except Exception as exc:
             logger.warning("[health] DB check failed: %s", exc)
         finally:
-            db.close()
+            _db.close()
             _done.set()
 
     t = threading.Thread(target=_check_db, daemon=True)
@@ -159,7 +159,8 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
     try:
-        db.execute(text("SELECT 1"))
+        from domain.health_service import check_db_ready
+        check_db_ready(db)
         components["database"] = "ready"
     except Exception as exc:
         logger.warning("Readiness database check failed: %s", exc)

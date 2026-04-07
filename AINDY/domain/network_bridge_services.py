@@ -33,6 +33,48 @@ def register_author(db: Session, name: str, platform: str, notes: str | None = N
     return author
 
 
+def connect_external_author(
+    db: Session,
+    *,
+    author_name: str,
+    platform: str,
+    connection_type: str,
+    notes: str | None,
+) -> dict:
+    """
+    Register the author, log a ripple event, save a metric, and commit.
+
+    Returns the result dict for the route handler.
+    All DB work (including the final commit) is owned here.
+    """
+    from domain import rippletrace_services
+    from analytics.calculation_services import save_calculation
+    from datetime import datetime
+
+    author = register_author(db=db, name=author_name, platform=platform, notes=notes)
+
+    ripple_event = {
+        "ping_type": connection_type,
+        "source_platform": platform,
+        "summary": f"{author_name} connected via {platform}",
+        "notes": notes or "",
+        "drop_point_id": "bridge",
+    }
+    rippletrace_services.log_ripple_event(db, ripple_event)
+
+    metric_name = f"UserEvent::{platform}"
+    save_calculation(db, metric_name, 1)
+
+    db.commit()
+
+    return {
+        "status": "connected",
+        "author_id": author.id,
+        "platform": platform,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
     query = db.query(AuthorDB)
     if platform:

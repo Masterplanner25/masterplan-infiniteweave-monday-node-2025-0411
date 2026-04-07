@@ -143,22 +143,10 @@ def create_agent_run(
     if not body.goal or not body.goal.strip():
         raise HTTPException(status_code=400, detail="goal is required")
     user_id = _current_user_id(current_user)
-    from platform_layer.async_job_service import async_heavy_execution_enabled, submit_autonomous_async_job
-
-    if async_heavy_execution_enabled():
-        response = submit_autonomous_async_job(
-            task_name="agent.create_run",
-            payload={"goal": body.goal.strip(), "user_id": str(user_id)},
-            user_id=user_id,
-            source="agent_router",
-            trigger_type="user",
-            trigger_context={"goal": body.goal.strip(), "importance": 0.95},
-        )
-        status = str(response.get("status") or "").lower()
-        if status in {"queued", "deferred"}:
-            return JSONResponse(status_code=202, content=response)
-        return response
-
+    # Removed: if async_heavy_execution_enabled(): submit_autonomous_async_job(...)
+    # Execution mode is decided exclusively by ExecutionDispatcher.
+    # Autonomy logic (evaluate_live_trigger, defer, ignore) is preserved inside
+    # agent_run_create_node — the flow node owns the autonomy decision.
     def handler(_ctx):
         return _run_flow_agent("agent_run_create", {"goal": body.goal.strip()}, db, user_id)
 

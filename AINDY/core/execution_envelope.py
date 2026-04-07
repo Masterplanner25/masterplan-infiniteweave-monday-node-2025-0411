@@ -63,25 +63,30 @@ def unified(
 
 
 def adapt_pipeline_result(result: Any, *, next_action: Any = None) -> dict[str, Any] | JSONResponse | Response:
-    trace_id = str(getattr(result, "metadata", {}).get("trace_id") or "")
+    metadata: dict[str, Any] = getattr(result, "metadata", {}) or {}
+    trace_id = str(metadata.get("trace_id") or "")
+    eu_id: str | None = metadata.get("eu_id") or None
     status_code = int(
-        getattr(result, "metadata", {}).get(
+        metadata.get(
             "status_code",
             200 if getattr(result, "success", False) else 500,
         )
     )
-    event_refs = list(getattr(result, "metadata", {}).get("event_refs") or [])
+    event_refs = list(metadata.get("event_refs") or [])
 
     data = getattr(result, "data", None)
     if isinstance(data, Response):
         if trace_id:
             data.headers.setdefault("X-Trace-ID", trace_id)
+        if eu_id:
+            data.headers.setdefault("X-EU-ID", eu_id)
         return data
 
     if getattr(result, "success", False):
         if isinstance(data, dict) and "status" in data and "trace_id" in data:
             body = dict(data)
             body["trace_id"] = body.get("trace_id") or trace_id
+            body.setdefault("eu_id", eu_id)
             body["events"] = [*body.get("events", []), *event_refs]
             if "data" not in body and "result" in body:
                 body["data"] = body["result"]
@@ -91,6 +96,7 @@ def adapt_pipeline_result(result: Any, *, next_action: Any = None) -> dict[str, 
                 body["next_action"] = next_action
         else:
             body = success(data, event_refs, trace_id, next_action=next_action)
+            body.setdefault("eu_id", eu_id)
         if status_code == 200:
             return body
         return JSONResponse(status_code=status_code, content=jsonable_encoder(body))

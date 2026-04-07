@@ -26,7 +26,7 @@ from core.execution_signal_helper import queue_memory_capture, queue_system_even
 from platform_layer.external_call_service import perform_external_call
 from utils.trace_context import is_pipeline_active
 from memory.memory_scoring_service import get_relevant_memories
-from platform_layer.async_job_service import submit_autonomous_async_job
+from core.execution_dispatcher import dispatch_autonomous_job
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
 from domain.task_services import queue_task_automation
@@ -307,7 +307,7 @@ def queue_delivery_generation(db: Session, order_id: int, user_id: str | None = 
     order = db.query(FreelanceOrder).filter(FreelanceOrder.id == order_id).first()
     if not order:
         raise ValueError(f"Order {order_id} not found")
-    dispatch = submit_autonomous_async_job(
+    dr = dispatch_autonomous_job(
         task_name="freelance.generate_delivery",
         payload={"order_id": order.id, "user_id": user_id or (str(order.user_id) if order.user_id else None)},
         user_id=user_id or order.user_id,
@@ -319,6 +319,7 @@ def queue_delivery_generation(db: Session, order_id: int, user_id: str | None = 
             "masterplan_id": order.masterplan_id,
         },
     )
+    dispatch = dr.envelope
     automation_log_id = (((dispatch or {}).get("result") or {}).get("automation_log_id"))
     if automation_log_id:
         order.automation_log_id = automation_log_id

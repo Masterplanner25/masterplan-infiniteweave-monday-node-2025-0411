@@ -593,7 +593,7 @@ def queue_task_automation(
     if not owner_user_id:
         return None
 
-    from platform_layer.async_job_service import submit_autonomous_async_job
+    from core.execution_dispatcher import dispatch_autonomous_job
 
     payload = {
         "task_id": task.id,
@@ -603,7 +603,7 @@ def queue_task_automation(
         "automation_config": task.automation_config or {},
         "user_id": str(owner_user_id),
     }
-    return submit_autonomous_async_job(
+    return dispatch_autonomous_job(
         task_name="automation.execute",
         payload=payload,
         user_id=owner_user_id,
@@ -615,7 +615,7 @@ def queue_task_automation(
             "reason": reason,
             "masterplan_id": task.masterplan_id,
         },
-    )
+    ).envelope
 
 
 def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
@@ -904,5 +904,15 @@ def stop_background_tasks(log: logging.Logger | None = None, timeout: float = 5.
     log = log or logger
     _release_background_lease(log=log)
     log.info("Background task lease released.")
+
+
+def list_tasks(db: Session, user_id: str | uuid.UUID | None) -> list[Task]:
+    """Return all tasks for a user, newest first."""
+    return (
+        db.query(Task)
+        .filter(Task.user_id == user_id)
+        .order_by(Task.id.desc())
+        .all()
+    )
 
 

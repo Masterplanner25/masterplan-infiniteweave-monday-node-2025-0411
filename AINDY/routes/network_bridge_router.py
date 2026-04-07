@@ -10,8 +10,6 @@ import uuid
 from analytics.calculation_services import save_calculation
 from services.auth_service import verify_api_key
 
-# Internal service imports
-from domain import rippletrace_services
 from domain import network_bridge_services
 router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
@@ -54,38 +52,17 @@ async def connect_external_author(
     """
     Registers an external connection or author handshake and logs it to calculation_results.
     """
-
-    author = network_bridge_services.register_author(
-        db=db,
-        name=handshake.author_name,
-        platform=handshake.platform,
-        notes=handshake.notes,
-    )
-
-    ripple_event = {
-        "ping_type": handshake.connection_type,
-        "source_platform": handshake.platform,
-        "summary": f"{handshake.author_name} connected via {handshake.platform}",
-        "notes": handshake.notes or "",
-        "drop_point_id": "bridge",
-    }
-    rippletrace_services.log_ripple_event(db, ripple_event)
-
-    # Save metric — now safely committed once at the end
-    metric_name = f"UserEvent::{handshake.platform}"
-    save_calculation(db, metric_name, 1)
-
-    logger.info("Bridge connect: %s via %s", handshake.author_name, handshake.platform)
-    logger.info("Logged metric from router: %s", metric_name)
-    db.commit()  # Final commit after all other services
-
     def handler(_ctx):
-        return {
-            "status": "connected",
-            "author_id": author.id,
-            "platform": handshake.platform,
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+        result = network_bridge_services.connect_external_author(
+            db,
+            author_name=handshake.author_name,
+            platform=handshake.platform,
+            connection_type=handshake.connection_type,
+            notes=handshake.notes,
+        )
+        logger.info("Bridge connect: %s via %s", handshake.author_name, handshake.platform)
+        return result
+
     return _execute_network_bridge(request, "network_bridge.connect", handler, db=db)
 
 @router.post("/user_event")
@@ -94,20 +71,17 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
     Called from the Node server whenever a new user joins or updates their profile.
     Logs the event into A.I.N.D.Y.'s metrics system (calculation_results table).
     """
-    metric_name = f"UserEvent::{event.platform}"
-    value = 1.0
-
-    result = save_calculation(db, metric_name, value)
-
-    logger.info("Bridge user event: %s via %s", event.name, event.platform)
-
     def handler(_ctx):
+        metric_name = f"UserEvent::{event.platform}"
+        result = save_calculation(db, metric_name, 1.0)
+        logger.info("Bridge user event: %s via %s", event.name, event.platform)
         return {
             "status": "logged",
             "user": event.name,
             "tagline": event.tagline,
-            "record_id": result.id if result else str(uuid.uuid4())
+            "record_id": result.id if result else str(uuid.uuid4()),
         }
+
     return _execute_network_bridge(request, "network_bridge.user_event", handler, db=db)
 
 

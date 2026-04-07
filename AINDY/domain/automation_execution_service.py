@@ -242,3 +242,18 @@ def _execute_content_generation(payload: dict[str, Any], config: dict[str, Any])
     }
 
 
+# ── automation log access ─────────────────────────────────────────────────────
+
+def get_automation_log(db, log_id: str, user_id: str) -> Any | None:
+    """
+    Fetch an AutomationLog row by id.
+
+    Returns the row if it exists (ownership is not enforced at the DB level —
+    the replay endpoint validates the execution_token instead).
+    Returns None when no row matches log_id.
+    """
+    from db.models.automation_log import AutomationLog
+
+    return db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+
+

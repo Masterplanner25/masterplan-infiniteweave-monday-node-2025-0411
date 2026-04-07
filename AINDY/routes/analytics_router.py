@@ -22,29 +22,19 @@ async def ingest_linkedin_manual(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(ctx):
-        from db.models import MasterPlan
+        from domain.masterplan_service import assert_masterplan_owned
         from runtime.flow_engine import run_flow
 
-        plan = (
-            db.query(MasterPlan)
-            .filter(
-                MasterPlan.id == data.masterplan_id,
-                MasterPlan.user_id == current_user["sub"],
-            )
-            .first()
-        )
-        if not plan:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "masterplan_not_found", "message": "MasterPlan not found"},
-            )
+        assert_masterplan_owned(db, data.masterplan_id, user_id)
 
         result = run_flow(
             "analytics_linkedin_ingest",
             {"data": data.model_dump()},
             db=db,
-            user_id=str(current_user["sub"]),
+            user_id=user_id,
         )
         if result.get("status") == "FAILED":
             error = result.get("error", "")
@@ -59,7 +49,7 @@ async def ingest_linkedin_manual(
 
     return await execute_with_pipeline(
         request=request, route_name="analytics.linkedin.manual", handler=handler,
-        user_id=str(current_user["sub"]), metadata={"db": db}, input_payload=data.model_dump(),
+        user_id=user_id, metadata={"db": db}, input_payload=data.model_dump(),
     )
 
 
@@ -73,25 +63,18 @@ async def get_masterplan_analytics(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(ctx):
-        from db.models import MasterPlan
+        from domain.masterplan_service import assert_masterplan_owned
         from runtime.flow_engine import run_flow
 
-        plan = (
-            db.query(MasterPlan)
-            .filter(
-                MasterPlan.id == masterplan_id,
-                MasterPlan.user_id == current_user["sub"],
-            )
-            .first()
-        )
-        if not plan:
-            raise HTTPException(status_code=404, detail={"error": "masterplan_not_found", "message": "MasterPlan not found"})
+        assert_masterplan_owned(db, masterplan_id, user_id)
 
         result = run_flow(
             "analytics_masterplan_get",
             {"masterplan_id": masterplan_id, "period_type": period_type, "platform": platform, "scope_type": scope_type},
-            db=db, user_id=str(current_user["sub"]),
+            db=db, user_id=user_id,
         )
         if result.get("status") == "FAILED":
             error = result.get("error", "")
@@ -102,7 +85,7 @@ async def get_masterplan_analytics(
 
     return await execute_with_pipeline(
         request=request, route_name="analytics.masterplan.get", handler=handler,
-        user_id=str(current_user["sub"]), metadata={"db": db},
+        user_id=user_id, metadata={"db": db},
     )
 
 
@@ -114,25 +97,18 @@ async def get_masterplan_summary(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(ctx):
-        from db.models import MasterPlan
+        from domain.masterplan_service import assert_masterplan_owned
         from runtime.flow_engine import run_flow
 
-        plan = (
-            db.query(MasterPlan)
-            .filter(
-                MasterPlan.id == masterplan_id,
-                MasterPlan.user_id == current_user["sub"],
-            )
-            .first()
-        )
-        if not plan:
-            raise HTTPException(status_code=404, detail={"error": "masterplan_not_found", "message": "MasterPlan not found"})
+        assert_masterplan_owned(db, masterplan_id, user_id)
 
         result = run_flow(
             "analytics_masterplan_summary",
             {"masterplan_id": masterplan_id, "group_by": group_by},
-            db=db, user_id=str(current_user["sub"]),
+            db=db, user_id=user_id,
         )
         if result.get("status") == "FAILED":
             error = result.get("error", "")
@@ -143,8 +119,5 @@ async def get_masterplan_summary(
 
     return await execute_with_pipeline(
         request=request, route_name="analytics.masterplan.summary", handler=handler,
-        user_id=str(current_user["sub"]), metadata={"db": db},
+        user_id=user_id, metadata={"db": db},
     )
-
-
-

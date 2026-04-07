@@ -1,5 +1,56 @@
 ## [Unreleased] — feat/infinity-algorithm-loop
 
+## [1.1.0] - 2026-04-06 — Execution Convergence / OS-LIKE Classification
+
+### Changed
+
+**System classification upgraded from LANGUAGE RUNTIME to OS-LIKE.**
+
+Every request now enters a single execution pipeline, creates an ExecutionUnit, delegates all DB work to domain services, and receives an auto-injected execution envelope. The ExecutionDispatcher is the sole authority for async decisions.
+
+**D5 — Auto-envelope injection (`core/execution_pipeline.py`)**
+- `_inject_execution_envelope()` added to `ExecutionPipeline.run()`; called unconditionally on every dict-typed handler result
+- `time.monotonic()` timing wrapped around handler invocation; `duration_ms` included in envelope
+- `to_envelope()` from `core/execution_gate.py` produces the canonical `{eu_id, trace_id, status, output, error, duration_ms, attempt_count}` shape
+- No per-route envelope construction required; all routes receive it automatically
+
+**Mass route refactor — 13 routers, zero remaining route-level DB access**
+
+New domain services:
+- `domain/social_service.py` — `get_user_scores()` owns `UserScore` query
+- `domain/health_service.py` — `check_db_connectivity()` and `check_db_ready()` own `SELECT 1` calls
+- `domain/compute_service.py` — `list_calculation_results()`, `list_masterplans_compute()`, `create_masterplan_compute()`
+- `domain/genesis_service.py` — `get_owned_session()`, `restore_synthesis_ready()`, `activate_masterplan_genesis()`
+- `domain/watcher_service.py` — `list_signals()` with `_VALID_SIGNAL_TYPES` moved from router
+- `domain/arm_service.py` — `get_arm_logs()` owns both `AnalysisResult` and `CodeGeneration` queries
+
+Extended domain services:
+- `domain/masterplan_service.py` — `assert_masterplan_owned()`, `list_masterplans()`, `lock_from_genesis()`, `set_masterplan_anchor()`, `get_masterplan_projection()`
+- `domain/leadgen_service.py` — `list_leads()`
+- `domain/rippletrace_service.py` — `count_trace_events()`
+- `domain/task_services.py` — `list_tasks()`
+- `domain/network_bridge_services.py` — `connect_external_author()` (multi-step: register + ripple log + save_calculation + commit)
+- `domain/automation_execution_service.py` — `get_automation_log()`
+
+Routers refactored (all route-level `db.query` / `db.add` / `db.commit` eliminated):
+- `routes/analytics_router.py` — 3 handlers use `assert_masterplan_owned`
+- `routes/main_router.py` — results/masterplan handlers use `compute_service`
+- `routes/arm_router.py` — log handler uses `arm_service`
+- `routes/genesis_router.py` — session query, synthesis restore, and activate block all domain-delegated
+- `routes/bridge_router.py` — user event persistence uses `bridge_service`
+- `routes/health_router.py` — both `db.execute(text(...))` calls use `health_service`
+- `routes/leadgen_router.py` — lead list uses `leadgen_service`
+- `routes/rippletrace_router.py` — trace count uses `rippletrace_service`
+- `routes/task_router.py` — task list uses `task_services`
+- `routes/watcher_router.py` — signal list uses `watcher_service`
+- `routes/network_bridge_router.py` — connect handler fully domain-delegated
+- `routes/automation_router.py` — replay pre-pipeline query moved inside handler closure
+- `routes/social_router.py` — feed handler uses `social_service.get_user_scores`
+
+**`docs/architecture/EXECUTION_AUDIT.md`** — fully updated: all 8 domain verdicts flipped from FAIL to PASS, Bottom Line updated to OS-LIKE classification, remediation order marked complete
+
+**`AINDY_README.md`** — classification updated to OS-LIKE (2026-04-06)
+
 ## [1.0.0] - 2026-04-05
 
 ### Added
