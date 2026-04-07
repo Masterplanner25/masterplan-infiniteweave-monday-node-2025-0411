@@ -16,9 +16,20 @@ Design principles
 
 Status machine
 --------------
-  pending → executing → waiting → completed
+  pending → executing → waiting → resumed → executing → completed
+                                                      └→ failed
+                                └→ executing  (backward compat / direct wakeup)
                                 └→ failed
+                      └→ completed
+                      └→ failed
   (completed and failed are terminal — no outbound transitions)
+
+  waiting  — EU is suspended; no thread is running; it is waiting for an
+             external event (flow node WAIT, ExecutionWaitSignal, resource
+             quota release, etc.)
+  resumed  — EU received its wake signal and is transitioning back into
+             executing.  Observable intermediate state so audit queries can
+             distinguish fresh executions from resumptions.
 
 Backward compatibility
 ----------------------
@@ -47,7 +58,7 @@ class ExecutionUnit(Base):
     # "task" | "agent" | "flow" | "job"
 
     status = Column(String(16), nullable=False, default="pending", index=True)
-    # "pending" | "executing" | "waiting" | "completed" | "failed"
+    # "pending" | "executing" | "waiting" | "resumed" | "completed" | "failed"
 
     # ── Ownership ──────────────────────────────────────────────────────────────
     user_id = Column(

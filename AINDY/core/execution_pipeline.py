@@ -88,15 +88,24 @@ class ExecutionResult:
     error: str | None = None
     memory_context_count: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+    eu_status: str | None = None
+    # When set, overrides the default "success" / "error" label in to_response().
+    # Use "waiting" when the handler entered WAIT, "resumed" when an EU is
+    # picked back up.  All other values fall through to the success/error mapping.
 
     def to_response(self) -> dict[str, Any]:
         trace_id = str(self.metadata.get("trace_id") or "")
         eu_id = self.metadata.get("eu_id")
         payload_data = self.data if isinstance(self.data, Response) else jsonable_encoder(self.data)
+        # eu_status overrides the default success/error label when set.
+        # "waiting" and "resumed" are non-terminal states — data is still returned.
+        status_label = self.eu_status or ("success" if self.success else "error")
         canonical_metadata = {
             "events": list(self.metadata.get("event_refs") or []),
             "next_action": self.metadata.get("next_action"),
         }
+        if self.eu_status == "waiting":
+            canonical_metadata["eu_wait_for"] = self.metadata.get("eu_wait_for")
         if not self.success:
             canonical_metadata["error"] = jsonable_encoder(
                 self.metadata.get("detail") or self.error or "Execution failed"
@@ -105,8 +114,8 @@ class ExecutionResult:
             if status_code is not None:
                 canonical_metadata["status_code"] = status_code
         return {
-            "status": "success" if self.success else "error",
-            "data": None if not self.success else payload_data,
+            "status": status_label,
+            "data": payload_data,
             "trace_id": trace_id,
             "eu_id": eu_id,
             "memory_context_count": self.memory_context_count,
@@ -120,6 +129,10 @@ class ExecutionPipeline:
         ctx: ExecutionContext,
         handler: Callable[[ExecutionContext], Any],
     ) -> ExecutionResult:
+        # Lazy import to avoid circular dependency (execution_gate ↔ execution_pipeline).
+        # Must be at the top of run() so the name is bound before the try/except.
+        from core.execution_gate import ExecutionWaitSignal
+
         trace_id = str(ctx.request_id)
         ctx.metadata.setdefault("trace_id", trace_id)
         started_event_id: str | None = None
@@ -154,6 +167,42 @@ class ExecutionPipeline:
                 )
             result, signals = self._extract_execution_result_and_signals(result)
             signals = self._merge_queued_signals(ctx, signals)
+
+            # ── WAIT detection (dict signal from flow/nodus/generic handlers) ──
+            wait_signal = self._detect_wait(result)
+            if wait_signal is not None:
+                wait_for, wait_payload = wait_signal
+                self._safe_transition_eu_waiting(ctx, wait_for=wait_for)
+                wait_event_id = self._safe_emit_event(
+                    ctx,
+                    event_type="execution.waiting",
+                    parent_event_id=started_event_id,
+                    payload={
+                        "route_name": ctx.route_name,
+                        "wait_for": wait_for,
+                        **wait_payload,
+                    },
+                )
+                self._set_event_refs(
+                    ctx,
+                    started_event_id,
+                    terminal_event_id=wait_event_id,
+                    completed=False,
+                )
+                ctx.metadata["eu_status"] = "waiting"
+                ctx.metadata["eu_wait_for"] = wait_for
+                logger.info(
+                    "execution.waiting",
+                    extra={"route": ctx.route_name, "wait_for": wait_for},
+                )
+                return ExecutionResult(
+                    success=True,
+                    eu_status="waiting",
+                    data=result,
+                    metadata=ctx.metadata,
+                )
+            # ─────────────────────────────────────────────────────────────────
+
             injected_count = self._apply_execution_signals(ctx, signals)
             memory_context_count = max(
                 self._extract_memory_context_count(result),
@@ -185,6 +234,43 @@ class ExecutionPipeline:
                 success=True,
                 data=result,
                 memory_context_count=memory_context_count,
+                metadata=ctx.metadata,
+            )
+        except ExecutionWaitSignal as exc:
+            # Handler explicitly requested WAIT via raise — not a failure.
+            self._safe_transition_eu_waiting(ctx, wait_for=exc.wait_for)
+            wait_event_id = self._safe_emit_event(
+                ctx,
+                event_type="execution.waiting",
+                parent_event_id=started_event_id,
+                payload={
+                    "route_name": ctx.route_name,
+                    "wait_for": exc.wait_for,
+                    "resume_key": exc.resume_key,
+                    **exc.payload,
+                },
+            )
+            self._set_event_refs(
+                ctx,
+                started_event_id,
+                terminal_event_id=wait_event_id,
+                completed=False,
+            )
+            ctx.metadata["eu_status"] = "waiting"
+            ctx.metadata["eu_wait_for"] = exc.wait_for
+            logger.info(
+                "execution.waiting (raised)",
+                extra={"route": ctx.route_name, "wait_for": exc.wait_for},
+            )
+            return ExecutionResult(
+                success=True,
+                eu_status="waiting",
+                data={
+                    "status": "WAITING",
+                    "wait_for": exc.wait_for,
+                    "resume_key": exc.resume_key,
+                    **exc.payload,
+                },
                 metadata=ctx.metadata,
             )
         except HTTPException as exc:
@@ -568,6 +654,58 @@ class ExecutionPipeline:
             reset_current_execution_context(token)
         except Exception:
             logger.debug("execution.current_ctx_reset_skipped", exc_info=True)
+
+    # ── WAIT detection and transition ────────────────────────────────────────
+
+    def _detect_wait(self, result: Any) -> tuple[str, dict] | None:
+        """
+        Return ``(wait_for, extra_payload)`` if ``result`` signals a WAIT,
+        otherwise return ``None``.
+
+        Two accepted forms:
+        - ``ExecutionWaitSignal`` instance returned as a value (unusual but
+          supported — some handlers prefer returning over raising).
+        - Dict with ``{"status": "WAITING", ...}`` — the shape produced by
+          ``PersistentFlowRunner`` and generic WAITING responses.
+
+        The raise-based path is handled by ``except ExecutionWaitSignal``
+        in ``run()``.  This method only handles the return-value form.
+        """
+        from core.execution_gate import ExecutionWaitSignal  # lazy to avoid circular
+
+        if isinstance(result, ExecutionWaitSignal):
+            return result.wait_for, result.payload
+        if isinstance(result, dict) and str(result.get("status") or "").upper() == "WAITING":
+            wait_for = str(
+                result.get("wait_for")
+                or result.get("waiting_for")
+                or "unknown"
+            )
+            return wait_for, {}
+        return None
+
+    def _safe_transition_eu_waiting(self, ctx: ExecutionContext, *, wait_for: str) -> None:
+        """
+        Transition the route-level EU from ``executing`` to ``waiting``.
+        Non-fatal: any exception is caught and logged at DEBUG level.
+        """
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id:
+            return
+        db = ctx.metadata.get("db")
+        if db is None:
+            return
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+
+            ExecutionUnitService(db).update_status(eu_id, "waiting")
+            logger.info(
+                "[Pipeline] EU→waiting eu_id=%s wait_for=%s",
+                eu_id,
+                wait_for,
+            )
+        except Exception:
+            logger.debug("execution.eu_transition_waiting_skipped", exc_info=True)
 
     # ── ExecutionEnvelope auto-injection ─────────────────────────────────────
 
