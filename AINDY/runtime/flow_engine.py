@@ -809,6 +809,7 @@ class PersistentFlowRunner:
                         self.db.commit()
                         try:
                             from kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
+                            from core.wait_condition import WaitCondition
                             _se = get_scheduler_engine()
                             _this_run_id = str(run.id)
                             _this_runner = self
@@ -823,6 +824,9 @@ class PersistentFlowRunner:
                                 correlation_id=_rw_trace,
                                 trace_id=_rw_trace,
                                 eu_type="flow",
+                                wait_condition=WaitCondition.for_event(
+                                    "resource_available", correlation_id=_rw_trace
+                                ),
                             )
                         except Exception as _se_exc:
                             logger.debug("[Flow] scheduler register_wait skipped: %s", _se_exc)
@@ -979,6 +983,7 @@ class PersistentFlowRunner:
                     # the resumed run re-uses the same flow checkpoint.
                     try:
                         from kernel.scheduler_engine import get_scheduler_engine
+                        from core.wait_condition import WaitCondition
                         _nw_run_id = str(run.id)
                         _nw_runner = self
                         _nw_trace = str(run.trace_id or _nw_run_id)
@@ -992,6 +997,9 @@ class PersistentFlowRunner:
                             correlation_id=_nw_trace,
                             trace_id=_nw_trace,
                             eu_type="flow",
+                            wait_condition=WaitCondition.for_event(
+                                wait_for, correlation_id=_nw_trace
+                            ),
                         )
                     except Exception as _nw_exc:
                         logger.debug("[Flow] node-WAIT scheduler register_wait skipped: %s", _nw_exc)

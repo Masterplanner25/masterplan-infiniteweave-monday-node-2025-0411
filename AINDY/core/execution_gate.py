@@ -86,26 +86,44 @@ class ExecutionWaitSignal(Exception):
     Usage
     -----
         from core.execution_gate import ExecutionWaitSignal
+        from core.wait_condition import WaitCondition
 
-        # Inside any handler closure:
+        # Event-based (default):
         raise ExecutionWaitSignal(
             "payment.confirmed",
             resume_key="invoice_123",
             payload={"invoice_id": "inv_123"},
         )
 
+        # Time-based (explicit WaitCondition):
+        from datetime import datetime, timezone, timedelta
+        raise ExecutionWaitSignal(
+            "timer.expired",
+            wait_condition=WaitCondition.for_time(
+                datetime.now(timezone.utc) + timedelta(hours=1)
+            ),
+        )
+
+        # External trigger:
+        raise ExecutionWaitSignal(
+            "webhook.received",
+            wait_condition=WaitCondition.for_external("webhook.received"),
+        )
+
     Parameters
     ----------
     wait_for:
-        The event type that will resume this EU (e.g. ``"payment.confirmed"``,
-        ``"approval.granted"``).  Stored in the ``execution.waiting`` event
-        payload and on ``ctx.metadata["eu_wait_for"]``.
+        The event type that will resume this EU.  Also used as the default
+        ``event_name`` when no explicit ``wait_condition`` is supplied.
     resume_key:
         Optional idempotency / targeting key so resume endpoints can locate
-        this EU by key rather than by id (e.g. an invoice id, a task id).
+        this EU by key rather than by id.
     payload:
-        Arbitrary extra context stored alongside the wait event for the
-        resume handler to read.
+        Arbitrary extra context stored alongside the wait event.
+    wait_condition:
+        Structured ``WaitCondition`` instance.  When provided, takes
+        precedence over deriving a condition from ``wait_for`` alone.
+        Defaults to ``WaitCondition.for_event(wait_for)`` when absent.
 
     Note
     ----
@@ -119,10 +137,12 @@ class ExecutionWaitSignal(Exception):
         *,
         resume_key: str | None = None,
         payload: dict[str, Any] | None = None,
+        wait_condition: Optional[Any] = None,  # WaitCondition | None
     ) -> None:
         self.wait_for = wait_for        # event type the EU is waiting for
         self.resume_key = resume_key    # optional resume targeting / idempotency key
         self.payload = dict(payload or {})
+        self.wait_condition = wait_condition  # WaitCondition | None
         super().__init__(f"execution.wait:{wait_for}")
 
 
