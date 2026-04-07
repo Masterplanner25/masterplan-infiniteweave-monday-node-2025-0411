@@ -686,8 +686,17 @@ class ExecutionPipeline:
 
     def _safe_transition_eu_waiting(self, ctx: ExecutionContext, *, wait_for: str) -> None:
         """
-        Transition the route-level EU from ``executing`` to ``waiting``.
+        Transition the route-level EU from ``executing`` to ``waiting`` and
+        register the wait with SchedulerEngine — the single WAIT authority.
+
         Non-fatal: any exception is caught and logged at DEBUG level.
+
+        SchedulerEngine.register_wait() is called with:
+          run_id          = eu_id  (unique per wait; flows use FlowRun.id)
+          wait_for_event  = wait_for
+          resume_callback = ExecutionUnitService.resume_execution_unit(eu_id)
+          correlation_id  = trace_id from ctx
+          trace_id        = trace_id from ctx
         """
         eu_id = ctx.metadata.get("eu_id")
         if not eu_id:
@@ -698,7 +707,34 @@ class ExecutionPipeline:
         try:
             from core.execution_unit_service import ExecutionUnitService
 
-            ExecutionUnitService(db).update_status(eu_id, "waiting")
+            eus = ExecutionUnitService(db)
+            eus.update_status(eu_id, "waiting")
+
+            # Register with SchedulerEngine so resume_waiting(event_type) can
+            # re-enqueue this EU when the awaited event fires.
+            try:
+                from kernel.scheduler_engine import get_scheduler_engine, PRIORITY_NORMAL
+
+                _eu_id = eu_id
+                _db = db
+                _trace = str(ctx.metadata.get("trace_id") or ctx.request_id)
+                get_scheduler_engine().register_wait(
+                    run_id=_eu_id,
+                    wait_for_event=wait_for,
+                    tenant_id=str(ctx.user_id or ""),
+                    eu_id=_eu_id,
+                    resume_callback=lambda: ExecutionUnitService(_db).resume_execution_unit(_eu_id),
+                    priority=PRIORITY_NORMAL,
+                    correlation_id=_trace,
+                    trace_id=_trace,
+                )
+                logger.debug(
+                    "[Pipeline] SchedulerEngine.register_wait eu=%s wait_for=%s trace=%s",
+                    _eu_id, wait_for, _trace,
+                )
+            except Exception as _se_exc:
+                logger.debug("[Pipeline] scheduler register_wait skipped: %s", _se_exc)
+
             logger.info(
                 "[Pipeline] EU→waiting eu_id=%s wait_for=%s",
                 eu_id,

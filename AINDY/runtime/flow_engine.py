@@ -812,6 +812,7 @@ class PersistentFlowRunner:
                             _se = get_scheduler_engine()
                             _this_run_id = str(run.id)
                             _this_runner = self
+                            _rw_trace = str(run.trace_id or _this_run_id)
                             _se.register_wait(
                                 run_id=_this_run_id,
                                 wait_for_event="resource_available",
@@ -819,6 +820,8 @@ class PersistentFlowRunner:
                                 eu_id=_eu_id_str,
                                 resume_callback=lambda: _this_runner.resume(_this_run_id),
                                 priority=getattr(self, "priority", "normal"),
+                                correlation_id=_rw_trace,
+                                trace_id=_rw_trace,
                             )
                         except Exception as _se_exc:
                             logger.debug("[Flow] scheduler register_wait skipped: %s", _se_exc)
@@ -970,6 +973,26 @@ class PersistentFlowRunner:
                     run.state = _json_safe(state)
                     run.current_node = current_node
                     self.db.commit()
+                    # Register with SchedulerEngine — single WAIT authority.
+                    # resume_callback re-enters PersistentFlowRunner.resume() so
+                    # the resumed run re-uses the same flow checkpoint.
+                    try:
+                        from kernel.scheduler_engine import get_scheduler_engine
+                        _nw_run_id = str(run.id)
+                        _nw_runner = self
+                        _nw_trace = str(run.trace_id or _nw_run_id)
+                        get_scheduler_engine().register_wait(
+                            run_id=_nw_run_id,
+                            wait_for_event=wait_for,
+                            tenant_id=str(self.user_id or ""),
+                            eu_id=str(getattr(self, "_eu_id", "") or ""),
+                            resume_callback=lambda: _nw_runner.resume(_nw_run_id),
+                            priority=getattr(self, "priority", "normal"),
+                            correlation_id=_nw_trace,
+                            trace_id=_nw_trace,
+                        )
+                    except Exception as _nw_exc:
+                        logger.debug("[Flow] node-WAIT scheduler register_wait skipped: %s", _nw_exc)
                     queue_system_event(
                         db=self.db,
                         event_type=SystemEventTypes.FLOW_WAITING,

@@ -242,19 +242,28 @@ class SchedulerEngine:
         eu_id: str,
         resume_callback: Callable[[], None],
         priority: str = PRIORITY_NORMAL,
+        correlation_id: str | None = None,
+        trace_id: str | None = None,
     ) -> None:
         """Register a run that is waiting for an event.
 
         When ``resume_waiting(wait_for_event)`` is called, this run will be
         re-enqueued with *priority*.
 
+        This is the single authority for all WAIT registrations — flow nodes,
+        resource-quota pauses, and generic ExecutionUnit WAITs (via pipeline)
+        all go through this method.
+
         Args:
-            run_id:           FlowRun ID (unique per wait registration).
+            run_id:           Unique key for this wait (FlowRun ID for flows,
+                              eu_id for generic EU waits).
             wait_for_event:   Event type the run is waiting for.
             tenant_id:        Owning tenant.
             eu_id:            ExecutionUnit ID.
             resume_callback:  Zero-arg callable to execute when resumed.
             priority:         Queue priority on resume (default NORMAL).
+            correlation_id:   Propagated correlation chain ID (optional).
+            trace_id:         Request trace ID for observability (optional).
         """
         with self._lock:
             self._waiting[str(run_id)] = {
@@ -263,9 +272,12 @@ class SchedulerEngine:
                 "eu_id": eu_id,
                 "callback": resume_callback,
                 "priority": priority,
+                "correlation_id": correlation_id,
+                "trace_id": trace_id,
             }
         logger.debug(
-            "[Scheduler] registered wait run=%s event=%s", run_id, wait_for_event
+            "[Scheduler] registered wait run=%s event=%s eu=%s trace=%s",
+            run_id, wait_for_event, eu_id, trace_id,
         )
 
     def resume_waiting(self, event_type: str) -> int:
