@@ -495,6 +495,136 @@ class TestSchedulerWaitResume:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# F2: SchedulerEngine.notify_event — event-triggered resume
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestSchedulerNotifyEvent:
+    """notify_event() matches on wait_condition.event_name and correlation_id."""
+
+    def _register(self, se, *, run_id, event_name, corr=None, priority=PRIORITY_NORMAL, eu_type="flow"):
+        from core.wait_condition import WaitCondition
+        wc = WaitCondition.for_event(event_name, correlation_id=corr)
+        calls = []
+        se.register_wait(
+            run_id=run_id,
+            wait_for_event=event_name,
+            tenant_id="t1",
+            eu_id=f"eu-{run_id}",
+            resume_callback=lambda r=run_id: calls.append(r),
+            priority=priority,
+            correlation_id=corr,
+            eu_type=eu_type,
+            wait_condition=wc,
+        )
+        return calls
+
+    def test_notify_event_resumes_matching_run(self):
+        se = SchedulerEngine()
+        self._register(se, run_id="r1", event_name="task.completed")
+        count = se.notify_event("task.completed")
+        assert count == 1
+        assert se.queue_depth()[PRIORITY_NORMAL] == 1
+        assert se.waiting_for("r1") is None
+
+    def test_notify_event_does_not_resume_different_event(self):
+        se = SchedulerEngine()
+        self._register(se, run_id="r1", event_name="task.completed")
+        count = se.notify_event("score.recalculated")
+        assert count == 0
+        assert se.waiting_for("r1") == "task.completed"
+
+    def test_notify_event_resumes_multiple_matching_runs(self):
+        se = SchedulerEngine()
+        self._register(se, run_id="r1", event_name="data.ready")
+        self._register(se, run_id="r2", event_name="data.ready")
+        self._register(se, run_id="r3", event_name="other.event")
+        count = se.notify_event("data.ready")
+        assert count == 2
+        assert se.waiting_for("r3") == "other.event"
+
+    def test_notify_event_correlation_id_match(self):
+        se = SchedulerEngine()
+        self._register(se, run_id="r1", event_name="job.done", corr="chain-abc")
+        self._register(se, run_id="r2", event_name="job.done", corr="chain-xyz")
+        # Only r1 matches — same correlation_id
+        count = se.notify_event("job.done", correlation_id="chain-abc")
+        assert count == 1
+        assert se.waiting_for("r1") is None
+        assert se.waiting_for("r2") == "job.done"  # r2 still waiting
+
+    def test_notify_event_unbound_wait_resumes_on_any_corr(self):
+        se = SchedulerEngine()
+        # No correlation_id on the wait — should resume regardless
+        self._register(se, run_id="r1", event_name="job.done", corr=None)
+        count = se.notify_event("job.done", correlation_id="chain-abc")
+        assert count == 1
+
+    def test_notify_event_unbound_event_resumes_on_any_corr(self):
+        se = SchedulerEngine()
+        # No correlation_id on the emitted event — should still resume bound waits
+        self._register(se, run_id="r1", event_name="job.done", corr="chain-abc")
+        count = se.notify_event("job.done", correlation_id=None)
+        assert count == 1
+
+    def test_notify_event_no_duplicate_resume(self):
+        se = SchedulerEngine()
+        self._register(se, run_id="r1", event_name="ev")
+        first = se.notify_event("ev")
+        second = se.notify_event("ev")
+        assert first == 1
+        assert second == 0  # already removed from _waiting
+
+    def test_notify_event_legacy_wait_for_fallback(self):
+        """Entries registered without a wait_condition use wait_for as fallback."""
+        se = SchedulerEngine()
+        # Register without WaitCondition (legacy path)
+        se.register_wait(
+            run_id="legacy-r1",
+            wait_for_event="legacy.event",
+            tenant_id="t1",
+            eu_id="eu-legacy",
+            resume_callback=lambda: None,
+        )
+        count = se.notify_event("legacy.event")
+        assert count == 1
+
+    def test_notify_event_external_type_resumes(self):
+        from core.wait_condition import WaitCondition
+        se = SchedulerEngine()
+        wc = WaitCondition.for_external("webhook.received")
+        se.register_wait(
+            run_id="ext-r1",
+            wait_for_event="webhook.received",
+            tenant_id="t1",
+            eu_id="eu-ext",
+            resume_callback=lambda: None,
+            wait_condition=wc,
+        )
+        count = se.notify_event("webhook.received")
+        assert count == 1
+
+    def test_notify_event_time_type_not_resumed(self):
+        """Time-based waits are NOT resumed by notify_event (tick_time_waits handles them)."""
+        from core.wait_condition import WaitCondition
+        import datetime
+        se = SchedulerEngine()
+        future = datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone.utc)
+        wc = WaitCondition.for_time(future)
+        se.register_wait(
+            run_id="time-r1",
+            wait_for_event="time.tick",
+            tenant_id="t1",
+            eu_id="eu-time",
+            resume_callback=lambda: None,
+            wait_condition=wc,
+        )
+        # notify_event should not fire time-based waits
+        count = se.notify_event("time.tick")
+        assert count == 0
+        assert se.waiting_for("time-r1") == "time.tick"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # G: SyscallDispatcher — tenant + resource integration
 # ═══════════════════════════════════════════════════════════════════════════════
 

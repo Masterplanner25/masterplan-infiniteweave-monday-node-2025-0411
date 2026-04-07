@@ -353,6 +353,94 @@ class SchedulerEngine:
             (wc_dict or {}).get("type"),
         )
 
+    def notify_event(self, event_type: str, *, correlation_id: str | None = None) -> int:
+        """Re-enqueue all waiting runs whose wait_condition matches *event_type*.
+
+        Called by the event system after each successful emission so that
+        event-triggered WAIT conditions are satisfied immediately — no polling.
+
+        Matching rules
+        --------------
+        An entry is resumed when ALL of the following hold:
+
+        1. **Event-name match** — one of:
+           - ``wait_condition.type`` is ``"event"`` or ``"external"`` AND
+             ``wait_condition.event_name`` equals ``event_type``  (structured).
+           - OR ``entry["wait_for"]`` equals ``event_type``  (legacy fallback for
+             entries registered before WaitCondition was available).
+
+        2. **Correlation-id filter** (applied only when *both* sides are non-empty):
+           ``entry["correlation_id"]`` must equal the emitted event's
+           ``correlation_id``.  When either side is absent the filter is not
+           applied — unbound waits resume on any matching event.
+
+        Duplicate protection
+        --------------------
+        Matched entries are deleted under ``_lock`` before any enqueue so a
+        run can never be resumed twice for the same event, even under concurrent
+        ``notify_event`` / ``resume_waiting`` calls.
+
+        Args:
+            event_type:     The event type that was just emitted.
+            correlation_id: Optional correlation chain ID from the emitted event.
+
+        Returns:
+            Number of runs re-enqueued.
+        """
+        to_resume: list[tuple[str, dict]] = []
+
+        with self._lock:
+            for run_id, entry in list(self._waiting.items()):
+                # ── Event-name matching ───────────────────────────────────
+                wc = entry.get("wait_condition") or {}
+                wc_type = wc.get("type")
+                wc_event = wc.get("event_name")
+
+                # Time-based waits are only fired by tick_time_waits(), never here.
+                if wc_type == "time":
+                    continue
+
+                if wc_event:
+                    # Structured WaitCondition — match on event_name
+                    if wc_type not in ("event", "external"):
+                        continue
+                    if wc_event != event_type:
+                        continue
+                else:
+                    # Legacy fallback — match directly on wait_for
+                    if entry.get("wait_for") != event_type:
+                        continue
+
+                # ── Correlation-id filter ─────────────────────────────────
+                entry_corr = entry.get("correlation_id") or None
+                emit_corr = correlation_id or None
+                if entry_corr and emit_corr and entry_corr != emit_corr:
+                    # Both present and mismatched — skip (cross-tenant guard)
+                    continue
+
+                to_resume.append((run_id, entry))
+
+            # Delete under the same lock — prevents duplicate resume
+            for run_id, _ in to_resume:
+                del self._waiting[run_id]
+
+        for run_id, entry in to_resume:
+            item = ScheduledItem(
+                execution_unit_id=entry["eu_id"],
+                tenant_id=entry["tenant_id"],
+                priority=entry["priority"],
+                run_callback=entry["callback"],
+                run_id=run_id,
+                eu_type=entry.get("eu_type", "flow"),
+            )
+            self.enqueue(item)
+            logger.info(
+                "[Scheduler] event-resumed run=%s event=%s type=%s priority=%s",
+                run_id, event_type, item.eu_type, entry["priority"],
+            )
+
+        return len(to_resume)
+
     def tick_time_waits(self) -> int:
         """Re-enqueue all time-based waits whose ``trigger_at`` has passed.
 
