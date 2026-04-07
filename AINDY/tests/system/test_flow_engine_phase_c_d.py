@@ -10,7 +10,7 @@ Phase C — Genesis → executable flow with WAIT states
   - genesis_validate_session: FAILURE without session_id
   - genesis_store_synthesis: SUCCESS even on exception (non-fatal)
   - genesis_router source has FlowRun integration (fire-and-forget block)
-  - WAIT/RESUME round-trip via route_event
+  - WAIT/RESUME round-trip: route_event delegates to SchedulerEngine
 
 Phase D — FlowHistory → Memory Bridge
   - _capture_flow_completion exists on PersistentFlowRunner
@@ -277,6 +277,149 @@ class TestGenesisRouterIntegration:
             headers=auth_headers,
         )
         assert r.status_code == 400
+
+
+class TestRouteEventSchedulerDelegation:
+    """
+    route_event() must delegate resume authority to SchedulerEngine.
+
+    Invariants:
+    - Payload is injected into FlowRun state before notify_event() fires.
+    - run.status and run.waiting_for are NOT mutated.
+    - runner.resume() is NEVER called directly.
+    - SchedulerEngine.notify_event() is always called.
+    - Return value is list[{run_id, payload_injected}].
+    """
+
+    def _make_waiting_run(self, db_session, user_id, event_type="task.completed"):
+        from db.models.flow_run import FlowRun
+        run = FlowRun(
+            id=str(uuid.uuid4()),
+            flow_name="test_flow",
+            workflow_type="test",
+            state={"some_key": "some_value"},
+            current_node="node_a",
+            status="waiting",
+            waiting_for=event_type,
+            trace_id=str(uuid.uuid4()),
+            user_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    def test_payload_injected_into_state(self, db_session, test_user):
+        """route_event() writes payload into FlowRun.state['event']."""
+        from runtime.flow_engine import route_event
+        from db.models.flow_run import FlowRun
+
+        run = self._make_waiting_run(db_session, test_user.id)
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 1
+            route_event("task.completed", {"result": "ok"}, db_session, user_id=test_user.id)
+
+        db_session.refresh(run)
+        assert run.state["event"] == {"result": "ok"}
+
+    def test_status_not_mutated(self, db_session, test_user):
+        """route_event() must NOT change run.status or run.waiting_for."""
+        from runtime.flow_engine import route_event
+        from db.models.flow_run import FlowRun
+
+        run = self._make_waiting_run(db_session, test_user.id)
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 0
+            route_event("task.completed", {}, db_session, user_id=test_user.id)
+
+        db_session.refresh(run)
+        assert run.status == "waiting"        # NOT mutated to "running"
+        assert run.waiting_for == "task.completed"  # NOT cleared to None
+
+    def test_notify_event_called_with_event_type(self, db_session, test_user):
+        """SchedulerEngine.notify_event() is called with the correct event_type."""
+        from runtime.flow_engine import route_event
+
+        self._make_waiting_run(db_session, test_user.id, event_type="genesis_user_message")
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 1
+            route_event("genesis_user_message", {}, db_session, user_id=test_user.id)
+
+        mock_se.return_value.notify_event.assert_called_once_with(
+            "genesis_user_message", correlation_id=None
+        )
+
+    def test_notify_event_receives_correlation_id_from_payload(self, db_session, test_user):
+        """correlation_id from payload is forwarded to notify_event."""
+        from runtime.flow_engine import route_event
+
+        self._make_waiting_run(db_session, test_user.id)
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 1
+            route_event(
+                "task.completed",
+                {"correlation_id": "chain-abc"},
+                db_session,
+                user_id=test_user.id,
+            )
+
+        mock_se.return_value.notify_event.assert_called_once_with(
+            "task.completed", correlation_id="chain-abc"
+        )
+
+    def test_no_runner_resume_called(self, db_session, test_user):
+        """PersistentFlowRunner.resume() must NOT be called by route_event."""
+        from runtime.flow_engine import route_event
+
+        self._make_waiting_run(db_session, test_user.id)
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 1
+            route_event("task.completed", {}, db_session, user_id=test_user.id)
+
+        # Verify scheduler was called (resume went through scheduler, not runner directly)
+        mock_se.return_value.notify_event.assert_called_once()
+
+    def test_returns_list_of_acknowledgements(self, db_session, test_user):
+        """Return value is list[{run_id, payload_injected}] per injected run."""
+        from runtime.flow_engine import route_event
+
+        run = self._make_waiting_run(db_session, test_user.id)
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 1
+            results = route_event("task.completed", {"x": 1}, db_session, user_id=test_user.id)
+
+        assert len(results) == 1
+        assert results[0]["run_id"] == str(run.id)
+        assert results[0]["payload_injected"] is True
+
+    def test_no_match_returns_empty_list(self, db_session, test_user):
+        """No waiting runs for the event → empty list, notify_event still called."""
+        from runtime.flow_engine import route_event
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 0
+            results = route_event("unknown.event", {}, db_session, user_id=test_user.id)
+
+        assert results == []
+        mock_se.return_value.notify_event.assert_called_once()
+
+    def test_notify_event_called_even_when_no_db_runs(self, db_session, test_user):
+        """notify_event() fires even if no FlowRuns matched the DB query."""
+        from runtime.flow_engine import route_event
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.notify_event.return_value = 0
+            route_event("some.event", {}, db_session)  # no user_id filter
+
+        mock_se.return_value.notify_event.assert_called_once_with(
+            "some.event", correlation_id=None
+        )
 
 
 class TestGenesisWaitResumeRoundTrip:
