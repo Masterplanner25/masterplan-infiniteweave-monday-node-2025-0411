@@ -125,7 +125,8 @@ class ExecutionUnitService:
 
     def resume_execution_unit(self, eu_id) -> bool:
         """
-        Transition a waiting EU through ``resumed → executing``.
+        Transition a waiting EU through ``resumed → executing`` and clear its
+        ``wait_condition``.
 
         Two-step so audit queries can observe the ``resumed`` state between
         the wake signal being received and execution actually restarting.
@@ -134,11 +135,55 @@ class ExecutionUnitService:
         The caller does not need to transition to "executing" separately —
         this method does both.
         """
+        from db.models.execution_unit import ExecutionUnit
+
         ok = self.update_status(eu_id, "resumed")
         if not ok:
             logger.warning("[EU] resume_execution_unit: waiting→resumed failed id=%s", eu_id)
             return False
+        # Clear wait_condition — the EU is no longer suspended.
+        try:
+            eu = self.db.query(ExecutionUnit).filter(
+                ExecutionUnit.id == _coerce_uuid(eu_id)
+            ).first()
+            if eu is not None and eu.wait_condition is not None:
+                eu.wait_condition = None
+                eu.updated_at = _now()
+                self.db.flush()
+        except Exception as exc:
+            logger.debug("[EU] clear wait_condition on resume failed (non-fatal): %s", exc)
         return self.update_status(eu_id, "executing")
+
+    def set_wait_condition(self, eu_id, condition) -> bool:
+        """
+        Persist a ``WaitCondition`` on the EU when it enters ``"waiting"`` status.
+
+        ``condition`` is accepted as a ``WaitCondition`` instance or a plain dict
+        (already serialised).  Pass ``None`` to clear.  Non-fatal.
+        """
+        from db.models.execution_unit import ExecutionUnit
+
+        try:
+            eu = self.db.query(ExecutionUnit).filter(
+                ExecutionUnit.id == _coerce_uuid(eu_id)
+            ).first()
+            if eu is None:
+                return False
+            if condition is None:
+                eu.wait_condition = None
+            elif isinstance(condition, dict):
+                eu.wait_condition = condition
+            else:
+                # WaitCondition instance — call to_dict() without hard import
+                eu.wait_condition = condition.to_dict()
+            eu.updated_at = _now()
+            self.db.flush()
+            logger.debug("[EU] wait_condition set eu_id=%s type=%s",
+                         eu_id, (eu.wait_condition or {}).get("type"))
+            return True
+        except Exception as exc:
+            logger.warning("[EU] set_wait_condition failed | id=%s error=%s", eu_id, exc)
+            return False
 
     # ── Link helpers ──────────────────────────────────────────────────────────
 

@@ -171,8 +171,8 @@ class ExecutionPipeline:
             # ── WAIT detection (dict signal from flow/nodus/generic handlers) ──
             wait_signal = self._detect_wait(result)
             if wait_signal is not None:
-                wait_for, wait_payload = wait_signal
-                self._safe_transition_eu_waiting(ctx, wait_for=wait_for)
+                wait_for, wait_payload, _wc = wait_signal
+                self._safe_transition_eu_waiting(ctx, wait_for=wait_for, wait_condition=_wc)
                 wait_event_id = self._safe_emit_event(
                     ctx,
                     event_type="execution.waiting",
@@ -238,7 +238,9 @@ class ExecutionPipeline:
             )
         except ExecutionWaitSignal as exc:
             # Handler explicitly requested WAIT via raise — not a failure.
-            self._safe_transition_eu_waiting(ctx, wait_for=exc.wait_for)
+            self._safe_transition_eu_waiting(
+                ctx, wait_for=exc.wait_for, wait_condition=exc.wait_condition
+            )
             wait_event_id = self._safe_emit_event(
                 ctx,
                 event_type="execution.waiting",
@@ -657,10 +659,13 @@ class ExecutionPipeline:
 
     # ── WAIT detection and transition ────────────────────────────────────────
 
-    def _detect_wait(self, result: Any) -> tuple[str, dict] | None:
+    def _detect_wait(self, result: Any) -> tuple[str, dict, Any] | None:
         """
-        Return ``(wait_for, extra_payload)`` if ``result`` signals a WAIT,
-        otherwise return ``None``.
+        Return ``(wait_for, extra_payload, wait_condition)`` if ``result``
+        signals a WAIT, otherwise return ``None``.
+
+        ``wait_condition`` is a ``WaitCondition`` instance when the signal
+        carries one, otherwise ``None`` (caller constructs a default).
 
         Two accepted forms:
         - ``ExecutionWaitSignal`` instance returned as a value (unusual but
@@ -674,22 +679,35 @@ class ExecutionPipeline:
         from core.execution_gate import ExecutionWaitSignal  # lazy to avoid circular
 
         if isinstance(result, ExecutionWaitSignal):
-            return result.wait_for, result.payload
+            return result.wait_for, result.payload, result.wait_condition
         if isinstance(result, dict) and str(result.get("status") or "").upper() == "WAITING":
             wait_for = str(
                 result.get("wait_for")
                 or result.get("waiting_for")
                 or "unknown"
             )
-            return wait_for, {}
+            return wait_for, {}, None
         return None
 
-    def _safe_transition_eu_waiting(self, ctx: ExecutionContext, *, wait_for: str) -> None:
+    def _safe_transition_eu_waiting(
+        self,
+        ctx: ExecutionContext,
+        *,
+        wait_for: str,
+        wait_condition=None,  # WaitCondition | None
+    ) -> None:
         """
         Transition the route-level EU from ``executing`` to ``waiting`` and
         register the wait with SchedulerEngine — the single WAIT authority.
 
         Non-fatal: any exception is caught and logged at DEBUG level.
+
+        Args:
+            ctx:            Current ExecutionContext.
+            wait_for:       Event name that will wake this EU.
+            wait_condition: Optional ``WaitCondition`` instance.  When absent,
+                            a default event-type condition is constructed from
+                            ``wait_for``.
 
         SchedulerEngine.register_wait() is called with:
           run_id          = eu_id  (unique per wait; flows use FlowRun.id)
@@ -697,6 +715,7 @@ class ExecutionPipeline:
           resume_callback = ExecutionUnitService.resume_execution_unit(eu_id)
           correlation_id  = trace_id from ctx
           trace_id        = trace_id from ctx
+          wait_condition  = structured WaitCondition (event or time)
         """
         eu_id = ctx.metadata.get("eu_id")
         if not eu_id:
@@ -706,9 +725,16 @@ class ExecutionPipeline:
             return
         try:
             from core.execution_unit_service import ExecutionUnitService
+            from core.wait_condition import WaitCondition
+
+            # Build a WaitCondition if the caller didn't provide one.
+            if wait_condition is None:
+                _trace = str(ctx.metadata.get("trace_id") or ctx.request_id)
+                wait_condition = WaitCondition.for_event(wait_for, correlation_id=_trace)
 
             eus = ExecutionUnitService(db)
             eus.update_status(eu_id, "waiting")
+            eus.set_wait_condition(eu_id, wait_condition)
 
             # Register with SchedulerEngine so resume_waiting(event_type) can
             # re-enqueue this EU when the awaited event fires.
@@ -727,10 +753,12 @@ class ExecutionPipeline:
                     priority=PRIORITY_NORMAL,
                     correlation_id=_trace,
                     trace_id=_trace,
+                    eu_type=_route_eu_type(ctx.route_name),
+                    wait_condition=wait_condition,
                 )
                 logger.debug(
-                    "[Pipeline] SchedulerEngine.register_wait eu=%s wait_for=%s trace=%s",
-                    _eu_id, wait_for, _trace,
+                    "[Pipeline] SchedulerEngine.register_wait eu=%s wait_for=%s cond_type=%s trace=%s",
+                    _eu_id, wait_for, wait_condition.type, _trace,
                 )
             except Exception as _se_exc:
                 logger.debug("[Pipeline] scheduler register_wait skipped: %s", _se_exc)

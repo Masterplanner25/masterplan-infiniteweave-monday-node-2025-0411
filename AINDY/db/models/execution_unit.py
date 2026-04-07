@@ -126,6 +126,12 @@ class ExecutionUnit(Base):
     quota_group = Column(String(64), nullable=True)
     # Optional policy tag for quota-group overrides (e.g. "premium", "batch").
 
+    # ── Wait condition ─────────────────────────────────────────────────────────
+    wait_condition = Column(JSONB, nullable=True)
+    # Populated when status transitions to "waiting"; cleared on resume.
+    # Shape: {type, trigger_at, event_name, correlation_id}
+    # See core/wait_condition.py — WaitCondition.to_dict() / from_dict().
+
     # ── Extra ──────────────────────────────────────────────────────────────────
     extra = Column(JSONB, nullable=True)
     # Per-type metadata: workflow_type, goal_preview, task_name, etc.
