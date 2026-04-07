@@ -390,11 +390,6 @@ def tasks_recurrence_check_node(state, context):
 def agent_run_create_node(state, context):
     try:
         from agents.agent_runtime import create_run, execute_run, to_execution_response
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_autonomous_async_job,
-        )
         from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
         from platform_layer.async_job_service import defer_async_job
         from utils.trace_context import ensure_trace_id
@@ -404,18 +399,9 @@ def agent_run_create_node(state, context):
         user_id = normalize_uuid(context.get("user_id"))
         goal = state.get("goal", "").strip()
 
-        if async_heavy_execution_enabled():
-            response = submit_autonomous_async_job(
-                task_name="agent.create_run",
-                payload={"goal": goal, "user_id": str(user_id)},
-                user_id=user_id,
-                source="agent_router",
-                trigger_type="user",
-                trigger_context={"goal": goal, "importance": 0.95},
-            )
-            return {"status": "SUCCESS", "output_patch": {"agent_run_create_result": {
-                "_http_status": 202, "_http_response": response,
-            }}}
+        # Removed: if async_heavy_execution_enabled(): submit_autonomous_async_job(...)
+        # Execution mode (INLINE vs ASYNC) is decided exclusively by ExecutionDispatcher
+        # at the route/flow entry boundary — not inside a flow node.
 
         trace_id = ensure_trace_id()
         trigger_context = {"goal": goal, "importance": 0.95}
@@ -498,7 +484,6 @@ def agent_run_get_node(state, context):
 def agent_run_approve_node(state, context):
     try:
         from agents.agent_runtime import approve_run, to_execution_response
-        from platform_layer.async_job_service import async_heavy_execution_enabled, submit_autonomous_async_job
         from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
         from platform_layer.async_job_service import defer_async_job
         from utils.trace_context import ensure_trace_id
@@ -507,16 +492,8 @@ def agent_run_approve_node(state, context):
         user_id = normalize_uuid(context.get("user_id"))
         run_id = state.get("run_id")
 
-        if async_heavy_execution_enabled():
-            response = submit_autonomous_async_job(
-                task_name="agent.approve_run",
-                payload={"run_id": run_id, "user_id": str(user_id)},
-                user_id=user_id, source="agent_router", trigger_type="user",
-                trigger_context={"goal": f"approve_run:{run_id}", "importance": 0.9},
-            )
-            return {"status": "SUCCESS", "output_patch": {"agent_run_approve_result": {
-                "_http_status": 202, "_http_response": response,
-            }}}
+        # Removed: if async_heavy_execution_enabled(): submit_autonomous_async_job(...)
+        # Execution mode is decided exclusively by ExecutionDispatcher at the entry boundary.
 
         trace_id = ensure_trace_id()
         trigger_context = {"goal": f"approve_run:{run_id}", "importance": 0.9}
@@ -1065,11 +1042,6 @@ def genesis_synthesize_node(state, context):
     try:
         import uuid
         from db.models import GenesisSessionDB
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
         from domain.genesis_ai import call_genesis_synthesis_llm
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -1082,16 +1054,8 @@ def genesis_synthesize_node(state, context):
             return {"status": "FAILURE", "error": "HTTP_404:GenesisSession not found"}
         if not session.synthesis_ready:
             return {"status": "FAILURE", "error": "HTTP_422:Session is not ready for synthesis yet"}
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="genesis.synthesize",
-                payload={"session_id": session_id, "user_id": str(user_id)},
-                user_id=user_id, source="genesis_router",
-            )
-            return {"status": "SUCCESS", "output_patch": {"genesis_synthesize_result": {
-                "_http_status": 202,
-                "_http_response": build_queued_response(log_id, task_name="genesis.synthesize", source="genesis_router"),
-            }}}
+        # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode is decided exclusively by ExecutionDispatcher at the entry boundary.
         current_state = session.summarized_state or {}
         draft = call_genesis_synthesis_llm(current_state, user_id=str(user_id), db=db)
         session.draft_json = draft
@@ -1106,11 +1070,6 @@ def genesis_audit_node(state, context):
     try:
         import uuid
         from db.models import GenesisSessionDB
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
         from domain.genesis_ai import validate_draft_integrity
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -1123,16 +1082,8 @@ def genesis_audit_node(state, context):
             return {"status": "FAILURE", "error": "HTTP_404:GenesisSession not found"}
         if not session.draft_json:
             return {"status": "FAILURE", "error": "HTTP_422:No draft available - run /genesis/synthesize first"}
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="genesis.audit",
-                payload={"session_id": session_id, "user_id": str(user_id)},
-                user_id=user_id, source="genesis_router",
-            )
-            return {"status": "SUCCESS", "output_patch": {"genesis_audit_result": {
-                "_http_status": 202,
-                "_http_response": build_queued_response(log_id, task_name="genesis.audit", source="genesis_router"),
-            }}}
+        # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode is decided exclusively by ExecutionDispatcher at the entry boundary.
         return {"status": "SUCCESS", "output_patch": {"genesis_audit_result": validate_draft_integrity(session.draft_json)}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
@@ -1862,11 +1813,6 @@ def memory_suggest_node(state, context):
 @register_node("memory_nodus_execute_node")
 def memory_nodus_execute_node(state, context):
     try:
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
         from core.execution_envelope import success
         from runtime.nodus_execution_service import execute_nodus_task_payload
         from runtime.nodus_security import NodusSecurityError
@@ -1874,24 +1820,8 @@ def memory_nodus_execute_node(state, context):
         from utils.user_ids import require_user_id
         db = context.get("db")
         user_id = str(require_user_id(context.get("user_id")))
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="memory.nodus.execute",
-                payload={
-                    "task_name": state.get("task_name"),
-                    "task_code": state.get("task_code"),
-                    "user_id": user_id,
-                    "session_tags": state.get("session_tags", []),
-                    "allowed_operations": state.get("allowed_operations"),
-                    "execution_id": state.get("execution_id"),
-                    "capability_token": state.get("capability_token"),
-                },
-                user_id=user_id, source="memory_router",
-            )
-            return {"status": "SUCCESS", "output_patch": {"memory_nodus_execute_result": {
-                "_http_status": 202,
-                "_http_response": build_queued_response(log_id, task_name="memory.nodus.execute", source="memory_router"),
-            }}}
+        # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode is decided exclusively by ExecutionDispatcher at the entry boundary.
         try:
             result = execute_nodus_task_payload(
                 task_name=state.get("task_name"),

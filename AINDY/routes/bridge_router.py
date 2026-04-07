@@ -14,7 +14,6 @@ from core.execution_helper import execute_with_pipeline
 from core.execution_signal_helper import queue_memory_capture
 from db.dao.memory_node_dao import MemoryNodeDAO
 from db.database import get_db
-from db.models.bridge_user_event import BridgeUserEvent
 from config import settings
 from services.auth_service import get_current_user, verify_api_key
 
@@ -276,27 +275,18 @@ async def bridge_user_event(
 ):
 
     def handler(ctx):
-        timestamp = event.timestamp or time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.gmtime()
-        )
-        occurred_at = _parse_event_timestamp(event.timestamp) or datetime.now(
-            timezone.utc
-        )
+        from domain.bridge_service import log_bridge_user_event
 
-        try:
-            db.add(
-                BridgeUserEvent(
-                    user_name=event.user,
-                    origin=event.origin,
-                    raw_timestamp=event.timestamp,
-                    occurred_at=occurred_at,
-                )
-            )
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("Failed to persist bridge user event: %s", exc)
+        timestamp = event.timestamp or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+        occurred_at = _parse_event_timestamp(event.timestamp) or datetime.now(timezone.utc)
 
+        log_bridge_user_event(
+            db,
+            user=event.user,
+            origin=event.origin,
+            raw_timestamp=event.timestamp,
+            occurred_at=occurred_at,
+        )
         return {
             "status": "logged",
             "user": event.user,
@@ -308,4 +298,5 @@ async def bridge_user_event(
         request=request,
         route_name="bridge.user_event",
         handler=handler,
+        metadata={"db": db},
     )

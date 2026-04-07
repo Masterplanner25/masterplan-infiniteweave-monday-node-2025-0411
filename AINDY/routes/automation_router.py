@@ -121,26 +121,27 @@ async def replay_automation_log(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    from db.models.automation_log import AutomationLog
-    from agents.capability_service import validate_token
-
-    log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
-    if log and getattr(log, "payload", None):
-        payload = log.payload if isinstance(log.payload, dict) else {}
-        if payload.get("execution_token"):
-            validation = validate_token(
-                token=payload.get("execution_token"),
-                run_id=payload.get("run_id"),
-                user_id=user_id,
-            )
-            if not validation.get("ok"):
-                raise HTTPException(
-                    status_code=403,
-                    detail={"error": validation.get("error", "invalid_execution_token")},
-                )
 
     def handler(_ctx):
+        from agents.capability_service import validate_token
         from core.execution_gate import require_execution_unit
+        from domain.automation_execution_service import get_automation_log
+
+        log = get_automation_log(db, log_id, user_id)
+        if log and getattr(log, "payload", None):
+            payload = log.payload if isinstance(log.payload, dict) else {}
+            if payload.get("execution_token"):
+                validation = validate_token(
+                    token=payload.get("execution_token"),
+                    run_id=payload.get("run_id"),
+                    user_id=user_id,
+                )
+                if not validation.get("ok"):
+                    raise HTTPException(
+                        status_code=403,
+                        detail={"error": validation.get("error", "invalid_execution_token")},
+                    )
+
         # EU gate: attach to existing AutomationLog EU (idempotent; non-fatal)
         require_execution_unit(
             db=db,
@@ -152,6 +153,7 @@ async def replay_automation_log(
             extra={"workflow_type": "automation_replay"},
         )
         return _run_flow_automation("automation_log_replay", {"log_id": log_id}, db, user_id)
+
     return await _execute_automation(request, "automation.logs.replay", handler, db=db, user_id=user_id,
                                      input_payload={"automation_log_id": log_id})
 

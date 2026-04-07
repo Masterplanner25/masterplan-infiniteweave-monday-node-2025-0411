@@ -13,11 +13,11 @@ Endpoints:
   PUT  /arm/config   — update ARM configuration
 """
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
+from core.execution_gate import to_envelope
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from services.auth_service import get_current_user
@@ -73,34 +73,9 @@ async def analyze_code(
         TP = (Complexity × Urgency) / Resource Cost
     """
     async def handler(ctx):
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
-
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="arm.analyze",
-                payload={
-                    "file_path": body.file_path,
-                    "user_id": str(current_user["sub"]),
-                    "complexity": body.complexity,
-                    "urgency": body.urgency,
-                    "context": body.context,
-                },
-                user_id=current_user["sub"],
-                source="arm_router",
-            )
-            return JSONResponse(
-                status_code=202,
-                content=build_queued_response(
-                    log_id,
-                    task_name="arm.analyze",
-                    source="arm_router",
-                ),
-            )
-
+        # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode (INLINE vs ASYNC) is decided exclusively by
+        # ExecutionDispatcher — not at the route level.
         from runtime.flow_engine import run_flow
         result = run_flow(
             "arm_analysis",
@@ -117,7 +92,16 @@ async def analyze_code(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "ARM analysis flow failed")
             )
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"),
+            trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request,
@@ -142,37 +126,9 @@ async def generate_code(
     Optionally link to a previous analysis session via analysis_id.
     """
     async def handler(ctx):
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
-
-        if async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="arm.generate",
-                payload={
-                    "prompt": body.prompt,
-                    "user_id": str(current_user["sub"]),
-                    "original_code": body.original_code,
-                    "language": body.language,
-                    "generation_type": body.generation_type,
-                    "analysis_id": body.analysis_id,
-                    "complexity": body.complexity,
-                    "urgency": body.urgency,
-                },
-                user_id=current_user["sub"],
-                source="arm_router",
-            )
-            return JSONResponse(
-                status_code=202,
-                content=build_queued_response(
-                    log_id,
-                    task_name="arm.generate",
-                    source="arm_router",
-                ),
-            )
-
+        # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode (INLINE vs ASYNC) is decided exclusively by
+        # ExecutionDispatcher — not at the route level.
         from runtime.flow_engine import run_flow
         result = run_flow(
             "arm_generate",
@@ -192,7 +148,16 @@ async def generate_code(
             raise RuntimeError(
                 (result.get("data") or {}).get("message", "ARM generate flow failed")
             )
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"),
+            trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request,
@@ -212,68 +177,15 @@ async def get_arm_logs(
     current_user: dict = Depends(get_current_user),
 ):
     """Fetch reasoning session logs for the current user."""
-    def handler(ctx):
-        from uuid import UUID
-        from db.models.arm_models import AnalysisResult, CodeGeneration
+    user_id = str(current_user["sub"])
 
-        user_id = UUID(str(current_user["sub"]))
-        analyses = (
-            db.query(AnalysisResult)
-            .filter(AnalysisResult.user_id == user_id)
-            .order_by(AnalysisResult.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-        generations = (
-            db.query(CodeGeneration)
-            .filter(CodeGeneration.user_id == user_id)
-            .order_by(CodeGeneration.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-        return {
-            "analyses": [
-                {
-                    "session_id": str(a.session_id),
-                    "file": (a.file_path or "").split("/")[-1].split("\\")[-1],
-                    "status": a.status,
-                    "execution_seconds": a.execution_seconds,
-                    "input_tokens": a.input_tokens,
-                    "output_tokens": a.output_tokens,
-                    "task_priority": a.task_priority,
-                    "execution_speed": round(
-                        ((a.input_tokens or 0) + (a.output_tokens or 0))
-                        / max(a.execution_seconds or 0.001, 0.001),
-                        1,
-                    ),
-                    "summary": a.result_summary,
-                    "created_at": a.created_at.isoformat() if a.created_at else None,
-                }
-                for a in analyses
-            ],
-            "generations": [
-                {
-                    "session_id": str(g.session_id),
-                    "language": g.language,
-                    "generation_type": g.generation_type,
-                    "execution_seconds": g.execution_seconds,
-                    "input_tokens": g.input_tokens,
-                    "output_tokens": g.output_tokens,
-                    "created_at": g.created_at.isoformat() if g.created_at else None,
-                }
-                for g in generations
-            ],
-            "summary": {
-                "total_analyses": len(analyses),
-                "total_generations": len(generations),
-                "total_tokens_used": sum((a.input_tokens or 0) + (a.output_tokens or 0) for a in analyses)
-                + sum((g.input_tokens or 0) + (g.output_tokens or 0) for g in generations),
-            },
-        }
+    def handler(ctx):
+        from domain.arm_service import get_arm_logs as svc_logs
+        return svc_logs(db, user_id=user_id, limit=limit)
 
     return await execute_with_pipeline(
         request=request, route_name="arm.logs", handler=handler,
-        user_id=str(current_user["sub"]), metadata={"db": db},
+        user_id=user_id, metadata={"db": db},
     )
 
 
@@ -288,7 +200,15 @@ async def get_config(
         result = run_flow("arm_config_get", {}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config get flow failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.config.get", handler=handler,
@@ -308,7 +228,15 @@ async def update_config(
         result = run_flow("arm_config_update", {"updates": body.updates}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config update flow failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.config.update", handler=handler,
@@ -329,7 +257,15 @@ async def get_arm_metrics(
         result = run_flow("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM metrics flow failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.metrics.get", handler=handler,
@@ -350,7 +286,15 @@ async def get_config_suggestions(
         result = run_flow("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config suggest flow failed")
-        return result.get("data")
+        data = result.get("data") or {}
+        if not isinstance(data, dict):
+            data = {"result": data}
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
+        return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.config.suggest", handler=handler,

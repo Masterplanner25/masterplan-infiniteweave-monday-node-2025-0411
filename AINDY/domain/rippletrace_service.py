@@ -374,3 +374,12 @@ def _serialize_edge(
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
+
+def count_trace_events(db, trace_id: str, user_id: str) -> int:
+    """Return the number of SystemEvent rows matching trace_id for user_id."""
+    return (
+        db.query(SystemEvent)
+        .filter(SystemEvent.trace_id == trace_id, SystemEvent.user_id == uuid.UUID(str(user_id)))
+        .count()
+    )
+

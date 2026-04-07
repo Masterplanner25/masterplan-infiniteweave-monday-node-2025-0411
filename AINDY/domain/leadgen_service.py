@@ -267,4 +267,31 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
     return results
 
 
+def list_leads(db: Session, user_id: str) -> list[dict]:
+    """Return all persisted LeadGenResult rows for a user, newest first."""
+    from db.models.leadgen_model import LeadGenResult
+
+    rows = (
+        db.query(LeadGenResult)
+        .filter(LeadGenResult.user_id == user_id)
+        .order_by(LeadGenResult.created_at.desc(), LeadGenResult.id.desc())
+        .all()
+    )
+    return [
+        {
+            "id": row.id,
+            "query": row.query,
+            "company": row.company,
+            "url": row.url,
+            "context": row.context,
+            "fit_score": row.fit_score,
+            "intent_score": row.intent_score,
+            "search_score": row.overall_score,
+            "reasoning": row.reasoning,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+
+
 

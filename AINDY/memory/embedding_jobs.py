@@ -7,7 +7,8 @@ from typing import Any
 
 from core.execution_signal_helper import queue_system_event
 from db.database import SessionLocal
-from platform_layer.async_job_service import register_async_job, submit_async_job
+from core.execution_dispatcher import dispatch_job
+from platform_layer.async_job_service import register_async_job
 from memory.embedding_service import generate_embedding
 from core.system_event_service import emit_error_event
 from core.system_event_types import SystemEventTypes
@@ -19,7 +20,7 @@ EMBEDDING_RETRY_DELAYS = (1, 2, 4)
 
 
 def enqueue_embedding(memory_id: str, *, user_id: str | None = None, trace_id: str | None = None) -> str:
-    return submit_async_job(
+    result = dispatch_job(
         task_name=EMBEDDING_JOB_NAME,
         payload={
             "memory_id": memory_id,
@@ -31,6 +32,7 @@ def enqueue_embedding(memory_id: str, *, user_id: str | None = None, trace_id: s
         max_attempts=1,
         execute_inline_in_test_mode=False,
     )
+    return result.meta["log_id"]
 
 
 def _set_embedding_status(db, memory_node, status: str, embedding: list[float] | None = None) -> None:

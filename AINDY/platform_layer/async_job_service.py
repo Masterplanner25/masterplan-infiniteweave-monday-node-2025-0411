@@ -32,13 +32,11 @@ _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
 _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 
-
-def async_heavy_execution_enabled() -> bool:
-    if os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}:
-        return False
-    if os.getenv("TEST_MODE", "false").lower() in {"1", "true", "yes"}:
-        return False
-    return os.getenv("AINDY_ASYNC_HEAVY_EXECUTION", "false").lower() in {"1", "true", "yes"}
+# async_heavy_execution_enabled() now lives in core.execution_dispatcher — the
+# single authoritative source for the INLINE vs ASYNC decision.  Re-exported
+# here so existing callers (flow_definitions_extended, memory_router, arm_router)
+# continue to work without modification.
+from core.execution_dispatcher import async_heavy_execution_enabled  # noqa: E402, F401
 
 
 def shutdown_async_jobs(*, wait: bool = True) -> None:
@@ -276,8 +274,18 @@ def submit_async_job(
         if _session_dialect_name(db) == "sqlite" and task_name != "agent.create_run":
             _execute_job_inline(db, log_id, task_name, payload)
             return log_id
-        future = _get_executor().submit(_execute_job, log_id, task_name, payload)
-        if future.cancelled():
+        # Removed: _get_executor().submit() called directly here.
+        # Dispatch through ExecutionDispatcher — the single owner of the
+        # INLINE vs ASYNC decision.  JOB_DISPATCH_STUB carries async_hint=True
+        # to bypass the global env flag (test-mode inline execution was already
+        # handled above; reaching this line means we are in a real async env).
+        from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+        _dr = _dispatch(
+            JOB_DISPATCH_STUB,
+            handler_fn=lambda: _execute_job(log_id, task_name, payload),
+            context={"log_id": log_id, "task_name": task_name},
+        )
+        if _dr.future is not None and _dr.future.cancelled():
             raise RuntimeError(f"Async job '{task_name}' was cancelled before execution")
         return log_id
     except Exception as exc:
@@ -519,7 +527,15 @@ def process_deferred_jobs(limit: int = 25) -> int:
             if settings.TEST_MODE:
                 _execute_job(log.id, log.task_name, log.payload or {})
             else:
-                _get_executor().submit(_execute_job, log.id, log.task_name, log.payload or {})
+                # Removed: direct _get_executor().submit() call.
+                # Route through dispatcher — single owner of thread-pool access.
+                from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+                _lid, _tn, _pl = log.id, log.task_name, log.payload or {}
+                _dispatch(
+                    JOB_DISPATCH_STUB,
+                    handler_fn=lambda: _execute_job(_lid, _tn, _pl),
+                    context={"log_id": _lid},
+                )
             resumed += 1
         return resumed
     finally:
@@ -701,7 +717,13 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                     "[AsyncJob] %s attempt %d/%d failed — rescheduling: %s",
                     task_name, log.attempt_count, log.max_attempts, exc,
                 )
-                _get_executor().submit(_execute_job, log_id, task_name, payload)
+                # Removed: direct _get_executor().submit() call.
+                from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+                _dispatch(
+                    JOB_DISPATCH_STUB,
+                    handler_fn=lambda: _execute_job(log_id, task_name, payload),
+                    context={"log_id": log_id, "retry": True},
+                )
                 return
 
             failure_response = execution_error(str(exc), [], str(log_id))

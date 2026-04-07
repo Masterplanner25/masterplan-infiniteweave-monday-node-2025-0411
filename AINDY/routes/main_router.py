@@ -7,8 +7,6 @@ from db.database import get_db
 from services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
 from schemas.masterplan import MasterPlanInput
-from db.models import MasterPlan
-from db.models import CalculationResult
 from schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
@@ -429,15 +427,11 @@ async def get_results(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await _execute_main(
-        request,
-        "main.results.list",
-        lambda ctx: db.query(CalculationResult).filter(
-            CalculationResult.user_id == uuid.UUID(str(current_user["sub"]))
-        ).all(),
-        db=db,
-        current_user=current_user,
-    )
+    def handler(ctx):
+        from domain.compute_service import list_calculation_results
+        return list_calculation_results(db, user_id=str(current_user["sub"]))
+
+    return await _execute_main(request, "main.results.list", handler, db=db, current_user=current_user)
 
 @router.get("/masterplans")
 async def get_masterplans(
@@ -445,15 +439,11 @@ async def get_masterplans(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await _execute_main(
-        request,
-        "main.masterplans.list",
-        lambda ctx: db.query(MasterPlan).filter(
-            MasterPlan.user_id == uuid.UUID(str(current_user["sub"]))
-        ).all(),
-        db=db,
-        current_user=current_user,
-    )
+    def handler(ctx):
+        from domain.compute_service import list_masterplans_compute
+        return list_masterplans_compute(db, user_id=str(current_user["sub"]))
+
+    return await _execute_main(request, "main.masterplans.list", handler, db=db, current_user=current_user)
 
 @router.post("/create_masterplan")
 async def create_masterplan(
@@ -463,12 +453,8 @@ async def create_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        plan = MasterPlan(**data.dict())
-        plan.user_id = uuid.UUID(str(current_user["sub"]))
-        db.add(plan)
-        db.commit()
-        db.refresh(plan)
-        return plan
+        from domain.compute_service import create_masterplan_compute
+        return create_masterplan_compute(db, data=data.dict(), user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 

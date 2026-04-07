@@ -6,11 +6,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from core.execution_gate import to_envelope
 from core.execution_service import ExecutionContext
 from core.execution_service import run_execution
 from core.observability_events import emit_observability_event
 from db.database import get_db
-from db.models import GenesisSessionDB, MasterPlan
+from db.models import GenesisSessionDB
 from services.auth_service import get_current_user
 # Legacy import path preserved in source for regression tests:
 # from services.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
@@ -33,6 +34,23 @@ _GENESIS_COMPAT_EXPORTS = (
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
 
+def _genesis_flow_envelope(result: dict) -> dict:
+    """Embed execution_envelope into flow result data. Returns the data dict."""
+    data = result.get("data")
+    if not isinstance(data, dict):
+        data = {} if data is None else {"result": data}
+    data.setdefault("execution_envelope", to_envelope(
+        eu_id=result.get("run_id"),
+        trace_id=result.get("trace_id"),
+        status=str(result.get("status") or "UNKNOWN").upper(),
+        output=None,
+        error=result.get("error"),
+        duration_ms=None,
+        attempt_count=None,
+    ))
+    return data
+
+
 def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
     """Run a genesis flow, decoding HTTP errors from node results."""
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
@@ -50,18 +68,12 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
             raise HTTPException(status_code=code, detail={"error": f"genesis_{flow_name}_failed", "message": msg})
         raise HTTPException(status_code=500, detail=f"{flow_name} failed")
 
-    return data
+    return _genesis_flow_envelope(result)
 
 
 def _get_owned_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
-    return (
-        db.query(GenesisSessionDB)
-        .filter(
-            GenesisSessionDB.id == session_id,
-            GenesisSessionDB.user_id == uuid.UUID(str(user_id)),
-        )
-        .first()
-    )
+    from domain.genesis_service import get_owned_session
+    return get_owned_session(db, session_id, user_id)
 
 
 def _get_user_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
@@ -149,10 +161,8 @@ def genesis_message(
                 logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
             raise HTTPException(status_code=500, detail="Genesis message execution failed")
 
-        db.refresh(session)
-        if existing_ready and not session.synthesis_ready:
-            session.synthesis_ready = True
-            db.commit()
+        from domain.genesis_service import restore_synthesis_ready
+        restore_synthesis_ready(db, session, existing_ready=existing_ready)
 
         try:
             emit_observability_event(
@@ -164,7 +174,7 @@ def genesis_message(
         except Exception as _obs_exc:
             logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
 
-        return result
+        return _genesis_flow_envelope(result)
 
     return _execute_genesis(
         "genesis.message",
@@ -300,7 +310,16 @@ def audit_genesis_draft(
             status_code=422,
             detail={"error": "draft_not_available", "message": "No draft_json available for audit"},
         )
-    return _execute_genesis("genesis.audit", lambda _ctx: validate_draft_integrity(session.draft_json, user_id=user_id, db=db), db=db, user_id=user_id, input_payload={"session_id": body.session_id})
+    def _audit_handler(_ctx):
+        audit_result = validate_draft_integrity(session.draft_json, user_id=user_id, db=db)
+        if not isinstance(audit_result, dict):
+            audit_result = {"result": audit_result}
+        audit_result.setdefault("execution_envelope", to_envelope(
+            eu_id=None, trace_id=None, status="SUCCESS",
+            output=None, error=None, duration_ms=None, attempt_count=1,
+        ))
+        return audit_result
+    return _execute_genesis("genesis.audit", _audit_handler, db=db, user_id=user_id, input_payload={"session_id": body.session_id})
 
 
 @router.post(
@@ -357,6 +376,10 @@ def lock_masterplan(
             "status": getattr(plan, "status", "locked"),
             "posture": getattr(plan, "posture", None),
             "posture_description": posture_description(getattr(plan, "posture", None)),
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
         }
     except HTTPException:
         # TERMINAL — failure
@@ -417,65 +440,37 @@ def activate_masterplan(
     except Exception as _obs_exc:
         logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
 
-    try:
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == plan_id, MasterPlan.user_id == uuid.UUID(user_id))
-            .first()
-        )
-        if not plan:
-            raise HTTPException(status_code=404, detail={"error": "plan_not_found", "message": "Masterplan not found"})
-        if not getattr(plan, "is_active", False):
-            (
-                db.query(MasterPlan)
-                .filter(MasterPlan.user_id == uuid.UUID(user_id))
-                .update({"is_active": False})
-            )
-            plan.is_active = True
-            plan.status = "active"
-            db.commit()
+    def _activate_handler(_ctx):
+        from domain.genesis_service import activate_masterplan_genesis
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            result = activate_masterplan_genesis(db, plan_id=plan_id, user_id=user_id)
+        except HTTPException:
+            try:
+                emit_observability_event(
+                    event_type=SystemEventTypes.GENESIS_ACTIVATE_FAILED,
+                    user_id=user_id,
+                    payload={"operation": "activate", "plan_id": plan_id, "status": "failed"},
+                    source="genesis",
+                )
+            except Exception as _obs_exc:
+                logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+            raise
 
-            MemoryNodeDAO(db).save(
-                content=f"Masterplan activated: {getattr(plan, 'version_label', plan_id)}",
-                source="genesis_activate",
-                tags=["genesis", "masterplan", "activate"],
-                user_id=user_id,
-                node_type="decision",
-                extra={"plan_id": getattr(plan, "id", plan_id)},
-            )
-        except Exception as exc:
-            logger.warning("Genesis activate memory capture failed: %s", exc)
-        result = {
-            "plan_id": getattr(plan, "id", plan_id),
-            "status": getattr(plan, "status", "active"),
-            "is_active": getattr(plan, "is_active", True),
-        }
-    except HTTPException:
-        # TERMINAL — failure
+        result["execution_envelope"] = to_envelope(
+            eu_id=None, trace_id=None, status="SUCCESS",
+            output=None, error=None, duration_ms=None, attempt_count=1,
+        )
         try:
             emit_observability_event(
-                event_type=SystemEventTypes.GENESIS_ACTIVATE_FAILED,
+                event_type=SystemEventTypes.GENESIS_ACTIVATED,
                 user_id=user_id,
-                payload={"operation": "activate", "plan_id": plan_id, "status": "failed"},
+                payload={"operation": "activate", "plan_id": plan_id, "status": "complete"},
                 source="genesis",
             )
         except Exception as _obs_exc:
-            logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
-        raise
+            logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
+        return result
 
-    # TERMINAL — success
-    try:
-        emit_observability_event(
-            event_type=SystemEventTypes.GENESIS_ACTIVATED,
-            user_id=user_id,
-            payload={"operation": "activate", "plan_id": plan_id, "status": "complete"},
-            source="genesis",
-        )
-    except Exception as _obs_exc:
-        logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
-
-    return _execute_genesis("genesis.activate", lambda _ctx: result, db=db, user_id=user_id, input_payload={"plan_id": plan_id})
+    return _execute_genesis("genesis.activate", _activate_handler, db=db, user_id=user_id, input_payload={"plan_id": plan_id})
 
 

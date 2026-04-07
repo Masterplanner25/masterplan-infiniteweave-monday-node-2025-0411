@@ -17,8 +17,14 @@ def _legacy_error_response(canonical: dict[str, Any], *, status_code: int) -> JS
 
 
 def _trace_headers(canonical: dict[str, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
     trace_id = str(canonical.get("trace_id") or "")
-    return {"X-Trace-ID": trace_id} if trace_id else {}
+    if trace_id:
+        headers["X-Trace-ID"] = trace_id
+    eu_id = str(canonical.get("eu_id") or "")
+    if eu_id:
+        headers["X-EU-ID"] = eu_id
+    return headers
 
 
 def adapt_response(route_name: str, canonical: dict[str, Any], *, status_code: int = 200) -> Response:

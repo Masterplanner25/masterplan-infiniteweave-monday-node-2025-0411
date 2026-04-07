@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from core.execution_service import ExecutionContext
 from core.execution_service import run_execution
 from db.database import get_db
-from db.models.leadgen_model import LeadGenResult
 from schemas.leadgen_schema import LeadGenItem
 from services.auth_service import get_current_user
 from platform_layer.rate_limiter import limiter
@@ -126,27 +125,8 @@ def list_all_leads(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        rows = (
-            db.query(LeadGenResult)
-            .filter(LeadGenResult.user_id == current_user["sub"])
-            .order_by(LeadGenResult.created_at.desc(), LeadGenResult.id.desc())
-            .all()
-        )
-        return [
-            {
-                "id": row.id,
-                "query": row.query,
-                "company": row.company,
-                "url": row.url,
-                "context": row.context,
-                "fit_score": row.fit_score,
-                "intent_score": row.intent_score,
-                "search_score": row.overall_score,
-                "reasoning": row.reasoning,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            }
-            for row in rows
-        ]
+        from domain.leadgen_service import list_leads
+        return list_leads(db, user_id=user_id)
 
     return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)
 

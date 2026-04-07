@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel
 import logging
 
+from core.execution_gate import to_envelope
 from core.execution_helper import execute_with_pipeline
 from db.database import get_db
 from db.dao.memory_node_dao import MemoryNodeDAO
@@ -56,6 +57,17 @@ def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
             raise HTTPException(status_code=400, detail={"error": "invalid_request", "message": error})
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
 
+    if not isinstance(data, dict):
+        data = {} if data is None else {"result": data}
+    data.setdefault("execution_envelope", to_envelope(
+        eu_id=result.get("run_id"),
+        trace_id=result.get("trace_id"),
+        status=str(result.get("status") or "UNKNOWN").upper(),
+        output=None,
+        error=result.get("error"),
+        duration_ms=None,
+        attempt_count=None,
+    ))
     return data
 
 
@@ -196,8 +208,9 @@ async def create_node(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
+        from fastapi.encoders import jsonable_encoder
         dao = MemoryNodeDAO(db)
-        return dao.save(
+        node = dao.save(
             content=body.content,
             source=body.source,
             tags=body.tags or [],
@@ -205,6 +218,12 @@ async def create_node(
             node_type=body.node_type,
             extra=body.extra or {},
         )
+        data = jsonable_encoder(node) if not isinstance(node, dict) else node
+        data.setdefault("execution_envelope", to_envelope(
+            eu_id=None, trace_id=None, status="SUCCESS",
+            output=None, error=None, duration_ms=None, attempt_count=1,
+        ))
+        return data
 
     return await _execute_memory(request, "memory.nodes.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}")
@@ -293,12 +312,19 @@ async def create_link(
         # Source node not found
         # Target node not found
         try:
-            return dao.create_link(
+            from fastapi.encoders import jsonable_encoder
+            link = dao.create_link(
                 body.source_id,
                 body.target_id,
                 body.link_type or "related",
                 body.weight or 0.5,
             )
+            data = jsonable_encoder(link) if not isinstance(link, dict) else link
+            data.setdefault("execution_envelope", to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ))
+            return data
         except ValueError as exc:
             raise HTTPException(
                 status_code=422,
@@ -360,6 +386,10 @@ async def search_similar_nodes(
             "query": body.query,
             "results": results,
             "count": len(results),
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
         }
 
     return await _execute_memory(request, "memory.nodes.search_similar", handler, db=db, current_user=current_user, input_payload=body.model_dump())
@@ -398,6 +428,10 @@ async def recall_memories(
                 "success_rate": 0.20,
                 "usage_frequency": 0.10,
             },
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
         }
 
     return await _execute_memory(request, "memory.recall", handler, db=db, current_user=current_user, input_payload=body.model_dump())
@@ -513,41 +547,14 @@ async def execute_nodus_task(
     current_user=Depends(get_current_user),
 ):
     async def _run_nodus():
-        from platform_layer.async_job_service import (
-            async_heavy_execution_enabled,
-            build_queued_response,
-            submit_async_job,
-        )
+        # Removed: if request is not None and async_heavy_execution_enabled(): submit_async_job(...)
+        # Execution mode is decided exclusively by ExecutionDispatcher.
         from runtime.nodus_execution_service import execute_nodus_task_payload
         from utils.user_ids import require_user_id
 
         user_id = str(require_user_id(current_user["sub"]))
-        if request is not None and async_heavy_execution_enabled():
-            log_id = submit_async_job(
-                task_name="memory.nodus.execute",
-                payload={
-                    "task_name": body.task_name,
-                    "task_code": body.task_code,
-                    "user_id": user_id,
-                    "session_tags": body.session_tags,
-                    "allowed_operations": body.allowed_operations,
-                    "execution_id": body.execution_id,
-                    "capability_token": body.capability_token,
-                },
-                user_id=user_id,
-                source="memory_router",
-            )
-            return JSONResponse(
-                status_code=202,
-                content=build_queued_response(
-                    log_id,
-                    task_name="memory.nodus.execute",
-                    source="memory_router",
-                ),
-            )
-
         try:
-            return execute_nodus_task_payload(
+            result = execute_nodus_task_payload(
                 task_name=body.task_name,
                 task_code=body.task_code,
                 db=db,
@@ -558,6 +565,13 @@ async def execute_nodus_task(
                 capability_token=body.capability_token,
                 logger=logger,
             )
+            if not isinstance(result, dict):
+                result = {"result": result}
+            result.setdefault("execution_envelope", to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ))
+            return result
         except NodusSecurityError as exc:
             raise HTTPException(
                 status_code=403,

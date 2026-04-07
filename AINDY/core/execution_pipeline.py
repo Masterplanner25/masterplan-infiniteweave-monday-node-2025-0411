@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -12,6 +13,35 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
+
+
+# ── EU-type routing ───────────────────────────────────────────────────────────
+
+# Maps the first segment of a route_name to the EU type used for retry-policy
+# resolution and (when async is enabled) thread-pool dispatch mode decisions.
+# Unmapped prefixes default to "task" which resolves to INLINE / low retry.
+_EU_TYPE_BY_ROUTE_PREFIX: dict[str, str] = {
+    "agent":      "agent",
+    "arm":        "flow",
+    "automation": "job",
+    "dashboard":  "task",
+    "flow":       "flow",
+    "genesis":    "flow",
+    "leadgen":    "flow",
+    "masterplan": "flow",
+    "memory":     "flow",
+    "nodus":      "nodus",
+    "platform":   "job",
+    "score":      "task",
+    "task":       "task",
+    "watcher":    "task",
+}
+
+
+def _route_eu_type(route_name: str) -> str:
+    """Derive the ExecutionUnit type from the route_name's first segment."""
+    prefix = (route_name or "").split(".")[0]
+    return _EU_TYPE_BY_ROUTE_PREFIX.get(prefix, "task")
 
 
 @dataclass(slots=True)
@@ -61,6 +91,7 @@ class ExecutionResult:
 
     def to_response(self) -> dict[str, Any]:
         trace_id = str(self.metadata.get("trace_id") or "")
+        eu_id = self.metadata.get("eu_id")
         payload_data = self.data if isinstance(self.data, Response) else jsonable_encoder(self.data)
         canonical_metadata = {
             "events": list(self.metadata.get("event_refs") or []),
@@ -77,6 +108,7 @@ class ExecutionResult:
             "status": "success" if self.success else "error",
             "data": None if not self.success else payload_data,
             "trace_id": trace_id,
+            "eu_id": eu_id,
             "memory_context_count": self.memory_context_count,
             "metadata": canonical_metadata,
         }
@@ -110,6 +142,8 @@ class ExecutionPipeline:
             parent_token = self._safe_set_parent_event(started_event_id)
             pipeline_token = self._safe_set_pipeline_active()
             execution_ctx_token = self._safe_set_current_execution_context(ctx)
+            self._safe_require_eu(ctx)
+            _handler_start = time.monotonic()
             result = handler(ctx)
             if inspect.isawaitable(result):
                 result = await result
@@ -127,6 +161,9 @@ class ExecutionPipeline:
                 self._safe_recall_memory_count(ctx),
             )
 
+            _duration_ms = round((time.monotonic() - _handler_start) * 1000, 2)
+            result = self._inject_execution_envelope(ctx, result, _duration_ms)
+
             completed_event_id = self._safe_emit_event(
                 ctx,
                 event_type="execution.completed",
@@ -139,6 +176,7 @@ class ExecutionPipeline:
                 terminal_event_id=completed_event_id,
                 completed=True,
             )
+            self._safe_finalize_eu(ctx, "completed")
             logger.info(
                 "execution.completed",
                 extra={"route": ctx.route_name, "success": True},
@@ -166,6 +204,7 @@ class ExecutionPipeline:
                 terminal_event_id=failed_event_id,
                 completed=False,
             )
+            self._safe_finalize_eu(ctx, "failed")
             logger.info(
                 "execution.completed",
                 extra={"route": ctx.route_name, "success": False},
@@ -192,6 +231,7 @@ class ExecutionPipeline:
                 terminal_event_id=failed_event_id,
                 completed=False,
             )
+            self._safe_finalize_eu(ctx, "failed")
             logger.exception("execution.failed", extra={"route": ctx.route_name})
             return ExecutionResult(
                 success=False,
@@ -528,4 +568,110 @@ class ExecutionPipeline:
             reset_current_execution_context(token)
         except Exception:
             logger.debug("execution.current_ctx_reset_skipped", exc_info=True)
+
+    # ── ExecutionEnvelope auto-injection ─────────────────────────────────────
+
+    def _inject_execution_envelope(
+        self,
+        ctx: ExecutionContext,
+        result: Any,
+        duration_ms: float,
+    ) -> Any:
+        """
+        Inject ``execution_envelope`` into the result dict when absent.
+
+        Uses ``setdefault`` so routes that already embed an envelope manually
+        (task, genesis, arm, watcher, memory routers) are left untouched.
+        Non-dict results (lists, None, raw objects) are returned unchanged.
+        Non-fatal: any import/call error is swallowed and logged at DEBUG.
+        """
+        if not isinstance(result, dict):
+            return result
+        try:
+            from core.execution_gate import to_envelope
+
+            result.setdefault(
+                "execution_envelope",
+                to_envelope(
+                    eu_id=ctx.metadata.get("eu_id"),
+                    trace_id=str(ctx.metadata.get("trace_id") or ctx.request_id),
+                    status="SUCCESS",
+                    output=None,
+                    error=None,
+                    duration_ms=duration_ms,
+                    attempt_count=1,
+                ),
+            )
+        except Exception:
+            logger.debug("execution.envelope_inject_skipped", exc_info=True)
+        return result
+
+    # ── ExecutionUnit integration ─────────────────────────────────────────────
+
+    def _safe_require_eu(self, ctx: ExecutionContext) -> str | None:
+        """
+        Create (or re-enter) a DB-backed ExecutionUnit for this request.
+
+        Skipped silently when:
+          - ``ctx.metadata["db"]`` is absent (route doesn't use a DB session)
+          - ``ctx.user_id`` is None (unauthenticated / background routes)
+
+        The EU id is stored in ``ctx.metadata["eu_id"]`` so handlers,
+        adapters, and ``to_response()`` can surface it without extra lookups.
+        Non-fatal: any exception is caught and logged at DEBUG level.
+        """
+        db = ctx.metadata.get("db")
+        if db is None or not ctx.user_id:
+            return None
+        try:
+            from core.execution_gate import require_execution_unit
+
+            eu = require_execution_unit(
+                db=db,
+                eu_type=_route_eu_type(ctx.route_name),
+                user_id=str(ctx.user_id),
+                source_type="route",
+                source_id=ctx.request_id,
+                correlation_id=ctx.request_id,
+                extra={
+                    "route_name": ctx.route_name,
+                    "workflow_type": ctx.route_name,
+                },
+            )
+            eu_id = str(eu.id) if eu is not None else None
+            ctx.metadata["eu_id"] = eu_id
+            logger.debug(
+                "[Pipeline] EU registered route=%s eu_id=%s trace_id=%s",
+                ctx.route_name,
+                eu_id,
+                ctx.request_id,
+            )
+            return eu_id
+        except Exception:
+            logger.debug("execution.eu_register_skipped", exc_info=True)
+            return None
+
+    def _safe_finalize_eu(self, ctx: ExecutionContext, status: str) -> None:
+        """
+        Transition the route-level EU to ``status`` (``"completed"`` or
+        ``"failed"``).  No-op when no EU was created for this request.
+        Non-fatal: any exception is caught and logged at DEBUG level.
+        """
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id:
+            return
+        db = ctx.metadata.get("db")
+        if db is None:
+            return
+        try:
+            from core.execution_unit_service import ExecutionUnitService
+
+            ExecutionUnitService(db).update_status(eu_id, status)
+            logger.debug(
+                "[Pipeline] EU finalised eu_id=%s status=%s",
+                eu_id,
+                status,
+            )
+        except Exception:
+            logger.debug("execution.eu_finalize_skipped", exc_info=True)
 

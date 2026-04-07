@@ -17,7 +17,7 @@ A.I.N.D.Y. is a FastAPI-based backend that combines:
 
 The system is a modular monolith, not a microservice fleet.
 
-**Classification (2026-04-01):** LANGUAGE RUNTIME — PRODUCTION READY. A.I.N.D.Y. is a language-executing runtime. Nodus scripts can read/write memory, emit events, trigger flows, schedule themselves, and be called from the CLI or any external system via the Platform API.
+**Classification (2026-04-06):** OS-LIKE — PRODUCTION READY. A.I.N.D.Y. is a language-executing OS-like runtime. Every request enters a shared execution pipeline, creates an ExecutionUnit, delegates all DB work to domain services, and receives an auto-injected execution envelope. The ExecutionDispatcher is the sole authority for async decisions. Nodus scripts can read/write memory, emit events, trigger flows, schedule themselves, and be called from the CLI or any external system via the Platform API.
 
 ## Current Structure
 

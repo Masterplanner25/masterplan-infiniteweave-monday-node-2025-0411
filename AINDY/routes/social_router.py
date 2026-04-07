@@ -260,8 +260,6 @@ def get_feed(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from db.models.user_score import UserScore
-
         posts_collection = db["posts"]
         query = {}
         if trust_filter:
@@ -291,13 +289,8 @@ def get_feed(
                     memory_hints.extend(hints)
 
         author_ids = list({doc.get("author_id") for doc in post_docs if doc.get("author_id")})
-        author_scores: dict = {}
-        if author_ids:
-            author_uuid_ids = [UUID(str(author_id)) for author_id in author_ids]
-            score_rows = (
-                sql_db.query(UserScore).filter(UserScore.user_id.in_(author_uuid_ids)).all()
-            )
-            author_scores = {str(row.user_id): row.master_score for row in score_rows}
+        from domain.social_service import get_user_scores
+        author_scores = get_user_scores(sql_db, author_ids)
 
         feed_items = []
         for post_doc in post_docs:

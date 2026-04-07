@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from core.execution_gate import to_envelope
 from core.execution_helper import execute_with_pipeline_sync
 from db.database import get_db
 from runtime.flow_engine import execute_intent
@@ -136,7 +137,15 @@ def _run_flow_watcher(flow_name: str, payload: dict, db: Session, user_id: str |
             msg = parts[1] if len(parts) > 1 else error
             raise HTTPException(status_code=code, detail=msg)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
-    return result.get("data")
+    data = result.get("data") or {}
+    if not isinstance(data, dict):
+        data = {"result": data}
+    data.setdefault("execution_envelope", to_envelope(
+        eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+        status=str(result.get("status") or "UNKNOWN").upper(),
+        output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+    ))
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -176,8 +185,13 @@ def receive_signals(
                 raise HTTPException(status_code=code, detail=msg)
             raise HTTPException(status_code=500, detail=error or "watcher_ingest failed")
         payload = result.get("result") or result.get("data") or {}
-        if isinstance(payload, dict) and "accepted" in payload:
-            return payload
+        if not isinstance(payload, dict):
+            payload = {"result": payload}
+        payload.setdefault("execution_envelope", to_envelope(
+            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
+            status=str(result.get("status") or "UNKNOWN").upper(),
+            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+        ))
         return payload
 
     return execute_with_pipeline_sync(
@@ -202,48 +216,23 @@ def list_signals(
 ) -> Dict[str, Any]:
     """Query stored watcher signals."""
     def handler(ctx):
-        from db.models.watcher_signal import WatcherSignal
-
-        if signal_type and signal_type not in _VALID_SIGNAL_TYPES:
-            raise HTTPException(status_code=422, detail=f"Unknown signal_type: {signal_type!r}")
-        parsed_user_id = None
-        if user_id:
-            try:
-                parsed_user_id = UUID(str(user_id))
-            except Exception as exc:
-                raise HTTPException(status_code=422, detail=f"Invalid user_id: {user_id!r}") from exc
-
-        query = db.query(WatcherSignal)
-        if session_id:
-            query = query.filter(WatcherSignal.session_id == session_id)
-        if signal_type:
-            query = query.filter(WatcherSignal.signal_type == signal_type)
-        if parsed_user_id is not None:
-            query = query.filter(WatcherSignal.user_id == parsed_user_id)
-
-        signals = (
-            query.order_by(WatcherSignal.signal_timestamp.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        from domain.watcher_service import list_signals as svc_list_signals
+        rows = svc_list_signals(
+            db,
+            session_id=session_id,
+            signal_type=signal_type,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
         )
-
-        return [
-            {
-                "id": s.id,
-                "signal_type": s.signal_type,
-                "session_id": s.session_id,
-                "app_name": s.app_name,
-                "window_title": s.window_title,
-                "activity_type": s.activity_type,
-                "signal_timestamp": s.signal_timestamp.isoformat(),
-                "received_at": s.received_at.isoformat(),
-                "duration_seconds": s.duration_seconds,
-                "focus_score": s.focus_score,
-                "metadata": s.signal_metadata,
-            }
-            for s in signals
-        ]
+        return {
+            "signals": rows,
+            "count": len(rows),
+            "execution_envelope": to_envelope(
+                eu_id=None, trace_id=None, status="SUCCESS",
+                output=None, error=None, duration_ms=None, attempt_count=1,
+            ),
+        }
 
     return execute_with_pipeline_sync(
         request=None,
