@@ -5,6 +5,8 @@ class SystemEventTypes:
     EXECUTION_STARTED = "execution.started"
     EXECUTION_COMPLETED = "execution.completed"
     EXECUTION_FAILED = "execution.failed"
+    EXECUTION_WAITING = "execution.waiting"
+    EXECUTION_STEP_COMPLETED = "execution.step.completed"
 
     FLOW_NODE_STARTED = "flow.node.started"
     FLOW_WAITING = "flow.waiting"

@@ -380,6 +380,34 @@ def _detect_behavioral_feedback_signals(
         logger.debug("[SystemEvent] stale abandonment scan skipped", exc_info=True)
 
 
+def _notify_scheduler_of_event(
+    event_type: str,
+    *,
+    trace_id: str | None,
+    payload: Optional[dict[str, Any]],
+) -> None:
+    """Inform SchedulerEngine that an event fired so waiting EUs can be resumed.
+
+    Extracts ``correlation_id`` from the event payload (preferred) or falls back
+    to the event's ``trace_id`` which propagates through the correlation chain.
+    Non-fatal — any exception is swallowed and logged at DEBUG level.
+    """
+    try:
+        from kernel.scheduler_engine import get_scheduler_engine
+
+        corr = (payload or {}).get("correlation_id") or trace_id
+        resumed = get_scheduler_engine().notify_event(event_type, correlation_id=corr)
+        if resumed:
+            logger.info(
+                "[SystemEvent] scheduler resumed %d run(s) on event=%s corr=%s",
+                resumed,
+                event_type,
+                corr,
+            )
+    except Exception:
+        logger.debug("[SystemEvent] scheduler notify_event skipped", exc_info=True)
+
+
 def emit_system_event(
     *,
     db,
@@ -479,6 +507,14 @@ def emit_system_event(
                 "[SystemEvent] webhook dispatch skipped for %s id=%s: %s",
                 event_type, event_id, wh_exc,
             )
+        # ── Scheduler wake-up ─────────────────────────────────────────────
+        # Non-fatal: wakes any ExecutionUnit waiting for this event_type.
+        # Runs synchronously but never raises — zero impact on emission path.
+        _notify_scheduler_of_event(
+            event_type,
+            trace_id=effective_trace_id,
+            payload=payload,
+        )
         # ─────────────────────────────────────────────────────────────────
         return event_id
     except Exception as exc:
