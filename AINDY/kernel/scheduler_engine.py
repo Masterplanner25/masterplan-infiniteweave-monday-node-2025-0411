@@ -67,6 +67,25 @@ PRIORITY_ORDER = (PRIORITY_HIGH, PRIORITY_NORMAL, PRIORITY_LOW)
 MAX_PER_SCHEDULE_CYCLE = 10
 
 
+# ── Resumed EU stub ───────────────────────────────────────────────────────────
+
+@dataclass
+class _ResumedEUStub:
+    """
+    Lightweight duck-typed proxy passed to ExecutionDispatcher.dispatch() when
+    a scheduler item is being resumed.
+
+    ``dispatch()`` only reads ``.type``, ``.priority``, ``.extra``, and ``.id``
+    (the last is for logging only).  This stub satisfies all four without
+    requiring a live DB query.
+    """
+
+    id: str           # eu_id — for dispatcher logging
+    type: str         # eu_type — drives INLINE vs ASYNC decision in _decide_mode
+    priority: str     # mirrors ScheduledItem.priority
+    extra: dict = field(default_factory=dict)
+
+
 # ── ScheduledItem ─────────────────────────────────────────────────────────────
 
 @dataclass
@@ -79,6 +98,8 @@ class ScheduledItem:
         priority:          One of PRIORITY_HIGH / PRIORITY_NORMAL / PRIORITY_LOW.
         run_callback:      Zero-arg callable executed when this item is dequeued.
         run_id:            Optional FlowRun / AgentRun ID (for WAIT/RESUME).
+        eu_type:           ExecutionUnit type string (flow/agent/job/task/nodus).
+                           Used by schedule() to build _ResumedEUStub for dispatch().
         enqueued_at_seq:   Monotone sequence number assigned on enqueue (for FIFO
                            within same tenant+priority).
     """
@@ -88,6 +109,7 @@ class ScheduledItem:
     priority: str
     run_callback: Callable[[], None]
     run_id: Optional[str] = None
+    eu_type: str = "flow"
     enqueued_at_seq: int = field(default=0, compare=False)
 
     def __post_init__(self) -> None:
@@ -194,6 +216,11 @@ class SchedulerEngine:
     def schedule(self) -> int:
         """Drain up to MAX_PER_SCHEDULE_CYCLE items and execute their callbacks.
 
+        Every resumed item is routed through ``ExecutionDispatcher.dispatch()``
+        so the INLINE vs ASYNC decision is made by the dispatcher, not hardcoded
+        here.  Heavy EU types (flow, agent, nodus) go ASYNC when async execution
+        is enabled; lightweight types (task, job) run INLINE on this thread.
+
         Checks ResourceManager before each execution:
         - If ``can_execute`` returns False, the item is re-enqueued at its
           original priority (it will be tried again next cycle).
@@ -201,6 +228,9 @@ class SchedulerEngine:
         Returns:
             Number of items actually dispatched (not re-enqueued) this cycle.
         """
+        # Lazy import — avoids circular dependency (kernel → core) at module load.
+        from core.execution_dispatcher import dispatch as _dispatch
+
         rm = get_resource_manager()
         dispatched = 0
 
@@ -220,12 +250,28 @@ class SchedulerEngine:
                 )
                 break  # stop trying; resource constrained
 
+            # Build a lightweight stub so dispatch() can make the INLINE/ASYNC
+            # decision without a live DB query.
+            _stub = _ResumedEUStub(
+                id=item.execution_unit_id,
+                type=item.eu_type,
+                priority=item.priority,
+            )
+            _context = {
+                "eu_id": item.execution_unit_id,
+                "run_id": item.run_id,
+                "source": "scheduler.resume",
+            }
             try:
-                item.run_callback()
+                _dispatch(_stub, item.run_callback, _context)
                 dispatched += 1
+                logger.debug(
+                    "[Scheduler] dispatched eu=%s type=%s priority=%s",
+                    item.execution_unit_id, item.eu_type, item.priority,
+                )
             except Exception as exc:
                 logger.error(
-                    "[Scheduler] callback failed eu=%s: %s", item.execution_unit_id, exc
+                    "[Scheduler] dispatch failed eu=%s: %s", item.execution_unit_id, exc
                 )
                 with self._lock:
                     self._total_dropped += 1
@@ -244,11 +290,12 @@ class SchedulerEngine:
         priority: str = PRIORITY_NORMAL,
         correlation_id: str | None = None,
         trace_id: str | None = None,
+        eu_type: str = "flow",
     ) -> None:
         """Register a run that is waiting for an event.
 
         When ``resume_waiting(wait_for_event)`` is called, this run will be
-        re-enqueued with *priority*.
+        re-enqueued with *priority* and routed through ExecutionDispatcher.
 
         This is the single authority for all WAIT registrations — flow nodes,
         resource-quota pauses, and generic ExecutionUnit WAITs (via pipeline)
@@ -264,6 +311,8 @@ class SchedulerEngine:
             priority:         Queue priority on resume (default NORMAL).
             correlation_id:   Propagated correlation chain ID (optional).
             trace_id:         Request trace ID for observability (optional).
+            eu_type:          ExecutionUnit type (flow/agent/job/task/nodus).
+                              Drives the INLINE vs ASYNC decision in dispatch().
         """
         with self._lock:
             self._waiting[str(run_id)] = {
@@ -274,10 +323,11 @@ class SchedulerEngine:
                 "priority": priority,
                 "correlation_id": correlation_id,
                 "trace_id": trace_id,
+                "eu_type": eu_type,
             }
         logger.debug(
-            "[Scheduler] registered wait run=%s event=%s eu=%s trace=%s",
-            run_id, wait_for_event, eu_id, trace_id,
+            "[Scheduler] registered wait run=%s event=%s eu=%s type=%s trace=%s",
+            run_id, wait_for_event, eu_id, eu_type, trace_id,
         )
 
     def resume_waiting(self, event_type: str) -> int:
@@ -308,12 +358,13 @@ class SchedulerEngine:
                 priority=entry["priority"],
                 run_callback=entry["callback"],
                 run_id=run_id,
+                eu_type=entry.get("eu_type", "flow"),
             )
             self.enqueue(item)
             resumed += 1
             logger.info(
-                "[Scheduler] resumed run=%s event=%s priority=%s",
-                run_id, event_type, entry["priority"],
+                "[Scheduler] resumed run=%s event=%s type=%s priority=%s",
+                run_id, event_type, item.eu_type, entry["priority"],
             )
 
         return resumed

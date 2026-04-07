@@ -822,6 +822,7 @@ class PersistentFlowRunner:
                                 priority=getattr(self, "priority", "normal"),
                                 correlation_id=_rw_trace,
                                 trace_id=_rw_trace,
+                                eu_type="flow",
                             )
                         except Exception as _se_exc:
                             logger.debug("[Flow] scheduler register_wait skipped: %s", _se_exc)
@@ -990,6 +991,7 @@ class PersistentFlowRunner:
                             priority=getattr(self, "priority", "normal"),
                             correlation_id=_nw_trace,
                             trace_id=_nw_trace,
+                            eu_type="flow",
                         )
                     except Exception as _nw_exc:
                         logger.debug("[Flow] node-WAIT scheduler register_wait skipped: %s", _nw_exc)

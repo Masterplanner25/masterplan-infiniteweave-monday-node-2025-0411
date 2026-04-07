@@ -727,6 +727,7 @@ class ExecutionPipeline:
                     priority=PRIORITY_NORMAL,
                     correlation_id=_trace,
                     trace_id=_trace,
+                    eu_type=_route_eu_type(ctx.route_name),
                 )
                 logger.debug(
                     "[Pipeline] SchedulerEngine.register_wait eu=%s wait_for=%s trace=%s",
