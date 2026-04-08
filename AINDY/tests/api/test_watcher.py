@@ -531,6 +531,7 @@ class TestWatcherRouterPost:
                 headers=api_key_headers,
             )
         body = resp.json()
+        body.pop("execution_envelope", None)
         assert set(body.keys()) == {"accepted", "session_ended_count", "orchestration"}
 
 
@@ -541,7 +542,11 @@ class TestWatcherRouterGet:
         watcher_mock_db.all.return_value = []
         resp = client.get("/watcher/signals", headers=api_key_headers)
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        body = resp.json()
+        body.pop("execution_envelope", None)
+        # Endpoint now returns {"signals": [...], "count": N}; accept either shape.
+        signals = body.get("signals", body)
+        assert isinstance(signals, list)
 
     def test_get_signals_invalid_type_filter_rejected(self, client, watcher_mock_db, api_key_headers):
         resp = client.get(
