@@ -102,10 +102,18 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
     monkeypatch.setattr("agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
 
     def _complete_run(**kwargs):
-        run = db_session.get(AgentRun, uuid.UUID(str(kwargs["run_id"])))
-        run.status = "completed"
-        run.result = {"steps": [], "loop_enforced": True, "next_action": "review_output"}
-        db_session.commit()
+        # Use the session passed into execute_with_flow (the job's own session),
+        # not db_session which is bound directly to db_connection.  Calling
+        # db_session.commit() from inside the inline job commits the outer
+        # connection transaction that PersistentFlowRunner is still using,
+        # leaving self.db in a stale state and breaking the FlowRun UPDATE.
+        db = kwargs.get("db")
+        if db is not None:
+            run = db.get(AgentRun, uuid.UUID(str(kwargs["run_id"])))
+            if run is not None:
+                run.status = "completed"
+                run.result = {"steps": [], "loop_enforced": True, "next_action": "review_output"}
+                db.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
     monkeypatch.setattr("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)

@@ -271,7 +271,7 @@ def submit_async_job(
             return log_id
         if settings.TEST_MODE and not execute_inline_in_test_mode:
             return log_id
-        if _session_dialect_name(db) == "sqlite" and task_name != "agent.create_run":
+        if _session_dialect_name(db) == "sqlite":
             _execute_job_inline(db, log_id, task_name, payload)
             return log_id
         # Removed: _get_executor().submit() called directly here.
