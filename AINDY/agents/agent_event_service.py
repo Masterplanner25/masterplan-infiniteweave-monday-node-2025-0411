@@ -101,6 +101,10 @@ def emit_event(
             required=required,
         )
 
+        normalized_system_event_id = (
+            normalize_uuid(system_event_id) if system_event_id else None
+        )
+
         event = AgentEvent(
             id=uuid.uuid4(),
             run_id=parsed_run_id,
@@ -108,7 +112,7 @@ def emit_event(
             user_id=normalized_user_id,
             event_type=event_type,
             payload=payload or {},
-            system_event_id=system_event_id,
+            system_event_id=normalized_system_event_id,
             occurred_at=datetime.now(timezone.utc),
         )
         db.add(event)

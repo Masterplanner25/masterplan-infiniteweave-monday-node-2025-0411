@@ -395,13 +395,27 @@ def agent_run_create_node(state, context):
         from utils.trace_context import ensure_trace_id
         from utils.uuid_utils import normalize_uuid
 
+        from core.execution_dispatcher import async_heavy_execution_enabled
+        from platform_layer.async_job_service import submit_autonomous_async_job
+
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         goal = state.get("goal", "").strip()
 
-        # Removed: if async_heavy_execution_enabled(): submit_autonomous_async_job(...)
-        # Execution mode (INLINE vs ASYNC) is decided exclusively by ExecutionDispatcher
-        # at the route/flow entry boundary — not inside a flow node.
+        if async_heavy_execution_enabled():
+            trigger_context = {"goal": goal, "importance": 0.95}
+            response = submit_autonomous_async_job(
+                task_name="agent.create_run",
+                payload={"goal": goal, "user_id": str(user_id)},
+                user_id=user_id,
+                source="agent_router",
+                trigger_type="user",
+                trigger_context=trigger_context,
+            )
+            return {"status": "SUCCESS", "output_patch": {"agent_run_create_result": {
+                "_http_status": 202,
+                "_http_response": response,
+            }}}
 
         trace_id = ensure_trace_id()
         trigger_context = {"goal": goal, "importance": 0.95}

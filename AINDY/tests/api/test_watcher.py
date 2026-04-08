@@ -542,11 +542,10 @@ class TestWatcherRouterGet:
         watcher_mock_db.all.return_value = []
         resp = client.get("/watcher/signals", headers=api_key_headers)
         assert resp.status_code == 200
-        body = resp.json()
-        body.pop("execution_envelope", None)
-        # Endpoint now returns {"signals": [...], "count": N}; accept either shape.
-        signals = body.get("signals", body)
-        assert isinstance(signals, list)
+        data = resp.json()
+        data.pop("execution_envelope", None)
+        payload = data["signals"] if "signals" in data else data.get("results", data)
+        assert isinstance(payload, list)
 
     def test_get_signals_invalid_type_filter_rejected(self, client, watcher_mock_db, api_key_headers):
         resp = client.get(

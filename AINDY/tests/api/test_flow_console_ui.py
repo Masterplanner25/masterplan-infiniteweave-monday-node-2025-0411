@@ -220,7 +220,7 @@ class TestAutomationEndpoints:
 
 class TestFlowConsoleAPIFunctions:
     def test_api_functions_present(self):
-        api_src = pathlib.Path("client/src/api.js").read_text(encoding="utf-8")
+        api_src = pathlib.Path("AINDY/client/src/api.js").read_text(encoding="utf-8")
 
         required_fns = [
             "getFlowRuns",

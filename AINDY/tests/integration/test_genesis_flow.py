@@ -420,32 +420,36 @@ class TestMasterplanRouterLock:
         assert response.status_code == 400
 
     def test_masterplan_lock_imports_factory(self):
-        source = _read_source("routes/masterplan_router.py")
+        # Logic delegated to domain/masterplan_service.py — check there
+        source = _read_source("domain/masterplan_service.py")
         assert "create_masterplan_from_genesis" in source, (
-            "masterplan_router.py must import create_masterplan_from_genesis"
+            "masterplan_service.py must use create_masterplan_from_genesis"
         )
 
     def test_masterplan_lock_imports_posture_description(self):
-        source = _read_source("routes/masterplan_router.py")
+        # Logic delegated to domain/masterplan_service.py — check there
+        source = _read_source("domain/masterplan_service.py")
         assert "posture_description" in source, (
-            "masterplan_router.py must import posture_description"
+            "masterplan_service.py must import posture_description"
         )
 
     def test_masterplan_lock_response_includes_posture_description(self):
-        source = _read_source("routes/masterplan_router.py")
+        # Logic delegated to domain/masterplan_service.py — check there
+        source = _read_source("domain/masterplan_service.py")
         lock_start = source.index("def lock_from_genesis(")
-        lock_body = source[lock_start:lock_start + 1200]
+        lock_body = source[lock_start:lock_start + 2000]
         assert "posture_description" in lock_body, (
-            "lock_from_genesis() should include posture_description in response"
+            "lock_from_genesis() in domain service should include posture_description"
         )
 
     def test_masterplan_lock_handles_value_error_as_422(self):
         """ValueError from factory (synthesis_ready gate) must map to 422."""
-        source = _read_source("routes/masterplan_router.py")
+        # Logic delegated to domain/masterplan_service.py — check there
+        source = _read_source("domain/masterplan_service.py")
         lock_start = source.index("def lock_from_genesis(")
         lock_body = source[lock_start:lock_start + 800]
         assert "ValueError" in lock_body and "422" in lock_body, (
-            "lock_from_genesis() should catch ValueError and return 422"
+            "lock_from_genesis() in domain service should catch ValueError and return 422"
         )
 
 
@@ -454,11 +458,12 @@ class TestMasterplanListResponseShape:
 
     def test_list_masterplans_returns_plans_key(self):
         """GET /masterplans/ must return {'plans': [...]} not a plain list."""
-        source = _read_source("routes/masterplan_router.py")
+        # Logic delegated to domain/masterplan_service.py — check there
+        source = _read_source("domain/masterplan_service.py")
         list_start = source.index("def list_masterplans(")
         list_body = source[list_start:list_start + 600]
         assert '"plans"' in list_body or "'plans'" in list_body, (
-            "list_masterplans() should return {\"plans\": [...]}"
+            "list_masterplans() in domain service should return {\"plans\": [...]}"
         )
 
     def test_list_masterplans_requires_auth(self, client):

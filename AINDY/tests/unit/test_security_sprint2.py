@@ -31,13 +31,19 @@ class TestAnalyticsOwnership:
     def test_analytics_manual_ingest_ownership(self):
         analytics_router = importlib.import_module("routes.analytics_router")
         src = _source(analytics_router.ingest_linkedin_manual)
-        assert "MasterPlan.user_id" in src, "manual ingest missing masterplan user scoping"
+        # Ownership enforced via assert_masterplan_owned() which filters by MasterPlan.user_id
+        assert "assert_masterplan_owned" in src or "MasterPlan.user_id" in src, (
+            "manual ingest missing masterplan user scoping"
+        )
         assert "current_user" in src, "manual ingest missing current_user reference"
 
     def test_analytics_summary_ownership(self):
         analytics_router = importlib.import_module("routes.analytics_router")
         src = _source(analytics_router.get_masterplan_summary)
-        assert "MasterPlan.user_id" in src, "summary missing masterplan user scoping"
+        # Ownership enforced via assert_masterplan_owned() which filters by MasterPlan.user_id
+        assert "assert_masterplan_owned" in src or "MasterPlan.user_id" in src, (
+            "summary missing masterplan user scoping"
+        )
 
 
 class TestSocialProfileOwnership:
