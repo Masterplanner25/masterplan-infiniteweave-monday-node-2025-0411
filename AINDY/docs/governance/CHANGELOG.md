@@ -10,6 +10,30 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Distributed Execution + PRODUCTION-READY OS — 2026-04-07
+
+### Added
+* **`kernel/event_bus.py`** — Redis pub/sub distributed event bus. `EventBus` class wraps publish and subscriber paths. `get_event_bus()` singleton. `publish_event(event_type, correlation_id)` is the **only** public API for firing resume events — replaces all direct `notify_event()` call sites. Subscriber daemon thread reconnects with exponential backoff (1 s → 30 s cap). `AINDY_EVENT_BUS_ENABLED=false` disables entirely for local-only deployments.
+
+### Changed
+* **`kernel/scheduler_engine.py`** — `notify_event()` gains `broadcast: bool = True` parameter. When `True` (default), publishes to Redis after the local `_waiting` scan. When `False` (called from subscriber), suppresses re-publication to prevent infinite loops. `_waiting` entries are deleted under lock before enqueue — prevents same-instance duplicate resume.
+* **`kernel/resource_manager.py`** — `mark_completed()` now calls `publish_event("resource_available")` (was `get_scheduler_engine().notify_event(...)`). Distributed broadcast on capacity transition.
+* **`core/system_event_service.py`** — `emit_event()` now calls `publish_event(event_type, correlation_id=corr)` (was `get_scheduler_engine().notify_event(...)`).
+* **`runtime/flow_engine.py`** — `route_event()` now calls `publish_event(event_type, correlation_id=corr)` (was `scheduler.notify_event(...)`). `PersistentFlowRunner.resume()` gains atomic FlowRun soft-lock: `UPDATE flow_runs SET status='executing' WHERE status='waiting'`; `rowcount=0` → returns `SKIPPED` immediately.
+* **`core/flow_run_rehydration.py`** — `_make_resume_callback` enforces 3-step execution ordering: (1) FlowRun atomic claim, (2) EU status transition — only if claim won, (3) flow execution — only if claim won. Losing instances (rowcount=0) return immediately with no side effects.
+* **`core/wait_rehydration.py`** — EU resume callback gains FlowRun ownership guard: if `FlowRun.status != "waiting"` when the callback fires, EU transition is skipped — avoids bookkeeping side effects on the losing instance.
+* **`main.py`** — `get_event_bus().start_subscriber()` called at startup before WAIT rehydration. `rehydrate_waiting_flow_runs()` called after `rehydrate_waiting_eus()` (FlowRun callbacks registered after EU callbacks).
+
+### Tests
+* **`tests/unit/test_event_bus.py`** — 26 new tests (Groups A–D): singleton, publish, subscriber thread, `_handle_message` dispatch, fault-tolerance
+* **`tests/system/test_flow_engine_phase_c_d.py`** — 7 new `TestResumeSoftLock` tests (Phase E): atomic claim, SKIPPED on double-claim, commit failure, EU/FlowRun ordering
+* **`tests/unit/test_flow_run_rehydration.py`** — 12 new tests (Groups G and H): 3-step ordering, claim gate, losing-instance skip
+* Assertion updates in `test_os_layer.py` and `test_flow_engine_phase_c_d.py` to reflect `broadcast=True` kwarg
+
+### Results
+* 254 tests passing in targeted suite; 0 regressions
+* **Classification: PRODUCTION-READY OS** (upgraded from OS-LIKE, 2026-04-06)
+
 ## Unified RetryPolicy System — 2026-04-05
 
 ### Added

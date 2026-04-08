@@ -131,11 +131,35 @@ class ExecutionUnitService:
         Two-step so audit queries can observe the ``resumed`` state between
         the wake signal being received and execution actually restarting.
 
-        Returns True when both steps succeed, False on any failure (non-fatal).
+        Idempotent: if the EU is already ``resumed``, ``executing``, or
+        ``completed`` this method is a no-op and returns True so callers
+        treat the skip as success.
+
+        Returns True when both steps succeed (or when skipped as a duplicate),
+        False on any failure (non-fatal).
         The caller does not need to transition to "executing" separately —
         this method does both.
         """
         from db.models.execution_unit import ExecutionUnit
+
+        # ── Idempotency guard ────────────────────────────────────────────────
+        # Two callbacks are registered per flow WAIT (runner.resume + this one).
+        # If the scheduler fires both, the second call must not re-emit events
+        # or attempt an invalid status transition.
+        _ALREADY_RESUMED = {"resumed", "executing", "completed"}
+        try:
+            _eu_check = self.db.query(ExecutionUnit).filter(
+                ExecutionUnit.id == _coerce_uuid(eu_id)
+            ).first()
+            if _eu_check is not None and _eu_check.status in _ALREADY_RESUMED:
+                logger.debug(
+                    "[EU] resume_execution_unit: skipped duplicate resume id=%s status=%s",
+                    eu_id, _eu_check.status,
+                )
+                return True
+        except Exception as exc:
+            logger.debug("[EU] resume_execution_unit: idempotency pre-check failed (continuing): %s", exc)
+        # ── Normal path ──────────────────────────────────────────────────────
 
         ok = self.update_status(eu_id, "resumed")
         if not ok:

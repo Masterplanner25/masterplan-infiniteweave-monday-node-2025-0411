@@ -358,8 +358,9 @@ class TestAnchorEndpoint:
         )
         assert resp.status_code == 404
         body = resp.json()
-        # Global exception handler wraps detail under "details" key
-        details = body.get("details") or body
+        # Pipeline passes HTTPExceptions to FastAPI directly: detail at body["detail"].
+        # Accept both "details" (legacy custom handler) and "detail" (FastAPI default).
+        details = body.get("details") or body.get("detail") or body
         assert details.get("error") == "masterplan_not_found"
 
     def test_put_anchor_422_for_invalid_date(self, client, router_mock_db, auth_headers):
@@ -380,7 +381,7 @@ class TestAnchorEndpoint:
         )
         assert resp.status_code == 422
         body = resp.json()
-        details = body.get("details") or body
+        details = body.get("details") or body.get("detail") or body
         assert details.get("error") == "invalid_anchor_date"
 
     def test_put_anchor_success(self, client, router_mock_db, auth_headers):

@@ -11,7 +11,7 @@ Types
 -----
 "event"
     EU is waiting for a named system event to fire.
-    ``event_name`` must be set.  When ``resume_waiting(event_name)`` is called,
+    ``event_name`` must be set.  When ``notify_event(event_name)`` is called,
     all EUs waiting for that event are re-enqueued.
 
 "time"
@@ -24,7 +24,7 @@ Types
     EU is waiting for a signal originating outside the system boundary
     (webhook, third-party callback, operator action, etc.).
     Treated identically to "event" by the scheduler — something external calls
-    ``resume_waiting(event_name)`` to wake it.  Labelled separately so audit
+    ``notify_event(event_name)`` to wake it.  Labelled separately so audit
     queries can distinguish internal event routing from external integrations.
 
 Serialisation
@@ -61,7 +61,7 @@ class WaitCondition:
     event_name:
         Event type string the EU is waiting for.  Required when
         ``type == "event"`` or ``"external"``.  Used as the key for
-        ``SchedulerEngine.resume_waiting(event_name)``.
+        ``SchedulerEngine.notify_event(event_name)``.
     correlation_id:
         Optional propagated correlation/trace ID.  Stored for observability;
         not used for scheduling decisions.
@@ -160,7 +160,7 @@ class WaitCondition:
 
     @property
     def resume_event(self) -> str | None:
-        """The event name to pass to ``resume_waiting()`` for this condition."""
+        """The event name to pass to ``notify_event()`` for this condition."""
         return self.event_name if self.is_event_based else None
 
 

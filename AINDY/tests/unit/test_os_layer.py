@@ -197,6 +197,117 @@ class TestResourceManagerQuota:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# B2: ResourceManager — resource_available event emission
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestResourceManagerCapacityEvent:
+    """mark_completed() fires notify_event("resource_available") exactly when
+    the tenant's active count crosses from >= MAX to < MAX."""
+
+    def _rm(self) -> ResourceManager:
+        return ResourceManager()
+
+    def _fill(self, rm: ResourceManager, tenant: str = "t1") -> None:
+        for i in range(MAX_CONCURRENT_PER_TENANT):
+            rm.mark_started(tenant, f"eu-{i}")
+
+    def test_fires_when_count_drops_from_max_to_below(self):
+        """Full → available transition emits resource_available exactly once."""
+        rm = self._rm()
+        self._fill(rm)
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", "eu-0")
+
+        mock_se.notify_event.assert_called_once_with("resource_available", correlation_id=None, broadcast=True)
+
+    def test_does_not_fire_when_below_limit(self):
+        """Completing when count < MAX must NOT emit the event."""
+        rm = self._rm()
+        # Only MAX-1 active — one below the limit
+        for i in range(MAX_CONCURRENT_PER_TENANT - 1):
+            rm.mark_started("t1", f"eu-{i}")
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", "eu-0")
+
+        mock_se.notify_event.assert_not_called()
+
+    def test_does_not_fire_when_count_zero(self):
+        """Completing with no active count must NOT emit the event."""
+        rm = self._rm()
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", None)
+
+        mock_se.notify_event.assert_not_called()
+
+    def test_fires_exactly_once_per_transition(self):
+        """Second completion after capacity opens does NOT fire again."""
+        rm = self._rm()
+        self._fill(rm)
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", "eu-0")   # MAX → MAX-1 → fires
+            rm.mark_completed("t1", "eu-1")   # MAX-1 → MAX-2 → does NOT fire
+
+        mock_se.notify_event.assert_called_once_with("resource_available", correlation_id=None, broadcast=True)
+
+    def test_does_not_fire_when_still_above_limit(self):
+        """If active drops from MAX+1 to MAX, capacity is still exhausted — no fire."""
+        rm = self._rm()
+        # Force count above limit by starting MAX+1 directly (bypassing can_execute guard)
+        self._fill(rm)
+        rm.mark_started("t1", "eu-extra")  # now at MAX+1
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", "eu-extra")  # MAX+1 → MAX, still blocked
+
+        mock_se.notify_event.assert_not_called()
+
+    def test_notify_event_failure_is_non_fatal(self):
+        """A scheduler error must not propagate — quota state is preserved."""
+        rm = self._rm()
+        self._fill(rm)
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        mock_se.notify_event.side_effect = RuntimeError("scheduler down")
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("t1", "eu-0")  # must not raise
+
+        # Count decremented correctly despite the error
+        assert rm.get_tenant_active("t1") == MAX_CONCURRENT_PER_TENANT - 1
+
+    def test_tenant_isolation_fires_only_for_full_tenant(self):
+        """Only the tenant that was at capacity triggers the event."""
+        rm = self._rm()
+        self._fill(rm, tenant="full-tenant")
+        # partial-tenant has only 1 active — well below limit
+        rm.mark_started("partial-tenant", "eu-p1")
+
+        from unittest.mock import MagicMock, patch
+        mock_se = MagicMock()
+        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+            rm.mark_completed("full-tenant", "eu-0")
+            rm.mark_completed("partial-tenant", "eu-p1")
+
+        # Only one call, from the full tenant
+        mock_se.notify_event.assert_called_once_with("resource_available", correlation_id=None, broadcast=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # C: ResourceManager — lifecycle + usage
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -436,7 +547,7 @@ class TestSchedulerWaitResume:
         se = SchedulerEngine()
         assert se.waiting_for("run-unknown") is None
 
-    def test_resume_waiting_enqueues_correct_runs(self):
+    def test_notify_event_enqueues_correct_runs(self):
         se = SchedulerEngine()
         resumed_calls = []
 
@@ -455,13 +566,13 @@ class TestSchedulerWaitResume:
             resume_callback=lambda: resumed_calls.append("run-2"),
         )
 
-        count = se.resume_waiting("task.completed")
+        count = se.notify_event("task.completed")
         assert count == 1
         assert se.queue_depth()[PRIORITY_NORMAL] == 1
         # run-2 is still waiting
         assert se.waiting_for("run-2") == "score.recalculated"
 
-    def test_resume_waiting_clears_wait_registry(self):
+    def test_notify_event_clears_wait_registry(self):
         se = SchedulerEngine()
         se.register_wait(
             run_id="run-1",
@@ -470,12 +581,12 @@ class TestSchedulerWaitResume:
             eu_id="eu-1",
             resume_callback=lambda: None,
         )
-        se.resume_waiting("myevent")
+        se.notify_event("myevent")
         assert se.waiting_for("run-1") is None
 
-    def test_resume_waiting_no_match_returns_zero(self):
+    def test_notify_event_no_match_returns_zero(self):
         se = SchedulerEngine()
-        count = se.resume_waiting("event.that.never.happened")
+        count = se.notify_event("event.that.never.happened")
         assert count == 0
 
     def test_resumed_item_priority_respected(self):
@@ -488,7 +599,7 @@ class TestSchedulerWaitResume:
             resume_callback=lambda: None,
             priority=PRIORITY_HIGH,
         )
-        se.resume_waiting("myevent")
+        se.notify_event("myevent")
         item = se.dequeue_next()
         assert item is not None
         assert item.priority == PRIORITY_HIGH
@@ -824,7 +935,7 @@ class TestSchedulerResourceIntegration:
         )
         assert se.waiting_for("run-cycle") == "task.completed"
 
-        resumed = se.resume_waiting("task.completed")
+        resumed = se.notify_event("task.completed")
         assert resumed == 1
         assert se.queue_depth()[PRIORITY_HIGH] == 1
 

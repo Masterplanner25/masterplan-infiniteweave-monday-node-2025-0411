@@ -794,3 +794,153 @@ class TestGeneratePlanFromIntent:
         plan = generate_plan_from_intent({})
         assert "steps" in plan
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Fail-fast EU guard — PersistentFlowRunner.start()
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFlowRunnerEUFailFast:
+    """
+    PersistentFlowRunner.start() must raise RuntimeError immediately when
+    ExecutionUnitService.create() returns None (EU creation failed).
+
+    All tests use a fully-mocked DB to avoid calling self.db.commit() on
+    the shared db_session fixture — real commits release the SQLite SAVEPOINT
+    used for test isolation and corrupt subsequent tests.
+
+    The guard logic verified here:
+    - RuntimeError is raised before self.resume() is called
+    - FlowRun.status is set to "failed" and db.commit() is called before raise
+    - _eu_id is never silently set to None
+    - When create() succeeds, the guard passes and resume() is called
+    """
+
+    _SIMPLE_FLOW = {
+        "start": "noop_node",
+        "edges": {},
+        "end": ["noop_node"],
+    }
+
+    def teardown_method(self, method):
+        # PersistentFlowRunner.start() calls ensure_trace_id() which sets
+        # _trace_id_ctx without saving a token. Reset to the default sentinel
+        # so downstream tests that call get_current_trace_id() (e.g. run_loop)
+        # don't pick up a leaked UUID and write events with the wrong trace_id.
+        from utils.trace_context import _trace_id_ctx
+        _trace_id_ctx.set("-")
+
+    @staticmethod
+    def _mock_db():
+        """Build a MagicMock DB that simulates add/commit/refresh/flush."""
+        db = MagicMock()
+        db.add.return_value = None
+        db.commit.return_value = None
+        db.refresh.return_value = None
+        db.flush.return_value = None
+        return db
+
+    _TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
+
+    @staticmethod
+    def _runner(mock_db, user_id=None):
+        from runtime.flow_engine import PersistentFlowRunner
+        uid = user_id or TestFlowRunnerEUFailFast._TEST_USER_ID
+        return PersistentFlowRunner(
+            flow={"start": "noop_node", "edges": {}, "end": ["noop_node"]},
+            db=mock_db,
+            user_id=uid,
+            workflow_type="test",
+        )
+
+    def test_raises_runtime_error_when_eu_creation_returns_none(self):
+        """start() raises RuntimeError when create() returns None."""
+        db = self._mock_db()
+        runner = self._runner(db)
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None):
+            with pytest.raises(RuntimeError, match="ExecutionUnit creation returned None"):
+                runner.start({"input": "data"}, flow_name="test_flow")
+
+    def test_error_message_contains_flow_name(self):
+        db = self._mock_db()
+        runner = self._runner(db)
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None):
+            with pytest.raises(RuntimeError) as exc_info:
+                runner.start({}, flow_name="my_important_flow")
+
+        assert "my_important_flow" in str(exc_info.value)
+
+    def test_flow_run_marked_failed_before_raise(self):
+        """FlowRun.status must be set to 'failed' and commit() called before raise."""
+        db = self._mock_db()
+        runner = self._runner(db)
+        captured_run = {}
+
+        def _capture_add(obj):
+            from db.models.flow_run import FlowRun
+            if isinstance(obj, FlowRun):
+                captured_run["obj"] = obj
+
+        db.add.side_effect = _capture_add
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None):
+            with pytest.raises(RuntimeError):
+                runner.start({}, flow_name="failing_flow")
+
+        run = captured_run.get("obj")
+        assert run is not None, "FlowRun was never added to session"
+        assert run.status == "failed"
+        # commit() must have been called (at least once for the FlowRun creation,
+        # and once more in the RuntimeError handler for the status update)
+        assert db.commit.call_count >= 2
+
+    def test_resume_never_called_when_eu_missing(self):
+        """self.resume() must not be called when EU creation fails."""
+        db = self._mock_db()
+        runner = self._runner(db)
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None), \
+             patch.object(runner, "resume") as mock_resume:
+            with pytest.raises(RuntimeError):
+                runner.start({}, flow_name="test_flow")
+
+        mock_resume.assert_not_called()
+
+    def test_eu_id_not_set_to_none_silently(self):
+        """
+        The raise happens before self._eu_id is assigned, so _eu_id is never
+        silently set to None when create() fails.
+        """
+        db = self._mock_db()
+        runner = self._runner(db)
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None):
+            with pytest.raises(RuntimeError):
+                runner.start({}, flow_name="test_flow")
+
+        assert not getattr(runner, "_eu_id", None)
+
+    def test_valid_eu_guard_passes_and_resume_called(self):
+        """When create() returns a valid EU, the guard passes and resume() is called."""
+        import uuid as _uuid
+        db = self._mock_db()
+        runner = self._runner(db)
+
+        mock_eu = MagicMock()
+        mock_eu.id = _uuid.uuid4()
+
+        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=mock_eu), \
+             patch("runtime.flow_engine.emit_system_event", return_value=None), \
+             patch.object(runner, "resume", return_value={"status": "SUCCESS"}) as mock_resume:
+            result = runner.start({}, flow_name="eu_guard_noop_flow")
+
+        mock_resume.assert_called_once()
+        assert runner._eu_id == mock_eu.id
+        assert result["status"] == "SUCCESS"
+

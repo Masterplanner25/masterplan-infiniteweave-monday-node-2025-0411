@@ -546,13 +546,37 @@ async def execute_nodus_task(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    async def _run_nodus():
-        # Removed: if request is not None and async_heavy_execution_enabled(): submit_async_job(...)
-        # Execution mode is decided exclusively by ExecutionDispatcher.
-        from runtime.nodus_execution_service import execute_nodus_task_payload
-        from utils.user_ids import require_user_id
+    from utils.user_ids import require_user_id
+    from core.execution_dispatcher import async_heavy_execution_enabled
 
-        user_id = str(require_user_id(current_user["sub"]))
+    user_id = str(require_user_id(current_user["sub"]))
+
+    # ── Async path: submit as a tracked background job (202 Accepted) ─────────
+    if request is not None and async_heavy_execution_enabled():
+        from platform_layer.async_job_service import submit_async_job, build_queued_response
+        from fastapi.responses import JSONResponse
+
+        log_id = submit_async_job(
+            task_name="memory.nodus.execute",
+            payload={
+                "task_name": body.task_name,
+                "task_code": body.task_code,
+                "user_id": user_id,
+                "session_tags": body.session_tags,
+                "allowed_operations": body.allowed_operations,
+                "execution_id": body.execution_id,
+                "capability_token": body.capability_token,
+            },
+            user_id=user_id,
+            source="memory.nodus.execute",
+        )
+        queued = build_queued_response(log_id, task_name="memory.nodus.execute", source="memory.nodus.execute")
+        return JSONResponse(status_code=202, content=queued)
+
+    # ── Sync path: inline execution through the pipeline ─────────────────────
+    async def _run_nodus():
+        from runtime.nodus_execution_service import execute_nodus_task_payload
+
         try:
             result = execute_nodus_task_payload(
                 task_name=body.task_name,

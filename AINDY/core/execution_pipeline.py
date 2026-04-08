@@ -802,7 +802,7 @@ class ExecutionPipeline:
             eus.update_status(eu_id, "waiting")
             eus.set_wait_condition(eu_id, wait_condition)
 
-            # Register with SchedulerEngine so resume_waiting(event_type) can
+            # Register with SchedulerEngine so notify_event(event_type) can
             # re-enqueue this EU when the awaited event fires.
             try:
                 from kernel.scheduler_engine import get_scheduler_engine, PRIORITY_NORMAL

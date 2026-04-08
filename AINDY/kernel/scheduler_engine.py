@@ -17,9 +17,9 @@ WAIT/RESUME integration
 -----------------------
 When a FlowRun enters WAIT state, its run_id is stored via
 ``register_wait(run_id, wait_for_event)``.  When the event fires,
-``resume_waiting(event_type)`` creates a new ScheduledItem and enqueues it
-at normal priority so the resumed run can be picked up on the next
-``schedule()`` cycle.
+``notify_event(event_type)`` matches registered ``_waiting`` entries by
+``wait_condition.event_name``, applies correlation-id filtering, and
+re-enqueues matched runs at their registered priority.
 
 Usage
 -----
@@ -136,7 +136,7 @@ class SchedulerEngine:
     WAIT/RESUME
     -----------
     ``register_wait(run_id, wait_for_event)`` records that a run is sleeping.
-    ``resume_waiting(event_type)`` re-enqueues all runs waiting for that event.
+    ``notify_event(event_type)`` re-enqueues all runs waiting for that event.
     """
 
     def __init__(self) -> None:
@@ -299,7 +299,7 @@ class SchedulerEngine:
     ) -> None:
         """Register a run that is waiting for a condition (event, time, external).
 
-        When the condition is satisfied — by ``resume_waiting(event_type)`` for
+        When the condition is satisfied — by ``notify_event(event_type)`` for
         event/external conditions, or by ``tick_time_waits()`` for time-based
         conditions — this run is re-enqueued and routed through
         ExecutionDispatcher.
@@ -353,7 +353,13 @@ class SchedulerEngine:
             (wc_dict or {}).get("type"),
         )
 
-    def notify_event(self, event_type: str, *, correlation_id: str | None = None) -> int:
+    def notify_event(
+        self,
+        event_type: str,
+        *,
+        correlation_id: str | None = None,
+        broadcast: bool = True,
+    ) -> int:
         """Re-enqueue all waiting runs whose wait_condition matches *event_type*.
 
         Called by the event system after each successful emission so that
@@ -378,14 +384,24 @@ class SchedulerEngine:
         --------------------
         Matched entries are deleted under ``_lock`` before any enqueue so a
         run can never be resumed twice for the same event, even under concurrent
-        ``notify_event`` / ``resume_waiting`` calls.
+        ``notify_event`` calls.
+
+        Distributed broadcast
+        ---------------------
+        When ``broadcast=True`` (default), the event is published to the
+        Redis event bus after the local scan completes so that all other
+        instances can wake flows registered in their own ``_waiting`` dicts.
+        Set ``broadcast=False`` when called from the event-bus subscriber
+        to prevent infinite re-publication.
 
         Args:
             event_type:     The event type that was just emitted.
             correlation_id: Optional correlation chain ID from the emitted event.
+            broadcast:      Publish to distributed event bus (default True).
+                            Pass False when invoked from the event-bus subscriber.
 
         Returns:
-            Number of runs re-enqueued.
+            Number of runs re-enqueued locally.
         """
         to_resume: list[tuple[str, dict]] = []
 
@@ -438,6 +454,20 @@ class SchedulerEngine:
                 "[Scheduler] event-resumed run=%s event=%s type=%s priority=%s",
                 run_id, event_type, item.eu_type, entry["priority"],
             )
+
+        # ── Distributed broadcast ─────────────────────────────────────────────
+        # Publish to the Redis event bus so all other instances can wake flows
+        # registered in their own _waiting dicts.  broadcast=False when called
+        # from the subscriber itself, preventing infinite re-publication.
+        # Non-fatal: a failing publish never interrupts local scheduling.
+        if broadcast:
+            try:
+                from kernel.event_bus import get_event_bus  # noqa: PLC0415
+                get_event_bus().publish(event_type, correlation_id=correlation_id)
+            except Exception as _bus_exc:
+                logger.debug(
+                    "[Scheduler] event bus publish failed (non-fatal): %s", _bus_exc
+                )
 
         return len(to_resume)
 
@@ -502,44 +532,60 @@ class SchedulerEngine:
 
         return len(to_fire)
 
-    def resume_waiting(self, event_type: str) -> int:
-        """Re-enqueue all runs waiting for *event_type*.
+    def peek_matching_run_ids(
+        self,
+        event_type: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> list[str]:
+        """Return the run_ids that *would* be resumed by notify_event().
 
-        Called when an event fires (e.g. from event_service.emit_system_event).
+        Read-only scan — no entries are deleted or enqueued.  Applies the
+        exact same matching predicate as ``notify_event()`` so callers can
+        pre-populate state (e.g. inject event payload into FlowRun.state)
+        before the scheduler fires.
+
+        Must be called *before* ``notify_event()`` for the same event, since
+        ``notify_event()`` removes matched entries from ``_waiting``.
+
+        Matching rules mirror ``notify_event()``:
+        - ``wait_condition.type`` must NOT be ``"time"``
+        - event name must match (structured or legacy fallback)
+        - correlation_id filter applied when both sides are non-empty
 
         Args:
-            event_type: The event type that just fired.
+            event_type:     The event type about to be emitted.
+            correlation_id: Optional correlation chain ID for scoping.
 
         Returns:
-            Number of runs re-enqueued.
+            List of run_id strings (FlowRun IDs and/or eu_ids) that match.
         """
-        resumed = 0
+        matched: list[str] = []
         with self._lock:
-            to_resume = [
-                (run_id, entry)
-                for run_id, entry in self._waiting.items()
-                if entry["wait_for"] == event_type
-            ]
-            for run_id, entry in to_resume:
-                del self._waiting[run_id]
+            for run_id, entry in self._waiting.items():
+                wc = entry.get("wait_condition") or {}
+                wc_type = wc.get("type")
+                wc_event = wc.get("event_name")
 
-        for run_id, entry in to_resume:
-            item = ScheduledItem(
-                execution_unit_id=entry["eu_id"],
-                tenant_id=entry["tenant_id"],
-                priority=entry["priority"],
-                run_callback=entry["callback"],
-                run_id=run_id,
-                eu_type=entry.get("eu_type", "flow"),
-            )
-            self.enqueue(item)
-            resumed += 1
-            logger.info(
-                "[Scheduler] resumed run=%s event=%s type=%s priority=%s",
-                run_id, event_type, item.eu_type, entry["priority"],
-            )
+                if wc_type == "time":
+                    continue
 
-        return resumed
+                if wc_event:
+                    if wc_type not in ("event", "external"):
+                        continue
+                    if wc_event != event_type:
+                        continue
+                else:
+                    if entry.get("wait_for") != event_type:
+                        continue
+
+                entry_corr = entry.get("correlation_id") or None
+                emit_corr = correlation_id or None
+                if entry_corr and emit_corr and entry_corr != emit_corr:
+                    continue
+
+                matched.append(run_id)
+        return matched
 
     def waiting_for(self, run_id: str) -> str | None:
         """Return the event type a run is waiting for, or None."""
