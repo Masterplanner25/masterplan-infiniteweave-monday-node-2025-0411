@@ -600,16 +600,39 @@ class PersistentFlowRunner:
                     "priority": self.priority,
                 },
             )
-            self._eu_id = _eu.id if _eu else None
+            # ── Fail-fast: EU must be valid before execution starts ───────────
+            # create() returns None on any DB/constraint failure.  A None eu_id
+            # means WAIT states can never be resumed and resource tracking is
+            # broken.  Raise immediately so the FlowRun is marked failed at the
+            # source, rather than silently proceeding to discover the gap later
+            # (e.g. at WAIT time when the damage is already done).
+            if _eu is None:
+                raise RuntimeError(
+                    f"ExecutionUnit creation returned None for "
+                    f"flow_run={run.id!r} flow={flow_name!r} — "
+                    f"execution cannot start without a valid EU. "
+                    f"Check DB connectivity and ExecutionUnit constraints."
+                )
+            self._eu_id = _eu.id
             self._tenant_id = _tenant_id
             # Register execution with ResourceManager (concurrency tracking)
             try:
                 from kernel.resource_manager import get_resource_manager
                 get_resource_manager().mark_started(
-                    _tenant_id, str(self._eu_id) if self._eu_id else None
+                    _tenant_id, str(self._eu_id)
                 )
             except Exception as _rm_exc:
                 logger.debug("[EU] resource_manager.mark_started skipped: %s", _rm_exc)
+        except RuntimeError:
+            # Fail-fast errors must propagate — do not swallow with the
+            # non-fatal handler below.  Mark the FlowRun as failed first.
+            try:
+                run.status = "failed"
+                run.error_message = "ExecutionUnit creation failed — execution aborted"
+                self.db.commit()
+            except Exception:
+                pass
+            raise
         except Exception as _eu_exc:
             logger.warning("[EU] flow hook create failed — non-fatal | error=%s", _eu_exc)
             self._eu_id = None
@@ -674,6 +697,61 @@ class PersistentFlowRunner:
                 next_action=None,
                 run_id=db_run_id,
             )
+
+        # ── Distributed soft-lock: atomic status claim ────────────────────────
+        # Applies only when the run is in 'waiting' state (rehydration resume
+        # path).  start() creates FlowRuns with status='running' — those bypass
+        # this guard entirely.
+        #
+        # The UPDATE is atomic at the DB level: exactly one instance wins the
+        # race.  Any other instance that fires the same callback gets rowcount=0
+        # and exits immediately, ensuring single-instance execution.
+        if run.status == "waiting":
+            claimed = (
+                self.db.query(FlowRun)
+                .filter(FlowRun.id == db_run_id, FlowRun.status == "waiting")
+                .update({"status": "executing"}, synchronize_session=False)
+            )
+            try:
+                self.db.commit()
+            except Exception as _claim_exc:
+                logger.warning(
+                    "[Flow] resume claim commit failed for run=%s: %s",
+                    db_run_id,
+                    _claim_exc,
+                )
+                try:
+                    self.db.rollback()
+                except Exception:
+                    pass
+                return _format_execution_response(
+                    status="SKIPPED",
+                    trace_id=db_run_id,
+                    result={
+                        "skipped": True,
+                        "reason": "claim commit failed — concurrent resume likely",
+                    },
+                    events=[],
+                    next_action=None,
+                    run_id=db_run_id,
+                )
+
+            if claimed == 0:
+                logger.info(
+                    "[Flow] resume skipped: run=%s already claimed by another instance",
+                    db_run_id,
+                )
+                return _format_execution_response(
+                    status="SKIPPED",
+                    trace_id=db_run_id,
+                    result={"skipped": True, "reason": "already claimed by another instance"},
+                    events=[],
+                    next_action=None,
+                    run_id=db_run_id,
+                )
+
+            # Sync in-memory object — synchronize_session=False leaves run.status stale
+            run.status = "executing"
 
         state = run.state or {}
         if isinstance(state, dict) and not state.get("trace_id"):
@@ -1269,8 +1347,11 @@ def route_event(
         event_type:  The event type to deliver (e.g. ``"approval.received"``).
         payload:     Arbitrary event payload forwarded into FlowRun state.
         db:          Active SQLAlchemy session for state write.
-        user_id:     Optional owner filter (limits which FlowRuns receive the
-                     payload injection — does not limit the scheduler match).
+        user_id:     Retained for API compatibility — no longer used for
+                     payload-injection filtering.  Scope is now derived from
+                     the scheduler's correlation_id match (same predicate as
+                     ``notify_event()``), which guarantees that every run
+                     receiving a payload is also a run that will be resumed.
 
     Returns:
         List of per-run payload acknowledgements ``{run_id, payload_injected}``.
@@ -1280,23 +1361,38 @@ def route_event(
     from db.models.flow_run import FlowRun
     from kernel.scheduler_engine import get_scheduler_engine
 
+    scheduler = get_scheduler_engine()
+    corr = (payload or {}).get("correlation_id") or None
+
     # ── 1. Event payload delivery ─────────────────────────────────────────────
-    # Inject payload into FlowRun.state["event"] so the Nodus resume bridge
-    # (nodus_adapter.py) finds it when runner.resume() re-enters the script.
-    # This is the ONLY permitted interaction with the FlowRun table.
-    # Status fields (status, waiting_for) are intentionally NOT mutated here —
-    # the flow runner handles its own checkpoint transitions on resume.
+    # Scope: ask the scheduler which run_ids it *will* resume for this event.
+    # Inject payload into exactly those FlowRun rows — no more, no less.
+    # This aligns injection scope with resume scope so Nodus event.wait()
+    # always receives its payload on re-execution.
+    #
+    # peek_matching_run_ids() is a read-only scan (no entries deleted/enqueued)
+    # and MUST be called before notify_event() because notify_event() removes
+    # matched entries from _waiting.
+    #
+    # Status fields are intentionally NOT mutated here — the flow runner handles
+    # its own checkpoint transitions on resume.
     results: list[dict] = []
 
-    query = db.query(FlowRun).filter(
-        FlowRun.waiting_for == event_type,
-        FlowRun.status == "waiting",
-    )
-    owner_user_id = parse_user_id(user_id)
-    if owner_user_id:
-        query = query.filter(FlowRun.user_id == owner_user_id)
+    matching_run_ids = scheduler.peek_matching_run_ids(event_type, correlation_id=corr)
+    if not matching_run_ids:
+        logger.debug(
+            "[route_event] no waiting runs matched event=%s corr=%s — skipping injection",
+            event_type, corr,
+        )
+        # Fall through to step 2 (notify_event) — let scheduler confirm and log.
+        query_runs = []
+    else:
+        query_runs = db.query(FlowRun).filter(
+            FlowRun.id.in_(matching_run_ids),
+            FlowRun.status == "waiting",
+        ).all()
 
-    for run in query.all():
+    for run in query_runs:
         try:
             state = dict(run.state or {})
             state["event"] = payload
@@ -1319,20 +1415,21 @@ def route_event(
         )
 
     # ── 2. Resume delegation ──────────────────────────────────────────────────
-    # SchedulerEngine is the sole resume authority.  notify_event() matches
-    # waiting entries by wait_condition.event_name, guards against duplicates
-    # under its internal lock, and re-enqueues through ExecutionDispatcher.
-    # No runner.resume() calls, no FLOW_REGISTRY lookups, no status mutations.
-    corr = (payload or {}).get("correlation_id") or None
+    # publish_event() is the single entry point for all event emission.
+    # It runs the local notify_event() scan on this instance AND publishes to
+    # the Redis event bus so all other instances wake their own registered
+    # waiters.  No runner.resume() calls, no FLOW_REGISTRY lookups, no status
+    # mutations here — the scheduler and its callbacks handle all of that.
     try:
-        resumed = get_scheduler_engine().notify_event(event_type, correlation_id=corr)
+        from kernel.event_bus import publish_event
+        resumed = publish_event(event_type, correlation_id=corr)
         logger.info(
-            "[route_event] SchedulerEngine.notify_event resumed=%d event=%s corr=%s",
+            "[route_event] publish_event resumed=%d event=%s corr=%s",
             resumed, event_type, corr,
         )
     except Exception as _sched_exc:
         logger.warning(
-            "[route_event] notify_event failed event=%s: %s", event_type, _sched_exc
+            "[route_event] publish_event failed event=%s: %s", event_type, _sched_exc
         )
 
     return results

@@ -47,6 +47,12 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 - Impact: Inconsistent memory view; already captured in TECH_DEBT.
 - Status: Resolved (deprecated in-memory trace with runtime warning).
 
+8) SchedulerEngine._waiting (per-process WAIT registry)
+- Location: `kernel/scheduler_engine.py` → `SchedulerEngine._waiting`
+- Risk: Previously — `_waiting` was in-memory only. A FlowRun entering WAIT on Instance A would never resume if the resume event arrived on Instance B.
+- Resolution (2026-04-07): `kernel/event_bus.py` introduces a Redis pub/sub distributed event bus. `notify_event(broadcast=True)` publishes to `aindy:scheduler_events` after the local scan. All instances subscribe and call `notify_event(broadcast=False)` on their own scheduler when a message arrives. Exactly-once execution is guaranteed by an atomic `UPDATE flow_runs SET status='executing' WHERE status='waiting'` DB claim — only the winning instance proceeds. All others return immediately. Startup rehydration re-registers all waiting FlowRun and EU callbacks on every instance so any instance can resume any waiting flow after a restart.
+- Status: ✅ Resolved (2026-04-07). Remaining known limitation: collective restart race window (all instances restart simultaneously during an in-flight event) — requires Redis Streams for full elimination.
+
 ## Actionable Recommendations (No redesign)
 - Replace `InMemoryBackend` with Redis/DB cache if cache consistency is required.
 - Document that ARM config changes require restart or reload across instances.

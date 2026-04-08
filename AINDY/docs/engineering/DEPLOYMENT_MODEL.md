@@ -28,6 +28,11 @@ The backend performs real startup checks:
 - APScheduler startup only on the lease leader (if the `apscheduler` dependency is present; otherwise the service logs that the scheduler is disabled)
 - flow registration
 - stuck-run recovery scan
+- **distributed event bus subscriber** (`kernel/event_bus.py`) — starts before rehydration so the thread is ready when the first resume event arrives
+- **EU WAIT rehydration** (`core/wait_rehydration.py`) — re-registers EU-level resume callbacks for all `status='waiting'` ExecutionUnits
+- **FlowRun WAIT rehydration** (`core/flow_run_rehydration.py`) — re-registers `PersistentFlowRunner` callbacks for all `status='waiting'` FlowRuns
+
+Rehydration ordering is intentional: event bus subscriber starts first so no event is missed during callback re-registration.
 
 If schema drift is detected, startup fails with `Run alembic upgrade head`.
 
@@ -43,6 +48,12 @@ Required or operationally important variables:
 - `REDIS_URL` when Redis cache is enabled
 - `MONGO_URL`
 - `MONGO_DB_NAME`
+
+Distributed event bus variables (all optional — system falls back to local-only mode if unset or Redis is unavailable):
+- `AINDY_REDIS_URL` — Redis connection URL (default: `redis://localhost:6379/0`)
+- `AINDY_EVENT_BUS_CHANNEL` — pub/sub channel name (default: `aindy:scheduler_events`)
+- `AINDY_EVENT_BUS_ENABLED` — set to `false` / `0` / `no` to disable entirely (default: enabled)
+- `INSTANCE_ID` — stable identifier for this pod/process; used to deduplicate own-instance pub/sub messages (defaults to `HOSTNAME` or `socket.gethostname()`)
 
 ## 5. Background Work Model
 - Background work is not started by daemon threads.
@@ -70,10 +81,10 @@ Available:
 - scheduler/leadership status
 - flow runs and automation logs
 - agent run traces
+- distributed event bus (`kernel/event_bus.py`) — Redis pub/sub cross-instance resume event routing
 
 Missing:
 - distributed tracing
-- durable cross-service event bus
 - consistent provider-level latency/cost telemetry
 
 ## 8. Current Deployment Risks

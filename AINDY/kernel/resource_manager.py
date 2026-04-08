@@ -223,14 +223,56 @@ class ResourceManager:
         after completion.  The snapshot is retained in memory until
         ``purge_eu(eu_id)`` is called.
 
+        Capacity event
+        --------------
+        If this completion causes the tenant's active count to drop from
+        at-or-above ``MAX_CONCURRENT_PER_TENANT`` to below it (i.e. the
+        full → available transition), ``notify_event("resource_available")``
+        is fired on the SchedulerEngine so that any FlowRun waiting on
+        ``waiting_for="resource_available"`` is immediately re-enqueued.
+
+        The event fires at most once per completion call — concurrent
+        completions that decrement from N > MAX to MAX-1 still below the
+        limit do NOT fire, preventing scheduler floods.  The notify call
+        is made **outside** ``_lock`` to avoid lock-ordering deadlocks with
+        ``SchedulerEngine._lock``.  Any scheduler failure is swallowed and
+        logged at DEBUG level so quota state is never corrupted by a
+        downstream error.
+
         Args:
             tenant_id: The tenant whose execution is completing.
             eu_id:     Optional ExecutionUnit ID.
         """
         tid = str(tenant_id)
+        capacity_freed = False
         with self._lock:
             current = self._tenant_active.get(tid, 0)
-            self._tenant_active[tid] = max(0, current - 1)
+            new_active = max(0, current - 1)
+            self._tenant_active[tid] = new_active
+            # Transition guard: fire only when the count was blocking new
+            # executions (>= MAX) and has now dropped below the limit.
+            # Exactly one thread can observe this per completion because
+            # each reads a different `current` value under the lock.
+            capacity_freed = (
+                current >= MAX_CONCURRENT_PER_TENANT
+                and new_active < MAX_CONCURRENT_PER_TENANT
+            )
+
+        if capacity_freed:
+            # ── Outside _lock — no re-entrant deadlock risk ───────────────
+            try:
+                from kernel.event_bus import publish_event
+                publish_event("resource_available")
+                logger.info(
+                    "[ResourceManager] capacity freed tenant=%s active=%d→%d "
+                    "— published resource_available to all instances",
+                    tid, current, new_active,
+                )
+            except Exception as _exc:
+                logger.debug(
+                    "[ResourceManager] publish_event resource_available failed "
+                    "(non-fatal): %s", _exc
+                )
 
     # ── Usage recording ───────────────────────────────────────────────────────
 

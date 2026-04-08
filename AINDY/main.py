@@ -303,6 +303,56 @@ async def lifespan(app: FastAPI):
         finally:
             _scan_db.close()
 
+    # Distributed event bus: subscribe to Redis pub/sub on ALL instances so
+    # that resume events emitted by any instance wake flows registered in this
+    # instance's local _waiting dict.  Must start BEFORE rehydration so the
+    # thread is ready when the first event arrives.  Non-fatal: if Redis is
+    # unavailable the system falls back to local-only notify_event behaviour.
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            from kernel.event_bus import get_event_bus
+            get_event_bus().start_subscriber()
+        except Exception as _bus_exc:
+            logger.warning(
+                "[startup] Event bus subscriber failed to start (non-fatal): %s", _bus_exc
+            )
+
+    # WAIT rehydration: re-register all waiting EUs with the SchedulerEngine.
+    # Must run after SchedulerEngine is initialised (above) and after the
+    # stuck-run scan (which may transition some EUs out of waiting status).
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        from core.wait_rehydration import rehydrate_waiting_eus
+        _rehydrate_db = SessionLocal()
+        try:
+            _n_rehydrated = rehydrate_waiting_eus(_rehydrate_db)
+            if _n_rehydrated:
+                logger.info("[startup] WAIT rehydration registered %d EU(s)", _n_rehydrated)
+        except Exception as _rehydrate_exc:
+            logger.warning("[startup] WAIT rehydration failed (non-fatal): %s", _rehydrate_exc)
+        finally:
+            _rehydrate_db.close()
+
+    # FlowRun WAIT rehydration: reconstruct PersistentFlowRunner callbacks for
+    # all FlowRuns with status="waiting" so they can be resumed when their
+    # event fires.  Must run after register_all_flows() so FLOW_REGISTRY is
+    # populated, and after EU rehydration so the scheduler entry for the same
+    # run_id already has the EU-level callback when we add the flow callback.
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        from core.flow_run_rehydration import rehydrate_waiting_flow_runs
+        _flow_rehydrate_db = SessionLocal()
+        try:
+            _n_flow_rehydrated = rehydrate_waiting_flow_runs(_flow_rehydrate_db)
+            if _n_flow_rehydrated:
+                logger.info(
+                    "[startup] FlowRun rehydration registered %d run(s)", _n_flow_rehydrated
+                )
+        except Exception as _flow_rehydrate_exc:
+            logger.warning(
+                "[startup] FlowRun rehydration failed (non-fatal): %s", _flow_rehydrate_exc
+            )
+        finally:
+            _flow_rehydrate_db.close()
+
     # Seed system identity
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from db.models.author_model import AuthorDB

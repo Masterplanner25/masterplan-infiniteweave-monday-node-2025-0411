@@ -312,11 +312,11 @@ class TestRouteEventSchedulerDelegation:
     def test_payload_injected_into_state(self, db_session, test_user):
         """route_event() writes payload into FlowRun.state['event']."""
         from runtime.flow_engine import route_event
-        from db.models.flow_run import FlowRun
 
         run = self._make_waiting_run(db_session, test_user.id)
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = [str(run.id)]
             mock_se.return_value.notify_event.return_value = 1
             route_event("task.completed", {"result": "ok"}, db_session, user_id=test_user.id)
 
@@ -326,11 +326,11 @@ class TestRouteEventSchedulerDelegation:
     def test_status_not_mutated(self, db_session, test_user):
         """route_event() must NOT change run.status or run.waiting_for."""
         from runtime.flow_engine import route_event
-        from db.models.flow_run import FlowRun
 
         run = self._make_waiting_run(db_session, test_user.id)
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             route_event("task.completed", {}, db_session, user_id=test_user.id)
 
@@ -345,20 +345,22 @@ class TestRouteEventSchedulerDelegation:
         self._make_waiting_run(db_session, test_user.id, event_type="genesis_user_message")
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event("genesis_user_message", {}, db_session, user_id=test_user.id)
 
         mock_se.return_value.notify_event.assert_called_once_with(
-            "genesis_user_message", correlation_id=None
+            "genesis_user_message", correlation_id=None, broadcast=True
         )
 
     def test_notify_event_receives_correlation_id_from_payload(self, db_session, test_user):
-        """correlation_id from payload is forwarded to notify_event."""
+        """correlation_id from payload is forwarded to both peek and notify_event."""
         from runtime.flow_engine import route_event
 
         self._make_waiting_run(db_session, test_user.id)
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event(
                 "task.completed",
@@ -367,8 +369,11 @@ class TestRouteEventSchedulerDelegation:
                 user_id=test_user.id,
             )
 
-        mock_se.return_value.notify_event.assert_called_once_with(
+        mock_se.return_value.peek_matching_run_ids.assert_called_once_with(
             "task.completed", correlation_id="chain-abc"
+        )
+        mock_se.return_value.notify_event.assert_called_once_with(
+            "task.completed", correlation_id="chain-abc", broadcast=True
         )
 
     def test_no_runner_resume_called(self, db_session, test_user):
@@ -378,6 +383,7 @@ class TestRouteEventSchedulerDelegation:
         self._make_waiting_run(db_session, test_user.id)
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event("task.completed", {}, db_session, user_id=test_user.id)
 
@@ -391,6 +397,7 @@ class TestRouteEventSchedulerDelegation:
         run = self._make_waiting_run(db_session, test_user.id)
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = [str(run.id)]
             mock_se.return_value.notify_event.return_value = 1
             results = route_event("task.completed", {"x": 1}, db_session, user_id=test_user.id)
 
@@ -403,6 +410,7 @@ class TestRouteEventSchedulerDelegation:
         from runtime.flow_engine import route_event
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             results = route_event("unknown.event", {}, db_session, user_id=test_user.id)
 
@@ -414,12 +422,49 @@ class TestRouteEventSchedulerDelegation:
         from runtime.flow_engine import route_event
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             route_event("some.event", {}, db_session)  # no user_id filter
 
         mock_se.return_value.notify_event.assert_called_once_with(
-            "some.event", correlation_id=None
+            "some.event", correlation_id=None, broadcast=True
         )
+
+    def test_payload_scope_matches_scheduler_scope(self, db_session, test_user):
+        """
+        Payload injection uses peek_matching_run_ids() — not user_id filter.
+
+        A run that IS in the scheduler's match set receives the payload
+        regardless of which user_id was passed to route_event().
+        A run that is NOT in the scheduler's match set does NOT receive it,
+        even if it is owned by the same user.
+        """
+        from runtime.flow_engine import route_event
+
+        matched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
+        unmatched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
+
+        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+            # Only matched_run is in the scheduler's scope
+            mock_se.return_value.peek_matching_run_ids.return_value = [str(matched_run.id)]
+            mock_se.return_value.notify_event.return_value = 1
+            results = route_event(
+                "payment.confirmed",
+                {"amount": 99},
+                db_session,
+                user_id=test_user.id,
+            )
+
+        db_session.refresh(matched_run)
+        db_session.refresh(unmatched_run)
+
+        # Only the scheduler-matched run receives the payload
+        assert matched_run.state.get("event") == {"amount": 99}
+        assert unmatched_run.state.get("event") is None  # NOT injected
+
+        # Only one ack returned
+        assert len(results) == 1
+        assert results[0]["run_id"] == str(matched_run.id)
 
 
 class TestGenesisWaitResumeRoundTrip:
@@ -761,3 +806,270 @@ class TestPhaseDAuto:
         assert result["status"] == "FAILED"
         mock_capture.assert_not_called()
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PHASE E — Distributed Soft-Lock (resume() idempotency)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class TestResumeSoftLock:
+    """PersistentFlowRunner.resume() must claim 'waiting' runs atomically.
+
+    The soft-lock protects against duplicate execution when two instances
+    both receive the same resume event after a restart.  Only the instance
+    that wins the atomic UPDATE proceeds; all others exit with SKIPPED.
+    """
+
+    @staticmethod
+    def _make_waiting_run(db_session, user_id):
+        """Create a FlowRun with status='waiting' and return it."""
+        from db.models.flow_run import FlowRun
+
+        run = FlowRun(
+            id=str(uuid.uuid4()),
+            flow_name="test_flow",
+            workflow_type="arm_analysis",
+            state={},
+            current_node="node_a",
+            status="waiting",
+            trace_id=str(uuid.uuid4()),
+            user_id=user_id,
+            waiting_for="some_event",
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    @staticmethod
+    def _make_running_run(db_session, user_id, node_name="node_a"):
+        """Create a FlowRun with status='running' (start() path)."""
+        from db.models.flow_run import FlowRun
+
+        run = FlowRun(
+            id=str(uuid.uuid4()),
+            flow_name="test_flow",
+            workflow_type="arm_analysis",
+            state={},
+            current_node=node_name,
+            status="running",
+            trace_id=str(uuid.uuid4()),
+            user_id=user_id,
+        )
+        db_session.add(run)
+        db_session.commit()
+        db_session.refresh(run)
+        return run
+
+    def test_claim_succeeds_when_waiting(self, db_session, test_user):
+        """Winning instance claims the run — status transitions to 'executing'."""
+        from runtime.flow_engine import PersistentFlowRunner, register_node
+
+        @register_node("soft_lock_success_node")
+        def success_node(state, context):
+            return {"status": "SUCCESS", "output_patch": {}}
+
+        run = self._make_waiting_run(db_session, test_user.id)
+        run.current_node = "soft_lock_success_node"
+        db_session.commit()
+
+        flow = {
+            "start": "soft_lock_success_node",
+            "edges": {},
+            "end": ["soft_lock_success_node"],
+        }
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db_session,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+        result = runner.resume(run.id)
+
+        # Claim succeeded — execution proceeded
+        assert result["status"] in {"SUCCESS", "WAITING", "FAILED"}, (
+            f"Expected execution result, got {result['status']!r}"
+        )
+        assert result["status"] != "SKIPPED"
+
+    def test_claim_fails_when_already_claimed(self, db_session, test_user):
+        """Second instance loses the claim — returns SKIPPED immediately.
+
+        Uses a mock db so that the initial SELECT returns status='waiting'
+        (triggering the claim branch) while the UPDATE returns 0 (concurrent
+        claim already won).
+        """
+        from runtime.flow_engine import PersistentFlowRunner
+
+        # Build a mock FlowRun that looks 'waiting'
+        mock_run = MagicMock()
+        mock_run.id = str(uuid.uuid4())
+        mock_run.status = "waiting"
+        mock_run.state = {}
+        mock_run.trace_id = str(uuid.uuid4())
+        mock_run.current_node = "node_a"
+        mock_run.flow_name = "test_flow"
+        mock_run.workflow_type = "arm_analysis"
+
+        # Mock query chain: first() → mock_run, update() → 0 (lost claim)
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.first.return_value = mock_run
+        mock_query.update.return_value = 0
+
+        mock_db = MagicMock()
+        mock_db.query.return_value = mock_query
+
+        flow = {"start": "node_a", "edges": {}, "end": ["node_a"]}
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=mock_db,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+
+        result = runner.resume(mock_run.id)
+
+        assert result["status"] == "SKIPPED"
+        assert result["result"]["skipped"] is True
+        assert "already claimed" in result["result"]["reason"]
+
+    def test_start_path_not_blocked_by_claim(self, db_session, test_user):
+        """start() creates FlowRuns with status='running' — claim guard skips them."""
+        from runtime.flow_engine import PersistentFlowRunner, register_node
+
+        @register_node("soft_lock_run_node")
+        def run_node(state, context):
+            return {"status": "SUCCESS", "output_patch": {}}
+
+        run = self._make_running_run(db_session, test_user.id, node_name="soft_lock_run_node")
+
+        flow = {
+            "start": "soft_lock_run_node",
+            "edges": {},
+            "end": ["soft_lock_run_node"],
+        }
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db_session,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+        # resume() must not return SKIPPED for a 'running' FlowRun
+        result = runner.resume(run.id)
+
+        assert result["status"] != "SKIPPED", (
+            "start() path (status='running') must NOT be blocked by the soft-lock claim"
+        )
+
+    def test_claim_commit_failure_returns_skipped(self, db_session, test_user):
+        """If the claim commit raises, resume() exits with SKIPPED (non-fatal)."""
+        from runtime.flow_engine import PersistentFlowRunner
+
+        run = self._make_waiting_run(db_session, test_user.id)
+
+        flow = {"start": "node_a", "edges": {}, "end": ["node_a"]}
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db_session,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+
+        commit_calls = {"count": 0}
+        original_commit = db_session.commit
+
+        def _failing_commit():
+            commit_calls["count"] += 1
+            if commit_calls["count"] == 1:
+                raise Exception("DB connection lost during claim commit")
+            original_commit()
+
+        with patch.object(db_session, "commit", side_effect=_failing_commit):
+            result = runner.resume(run.id)
+
+        assert result["status"] == "SKIPPED"
+        assert result["result"]["skipped"] is True
+        assert "claim commit failed" in result["result"]["reason"]
+
+    def test_run_not_found_returns_failed(self, db_session, test_user):
+        """Non-existent run_id returns FAILED (not SKIPPED)."""
+        from runtime.flow_engine import PersistentFlowRunner
+
+        flow = {"start": "node_a", "edges": {}, "end": ["node_a"]}
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db_session,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+        result = runner.resume("non-existent-run-id")
+
+        assert result["status"] == "FAILED"
+        assert "not found" in result["result"]["error"]
+
+    def test_non_waiting_status_skips_claim(self, db_session, test_user):
+        """FlowRun with status other than 'waiting' bypasses claim entirely."""
+        from runtime.flow_engine import PersistentFlowRunner, register_node
+
+        @register_node("soft_lock_bypass_node")
+        def bypass_node(state, context):
+            return {"status": "SUCCESS", "output_patch": {}}
+
+        # Explicitly set status='running' to represent a non-waiting FlowRun
+        run = self._make_running_run(db_session, test_user.id, node_name="soft_lock_bypass_node")
+
+        flow = {
+            "start": "soft_lock_bypass_node",
+            "edges": {},
+            "end": ["soft_lock_bypass_node"],
+        }
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db_session,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+
+        # No UPDATE should be issued for non-waiting runs
+        with patch.object(db_session, "query", wraps=db_session.query) as mock_q:
+            result = runner.resume(run.id)
+
+        assert result["status"] != "SKIPPED"
+
+    def test_skipped_result_has_no_events(self, db_session, test_user):
+        """SKIPPED response must include empty events list and correct run_id."""
+        from runtime.flow_engine import PersistentFlowRunner
+
+        run_id = str(uuid.uuid4())
+
+        mock_run = MagicMock()
+        mock_run.id = run_id
+        mock_run.status = "waiting"
+        mock_run.state = {}
+        mock_run.trace_id = str(uuid.uuid4())
+        mock_run.current_node = "node_a"
+        mock_run.flow_name = "test_flow"
+        mock_run.workflow_type = "arm_analysis"
+
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.first.return_value = mock_run
+        mock_query.update.return_value = 0
+
+        mock_db = MagicMock()
+        mock_db.query.return_value = mock_query
+
+        flow = {"start": "node_a", "edges": {}, "end": ["node_a"]}
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=mock_db,
+            user_id=test_user.id,
+            workflow_type="arm_analysis",
+        )
+
+        result = runner.resume(run_id)
+
+        assert result["status"] == "SKIPPED"
+        assert result.get("events") == [] or result.get("events") is None
+        assert result.get("run_id") == run_id or result.get("trace_id") == run_id

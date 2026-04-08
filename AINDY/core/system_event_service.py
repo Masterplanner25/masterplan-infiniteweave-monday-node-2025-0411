@@ -393,19 +393,19 @@ def _notify_scheduler_of_event(
     Non-fatal — any exception is swallowed and logged at DEBUG level.
     """
     try:
-        from kernel.scheduler_engine import get_scheduler_engine
+        from kernel.event_bus import publish_event
 
         corr = (payload or {}).get("correlation_id") or trace_id
-        resumed = get_scheduler_engine().notify_event(event_type, correlation_id=corr)
+        resumed = publish_event(event_type, correlation_id=corr)
         if resumed:
             logger.info(
-                "[SystemEvent] scheduler resumed %d run(s) on event=%s corr=%s",
+                "[SystemEvent] publish_event resumed %d run(s) on event=%s corr=%s",
                 resumed,
                 event_type,
                 corr,
             )
     except Exception:
-        logger.debug("[SystemEvent] scheduler notify_event skipped", exc_info=True)
+        logger.debug("[SystemEvent] publish_event skipped", exc_info=True)
 
 
 def emit_system_event(
