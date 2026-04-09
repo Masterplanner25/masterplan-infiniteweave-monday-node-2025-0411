@@ -401,8 +401,11 @@ def submit_autonomous_async_job(
     trigger_type: str,
     trigger_context: dict[str, Any] | None = None,
     max_attempts: int = 1,
+    db=None,
 ) -> dict[str, Any]:
-    db = SessionLocal()
+    _owns_db = db is None
+    if _owns_db:
+        db = SessionLocal()
     try:
         trace_id = str(uuid.uuid4())
         context = dict(trigger_context or {})
@@ -435,7 +438,8 @@ def submit_autonomous_async_job(
                 decision=decision,
             )
     finally:
-        db.close()
+        if _owns_db:
+            db.close()
 
     payload_with_autonomy = dict(payload)
     payload_with_autonomy["__autonomy"] = {
