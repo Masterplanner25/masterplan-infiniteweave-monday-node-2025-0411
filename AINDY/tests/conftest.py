@@ -107,10 +107,3 @@ def pytest_runtest_setup(item):
     else:
         _remove_service_compat_files()
 
-pytest_plugins = [
-    "tests.fixtures.db",
-    "tests.fixtures.auth",
-    "tests.fixtures.users",
-    "tests.fixtures.client",
-    "tests.fixtures.common",
-]

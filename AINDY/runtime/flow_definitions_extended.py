@@ -411,6 +411,7 @@ def agent_run_create_node(state, context):
                 source="agent_router",
                 trigger_type="user",
                 trigger_context=trigger_context,
+                db=db,
             )
             return {"status": "SUCCESS", "output_patch": {"agent_run_create_result": {
                 "_http_status": 202,
