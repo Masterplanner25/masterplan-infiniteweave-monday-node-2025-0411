@@ -26,6 +26,8 @@ Every call returns the same envelope:
 
 `data` is the handler output on success. `error` is set on failure. `warning` is set when the syscall is deprecated.
 
+`trace_id` and `execution_unit_id` are **automatically propagated** through nested syscall chains. If your script or handler dispatches one syscall that internally dispatches another, every call in the chain shares the same `trace_id` — you never need to thread these IDs manually.
+
 ---
 
 ## Memory

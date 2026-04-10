@@ -15,6 +15,7 @@ I  memory.search handler (unit)         (3 tests)
 J  flow.run handler (unit)              (4 tests)
 K  event.emit handler (unit)            (4 tests)
 L  Nodus integration (adapter binding)  (4 tests)
+M  Trace propagation (ContextVar)       (5 tests)
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ import kernel.syscall_registry as _reg_mod
 from kernel.syscall_dispatcher import (
     DEFAULT_NODUS_CAPABILITIES,
     SyscallContext,
+    _EU_ID_CTX,
+    _TRACE_ID_CTX,
+    child_context,
     get_dispatcher,
     register_syscall,
 )
@@ -658,3 +662,115 @@ class TestQuotaEnforcement:
         assert result["status"] == "success"
 
 
+# ── M: Trace propagation (ContextVar) ────────────────────────────────────────
+
+_TRACE_SYSCALL = "sys.v1.test.traceprop"
+_NESTED_SYSCALL = "sys.v1.test.tracenested"
+
+
+class TestTracePropagation:
+    """Ensure trace_id and eu_id propagate through nested dispatch() calls."""
+
+    def setup_method(self):
+        self.dispatcher = SyscallDispatcher()
+        # Capture context fields from inside the handler for assertion
+        self._captured: list[dict] = []
+
+        def _capture(payload, context):
+            self._captured.append({
+                "trace_id": context.trace_id,
+                "eu_id": context.execution_unit_id,
+            })
+            return {"ok": True}
+
+        SYSCALL_REGISTRY[_TRACE_SYSCALL] = _reg_mod.SyscallEntry(
+            handler=_capture,
+            capability="test.traceprop",
+        )
+        SYSCALL_REGISTRY[_NESTED_SYSCALL] = _reg_mod.SyscallEntry(
+            handler=_capture,
+            capability="test.tracenested",
+        )
+
+    def teardown_method(self):
+        SYSCALL_REGISTRY.pop(_TRACE_SYSCALL, None)
+        SYSCALL_REGISTRY.pop(_NESTED_SYSCALL, None)
+        self._captured.clear()
+
+    def _ctx_with_caps(self, **kwargs):
+        return _ctx(
+            capabilities=["test.traceprop", "test.tracenested"],
+            trace_id="root-trace",
+            execution_unit_id="root-eu",
+            **kwargs,
+        )
+
+    def test_root_call_preserves_trace_id(self):
+        """Root dispatch returns the caller-supplied trace_id unchanged."""
+        ctx = self._ctx_with_caps()
+        result = self.dispatcher.dispatch(_TRACE_SYSCALL, {}, ctx)
+        assert result["status"] == "success"
+        assert result["trace_id"] == "root-trace"
+        assert self._captured[0]["trace_id"] == "root-trace"
+
+    def test_root_call_generates_trace_id_when_empty(self):
+        """Root dispatch generates a UUID trace_id when context has empty string."""
+        ctx = _ctx(
+            capabilities=["test.traceprop"],
+            trace_id="",
+            execution_unit_id="",
+        )
+        result = self.dispatcher.dispatch(_TRACE_SYSCALL, {}, ctx)
+        assert result["status"] == "success"
+        assert result["trace_id"]  # non-empty UUID was generated
+        assert self._captured[0]["trace_id"] == result["trace_id"]
+
+    def test_nested_call_inherits_parent_trace_id(self):
+        """A handler that dispatches a nested syscall shares the root trace_id."""
+        captured_outer = self._captured
+
+        def _outer_handler(payload, context):
+            # Simulate a handler calling a nested syscall with a FRESH context
+            # (as agent_tools._syscall() does) — the ContextVar must override it.
+            fresh_ctx = SyscallContext(
+                execution_unit_id="fresh-eu",
+                user_id=context.user_id,
+                capabilities=["test.tracenested"],
+                trace_id="fresh-trace",   # would break lineage without ContextVar
+            )
+            self.dispatcher.dispatch(_NESTED_SYSCALL, {}, fresh_ctx)
+            return {"ok": True}
+
+        SYSCALL_REGISTRY[_TRACE_SYSCALL] = _reg_mod.SyscallEntry(
+            handler=_outer_handler,
+            capability="test.traceprop",
+        )
+
+        ctx = self._ctx_with_caps()
+        self.dispatcher.dispatch(_TRACE_SYSCALL, {}, ctx)
+
+        # The nested call must have inherited root-trace, not fresh-trace
+        assert len(captured_outer) == 1
+        assert captured_outer[0]["trace_id"] == "root-trace"
+        assert captured_outer[0]["eu_id"] == "root-eu"
+
+    def test_context_var_reset_after_root_dispatch(self):
+        """ContextVars must be empty after the root dispatch() returns."""
+        ctx = self._ctx_with_caps()
+        self.dispatcher.dispatch(_TRACE_SYSCALL, {}, ctx)
+        assert _TRACE_ID_CTX.get() == ""
+        assert _EU_ID_CTX.get() == ""
+
+    def test_child_context_helper_inherits_ids(self):
+        """child_context() builds a derived context with parent's trace/eu."""
+        parent = SyscallContext(
+            execution_unit_id="eu-abc",
+            user_id="u1",
+            capabilities=["x"],
+            trace_id="trace-xyz",
+        )
+        child = child_context(parent, capabilities=["y"])
+        assert child.trace_id == "trace-xyz"
+        assert child.execution_unit_id == "eu-abc"
+        assert child.user_id == "u1"
+        assert child.capabilities == ["y"]

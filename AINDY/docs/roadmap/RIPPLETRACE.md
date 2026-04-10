@@ -69,6 +69,7 @@ Implemented:
 - a separate `SystemEvent` observability layer exists for runtime and agent activity, but it is not the RippleTrace domain model
 - execution-side RippleTrace graph building now exists on top of `SystemEvent` via `ripple_edges`
 - causal event stitching now includes parent/child linkage and event -> memory links (`stored_as_memory`)
+- **trace_id lineage is now structurally sound**: `SyscallDispatcher` propagates `trace_id` and `execution_unit_id` across nested syscall chains via `ContextVar`. Every call in a chain (`flow.run → memory.read → event.emit`) shares one `trace_id` — a single coherent unit in both `AgentEvent` logs and RippleTrace graphs. This was the root cause of fragmented execution graphs.
 
 Still true:
 - RippleTrace is tightly coupled to the monolith
@@ -81,7 +82,7 @@ Still true:
 
 ### Step 1 - Add end-to-end validation for causal graph generation
 **Files:** test coverage around `services/system_event_service.py`, `services/rippletrace_service.py`, `services/memory_capture_engine.py`  
-**Outcome:** a single execution can be verified to produce reconstructable event and memory causality.
+**Outcome:** a single execution can be verified to produce reconstructable event and memory causality. Trace propagation fix makes this verifiable — a single `trace_id` now appears across all `SYSCALL_EXECUTED` events for a given run.
 
 ### Step 2 - Expand execution graph validation in the frontend
 **Files:** `client/src/components/RippleTraceViewer.jsx`, supporting API consumers  
