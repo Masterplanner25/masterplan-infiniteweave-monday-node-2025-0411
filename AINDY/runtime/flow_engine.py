@@ -1707,11 +1707,14 @@ def execute_intent(
         return _execute_intent_direct(intent_data, db, user_id)
 
     import uuid as _uuid
-    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+    from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
 
-    trace_id = str(_uuid.uuid4())
+    # Reuse parent trace/EU when running inside an existing syscall chain;
+    # otherwise start a fresh root trace for this intent execution.
+    trace_id = _TRACE_ID_CTX.get() or str(_uuid.uuid4())
+    eu_id = _EU_ID_CTX.get() or trace_id
     ctx = SyscallContext(
-        execution_unit_id=trace_id,
+        execution_unit_id=eu_id,
         user_id=str(user_id),
         capabilities=["flow.run", "flow.execute"],
         trace_id=trace_id,
@@ -1792,11 +1795,14 @@ def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = Non
         return _run_flow_direct(flow_name, state or {}, db, user_id)
 
     import uuid as _uuid
-    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+    from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
 
-    trace_id = str(_uuid.uuid4())
+    # Reuse parent trace/EU when running inside an existing syscall chain;
+    # otherwise start a fresh root trace for this flow run.
+    trace_id = _TRACE_ID_CTX.get() or str(_uuid.uuid4())
+    eu_id = _EU_ID_CTX.get() or trace_id
     ctx = SyscallContext(
-        execution_unit_id=trace_id,
+        execution_unit_id=eu_id,
         user_id=str(user_id),
         capabilities=["flow.run"],
         trace_id=trace_id,

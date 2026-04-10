@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     REDIS_URL: str | None = None
     AINDY_CACHE_BACKEND: str = "memory"
+
+    # --- Execution transport ---
+    # "thread"      — ThreadPoolExecutor (default; single-process only).
+    # "distributed" — DistributedQueue via Redis (multi-process / multi-host).
+    EXECUTION_MODE: str = "thread"
+    AINDY_QUEUE_NAME: str = "aindy:jobs"
+    AINDY_ASYNC_JOB_WORKERS: int = 4
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = False
     SKIP_MONGO_PING: bool = False

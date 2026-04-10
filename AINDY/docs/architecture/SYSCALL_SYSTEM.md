@@ -87,6 +87,7 @@ Steps executed in order for every call:
 
 | Step | Action | Fatal? |
 |------|--------|--------|
+| 0 | **Resolve trace context** — inherit or establish `trace_id` / `eu_id` via ContextVars | never fatal |
 | 1 | Parse `sys.{version}.{action}` from name | error if malformed |
 | 2 | Resolve version; optional fallback (`SYSCALL_VERSION_FALLBACK`) | error if unresolvable |
 | 3 | Look up entry in `SYSCALL_REGISTRY` | error if not found |
@@ -99,7 +100,9 @@ Steps executed in order for every call:
 | 10 | Output validation against `entry.output_schema` | non-fatal, logs warning |
 | 11 | Record syscall usage in `ResourceManager` | non-fatal |
 | 12 | Emit `SYSCALL_EXECUTED` system event | non-fatal |
-| 13 | Return success envelope | — |
+| 13 | Return success envelope; reset ContextVar tokens | — |
+
+Step 0 is the trace propagation gate — see §12 for detail.
 
 ---
 
@@ -239,9 +242,14 @@ class SyscallContext:
     execution_unit_id: str          # AgentRun/flow run ID
     user_id:           str          # authenticated tenant identity
     capabilities:      list[str]    # granted capability names
-    trace_id:          str          # for observability correlation
+    trace_id:          str          # propagated observability trace ID
+    memory_context:    list         # pre-loaded memory nodes (Nodus scripts)
     metadata:          dict         # optional — workflow_type, flow_name, etc.
 ```
+
+`trace_id` and `execution_unit_id` are automatically propagated through nested
+`dispatch()` calls via ContextVars (see §12). Callers never need to manually
+thread them through handler code.
 
 Helper builders (from `kernel/syscall_dispatcher.py`):
 
@@ -251,6 +259,9 @@ ctx = make_syscall_ctx_from_flow(context, capabilities=["memory.read"])
 
 # From an agent tool call
 ctx = make_syscall_ctx_from_tool(user_id="user-123", run_id="run-456")
+
+# From a parent context — explicit propagation with capability scoping
+ctx = child_context(parent_context, capabilities=["memory.read"])
 ```
 
 ---
@@ -290,8 +301,12 @@ Domain handlers registered at startup via `register_all_domain_handlers()` in `k
 def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = None) -> dict:
     if not user_id:
         return _run_flow_direct(flow_name, state or {}, db, user_id)   # anonymous
-    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
-    ctx = SyscallContext(execution_unit_id=trace_id, user_id=str(user_id),
+    from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
+    # Inherit active trace when called from within a running syscall chain;
+    # generate a fresh root trace when called from a route or scheduler.
+    trace_id = _TRACE_ID_CTX.get() or str(uuid4())
+    eu_id    = _EU_ID_CTX.get()    or trace_id
+    ctx = SyscallContext(execution_unit_id=eu_id, user_id=str(user_id),
                          capabilities=["flow.run"], trace_id=trace_id,
                          metadata={"_db": db})
     result = get_dispatcher().dispatch("sys.v1.flow.run", {...}, ctx)
@@ -340,11 +355,85 @@ if result["status"] == "success":
     nodes = result["data"]["nodes"]
 ```
 
-The `sys` global is injected at runtime by `NodusInterpreter`. The syscall context is derived from the current flow's execution context.
+The `sys` global is injected at runtime by `NodusInterpreter`. The syscall context is derived from the current flow's execution context. Because context propagation is ContextVar-based, nested `sys()` calls inside a Nodus script automatically share the script's root `trace_id`.
 
 ---
 
-## 12. Introspection API
+## 12. Trace Propagation
+
+### Problem
+
+Nested syscall calls previously generated a fresh `trace_id` and `execution_unit_id` on every dispatch, producing fragmented observability graphs and broken RippleTrace lineage. A single agent run touching `flow.run → memory.read → event.emit` appeared as three unrelated execution units.
+
+### Mechanism
+
+`dispatch()` resolves trace context before doing any work via two module-level `ContextVar`s:
+
+```python
+_TRACE_ID_CTX: ContextVar[str]  # default ""
+_EU_ID_CTX:    ContextVar[str]  # default ""
+```
+
+**Root call** (ContextVars empty — first dispatch in a thread/task):
+
+1. Use `context.trace_id` and `context.execution_unit_id`; generate UUIDs if either is empty.
+2. Set both ContextVars.
+3. Execute handler.
+4. **Reset** both ContextVars in `finally` — the slot is clean for the next root call.
+
+**Nested call** (ContextVars already set — dispatch called from within a handler):
+
+1. Override the incoming context's `trace_id` / `eu_id` with the ContextVar values.
+2. Execute handler using the inherited IDs.
+3. Return — no ContextVar tokens to reset.
+
+The result: every syscall in a chain — however deep — shares one `trace_id` and one `execution_unit_id`, giving a single coherent execution unit in RippleTrace and `AgentEvent` logs.
+
+### ContextVar scope
+
+Python's `ContextVar` is thread-local and asyncio-task-local:
+
+- **Sync handlers / threads**: each thread starts with a copy of the context from its spawning thread; `set()`/`reset()` are scoped to that thread.
+- **Async handlers**: each `asyncio.Task` runs in its own `Context` copy; propagation is automatic within a task, isolated between tasks.
+- **Thread pool (VM execution)**: the Nodus VM runs in a daemon thread seeded with the calling thread's `Context`, so ContextVar values are inherited — `sys()` calls inside a Nodus script propagate the root trace correctly.
+
+### `child_context()` — explicit propagation
+
+For handlers that need to dispatch a nested syscall with a **different capability set**, use `child_context()` to build an explicitly forwarded context:
+
+```python
+from kernel.syscall_dispatcher import child_context, get_dispatcher
+
+def _handle_complex_flow(payload, context):
+    # Inherit trace/eu; narrow capabilities for the sub-call
+    ctx = child_context(context, capabilities=["memory.read"])
+    result = get_dispatcher().dispatch("sys.v1.memory.read", {"query": "..."}, ctx)
+    ...
+```
+
+`child_context()` always copies `trace_id` and `execution_unit_id` from the parent. It is optional — the ContextVar mechanism works transparently even without it. Use `child_context()` for **documentation clarity** or **capability narrowing**.
+
+### Before / after
+
+**Before** (broken — each nested call got a fresh trace):
+
+```
+dispatch("sys.v1.flow.run",      ctx_A)  → trace_id="trace-abc", eu="eu-1"
+  └─ handler calls dispatch("sys.v1.memory.read", fresh_ctx)
+        → trace_id="trace-xyz"  ← DIFFERENT — lineage broken
+```
+
+**After** (fixed — entire chain shares root trace):
+
+```
+dispatch("sys.v1.flow.run",      ctx_A)  → trace_id="trace-abc", eu="eu-1"
+  └─ handler calls dispatch("sys.v1.memory.read", fresh_ctx)
+        → trace_id="trace-abc"  ← INHERITED via ContextVar
+```
+
+---
+
+## 13. Introspection API
 
 ```
 GET /platform/syscalls?version=v1
@@ -375,13 +464,13 @@ Response:
 
 ---
 
-## 13. Key Files
+## 14. Key Files
 
 | File | Role |
 |------|------|
 | `kernel/syscall_versioning.py` | `SyscallSpec`, `parse_syscall_name`, `validate_payload`, `resolve_version`, `ABI_VERSIONS` |
 | `kernel/syscall_registry.py` | `SyscallEntry`, `VersionedSyscallRegistry`, `SYSCALL_REGISTRY`, `register_syscall`, `DEFAULT_NODUS_CAPABILITIES` |
-| `kernel/syscall_dispatcher.py` | `SyscallDispatcher`, `get_dispatcher`, `SyscallContext`, context builder helpers |
+| `kernel/syscall_dispatcher.py` | `SyscallDispatcher`, `get_dispatcher`, `SyscallContext`, `child_context`, `_TRACE_ID_CTX`, `_EU_ID_CTX`, context builder helpers |
 | `kernel/syscall_handlers.py` | All 23 domain handler functions; `register_all_domain_handlers()` |
 | `routes/platform_router.py` | `GET /platform/syscalls` introspection endpoint; `POST /platform/syscall` dispatch |
 | `tests/unit/test_syscall_versioning.py` | 64 versioning/ABI tests (Groups A–J) |
