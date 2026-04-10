@@ -272,7 +272,12 @@ def submit_async_job(
         if settings.TEST_MODE and not execute_inline_in_test_mode:
             return log_id
         if _session_dialect_name(db) == "sqlite":
-            _execute_job_inline(db, log_id, task_name, payload)
+            if execute_inline_in_test_mode:
+                _execute_job_inline(db, log_id, task_name, payload)
+            return log_id
+        if not execute_inline_in_test_mode:
+            # Caller explicitly opted out of inline execution (e.g. embedding jobs
+            # in test environments where the dialect isn't detected as sqlite).
             return log_id
         # Removed: _get_executor().submit() called directly here.
         # Dispatch through ExecutionDispatcher — the single owner of the

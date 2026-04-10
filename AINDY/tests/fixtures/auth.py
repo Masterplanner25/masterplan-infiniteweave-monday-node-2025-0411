@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from services.auth_service import create_access_token, hash_password
+from AINDY.services.auth_service import create_access_token, hash_password
 
 
 TEST_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
