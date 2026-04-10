@@ -10,6 +10,24 @@ The format is based on the "Keep a Changelog" style and follows semantic-style v
 
 Changes that have been implemented but are not yet part of a tagged release.
 
+## Syscall Convergence Refactor — 2026-04-09
+
+### Changed
+* **`kernel/syscall_registry.py`** — `_handle_flow_run` updated to reuse caller's DB session via `context.metadata["_db"]` (opens own session only when absent, preserving route-managed transaction boundaries). Four new execution entry-point handlers added: `_handle_flow_execute_intent`, `_handle_nodus_execute`, `_handle_job_submit`, `_handle_agent_execute`. Four new syscalls registered: `sys.v1.flow.execute_intent` (cap: `flow.execute`), `sys.v1.nodus.execute` (cap: `nodus.execute`), `sys.v1.job.submit` (cap: `job.submit`), `sys.v1.agent.execute` (cap: `agent.execute`).
+* **`runtime/flow_engine.py`** — `execute_intent()` and `run_flow()` are now thin syscall proxies. Real implementations moved to `_execute_intent_direct()` and `_run_flow_direct()` respectively. Both fall back to `_direct()` when `user_id=None`. `run_flow()` signature relaxed to `db: Session = None`.
+* **`runtime/nodus_execution_service.py`** — `run_nodus_script_via_flow()` is now a thin syscall proxy. Real implementation moved to `_run_nodus_via_flow_direct()`. Falls back to `_direct()` when `user_id=None`. Optional fields (`trace_id`, `node_max_retries`) are excluded from the syscall payload when `None` to satisfy input schema validation.
+
+### Architecture
+* Single execution model achieved: all authenticated execution — Nodus scripts, routes, agents, schedulers — now routes through `SyscallDispatcher`. Capability enforcement, quota tracking, and observability apply uniformly.
+* `ExecutionPipeline`, `ExecutionDispatcher`, `SchedulerEngine`, and flow engine core were **not changed**.
+* No route handlers changed — they call `run_flow()` which is now a proxy; no API contract changes.
+
+### Tests
+* 110 syscall/Nodus unit tests pass; 410 flow/nodus/execute tests pass.
+* 7 pre-existing auth failures in `test_syscall_versioning.py::TestSyscallsEndpoint` (401 Unauthorized — unrelated to this refactor).
+
+---
+
 ## Distributed Execution + PRODUCTION-READY OS — 2026-04-07
 
 ### Added

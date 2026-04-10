@@ -14,6 +14,7 @@ import FreelanceDashboard from "./components/FreelanceDashboard";
 import TaskDashboard from "./components/TaskDashboard";
 import MasterPlanDashboard from "./components/MasterPlanDashboard";
 import ExecutionConsole from "./components/ExecutionConsole";
+import FlowEngineConsole from "./components/FlowEngineConsole";
 import AnalyticsPanel from "./components/AnalyticsPanel";
 import Genesis from "./components/Genesis";
 import AgentApprovalInbox from "./components/AgentApprovalInbox";
@@ -136,6 +137,7 @@ export default function App() {
                 <Route path="/tasks" element={<TaskDashboard />} />
                 <Route path="/masterplan" element={<MasterPlanDashboard />} />
                 <Route path="/console" element={<ExecutionConsole />} />
+                <Route path="/flow-console" element={<FlowEngineConsole />} />
                 <Route path="/arm/analyze" element={<ARMAnalyze />} />
                 <Route path="/arm/generate" element={<ARMGenerate />} />
                 <Route path="/arm/logs" element={<ARMLogs />} />
