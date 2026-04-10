@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid as _uuid_mod
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from enum import Enum
@@ -218,6 +219,153 @@ class _DomainJobStub:
         }
 
 
+# ── Distributed enqueue helper ────────────────────────────────────────────────
+
+def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
+    """
+    Build a ``QueueJobPayload`` from the current execution context and push it
+    to the distributed queue backend.
+
+    Called exclusively from ``dispatch()`` when ``EXECUTION_MODE=distributed``.
+    The context dict supplied by callers (e.g. ``async_job_service``) carries
+    ``log_id`` and ``task_name`` — the two fields the worker needs to re-hydrate
+    the job from the database.
+
+    Trace context is captured from the active ContextVars so the worker can
+    restore the full trace chain after crossing the process boundary.
+
+    Retry backoff (Task 4)
+    ----------------------
+    When ``context["retry"] == True``, the job is a retry.  An exponential
+    delay is computed from the AutomationLog's ``attempt_count`` and the job
+    is submitted via ``enqueue_delayed()`` rather than ``enqueue()``.
+
+    Delay formula: ``min(base_ms * 2^(attempt-1), max_ms) / 1000`` seconds.
+    Defaults: ``AINDY_RETRY_BACKOFF_BASE_MS=1000``, ``AINDY_RETRY_BACKOFF_MAX_MS=30000``.
+    """
+    from core.distributed_queue import QueueJobPayload, get_queue
+    from utils.trace_context import get_trace_id
+
+    # Capture active trace IDs from ContextVars (set by the root syscall dispatch).
+    try:
+        from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
+
+        trace_id: str = _TRACE_ID_CTX.get() or get_trace_id() or str(_uuid_mod.uuid4())
+        eu_id: str = _EU_ID_CTX.get() or str(getattr(execution_unit, "id", "") or "")
+    except Exception:
+        trace_id = get_trace_id() or str(_uuid_mod.uuid4())
+        eu_id = str(getattr(execution_unit, "id", "") or "")
+
+    job_id = str(context.get("log_id") or eu_id or _uuid_mod.uuid4())
+    task_name = str(context.get("task_name", ""))
+    is_retry = bool(context.get("retry", False))
+
+    payload = QueueJobPayload(
+        job_id=job_id,
+        task_name=task_name,
+        # idempotency_key defaults to job_id via QueueJobPayload.__post_init__
+        context={
+            "trace_id": trace_id,
+            "eu_id": eu_id,
+            "user_id": str(getattr(execution_unit, "user_id", "") or ""),
+        },
+        retry_metadata={
+            "attempt_count": int(context.get("attempt_count", 0)),
+            "max_attempts": int(context.get("max_attempts", 1)),
+            "is_retry": is_retry,
+        },
+    )
+
+    logger.debug(
+        "[Dispatcher] enqueue job_id=%s task=%s trace_id=%s is_retry=%s",
+        job_id, task_name, trace_id, is_retry,
+    )
+
+    # Emit job_enqueued observability event (non-fatal; skipped in test mode
+    # to prevent cascade: memory capture engine spawns more async jobs).
+    _in_test = (
+        os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}
+        or os.getenv("TEST_MODE", "false").lower() in {"1", "true", "yes"}
+    )
+    if not _in_test:
+        try:
+            from core.system_event_service import emit_system_event
+            from db.database import SessionLocal
+
+            _db = SessionLocal()
+            try:
+                emit_system_event(
+                    db=_db,
+                    event_type="job_enqueued",
+                    user_id=None,
+                    trace_id=trace_id,
+                    parent_event_id=None,
+                    source="distributed_dispatcher",
+                    payload={
+                        "job_id": job_id,
+                        "task_name": task_name,
+                        "eu_id": eu_id,
+                        "is_retry": is_retry,
+                    },
+                    required=False,
+                )
+                _db.commit()
+            finally:
+                _db.close()
+        except Exception as _ev_exc:
+            logger.debug("[Dispatcher] job_enqueued event skipped: %s", _ev_exc)
+
+    q = get_queue()
+
+    # ── Task 4: Retry backoff — delayed re-enqueue ────────────────────────
+    if is_retry:
+        delay_s = _compute_retry_delay(job_id)
+        if delay_s > 0:
+            logger.info(
+                "[Dispatcher] retry backoff job_id=%s delay=%.1fs", job_id, delay_s
+            )
+            q.enqueue_delayed(payload, delay_seconds=delay_s)
+            return
+
+    q.enqueue(payload)
+
+
+def _compute_retry_delay(job_id: str) -> float:
+    """
+    Return the exponential backoff delay in seconds for a retry.
+
+    Reads the current ``attempt_count`` from the AutomationLog so the delay
+    scales with how many times the job has already failed.
+
+    Formula: ``min(base_ms * 2^(attempt-1), max_ms) / 1000``
+
+    Environment variables
+    ---------------------
+    AINDY_RETRY_BACKOFF_BASE_MS   int  Base delay in ms (default 1000)
+    AINDY_RETRY_BACKOFF_MAX_MS    int  Maximum delay in ms (default 30000)
+    """
+    base_ms = int(os.getenv("AINDY_RETRY_BACKOFF_BASE_MS", "1000"))
+    max_ms = int(os.getenv("AINDY_RETRY_BACKOFF_MAX_MS", "30000"))
+
+    attempt = 1  # default if DB read fails
+    try:
+        from db.database import SessionLocal
+        from db.models.automation_log import AutomationLog
+
+        _db = SessionLocal()
+        try:
+            log = _db.query(AutomationLog).filter(AutomationLog.id == job_id).first()
+            if log:
+                attempt = max(1, int(log.attempt_count or 1))
+        finally:
+            _db.close()
+    except Exception as exc:
+        logger.debug("[Dispatcher] backoff DB read failed job_id=%s: %s", job_id, exc)
+
+    delay_ms = min(base_ms * (2 ** (attempt - 1)), max_ms)
+    return delay_ms / 1000.0
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 def dispatch(
@@ -267,7 +415,19 @@ def dispatch(
             raise
         return DispatchResult(mode=mode, envelope=envelope, meta=meta)
 
-    # ASYNC — delegate to the shared thread pool.
+    # ASYNC — route to distributed queue OR thread pool based on EXECUTION_MODE.
+    _exec_mode = os.getenv("EXECUTION_MODE", "thread").lower()
+
+    if _exec_mode == "distributed":
+        logger.debug(
+            "[Dispatcher] DISTRIBUTED enqueue eu_type=%s eu_id=%s",
+            getattr(execution_unit, "type", "?"),
+            getattr(execution_unit, "id", "?"),
+        )
+        _enqueue_distributed(execution_unit, meta)
+        return DispatchResult(mode=mode, meta=meta)
+
+    # Thread-pool fallback (EXECUTION_MODE=thread or any unrecognised value).
     from platform_layer.async_job_service import _get_executor
 
     logger.debug(

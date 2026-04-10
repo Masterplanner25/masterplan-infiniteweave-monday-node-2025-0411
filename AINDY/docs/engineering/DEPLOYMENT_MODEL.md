@@ -14,10 +14,12 @@ Recommended order:
 1. Provide required environment variables.
 2. Start PostgreSQL.
 3. Start MongoDB if using social-layer features.
-4. Run `alembic upgrade head`.
-5. Start FastAPI with `uvicorn main:app`.
-6. Start `server.js` if the Node gateway is required.
-7. Start the frontend from `client/`.
+4. Start Redis if `EXECUTION_MODE=distributed` or `AINDY_CACHE_BACKEND=redis`.
+5. Run `alembic upgrade head`.
+6. Start FastAPI with `uvicorn main:app`.
+7. Start one or more worker processes if `EXECUTION_MODE=distributed` (see §5a).
+8. Start `server.js` if the Node gateway is required.
+9. Start the frontend from `client/`.
 
 ## 3. Runtime Enforcement at Startup
 The backend performs real startup checks:
@@ -45,7 +47,7 @@ Required or operationally important variables:
 - `AINDY_ENFORCE_SCHEMA`
 - `AINDY_ENABLE_BACKGROUND_TASKS`
 - `AINDY_CACHE_BACKEND`
-- `REDIS_URL` when Redis cache is enabled
+- `REDIS_URL` when Redis cache or distributed execution is enabled
 - `MONGO_URL`
 - `MONGO_DB_NAME`
 
@@ -55,6 +57,19 @@ Distributed event bus variables (all optional — system falls back to local-onl
 - `AINDY_EVENT_BUS_ENABLED` — set to `false` / `0` / `no` to disable entirely (default: enabled)
 - `INSTANCE_ID` — stable identifier for this pod/process; used to deduplicate own-instance pub/sub messages (defaults to `HOSTNAME` or `socket.gethostname()`)
 
+Distributed execution variables (all optional — system defaults to thread-pool mode):
+- `EXECUTION_MODE` — `thread` (default, single-process ThreadPoolExecutor) or `distributed` (Redis-backed queue)
+- `AINDY_QUEUE_NAME` — main queue key in Redis (default: `aindy:jobs`)
+- `AINDY_ASYNC_JOB_WORKERS` — ThreadPoolExecutor size when `EXECUTION_MODE=thread` (default: `4`)
+- `AINDY_RETRY_BACKOFF_BASE_MS` — base delay for exponential retry backoff in ms (default: `1000`)
+- `AINDY_RETRY_BACKOFF_MAX_MS` — maximum retry backoff delay in ms (default: `30000`)
+
+Worker process variables (only relevant when running `worker/worker_loop.py`):
+- `WORKER_CONCURRENCY` — number of parallel dequeue threads per worker process (default: `1`)
+- `WORKER_MAX_CONCURRENT_JOBS` — semaphore limit on in-progress jobs per process; `0` = unlimited (default: `0`)
+- `WORKER_VISIBILITY_TIMEOUT_SECS` — seconds before an in-flight job is considered stale and re-enqueued (default: `300`)
+- `WORKER_STALE_CHECK_INTERVAL_SECS` — how often the stale-recovery thread scans in-flight jobs (default: `60`)
+
 ## 5. Background Work Model
 - Background work is not started by daemon threads.
 - APScheduler is the active scheduler when installed; otherwise the system continues running without scheduled jobs.
@@ -62,6 +77,26 @@ Distributed event bus variables (all optional — system falls back to local-onl
 - Lease timestamps are normalized as timezone-aware UTC in the Python lease path before comparison or persistence.
 - Only one instance should actively run scheduled jobs at a time.
 - Follower instances still serve API traffic but do not start the scheduler.
+
+## 5a. Distributed Worker Process
+When `EXECUTION_MODE=distributed`, async jobs are enqueued to a Redis-backed queue instead of the in-process ThreadPoolExecutor.  One or more worker processes must be started separately:
+
+```bash
+# Single worker
+python -m worker.worker_loop
+
+# 4 parallel dequeue threads, max 8 concurrent jobs
+WORKER_CONCURRENCY=4 WORKER_MAX_CONCURRENT_JOBS=8 python -m worker.worker_loop
+```
+
+Worker reliability features:
+- **Visibility timeout recovery** — on startup and every `WORKER_STALE_CHECK_INTERVAL_SECS`, the worker re-enqueues in-flight jobs whose workers crashed before ack/fail.
+- **Dead Letter Queue** — terminal failures are moved to `aindy:jobs:dead` for operator inspection and replay.
+- **Retry backoff** — exponential backoff (`AINDY_RETRY_BACKOFF_BASE_MS`, `AINDY_RETRY_BACKOFF_MAX_MS`) is applied before re-enqueueing failed jobs; uses a Redis sorted set (`aindy:jobs:delayed`) with a Lua script for atomic promotion.
+- **Concurrency guard** — `WORKER_MAX_CONCURRENT_JOBS` limits simultaneous in-progress jobs per process via a semaphore.
+- **DB claim safety** — each worker performs an atomic `UPDATE WHERE status='pending'` before executing, preventing duplicate execution after a visibility-timeout re-enqueue.
+
+The inline (thread-pool) path is completely unchanged when `EXECUTION_MODE=thread` and no worker process is required.
 
 ## 6. Scaling Reality
 What scales reasonably:

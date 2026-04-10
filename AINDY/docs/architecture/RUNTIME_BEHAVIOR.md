@@ -93,6 +93,9 @@ This document describes the current runtime behavior of the FastAPI backend as i
   - `async_job.started` when the worker begins queued execution
   - `async_job.completed` or `async_job.failed` for queued worker outcome
   - `execution.completed` or `execution.failed` as the canonical execution ledger events
+- Async execution has two transport modes, selected by `EXECUTION_MODE`:
+  - `thread` (default) — `ExecutionDispatcher` submits to an in-process `ThreadPoolExecutor`; no external dependencies.
+  - `distributed` — `ExecutionDispatcher` enqueues a `QueueJobPayload` to `core/distributed_queue.py`; one or more `worker/worker_loop.py` processes consume the queue. Trace context (`trace_id`, `eu_id`) is serialised into the payload and restored in the worker before execution, preserving the full syscall trace chain across the process boundary. Retry backoff, visibility timeout recovery, and a Dead Letter Queue are included; see `docs/engineering/DEPLOYMENT_MODEL.md §5a`.
 - High-impact execution outcomes can now auto-create Memory Bridge records with causal metadata (`source_event_id`, `root_event_id`, `causal_depth`, `impact_score`, `memory_type`).
 - Embedding generation for newly captured memory is now asynchronous. Request paths persist the memory first with `embedding_status=pending`, enqueue background embedding work, and retrieval can fall back to non-embedding search while vectors are unavailable.
 - Agent execution now performs pre-run memory recall and injects categorized context (`similar_past_outcomes`, `relevant_failures`, `successful_patterns`) before deterministic execution begins.
