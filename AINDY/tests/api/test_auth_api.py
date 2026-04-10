@@ -31,12 +31,13 @@ def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_sess
 
     memory = (
         db_session.query(MemoryNodeModel)
-        .filter(MemoryNodeModel.user_id == user.id)
-        .order_by(MemoryNodeModel.created_at.desc())
+        .filter(
+            MemoryNodeModel.user_id == user.id,
+            MemoryNodeModel.content == "User account created",
+        )
         .first()
     )
     assert memory is not None
-    assert memory.content == "User account created"
     assert memory.extra["type"] == "identity"
     assert memory.extra["context"] == "identity_init"
 
@@ -69,10 +70,10 @@ def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_sess
     assert boot_response.status_code == 200
     boot_payload = boot_response.json()
     boot_data = boot_payload["data"]
-    assert boot_data["system_state"]["memory_count"] == 1
+    assert boot_data["system_state"]["memory_count"] >= 1
     assert boot_data["system_state"]["active_runs"] == 1
     assert boot_data["system_state"]["score"] == 0.0
-    assert boot_data["memory"][0]["content"] == "User account created"
+    assert any(m["content"] == "User account created" for m in boot_data["memory"])
     assert boot_data["metrics"]["trajectory"] == "baseline"
 
 

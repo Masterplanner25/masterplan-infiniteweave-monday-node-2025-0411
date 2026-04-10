@@ -119,6 +119,8 @@ class EventBus:
         self._pub_client = None          # lazy Redis client for publishing
         self._subscriber_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._consecutive_failures: int = 0
+        self._max_failures: int = 3      # disable after 3 consecutive failures
 
     # ── Publisher ─────────────────────────────────────────────────────────────
 
@@ -126,7 +128,12 @@ class EventBus:
         """Return (or lazily create) the publish-side Redis client."""
         if self._pub_client is None:
             import redis as _redis  # noqa: PLC0415 — lazy; redis may not be installed
-            self._pub_client = _redis.from_url(REDIS_URL, decode_responses=True)
+            self._pub_client = _redis.from_url(
+                REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=1,
+                socket_timeout=1,
+            )
         return self._pub_client
 
     def publish(self, event_type: str, *, correlation_id: str | None = None) -> bool:
@@ -162,12 +169,22 @@ class EventBus:
                     "[EventBus] published event=%r corr=%r channel=%s",
                     event_type, correlation_id, CHANNEL,
                 )
+                self._consecutive_failures = 0
                 return True
             except Exception as exc:
-                logger.warning(
-                    "[EventBus] publish failed for event=%r (non-fatal): %s",
-                    event_type, exc,
-                )
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= self._max_failures:
+                    self._enabled = False
+                    logger.warning(
+                        "[EventBus] disabled after %d consecutive failures — Redis unavailable. "
+                        "Set AINDY_EVENT_BUS_ENABLED=false to suppress this.",
+                        self._consecutive_failures,
+                    )
+                else:
+                    logger.warning(
+                        "[EventBus] publish failed for event=%r (non-fatal): %s",
+                        event_type, exc,
+                    )
                 # Reset client so the next call gets a fresh connection.
                 self._pub_client = None
                 return False
