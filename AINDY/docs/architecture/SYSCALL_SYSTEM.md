@@ -6,21 +6,38 @@ A.I.N.D.Y. syscalls are the single gated interface between Nodus scripts and hos
 
 ## 1. Overview
 
+**All execution in A.I.N.D.Y. routes through SyscallDispatcher.** Both Nodus scripts (via the `sys()` global) and host-layer entry points (routes, agents, schedulers) use the same syscall interface. Entry-point functions like `run_flow()` and `execute_intent()` are syscall proxies — thin wrappers that build a `SyscallContext` and call `get_dispatcher().dispatch(...)`.
+
 ```
-Nodus script
-    │  sys("sys.v1.memory.read", {"query": "auth"})
+Route / Agent / CLI / Scheduler
+    │  run_flow() / execute_intent() / run_nodus_script_via_flow()
+    │  [syscall proxy — lazy import of get_dispatcher()]
     ▼
 SyscallDispatcher.dispatch()
     │  parse version · check capability · validate input · execute handler
     ▼
 Registered handler
-    │  e.g. _handle_memory_read(payload, ctx) → dict
+    │  e.g. _handle_flow_run(payload, ctx) → calls _run_flow_direct()
+    ▼
+PersistentFlowRunner → ExecutionPipeline → ExecutionDispatcher → Runtime
     ▼
 Standard response envelope
     { status, data, version, warning, trace_id, duration_ms, error }
+
+---
+
+Nodus script
+    │  sys("sys.v1.memory.read", {"query": "auth"})
+    ▼
+SyscallDispatcher.dispatch()
+    │  (same pipeline as above)
+    ▼
+Standard response envelope
 ```
 
 The dispatcher **never raises**. Every code path returns the envelope.
+
+**Anonymous / system calls (`user_id=None`):** The dispatcher enforces tenant identity, so calls with no `user_id` skip the syscall layer and invoke the `_*_direct()` implementation directly. This preserves system-internal and test-harness execution paths. Logged at DEBUG.
 
 ---
 
@@ -251,14 +268,69 @@ Core syscalls registered in `kernel/syscall_registry.py`; domain handlers regist
 | `sys.v1.memory.tree` | `memory.read` | Hierarchical tree from a MAS path |
 | `sys.v1.memory.trace` | `memory.read` | Causal chain from a node path |
 | `sys.v1.flow.run` | `flow.run` | Execute a registered Nodus flow |
+| `sys.v1.flow.execute_intent` | `flow.execute` | Intent-based flow execution — selects strategy, compiles plan, runs flow |
+| `sys.v1.nodus.execute` | `nodus.execute` | Run a Nodus script via the standard `NODUS_SCRIPT_FLOW` pipeline |
+| `sys.v1.job.submit` | `job.submit` | Submit an async job via `AsyncJobService` (wraps `submit_async_job()`) |
+| `sys.v1.agent.execute` | `agent.execute` | Execute an agent run via `execute_run()` (external agent wrapper) |
 | `sys.v1.event.emit` | `event.emit` | Emit a system event |
 | `sys.v2.memory.read` | `memory.read` | v2 evolution — adds `filters` dict (memory_type, node_type, min_impact) |
 
-Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`.
+Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`. Execution entry-point handlers (`flow.execute_intent`, `nodus.execute`, `job.submit`, `agent.execute`) are registered directly in `kernel/syscall_registry.py` alongside `flow.run`.
 
 ---
 
-## 10. Nodus Integration
+## 10. Execution Entry-Point Convergence
+
+**All public execution functions are syscall proxies.** The real implementation lives in a `_*_direct()` private function. The proxy: (1) checks for `user_id`, (2) builds a `SyscallContext`, (3) calls `get_dispatcher().dispatch()`, (4) unwraps the envelope. The handler delegates back to `_direct()`.
+
+### Proxy pattern
+
+```python
+# Public entry point — proxy
+def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = None) -> dict:
+    if not user_id:
+        return _run_flow_direct(flow_name, state or {}, db, user_id)   # anonymous
+    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+    ctx = SyscallContext(execution_unit_id=trace_id, user_id=str(user_id),
+                         capabilities=["flow.run"], trace_id=trace_id,
+                         metadata={"_db": db})
+    result = get_dispatcher().dispatch("sys.v1.flow.run", {...}, ctx)
+    if result["status"] == "error":
+        raise RuntimeError(...)
+    return result["data"]["flow_result"]
+
+# Real implementation — called by the syscall handler
+def _run_flow_direct(flow_name, state, db, user_id) -> dict:
+    ...
+    runner = PersistentFlowRunner(flow=flow, db=db, user_id=user_id, ...)
+    return runner.start(initial_state=state, flow_name=flow_name)
+```
+
+### DB session threading
+
+Routes pass a managed SQLAlchemy session to `run_flow()`. The proxy forwards it as `context.metadata["_db"]`. The handler reads `external_db = context.metadata.get("_db")` and uses it without closing. If absent, the handler opens and owns its own session. This preserves transaction boundaries across the syscall boundary.
+
+### Converged entry points
+
+| Public function | Syscall | `_direct()` impl |
+|---|---|---|
+| `run_flow()` | `sys.v1.flow.run` | `_run_flow_direct()` |
+| `execute_intent()` | `sys.v1.flow.execute_intent` | `_execute_intent_direct()` |
+| `run_nodus_script_via_flow()` | `sys.v1.nodus.execute` | `_run_nodus_via_flow_direct()` |
+| `submit_async_job()` (external wrapper) | `sys.v1.job.submit` | routes to `AsyncJobService` |
+| `execute_run()` (external wrapper) | `sys.v1.agent.execute` | routes to `agents.agent_runtime` |
+
+`submit_async_job()` and `execute_run()` already routed through `ExecutionDispatcher` internally; the new syscalls wrap them externally for quota tracking and observability on non-Nodus callers.
+
+### Adding a new entry point
+
+1. Put real logic in `_my_service_direct()`.
+2. Register as `sys.v1.myservice.action` with a handler that calls `_direct()`.
+3. Make the public function a proxy (user_id check → SyscallContext → dispatch).
+
+---
+
+## 11. Nodus Integration
 
 Nodus scripts call syscalls via the `sys()` global:
 
@@ -272,7 +344,7 @@ The `sys` global is injected at runtime by `NodusInterpreter`. The syscall conte
 
 ---
 
-## 11. Introspection API
+## 12. Introspection API
 
 ```
 GET /platform/syscalls?version=v1
@@ -297,13 +369,13 @@ Response:
             }
         }
     },
-    "total_count": 9
+    "total_count": 13
 }
 ```
 
 ---
 
-## 12. Key Files
+## 13. Key Files
 
 | File | Role |
 |------|------|

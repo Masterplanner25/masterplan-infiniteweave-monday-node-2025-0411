@@ -447,6 +447,12 @@ def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
         flow_name     (str)  — required; must exist in FLOW_REGISTRY
         initial_state (dict) — optional; passed to PersistentFlowRunner.start()
         workflow_type (str)  — optional; default "syscall"
+
+    Context metadata keys (internal use):
+        _db  — caller-provided SQLAlchemy Session. When present the handler
+               uses it directly and skips close() so the caller's transaction
+               boundary is preserved. When absent the handler opens and closes
+               its own session.
     """
     from db.database import SessionLocal
     from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
@@ -457,12 +463,17 @@ def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
 
     flow = FLOW_REGISTRY.get(flow_name)
     if flow is None:
-        raise ValueError(f"sys.v1.flow.run: unknown flow '{flow_name}'")
+        raise ValueError(
+            f"sys.v1.flow.run: unknown flow '{flow_name}' — "
+            f"not registered. Available: {sorted(FLOW_REGISTRY.keys())}"
+        )
 
     initial_state: dict = payload.get("initial_state") or {}
-    workflow_type: str = payload.get("workflow_type", "syscall")
+    workflow_type: str = payload.get("workflow_type", flow_name)
 
-    db = SessionLocal()
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
     try:
         runner = PersistentFlowRunner(
             flow=flow,
@@ -473,7 +484,8 @@ def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
         result = runner.start(initial_state, flow_name=flow_name)
         return {"flow_result": result}
     finally:
-        db.close()
+        if owns_session:
+            db.close()
 
 
 def _handle_event_emit(payload: dict, context: SyscallContext) -> dict:
@@ -561,6 +573,148 @@ def _handle_memory_read_v2(payload: dict, context: SyscallContext) -> dict:
         return {"nodes": nodes[:limit], "count": min(len(nodes), limit), "version": "v2"}
     finally:
         db.close()
+
+
+# ── Execution entry-point handlers ───────────────────────────────────────────
+# These wrap the four top-level execution entry points so ALL code paths go
+# through the syscall layer. Internal proxies (run_flow, execute_intent, …)
+# call these handlers; direct callers use the public proxy functions instead.
+
+
+def _handle_flow_execute_intent(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.flow.execute_intent — top-level intent execution with strategy selection.
+
+    Payload keys:
+        intent_data (dict) — required; at minimum {"workflow_type": "..."}
+
+    Context metadata keys (internal use):
+        _db — caller-provided SQLAlchemy Session (transaction preserved).
+    """
+    from db.database import SessionLocal
+
+    intent_data: dict = payload.get("intent_data") or {}
+    if not intent_data:
+        raise ValueError("sys.v1.flow.execute_intent requires non-empty 'intent_data'")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from runtime.flow_engine import _execute_intent_direct
+        result = _execute_intent_direct(
+            intent_data=intent_data,
+            db=db,
+            user_id=context.user_id,
+        )
+        return {"intent_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_nodus_execute(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.nodus.execute — execute a Nodus script via flow-backed orchestration.
+
+    Payload keys:
+        script           (str)        — required; Nodus source code
+        input_payload    (dict)       — optional; script input variables
+        error_policy     (str)        — optional; "halt" (default) or "continue"
+        workflow_type    (str)        — optional; default "nodus_execute"
+        trace_id         (str)        — optional; correlation ID
+        node_max_retries (int)        — optional; per-node retry override
+
+    Context metadata keys (internal use):
+        _db                 — caller-provided SQLAlchemy Session.
+        _extra_initial_state — extra keys merged into initial flow state.
+    """
+    from db.database import SessionLocal
+
+    script: str = payload.get("script", "")
+    if not script:
+        raise ValueError("sys.v1.nodus.execute requires 'script'")
+
+    input_payload: dict = payload.get("input_payload") or {}
+    error_policy: str = payload.get("error_policy", "halt")
+    workflow_type: str = payload.get("workflow_type", "nodus_execute")
+    trace_id: str | None = payload.get("trace_id")
+    node_max_retries = payload.get("node_max_retries")
+    extra_initial_state: dict | None = context.metadata.get("_extra_initial_state")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from runtime.nodus_execution_service import _run_nodus_via_flow_direct
+        result = _run_nodus_via_flow_direct(
+            script=script,
+            input_payload=input_payload,
+            error_policy=error_policy,
+            db=db,
+            user_id=context.user_id,
+            workflow_type=workflow_type,
+            trace_id=trace_id,
+            extra_initial_state=extra_initial_state,
+            node_max_retries=node_max_retries,
+        )
+        return {"nodus_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_job_submit(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.job.submit — submit a named async job to the automation pipeline.
+
+    Payload keys:
+        task_name    (str)  — required; name registered in _JOB_REGISTRY
+        payload      (dict) — optional; forwarded to the job handler
+        source       (str)  — optional; label for the AutomationLog
+        max_attempts (int)  — optional; retry budget (default 1)
+    """
+    task_name: str = payload.get("task_name", "")
+    if not task_name:
+        raise ValueError("sys.v1.job.submit requires 'task_name'")
+
+    job_payload: dict = payload.get("payload") or {}
+    source: str = payload.get("source", "syscall")
+    max_attempts: int = int(payload.get("max_attempts", 1))
+
+    from platform_layer.async_job_service import submit_async_job
+    log_id = submit_async_job(
+        task_name=task_name,
+        payload=job_payload,
+        user_id=context.user_id,
+        source=source,
+        max_attempts=max_attempts,
+    )
+    return {"log_id": log_id, "task_name": task_name, "source": source}
+
+
+def _handle_agent_execute(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.execute — execute an approved AgentRun via the deterministic runtime.
+
+    Payload keys:
+        run_id (str) — required; ID of an AgentRun with status "approved"
+
+    Context metadata keys (internal use):
+        _db — caller-provided SQLAlchemy Session.
+    """
+    from db.database import SessionLocal
+
+    run_id: str = payload.get("run_id", "")
+    if not run_id:
+        raise ValueError("sys.v1.agent.execute requires 'run_id'")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from agents.agent_runtime import execute_run
+        result = execute_run(run_id=run_id, user_id=context.user_id, db=db)
+        return {"run_result": result}
+    finally:
+        if owns_session:
+            db.close()
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -715,6 +869,81 @@ SYSCALL_REGISTRY["sys.v2.memory.read"] = SyscallEntry(
         },
     },
     stable=False,
+)
+
+# ── v1 execution entry-point syscalls ─────────────────────────────────────────
+# These mirror the top-level execution entry points so ALL code paths — both
+# internal and external — route through the syscall layer.
+
+SYSCALL_REGISTRY["sys.v1.flow.execute_intent"] = SyscallEntry(
+    handler=_handle_flow_execute_intent,
+    capability="flow.execute",
+    description="Top-level intent execution with learned strategy selection.",
+    input_schema={
+        "required": ["intent_data"],
+        "properties": {
+            "intent_data": {"type": "dict"},
+        },
+    },
+    output_schema={
+        "required": ["intent_result"],
+        "properties": {"intent_result": {"type": "dict"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.nodus.execute"] = SyscallEntry(
+    handler=_handle_nodus_execute,
+    capability="nodus.execute",
+    description="Execute a Nodus script via flow-backed orchestration.",
+    input_schema={
+        "required": ["script"],
+        "properties": {
+            "script": {"type": "string"},
+            "input_payload": {"type": "dict"},
+            "error_policy": {"type": "string"},
+            "workflow_type": {"type": "string"},
+            "trace_id": {"type": "string"},
+            "node_max_retries": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["nodus_result"],
+        "properties": {"nodus_result": {"type": "dict"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.job.submit"] = SyscallEntry(
+    handler=_handle_job_submit,
+    capability="job.submit",
+    description="Submit a named async job to the automation pipeline.",
+    input_schema={
+        "required": ["task_name"],
+        "properties": {
+            "task_name": {"type": "string"},
+            "payload": {"type": "dict"},
+            "source": {"type": "string"},
+            "max_attempts": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["log_id"],
+        "properties": {
+            "log_id": {"type": "string"},
+            "task_name": {"type": "string"},
+            "source": {"type": "string"},
+        },
+    },
+)
+SYSCALL_REGISTRY["sys.v1.agent.execute"] = SyscallEntry(
+    handler=_handle_agent_execute,
+    capability="agent.execute",
+    description="Execute an approved AgentRun via the deterministic runtime.",
+    input_schema={
+        "required": ["run_id"],
+        "properties": {"run_id": {"type": "string"}},
+    },
+    output_schema={
+        "required": ["run_result"],
+        "properties": {"run_result": {"type": "dict"}},
+    },
 )
 
 

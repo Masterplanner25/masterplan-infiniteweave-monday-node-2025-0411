@@ -102,7 +102,7 @@ def ensure_nodus_script_flow_registered() -> None:
         register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
 
 
-def run_nodus_script_via_flow(
+def _run_nodus_via_flow_direct(
     *,
     script: str,
     input_payload: dict[str, Any],
@@ -115,7 +115,12 @@ def run_nodus_script_via_flow(
     node_max_retries: Optional[int] = None,
 ) -> dict[str, Any]:
     """
-    Execute a Nodus script through the canonical flow-backed orchestration path.
+    Internal Nodus execution implementation.
+
+    Called by the sys.v1.nodus.execute syscall handler and by
+    run_nodus_script_via_flow() when user_id is absent.
+    Do not call directly from new code — use run_nodus_script_via_flow() or
+    dispatch sys.v1.nodus.execute through the SyscallDispatcher.
 
     node_max_retries
         When provided, overrides the default flow-node retry limit for the
@@ -160,6 +165,71 @@ def run_nodus_script_via_flow(
         initial_state=initial_state,
         flow_name="nodus_execute",
     )
+
+
+def run_nodus_script_via_flow(
+    *,
+    script: str,
+    input_payload: dict[str, Any],
+    error_policy: str,
+    db: Session,
+    user_id: str,
+    workflow_type: str = "nodus_execute",
+    trace_id: str | None = None,
+    extra_initial_state: dict[str, Any] | None = None,
+    node_max_retries: Optional[int] = None,
+) -> dict[str, Any]:
+    """
+    Execute a Nodus script through the canonical flow-backed orchestration path.
+
+    Routes through sys.v1.nodus.execute for unified capability enforcement,
+    quota tracking, and observability. Falls back to _run_nodus_via_flow_direct()
+    for anonymous/system calls (user_id absent).
+    """
+    if not user_id:
+        logger.debug(
+            "[run_nodus_script_via_flow] no user_id — executing directly "
+            "(syscall layer requires identity)"
+        )
+        return _run_nodus_via_flow_direct(
+            script=script,
+            input_payload=input_payload,
+            error_policy=error_policy,
+            db=db,
+            user_id=user_id,
+            workflow_type=workflow_type,
+            trace_id=trace_id,
+            extra_initial_state=extra_initial_state,
+            node_max_retries=node_max_retries,
+        )
+
+    import uuid as _uuid
+    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+
+    _trace_id = trace_id or str(_uuid.uuid4())
+    ctx = SyscallContext(
+        execution_unit_id=_trace_id,
+        user_id=str(user_id),
+        capabilities=["nodus.execute", "flow.run"],
+        trace_id=_trace_id,
+        metadata={"_db": db, "_extra_initial_state": extra_initial_state},
+    )
+    _nodus_payload: dict[str, Any] = {
+        "script": script,
+        "input_payload": input_payload or {},
+        "error_policy": error_policy,
+        "workflow_type": workflow_type,
+    }
+    if trace_id is not None:
+        _nodus_payload["trace_id"] = trace_id
+    if node_max_retries is not None:
+        _nodus_payload["node_max_retries"] = node_max_retries
+    result = get_dispatcher().dispatch("sys.v1.nodus.execute", _nodus_payload, ctx)
+    if result["status"] == "error":
+        raise RuntimeError(
+            f"sys.v1.nodus.execute failed: {result.get('error', '')}"
+        )
+    return result["data"]["nodus_result"]
 
 
 def format_nodus_flow_result(flow_result: dict[str, Any]) -> dict[str, Any]:

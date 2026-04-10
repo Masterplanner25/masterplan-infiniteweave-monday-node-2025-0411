@@ -2,9 +2,9 @@
 
 ## Status Note
 
-**Updated 2026-04-07 — PRODUCTION-READY OS classification achieved.**
+**Updated 2026-04-09 — PRODUCTION-READY OS classification maintained; syscall convergence complete.**
 
-This document has been fully updated to reflect the current state of the execution system after the distributed execution sprint completed on 2026-04-07.
+This document has been fully updated to reflect the current state of the execution system after the distributed execution sprint (2026-04-07) and the syscall convergence refactor (2026-04-09).
 
 The OS-LIKE classification (achieved 2026-04-06) has been superseded. The remaining gap — per-process `_waiting` causing missed events in multi-instance deployment — is now closed by the distributed event bus (`kernel/event_bus.py`). All five distributed execution criteria now pass. See §Distributed Execution Audit below.
 
@@ -164,7 +164,7 @@ Audit criteria:
 
 ### Convergence summary
 
-All 8 dimensions of the OS-LIKE bar are now green:
+All 9 dimensions of the OS-LIKE bar are now green:
 
 | Dimension | Status |
 |---|---|
@@ -176,6 +176,9 @@ All 8 dimensions of the OS-LIKE bar are now green:
 | D6 — RetryPolicy resolved via `_resolve_policy_for_eu()` | PASS |
 | D7 — No execution logic outside pipeline/dispatcher/runtimes | PASS |
 | D8 — No route-level `db.query` / `db.add` / `db.commit` | PASS |
+| D9 — All execution entry points route through SyscallDispatcher | PASS |
+
+**D9 — Syscall convergence (achieved 2026-04-09):** `run_flow()`, `execute_intent()`, and `run_nodus_script_via_flow()` are now thin syscall proxies. The real implementation lives in private `_*_direct()` functions called by the registered syscall handlers. Callers with `user_id=None` (system/anonymous) bypass the syscall layer directly via `_direct()`. The new syscalls are `sys.v1.flow.execute_intent`, `sys.v1.nodus.execute`, `sys.v1.job.submit`, and `sys.v1.agent.execute`. See `docs/architecture/SYSCALL_SYSTEM.md §10` for the full proxy pattern.
 
 ### Eliminated failure modes
 

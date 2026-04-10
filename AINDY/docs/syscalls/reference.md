@@ -92,6 +92,66 @@ Auth: `Authorization: Bearer <jwt>` or `X-Platform-Key: aindy_<token>`.
 | --- | --- |
 | `event_id` | `string` |
 
+## Execution entry-point syscalls (v1)
+
+These syscalls gate the host-layer execution entry points. Routes, agents, and schedulers call the corresponding public proxy functions (`run_flow()`, `execute_intent()`, etc.) — the proxy builds a `SyscallContext` and dispatches here. Callers with `user_id=None` skip the syscall layer entirely and invoke the underlying `_direct()` function.
+
+### `sys.v1.flow.execute_intent`
+- Capability: `flow.execute`
+- Purpose: intent-based flow execution — selects a registered strategy, generates a plan if none found, compiles it to a flow, and runs via `PersistentFlowRunner`
+
+| Input | Type |
+| --- | --- |
+| `intent_data` | `dict` |
+
+| Output | Type |
+| --- | --- |
+| `intent_result` | `dict` |
+
+### `sys.v1.nodus.execute`
+- Capability: `nodus.execute`
+- Purpose: run a Nodus script through the standard `NODUS_SCRIPT_FLOW` pipeline
+
+| Input | Type |
+| --- | --- |
+| `script` | `string` |
+| `input_payload` | `dict` |
+| `error_policy` | `string` |
+| `workflow_type` | `string` |
+| `trace_id` | `string` |
+| `node_max_retries` | `integer` |
+
+| Output | Type |
+| --- | --- |
+| `nodus_result` | `dict` |
+
+### `sys.v1.job.submit`
+- Capability: `job.submit`
+- Purpose: submit an async job; wraps `platform_layer.async_job_service.submit_async_job()` for quota tracking on non-Nodus callers
+
+| Input | Type |
+| --- | --- |
+| `job_type` | `string` |
+| `job_data` | `dict` |
+| `user_id` | `string` |
+
+| Output | Type |
+| --- | --- |
+| `job_result` | `dict` |
+
+### `sys.v1.agent.execute`
+- Capability: `agent.execute`
+- Purpose: execute an agent run; wraps `agents.agent_runtime.execute_run()` for capability enforcement and observability on external callers
+
+| Input | Type |
+| --- | --- |
+| `run_id` | `string` |
+| `user_id` | `string` |
+
+| Output | Type |
+| --- | --- |
+| `agent_result` | `dict` |
+
 ## Experimental v1 syscalls
 
 These are present in the `v1` registry but marked `stable=false`.

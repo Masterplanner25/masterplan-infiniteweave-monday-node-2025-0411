@@ -1642,19 +1642,18 @@ def compile_plan_to_flow(plan: dict) -> dict:
     return flow
 
 
-def execute_intent(
+def _execute_intent_direct(
     intent_data: dict,
     db: Session,
     user_id: str = None,
 ) -> dict:
     """
-    Top-level intent execution.
+    Internal execute_intent implementation.
 
-    1. Try strategy selection (learned flow)
-    2. Fall back to generated plan
-    3. Execute via PersistentFlowRunner
-
-    This is the single entry point for all A.I.N.D.Y. workflow execution in v5.
+    Called by the sys.v1.flow.execute_intent syscall handler and by
+    execute_intent() when user_id is absent (anonymous/system calls).
+    Do not call directly from new code — use execute_intent() or dispatch
+    sys.v1.flow.execute_intent through the SyscallDispatcher.
     """
     intent_type = intent_data.get("workflow_type", "generic")
 
@@ -1684,31 +1683,64 @@ def execute_intent(
     return runner.start(initial_state=intent_data, flow_name=flow_name)
 
 
+def execute_intent(
+    intent_data: dict,
+    db: Session,
+    user_id: str = None,
+) -> dict:
+    """
+    Top-level intent execution — routes through sys.v1.flow.execute_intent.
+
+    1. Try strategy selection (learned flow)
+    2. Fall back to generated plan
+    3. Execute via PersistentFlowRunner
+
+    Routes through SyscallDispatcher when user_id is present, giving unified
+    capability enforcement, quota tracking, and observability. Falls back to
+    _execute_intent_direct() for anonymous/system calls (user_id=None).
+    """
+    if not user_id:
+        logger.debug(
+            "[execute_intent] no user_id — executing directly "
+            "(syscall layer requires identity)"
+        )
+        return _execute_intent_direct(intent_data, db, user_id)
+
+    import uuid as _uuid
+    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+
+    trace_id = str(_uuid.uuid4())
+    ctx = SyscallContext(
+        execution_unit_id=trace_id,
+        user_id=str(user_id),
+        capabilities=["flow.run", "flow.execute"],
+        trace_id=trace_id,
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(
+        "sys.v1.flow.execute_intent",
+        {"intent_data": intent_data},
+        ctx,
+    )
+    if result["status"] == "error":
+        raise RuntimeError(
+            f"sys.v1.flow.execute_intent failed: {result.get('error', '')}"
+        )
+    return result["data"]["intent_result"]
+
+
 # ── Router-facing entry point ──────────────────────────────────────────────────
 
 
-def run_flow(flow_name: str, state: dict, db: Session, user_id: str = None) -> dict:
+def _run_flow_direct(
+    flow_name: str, state: dict, db: Session = None, user_id: str = None
+) -> dict:
     """
-    Execute a registered flow by name.
+    Internal run_flow implementation.
 
-    Thin wrapper over PersistentFlowRunner for use inside router handlers.
-    Raises KeyError immediately if the flow is not registered, so misconfigured
-    routers fail loudly at startup rather than silently at request time.
-
-    Returns the standard execution envelope:
-        {
-            "status": "success" | "error",
-            "data":   <_extract_execution_result output>,
-            "trace_id": str,
-            "run_id":   str,
-            ...
-        }
-
-    Usage inside a handler:
-        result = run_flow("task_create", {"task_name": "..."}, db=db, user_id=user_id)
-        if result.get("status") == "error":
-            raise RuntimeError(result.get("data", {}).get("message", "flow failed"))
-        return result.get("data")
+    Called by the sys.v1.flow.run syscall handler and by run_flow() when
+    user_id is absent. Do not call directly from new code — use run_flow()
+    or dispatch sys.v1.flow.run through the SyscallDispatcher.
     """
     flow = FLOW_REGISTRY.get(flow_name)
     if not flow:
@@ -1724,4 +1756,62 @@ def run_flow(flow_name: str, state: dict, db: Session, user_id: str = None) -> d
         workflow_type=flow_name,
     )
     return runner.start(initial_state=dict(state), flow_name=flow_name)
+
+
+def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = None) -> dict:
+    """
+    Execute a registered flow by name.
+
+    Routes through sys.v1.flow.run for unified capability enforcement, quota
+    tracking, and observability. Raises KeyError if the flow is not registered.
+
+    When user_id is None (anonymous/system calls), falls through to
+    _run_flow_direct() because the syscall layer requires tenant identity.
+
+    Returns the standard execution envelope:
+        {
+            "status": "success" | "error",
+            "data":   <execution result>,
+            "trace_id": str,
+            "run_id":   str,
+            ...
+        }
+
+    Usage inside a handler:
+        result = run_flow("task_create", {"task_name": "..."}, db=db, user_id=user_id)
+        if result.get("status") == "error":
+            raise RuntimeError(result.get("data", {}).get("message", "flow failed"))
+        return result.get("data")
+    """
+    if not user_id:
+        logger.debug(
+            "[run_flow] no user_id — executing '%s' directly "
+            "(syscall layer requires identity)",
+            flow_name,
+        )
+        return _run_flow_direct(flow_name, state or {}, db, user_id)
+
+    import uuid as _uuid
+    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+
+    trace_id = str(_uuid.uuid4())
+    ctx = SyscallContext(
+        execution_unit_id=trace_id,
+        user_id=str(user_id),
+        capabilities=["flow.run"],
+        trace_id=trace_id,
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(
+        "sys.v1.flow.run",
+        {"flow_name": flow_name, "initial_state": state or {}, "workflow_type": flow_name},
+        ctx,
+    )
+    if result["status"] == "error":
+        error_msg = result.get("error", "")
+        # Preserve original KeyError for unknown/unregistered flows.
+        if "not registered" in error_msg or "unknown flow" in error_msg.lower():
+            raise KeyError(error_msg)
+        raise RuntimeError(f"sys.v1.flow.run failed: {error_msg}")
+    return result["data"]["flow_result"]
 
