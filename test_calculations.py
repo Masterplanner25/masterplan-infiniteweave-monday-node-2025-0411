@@ -1,7 +1,46 @@
 from fastapi.testclient import TestClient
 from main import app
+from AINDY.services.auth_service import hash_password
+from AINDY.tests.fixtures.auth import (
+    TEST_USER_EMAIL,
+    TEST_USER_ID,
+    TEST_PASSWORD,
+    build_access_token,
+)
+from db.database import SessionLocal
+from db.models.user import User
 
 client = TestClient(app)
+AUTH_HEADERS = {"Authorization": f"Bearer {build_access_token()}"}
+
+
+def _ensure_test_user():
+    session = SessionLocal()
+    try:
+        user = session.get(User, TEST_USER_ID)
+        if user is None:
+            user = User(
+                id=TEST_USER_ID,
+                email=TEST_USER_EMAIL,
+                username="test_user",
+                hashed_password=hash_password(TEST_PASSWORD),
+                is_active=True,
+            )
+            session.add(user)
+            session.commit()
+    finally:
+        session.close()
+
+
+_ensure_test_user()
+
+
+def _auth_post(path: str, payload: dict):
+    return client.post(path, json=payload, headers=AUTH_HEADERS)
+
+
+def _auth_get(path: str):
+    return client.get(path, headers=AUTH_HEADERS)
 
 def test_post_ai_productivity_boost():
     payload = {
@@ -9,7 +48,7 @@ def test_post_ai_productivity_boost():
         "tasks_without_ai": 40,
         "time_saved": 10
     }
-    response = client.post("/ai_productivity_boost", json=payload)
+    response = _auth_post("/ai_productivity_boost", payload)
     assert response.status_code == 200
     assert "AI Productivity Boost" in response.json()
 
@@ -20,7 +59,7 @@ def test_post_income_efficiency():
         "time": 10,
         "capital": 5
     }
-    response = client.post("/income_efficiency", json=payload)
+    response = _auth_post("/income_efficiency", payload)
     assert response.status_code == 200
     assert "Income Efficiency" in response.json()
 
@@ -30,7 +69,7 @@ def test_post_execution_speed():
         "systemized_workflows": 5,
         "decision_lag": 5
     }
-    response = client.post("/execution_speed", json=payload)
+    response = _auth_post("/execution_speed", payload)
     assert response.status_code == 200
     assert "Execution Speed" in response.json()
 
@@ -39,7 +78,7 @@ def test_post_engagement_rate():
         "total_interactions": 500,
         "total_views": 1000
     }
-    response = client.post("/engagement_rate", json=payload)
+    response = _auth_post("/engagement_rate", payload)
     assert response.status_code == 200
     assert "Engagement Rate" in response.json()
 
@@ -49,7 +88,7 @@ def test_post_lost_potential():
         "time_delayed": 2,
         "gains_from_action": 5
     }
-    response = client.post("/lost_potential", json=payload)
+    response = _auth_post("/lost_potential", payload)
     assert response.status_code == 200
     assert "Lost Potential" in response.json()
 
@@ -59,7 +98,7 @@ def test_post_decision_efficiency():
         "manual_decisions": 5,
         "processing_time": 5
     }
-    response = client.post("/decision_efficiency", json=payload)
+    response = _auth_post("/decision_efficiency", payload)
     assert response.status_code == 200
     assert "Decision Efficiency" in response.json()
 
@@ -142,13 +181,13 @@ def test_post_batch_calculations():
             "audience_size": 5000
         }]
     }
-    response = client.post("/batch_calculations", json=payload)
+    response = _auth_post("/batch_calculations", payload)
     print(response.json())
     assert response.status_code == 200
     assert isinstance(response.json(), dict)
     assert "AI Productivity Boost" in response.json()
 
 def test_get_results():
-    response = client.get("/results")
+    response = _auth_get("/results")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
