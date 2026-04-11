@@ -19,7 +19,7 @@ from AINDY.agents.autonomous_controller import record_decision
 from AINDY.core.execution_envelope import error as execution_error
 from AINDY.core.execution_envelope import success as execution_success
 from AINDY.core.execution_record_service import record_from_automation_log
-from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_service import emit_error_event, SystemEventEmissionError
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.utils.trace_context import get_parent_event_id
 from AINDY.utils.trace_context import reset_parent_event_id
@@ -176,16 +176,32 @@ def _session_dialect_name(db) -> str | None:
 def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
     from AINDY.core.system_event_service import emit_system_event
 
-    return emit_system_event(
-        db=db,
-        event_type=event_type,
-        user_id=user_id,
-        trace_id=trace_id,
-        parent_event_id=parent_event_id,
-        source=source,
-        payload=payload,
-        required=True,
-    )
+    try:
+        return emit_system_event(
+            db=db,
+            event_type=event_type,
+            user_id=user_id,
+            trace_id=trace_id,
+            parent_event_id=parent_event_id,
+            source=source,
+            payload=payload,
+            required=True,
+        )
+    except SystemEventEmissionError as exc:
+        logger.warning(
+            "[AsyncJob] Emitting %s trace=%s failed: %s",
+            event_type,
+            trace_id,
+            exc,
+        )
+    except Exception as exc:
+        logger.warning(
+            "[AsyncJob] Emitting %s trace=%s encountered unexpected error: %s",
+            event_type,
+            trace_id,
+            exc,
+        )
+    return None
 
 
 def build_ignored_response(
@@ -251,6 +267,8 @@ def submit_async_job(
             db.commit()
         except Exception:
             db.rollback()
+        env_name = os.getenv("ENV", "").lower()
+        force_inline_env = settings.is_testing or env_name == "test"
         _emit_async_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
@@ -263,13 +281,11 @@ def submit_async_job(
                 "task_name": task_name,
                 "source": source,
                 "execution_mode": "async_job",
-                "dispatch_state": "queued" if not settings.TEST_MODE else "inline",
+                "dispatch_state": "queued" if not force_inline_env else "inline",
             },
         )
-        if settings.TEST_MODE and execute_inline_in_test_mode:
+        if force_inline_env:
             _execute_job_inline(db, log_id, task_name, payload)
-            return log_id
-        if settings.TEST_MODE and not execute_inline_in_test_mode:
             return log_id
         if _session_dialect_name(db) == "sqlite":
             if execute_inline_in_test_mode:
@@ -598,9 +614,28 @@ def _get_root_execution_event_id(db, trace_id: str) -> str | None:
         return None
 
 
+def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
+    root_event_id = _get_root_execution_event_id(db, trace_id)
+    if root_event_id:
+        return root_event_id
+    created_id = _emit_async_system_event(
+        db=db,
+        event_type=SystemEventTypes.EXECUTION_STARTED,
+        user_id=None,
+        trace_id=trace_id,
+        parent_event_id=None,
+        source="async",
+        payload={
+            "run_id": trace_id,
+            "source": "async_root",
+        },
+    )
+    return str(created_id) if created_id else None
+
+
 def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]) -> None:
     trace_token = set_trace_id(str(log_id))
-    parent_token = set_parent_event_id(_get_root_execution_event_id(db, str(log_id)))
+    parent_token = set_parent_event_id(_ensure_root_execution_event_id(db, str(log_id)))
     try:
         log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
         if not log:

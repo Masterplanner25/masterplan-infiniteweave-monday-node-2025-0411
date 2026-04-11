@@ -101,9 +101,31 @@ def emit_event(
             required=required,
         )
 
-        normalized_system_event_id = (
-            normalize_uuid(system_event_id) if system_event_id else None
-        )
+        normalized_system_event_id = None
+        if system_event_id:
+            try:
+                candidate = uuid.UUID(str(system_event_id))
+                from AINDY.db.models.system_event import SystemEvent
+
+                exists = (
+                    db.query(SystemEvent.id)
+                    .filter(SystemEvent.id == candidate)
+                    .first()
+                )
+                if exists:
+                    normalized_system_event_id = normalize_uuid(candidate)
+                else:
+                    logger.warning(
+                        "[AgentEventService] SystemEvent %s missing; linking skipped for %s",
+                        system_event_id,
+                        event_type,
+                    )
+            except Exception:
+                logger.warning(
+                    "[AgentEventService] Invalid SystemEvent %s for %s",
+                    system_event_id,
+                    event_type,
+                )
 
         event = AgentEvent(
             id=uuid.uuid4(),

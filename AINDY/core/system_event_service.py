@@ -70,6 +70,25 @@ def _persist_system_event(
         except (ValueError, TypeError):
             normalized_parent_event_id = None
 
+    if normalized_parent_event_id:
+        from AINDY.db.models.system_event import SystemEvent
+
+        try:
+            exists = (
+                db.query(SystemEvent.id)
+                .filter(SystemEvent.id == normalized_parent_event_id)
+                .first()
+            )
+        except Exception:
+            exists = None
+        if not exists:
+            logger.warning(
+                "[SystemEvent] parent_event_id %s missing for %s; clearing parent reference",
+                normalized_parent_event_id,
+                event_type,
+            )
+            normalized_parent_event_id = None
+
     event = SystemEvent(
         id=uuid.uuid4(),
         type=event_type,
@@ -98,7 +117,7 @@ def _persist_system_event(
             target_event_id=event_id,
             relationship_type=relationship_type,
         )
-    db.commit()
+        db.commit()
     return event_id
 
 
