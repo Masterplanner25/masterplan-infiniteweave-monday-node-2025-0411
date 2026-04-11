@@ -5,35 +5,37 @@ import sys
 import time
 import uuid
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from platform_layer.rate_limiter import limiter
-from platform_layer import scheduler_service
-from domain import task_services
-from core.observability_events import emit_observability_event
-from core.system_event_service import emit_error_event
-from db.database import SessionLocal
-from db.mongo_setup import init_mongo
-from core.execution_guard import require_execution_context, validate_execution_contract
-from routes import (
+from sqlalchemy import create_engine
+from contextlib import asynccontextmanager
+
+from AINDY.platform_layer import scheduler_service
+from AINDY.platform_layer.rate_limiter import limiter
+from AINDY.domain import task_services
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.db.database import SessionLocal
+from AINDY.db.mongo_setup import init_mongo
+from AINDY.core.execution_guard import require_execution_context, validate_execution_contract
+from AINDY.routes import (
     APP_ROUTERS,
     LEGACY_ROOT_ROUTERS,
     PLATFORM_ROUTERS,
     ROOT_ROUTERS,
     platform_router,
 )
-from config import settings
-from db.models.metrics_models import *
-from db.models.request_metric import RequestMetric
-from utils.trace_context import (
+from AINDY.config import settings
+from AINDY.db.models.metrics_models import *
+from AINDY.db.models.request_metric import RequestMetric
+from AINDY.utils.trace_context import (
     _trace_id_ctx,
     reset_current_request,
     reset_current_trace_id,
@@ -110,17 +112,26 @@ logger = logging.getLogger(__name__)
 
 def _check_alembic_head() -> None:
     """Warn at startup if DB schema is behind the latest Alembic migration."""
+    if not (Config and ScriptDirectory and MigrationContext):
+        logger.warning("Schema guard unavailable: alembic not installed.")
+        return
+
     try:
-        import subprocess, sys
-        result = subprocess.run(
-            [sys.executable, "-m", "alembic", "check"],
-            capture_output=True, text=True,
-            cwd=os.path.dirname(__file__),
-        )
-        if result.returncode != 0:
+        engine = create_engine(settings.DATABASE_URL)
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            current_rev = context.get_current_revision()
+
+        alembic_cfg = Config("alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        script = ScriptDirectory.from_config(alembic_cfg)
+        head_rev = script.get_current_head()
+
+        if current_rev != head_rev:
             logger.warning(
-                "[startup] Alembic schema is not at head — run `alembic upgrade head`.\n%s",
-                result.stdout or result.stderr,
+                "[startup] Alembic schema is not at head (db=%s head=%s).",
+                current_rev,
+                head_rev,
             )
         else:
             logger.info("[startup] Alembic schema is at head.")
@@ -129,9 +140,9 @@ def _check_alembic_head() -> None:
 
 def _ensure_dev_api_key():
     try:
-        from platform_layer.api_key_service import hash_key
-        from db.models.api_key import PlatformAPIKey
-        from db.models.user import User   # ✅ ADD THIS
+        from AINDY.platform_layer.api_key_service import hash_key
+        from AINDY.db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.user import User   # ✅ ADD THIS
         import uuid
 
         db = SessionLocal()
@@ -258,17 +269,17 @@ async def lifespan(app: FastAPI):
         scheduler_service.start()
 
     # Register domain syscall handlers (must come before flow registration)
-    from kernel.syscall_handlers import register_all_domain_handlers
+    from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
 
     # Register Flow Engine flows and nodes (static startup definitions)
-    from runtime.flow_definitions import register_all_flows
+    from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
 
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from platform_layer.platform_loader import load_dynamic_registry
+        from AINDY.platform_layer.platform_loader import load_dynamic_registry
         _loader_db = SessionLocal()
         try:
             _loader_stats = load_dynamic_registry(_loader_db)
@@ -285,7 +296,7 @@ async def lifespan(app: FastAPI):
 
     # Enforce execution boundary: no router may import services directly
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from core.router_guard import RouterBoundaryViolation, validate_router_boundary
+        from AINDY.core.router_guard import RouterBoundaryViolation, validate_router_boundary
         try:
             validate_router_boundary()
         except RouterBoundaryViolation as _rbv:
@@ -294,7 +305,7 @@ async def lifespan(app: FastAPI):
 
     # Sprint N+7: Recover any FlowRun/AgentRun rows stranded by prior crash
     if enable_background and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
         _scan_db = SessionLocal()
         try:
             scan_and_recover_stuck_runs(_scan_db)
@@ -310,7 +321,7 @@ async def lifespan(app: FastAPI):
     # unavailable the system falls back to local-only notify_event behaviour.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         try:
-            from kernel.event_bus import get_event_bus
+            from AINDY.kernel.event_bus import get_event_bus
             get_event_bus().start_subscriber()
         except Exception as _bus_exc:
             logger.warning(
@@ -321,7 +332,7 @@ async def lifespan(app: FastAPI):
     # Must run after SchedulerEngine is initialised (above) and after the
     # stuck-run scan (which may transition some EUs out of waiting status).
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from core.wait_rehydration import rehydrate_waiting_eus
+        from AINDY.core.wait_rehydration import rehydrate_waiting_eus
         _rehydrate_db = SessionLocal()
         try:
             _n_rehydrated = rehydrate_waiting_eus(_rehydrate_db)
@@ -338,7 +349,7 @@ async def lifespan(app: FastAPI):
     # populated, and after EU rehydration so the scheduler entry for the same
     # run_id already has the EU-level callback when we add the flow callback.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from core.flow_run_rehydration import rehydrate_waiting_flow_runs
+        from AINDY.core.flow_run_rehydration import rehydrate_waiting_flow_runs
         _flow_rehydrate_db = SessionLocal()
         try:
             _n_flow_rehydrated = rehydrate_waiting_flow_runs(_flow_rehydrate_db)
@@ -355,7 +366,7 @@ async def lifespan(app: FastAPI):
 
     # Seed system identity
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        from db.models.author_model import AuthorDB
+        from AINDY.db.models.author_model import AuthorDB
         from datetime import datetime
         db = SessionLocal()
         try:
@@ -394,7 +405,7 @@ async def lifespan(app: FastAPI):
     task_services.stop_background_tasks(log=logger)
     scheduler_service.stop()
     try:
-        from platform_layer.async_job_service import shutdown_async_jobs
+        from AINDY.platform_layer.async_job_service import shutdown_async_jobs
 
         shutdown_async_jobs(wait=True)
     except Exception as exc:
@@ -511,7 +522,7 @@ def _extract_user_id_from_request(request: Request):
     if not token:
         return None
     try:
-        from services.auth_service import decode_access_token
+        from AINDY.services.auth_service import decode_access_token
         payload = decode_access_token(token)
         if not payload or "sub" not in payload:
             return None
