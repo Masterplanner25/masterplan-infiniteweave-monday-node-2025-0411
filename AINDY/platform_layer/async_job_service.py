@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +28,8 @@ from AINDY.utils.trace_context import reset_trace_id
 from AINDY.utils.trace_context import set_parent_event_id
 from AINDY.utils.trace_context import set_trace_id
 from AINDY.utils.user_ids import parse_user_id
+
+logger = logging.getLogger(__name__)
 
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
@@ -173,6 +176,19 @@ def _session_dialect_name(db) -> str | None:
     return getattr(getattr(bind, "dialect", None), "name", None)
 
 
+def _is_background_runner_active() -> bool:
+    try:
+        from AINDY.platform_layer import scheduler_service
+
+        scheduler = scheduler_service.get_scheduler()
+        return bool(getattr(scheduler, "running", False))
+    except RuntimeError:
+        return False
+    except Exception as exc:
+        logger.debug("[AsyncJobService] Unable to inspect background runner: %s", exc)
+        return False
+
+
 def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
     from AINDY.core.system_event_service import emit_system_event
 
@@ -268,7 +284,16 @@ def submit_async_job(
         except Exception:
             db.rollback()
         env_name = os.getenv("ENV", "").lower()
-        force_inline_env = settings.is_testing or env_name == "test"
+        pytest_env = os.getenv("PYTEST_CURRENT_TEST")
+        force_inline_env = settings.is_testing or env_name == "test" or bool(pytest_env)
+        background_enabled = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        background_runner_available = background_enabled and _is_background_runner_active()
+        runner_disabled = not background_runner_available
+        dispatch_state = "inline" if force_inline_env or runner_disabled else "queued"
         _emit_async_system_event(
             db=db,
             event_type=SystemEventTypes.EXECUTION_STARTED,
@@ -281,10 +306,16 @@ def submit_async_job(
                 "task_name": task_name,
                 "source": source,
                 "execution_mode": "async_job",
-                "dispatch_state": "queued" if not force_inline_env else "inline",
+                "dispatch_state": dispatch_state,
             },
         )
         if force_inline_env:
+            _execute_job_inline(db, log_id, task_name, payload)
+            return log_id
+        if runner_disabled and not force_inline_env:
+            logger.warning(
+                "[AsyncJobService] Inline execution fallback triggered (background runner unavailable)."
+            )
             _execute_job_inline(db, log_id, task_name, payload)
             return log_id
         if _session_dialect_name(db) == "sqlite":
