@@ -151,8 +151,9 @@ class TestIdentityDashboardEndpoints:
         assert res.status_code in (200, 500)
         if res.status_code == 200:
             body = res.json()
+            profile = body.get("data") if isinstance(body, dict) and "data" in body else body
             for key in ("communication", "tools", "decision_making", "learning"):
-                assert key in body, f"Missing dimension: {key}"
+                assert key in profile, f"Missing dimension: {key}"
 
     def test_identity_put_requires_auth(self, client):
         res = client.put("/identity/", json={"communication": {"tone": "direct"}})
@@ -175,6 +176,7 @@ class TestIdentityDashboardEndpoints:
         assert res.status_code in (200, 500)
         if res.status_code == 200:
             body = res.json()
+            summary = body.get("data") if isinstance(body, dict) and "data" in body else body
             for key in (
                 "observation_count",
                 "total_changes",
@@ -182,7 +184,7 @@ class TestIdentityDashboardEndpoints:
                 "recent_changes",
                 "evolution_arc",
             ):
-                assert key in body, f"Missing evolution key: {key}"
+                assert key in summary, f"Missing evolution key: {key}"
 
     def test_identity_context_requires_auth(self, client):
         res = client.get("/identity/context")
