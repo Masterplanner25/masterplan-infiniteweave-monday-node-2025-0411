@@ -1,8 +1,15 @@
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _read(path: str) -> str:
-    return Path(path).read_text(encoding="utf-8")
+    candidate = Path(path)
+    if not candidate.is_absolute() and candidate.parts and candidate.parts[0] == PROJECT_ROOT.name:
+        candidate = Path(*candidate.parts[1:])
+    target = candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
+    assert target.exists(), f"Source file missing: {target}"
+    return target.read_text(encoding="utf-8")
 
 
 def test_task_list_scopes_by_user():
