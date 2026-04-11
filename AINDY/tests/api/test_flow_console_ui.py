@@ -8,6 +8,8 @@ from unittest.mock import patch
 from db.models.automation_log import AutomationLog
 from db.models.flow_run import FlowHistory, FlowRun
 
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
 
 def _unwrap(payload):
     if isinstance(payload, dict) and "data" in payload:
@@ -220,7 +222,9 @@ class TestAutomationEndpoints:
 
 class TestFlowConsoleAPIFunctions:
     def test_api_functions_present(self):
-        api_src = pathlib.Path("AINDY/client/src/api.js").read_text(encoding="utf-8")
+        api_path = PROJECT_ROOT / "client/src/api.js"
+        assert api_path.exists(), f"api.js missing at {api_path}"
+        api_src = api_path.read_text(encoding="utf-8")
 
         required_fns = [
             "getFlowRuns",
