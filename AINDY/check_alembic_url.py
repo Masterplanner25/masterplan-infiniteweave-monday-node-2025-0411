@@ -1,4 +1,4 @@
-from alembic.config import Config
+from AINDY.alembic.config import Config
 
 config = Config("alembic.ini")
 print("✅ Alembic detected URL:")

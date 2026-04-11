@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
 # NOTE: set DATABASE_URL here or via the env var DATABASE_URL
 DATABASE_URL = "postgresql+psycopg2://postgres:Yourpasswordhere@localhost:5433/base"

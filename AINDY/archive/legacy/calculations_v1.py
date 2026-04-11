@@ -1,5 +1,5 @@
 from batch import BatchInput
-from analytics.calculations import (
+from AINDY.analytics.calculations import (
     calculate_twr,
     calculate_effort,
     calculate_productivity,

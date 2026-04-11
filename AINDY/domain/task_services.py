@@ -9,14 +9,14 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from db.database import SessionLocal
-from db.models.background_task_lease import BackgroundTaskLease
-from db.models.masterplan import MasterPlan
-from db.models.task import Task
-from db.mongo_setup import get_mongo_client
-from analytics.calculation_services import calculate_twr, save_calculation
-from core.observability_events import emit_observability_event
-from core.system_event_types import SystemEventTypes
+from AINDY.db.database import SessionLocal
+from AINDY.db.models.background_task_lease import BackgroundTaskLease
+from AINDY.db.models.masterplan import MasterPlan
+from AINDY.db.models.task import Task
+from AINDY.db.mongo_setup import get_mongo_client
+from AINDY.analytics.calculation_services import calculate_twr, save_calculation
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -433,7 +433,7 @@ def create_task(
     except Exception as _obs_exc:
         logger.warning("[task] observability emit failed (create): %s", _obs_exc)
     try:
-        from core.execution_unit_service import ExecutionUnitService
+        from AINDY.core.execution_unit_service import ExecutionUnitService
         ExecutionUnitService(db).create(
             eu_type="task",
             user_id=owner_user_id,
@@ -478,7 +478,7 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         except Exception as _obs_exc:
             logger.warning("[task] observability emit failed (start): %s", _obs_exc)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
             _eu = _eus.get_by_source("task", str(task.id))
             if _eu:
@@ -511,7 +511,7 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         except Exception as _obs_exc:
             logger.warning("[task] observability emit failed (pause): %s", _obs_exc)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
             _eu = _eus.get_by_source("task", str(task.id))
             if _eu:
@@ -553,7 +553,7 @@ def complete_task(db: Session, name: str, user_id: str = None):
     except Exception as _obs_exc:
         logger.warning("[task] observability emit failed (complete): %s", _obs_exc)
     try:
-        from core.execution_unit_service import ExecutionUnitService
+        from AINDY.core.execution_unit_service import ExecutionUnitService
         _eus = ExecutionUnitService(db)
         _eu = _eus.get_by_source("task", str(task.id))
         if _eu:
@@ -593,7 +593,7 @@ def queue_task_automation(
     if not owner_user_id:
         return None
 
-    from core.execution_dispatcher import dispatch_autonomous_job
+    from AINDY.core.execution_dispatcher import dispatch_autonomous_job
 
     payload = {
         "task_id": task.id,
@@ -641,7 +641,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
     automation_runs: list[dict[str, Any]] = []
 
     try:
-        from core.execution_signal_helper import queue_memory_capture
+        from AINDY.core.execution_signal_helper import queue_memory_capture
         # Task completion memory capture is routed through a MemoryCaptureEngine-backed helper.
 
         node = queue_memory_capture(
@@ -659,8 +659,8 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("Task completion memory capture failed: %s", exc)
 
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator
 
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)
         memory_context = orchestrator.get_context(
@@ -691,7 +691,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         mongo = get_mongo_client()
         db_mongo = mongo["aindy_social_layer"]
         profiles = db_mongo["profiles"]
-        from domain.infinity_service import get_user_kpi_snapshot
+        from AINDY.domain.infinity_service import get_user_kpi_snapshot
 
         kpi_snapshot = get_user_kpi_snapshot(str(owner_user_id), db) or {}
         master_score = float(kpi_snapshot.get("master_score", 0.0) or 0.0)
@@ -714,7 +714,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", exc)
 
     try:
-        from analytics.eta_service import calculate_eta
+        from AINDY.analytics.eta_service import calculate_eta
 
         active_plan = (
             db.query(MasterPlan)
@@ -729,7 +729,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
 
     orchestration = {"next_action": None}
     try:
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         orchestration = execute_infinity_orchestrator(
             user_id=owner_user_id,
@@ -795,7 +795,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
 
 
 def execute_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
-    from runtime.flow_engine import execute_intent
+    from AINDY.runtime.flow_engine import execute_intent
 
     return execute_intent(
         intent_data={

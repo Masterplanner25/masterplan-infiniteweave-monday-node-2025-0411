@@ -21,7 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class AgentRun(Base):

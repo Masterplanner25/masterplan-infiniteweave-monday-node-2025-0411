@@ -1,5 +1,5 @@
-from schemas.batch import BatchInput
-from analytics.calculation_services import (  
+from AINDY.schemas.batch import BatchInput
+from AINDY.analytics.calculation_services import (  
     calculate_twr,
     calculate_effort,
     calculate_productivity,

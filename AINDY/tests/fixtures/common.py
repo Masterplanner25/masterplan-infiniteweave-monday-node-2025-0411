@@ -18,7 +18,7 @@ def mock_openai(mocker):
 
 @pytest.fixture
 def sample_task_input():
-    from schemas.analytics_inputs import TaskInput
+    from AINDY.schemas.analytics_inputs import TaskInput
 
     return TaskInput(
         task_name="Test Task",
@@ -32,7 +32,7 @@ def sample_task_input():
 
 @pytest.fixture
 def sample_engagement_input():
-    from schemas.analytics_inputs import EngagementInput
+    from AINDY.schemas.analytics_inputs import EngagementInput
 
     return EngagementInput(
         likes=100,

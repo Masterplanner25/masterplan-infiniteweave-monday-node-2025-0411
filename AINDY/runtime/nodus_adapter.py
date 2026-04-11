@@ -46,23 +46,23 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from core.execution_signal_helper import queue_system_event, record_agent_event
+from AINDY.core.execution_signal_helper import queue_system_event, record_agent_event
 emit_system_event = queue_system_event
-from agents.capability_service import check_execution_capability, check_tool_capability
-from agents.agent_tools import execute_tool
-from runtime.flow_engine import PersistentFlowRunner, register_node
-from runtime.nodus_execution_service import build_nodus_execution_summary
-from runtime.nodus_execution_service import execute_nodus_runtime
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
-from utils.user_ids import parse_user_id
+from AINDY.agents.capability_service import check_execution_capability, check_tool_capability
+from AINDY.agents.agent_tools import execute_tool
+from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
+from AINDY.runtime.nodus_execution_service import build_nodus_execution_summary
+from AINDY.runtime.nodus_execution_service import execute_nodus_runtime
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
-from core.observability_events import emit_observability_event
+from AINDY.core.observability_events import emit_observability_event
 
 MAX_STEP_RETRIES = 3  # kept for reference; retry gate now reads RetryPolicy
 
-from core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
+from AINDY.core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
 
 
 def _db_run_id(run_id):
@@ -124,7 +124,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     edge _more_steps() while current_step_index < len(steps), then advance
     to agent_finalize_run when all steps are done.
     """
-    from db.models.agent_run import AgentRun, AgentStep
+    from AINDY.db.models.agent_run import AgentRun, AgentStep
 
     steps = state.get("steps", [])
     idx = state.get("current_step_index", 0)
@@ -180,7 +180,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
             agent_run.current_step = idx + 1
         db.commit()
 
-        from agents.agent_event_service import emit_event
+        from AINDY.agents.agent_event_service import emit_event
         record_agent_event(
             run_id=agent_run_id,
             user_id=user_id,
@@ -246,7 +246,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     # implementation (and any node that reads context["memory_context"]) can
     # adapt its behaviour based on past outcomes.
     context["tool_name"] = tool_name
-    from memory.memory_helpers import enrich_context
+    from AINDY.memory.memory_helpers import enrich_context
     enrich_context(context)
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -392,7 +392,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
     _capture_flow_completion() which writes the execution summary to the
     Memory Bridge via MemoryCaptureEngine.
     """
-    from db.models.agent_run import AgentRun
+    from AINDY.db.models.agent_run import AgentRun
 
     agent_run_id = state["agent_run_id"]
     agent_run_db_id = _db_run_id(agent_run_id)
@@ -403,7 +403,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
 
     result_payload = {"steps": step_results}
     if agent_run and state.get("user_id"):
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         orchestration = execute_infinity_orchestrator(
             user_id=state["user_id"],
@@ -428,7 +428,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
         )
 
     # Emit COMPLETED lifecycle event
-    from agents.agent_event_service import emit_event
+    from AINDY.agents.agent_event_service import emit_event
     record_agent_event(
         run_id=agent_run_id,
         user_id=state.get("user_id", ""),
@@ -502,7 +502,7 @@ class NodusAgentAdapter:
 
         Never raises — all exceptions are caught and treated as failures.
         """
-        from runtime.nodus_execution_service import execute_agent_flow_orchestration
+        from AINDY.runtime.nodus_execution_service import execute_agent_flow_orchestration
 
         return execute_agent_flow_orchestration(
             run_id=run_id,
@@ -567,9 +567,9 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     * RETRY status lets the flow engine's attempt counter and max_retries gate
       apply exactly as they do for any other node that returns RETRY.
     """
-    from runtime.nodus_runtime_adapter import _build_event_sink, _flush_memory_writes
-    from core.execution_signal_helper import queue_system_event
-    from core.system_event_types import SystemEventTypes
+    from AINDY.runtime.nodus_runtime_adapter import _build_event_sink, _flush_memory_writes
+    from AINDY.core.execution_signal_helper import queue_system_event
+    from AINDY.core.system_event_types import SystemEventTypes
 
     db = context["db"]
     user_id: str = str(context.get("user_id") or "")
@@ -855,7 +855,7 @@ def nodus_flow_compile_node(state: dict, context: dict) -> dict:
     nodus_flow_name : str
         Echo of the flow name (normalised).
     """
-    from runtime.nodus_flow_compiler import compile_nodus_flow
+    from AINDY.runtime.nodus_flow_compiler import compile_nodus_flow
 
     script: Optional[str] = state.get("nodus_flow_script")
     flow_name: str = str(state.get("nodus_flow_name") or "nodus_flow")

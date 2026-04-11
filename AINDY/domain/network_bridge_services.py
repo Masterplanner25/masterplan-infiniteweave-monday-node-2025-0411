@@ -1,7 +1,7 @@
 # /services/network_bridge_services.py
 from sqlalchemy.orm import Session
 from datetime import datetime
-from db.models.author_model import AuthorDB
+from AINDY.db.models.author_model import AuthorDB
 import uuid
 
 def register_author(db: Session, name: str, platform: str, notes: str | None = None, user_id: str | uuid.UUID | None = None):
@@ -47,8 +47,8 @@ def connect_external_author(
     Returns the result dict for the route handler.
     All DB work (including the final commit) is owned here.
     """
-    from domain import rippletrace_services
-    from analytics.calculation_services import save_calculation
+    from AINDY.domain import rippletrace_services
+    from AINDY.analytics.calculation_services import save_calculation
     from datetime import datetime
 
     author = register_author(db=db, name=author_name, platform=platform, notes=notes)

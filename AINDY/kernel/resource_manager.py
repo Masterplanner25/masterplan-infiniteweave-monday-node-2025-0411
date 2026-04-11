@@ -20,7 +20,7 @@ These can be overridden via environment variables:
 
 Usage
 -----
-    from kernel.resource_manager import get_resource_manager
+    from AINDY.kernel.resource_manager import get_resource_manager
 
     rm = get_resource_manager()
 
@@ -261,7 +261,7 @@ class ResourceManager:
         if capacity_freed:
             # ── Outside _lock — no re-entrant deadlock risk ───────────────
             try:
-                from kernel.event_bus import publish_event
+                from AINDY.kernel.event_bus import publish_event
                 publish_event("resource_available")
                 logger.info(
                     "[ResourceManager] capacity freed tenant=%s active=%d→%d "

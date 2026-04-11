@@ -29,8 +29,8 @@ The TOOL_REGISTRY dict maps tool_name →
 import logging
 from typing import Callable
 
-from core.execution_signal_helper import queue_system_event
-from kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def execute_tool(
                 "error": "run_id is required when execution_token is supplied",
             }
         try:
-            from agents.capability_service import check_tool_capability
+            from AINDY.agents.capability_service import check_tool_capability
 
             capability_check = check_tool_capability(
                 token=execution_token,
@@ -211,7 +211,7 @@ def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
 
     if user_id and db is not None:
         try:
-            from domain.infinity_loop import get_latest_adjustment
+            from AINDY.domain.infinity_loop import get_latest_adjustment
 
             latest = get_latest_adjustment(user_id=user_id, db=db)
             payload = getattr(latest, "adjustment_payload", {}) if latest is not None else {}

@@ -2,9 +2,9 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import ScoreSnapshotDB
-from analytics.delta_engine import compute_deltas, drop_point_ids_with_history
-from analytics.prediction_engine import predict_drop_point
+from AINDY.db.models import ScoreSnapshotDB
+from AINDY.analytics.delta_engine import compute_deltas, drop_point_ids_with_history
+from AINDY.analytics.prediction_engine import predict_drop_point
 
 RECOMMENDATION_TEMPLATES = {
     "likely_to_spike": {

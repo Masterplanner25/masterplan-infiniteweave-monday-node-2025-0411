@@ -23,17 +23,17 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from services.auth_service import get_current_user
-from utils.uuid_utils import normalize_uuid
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
 
 def _run_to_response(run) -> dict:
-    from agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import _run_to_dict
 
     return _run_to_dict(run)
 
@@ -60,8 +60,8 @@ def _flow_failure(result: dict) -> str:
 
 def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
     """Run a flow and interpret special response markers from agent nodes."""
-    from runtime.flow_engine import run_flow
-    from core.execution_gate import flow_result_to_envelope
+    from AINDY.runtime.flow_engine import run_flow
+    from AINDY.core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, payload, db=db, user_id=str(user_id))
     data = result.get("data")
     if data is None:
@@ -90,7 +90,7 @@ def _run_flow_agent(flow_name: str, payload: dict, db, user_id):
     if isinstance(data, dict):
         # Use to_envelope with output=None: data IS the output, embedding
         # flow_result_to_envelope() would create a circular reference via output→data.
-        from core.execution_gate import to_envelope
+        from AINDY.core.execution_gate import to_envelope
         data.setdefault("execution_envelope", to_envelope(
             eu_id=result.get("run_id"),
             trace_id=result.get("trace_id"),
@@ -278,8 +278,8 @@ def get_tool_suggestions(
     """Return up to 3 KPI-driven tool suggestions for the current user."""
     user_id = _current_user_id(current_user)
     if request is None:
-        from agents.agent_tools import suggest_tools
-        from domain.infinity_service import get_user_kpi_snapshot
+        from AINDY.agents.agent_tools import suggest_tools
+        from AINDY.domain.infinity_service import get_user_kpi_snapshot
 
         snapshot = get_user_kpi_snapshot(user_id, db)
         return suggest_tools(snapshot, user_id=user_id, db=db)

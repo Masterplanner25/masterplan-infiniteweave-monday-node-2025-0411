@@ -11,7 +11,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _reset_trace_context():
-    from utils.trace_context import _trace_id_ctx
+    from AINDY.utils.trace_context import _trace_id_ctx
 
     token = _trace_id_ctx.set("-")
     try:
@@ -112,7 +112,7 @@ class _FakeDB:
 
 
 def test_flow_success_emits_start_and_end_events(monkeypatch):
-    from runtime.flow_engine import PersistentFlowRunner
+    from AINDY.runtime.flow_engine import PersistentFlowRunner
 
     events = []
 
@@ -138,7 +138,7 @@ def test_flow_success_emits_start_and_end_events(monkeypatch):
 
 
 def test_flow_failure_emits_failure_and_error_events(monkeypatch):
-    from runtime.flow_engine import PersistentFlowRunner
+    from AINDY.runtime.flow_engine import PersistentFlowRunner
 
     events = []
 
@@ -168,7 +168,7 @@ def test_flow_failure_emits_failure_and_error_events(monkeypatch):
 
 
 def test_loop_execution_emits_started_and_decision_events(monkeypatch):
-    from domain.infinity_orchestrator import execute
+    from AINDY.domain.infinity_orchestrator import execute
 
     events = []
 
@@ -219,7 +219,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
 
 
 def test_agent_step_success_emits_system_event(monkeypatch):
-    from runtime.nodus_adapter import agent_execute_step
+    from AINDY.runtime.nodus_adapter import agent_execute_step
 
     events = []
     agent_run = SimpleNamespace(id=uuid.uuid4(), steps_completed=0, current_step=0)
@@ -266,8 +266,8 @@ def test_agent_step_success_emits_system_event(monkeypatch):
 
 
 def test_memory_write_requires_system_event(monkeypatch):
-    from memory.memory_capture_engine import MemoryCaptureEngine
-    from core.system_event_service import SystemEventEmissionError
+    from AINDY.memory.memory_capture_engine import MemoryCaptureEngine
+    from AINDY.core.system_event_service import SystemEventEmissionError
 
     class _Dao:
         def save(self, **kwargs):
@@ -302,8 +302,8 @@ def test_memory_write_requires_system_event(monkeypatch):
 
 
 def test_async_job_success_persists_execution_events(monkeypatch):
-    from db.models.automation_log import AutomationLog
-    from platform_layer.async_job_service import _execute_job
+    from AINDY.db.models.automation_log import AutomationLog
+    from AINDY.platform_layer.async_job_service import _execute_job
 
     db = _FakeDB()
     log = AutomationLog(
@@ -335,7 +335,7 @@ def test_async_job_success_persists_execution_events(monkeypatch):
 
 def test_auth_success_routes_emit_system_events(monkeypatch):
     auth_router = importlib.import_module("routes.auth_router")
-    from schemas.auth_schemas import LoginRequest, RegisterRequest
+    from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest
 
     events = []
     user = SimpleNamespace(

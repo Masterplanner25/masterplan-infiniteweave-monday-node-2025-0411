@@ -5,13 +5,13 @@ import time
 import uuid
 from typing import Any
 
-from core.execution_signal_helper import queue_system_event
-from db.database import SessionLocal
-from core.execution_dispatcher import dispatch_job
-from platform_layer.async_job_service import register_async_job
-from memory.embedding_service import generate_embedding
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.db.database import SessionLocal
+from AINDY.core.execution_dispatcher import dispatch_job
+from AINDY.platform_layer.async_job_service import register_async_job
+from AINDY.memory.embedding_service import generate_embedding
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def _set_embedding_status(db, memory_node, status: str, embedding: list[float] |
 
 @register_async_job(EMBEDDING_JOB_NAME)
 def process_embedding_job(payload: dict[str, Any], db):
-    from memory.memory_persistence import MemoryNodeModel
+    from AINDY.memory.memory_persistence import MemoryNodeModel
 
     memory_node = (
         db.query(MemoryNodeModel)

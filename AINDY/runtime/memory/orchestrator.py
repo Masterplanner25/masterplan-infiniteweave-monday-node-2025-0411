@@ -9,7 +9,7 @@ from .query_expander import QueryExpander
 from .scorer import MemoryScorer
 from .strategies import StrategySelector
 from .types import MemoryContext, MemoryItem, RecallRequest
-from db.dao.memory_trace_dao import MemoryTraceDAO
+from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
 
 logger = logging.getLogger(__name__)
 

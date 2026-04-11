@@ -7,7 +7,7 @@ import re
 import nltk
 import textstat
 
-from utils import enforce_word_limit, prepare_input_text
+from AINDY.utils import enforce_word_limit, prepare_input_text
 
 logger = logging.getLogger(__name__)
 _TOKENIZER_AVAILABLE: bool | None = None

@@ -27,7 +27,7 @@ import pytest
 
 def _make_builtins(dao_return_recall=None, dao_raise=None, dao_save_return=None):
     """Return a NodusMemoryBuiltins with a mocked DAO injected via instance override."""
-    from runtime.nodus_builtins import NodusMemoryBuiltins
+    from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins
 
     db = MagicMock()
     user_id = "user-abc"
@@ -76,17 +76,17 @@ def _node_dict(**overrides):
 
 class TestConstruction:
     def test_stores_user_id(self):
-        from runtime.nodus_builtins import NodusMemoryBuiltins
+        from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins
         b = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         assert b._user_id == "u1"
 
     def test_writes_starts_empty(self):
-        from runtime.nodus_builtins import NodusMemoryBuiltins
+        from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins
         b = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         assert b._writes == []
 
     def test_separate_instances_dont_share_writes(self):
-        from runtime.nodus_builtins import NodusMemoryBuiltins
+        from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins
         b1 = NodusMemoryBuiltins(db=MagicMock(), user_id="u1")
         b2 = NodusMemoryBuiltins(db=MagicMock(), user_id="u2")
         b1._writes.append({"x": 1})
@@ -97,7 +97,7 @@ class TestConstruction:
 
 class TestSafeNode:
     def _safe(self, node):
-        from runtime.nodus_builtins import NodusMemoryBuiltins
+        from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins
         return NodusMemoryBuiltins._safe_node(node)
 
     def test_dict_all_fields_extracted(self):
@@ -382,7 +382,7 @@ class TestAdapterIntegration:
         Run NodusRuntimeAdapter._execute() with all external dependencies mocked.
         Returns (result, captured_initial_globals).
         """
-        from runtime.nodus_runtime_adapter import (
+        from AINDY.runtime.nodus_runtime_adapter import (
             NodusRuntimeAdapter,
             NodusExecutionContext,
         )
@@ -457,7 +457,7 @@ class TestAdapterIntegration:
         assert result.memory_writes == []
 
     def test_builtins_constructed_with_correct_user_id(self):
-        from runtime.nodus_runtime_adapter import (
+        from AINDY.runtime.nodus_runtime_adapter import (
             NodusRuntimeAdapter,
             NodusExecutionContext,
         )

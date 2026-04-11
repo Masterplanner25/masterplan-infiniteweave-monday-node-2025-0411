@@ -6,7 +6,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import DropPointDB, PingDB, ScoreSnapshotDB
+from AINDY.db.models import DropPointDB, PingDB, ScoreSnapshotDB
 
 SEMANTIC_KEYWORDS = {"similar", "echo", "same idea"}
 INFERRED_KEYWORDS = {"unexpected", "random", "coincidence"}

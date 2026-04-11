@@ -14,15 +14,15 @@ import pytest
 
 class TestTaskModel:
     def test_task_model_importable(self):
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         assert Task is not None
 
     def test_task_model_tablename(self):
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         assert Task.__tablename__ == "tasks"
 
     def test_task_has_required_columns(self):
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(Task)
         col_names = [c.key for c in mapper.attrs]
@@ -33,7 +33,7 @@ class TestTaskModel:
             )
 
     def test_task_has_scheduling_columns(self):
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(Task)
         col_names = [c.key for c in mapper.attrs]
@@ -42,7 +42,7 @@ class TestTaskModel:
 
     def test_task_has_user_fk(self):
         """Task model now includes user_id for ownership scoping."""
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(Task)
         col_names = [c.key for c in mapper.attrs]
@@ -53,15 +53,15 @@ class TestTaskModel:
 
 class TestCalculationResultModel:
     def test_calculation_result_importable(self):
-        from db.models.calculation import CalculationResult
+        from AINDY.db.models.calculation import CalculationResult
         assert CalculationResult is not None
 
     def test_calculation_result_tablename(self):
-        from db.models.calculation import CalculationResult
+        from AINDY.db.models.calculation import CalculationResult
         assert CalculationResult.__tablename__ == "calculation_results"
 
     def test_calculation_result_columns(self):
-        from db.models.calculation import CalculationResult
+        from AINDY.db.models.calculation import CalculationResult
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(CalculationResult)
         col_names = [c.key for c in mapper.attrs]
@@ -81,7 +81,7 @@ class TestCalculationResultModel:
         2. These are the fields that should be in MemoryNodeModel
         3. db/models/models.py does not exist (import would fail)
         """
-        from db.models.calculation import CalculationResult
+        from AINDY.db.models.calculation import CalculationResult
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(CalculationResult)
         col_names = [c.key for c in mapper.attrs]
@@ -106,7 +106,7 @@ class TestCalculationResultModel:
         )
 
         # The correct table for memory nodes is memory_nodes via MemoryNodeModel
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         mapper2 = sa_inspect(MemoryNodeModel)
         col_names2 = [c.key for c in mapper2.attrs]
         assert "content" in col_names2
@@ -116,15 +116,15 @@ class TestCalculationResultModel:
 
 class TestMemoryPersistenceModels:
     def test_memory_node_model_importable(self):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         assert MemoryNodeModel is not None
 
     def test_memory_node_model_tablename(self):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         assert MemoryNodeModel.__tablename__ == "memory_nodes"
 
     def test_memory_node_model_columns(self):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -136,7 +136,7 @@ class TestMemoryPersistenceModels:
         Memory Bridge Phase 2: MemoryNodeModel has an 'embedding' VECTOR(1536) column.
         Semantic memory search is now operational.
         """
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -146,15 +146,15 @@ class TestMemoryPersistenceModels:
         )
 
     def test_memory_link_model_importable(self):
-        from memory.memory_persistence import MemoryLinkModel
+        from AINDY.memory.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel is not None
 
     def test_memory_link_model_tablename(self):
-        from memory.memory_persistence import MemoryLinkModel
+        from AINDY.memory.memory_persistence import MemoryLinkModel
         assert MemoryLinkModel.__tablename__ == "memory_links"
 
     def test_memory_link_model_columns(self):
-        from memory.memory_persistence import MemoryLinkModel
+        from AINDY.memory.memory_persistence import MemoryLinkModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryLinkModel)
         col_names = [c.key for c in mapper.attrs]

@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
 
@@ -35,7 +35,7 @@ def _masterplan_http_detail(code: int, message: str):
 
 
 def _run_flow_masterplan(flow_name: str, payload: dict, db: Session, user_id: str):
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = _flow_failure(result)
@@ -61,7 +61,7 @@ async def lock_from_genesis(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import lock_from_genesis as svc_lock
+        from AINDY.domain.masterplan_service import lock_from_genesis as svc_lock
         return svc_lock(
             db,
             user_id=user_id,
@@ -104,7 +104,7 @@ async def list_masterplans(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import list_masterplans as svc_list
+        from AINDY.domain.masterplan_service import list_masterplans as svc_list
         return svc_list(db, user_id=user_id)
 
     return await execute_with_pipeline(
@@ -150,7 +150,7 @@ async def set_masterplan_anchor(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import set_masterplan_anchor as svc_anchor
+        from AINDY.domain.masterplan_service import set_masterplan_anchor as svc_anchor
         return svc_anchor(
             db,
             user_id=user_id,
@@ -184,7 +184,7 @@ async def get_masterplan_projection(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import get_masterplan_projection as svc_projection
+        from AINDY.domain.masterplan_service import get_masterplan_projection as svc_projection
         return svc_projection(db, user_id=user_id, plan_id=plan_id)
 
     return await execute_with_pipeline(

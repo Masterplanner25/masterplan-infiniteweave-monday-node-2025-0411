@@ -3,14 +3,14 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Optional
 
-from memory.bridge import create_memory_node
-from db.dao.memory_trace_dao import MemoryTraceDAO
-from runtime.memory import MemoryOrchestrator
-from runtime.memory.memory_feedback import MemoryFeedbackEngine
-from runtime.memory.memory_learning import MemoryLearningEngine
-from runtime.memory.memory_metrics import MemoryMetricsEngine
-from runtime.memory.metrics_store import MemoryMetricsStore
-from utils.uuid_utils import normalize_uuid
+from AINDY.memory.bridge import create_memory_node
+from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
+from AINDY.runtime.memory import MemoryOrchestrator
+from AINDY.runtime.memory.memory_feedback import MemoryFeedbackEngine
+from AINDY.runtime.memory.memory_learning import MemoryLearningEngine
+from AINDY.runtime.memory.memory_metrics import MemoryMetricsEngine
+from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,7 @@ class ExecutionLoop:
 # PersistentFlowRunner and related symbols are the canonical execution backbone
 # as of Flow Engine Phase B. Exported here for backwards-compatibility.
 
-from runtime.flow_engine import (  # noqa: F401, E402
+from AINDY.runtime.flow_engine import (  # noqa: F401, E402
     PersistentFlowRunner,
     execute_intent,
     register_node,

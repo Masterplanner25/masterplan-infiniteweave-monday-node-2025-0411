@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime
 from datetime import datetime
-from db.database import Base
+from AINDY.db.database import Base
 
 class SystemHealthLog(Base):
     __tablename__ = "system_health_logs"

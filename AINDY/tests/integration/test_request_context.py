@@ -19,12 +19,12 @@ class TestRequestIdContextVar:
     """_request_id_ctx should default to '-' when no request is active."""
 
     def test_default_is_dash(self):
-        from main import _request_id_ctx
+        from AINDY.main import _request_id_ctx
         # In a fresh context with no set() call, default must be "-"
         assert _request_id_ctx.get() == "-"
 
     def test_set_then_get_returns_value(self):
-        from main import _request_id_ctx
+        from AINDY.main import _request_id_ctx
         token = _request_id_ctx.set("test-req-id-123")
         try:
             assert _request_id_ctx.get() == "test-req-id-123"
@@ -40,7 +40,7 @@ class TestRequestContextFilter:
     """RequestContextFilter must inject request_id into every LogRecord."""
 
     def test_filter_sets_request_id_from_ctx(self):
-        from main import RequestContextFilter, _request_id_ctx
+        from AINDY.main import RequestContextFilter, _request_id_ctx
         f = RequestContextFilter()
         record = logging.LogRecord(
             name="test", level=logging.INFO, pathname="", lineno=0,
@@ -55,7 +55,7 @@ class TestRequestContextFilter:
         assert record.trace_id == "abc-123"
 
     def test_filter_uses_default_when_no_request(self):
-        from main import RequestContextFilter, _request_id_ctx
+        from AINDY.main import RequestContextFilter, _request_id_ctx
         f = RequestContextFilter()
         # Ensure no value is set (use a fresh token state)
         token = _request_id_ctx.set("-")
@@ -70,7 +70,7 @@ class TestRequestContextFilter:
             _request_id_ctx.reset(token)
 
     def test_filter_returns_true(self):
-        from main import RequestContextFilter
+        from AINDY.main import RequestContextFilter
         f = RequestContextFilter()
         record = logging.LogRecord(
             name="test", level=logging.INFO, pathname="", lineno=0,
@@ -89,7 +89,7 @@ class TestLogRequestsMiddleware:
 
     @pytest.mark.asyncio
     async def test_sets_request_id_before_call_next(self):
-        from main import log_requests, _request_id_ctx
+        from AINDY.main import log_requests, _request_id_ctx
 
         captured_id: list[str] = []
 
@@ -112,7 +112,7 @@ class TestLogRequestsMiddleware:
 
     @pytest.mark.asyncio
     async def test_response_header_x_request_id_set(self):
-        from main import log_requests
+        from AINDY.main import log_requests
 
         async def fake_call_next(req):
             mock_resp = MagicMock()
@@ -131,7 +131,7 @@ class TestLogRequestsMiddleware:
     @pytest.mark.asyncio
     async def test_request_id_is_uuid_format(self):
         import re
-        from main import log_requests, _request_id_ctx
+        from AINDY.main import log_requests, _request_id_ctx
 
         UUID_PATTERN = re.compile(
             r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"

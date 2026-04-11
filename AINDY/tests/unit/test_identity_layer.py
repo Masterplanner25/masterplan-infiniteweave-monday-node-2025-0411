@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import inspect
 
-from db.models.user_identity import (
+from AINDY.db.models.user_identity import (
     UserIdentity,
     VALID_DETAIL_PREFERENCES,
     VALID_LEARNING_STYLES,
@@ -10,7 +10,7 @@ from db.models.user_identity import (
     VALID_SPEED_VS_QUALITY,
     VALID_TONES,
 )
-from domain.identity_service import IdentityService
+from AINDY.domain.identity_service import IdentityService
 
 
 class TestUserIdentityModel:

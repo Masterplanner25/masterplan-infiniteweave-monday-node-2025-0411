@@ -94,7 +94,7 @@ class TestLeadGenServiceBugs:
         code after its first return statement.
         """
         import inspect
-        from domain import leadgen_service
+        from AINDY.domain import leadgen_service
         source = inspect.getsource(leadgen_service.score_lead)
         return_count = source.count("return result")
         try_count = source.count("try:")
@@ -113,8 +113,8 @@ class TestLeadGenServiceBugs:
         Regression guard: ensures CalculationResult is never reintroduced.
         """
         import inspect
-        from domain import leadgen_service
-        import memory.bridge as bridge
+        from AINDY.domain import leadgen_service
+        import AINDY.memory.bridge as bridge
 
         source = inspect.getsource(leadgen_service.create_lead_results)
         assert "create_memory_node" in source, (

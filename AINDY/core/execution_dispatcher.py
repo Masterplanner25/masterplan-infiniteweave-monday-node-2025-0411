@@ -45,7 +45,7 @@ Overrides (checked first):
 
 Usage
 -----
-    from core.execution_dispatcher import dispatch, ExecutionMode
+    from AINDY.core.execution_dispatcher import dispatch, ExecutionMode
 
     result = dispatch(eu, handler_fn=my_handler, context={"db": db})
     if result.mode is ExecutionMode.INLINE:
@@ -243,12 +243,12 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
     Delay formula: ``min(base_ms * 2^(attempt-1), max_ms) / 1000`` seconds.
     Defaults: ``AINDY_RETRY_BACKOFF_BASE_MS=1000``, ``AINDY_RETRY_BACKOFF_MAX_MS=30000``.
     """
-    from core.distributed_queue import QueueJobPayload, get_queue
-    from utils.trace_context import get_trace_id
+    from AINDY.core.distributed_queue import QueueJobPayload, get_queue
+    from AINDY.utils.trace_context import get_trace_id
 
     # Capture active trace IDs from ContextVars (set by the root syscall dispatch).
     try:
-        from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
+        from AINDY.kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
 
         trace_id: str = _TRACE_ID_CTX.get() or get_trace_id() or str(_uuid_mod.uuid4())
         eu_id: str = _EU_ID_CTX.get() or str(getattr(execution_unit, "id", "") or "")
@@ -289,8 +289,8 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
     )
     if not _in_test:
         try:
-            from core.system_event_service import emit_system_event
-            from db.database import SessionLocal
+            from AINDY.core.system_event_service import emit_system_event
+            from AINDY.db.database import SessionLocal
 
             _db = SessionLocal()
             try:
@@ -349,8 +349,8 @@ def _compute_retry_delay(job_id: str) -> float:
 
     attempt = 1  # default if DB read fails
     try:
-        from db.database import SessionLocal
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.database import SessionLocal
+        from AINDY.db.models.automation_log import AutomationLog
 
         _db = SessionLocal()
         try:
@@ -428,7 +428,7 @@ def dispatch(
         return DispatchResult(mode=mode, meta=meta)
 
     # Thread-pool fallback (EXECUTION_MODE=thread or any unrecognised value).
-    from platform_layer.async_job_service import _get_executor
+    from AINDY.platform_layer.async_job_service import _get_executor
 
     logger.debug(
         "[Dispatcher] ASYNC submission eu_type=%s eu_id=%s",
@@ -465,7 +465,7 @@ def dispatch_job(
         ``mode`` is always ASYNC (job-type work is never inline at the
         domain layer).  The AutomationLog id is in ``result.meta["log_id"]``.
     """
-    from platform_layer.async_job_service import submit_async_job as _submit
+    from AINDY.platform_layer.async_job_service import submit_async_job as _submit
 
     stub = _DomainJobStub(task_name=task_name, source=source)
     logger.debug(
@@ -520,7 +520,7 @@ def dispatch_autonomous_job(
         ``mode`` is ``INLINE`` for IGNORED decisions (no thread submitted),
         ``ASYNC`` for QUEUED / DEFERRED.
     """
-    from platform_layer.async_job_service import submit_autonomous_async_job as _submit_auto
+    from AINDY.platform_layer.async_job_service import submit_autonomous_async_job as _submit_auto
 
     stub = _DomainJobStub(task_name=task_name, source=source)
     logger.debug(

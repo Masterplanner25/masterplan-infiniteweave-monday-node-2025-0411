@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from services.auth_service import decode_access_token
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.services.auth_service import decode_access_token
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 
 def test_register_seeds_signup_state_and_supports_immediate_boot(client, db_session):

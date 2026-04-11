@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from kernel.event_bus import CHANNEL, EventBus
+from AINDY.kernel.event_bus import CHANNEL, EventBus
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -255,7 +255,7 @@ class TestEventBusHandleMessage:
 class TestSchedulerNotifyEventBroadcast:
 
     def _make_scheduler(self):
-        from kernel.scheduler_engine import SchedulerEngine
+        from AINDY.kernel.scheduler_engine import SchedulerEngine
         se = SchedulerEngine()
         return se
 
@@ -283,8 +283,8 @@ class TestSchedulerNotifyEventBroadcast:
 
     def test_notify_event_bus_failure_is_nonfatal(self):
         """Event bus exception must not affect local scheduling result."""
-        from kernel.scheduler_engine import SchedulerEngine
-        from core.wait_condition import WaitCondition
+        from AINDY.kernel.scheduler_engine import SchedulerEngine
+        from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
         cb = MagicMock()
@@ -306,8 +306,8 @@ class TestSchedulerNotifyEventBroadcast:
 
     def test_notify_event_local_scan_always_runs_first(self):
         """Local _waiting scan must complete before publish is attempted."""
-        from kernel.scheduler_engine import SchedulerEngine
-        from core.wait_condition import WaitCondition
+        from AINDY.kernel.scheduler_engine import SchedulerEngine
+        from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
         call_order: list[str] = []
@@ -335,8 +335,8 @@ class TestSchedulerNotifyEventBroadcast:
 
     def test_notify_event_returns_local_count_regardless_of_bus(self):
         """Return value reflects locally matched runs, not bus delivery."""
-        from kernel.scheduler_engine import SchedulerEngine
-        from core.wait_condition import WaitCondition
+        from AINDY.kernel.scheduler_engine import SchedulerEngine
+        from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
         se.register_wait(

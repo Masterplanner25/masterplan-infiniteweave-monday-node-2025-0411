@@ -3,14 +3,14 @@ from fastapi import APIRouter, Depends, Request
 import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
 from datetime import datetime
 import uuid
-from analytics.calculation_services import save_calculation
-from services.auth_service import verify_api_key
+from AINDY.analytics.calculation_services import save_calculation
+from AINDY.services.auth_service import verify_api_key
 
-from domain import network_bridge_services
+from AINDY.domain import network_bridge_services
 router = APIRouter(prefix="/network_bridge", tags=["Network Bridge"], dependencies=[Depends(verify_api_key)])
 logger = logging.getLogger(__name__)
 

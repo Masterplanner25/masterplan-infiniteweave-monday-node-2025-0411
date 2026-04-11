@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from db.mongo_setup import get_mongo_client
+from AINDY.db.mongo_setup import get_mongo_client
 
 
 def compute_engagement_score(post: dict[str, Any]) -> float:

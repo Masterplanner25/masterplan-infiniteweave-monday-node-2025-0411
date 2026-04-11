@@ -3,12 +3,12 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from config import DATABASE_URL
+from AINDY.config import DATABASE_URL
 from base import Base
 from models import *     # bring in all models from models.py
-from main import *       # bring in models from main.py
+from AINDY.main import *       # bring in models from main.py
 
-from alembic import context
+from AINDY.alembic import context
 from sqlalchemy import create_engine, pool
 
 import logging

@@ -7,7 +7,7 @@ Purpose: Store results from the B2B Lead Generation via AI Search Optimization m
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, func, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class LeadGenResult(Base):

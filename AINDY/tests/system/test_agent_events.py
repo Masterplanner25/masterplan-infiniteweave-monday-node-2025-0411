@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from db.models.agent_event import AgentEvent
-from db.models.agent_run import AgentRun, AgentStep
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from core.execution_signal_helper import record_agent_event
-from agents.agent_runtime import get_run_events, replay_run
-from tests.fixtures.auth import build_access_token
+from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.agent_run import AgentRun, AgentStep
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.core.execution_signal_helper import record_agent_event
+from AINDY.agents.agent_runtime import get_run_events, replay_run
+from AINDY.tests.fixtures.auth import build_access_token
 
 
 def _make_run(db_session, test_user, *, status: str = "completed", plan: dict | None = None) -> AgentRun:

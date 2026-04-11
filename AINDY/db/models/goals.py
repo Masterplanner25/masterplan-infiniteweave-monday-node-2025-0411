@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class Goal(Base):

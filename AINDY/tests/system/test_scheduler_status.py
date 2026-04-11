@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from db.models.background_task_lease import BackgroundTaskLease
+from AINDY.db.models.background_task_lease import BackgroundTaskLease
 
 
 class TestIsBackgroundLeader:
     def test_returns_false_when_no_owner(self):
-        import domain.task_services as ts
+        import AINDY.domain.task_services as ts
 
         original = ts._BACKGROUND_OWNER_ID
         try:
@@ -18,7 +18,7 @@ class TestIsBackgroundLeader:
             ts._BACKGROUND_OWNER_ID = original
 
     def test_returns_true_when_owner_matches_instance(self):
-        import domain.task_services as ts
+        import AINDY.domain.task_services as ts
 
         original = ts._BACKGROUND_OWNER_ID
         try:
@@ -51,7 +51,7 @@ class TestSchedulerStatusEndpoint:
         db_session,
         auth_headers,
     ):
-        import domain.task_services as task_services
+        import AINDY.domain.task_services as task_services
 
         lease = BackgroundTaskLease(
             name=task_services._BACKGROUND_LEASE_NAME,

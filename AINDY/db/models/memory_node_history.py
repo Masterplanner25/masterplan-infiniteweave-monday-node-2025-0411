@@ -12,7 +12,7 @@ from sqlalchemy import Column, String, Text, DateTime, JSON, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
-from db.database import Base
+from AINDY.db.database import Base
 import uuid
 
 

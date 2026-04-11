@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 def list_calculation_results(db: Session, *, user_id: str) -> list[Any]:
     """Return all CalculationResult rows for a user."""
-    from db.models import CalculationResult
+    from AINDY.db.models import CalculationResult
 
     return (
         db.query(CalculationResult)
@@ -19,7 +19,7 @@ def list_calculation_results(db: Session, *, user_id: str) -> list[Any]:
 
 def list_masterplans_compute(db: Session, *, user_id: str) -> list[Any]:
     """Return all MasterPlan rows for a user (compute/legacy endpoint)."""
-    from db.models import MasterPlan
+    from AINDY.db.models import MasterPlan
 
     return (
         db.query(MasterPlan)
@@ -30,7 +30,7 @@ def list_masterplans_compute(db: Session, *, user_id: str) -> list[Any]:
 
 def create_masterplan_compute(db: Session, *, data: dict[str, Any], user_id: str) -> Any:
     """Create and persist a new MasterPlan from raw field data."""
-    from db.models import MasterPlan
+    from AINDY.db.models import MasterPlan
 
     plan = MasterPlan(**data)
     plan.user_id = uuid.UUID(str(user_id))

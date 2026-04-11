@@ -15,7 +15,7 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import relationship
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class PlatformAPIKey(Base):

@@ -1,7 +1,7 @@
 import requests
 from datetime import datetime
 from typing import List, Dict
-from platform_layer.external_call_service import perform_external_call
+from AINDY.platform_layer.external_call_service import perform_external_call
 
 class YouTubeService:
 

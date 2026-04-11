@@ -1,42 +1,42 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from services.auth_service import verify_api_key
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import verify_api_key
 
-from analytics.causal_engine import build_causal_graph, get_causal_chain
-from domain.content_generator import (
+from AINDY.analytics.causal_engine import build_causal_graph, get_causal_chain
+from AINDY.domain.content_generator import (
     generate_content,
     generate_content_for_drop,
     generate_variations,
 )
-from analytics.delta_engine import compute_deltas, emerging_drops, find_momentum_leaders
-from analytics.influence_graph import build_influence_graph, influence_chain
-from analytics.learning_engine import adjust_thresholds, evaluate_outcome, learning_stats
-from analytics.narrative_engine import generate_narrative, narrative_summary
-from analytics.playbook_engine import (
+from AINDY.analytics.delta_engine import compute_deltas, emerging_drops, find_momentum_leaders
+from AINDY.analytics.influence_graph import build_influence_graph, influence_chain
+from AINDY.analytics.learning_engine import adjust_thresholds, evaluate_outcome, learning_stats
+from AINDY.analytics.narrative_engine import generate_narrative, narrative_summary
+from AINDY.analytics.playbook_engine import (
     build_playbook,
     get_playbook,
     list_playbooks,
     match_playbooks,
 )
-from analytics.prediction_engine import (
+from AINDY.analytics.prediction_engine import (
     predict_drop_point,
     prediction_summary,
     scan_drop_point_predictions,
 )
-from analytics.recommendation_engine import (
+from AINDY.analytics.recommendation_engine import (
     recommend_for_drop_point,
     recommendations_summary,
 )
-from domain.strategy_engine import (
+from AINDY.domain.strategy_engine import (
     build_strategies,
     get_strategy,
     list_strategies,
     match_strategies,
 )
-from utils.threadweaver import (
+from AINDY.utils.threadweaver import (
     analyze_drop_point,
     get_dashboard_snapshot,
     get_top_drop_points,

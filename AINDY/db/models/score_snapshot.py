@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Float
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class ScoreSnapshotDB(Base):

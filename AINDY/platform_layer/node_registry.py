@@ -262,7 +262,7 @@ def register_external_node(
     Returns the stored metadata dict.
     Raises ValueError(str) on validation or import failure.
     """
-    from runtime.flow_engine import NODE_REGISTRY, register_node
+    from AINDY.runtime.flow_engine import NODE_REGISTRY, register_node
 
     # â”€â”€ Validate inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if not name or not name.strip():
@@ -331,7 +331,7 @@ def _persist_node(
     db: Session,
 ) -> None:
     """Upsert the node config into the dynamic_nodes table."""
-    from db.models.dynamic_node import DynamicNode
+    from AINDY.db.models.dynamic_node import DynamicNode
 
     if node_type == "webhook":
         handler_config: dict[str, Any] = {"url": handler, "timeout_seconds": timeout_seconds}
@@ -385,7 +385,7 @@ def delete_dynamic_node(name: str, *, db: Session | None = None) -> bool:
     Returns True if removed, False if not found in _DYNAMIC_NODE_META.
     Static (startup-registered) nodes cannot be deleted via this function.
     """
-    from runtime.flow_engine import NODE_REGISTRY
+    from AINDY.runtime.flow_engine import NODE_REGISTRY
 
     with _node_lock:
         if name not in _DYNAMIC_NODE_META:
@@ -395,7 +395,7 @@ def delete_dynamic_node(name: str, *, db: Session | None = None) -> bool:
 
     if db is not None:
         try:
-            from db.models.dynamic_node import DynamicNode
+            from AINDY.db.models.dynamic_node import DynamicNode
             row = db.query(DynamicNode).filter(DynamicNode.name == name).first()
             if row:
                 row.is_active = False

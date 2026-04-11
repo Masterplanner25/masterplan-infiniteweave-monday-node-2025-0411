@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from config import settings
-from core.execution_helper import execute_with_pipeline_sync
-from core.system_event_service import emit_system_event
-from db.database import SessionLocal, engine, get_db
-from services.auth_service import verify_api_key
+from AINDY.config import settings
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.core.system_event_service import emit_system_event
+from AINDY.db.database import SessionLocal, engine, get_db
+from AINDY.services.auth_service import verify_api_key
 
 router = APIRouter(tags=["Health"])
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def _compute_liveness() -> dict:
         nonlocal db_status
         _db = SessionLocal()
         try:
-            from domain.health_service import check_db_connectivity
+            from AINDY.domain.health_service import check_db_connectivity
             check_db_connectivity(_db)
             db_status = "ok"
         except Exception as exc:
@@ -159,7 +159,7 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
     try:
-        from domain.health_service import check_db_ready
+        from AINDY.domain.health_service import check_db_ready
         check_db_ready(db)
         components["database"] = "ready"
     except Exception as exc:
@@ -250,7 +250,7 @@ def health_details(request: Request, db: Session = Depends(get_db)) -> dict:
         status["status"] = "degraded"
 
     try:
-        from memory import memory_persistence
+        from AINDY.memory import memory_persistence
         status["components"]["memory_bridge"] = (
             "ready" if hasattr(memory_persistence, "MemoryNodeDAO") else "not_loaded"
         )

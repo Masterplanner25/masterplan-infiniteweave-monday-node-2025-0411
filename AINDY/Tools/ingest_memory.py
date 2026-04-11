@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from db.database import SessionLocal
-from memory.memory_ingest_service import MemoryIngestService
+from AINDY.db.database import SessionLocal
+from AINDY.memory.memory_ingest_service import MemoryIngestService
 
 
 DEFAULT_PATHS = [

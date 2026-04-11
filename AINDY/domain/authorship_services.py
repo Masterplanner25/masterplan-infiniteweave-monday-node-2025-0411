@@ -11,7 +11,7 @@ Dependencies:
     from authorship.Authorship import epistemic_reclaim
 """
 
-from Tools.authorship.Authorship import epistemic_reclaim
+from AINDY.Tools.authorship.Authorship import epistemic_reclaim
 
 
 def reclaim_authorship(

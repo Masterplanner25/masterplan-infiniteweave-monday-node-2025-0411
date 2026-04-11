@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 
 def _patch_session_aliases(monkeypatch, session_factory, engine):
-    import db.database as db_database
+    import AINDY.db.database as db_database
 
     monkeypatch.setattr(db_database, "SessionLocal", session_factory, raising=False)
     monkeypatch.setattr(db_database, "engine", engine, raising=False)
@@ -36,8 +36,8 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
 
 @pytest.fixture
 def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
-    from db.database import get_db
-    from main import app as fastapi_app
+    from AINDY.db.database import get_db
+    from AINDY.main import app as fastapi_app
 
     _patch_session_aliases(monkeypatch, testing_session_factory, test_engine)
 

@@ -62,25 +62,25 @@ def router_mock_db(app):
 class TestSecretKeyHardening:
     def test_config_has_secret_key_field(self):
         """Settings class must have a SECRET_KEY field."""
-        from config import Settings
+        from AINDY.config import Settings
         assert hasattr(Settings.model_fields, "SECRET_KEY") or "SECRET_KEY" in Settings.model_fields
 
     def test_secret_key_loaded_from_env(self):
         """settings.SECRET_KEY must be populated (non-empty)."""
-        from config import settings
+        from AINDY.config import settings
         assert settings.SECRET_KEY
         assert len(settings.SECRET_KEY) > 0
 
     def test_secret_key_test_env_is_not_placeholder(self):
         """Test env must not use the insecure default placeholder."""
-        from config import settings
+        from AINDY.config import settings
         assert settings.SECRET_KEY != "dev-secret-change-in-production", (
             "Test env is using the insecure placeholder — set SECRET_KEY in .env or conftest"
         )
 
     def test_is_prod_property_false_in_test(self):
         """is_prod must be False in test environment."""
-        from config import settings
+        from AINDY.config import settings
         assert not settings.is_prod
 
     def test_startup_guard_warns_in_dev(self):
@@ -115,17 +115,17 @@ class TestSecretKeyHardening:
 class TestDualDAOConsolidation:
     def test_canonical_dao_has_load_memory_node(self):
         """Canonical DAO must expose load_memory_node()."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "load_memory_node")
 
     def test_canonical_dao_has_find_by_tags(self):
         """Canonical DAO must expose find_by_tags()."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "find_by_tags")
 
     def test_load_memory_node_returns_none_for_missing(self):
         """load_memory_node must return None when node does not exist."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         dao = MemoryNodeDAO(mock_db)
@@ -134,7 +134,7 @@ class TestDualDAOConsolidation:
 
     def test_load_memory_node_returns_dict_for_existing(self):
         """load_memory_node must return a dict when node exists."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         from unittest.mock import MagicMock
         import uuid
         mock_db = MagicMock()
@@ -158,7 +158,7 @@ class TestDualDAOConsolidation:
 
     def test_find_by_tags_delegates_to_get_by_tags(self):
         """find_by_tags must return same result as get_by_tags."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.filter.return_value.all.return_value = []
@@ -191,8 +191,8 @@ class TestMemoryNodeChildrenPersistence:
     def test_save_creates_child_links_from_extra(self):
         """save() must create MemoryLink rows for node IDs in extra['children']."""
         import uuid
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from memory.embedding_service import generate_embedding
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.memory.embedding_service import generate_embedding
 
         child_id = uuid.uuid4()
         mock_db = MagicMock()
@@ -232,8 +232,8 @@ class TestMemoryNodeChildrenPersistence:
 
                 # We need the MemoryNodeModel instance that save() creates
                 # to have a valid id — patch MemoryNodeModel
-                import db.dao.memory_node_dao as dao_module
-                from memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
+                import AINDY.db.dao.memory_node_dao as dao_module
+                from AINDY.memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
 
                 with patch.object(dao_module, "MemoryNodeModel") as MockModel, \
                      patch.object(dao_module, "MemoryLinkModel") as MockLink:
@@ -266,8 +266,8 @@ class TestMemoryNodeChildrenPersistence:
     def test_save_no_children_creates_no_links(self):
         """save() with no children in extra must not create any MemoryLink rows."""
         import uuid
-        import db.dao.memory_node_dao as dao_module
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        import AINDY.db.dao.memory_node_dao as dao_module
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_db = MagicMock()
 
@@ -299,39 +299,39 @@ class TestMemoryNodeChildrenPersistence:
 
 class TestMasterPlanAnchorColumns:
     def test_masterplan_has_anchor_date(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "anchor_date")
 
     def test_masterplan_has_goal_value(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "goal_value")
 
     def test_masterplan_has_goal_unit(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "goal_unit")
 
     def test_masterplan_has_goal_description(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "goal_description")
 
     def test_masterplan_has_projected_completion_date(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "projected_completion_date")
 
     def test_masterplan_has_current_velocity(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "current_velocity")
 
     def test_masterplan_has_days_ahead_behind(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "days_ahead_behind")
 
     def test_masterplan_has_eta_last_calculated(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "eta_last_calculated")
 
     def test_masterplan_has_eta_confidence(self):
-        from db.models.masterplan import MasterPlan
+        from AINDY.db.models.masterplan import MasterPlan
         assert hasattr(MasterPlan, "eta_confidence")
 
     def test_migration_file_exists(self):
@@ -453,16 +453,16 @@ class TestETAService:
         return plan
 
     def test_calculate_eta_raises_for_missing_plan(self):
-        from analytics.eta_service import calculate_eta
+        from AINDY.analytics.eta_service import calculate_eta
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         with pytest.raises(ValueError, match="not found"):
             calculate_eta(db=mock_db, masterplan_id=9999, user_id=uuid4())
 
     def test_calculate_eta_returns_dict_keys(self):
-        from analytics.eta_service import calculate_eta
-        from db.models.masterplan import MasterPlan
-        from db.models.task import Task
+        from AINDY.analytics.eta_service import calculate_eta
+        from AINDY.db.models.masterplan import MasterPlan
+        from AINDY.db.models.task import Task
 
         mock_db = MagicMock()
         plan = self._make_plan(anchor_date=datetime(2027, 6, 1))
@@ -488,9 +488,9 @@ class TestETAService:
 
     def test_calculate_eta_zero_velocity_no_projection(self):
         """When velocity=0, projected_completion_date must be None."""
-        from analytics.eta_service import calculate_eta
-        from db.models.masterplan import MasterPlan
-        from db.models.task import Task
+        from AINDY.analytics.eta_service import calculate_eta
+        from AINDY.db.models.masterplan import MasterPlan
+        from AINDY.db.models.task import Task
 
         mock_db = MagicMock()
         plan = self._make_plan()
@@ -512,9 +512,9 @@ class TestETAService:
 
     def test_calculate_eta_days_ahead_positive_when_early(self):
         """days_ahead_behind is positive when projected date is before anchor."""
-        from analytics.eta_service import calculate_eta
-        from db.models.masterplan import MasterPlan
-        from db.models.task import Task
+        from AINDY.analytics.eta_service import calculate_eta
+        from AINDY.db.models.masterplan import MasterPlan
+        from AINDY.db.models.task import Task
 
         anchor = datetime.utcnow() + timedelta(days=365)
         mock_db = MagicMock()
@@ -549,8 +549,8 @@ class TestETAService:
 
     def test_recalculate_all_etas_updates_anchored_plans(self):
         """recalculate_all_etas must process all plans with anchor_date set."""
-        from analytics.eta_service import recalculate_all_etas
-        from db.models.masterplan import MasterPlan
+        from AINDY.analytics.eta_service import recalculate_all_etas
+        from AINDY.db.models.masterplan import MasterPlan
 
         mock_db = MagicMock()
 
@@ -567,8 +567,8 @@ class TestETAService:
 
     def test_recalculate_all_etas_skips_on_error(self):
         """recalculate_all_etas must continue past individual plan failures."""
-        from analytics.eta_service import recalculate_all_etas
-        from db.models.masterplan import MasterPlan
+        from AINDY.analytics.eta_service import recalculate_all_etas
+        from AINDY.db.models.masterplan import MasterPlan
 
         mock_db = MagicMock()
         plan1 = self._make_plan(plan_id=1, user_id=uuid4(), anchor_date=datetime(2027, 1, 1))
@@ -625,9 +625,9 @@ class TestProjectionEndpoint:
 class TestSchedulerETAJob:
     def test_daily_eta_job_registered_in_system_jobs(self):
         """_register_system_jobs must add the daily_eta_recalculation job."""
-        from apscheduler.schedulers.background import BackgroundScheduler
+        from AINDY.apscheduler.schedulers.background import BackgroundScheduler
         scheduler = BackgroundScheduler()
-        from platform_layer.scheduler_service import _register_system_jobs
+        from AINDY.platform_layer.scheduler_service import _register_system_jobs
 
         with patch("platform_layer.scheduler_service._recalculate_all_etas_job"):
             _register_system_jobs(scheduler)
@@ -637,12 +637,12 @@ class TestSchedulerETAJob:
 
     def test_eta_job_callable_exists(self):
         """_recalculate_all_etas_job must be importable."""
-        from platform_layer.scheduler_service import _recalculate_all_etas_job
+        from AINDY.platform_layer.scheduler_service import _recalculate_all_etas_job
         assert callable(_recalculate_all_etas_job)
 
     def test_eta_job_handles_db_error_gracefully(self):
         """_recalculate_all_etas_job must not raise even if DB is unavailable."""
-        from platform_layer.scheduler_service import _recalculate_all_etas_job
+        from AINDY.platform_layer.scheduler_service import _recalculate_all_etas_job
         # SessionLocal is a local import inside the job — patch at the db.database level
         with patch("db.database.SessionLocal", side_effect=RuntimeError("no DB")):
             # Should not raise
@@ -656,7 +656,7 @@ class TestSchedulerETAJob:
 class TestCompleteTaskETAHook:
     def test_orchestrate_task_completion_triggers_eta_for_active_plan_with_anchor(self):
         """orchestrate_task_completion must call calculate_eta when active plan has anchor_date."""
-        from domain import task_services
+        from AINDY.domain import task_services
         mock_db = MagicMock()
         mock_task = MagicMock()
         mock_task.name = "test-task"

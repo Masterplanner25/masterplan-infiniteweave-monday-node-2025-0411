@@ -22,9 +22,9 @@ from datetime import datetime, timezone
 from typing import Callable, Optional
 
 try:
-    from apscheduler.schedulers.background import BackgroundScheduler
-    from apscheduler.triggers.cron import CronTrigger
-    from apscheduler.triggers.interval import IntervalTrigger
+    from AINDY.apscheduler.schedulers.background import BackgroundScheduler
+    from AINDY.apscheduler.triggers.cron import CronTrigger
+    from AINDY.apscheduler.triggers.interval import IntervalTrigger
 except ImportError:  # pragma: no cover - optional dependency
     class _FallbackJob:
         def __init__(self, *, func, trigger, id, name, replace_existing):
@@ -226,7 +226,7 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     # are registered.  Done last so system jobs are never blocked by a bad
     # user script.
     try:
-        from runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
         restore_nodus_scheduled_jobs()
     except Exception as _nodus_restore_exc:
         logger.warning(
@@ -238,10 +238,10 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
 def _recalculate_all_scores() -> None:
     """Daily job: recalculate Infinity scores for all users."""
     try:
-        from db.database import SessionLocal
-        from agents.autonomous_controller import evaluate_live_trigger, record_decision
-        from db.models.user import User
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.db.database import SessionLocal
+        from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+        from AINDY.db.models.user import User
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = SessionLocal()
         try:
@@ -275,9 +275,9 @@ def _recalculate_all_scores() -> None:
 def _recalculate_all_etas_job() -> None:
     """Daily job: recalculate ETA projections for all anchored MasterPlans."""
     try:
-        from db.database import SessionLocal
-        from agents.autonomous_controller import evaluate_live_trigger, record_decision
-        from analytics.eta_service import recalculate_all_etas
+        from AINDY.db.database import SessionLocal
+        from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+        from AINDY.analytics.eta_service import recalculate_all_etas
 
         db = SessionLocal()
         try:
@@ -299,8 +299,8 @@ def _recalculate_all_etas_job() -> None:
 def _cleanup_stale_logs() -> None:
     """Clean up AutomationLog entries stuck in 'pending' for > 1 hour."""
     try:
-        from db.database import SessionLocal
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.database import SessionLocal
+        from AINDY.db.models.automation_log import AutomationLog
         from datetime import timedelta
 
         db = SessionLocal()
@@ -327,9 +327,9 @@ def _cleanup_stale_logs() -> None:
 def _check_reminders_job() -> None:
     """Check for overdue task reminders â€” replaces daemon thread."""
     try:
-        from db.database import SessionLocal
-        from agents.autonomous_controller import evaluate_live_trigger, record_decision
-        from domain.task_services import check_reminders
+        from AINDY.db.database import SessionLocal
+        from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+        from AINDY.domain.task_services import check_reminders
         db = SessionLocal()
         try:
             trigger = {"trigger_type": "schedule", "source": "scheduler.reminders", "goal": "task_reminder_check"}
@@ -347,9 +347,9 @@ def _check_reminders_job() -> None:
 def _check_task_recurrence() -> None:
     """Trigger task recurrence check â€” replaces daemon thread."""
     try:
-        from db.database import SessionLocal
-        from agents.autonomous_controller import evaluate_live_trigger, record_decision
-        from domain.task_services import handle_recurrence
+        from AINDY.db.database import SessionLocal
+        from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
+        from AINDY.domain.task_services import handle_recurrence
         db = SessionLocal()
         try:
             trigger = {"trigger_type": "schedule", "source": "scheduler.recurrence", "goal": "task_recurrence_check"}
@@ -366,7 +366,7 @@ def _check_task_recurrence() -> None:
 
 def _process_deferred_async_jobs() -> None:
     try:
-        from platform_layer.async_job_service import process_deferred_jobs
+        from AINDY.platform_layer.async_job_service import process_deferred_jobs
 
         resumed = process_deferred_jobs()
         if resumed:
@@ -378,7 +378,7 @@ def _process_deferred_async_jobs() -> None:
 def _refresh_lease_heartbeat() -> None:
     """Refresh background task DB lease â€” prevents expiry on the leader instance."""
     try:
-        from domain.task_services import _heartbeat_lease_job
+        from AINDY.domain.task_services import _heartbeat_lease_job
         _heartbeat_lease_job()
     except Exception as exc:
         logger.warning("Lease heartbeat job raised unexpectedly: %s", exc)
@@ -407,8 +407,8 @@ def run_task_now(
     With:
         run_task_now(fn, "task_name", payload)
     """
-    from db.database import SessionLocal
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     log = AutomationLog(
@@ -445,8 +445,8 @@ def _supervised_execute(log_id: str, task_fn: Callable, payload: dict) -> None:
     - Retried on failure with exponential backoff (tenacity)
     - Auditable (status + error_message stored in AutomationLog)
     """
-    from db.database import SessionLocal
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
@@ -512,8 +512,8 @@ def replay_task(log_id: str) -> bool:
     Returns True if replay was scheduled, False if log not found / not failed
     or task function not in registry.
     """
-    from db.database import SessionLocal
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()

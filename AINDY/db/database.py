@@ -11,7 +11,9 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 import logging
 import threading
-from config import settings
+
+from AINDY.config import settings
+from AINDY.core.observability_events import emit_observability_event
 
 # --------------------------------------------------------------------
 # Database Configuration
@@ -44,7 +46,6 @@ engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = logging.getLogger(__name__)
-from core.observability_events import emit_observability_event
 _session_guard_lock = threading.Lock()
 _active_sessions: set[int] = set()
 

@@ -141,14 +141,14 @@ class TestScanNoStuckRuns:
     """scan_and_recover_stuck_runs returns 0 and does not commit when table is clean."""
 
     def test_returns_zero_when_no_stuck_runs(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         db = _make_db(stuck_runs=[])
         result = scan_and_recover_stuck_runs(db, staleness_minutes=10)
         assert result == 0
 
     def test_does_not_commit_when_nothing_to_recover(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         db = _make_db(stuck_runs=[])
         scan_and_recover_stuck_runs(db, staleness_minutes=10)
@@ -159,7 +159,7 @@ class TestScanRecoverAgentRun:
     """agent_execution stuck runs mark both FlowRun and AgentRun as failed."""
 
     def _run_scan(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         fr = _flow_run(workflow_type="agent_execution")
         step = _agent_step(step_index=0)
@@ -208,7 +208,7 @@ class TestScanRecoverGenericRun:
     """Non-agent stuck runs are marked failed with a log entry only."""
 
     def _run_scan(self, workflow_type="some_other_flow"):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         fr = _flow_run(workflow_type=workflow_type)
         db = _make_db(stuck_runs=[fr])
@@ -228,8 +228,8 @@ class TestScanRecoverGenericRun:
         assert fr.error_message is not None
 
     def test_no_agent_run_query_for_generic(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
-        from db.models.agent_run import AgentRun
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.db.models.agent_run import AgentRun
 
         fr = _flow_run(workflow_type="memory_workflow")
         db = _make_db(stuck_runs=[fr])
@@ -247,7 +247,7 @@ class TestScanMultipleRuns:
     """Multiple stuck runs are all recovered in a single scan pass."""
 
     def test_recovers_all_stuck_runs(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         runs = [_flow_run(workflow_type="generic") for _ in range(3)]
         db = _make_db(stuck_runs=runs)
@@ -255,7 +255,7 @@ class TestScanMultipleRuns:
         assert count == 3
 
     def test_each_run_committed_individually(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         runs = [_flow_run(workflow_type="generic") for _ in range(2)]
         db = _make_db(stuck_runs=runs)
@@ -267,7 +267,7 @@ class TestScanAgentRunAlreadyFinal:
     """AgentRun not in 'executing' status is left untouched."""
 
     def test_completed_agent_run_not_modified(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         fr = _flow_run(workflow_type="agent_execution")
         ar = _agent_run(flow_run_id=str(fr.id), status="completed")
@@ -278,7 +278,7 @@ class TestScanAgentRunAlreadyFinal:
         assert ar.status == "completed"
 
     def test_failed_agent_run_not_overwritten(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         fr = _flow_run(workflow_type="agent_execution")
         ar = _agent_run(flow_run_id=str(fr.id), status="failed")
@@ -292,7 +292,7 @@ class TestScanNoLinkedAgentRun:
     """agent_execution FlowRun with no matching AgentRun still marks FlowRun failed."""
 
     def test_flow_run_marked_failed_without_agent_run(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         fr = _flow_run(workflow_type="agent_execution")
         db = _make_db(stuck_runs=[fr], agent_run=None)
@@ -305,7 +305,7 @@ class TestScanPerRunExceptionIsolation:
     """A bad row does not abort recovery of subsequent rows."""
 
     def test_exception_in_one_run_does_not_stop_others(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         good_run = _flow_run(workflow_type="generic")
         bad_run = _flow_run(workflow_type="generic")
@@ -353,7 +353,7 @@ class TestScanOuterException:
     """Outer DB exception returns 0 and never raises."""
 
     def test_returns_zero_on_outer_exception(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         db = MagicMock()
         db.query.side_effect = RuntimeError("DB connection lost")
@@ -362,7 +362,7 @@ class TestScanOuterException:
         assert result == 0
 
     def test_never_raises(self):
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         db = MagicMock()
         db.query.side_effect = Exception("catastrophic failure")
@@ -375,17 +375,17 @@ class TestScanThresholdDefault:
     """Default threshold is read from AINDY_STUCK_RUN_THRESHOLD_MINUTES."""
 
     def test_uses_env_var_when_no_param(self):
-        from agents import stuck_run_service
+        from AINDY.agents import stuck_run_service
         with patch.dict(os.environ, {"AINDY_STUCK_RUN_THRESHOLD_MINUTES": "5"}):
             assert stuck_run_service._default_threshold_minutes() == 5
 
     def test_falls_back_to_10_on_invalid_env(self):
-        from agents import stuck_run_service
+        from AINDY.agents import stuck_run_service
         with patch.dict(os.environ, {"AINDY_STUCK_RUN_THRESHOLD_MINUTES": "not_a_number"}):
             assert stuck_run_service._default_threshold_minutes() == 10
 
     def test_falls_back_to_10_when_env_absent(self):
-        from agents import stuck_run_service
+        from AINDY.agents import stuck_run_service
         env = {k: v for k, v in os.environ.items() if k != "AINDY_STUCK_RUN_THRESHOLD_MINUTES"}
         with patch.dict(os.environ, env, clear=True):
             assert stuck_run_service._default_threshold_minutes() == 10
@@ -400,7 +400,7 @@ class TestScanRecentRunSkipped:
         We verify that when the query returns an empty list (because all
         runs are recent), recovered count is 0.
         """
-        from agents.stuck_run_service import scan_and_recover_stuck_runs
+        from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
 
         # Simulate DB correctly filtering out recent runs (returns empty list)
         db = _make_db(stuck_runs=[])
@@ -468,7 +468,7 @@ def _executing_run(
 
 class TestRecoverNotFound:
     def test_returns_not_found(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         db = _make_recover_db(agent_run=None)
         result = recover_stuck_agent_run("unknown-id", TEST_USER_ID, db)
@@ -478,7 +478,7 @@ class TestRecoverNotFound:
 
 class TestRecoverForbidden:
     def test_returns_forbidden_on_owner_mismatch(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run(user_id=OTHER_USER_ID)
         db = _make_recover_db(agent_run=ar)
@@ -489,7 +489,7 @@ class TestRecoverForbidden:
 
 class TestRecoverWrongStatus:
     def test_returns_wrong_status_when_completed(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run()
         ar.status = "completed"
@@ -500,7 +500,7 @@ class TestRecoverWrongStatus:
         assert "executing" in result["detail"].lower()
 
     def test_returns_wrong_status_when_pending(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run()
         ar.status = "pending_approval"
@@ -511,7 +511,7 @@ class TestRecoverWrongStatus:
 
 class TestRecoverTooRecent:
     def test_too_recent_without_force(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run(started_minutes_ago=2)  # only 2 minutes old
         db = _make_recover_db(agent_run=ar)
@@ -523,7 +523,7 @@ class TestRecoverTooRecent:
 
 class TestRecoverForceBypassesAge:
     def test_force_true_skips_age_guard(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run(started_minutes_ago=1)  # only 1 minute old
         db = _make_recover_db(agent_run=ar)
@@ -534,7 +534,7 @@ class TestRecoverForceBypassesAge:
 
 class TestRecoverSuccess:
     def _run_recover(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run(started_minutes_ago=20)
         step = _agent_step(step_index=0)
@@ -567,7 +567,7 @@ class TestRecoverSuccess:
 
 class TestRecoverLinksFlowRun:
     def test_linked_flow_run_marked_failed(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         fr = _flow_run(workflow_type="agent_execution")
         fr.status = "running"
@@ -577,7 +577,7 @@ class TestRecoverLinksFlowRun:
         assert fr.status == "failed"
 
     def test_no_error_when_no_flow_run(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         ar = _executing_run(started_minutes_ago=20, flow_run_id=None)
         db = _make_recover_db(agent_run=ar, flow_run=None)
@@ -587,7 +587,7 @@ class TestRecoverLinksFlowRun:
 
 class TestRecoverInternalError:
     def test_returns_internal_error_on_exception(self):
-        from agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
         db = MagicMock()
         db.query.side_effect = RuntimeError("DB exploded")
@@ -602,7 +602,7 @@ class TestRecoverInternalError:
 
 class TestReplayRunNotFound:
     def test_returns_none_when_not_found(self):
-        from agents.agent_runtime import replay_run
+        from AINDY.agents.agent_runtime import replay_run
 
         db = MagicMock()
         q = MagicMock()
@@ -616,7 +616,7 @@ class TestReplayRunNotFound:
 
 class TestReplayRunForbidden:
     def test_returns_none_on_owner_mismatch(self):
-        from agents.agent_runtime import replay_run
+        from AINDY.agents.agent_runtime import replay_run
 
         original = MagicMock()
         original.user_id = OTHER_USER_ID
@@ -636,7 +636,7 @@ class TestReplayRunForbidden:
 
 class TestReplayRunCreatesNewRun:
     def test_new_run_returned_on_success(self):
-        from agents.agent_runtime import replay_run
+        from AINDY.agents.agent_runtime import replay_run
 
         plan = {
             "steps": [{"tool": "task.create", "args": {}, "risk_level": "low",
@@ -675,7 +675,7 @@ class TestReplayRunCreatesNewRun:
 class TestReplayRunSetsLineage:
     def test_replayed_from_run_id_set(self):
         """replay_run passes replayed_from_run_id through to _create_run_from_plan."""
-        from agents.agent_runtime import replay_run
+        from AINDY.agents.agent_runtime import replay_run
 
         plan = {"steps": [], "overall_risk": "low", "executive_summary": ""}
         original = MagicMock()
@@ -706,7 +706,7 @@ class TestReplayRunSetsLineage:
 class TestReplayRunTrustGateReapplied:
     def test_high_risk_plan_gets_pending_approval(self):
         """High-risk replay always requires approval regardless of prior approval."""
-        from agents.agent_runtime import replay_run
+        from AINDY.agents.agent_runtime import replay_run
 
         plan = {
             "steps": [{"tool": "genesis.message", "args": {}, "risk_level": "high",
@@ -737,7 +737,7 @@ class TestReplayRunTrustGateReapplied:
 
 class TestRunToDictReplayedFromRunId:
     def test_includes_replayed_from_run_id_when_set(self):
-        from agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import _run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -762,7 +762,7 @@ class TestRunToDictReplayedFromRunId:
         assert d["replayed_from_run_id"] == ORIGIN_RUN_ID
 
     def test_replayed_from_run_id_none_when_not_set(self):
-        from agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import _run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -820,11 +820,11 @@ class TestMigrationReplayedFromRunId:
 
 class TestAgentRunModelHasColumn:
     def test_replayed_from_run_id_attribute_exists(self):
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         assert hasattr(AgentRun, "replayed_from_run_id")
 
     def test_column_is_nullable(self):
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         col = AgentRun.__table__.columns.get("replayed_from_run_id")
         assert col is not None
         assert col.nullable is True
@@ -833,7 +833,7 @@ class TestAgentRunModelHasColumn:
 class TestSerializerUnification:
     def test_run_to_response_includes_flow_run_id(self):
         """After unification, _run_to_response() returns flow_run_id."""
-        from routes.agent_router import _run_to_response
+        from AINDY.routes.agent_router import _run_to_response
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -859,7 +859,7 @@ class TestSerializerUnification:
         assert response["flow_run_id"] == "fr-123"
 
     def test_run_to_response_includes_replayed_from_run_id(self):
-        from routes.agent_router import _run_to_response
+        from AINDY.routes.agent_router import _run_to_response
 
         run = MagicMock()
         run.id = uuid.uuid4()

@@ -1,6 +1,6 @@
 import pytest
 
-from runtime.memory import MemoryOrchestrator
+from AINDY.runtime.memory import MemoryOrchestrator
 
 
 class FakeDAO:

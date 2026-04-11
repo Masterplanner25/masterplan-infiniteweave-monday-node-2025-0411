@@ -1,4 +1,4 @@
-from domain.leadgen_service import run_ai_search, _extract_leads_from_text, _extract_leads_from_response
+from AINDY.domain.leadgen_service import run_ai_search, _extract_leads_from_text, _extract_leads_from_response
 
 
 def test_extract_leads_from_text_parses_urls():
@@ -42,7 +42,7 @@ def test_run_ai_search_falls_back_on_error(monkeypatch):
 
 
 def test_search_scoring_for_leads():
-    from analytics.search_scoring import score_lead_result
+    from AINDY.analytics.search_scoring import score_lead_result
 
     score = score_lead_result(overall_score=80)
     assert 0.0 <= score <= 1.0
@@ -50,14 +50,14 @@ def test_search_scoring_for_leads():
 
 
 def test_search_scoring_for_seo():
-    from analytics.search_scoring import score_seo_result
+    from AINDY.analytics.search_scoring import score_seo_result
 
     score = score_seo_result(readability=80, avg_keyword_density=2.0, word_count=800)
     assert 0.0 <= score <= 1.0
 
 
 def test_search_scoring_for_research():
-    from analytics.search_scoring import score_research_result
+    from AINDY.analytics.search_scoring import score_research_result
 
     score = score_research_result(summary="A" * 600, memory_context_count=2)
     assert 0.0 <= score <= 1.0

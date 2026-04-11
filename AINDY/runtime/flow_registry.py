@@ -49,7 +49,7 @@ def _validate(
     - edge source and target nodes are in the declared nodes list
     - no unreachable nodes (no inbound edge and not the start node)
     """
-    from runtime.flow_engine import NODE_REGISTRY  # lazy — avoids circular import at module load
+    from AINDY.runtime.flow_engine import NODE_REGISTRY  # lazy — avoids circular import at module load
 
     errors: list[str] = []
     node_set = set(nodes)
@@ -128,7 +128,7 @@ def register_dynamic_flow(
     Raises ValueError(list[str]) with validation errors if invalid.
     Raises ValueError(["flow already exists ..."]) if name taken and overwrite=False.
     """
-    from runtime.flow_engine import FLOW_REGISTRY, register_flow
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
 
     errors = _validate(name, nodes, edges, start, end)
     if errors:
@@ -178,7 +178,7 @@ def _persist_flow(
     db: Session,
 ) -> None:
     """Upsert the flow definition into the dynamic_flows table."""
-    from db.models.dynamic_flow import DynamicFlow
+    from AINDY.db.models.dynamic_flow import DynamicFlow
 
     definition = {
         "nodes": list(nodes),
@@ -229,7 +229,7 @@ def delete_dynamic_flow(name: str, *, db: Session | None = None) -> bool:
     Returns True if removed, False if name not found in _DYNAMIC_META.
     Static (startup-registered) flows cannot be deleted via this function.
     """
-    from runtime.flow_engine import FLOW_REGISTRY
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY
 
     with _registry_lock:
         if name not in _DYNAMIC_META:
@@ -239,7 +239,7 @@ def delete_dynamic_flow(name: str, *, db: Session | None = None) -> bool:
 
     if db is not None:
         try:
-            from db.models.dynamic_flow import DynamicFlow
+            from AINDY.db.models.dynamic_flow import DynamicFlow
             row = db.query(DynamicFlow).filter(DynamicFlow.name == name).first()
             if row:
                 row.is_active = False

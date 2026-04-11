@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from db.models.automation_log import AutomationLog
-from db.models.masterplan import MasterPlan
-from db.models.task import Task
-from domain.task_services import create_task
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.masterplan import MasterPlan
+from AINDY.db.models.task import Task
+from AINDY.domain.task_services import create_task
 
 
 _CHILD_KEYS = ("phases", "milestones", "steps", "tasks", "actions", "initiatives", "objectives")

@@ -4,20 +4,20 @@ Identity Router - v5 Phase 2
 API for viewing and managing user identity profiles.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request
-from core.execution_signal_helper import queue_system_event
+from AINDY.core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
-from domain.identity_boot_service import boot_identity_context
-from domain.identity_service import IdentityService
-from core.system_event_service import (
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
+from AINDY.domain.identity_boot_service import boot_identity_context
+from AINDY.domain.identity_service import IdentityService
+from AINDY.core.system_event_service import (
     SystemEventEmissionError,
 )
-from utils.user_ids import require_user_id
+from AINDY.utils.user_ids import require_user_id
 
 router = APIRouter(prefix="/identity", tags=["Identity Layer"])
 

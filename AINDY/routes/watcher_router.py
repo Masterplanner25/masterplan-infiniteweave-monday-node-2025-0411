@@ -18,11 +18,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.execution_gate import to_envelope
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from runtime.flow_engine import execute_intent
-from services.auth_service import verify_api_key
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import verify_api_key
 
 router = APIRouter(
     prefix="/watcher",
@@ -127,7 +126,7 @@ def _validate_signal(sig: SignalPayload, idx: int) -> None:
 
 
 def _run_flow_watcher(flow_name: str, payload: dict, db: Session, user_id: str | None):
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -167,32 +166,12 @@ def receive_signals(
     def handler(ctx):
         for idx, sig in enumerate(batch.signals):
             _validate_signal(sig, idx)
-        result = execute_intent(
-            intent_data={
-                "workflow_type": "watcher_ingest",
-                "signals": [sig.model_dump() for sig in batch.signals],
-                "user_id": user_id,
-            },
-            db=db,
-            user_id=user_id,
+        return _run_flow_watcher(
+            "watcher_signals_receive",
+            {"signals": [sig.model_dump() for sig in batch.signals]},
+            db,
+            user_id,
         )
-        if result.get("status") == "FAILED":
-            error = result.get("error", "")
-            if error.startswith("HTTP_"):
-                parts = error.split(":", 1)
-                code = int(parts[0].replace("HTTP_", ""))
-                msg = parts[1] if len(parts) > 1 else error
-                raise HTTPException(status_code=code, detail=msg)
-            raise HTTPException(status_code=500, detail=error or "watcher_ingest failed")
-        payload = result.get("result") or result.get("data") or {}
-        if not isinstance(payload, dict):
-            payload = {"result": payload}
-        payload.setdefault("execution_envelope", to_envelope(
-            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
-            status=str(result.get("status") or "UNKNOWN").upper(),
-            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
-        ))
-        return payload
 
     return execute_with_pipeline_sync(
         request=None,
@@ -216,7 +195,7 @@ def list_signals(
 ) -> Dict[str, Any]:
     """Query stored watcher signals."""
     def handler(ctx):
-        from domain.watcher_service import list_signals as svc_list_signals
+        from AINDY.domain.watcher_service import list_signals as svc_list_signals
         rows = svc_list_signals(
             db,
             session_id=session_id,

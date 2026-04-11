@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline_sync
-from domain.seo import SEOInput, MetaInput
-from analytics.calculation_services import save_calculation
-from services.auth_service import get_current_user
-from db.database import get_db
-from domain.search_service import (
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.domain.seo import SEOInput, MetaInput
+from AINDY.analytics.calculation_services import save_calculation
+from AINDY.services.auth_service import get_current_user
+from AINDY.db.database import get_db
+from AINDY.domain.search_service import (
     analyze_seo_content,
     generate_meta as generate_meta_result,
     suggest_seo_improvements,

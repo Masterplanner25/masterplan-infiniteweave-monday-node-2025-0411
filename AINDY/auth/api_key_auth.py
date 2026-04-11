@@ -51,7 +51,7 @@ from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from db.database import get_db
+from AINDY.db.database import get_db
 
 # ---------------------------------------------------------------------------
 # Scope constants
@@ -140,7 +140,7 @@ def get_authenticated_principal(
 
 
 def _resolve_jwt(token: str) -> AuthPrincipal:
-    from services.auth_service import decode_access_token
+    from AINDY.services.auth_service import decode_access_token
     payload = decode_access_token(token)
     return AuthPrincipal(
         user_id=str(payload.get("sub", "")),
@@ -151,8 +151,8 @@ def _resolve_jwt(token: str) -> AuthPrincipal:
 
 
 def _resolve_api_key(raw_key: str, db: Session) -> AuthPrincipal:
-    from platform_layer.api_key_service import hash_key, touch_last_used
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.platform_layer.api_key_service import hash_key, touch_last_used
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     key_hash = hash_key(raw_key)
     record = db.query(PlatformAPIKey).filter(

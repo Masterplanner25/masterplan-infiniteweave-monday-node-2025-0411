@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ async def list_flow_runs(
 ):
     """List flow runs for the current user."""
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("flow_runs_list", {"status": status, "workflow_type": workflow_type, "limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             error = _flow_failure(result)
@@ -79,7 +79,7 @@ async def get_flow_run(
 ):
     """Get a single flow run with full state."""
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("flow_run_get", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             error = _flow_failure(result)
@@ -97,7 +97,7 @@ async def get_flow_run_history(
 ):
     """Get the node execution history for a flow run."""
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("flow_run_history", {"run_id": run_id}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             error = _flow_failure(result)
@@ -121,8 +121,8 @@ async def resume_flow_run(
 ):
     """Resume a waiting flow run with an event."""
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
-        from core.execution_gate import require_execution_unit
+        from AINDY.runtime.flow_engine import run_flow
+        from AINDY.core.execution_gate import require_execution_unit
         # EU gate: attach to the existing FlowRun being resumed (non-fatal)
         require_execution_unit(
             db=db,
@@ -150,7 +150,7 @@ async def resume_flow_run(
         if isinstance(data, dict):
             # Use to_envelope with output=None: data IS the output, embedding
             # flow_result_to_envelope() would create a circular reference via output→data.
-            from core.execution_gate import to_envelope
+            from AINDY.core.execution_gate import to_envelope
             data.setdefault("execution_envelope", to_envelope(
                 eu_id=result.get("run_id"),
                 trace_id=result.get("trace_id"),
@@ -172,7 +172,7 @@ async def get_flow_registry(
 ):
     """List all registered flows and nodes."""
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("flow_registry_get", {}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "FAILED":
             raise HTTPException(status_code=500, detail="Registry fetch failed")

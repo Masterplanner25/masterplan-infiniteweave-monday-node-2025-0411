@@ -19,19 +19,19 @@ import logging
 import time
 import uuid
 
-from core.execution_signal_helper import queue_memory_capture
+from AINDY.core.execution_signal_helper import queue_memory_capture
 # ARM memory capture is routed through a MemoryCaptureEngine-backed helper.
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 
-from modules.deepseek.security_deepseek import SecurityValidator
-from modules.deepseek.file_processor_deepseek import FileProcessor
-from modules.deepseek.config_manager_deepseek import ConfigManager
-from db.models.arm_models import AnalysisResult, CodeGeneration
-from config import settings
-from platform_layer.external_call_service import perform_external_call
+from AINDY.modules.deepseek.security_deepseek import SecurityValidator
+from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
+from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
+from AINDY.db.models.arm_models import AnalysisResult, CodeGeneration
+from AINDY.config import settings
+from AINDY.platform_layer.external_call_service import perform_external_call
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -197,8 +197,8 @@ class DeepSeekCodeAnalyzer:
             prior_memories = []
             if user_id:
                 try:
-                    from db.dao.memory_node_dao import MemoryNodeDAO
-                    from runtime.memory import MemoryOrchestrator
+                    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+                    from AINDY.runtime.memory import MemoryOrchestrator
 
                     orchestrator = MemoryOrchestrator(MemoryNodeDAO)
                     context = orchestrator.get_context(
@@ -219,7 +219,7 @@ class DeepSeekCodeAnalyzer:
             # Step 2c — Inject identity context (non-blocking)
             identity_context = ""
             try:
-                from domain.identity_service import IdentityService
+                from AINDY.domain.identity_service import IdentityService
                 id_service = IdentityService(db=db, user_id=user_id)
                 identity_context = id_service.get_context_for_prompt()
                 id_service.observe(
@@ -305,7 +305,7 @@ class DeepSeekCodeAnalyzer:
             # Trigger Infinity score recalculation (fire-and-forget)
             try:
                 if user_id and db:
-                    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+                    from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
                     execute_infinity_orchestrator(
                         user_id=str(user_id),
@@ -318,7 +318,7 @@ class DeepSeekCodeAnalyzer:
             # Step 6a — Auto-feedback on recalled memories (fire-and-forget)
             try:
                 if prior_memories and db and user_id:
-                    from db.dao.memory_node_dao import MemoryNodeDAO
+                    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
                     feedback_dao = MemoryNodeDAO(db)
 
                     outcome = (

@@ -8,12 +8,12 @@ from typing import Any
 
 from sqlalchemy import func
 
-from db.models.agent_run import AgentRun
-from db.models.flow_run import FlowRun
-from db.models.request_metric import RequestMetric
-from db.models.system_event import SystemEvent
-from db.models.system_health_log import SystemHealthLog
-from db.models.system_state_snapshot import SystemStateSnapshot
+from AINDY.db.models.agent_run import AgentRun
+from AINDY.db.models.flow_run import FlowRun
+from AINDY.db.models.request_metric import RequestMetric
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.system_health_log import SystemHealthLog
+from AINDY.db.models.system_state_snapshot import SystemStateSnapshot
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.execution_signal_helper import queue_system_event
+from AINDY.core.execution_signal_helper import queue_system_event
 
 
 MESSAGE_TYPES = {

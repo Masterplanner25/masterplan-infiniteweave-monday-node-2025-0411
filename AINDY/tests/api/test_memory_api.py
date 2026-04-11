@@ -3,11 +3,11 @@ from __future__ import annotations
 import time
 import uuid
 
-from db.models.automation_log import AutomationLog
-from db.models.memory_metrics import MemoryMetric
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from services.auth_service import hash_password
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.memory_metrics import MemoryMetric
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.services.auth_service import hash_password
 
 
 def _unwrap(payload):
@@ -92,7 +92,7 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     assert fetched["tags"] == ["alpha", "beta"]
 
     # Insert another user's node directly to validate route scoping.
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     dao = MemoryNodeDAO(db_session)
     hidden = dao.save(
@@ -167,7 +167,7 @@ def test_memory_nodus_async_route_emits_system_events(
     auth_headers,
     monkeypatch,
 ):
-    from platform_layer.async_job_service import shutdown_async_jobs
+    from AINDY.platform_layer.async_job_service import shutdown_async_jobs
 
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")

@@ -3,17 +3,17 @@ from __future__ import annotations
 import uuid
 from unittest.mock import patch
 
-from db.models.agent_event import AgentEvent
-from db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
-from db.models.system_event import SystemEvent
-from agents.agent_runtime import approve_run, create_run, execute_run
-from agents.capability_service import (
+from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.agents.agent_runtime import approve_run, create_run, execute_run
+from AINDY.agents.capability_service import (
     check_tool_capability,
     get_auto_grantable_tools,
     mint_token,
 )
-from core.system_event_types import SystemEventTypes
-from runtime.nodus_adapter import agent_execute_step
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.runtime.nodus_adapter import agent_execute_step
 
 
 VALID_PLAN = {

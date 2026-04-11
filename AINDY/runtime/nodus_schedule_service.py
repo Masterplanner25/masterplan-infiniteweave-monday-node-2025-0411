@@ -67,7 +67,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
     """
     # ── 1. Leader election ────────────────────────────────────────────────────
     try:
-        from domain.task_services import is_background_leader
+        from AINDY.domain.task_services import is_background_leader
         if not is_background_leader():
             logger.debug("[NodusSchedule] Not leader — skipping job %s", job_id)
             return
@@ -75,9 +75,9 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         logger.warning("[NodusSchedule] Leader check failed — skipping: %s", _le_exc)
         return
 
-    from db.database import SessionLocal
-    from db.models.nodus_scheduled_job import NodusScheduledJob
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     log: Optional[AutomationLog] = None
@@ -115,8 +115,8 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         db.commit()
 
         # ── 4. Execute via the shared Nodus orchestration helper ─────────────
-        from runtime.nodus_execution_service import format_nodus_flow_result
-        from runtime.nodus_execution_service import run_nodus_script_via_flow
+        from AINDY.runtime.nodus_execution_service import format_nodus_flow_result
+        from AINDY.runtime.nodus_execution_service import run_nodus_script_via_flow
 
         user_id_str = str(job.user_id) if job.user_id else ""
         result = run_nodus_script_via_flow(
@@ -239,8 +239,8 @@ def create_nodus_scheduled_job(
     # Validate cron expression before touching DB
     _trigger = _parse_cron(cron_expression)
 
-    from db.models.nodus_scheduled_job import NodusScheduledJob
-    from utils.uuid_utils import normalize_uuid
+    from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
+    from AINDY.utils.uuid_utils import normalize_uuid
 
     uid = normalize_uuid(user_id) if user_id else None
 
@@ -278,8 +278,8 @@ def list_nodus_scheduled_jobs(*, db: Session, user_id: str) -> list[dict]:
     """
     Return all active scheduled Nodus jobs owned by ``user_id``.
     """
-    from db.models.nodus_scheduled_job import NodusScheduledJob
-    from utils.uuid_utils import normalize_uuid
+    from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
+    from AINDY.utils.uuid_utils import normalize_uuid
 
     uid = normalize_uuid(user_id)
     rows = (
@@ -307,8 +307,8 @@ def delete_nodus_scheduled_job(
     Returns True on success, False if the job was not found or not owned by
     ``user_id``.
     """
-    from db.models.nodus_scheduled_job import NodusScheduledJob
-    from utils.uuid_utils import normalize_uuid
+    from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
+    from AINDY.utils.uuid_utils import normalize_uuid
 
     uid = normalize_uuid(user_id)
 
@@ -348,8 +348,8 @@ def restore_nodus_scheduled_jobs() -> int:
 
     Returns the number of jobs successfully restored.
     """
-    from db.database import SessionLocal
-    from db.models.nodus_scheduled_job import NodusScheduledJob
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
 
     db = SessionLocal()
     restored = 0
@@ -394,7 +394,7 @@ def _parse_cron(cron_expression: str):
     available or the expression is invalid.
     """
     try:
-        from apscheduler.triggers.cron import CronTrigger
+        from AINDY.apscheduler.triggers.cron import CronTrigger
     except ImportError as exc:
         raise ValueError("APScheduler is not installed — cannot schedule Nodus jobs") from exc
 
@@ -418,7 +418,7 @@ def _next_run(trigger) -> Optional[str]:
 
 def _register_with_scheduler(job_row: Any, trigger: Any) -> None:
     """Add/replace the job in the live APScheduler instance."""
-    from platform_layer.scheduler_service import get_scheduler
+    from AINDY.platform_layer.scheduler_service import get_scheduler
 
     scheduler = get_scheduler()
     job_id_str = str(job_row.id)
@@ -440,7 +440,7 @@ def _register_with_scheduler(job_row: Any, trigger: Any) -> None:
 def _remove_from_scheduler(job_id: str) -> None:
     """Remove a job from APScheduler (best-effort — never raises)."""
     try:
-        from platform_layer.scheduler_service import get_scheduler
+        from AINDY.platform_layer.scheduler_service import get_scheduler
         scheduler = get_scheduler()
         aps_id = f"{_JOB_ID_PREFIX}{job_id}"
         try:

@@ -105,7 +105,7 @@ def validate_tenant_path(path: str, tenant_id: str) -> None:
     expected_prefix = f"{MAS_ROOT}/{tenant_id}/"
     exact = f"{MAS_ROOT}/{tenant_id}"
     if not (path.startswith(expected_prefix) or path == exact):
-        from kernel.tenant_context import TENANT_VIOLATION
+        from AINDY.kernel.tenant_context import TENANT_VIOLATION
         raise PermissionError(
             f"{TENANT_VIOLATION}: path {path!r} is not under tenant "
             f"namespace {expected_prefix!r}"

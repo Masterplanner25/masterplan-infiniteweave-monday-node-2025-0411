@@ -7,8 +7,8 @@ from email.message import EmailMessage
 from typing import Any
 from urllib import request as urllib_request
 
-from db.mongo_setup import get_mongo_client
-from platform_layer.external_call_service import perform_external_call
+from AINDY.db.mongo_setup import get_mongo_client
+from AINDY.platform_layer.external_call_service import perform_external_call
 
 
 SUPPORTED_AUTOMATION_TYPES = {
@@ -252,7 +252,7 @@ def get_automation_log(db, log_id: str, user_id: str) -> Any | None:
     the replay endpoint validates the execution_token instead).
     Returns None when no row matches log_id.
     """
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.models.automation_log import AutomationLog
 
     return db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
 

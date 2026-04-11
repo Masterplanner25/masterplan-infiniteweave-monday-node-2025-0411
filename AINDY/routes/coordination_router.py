@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from agents.agent_coordinator import coordination_graph
-from agents.agent_coordinator import get_agent_status
-from agents.agent_coordinator import list_agents
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.agents.agent_coordinator import coordination_graph
+from AINDY.agents.agent_coordinator import get_agent_status
+from AINDY.agents.agent_coordinator import list_agents
+from AINDY.services.auth_service import get_current_user
 
 
 router = APIRouter(prefix="/coordination", tags=["Coordination"])

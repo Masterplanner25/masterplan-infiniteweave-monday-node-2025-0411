@@ -1,13 +1,11 @@
-import os
 import json
 import logging
-from core.execution_signal_helper import queue_memory_capture
+from AINDY.core.execution_signal_helper import queue_memory_capture
 # Genesis memory capture is routed through a MemoryCaptureEngine-backed helper.
-from openai import OpenAI
-from platform_layer.external_call_service import perform_external_call
-from core.observability_events import emit_observability_event
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.utils.openai_client import get_openai_client
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 logger = logging.getLogger(__name__)
 
 MODEL = "gpt-4o-mini"  # efficient + structured
@@ -48,8 +46,8 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     prior_context = ""
     if user_id and db:
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.runtime.memory import MemoryOrchestrator
 
             orchestrator = MemoryOrchestrator(MemoryNodeDAO)
             context = orchestrator.get_context(
@@ -75,7 +73,7 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     arm_context = ""
     try:
         if user_id and db:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
             fed_dao = MemoryNodeDAO(db)
             arm_memories = fed_dao.recall_from_agent(
                 agent_namespace="arm",
@@ -106,7 +104,7 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     identity_context = ""
     try:
         if user_id and db:
-            from domain.identity_service import IdentityService
+            from AINDY.domain.identity_service import IdentityService
             id_service = IdentityService(db=db, user_id=user_id)
             identity_context = id_service.get_context_for_prompt()
     except Exception as exc:
@@ -128,7 +126,7 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
         model=MODEL,
         method="openai.chat",
         extra={"purpose": "genesis_message"},
-        operation=lambda: client.chat.completions.create(
+        operation=lambda: get_openai_client().chat.completions.create(
             model=MODEL,
             messages=[
                 {"role": "system", "content": system_content},
@@ -237,7 +235,7 @@ def call_genesis_synthesis_llm(
     arm_insights = ""
     try:
         if user_id and db:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
             fed_dao = MemoryNodeDAO(db)
             arm_memories = fed_dao.recall_from_agent(
                 agent_namespace="arm",
@@ -273,7 +271,7 @@ def call_genesis_synthesis_llm(
         model="gpt-4o",
         method="openai.chat",
         extra={"purpose": "genesis_synthesis"},
-        operation=lambda: client.chat.completions.create(
+        operation=lambda: get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -368,7 +366,7 @@ def validate_draft_integrity(draft: dict, user_id: str = None, db=None) -> dict:
                 model="gpt-4o",
                 method="openai.chat",
                 extra={"purpose": "genesis_draft_audit", "attempt": attempt + 1},
-                operation=lambda: client.chat.completions.create(
+                operation=lambda: get_openai_client().chat.completions.create(
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": AUDIT_SYSTEM_PROMPT},

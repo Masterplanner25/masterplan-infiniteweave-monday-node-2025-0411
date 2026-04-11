@@ -7,7 +7,7 @@ import uuid
 
 
 def test_masterplan_anchor_node_invalid_date():
-    from runtime.flow_definitions_extended import masterplan_anchor_node
+    from AINDY.runtime.flow_definitions_extended import masterplan_anchor_node
 
     query = MagicMock()
     query.filter.return_value = query
@@ -31,7 +31,7 @@ def test_masterplan_anchor_node_invalid_date():
 
 
 def test_masterplan_projection_node_eta_failure(monkeypatch):
-    from runtime.flow_definitions_extended import masterplan_projection_node
+    from AINDY.runtime.flow_definitions_extended import masterplan_projection_node
 
     query = MagicMock()
     query.filter.return_value = query
@@ -124,12 +124,12 @@ class _ListQuery:
 
 
 def test_observability_dashboard_node_success():
-    from db.models.agent_event import AgentEvent
-    from db.models.flow_run import FlowRun
-    from db.models.request_metric import RequestMetric
-    from db.models.system_event import SystemEvent
-    from db.models.system_health_log import SystemHealthLog
-    from runtime.flow_definitions_extended import observability_dashboard_node
+    from AINDY.db.models.agent_event import AgentEvent
+    from AINDY.db.models.flow_run import FlowRun
+    from AINDY.db.models.request_metric import RequestMetric
+    from AINDY.db.models.system_event import SystemEvent
+    from AINDY.db.models.system_health_log import SystemHealthLog
+    from AINDY.runtime.flow_definitions_extended import observability_dashboard_node
 
     user_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
@@ -220,7 +220,7 @@ def test_observability_dashboard_node_success():
 
 
 def test_masterplan_activate_node_success(monkeypatch):
-    from runtime.flow_definitions_extended import masterplan_activate_node
+    from AINDY.runtime.flow_definitions_extended import masterplan_activate_node
 
     plan = SimpleNamespace(id=7, user_id="user-1", is_active=False, status="draft", activated_at=None)
 
@@ -263,7 +263,7 @@ class _LeaseQuery:
 
 
 def test_observability_scheduler_status_node_success(monkeypatch):
-    from runtime.flow_definitions_extended import observability_scheduler_status_node
+    from AINDY.runtime.flow_definitions_extended import observability_scheduler_status_node
 
     lease = SimpleNamespace(
         owner_id="worker-1",
@@ -290,7 +290,7 @@ def test_observability_scheduler_status_node_success(monkeypatch):
 
 
 def test_observability_rippletrace_node_empty_trace():
-    from runtime.flow_definitions_extended import observability_rippletrace_node
+    from AINDY.runtime.flow_definitions_extended import observability_rippletrace_node
 
     query = MagicMock()
     query.filter.return_value = query
@@ -311,7 +311,7 @@ def test_observability_rippletrace_node_empty_trace():
 
 
 def test_register_extended_flows_registers_single_and_multi_node_flows(monkeypatch):
-    import runtime.flow_definitions_extended as flow_defs
+    import AINDY.runtime.flow_definitions_extended as flow_defs
 
     flow_registry = {}
     registered = {}
@@ -336,11 +336,11 @@ def test_register_extended_flows_registers_single_and_multi_node_flows(monkeypat
 
 
 def test_misc_extended_flow_nodes_smoke(monkeypatch):
-    import analytics.arm_metrics_service as arm_metrics_module
-    import domain.goal_service as goal_service
-    import domain.search_service as search_service
-    import modules.deepseek.config_manager_deepseek as config_module
-    from runtime.flow_definitions_extended import (
+    import AINDY.analytics.arm_metrics_service as arm_metrics_module
+    import AINDY.domain.goal_service as goal_service
+    import AINDY.domain.search_service as search_service
+    import AINDY.modules.deepseek.config_manager_deepseek as config_module
+    from AINDY.runtime.flow_definitions_extended import (
         arm_config_get_node,
         arm_config_suggest_node,
         arm_config_update_node,
@@ -406,13 +406,13 @@ def test_misc_extended_flow_nodes_smoke(monkeypatch):
 
 
 def test_query_backed_extended_flow_nodes_smoke(monkeypatch):
-    import domain.task_services as task_services
-    from db.models.arm_models import AnalysisResult, CodeGeneration
-    from db.models.infinity_loop import UserFeedback
-    from db.models.leadgen_model import LeadGenResult
-    from db.models.task import Task
-    from db.models.user_score import ScoreHistory
-    from runtime.flow_definitions_extended import (
+    import AINDY.domain.task_services as task_services
+    from AINDY.db.models.arm_models import AnalysisResult, CodeGeneration
+    from AINDY.db.models.infinity_loop import UserFeedback
+    from AINDY.db.models.leadgen_model import LeadGenResult
+    from AINDY.db.models.task import Task
+    from AINDY.db.models.user_score import ScoreHistory
+    from AINDY.runtime.flow_definitions_extended import (
         arm_logs_node,
         leadgen_list_node,
         score_feedback_list_node,
@@ -517,13 +517,13 @@ def test_query_backed_extended_flow_nodes_smoke(monkeypatch):
 
 
 def test_score_get_health_and_dashboard_nodes(monkeypatch):
-    import domain.infinity_loop as infinity_loop
-    import domain.infinity_orchestrator as infinity_orchestrator
-    from db.models import PingDB
-    from db.models.author_model import AuthorDB
-    from db.models.system_health_log import SystemHealthLog
-    from db.models.user_score import UserScore
-    from runtime.flow_definitions_extended import (
+    import AINDY.domain.infinity_loop as infinity_loop
+    import AINDY.domain.infinity_orchestrator as infinity_orchestrator
+    from AINDY.db.models import PingDB
+    from AINDY.db.models.author_model import AuthorDB
+    from AINDY.db.models.system_health_log import SystemHealthLog
+    from AINDY.db.models.user_score import UserScore
+    from AINDY.runtime.flow_definitions_extended import (
         dashboard_overview_node,
         health_dashboard_list_node,
         score_get_node,
@@ -609,10 +609,10 @@ def test_score_get_health_and_dashboard_nodes(monkeypatch):
 
 
 def test_analytics_and_watcher_nodes_smoke():
-    from db.models import MasterPlan
-    from db.models.metrics_models import CanonicalMetricDB
-    from db.models.watcher_signal import WatcherSignal
-    from runtime.flow_definitions_extended import (
+    from AINDY.db.models import MasterPlan
+    from AINDY.db.models.metrics_models import CanonicalMetricDB
+    from AINDY.db.models.watcher_signal import WatcherSignal
+    from AINDY.runtime.flow_definitions_extended import (
         analytics_masterplan_get_node,
         analytics_masterplan_summary_node,
         watcher_signals_list_node,
@@ -683,9 +683,9 @@ def test_analytics_and_watcher_nodes_smoke():
 
 
 def test_flow_run_nodes_smoke(monkeypatch):
-    import runtime.flow_engine as flow_engine
-    from db.models.flow_run import FlowHistory, FlowRun
-    from runtime.flow_definitions_extended import (
+    import AINDY.runtime.flow_engine as flow_engine
+    from AINDY.db.models.flow_run import FlowHistory, FlowRun
+    from AINDY.runtime.flow_definitions_extended import (
         flow_registry_get_node,
         flow_run_get_node,
         flow_run_history_node,

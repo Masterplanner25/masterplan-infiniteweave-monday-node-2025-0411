@@ -116,7 +116,7 @@ class NodusMemoryBuiltins:
 
     def _dao(self):
         """Lazy DAO instantiation — keeps module imports DB/settings-free."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         return MemoryNodeDAO(self._db)
 
     @staticmethod
@@ -402,7 +402,7 @@ class NodusEventBuiltins:
                 )
         else:
             try:
-                from core.execution_signal_helper import queue_system_event
+                from AINDY.core.execution_signal_helper import queue_system_event
                 queue_system_event(
                     db=self._db,
                     event_type=event_type,

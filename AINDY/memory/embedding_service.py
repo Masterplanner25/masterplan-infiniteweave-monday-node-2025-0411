@@ -14,8 +14,8 @@ import threading
 
 from openai import OpenAI
 
-from config import settings
-from platform_layer.external_call_service import perform_external_call
+from AINDY.config import settings
+from AINDY.platform_layer.external_call_service import perform_external_call
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536

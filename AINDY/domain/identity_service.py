@@ -36,7 +36,7 @@ class IdentityService:
         Get the user's identity profile.
         Creates a blank profile if none exists.
         """
-        from db.models.user_identity import UserIdentity
+        from AINDY.db.models.user_identity import UserIdentity
 
         identity = (
             self.db.query(UserIdentity)
@@ -116,7 +116,7 @@ class IdentityService:
         Called when user directly states their preferences.
         All changes are logged in evolution_log.
         """
-        from db.models.user_identity import (
+        from AINDY.db.models.user_identity import (
             VALID_DETAIL_PREFERENCES,
             VALID_LEARNING_STYLES,
             VALID_RISK_TOLERANCE,

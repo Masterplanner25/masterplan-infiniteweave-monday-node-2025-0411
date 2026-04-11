@@ -5,8 +5,8 @@ from typing import Any
 
 from sqlalchemy import case, func
 
-from db.models.memory_metrics import MemoryMetric
-from utils.uuid_utils import normalize_uuid
+from AINDY.db.models.memory_metrics import MemoryMetric
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import platform_layer.platform_loader as loader
+import AINDY.platform_layer.platform_loader as loader
 
 
 class _FakeQuery:
@@ -34,9 +34,9 @@ class _FakeSession:
 
 
 def test_load_active_dynamic_nodes_only(monkeypatch):
-    import db.models.dynamic_node as dynamic_node_module
-    import runtime.flow_engine as flow_engine
-    import platform_layer.node_registry as node_registry
+    import AINDY.db.models.dynamic_node as dynamic_node_module
+    import AINDY.runtime.flow_engine as flow_engine
+    import AINDY.platform_layer.node_registry as node_registry
 
     class FakeDynamicNode:
         is_active = object()
@@ -106,9 +106,9 @@ def test_load_active_dynamic_nodes_only(monkeypatch):
 
 
 def test_load_dynamic_flows_only_active(monkeypatch):
-    import db.models.dynamic_flow as dynamic_flow_module
-    import runtime.flow_engine as flow_engine
-    import runtime.flow_registry as flow_registry
+    import AINDY.db.models.dynamic_flow as dynamic_flow_module
+    import AINDY.runtime.flow_engine as flow_engine
+    import AINDY.runtime.flow_registry as flow_registry
 
     class FakeDynamicFlow:
         is_active = object()
@@ -165,8 +165,8 @@ def test_load_dynamic_flows_only_active(monkeypatch):
 
 
 def test_load_webhooks_only_active(monkeypatch):
-    import db.models.webhook_subscription as webhook_model_module
-    import platform_layer.event_service as event_service
+    import AINDY.db.models.webhook_subscription as webhook_model_module
+    import AINDY.platform_layer.event_service as event_service
 
     class FakeWebhookSubscription:
         is_active = object()
@@ -247,9 +247,9 @@ def test_loader_handles_db_failure_gracefully(caplog):
 
 
 def test_loader_skips_bad_row_and_continues(monkeypatch, caplog):
-    import db.models.dynamic_node as dynamic_node_module
-    import runtime.flow_engine as flow_engine
-    import platform_layer.node_registry as node_registry
+    import AINDY.db.models.dynamic_node as dynamic_node_module
+    import AINDY.runtime.flow_engine as flow_engine
+    import AINDY.platform_layer.node_registry as node_registry
 
     class FakeDynamicNode:
         is_active = object()

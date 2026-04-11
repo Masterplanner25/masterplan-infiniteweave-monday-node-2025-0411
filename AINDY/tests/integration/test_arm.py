@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 class TestSecurityValidator:
 
     def test_blocks_env_file(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -28,7 +28,7 @@ class TestSecurityValidator:
 
     def test_blocks_dotenv_path_segment(self):
         """Any path containing /.env/ segment is blocked."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -36,7 +36,7 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 403
 
     def test_blocks_venv_directory(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -45,7 +45,7 @@ class TestSecurityValidator:
 
     def test_blocks_unsupported_extension(self, tmp_path):
         """Files with unsupported extensions are rejected with 422."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         exe_file = tmp_path / "binary.exe"
         exe_file.write_bytes(b"\x00" * 100)
@@ -55,7 +55,7 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 422
 
     def test_blocks_dll_extension(self, tmp_path):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         dll_file = tmp_path / "module.dll"
         dll_file.write_bytes(b"\x00" * 50)
@@ -65,7 +65,7 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 422
 
     def test_missing_file_returns_404(self, tmp_path):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -74,7 +74,7 @@ class TestSecurityValidator:
 
     def test_blocks_openai_key_in_content(self):
         """OpenAI sk- key pattern must be caught."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         fake_key = "sk-" + "A" * 48
@@ -84,7 +84,7 @@ class TestSecurityValidator:
 
     def test_blocks_generic_api_key_assignment(self):
         """Generic api_key = '...' pattern is blocked."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -92,7 +92,7 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 403
 
     def test_blocks_private_key_pem(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -100,7 +100,7 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 403
 
     def test_blocks_aws_access_key(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException) as exc_info:
@@ -109,7 +109,7 @@ class TestSecurityValidator:
 
     def test_allows_clean_python_file(self, tmp_path):
         """Clean Python files pass all validation layers."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         py_file = tmp_path / "clean.py"
         py_file.write_text("def hello():\n    return 'world'\n")
         v = SecurityValidator()
@@ -117,7 +117,7 @@ class TestSecurityValidator:
         assert "hello" in content
 
     def test_allows_clean_js_file(self, tmp_path):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         js_file = tmp_path / "app.js"
         js_file.write_text("function greet() { return 'hello'; }\n")
         v = SecurityValidator()
@@ -126,7 +126,7 @@ class TestSecurityValidator:
 
     def test_blocks_oversized_file(self, tmp_path):
         """Files exceeding the size limit are rejected with 422."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         large_file = tmp_path / "huge.py"
         large_file.write_bytes(b"x" * 200_000)   # 200 KB
@@ -137,7 +137,7 @@ class TestSecurityValidator:
 
     def test_size_limit_respected_exactly(self, tmp_path):
         """Content exactly at the limit passes; one byte over fails."""
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         limit = 1_000
         v = SecurityValidator({"max_file_size_bytes": limit})
@@ -154,14 +154,14 @@ class TestSecurityValidator:
         assert exc_info.value.status_code == 422
 
     def test_validate_code_input_rejects_key(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         from fastapi import HTTPException
         v = SecurityValidator()
         with pytest.raises(HTTPException):
             v.validate_code_input('password = "mysupersecretpassword123"')
 
     def test_validate_code_input_accepts_clean_code(self):
-        from modules.deepseek.security_deepseek import SecurityValidator
+        from AINDY.modules.deepseek.security_deepseek import SecurityValidator
         v = SecurityValidator()
         result = v.validate_code_input("def add(a, b):\n    return a + b\n")
         assert result == "def add(a, b):\n    return a + b\n"
@@ -174,25 +174,25 @@ class TestSecurityValidator:
 class TestConfigManager:
 
     def test_loads_defaults_when_file_missing(self):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         assert cm.get("model") is not None
         assert cm.get("temperature") is not None
 
     def test_default_model_is_gpt4o(self):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         assert cm.get("model") == "gpt-4o"
 
     def test_task_priority_formula(self):
         """TP = (complexity × urgency) / resource_cost."""
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         tp = cm.calculate_task_priority(complexity=5, urgency=5, resource_cost=5)
         assert abs(tp - 5.0) < 0.001
 
     def test_task_priority_asymmetric(self):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         # (10 × 2) / 4 = 5.0
         tp = cm.calculate_task_priority(complexity=10, urgency=2, resource_cost=4)
@@ -200,14 +200,14 @@ class TestConfigManager:
 
     def test_task_priority_zero_resource_cost_no_crash(self):
         """Division by zero is guarded — result must be > 0."""
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         tp = cm.calculate_task_priority(complexity=5, urgency=5, resource_cost=0)
         assert tp > 0
 
     def test_task_priority_uses_defaults_when_none(self):
         """Passing None uses the configured defaults."""
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent_config_path.json")
         tp_explicit = cm.calculate_task_priority(
             complexity=cm.get("task_complexity_default"),
@@ -218,7 +218,7 @@ class TestConfigManager:
         assert abs(tp_explicit - tp_implicit) < 0.001
 
     def test_update_persists_to_file(self, tmp_path):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cfg_file = tmp_path / "arm_config.json"
         cm = ConfigManager(config_path=str(cfg_file))
         cm.update({"temperature": 0.7})
@@ -227,7 +227,7 @@ class TestConfigManager:
         assert cm2.get("temperature") == 0.7
 
     def test_update_returns_full_config(self, tmp_path):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cfg_file = tmp_path / "arm_config.json"
         cm = ConfigManager(config_path=str(cfg_file))
         result = cm.update({"temperature": 0.5})
@@ -237,14 +237,14 @@ class TestConfigManager:
 
     def test_update_ignores_unknown_keys(self, tmp_path):
         """Unknown keys are silently filtered — no injection possible."""
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cfg_file = tmp_path / "arm_config.json"
         cm = ConfigManager(config_path=str(cfg_file))
         cm.update({"malicious_injection": "evil_payload"})
         assert cm.get("malicious_injection") is None
 
     def test_get_all_returns_copy(self):
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         cm = ConfigManager(config_path="nonexistent.json")
         cfg1 = cm.get_all()
         cfg2 = cm.get_all()
@@ -261,7 +261,7 @@ class TestConfigManager:
 class TestFileProcessor:
 
     def test_no_chunking_for_small_content(self):
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({"max_chunk_tokens": 4000})
         content = "def hello():\n    return 'world'\n"
         chunks = fp.chunk_content(content)
@@ -269,7 +269,7 @@ class TestFileProcessor:
         assert chunks[0] == content
 
     def test_chunks_large_content_into_multiple(self):
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         # 10 tokens * 4 chars/token = 40 chars per chunk
         fp = FileProcessor({"max_chunk_tokens": 10})
         content = "\n".join([f"line_{i:03d}" for i in range(50)])
@@ -278,7 +278,7 @@ class TestFileProcessor:
 
     def test_chunks_preserve_all_content(self):
         """Re-joining chunks should reproduce the original content."""
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({"max_chunk_tokens": 10})
         lines = [f"line_{i}" for i in range(30)]
         content = "\n".join(lines)
@@ -288,7 +288,7 @@ class TestFileProcessor:
         assert rejoined == content
 
     def test_session_id_is_valid_uuid(self):
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({})
         session_id = fp.create_session_id()
         # uuid.UUID() raises ValueError if not valid
@@ -296,14 +296,14 @@ class TestFileProcessor:
         assert str(parsed) == session_id
 
     def test_session_ids_are_unique(self):
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({})
         ids = {fp.create_session_id() for _ in range(20)}
         assert len(ids) == 20
 
     def test_session_log_structure(self):
         import time
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({})
         start = time.time()
         log = fp.create_session_log(
@@ -324,7 +324,7 @@ class TestFileProcessor:
 
     def test_session_log_includes_error(self):
         import time
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         fp = FileProcessor({})
         log = fp.create_session_log(
             session_id="xyz",
@@ -341,7 +341,7 @@ class TestFileProcessor:
 
     def test_read_file_returns_content(self, tmp_path):
         from pathlib import Path
-        from modules.deepseek.file_processor_deepseek import FileProcessor
+        from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
         f = tmp_path / "sample.py"
         f.write_text("print('hello')\n", encoding="utf-8")
         fp = FileProcessor({})
@@ -441,7 +441,7 @@ class TestARMRoutes:
         )
 
         # Reset singleton so the mock is picked up
-        import routes.arm_router as arm_mod
+        import AINDY.routes.arm_router as arm_mod
         arm_mod._analyzer = None
 
         response = client.post(
@@ -480,7 +480,7 @@ class TestARMRoutes:
             ),
         )
 
-        import routes.arm_router as arm_mod
+        import AINDY.routes.arm_router as arm_mod
         arm_mod._analyzer = None
 
         response = client.post(
@@ -502,7 +502,7 @@ class TestARMRoutes:
         exe_file = tmp_path / "binary.exe"
         exe_file.write_bytes(b"\x00" * 100)
 
-        import routes.arm_router as arm_mod
+        import AINDY.routes.arm_router as arm_mod
         arm_mod._analyzer = None
 
         response = client.post(
@@ -563,7 +563,7 @@ class TestARMMetricsService:
 
     def test_empty_metrics_structure(self):
         """Empty metrics returns correct structure."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         service = ARMMetricsService.__new__(ARMMetricsService)
         result = service._empty_metrics()
         assert "execution_speed" in result
@@ -574,7 +574,7 @@ class TestARMMetricsService:
 
     def test_decision_efficiency_perfect(self):
         """100% success rate = 100% efficiency."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -594,7 +594,7 @@ class TestARMMetricsService:
 
     def test_decision_efficiency_partial(self):
         """3/5 success = 60% efficiency."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -606,7 +606,7 @@ class TestARMMetricsService:
 
     def test_execution_speed_calculation(self):
         """tokens/seconds = execution speed."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -625,7 +625,7 @@ class TestARMMetricsService:
 
     def test_lost_potential_no_failures(self):
         """No failures = 0% waste."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -644,7 +644,7 @@ class TestARMMetricsService:
 
     def test_lost_potential_with_failures(self):
         """Failed sessions contribute to waste %."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -668,7 +668,7 @@ class TestARMMetricsService:
 
     def test_ai_productivity_boost_ratio(self):
         """Output/input token ratio calculation."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -682,7 +682,7 @@ class TestARMMetricsService:
 
     def test_learning_efficiency_insufficient_data(self):
         """Less than 4 sessions = insufficient data."""
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         from unittest.mock import MagicMock
         service = ARMMetricsService.__new__(ARMMetricsService)
 
@@ -702,7 +702,7 @@ class TestARMConfigSuggestions:
 
     def test_no_suggestions_when_metrics_healthy(self):
         """Healthy metrics = no config changes recommended."""
-        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
+        from AINDY.analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         healthy_metrics = {
             "decision_efficiency": {"score": 95.0},
@@ -727,7 +727,7 @@ class TestARMConfigSuggestions:
 
     def test_suggests_lower_temperature_on_high_failure(self):
         """Critical efficiency triggers temperature reduction."""
-        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
+        from AINDY.analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         bad_metrics = {
             "decision_efficiency": {"score": 50.0},  # critical
@@ -756,7 +756,7 @@ class TestARMConfigSuggestions:
 
     def test_low_risk_suggestions_in_auto_apply(self):
         """Low-risk suggestions appear in auto_apply_safe."""
-        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
+        from AINDY.analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         metrics = {
             "decision_efficiency": {"score": 70.0},  # warning
@@ -781,7 +781,7 @@ class TestARMConfigSuggestions:
 
     def test_combined_config_contains_all_changes(self):
         """combined_suggested_config merges all suggestions."""
-        from analytics.arm_metrics_service import ARMConfigSuggestionEngine
+        from AINDY.analytics.arm_metrics_service import ARMConfigSuggestionEngine
 
         bad_metrics = {
             "decision_efficiency": {"score": 50.0},

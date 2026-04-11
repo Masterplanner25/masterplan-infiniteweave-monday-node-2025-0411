@@ -12,12 +12,12 @@ from datetime import datetime
 class TestMemoryNodeHistory:
 
     def test_history_model_importable(self):
-        from db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
         assert MemoryNodeHistory.__tablename__ == "memory_node_history"
 
     def test_history_table_in_db(self):
         from sqlalchemy import inspect
-        from db.database import engine
+        from AINDY.db.database import engine
         try:
             insp = inspect(engine)
             assert "memory_node_history" in insp.get_table_names(), \
@@ -26,7 +26,7 @@ class TestMemoryNodeHistory:
             pytest.skip("DB not reachable from test context")
 
     def test_history_required_columns(self):
-        from db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeHistory)
         cols = [c.key for c in mapper.columns]
@@ -39,19 +39,19 @@ class TestMemoryNodeHistory:
             assert col in cols, f"memory_node_history missing: {col}"
 
     def test_update_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "update")
         assert callable(MemoryNodeDAO.update)
 
     def test_get_history_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "get_history")
 
     def test_update_no_change_returns_node(self, db_session, test_user):
         """Update with identical values creates no history."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from db.models.memory_node_history import MemoryNodeHistory
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.memory.memory_persistence import MemoryNodeModel
 
         node = MemoryNodeModel(
             content="original content",
@@ -78,9 +78,9 @@ class TestMemoryNodeHistory:
 
     def test_update_creates_history_on_change(self, db_session, test_user, mocker):
         """Update with new content creates history entry."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from db.models.memory_node_history import MemoryNodeHistory
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.memory.memory_persistence import MemoryNodeModel
 
         mocker.patch(
             "memory.embedding_service.generate_embedding",
@@ -131,13 +131,13 @@ class TestMemoryNodeHistory:
 class TestDFSTraversal:
 
     def test_traverse_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "traverse")
         assert callable(MemoryNodeDAO.traverse)
 
     def test_traverse_returns_correct_structure(self):
         """traverse() returns expected dict structure."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -155,8 +155,8 @@ class TestDFSTraversal:
 
     def test_traverse_cycle_prevention(self):
         """DFS must not loop on A -> B -> A cycles."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from memory.memory_persistence import MemoryLinkModel
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.memory.memory_persistence import MemoryLinkModel
         import uuid as _uuid
 
         mock_db = MagicMock()
@@ -245,7 +245,7 @@ class TestDFSTraversal:
 
     def test_traverse_max_depth_respected(self):
         """traverse() must not exceed max_depth."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -285,12 +285,12 @@ class TestDFSTraversal:
 class TestNodeExpansion:
 
     def test_expand_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "expand")
         assert callable(MemoryNodeDAO.expand)
 
     def test_expand_returns_correct_structure(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -395,7 +395,7 @@ class TestChainNarrative:
     """Tests for the chain of thought narrative."""
 
     def test_narrative_generated_for_empty_chain(self, mock_db):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_node = {"content": "Starting memory"}
 
@@ -406,7 +406,7 @@ class TestChainNarrative:
         assert "No connected memories" in narrative
 
     def test_narrative_includes_link_descriptions(self, mock_db):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mock_node = {"content": "Starting memory content"}
 

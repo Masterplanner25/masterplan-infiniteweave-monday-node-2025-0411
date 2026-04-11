@@ -1,4 +1,4 @@
-from domain.infinity_loop import _build_expectation, _derive_actual_outcome
+from AINDY.domain.infinity_loop import _build_expectation, _derive_actual_outcome
 
 
 def test_build_expectation_sets_expected_outcome_and_score():

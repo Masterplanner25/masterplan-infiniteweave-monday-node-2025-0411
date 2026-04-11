@@ -13,7 +13,7 @@ def _count_flow_runs(session_factory):
 
 
 def _run_scenario(db_session_factory, testing_session_factory, label=""):
-    from db.models.flow_run import FlowRun
+    from AINDY.db.models.flow_run import FlowRun
 
     sf = db_session_factory()
     fr_id = str(uuid.uuid4())

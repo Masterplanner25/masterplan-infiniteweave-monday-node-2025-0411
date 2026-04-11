@@ -4,35 +4,34 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 import logging
-from openai import OpenAI
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
 # ORM models (database layer)
-from db.models.freelance import (
+from AINDY.db.models.freelance import (
     FreelanceOrder,
     ClientFeedback,
     RevenueMetrics,
 )
 
 # Pydantic schemas (validation layer)
-from schemas.freelance import (
+from AINDY.schemas.freelance import (
     FreelanceOrderCreate,
     FeedbackCreate,
 )
 
-from domain.automation_execution_service import execute_automation_action
-from core.execution_signal_helper import queue_memory_capture, queue_system_event
-from platform_layer.external_call_service import perform_external_call
-from utils.trace_context import is_pipeline_active
-from memory.memory_scoring_service import get_relevant_memories
-from core.execution_dispatcher import dispatch_autonomous_job
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
-from domain.task_services import queue_task_automation
+from AINDY.domain.automation_execution_service import execute_automation_action
+from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.utils.trace_context import is_pipeline_active
+from AINDY.utils.openai_client import get_openai_client
+from AINDY.memory.memory_scoring_service import get_relevant_memories
+from AINDY.core.execution_dispatcher import dispatch_autonomous_job
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.domain.task_services import queue_task_automation
 
 logger = logging.getLogger(__name__)
-_client = OpenAI()
 
 # -----------------------------------------------------
 # Core Freelance Order Logic
@@ -111,7 +110,7 @@ def generate_deliverable(db: Session, order_id: int, user_id: str | None = None)
         model="gpt-4o-mini",
         method="openai.chat",
         extra={"purpose": "freelance_delivery_generation", "order_id": order.id},
-        operation=lambda: _client.chat.completions.create(
+        operation=lambda: get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
@@ -543,7 +542,7 @@ def _update_linked_task_feedback(db: Session, order: FreelanceOrder, *, outcome:
     try:
         if not order.task_id or not order.user_id:
             return
-        from domain.task_services import get_task_by_id
+        from AINDY.domain.task_services import get_task_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:
             return
@@ -561,7 +560,7 @@ def _sync_freelance_automation(db: Session, order: FreelanceOrder) -> None:
     try:
         if not order.task_id or not order.user_id:
             return
-        from domain.task_services import get_task_by_id
+        from AINDY.domain.task_services import get_task_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:
             return

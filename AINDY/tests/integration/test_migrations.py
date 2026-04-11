@@ -14,7 +14,7 @@ mocked DB). Schema drift is also caught at startup by the guard in main.py.
 import shutil
 import subprocess
 import pytest
-from config import settings
+from AINDY.config import settings
 
 
 def test_alembic_current_matches_heads():

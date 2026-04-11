@@ -17,11 +17,11 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
-from core.execution_gate import to_envelope
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
-from platform_layer.rate_limiter import limiter
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
+from AINDY.platform_layer.rate_limiter import limiter
 
 
 router = APIRouter(
@@ -76,7 +76,7 @@ async def analyze_code(
         # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "arm_analysis",
             {
@@ -129,7 +129,7 @@ async def generate_code(
         # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
         # Execution mode (INLINE vs ASYNC) is decided exclusively by
         # ExecutionDispatcher — not at the route level.
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "arm_generate",
             {
@@ -180,7 +180,7 @@ async def get_arm_logs(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.arm_service import get_arm_logs as svc_logs
+        from AINDY.domain.arm_service import get_arm_logs as svc_logs
         return svc_logs(db, user_id=user_id, limit=limit)
 
     return await execute_with_pipeline(
@@ -196,7 +196,7 @@ async def get_config(
 ):
     """Read current ARM configuration."""
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("arm_config_get", {}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config get flow failed")
@@ -224,7 +224,7 @@ async def update_config(
 ):
     """Update ARM configuration parameters."""
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("arm_config_update", {"updates": body.updates}, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config update flow failed")
@@ -253,7 +253,7 @@ async def get_arm_metrics(
 ):
     """Get the full Thinking KPI report for this user's ARM sessions."""
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("arm_metrics", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM metrics flow failed")
@@ -282,7 +282,7 @@ async def get_config_suggestions(
 ):
     """Analyze ARM performance metrics and suggest configuration improvements."""
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("arm_config_suggest", {"window": window}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise RuntimeError("ARM config suggest flow failed")

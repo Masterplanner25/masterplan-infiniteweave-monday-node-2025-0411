@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import ScoreSnapshotDB
+from AINDY.db.models import ScoreSnapshotDB
 
 NARRATIVE_SPIKE_THRESHOLD = 5.0
 EMERGING_VELOCITY_THRESHOLD = 0.75

@@ -28,7 +28,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from core.execution_pipeline import ExecutionContext, ExecutionPipeline, ExecutionResult
+from AINDY.core.execution_pipeline import ExecutionContext, ExecutionPipeline, ExecutionResult
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ class TestRaiseBasedWaitGuard:
     """
 
     def _signal_handler(self, ctx):
-        from core.execution_gate import ExecutionWaitSignal
+        from AINDY.core.execution_gate import ExecutionWaitSignal
         raise ExecutionWaitSignal("payment.confirmed", resume_key="inv-123")
 
     def test_no_eu_id_returns_failure(self):
@@ -205,7 +205,7 @@ class TestRaiseBasedWaitGuard:
         mock_db = MagicMock()
 
         def handler(ctx):
-            from core.execution_gate import ExecutionWaitSignal
+            from AINDY.core.execution_gate import ExecutionWaitSignal
             raise ExecutionWaitSignal("webhook.received")
 
         with patch("core.execution_unit_service.ExecutionUnitService") as mock_eus, \

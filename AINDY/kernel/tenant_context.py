@@ -24,7 +24,7 @@ Callers that violate this raise TENANT_VIOLATION.
 
 Usage
 -----
-    from kernel.tenant_context import TenantContext, build_tenant_context
+    from AINDY.kernel.tenant_context import TenantContext, build_tenant_context
 
     ctx = build_tenant_context(user_id="user-123", capability_scope=["memory.read"])
     ctx.assert_memory_path(f"/memory/{ctx.tenant_id}/node-abc")  # OK

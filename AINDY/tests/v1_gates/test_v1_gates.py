@@ -64,7 +64,7 @@ def test_quota_is_fatal_when_exceeded():
     check_quota() returning (False, reason) must produce an error envelope.
     Execution must NOT continue when quota is exceeded.
     """
-    from kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
 
     ctx = SyscallContext(
         execution_unit_id="eu-quota-test",
@@ -108,7 +108,7 @@ def test_nodus_timeout_returns_envelope(db_session):
     This test WILL FAIL with TypeError until V1-STAB-002 adds the parameter.
     """
     import time
-    from runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
+    from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
 
     adapter = NodusRuntimeAdapter(db=db_session)
     ctx = NodusExecutionContext(
@@ -156,7 +156,7 @@ def test_dispatcher_never_raises(name, payload):
     SyscallDispatcher.dispatch() must NEVER raise for any input.
     Every code path returns a response envelope.
     """
-    from kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
 
     ctx = SyscallContext(
         execution_unit_id="eu-never-raises",
@@ -266,7 +266,7 @@ def test_cross_tenant_memory_blocked():
     V1-VAL-006 | Task: V1-REFACT-002 (tenant context in kernel)
     A syscall context for user-a must not be able to read user-b's memory.
     """
-    from kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
 
     # Context belongs to user-a
     ctx = SyscallContext(
@@ -363,7 +363,7 @@ def test_all_syscalls_have_stable_field():
     Every entry in SYSCALL_REGISTRY must have stable explicitly set to
     True or False. None is not acceptable for a V1 release.
     """
-    from kernel.syscall_registry import SYSCALL_REGISTRY
+    from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
 
     unset = []
     for name in SYSCALL_REGISTRY:
@@ -439,7 +439,7 @@ def test_genesis_emits_system_event(client, auth_headers, db_session):
     POST /apps/genesis/message must emit at least one SystemEvent.
     This test enforces the execution contract for the Genesis subsystem.
     """
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     initial_count = db_session.query(SystemEvent).count()
 
@@ -478,7 +478,7 @@ def test_task_operations_emit_system_event(client, auth_headers, db_session):
     POST /apps/tasks/create must emit at least one SystemEvent.
     This test enforces the execution contract for the Task subsystem.
     """
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     initial_count = db_session.query(SystemEvent).count()
 

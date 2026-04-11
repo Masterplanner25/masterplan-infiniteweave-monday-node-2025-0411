@@ -6,9 +6,9 @@ from typing import Any
 
 from sqlalchemy import or_
 
-from db.models.ripple_edge import RippleEdge
-from db.models.system_event import SystemEvent
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.db.models.ripple_edge import RippleEdge
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 
 def link_events(

@@ -243,7 +243,7 @@ def _local_disassemble(script: str, filename: str) -> str | None:
         nodus_path = _os.environ.get("NODUS_SOURCE_PATH", r"C:\dev\Coding Language\src")
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
-        from nodus.tooling.runner import disassemble_source, format_disassembly_with_locs
+        from AINDY.nodus.tooling.runner import disassemble_source, format_disassembly_with_locs
         result = disassemble_source(script, filename=filename)
         if not result.get("ok"):
             return None

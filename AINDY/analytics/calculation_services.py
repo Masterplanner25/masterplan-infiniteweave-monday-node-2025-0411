@@ -1,6 +1,6 @@
 import logging
 from sqlalchemy.orm import Session
-from db.models import CalculationResult
+from AINDY.db.models import CalculationResult
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ except ImportError:
         return sum(v * w for v, w in zip(values, weights))
 
 # Pydantic schemas
-from schemas.analytics_inputs import (
+from AINDY.schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
     AIEfficiencyInput,

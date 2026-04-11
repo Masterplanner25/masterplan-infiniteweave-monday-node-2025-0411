@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from services.auth_service import get_current_user
-from platform_layer.system_state_service import compute_current_state
-from platform_layer.system_state_service import get_latest_snapshot
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
+from AINDY.platform_layer.system_state_service import compute_current_state
+from AINDY.platform_layer.system_state_service import get_latest_snapshot
 
 
 router = APIRouter(prefix="/system", tags=["System State"])

@@ -56,14 +56,14 @@ class TestRecallMemoriesBridge:
     """Tests for bridge.recall_memories()"""
 
     def test_recall_no_db_returns_empty_list(self):
-        from memory.bridge import recall_memories
+        from AINDY.memory.bridge import recall_memories
         result = recall_memories(query="test", db=None)
         assert result == []
 
     def test_recall_delegates_to_orchestrator(self):
         mock_db = MagicMock()
         with patch(f"{_ORCH_PATH}.get_context") as mock_get_context:
-            from runtime.memory import MemoryContext, MemoryItem
+            from AINDY.runtime.memory import MemoryContext, MemoryItem
 
             mock_get_context.return_value = MemoryContext(
                 items=[
@@ -80,7 +80,7 @@ class TestRecallMemoriesBridge:
                 metadata={},
             )
 
-            from memory.bridge import recall_memories
+            from AINDY.memory.bridge import recall_memories
             result = recall_memories(
                 query="test query",
                 tags=["arm"],
@@ -95,7 +95,7 @@ class TestRecallMemoriesBridge:
     def test_recall_returns_empty_list_on_orchestrator_failure(self):
         mock_db = MagicMock()
         with patch(f"{_ORCH_PATH}.get_context", side_effect=Exception("DB down")):
-            from memory.bridge import recall_memories
+            from AINDY.memory.bridge import recall_memories
             result = recall_memories(query="test", db=mock_db)
 
         assert result == []
@@ -103,7 +103,7 @@ class TestRecallMemoriesBridge:
     def test_recall_with_node_type_filter(self):
         mock_db = MagicMock()
         with patch(f"{_ORCH_PATH}.get_context") as mock_get_context:
-            from runtime.memory import MemoryContext
+            from AINDY.runtime.memory import MemoryContext
 
             mock_get_context.return_value = MemoryContext(
                 items=[],
@@ -111,7 +111,7 @@ class TestRecallMemoriesBridge:
                 metadata={},
             )
 
-            from memory.bridge import recall_memories
+            from AINDY.memory.bridge import recall_memories
             recall_memories(query="decision", node_type="decision", db=mock_db)
 
         mock_get_context.assert_called_once()
@@ -125,8 +125,8 @@ class TestCreateMemoryNodeBridge:
     """Tests for updated bridge.create_memory_node() using new DAO."""
 
     def test_create_node_no_db_returns_transient(self):
-        from memory.bridge import create_memory_node
-        from memory.bridge import MemoryNode
+        from AINDY.memory.bridge import create_memory_node
+        from AINDY.memory.bridge import MemoryNode
         result = create_memory_node(content="test", db=None)
         assert isinstance(result, MemoryNode)
         assert result.content == "test"
@@ -138,7 +138,7 @@ class TestCreateMemoryNodeBridge:
             mock_dao_instance.save.return_value = MOCK_NODE_DICT
             MockDAO.return_value = mock_dao_instance
 
-            from memory.bridge import create_memory_node
+            from AINDY.memory.bridge import create_memory_node
             result = create_memory_node(
                 content="ARM analysis of app.py",
                 source="arm_analysis",
@@ -165,7 +165,7 @@ class TestCreateMemoryNodeBridge:
             mock_dao_instance.save.return_value = MOCK_NODE_DICT
             MockDAO.return_value = mock_dao_instance
 
-            from memory.bridge import create_memory_node
+            from AINDY.memory.bridge import create_memory_node
             create_memory_node(content="no type set", db=mock_db)
 
         _, kwargs = mock_dao_instance.save.call_args
@@ -182,7 +182,7 @@ class TestARMAnalysisMemoryHook:
     def _make_analyzer(self):
         """Build a DeepSeekCodeAnalyzer with mocked dependencies."""
         import pathlib
-        from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+        from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
         with patch("modules.deepseek.deepseek_code_analyzer.OpenAI"):
             analyzer = DeepSeekCodeAnalyzer.__new__(DeepSeekCodeAnalyzer)
         analyzer.client = MagicMock()
@@ -314,7 +314,7 @@ class TestARMCodegenMemoryHook:
     """Tests for memory write hook in deepseek_code_analyzer.generate_code()"""
 
     def _make_analyzer(self):
-        from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+        from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
         with patch("modules.deepseek.deepseek_code_analyzer.OpenAI"):
             analyzer = DeepSeekCodeAnalyzer.__new__(DeepSeekCodeAnalyzer)
         analyzer.client = MagicMock()
@@ -429,7 +429,7 @@ class TestTaskCompletionMemoryHook:
              patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
-            from domain.task_services import orchestrate_task_completion
+            from AINDY.domain.task_services import orchestrate_task_completion
             result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # returned something
@@ -449,7 +449,7 @@ class TestTaskCompletionMemoryHook:
              patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
              patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
 
-            from domain.task_services import orchestrate_task_completion
+            from AINDY.domain.task_services import orchestrate_task_completion
             orchestrate_task_completion(mock_db, "Test Task", None)
 
         mock_capture.assert_not_called()
@@ -466,7 +466,7 @@ class TestTaskCompletionMemoryHook:
              patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
-            from domain.task_services import orchestrate_task_completion
+            from AINDY.domain.task_services import orchestrate_task_completion
             result = orchestrate_task_completion(mock_db, "Test Task", user_id=TEST_USER_ID)
 
         assert result  # did not raise
@@ -474,7 +474,7 @@ class TestTaskCompletionMemoryHook:
     def test_complete_task_signature_accepts_user_id(self):
         """Verify backward-compat: user_id is optional, existing callers unaffected."""
         import inspect
-        from domain.task_services import complete_task
+        from AINDY.domain.task_services import complete_task
         sig = inspect.signature(complete_task)
         params = sig.parameters
         assert "user_id" in params
@@ -492,9 +492,9 @@ class TestGenesisMemoryHooks:
         """Build a test FastAPI app with overridden dependencies."""
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from routes.genesis_router import router
-        from db.database import get_db
-        from services.auth_service import get_current_user
+        from AINDY.routes.genesis_router import router
+        from AINDY.db.database import get_db
+        from AINDY.services.auth_service import get_current_user
 
         app = FastAPI()
         app.include_router(router)

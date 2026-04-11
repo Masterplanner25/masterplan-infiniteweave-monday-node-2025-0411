@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from schemas.analytics import LinkedInRawInput
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.schemas.analytics import LinkedInRawInput
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -25,8 +25,8 @@ async def ingest_linkedin_manual(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import assert_masterplan_owned
-        from runtime.flow_engine import run_flow
+        from AINDY.domain.masterplan_service import assert_masterplan_owned
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, data.masterplan_id, user_id)
 
@@ -66,8 +66,8 @@ async def get_masterplan_analytics(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import assert_masterplan_owned
-        from runtime.flow_engine import run_flow
+        from AINDY.domain.masterplan_service import assert_masterplan_owned
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, masterplan_id, user_id)
 
@@ -100,8 +100,8 @@ async def get_masterplan_summary(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from domain.masterplan_service import assert_masterplan_owned
-        from runtime.flow_engine import run_flow
+        from AINDY.domain.masterplan_service import assert_masterplan_owned
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, masterplan_id, user_id)
 

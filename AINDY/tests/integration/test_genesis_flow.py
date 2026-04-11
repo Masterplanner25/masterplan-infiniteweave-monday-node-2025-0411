@@ -66,29 +66,29 @@ class TestValidateDraftIntegrity:
     """Unit tests for the validate_draft_integrity() service function."""
 
     def test_function_exists_in_genesis_ai(self):
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         assert callable(validate_draft_integrity)
 
     def test_audit_system_prompt_exists(self):
-        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         assert isinstance(AUDIT_SYSTEM_PROMPT, str) and len(AUDIT_SYSTEM_PROMPT) > 50
 
     def test_audit_system_prompt_contains_required_fields(self):
-        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for field in ("audit_passed", "findings", "overall_confidence", "audit_summary"):
             assert field in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing required field: {field}"
             )
 
     def test_audit_system_prompt_contains_severity_levels(self):
-        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for level in ("critical", "warning", "advisory"):
             assert level in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing severity level: {level}"
             )
 
     def test_audit_system_prompt_contains_finding_types(self):
-        from domain.genesis_ai import AUDIT_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import AUDIT_SYSTEM_PROMPT
         for ftype in ("mechanism_gap", "contradiction", "timeline_risk", "asset_gap", "confidence_concern"):
             assert ftype in AUDIT_SYSTEM_PROMPT, (
                 f"AUDIT_SYSTEM_PROMPT missing finding type: {ftype}"
@@ -120,7 +120,7 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_has_failsafe(self):
         """If OpenAI fails, function must return a valid fallback dict."""
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.side_effect = Exception("Network error")
             result = validate_draft_integrity(SAMPLE_DRAFT)
@@ -132,7 +132,7 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_failsafe_audit_passed_false(self):
         """Fail-safe result must have audit_passed=False."""
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         with patch("domain.genesis_ai.client") as mock_client:
             mock_client.chat.completions.create.side_effect = Exception("fail")
             result = validate_draft_integrity(SAMPLE_DRAFT)
@@ -140,7 +140,7 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_happy_path(self):
         """With a valid OpenAI response, function returns parsed JSON."""
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT)
@@ -153,7 +153,7 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_failed_audit(self):
         """Function correctly returns a failed audit with critical findings."""
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT_FAILED)
@@ -176,7 +176,7 @@ class TestValidateDraftIntegrity:
     def test_genesis_ai_exports_validate_draft_integrity(self):
         """validate_draft_integrity must be importable from domain.genesis_ai."""
         try:
-            from domain.genesis_ai import validate_draft_integrity
+            from AINDY.domain.genesis_ai import validate_draft_integrity
         except ImportError:
             pytest.fail("validate_draft_integrity not importable from domain.genesis_ai")
 
@@ -254,7 +254,7 @@ class TestMasterplanFactoryHardening:
 
     @staticmethod
     def _seed_session(db_session, test_user, *, status="active", synthesis_ready=True, draft_json=None):
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
 
         session = GenesisSessionDB(
             user_id=test_user.id,
@@ -268,17 +268,17 @@ class TestMasterplanFactoryHardening:
         return session
 
     def test_factory_accepts_user_id(self):
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         sig = inspect.signature(create_masterplan_from_genesis)
         assert "user_id" in sig.parameters
 
     def test_factory_raises_on_missing_session(self, db_session, test_user):
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         with pytest.raises(Exception, match="not found"):
             create_masterplan_from_genesis(999, {}, db_session, user_id=test_user.id)
 
     def test_factory_raises_on_already_locked(self, db_session, test_user):
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -291,7 +291,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_raises_if_not_synthesis_ready(self, db_session, test_user):
         """Factory must gate on synthesis_ready — raise if False."""
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -331,7 +331,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_rollback_called_on_db_failure(self, db_session, test_user, monkeypatch):
         """db.rollback() must be called when db.commit() raises."""
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -361,8 +361,8 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_returns_masterplan_object(self, db_session, test_user):
         """Factory must return a MasterPlan instance on success."""
-        from domain.masterplan_factory import create_masterplan_from_genesis
-        from db.models import MasterPlan
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.db.models import MasterPlan
         session = self._seed_session(
             db_session,
             test_user,
@@ -381,7 +381,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_sets_posture_from_draft(self, db_session, test_user):
         """Factory must set posture based on draft ambition/horizon."""
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         session = self._seed_session(
             db_session,
             test_user,
@@ -540,7 +540,7 @@ class TestSynthesisPromptSchema:
     """Verify SYNTHESIS_SYSTEM_PROMPT includes synthesis_notes field."""
 
     def test_synthesis_prompt_schema_complete(self):
-        from domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
         required = [
             "vision_statement", "time_horizon_years", "primary_mechanism",
             "ambition_score", "core_domains", "phases", "key_assets",
@@ -553,7 +553,7 @@ class TestSynthesisPromptSchema:
             )
 
     def test_synthesis_notes_rule_in_prompt(self):
-        from domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
+        from AINDY.domain.genesis_ai import SYNTHESIS_SYSTEM_PROMPT
         assert "synthesis_notes" in SYNTHESIS_SYSTEM_PROMPT
         # Confirm there's a rule describing it
         assert "inferred" in SYNTHESIS_SYSTEM_PROMPT or "confident" in SYNTHESIS_SYSTEM_PROMPT
@@ -565,23 +565,23 @@ class TestPostureDescriptionHelper:
     """Tests for posture_description() from analytics.posture."""
 
     def test_posture_description_returns_string_for_all_postures(self):
-        from analytics.posture import posture_description
+        from AINDY.analytics.posture import posture_description
         for posture in ("Stable", "Accelerated", "Aggressive", "Reduced"):
             desc = posture_description(posture)
             assert isinstance(desc, str) and len(desc) > 0
 
     def test_posture_description_stable(self):
-        from analytics.posture import posture_description
+        from AINDY.analytics.posture import posture_description
         desc = posture_description("Stable")
         assert "stable" in desc.lower() or "balanced" in desc.lower() or "steady" in desc.lower()
 
     def test_posture_description_aggressive(self):
-        from analytics.posture import posture_description
+        from AINDY.analytics.posture import posture_description
         desc = posture_description("Aggressive")
         assert len(desc) > 0
 
     def test_posture_description_unknown(self):
-        from analytics.posture import posture_description
+        from AINDY.analytics.posture import posture_description
         desc = posture_description("Unknown")
         assert isinstance(desc, str)
 

@@ -100,8 +100,8 @@ def create_memory_node(
     unpersisted MemoryNode when db is not provided.
     """
     import logging
-    from core.execution_signal_helper import queue_system_event
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.core.execution_signal_helper import queue_system_event
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     logger = logging.getLogger(__name__)
 
@@ -165,8 +165,8 @@ def recall_memories(
     list of node dicts ordered by resonance_score, or [] on failure
     """
     import logging
-    from db.dao.memory_node_dao import MemoryNodeDAO
-    from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
     logger = logging.getLogger(__name__)
 
@@ -224,7 +224,7 @@ def create_memory_link(
     if db is None:
         raise ValueError("create_memory_link requires a DB session")
 
-    from memory.memory_persistence import MemoryNodeDAO
+    from AINDY.memory.memory_persistence import MemoryNodeDAO
     dao = MemoryNodeDAO(db)
     return dao.create_link(source_id, target_id, link_type, weight)
 

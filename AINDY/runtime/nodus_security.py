@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
-from agents.capability_service import check_execution_capability, validate_token
+from AINDY.agents.capability_service import check_execution_capability, validate_token
 
 
 class NodusSecurityError(ValueError):

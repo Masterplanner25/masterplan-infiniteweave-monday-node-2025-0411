@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class MemoryTraceNode(Base):

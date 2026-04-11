@@ -5,13 +5,13 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from core.execution_helper import execute_with_pipeline
+from AINDY.core.execution_helper import execute_with_pipeline
 
-from db.database import get_db
+from AINDY.db.database import get_db
 
-from domain import rippletrace_services
-from services.auth_service import get_current_user
-from domain.rippletrace_service import (
+from AINDY.domain import rippletrace_services
+from AINDY.services.auth_service import get_current_user
+from AINDY.domain.rippletrace_service import (
     build_trace_graph,
     calculate_ripple_span,
     detect_root_event,
@@ -185,7 +185,7 @@ def get_trace_graph(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from domain.rippletrace_service import count_trace_events
+        from AINDY.domain.rippletrace_service import count_trace_events
 
         user_id = str(current_user["sub"])
         events = count_trace_events(db, trace_id, user_id)

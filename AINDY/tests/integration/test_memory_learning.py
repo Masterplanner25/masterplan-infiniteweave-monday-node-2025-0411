@@ -1,7 +1,7 @@
 import pytest
 
-from runtime.memory.memory_learning import MemoryLearningEngine, evaluate_result
-from runtime.memory.scorer import MemoryScorer
+from AINDY.runtime.memory.memory_learning import MemoryLearningEngine, evaluate_result
+from AINDY.runtime.memory.scorer import MemoryScorer
 
 
 class FakeNode:

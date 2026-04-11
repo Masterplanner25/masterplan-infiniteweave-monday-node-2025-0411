@@ -4,12 +4,12 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from db.models.agent_run import AgentTrustSettings
-from db.models.automation_log import AutomationLog
-from db.models.background_task_lease import BackgroundTaskLease
-from db.models.system_event import SystemEvent
-from db.models.user_identity import UserIdentity
-from platform_layer.async_job_service import _JOB_REGISTRY, submit_async_job
+from AINDY.db.models.agent_run import AgentTrustSettings
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.background_task_lease import BackgroundTaskLease
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user_identity import UserIdentity
+from AINDY.platform_layer.async_job_service import _JOB_REGISTRY, submit_async_job
 
 
 VALID_PLAN = {
@@ -93,7 +93,7 @@ def test_async_job_never_disappears(client, db_session, testing_session_factory,
 
 
 def test_db_rollback_works_on_async_job_failure(db_session, testing_session_factory, test_user, monkeypatch):
-    import platform_layer.async_job_service as async_job_service
+    import AINDY.platform_layer.async_job_service as async_job_service
 
     monkeypatch.setattr(async_job_service, "SessionLocal", testing_session_factory)
     job_name = "hardening.rollback"
@@ -141,7 +141,7 @@ def test_db_rollback_works_on_async_job_failure(db_session, testing_session_fact
 
 
 def test_lease_exclusivity(db_session, db_session_factory, monkeypatch):
-    import domain.task_services as task_services
+    import AINDY.domain.task_services as task_services
 
     monkeypatch.setattr(task_services, "SessionLocal", db_session_factory)
 
@@ -172,7 +172,7 @@ def test_lease_exclusivity(db_session, db_session_factory, monkeypatch):
 
 
 def test_event_completeness_for_successful_job(db_session, testing_session_factory, test_user, monkeypatch):
-    import platform_layer.async_job_service as async_job_service
+    import AINDY.platform_layer.async_job_service as async_job_service
 
     monkeypatch.setattr(async_job_service, "SessionLocal", testing_session_factory)
     job_name = "hardening.success"

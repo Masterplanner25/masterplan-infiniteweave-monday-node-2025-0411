@@ -4,4 +4,4 @@ The canonical implementation lives in ``AINDY/runtime/nodus_adapter.py`` and
 continues to route high-signal outcomes through ``infinity_orchestrator``.
 """
 
-from runtime.nodus_adapter import *  # noqa: F401,F403
+from AINDY.runtime.nodus_adapter import *  # noqa: F401,F403

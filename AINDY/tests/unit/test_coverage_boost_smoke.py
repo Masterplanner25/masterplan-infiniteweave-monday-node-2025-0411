@@ -10,7 +10,7 @@ import pytest
 
 
 def test_execution_service_run_execution_success(monkeypatch):
-    from core.execution_service import ExecutionContext, run_execution
+    from AINDY.core.execution_service import ExecutionContext, run_execution
 
     captured = {}
 
@@ -57,7 +57,7 @@ def test_execution_service_run_execution_success(monkeypatch):
 def test_execution_service_run_execution_maps_exception(monkeypatch):
     from fastapi import HTTPException
 
-    from core.execution_service import ExecutionContext, ExecutionErrorConfig, run_execution
+    from AINDY.core.execution_service import ExecutionContext, ExecutionErrorConfig, run_execution
 
     def fake_execute_with_pipeline_sync(**kwargs):
         return kwargs["handler"](None)
@@ -92,7 +92,7 @@ def test_execution_service_run_execution_maps_exception(monkeypatch):
 
 
 def test_router_guard_scan_and_validate(tmp_path):
-    from core.router_guard import RouterBoundaryViolation, _scan_file, validate_router_boundary
+    from AINDY.core.router_guard import RouterBoundaryViolation, _scan_file, validate_router_boundary
 
     bad_router = tmp_path / "bad_router.py"
     bad_router.write_text(
@@ -116,7 +116,7 @@ def test_router_guard_scan_and_validate(tmp_path):
 
 
 def test_masterplan_execution_service_sync_skip_and_status():
-    from domain.masterplan_execution_service import (
+    from AINDY.domain.masterplan_execution_service import (
         get_masterplan_execution_status,
         sync_masterplan_tasks,
     )
@@ -168,7 +168,7 @@ def test_masterplan_execution_service_sync_skip_and_status():
 
 
 def test_masterplan_execution_service_replace_protects_completed_tasks():
-    from domain.masterplan_execution_service import sync_masterplan_tasks
+    from AINDY.domain.masterplan_execution_service import sync_masterplan_tasks
 
     completed_task = SimpleNamespace(id=1, status="completed")
     query = MagicMock()
@@ -190,7 +190,7 @@ def test_masterplan_execution_service_replace_protects_completed_tasks():
 
 
 def test_masterplan_execution_service_helper_paths(monkeypatch):
-    from domain import masterplan_execution_service as service
+    from AINDY.domain import masterplan_execution_service as service
 
     assert service._extract_root_items({"phases": ["A"]}) == ["A"]
     assert service._extract_root_items(["bad"]) == []
@@ -242,7 +242,7 @@ def test_masterplan_execution_service_helper_paths(monkeypatch):
 
 
 def test_projection_service_smoke():
-    from analytics.projection_service import evaluate_phase, project_completion
+    from AINDY.analytics.projection_service import evaluate_phase, project_completion
 
     masterplan = SimpleNamespace(target_date=datetime.utcnow() + timedelta(days=30))
     projection = project_completion(masterplan, [50, 100, 150])
@@ -269,7 +269,7 @@ def test_projection_service_smoke():
 
 
 def test_worker_schema_helpers_and_main(monkeypatch):
-    import worker
+    import AINDY.worker
 
     session = MagicMock()
     session.bind = object()
@@ -311,7 +311,7 @@ def test_worker_schema_helpers_and_main(monkeypatch):
 
 
 def test_system_event_service_emit_smoke(monkeypatch):
-    from core.system_event_service import emit_system_event
+    from AINDY.core.system_event_service import emit_system_event
 
     event_id = uuid.uuid4()
     monkeypatch.setattr("core.system_event_service._persist_system_event", lambda **kwargs: event_id)
@@ -341,7 +341,7 @@ def test_system_event_service_emit_smoke(monkeypatch):
 
 
 def test_scheduler_service_lifecycle_and_registration(monkeypatch):
-    from platform_layer import scheduler_service
+    from AINDY.platform_layer import scheduler_service
 
     class FakeScheduler:
         def __init__(self, job_defaults=None):
@@ -390,9 +390,9 @@ def test_scheduler_service_lifecycle_and_registration(monkeypatch):
 
 
 def test_scheduler_service_run_task_now_and_replay(monkeypatch):
-    from platform_layer import scheduler_service
-    import db.database as database
-    import db.models.automation_log as automation_log_module
+    from AINDY.platform_layer import scheduler_service
+    import AINDY.db.database as database
+    import AINDY.db.models.automation_log as automation_log_module
 
     class FakeAutomationLog:
         id = object()
@@ -484,7 +484,7 @@ def test_scheduler_service_run_task_now_and_replay(monkeypatch):
 
 
 def test_nodus_embedding_shim_import_contract():
-    from nodus.runtime.embedding import NodusRuntime
+    from AINDY.nodus.runtime.embedding import NodusRuntime
 
     assert NodusRuntime is not None
     assert getattr(NodusRuntime, "__name__", "") == "NodusRuntime"

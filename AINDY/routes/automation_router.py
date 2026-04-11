@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +35,8 @@ def _flow_failure(result: dict) -> str:
 
 
 def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: str):
-    from runtime.flow_engine import run_flow
-    from core.execution_gate import flow_result_to_envelope
+    from AINDY.runtime.flow_engine import run_flow
+    from AINDY.core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = _flow_failure(result)
@@ -50,7 +50,7 @@ def _run_flow_automation(flow_name: str, payload: dict, db: Session, user_id: st
     if isinstance(data, dict):
         # Use to_envelope with output=None: data IS the output, embedding
         # flow_result_to_envelope() would create a circular reference via output→data.
-        from core.execution_gate import to_envelope
+        from AINDY.core.execution_gate import to_envelope
         data.setdefault("execution_envelope", to_envelope(
             eu_id=result.get("run_id"),
             trace_id=result.get("trace_id"),
@@ -123,9 +123,9 @@ async def replay_automation_log(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from agents.capability_service import validate_token
-        from core.execution_gate import require_execution_unit
-        from domain.automation_execution_service import get_automation_log
+        from AINDY.agents.capability_service import validate_token
+        from AINDY.core.execution_gate import require_execution_unit
+        from AINDY.domain.automation_execution_service import get_automation_log
 
         log = get_automation_log(db, log_id, user_id)
         if log and getattr(log, "payload", None):
@@ -181,7 +181,7 @@ async def trigger_task_automation(
     user_id = str(current_user["sub"])
     def handler(_ctx):
         import uuid as _uuid
-        from core.execution_gate import require_execution_unit
+        from AINDY.core.execution_gate import require_execution_unit
         # EU gate: create before trigger dispatch (non-fatal)
         require_execution_unit(
             db=db,

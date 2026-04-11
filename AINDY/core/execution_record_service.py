@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.execution_unit_service import ExecutionUnitService
+from AINDY.core.execution_unit_service import ExecutionUnitService
 
 
 def build_execution_record(

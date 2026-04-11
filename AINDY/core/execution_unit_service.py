@@ -60,7 +60,7 @@ class ExecutionUnitService:
         Create and persist a new ExecutionUnit. Returns the EU on success,
         None on failure (non-fatal).
         """
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = ExecutionUnit(
@@ -97,7 +97,7 @@ class ExecutionUnitService:
         Transition EU to new_status. Returns True on success, False otherwise.
         Validates the transition against the status machine.
         """
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = self.db.query(ExecutionUnit).filter(ExecutionUnit.id == _coerce_uuid(eu_id)).first()
@@ -140,7 +140,7 @@ class ExecutionUnitService:
         The caller does not need to transition to "executing" separately —
         this method does both.
         """
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         # ── Idempotency guard ────────────────────────────────────────────────
         # Two callbacks are registered per flow WAIT (runner.resume + this one).
@@ -185,7 +185,7 @@ class ExecutionUnitService:
         ``condition`` is accepted as a ``WaitCondition`` instance or a plain dict
         (already serialised).  Pass ``None`` to clear.  Non-fatal.
         """
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = self.db.query(ExecutionUnit).filter(
@@ -212,7 +212,7 @@ class ExecutionUnitService:
     # ── Link helpers ──────────────────────────────────────────────────────────
 
     def link_flow_run(self, eu_id, flow_run_id: str) -> bool:
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = self.db.query(ExecutionUnit).filter(ExecutionUnit.id == _coerce_uuid(eu_id)).first()
@@ -228,7 +228,7 @@ class ExecutionUnitService:
 
     def link_memory_context(self, eu_id, memory_ids: list) -> bool:
         """Replace memory_context_ids (called once, pre-execution)."""
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = self.db.query(ExecutionUnit).filter(ExecutionUnit.id == _coerce_uuid(eu_id)).first()
@@ -244,7 +244,7 @@ class ExecutionUnitService:
 
     def append_output_memory(self, eu_id, memory_id) -> bool:
         """Append a single memory id to output_memory_ids."""
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             eu = self.db.query(ExecutionUnit).filter(ExecutionUnit.id == _coerce_uuid(eu_id)).first()
@@ -265,7 +265,7 @@ class ExecutionUnitService:
     # ── Queries ───────────────────────────────────────────────────────────────
 
     def get_by_source(self, source_type: str, source_id: str):
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             return (
@@ -282,7 +282,7 @@ class ExecutionUnitService:
             return None
 
     def get_by_correlation(self, correlation_id: str) -> list:
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             return (
@@ -296,7 +296,7 @@ class ExecutionUnitService:
             return []
 
     def get_children(self, parent_eu_id) -> list:
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
 
         try:
             return (

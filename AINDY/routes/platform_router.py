@@ -72,9 +72,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(
     prefix="/platform",
@@ -307,8 +307,8 @@ _SCRIPTS_DIR = Path(__file__).parent.parent / "scripts" / "nodus"
 # ---------------------------------------------------------------------------
 
 def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | None) -> dict:
-    from runtime.flow_engine import run_flow
-    from core.execution_gate import flow_result_to_envelope
+    from AINDY.runtime.flow_engine import run_flow
+    from AINDY.core.execution_gate import flow_result_to_envelope
     result = run_flow(flow_name, state, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")
@@ -332,7 +332,7 @@ def _ensure_nodus_flow_registered() -> None:
     nodus_record_outcome, nodus_handle_error) are in NODE_REGISTRY.
     Thread-safe; idempotent.
     """
-    from runtime.nodus_execution_service import ensure_nodus_script_flow_registered
+    from AINDY.runtime.nodus_execution_service import ensure_nodus_script_flow_registered
 
     ensure_nodus_script_flow_registered()
 
@@ -353,7 +353,7 @@ def _run_nodus_script(
     in the returned state).  May raise HTTPException on infrastructure failure
     (VM not installed, DB unreachable, etc.).
     """
-    from runtime.nodus_execution_service import run_nodus_script_via_flow
+    from AINDY.runtime.nodus_execution_service import run_nodus_script_via_flow
 
     return run_nodus_script_via_flow(
         script=script,
@@ -382,7 +382,7 @@ def _format_nodus_response(flow_result: dict) -> dict:
     memory_writes_count int
     error               str | None — script error message (if nodus_status="failure")
     """
-    from runtime.nodus_execution_service import format_nodus_flow_result
+    from AINDY.runtime.nodus_execution_service import format_nodus_flow_result
 
     return format_nodus_flow_result(flow_result)
 
@@ -391,7 +391,7 @@ def _validate_nodus_source(source: str, field: str = "script") -> None:
     """
     Run nodus_security sandbox checks.  Raises HTTPException(422) on violation.
     """
-    from runtime.nodus_security import NodusSecurityError, validate_nodus_source
+    from AINDY.runtime.nodus_security import NodusSecurityError, validate_nodus_source
     try:
         validate_nodus_source(source)
     except NodusSecurityError as exc:
@@ -423,7 +423,7 @@ def create_flow(
     No application restart required.  Thread-safe.  Persisted to DB.
     All listed nodes must already exist in NODE_REGISTRY.
     """
-    from runtime.flow_registry import register_dynamic_flow
+    from AINDY.runtime.flow_registry import register_dynamic_flow
 
     user_id = str(current_user["sub"])
     try:
@@ -456,7 +456,7 @@ def list_flows(
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform flows."""
-    from runtime.flow_registry import list_dynamic_flows
+    from AINDY.runtime.flow_registry import list_dynamic_flows
     return {"flows": list_dynamic_flows()}
 
 
@@ -471,7 +471,7 @@ def get_flow(
     current_user: dict = Depends(get_current_user),
 ):
     """Return the definition of a dynamic flow."""
-    from runtime.flow_registry import get_dynamic_flow
+    from AINDY.runtime.flow_registry import get_dynamic_flow
     meta = get_dynamic_flow(name)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Flow {name!r} not found")
@@ -497,7 +497,7 @@ def run_flow_endpoint(
     Returns the full execution envelope:
       { "status": "SUCCESS"|"FAILED", "data": <final_state>, "run_id": ..., "trace_id": ... }
     """
-    from runtime.flow_engine import FLOW_REGISTRY
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY
 
     user_id = str(current_user["sub"])
     if name not in FLOW_REGISTRY:
@@ -534,7 +534,7 @@ def delete_flow(
     Static (startup-registered) flows cannot be deleted via this endpoint.
     Returns 204 on success, 404 if not found or not a dynamic flow.
     """
-    from runtime.flow_registry import delete_dynamic_flow
+    from AINDY.runtime.flow_registry import delete_dynamic_flow
     removed = delete_dynamic_flow(name, db=db)
     if not removed:
         raise HTTPException(
@@ -576,7 +576,7 @@ def register_node(
 
     No application restart required.  Thread-safe.  Persisted to DB.
     """
-    from platform_layer.node_registry import register_external_node
+    from AINDY.platform_layer.node_registry import register_external_node
 
     user_id = str(current_user["sub"])
     try:
@@ -605,7 +605,7 @@ def list_nodes(
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform nodes."""
-    from platform_layer.node_registry import list_dynamic_nodes
+    from AINDY.platform_layer.node_registry import list_dynamic_nodes
     return {"nodes": list_dynamic_nodes()}
 
 
@@ -620,7 +620,7 @@ def get_node(
     current_user: dict = Depends(get_current_user),
 ):
     """Return the metadata for a dynamic node."""
-    from platform_layer.node_registry import get_dynamic_node
+    from AINDY.platform_layer.node_registry import get_dynamic_node
     meta = get_dynamic_node(name)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Node {name!r} not found")
@@ -644,7 +644,7 @@ def delete_node(
 
     Static (startup-registered) nodes cannot be deleted via this endpoint.
     """
-    from platform_layer.node_registry import delete_dynamic_node
+    from AINDY.platform_layer.node_registry import delete_dynamic_node
     removed = delete_dynamic_node(name, db=db)
     if not removed:
         raise HTTPException(
@@ -700,7 +700,7 @@ def create_webhook(
     - `"execution.*"` — all events starting with `"execution."`
     - `"*"`           — every SystemEvent
     """
-    from platform_layer.event_service import subscribe_webhook
+    from AINDY.platform_layer.event_service import subscribe_webhook
 
     user_id = str(current_user["sub"])
     try:
@@ -726,7 +726,7 @@ def list_webhook_subscriptions(
     current_user: dict = Depends(get_current_user),
 ):
     """List all webhook subscriptions for the current user."""
-    from platform_layer.event_service import list_webhooks
+    from AINDY.platform_layer.event_service import list_webhooks
     user_id = str(current_user["sub"])
     return {"webhooks": list_webhooks(user_id=user_id)}
 
@@ -742,7 +742,7 @@ def get_webhook_subscription(
     current_user: dict = Depends(get_current_user),
 ):
     """Return details for a single webhook subscription."""
-    from platform_layer.event_service import get_webhook
+    from AINDY.platform_layer.event_service import get_webhook
     meta = get_webhook(subscription_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Subscription {subscription_id!r} not found")
@@ -765,7 +765,7 @@ def delete_webhook_subscription(
     current_user: dict = Depends(get_current_user),
 ):
     """Cancel a webhook subscription."""
-    from platform_layer.event_service import get_webhook, unsubscribe_webhook
+    from AINDY.platform_layer.event_service import get_webhook, unsubscribe_webhook
     meta = get_webhook(subscription_id)
     if not meta or meta.get("created_by") != str(current_user["sub"]):
         raise HTTPException(status_code=404, detail=f"Subscription {subscription_id!r} not found")
@@ -819,8 +819,8 @@ def create_key(
     Response includes `key` (full plaintext) alongside the metadata record.
     Subsequent `GET /platform/keys` calls show only `key_prefix` (first 16 chars).
     """
-    from auth.api_key_auth import Scopes
-    from platform_layer.api_key_service import create_api_key
+    from AINDY.auth.api_key_auth import Scopes
+    from AINDY.platform_layer.api_key_service import create_api_key
     from datetime import datetime, timezone
 
     user_id = str(current_user["sub"])
@@ -876,7 +876,7 @@ def list_keys(
     current_user: dict = Depends(get_current_user),
 ):
     """List all API keys owned by the current user (no plaintext, shows prefix/scopes/stats)."""
-    from platform_layer.api_key_service import list_api_keys
+    from AINDY.platform_layer.api_key_service import list_api_keys
     user_id = str(current_user["sub"])
     return {"keys": list_api_keys(user_id=user_id, db=db)}
 
@@ -893,7 +893,7 @@ def get_key(
     current_user: dict = Depends(get_current_user),
 ):
     """Return metadata for a single API key.  Ownership-enforced."""
-    from platform_layer.api_key_service import get_api_key
+    from AINDY.platform_layer.api_key_service import get_api_key
     user_id = str(current_user["sub"])
     meta = get_api_key(key_id=key_id, user_id=user_id, db=db)
     if not meta:
@@ -918,7 +918,7 @@ def revoke_key(
 
     Returns 204 on success, 404 if not found or not owned by the current user.
     """
-    from platform_layer.api_key_service import revoke_api_key
+    from AINDY.platform_layer.api_key_service import revoke_api_key
     user_id = str(current_user["sub"])
     revoked = revoke_api_key(key_id=key_id, user_id=user_id, db=db)
     if not revoked:
@@ -1022,7 +1022,7 @@ def run_nodus_script(
             script_source = record["content"]
 
     def handler(_ctx):
-        from core.execution_gate import flow_result_to_envelope
+        from AINDY.core.execution_gate import flow_result_to_envelope
         flow_result = _run_nodus_script(
             script=script_source,
             input_payload=body.input,
@@ -1261,9 +1261,9 @@ def compile_and_run_nodus_flow(
     _validate_nodus_source(body.script, field="script")
 
     def handler(_ctx):
-        from runtime.nodus_flow_compiler import compile_nodus_flow
-        from runtime.flow_engine import PersistentFlowRunner, register_flow
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.runtime.nodus_flow_compiler import compile_nodus_flow
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_flow
+        from AINDY.utils.uuid_utils import normalize_uuid
 
         # Compile the Nodus flow script → flow dict
         try:
@@ -1292,7 +1292,7 @@ def compile_and_run_nodus_flow(
 
         if body.run:
             import uuid as _uuid
-            from core.execution_gate import require_execution_unit, flow_result_to_envelope
+            from AINDY.core.execution_gate import require_execution_unit, flow_result_to_envelope
             uid = normalize_uuid(user_id) if user_id else None
             # EU gate: create BEFORE the runner starts so the execution is
             # always DB-tracked, even if the process dies mid-run.
@@ -1319,7 +1319,7 @@ def compile_and_run_nodus_flow(
             # Finalize EU: link to the FlowRun and set terminal status.
             try:
                 if _pre_eu is not None:
-                    from core.execution_unit_service import ExecutionUnitService
+                    from AINDY.core.execution_unit_service import ExecutionUnitService
                     _eus = ExecutionUnitService(db)
                     if result.get("run_id"):
                         _eus.link_flow_run(_pre_eu.id, result["run_id"])
@@ -1446,7 +1446,7 @@ def create_nodus_schedule(
             script_source = record["content"]
         _validate_nodus_source(script_source, field="script_name")
 
-    from runtime.nodus_schedule_service import create_nodus_scheduled_job
+    from AINDY.runtime.nodus_schedule_service import create_nodus_scheduled_job
 
     try:
         meta = create_nodus_scheduled_job(
@@ -1501,7 +1501,7 @@ def list_nodus_schedules(
     }
     ```
     """
-    from runtime.nodus_schedule_service import list_nodus_scheduled_jobs
+    from AINDY.runtime.nodus_schedule_service import list_nodus_scheduled_jobs
 
     user_id = str(current_user["sub"])
     jobs = list_nodus_scheduled_jobs(db=db, user_id=user_id)
@@ -1528,7 +1528,7 @@ def delete_nodus_schedule(
 
     Returns 204 on success, 404 if not found or not owned by the caller.
     """
-    from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+    from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
     user_id = str(current_user["sub"])
     removed = delete_nodus_scheduled_job(db=db, job_id=job_id, user_id=user_id)
@@ -1596,7 +1596,7 @@ def get_nodus_trace(
 
     **Ownership:** only events belonging to the authenticated user are returned.
     """
-    from runtime.nodus_trace_service import query_nodus_trace
+    from AINDY.runtime.nodus_trace_service import query_nodus_trace
 
     user_id = str(current_user["sub"])
     result = query_nodus_trace(db=db, trace_id=trace_id, user_id=user_id, limit=limit)
@@ -1669,8 +1669,8 @@ def get_tenant_usage(
             },
         )
 
-    from kernel.resource_manager import get_resource_manager
-    from kernel.scheduler_engine import get_scheduler_engine
+    from AINDY.kernel.resource_manager import get_resource_manager
+    from AINDY.kernel.scheduler_engine import get_scheduler_engine
 
     rm = get_resource_manager()
     se = get_scheduler_engine()
@@ -1706,8 +1706,8 @@ def list_memory_path(
 
     Optionally filter by **query** (keyword) and **tags** (comma-separated).
     """
-    from memory.memory_address_space import validate_tenant_path, normalize_path
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import validate_tenant_path, normalize_path
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     user_id = str(current_user["sub"])
     try:
@@ -1741,11 +1741,11 @@ def memory_tree(
     db: Session = Depends(get_db),
 ):
     """Return a hierarchical tree of memory nodes under a path prefix."""
-    from memory.memory_address_space import (
+    from AINDY.memory.memory_address_space import (
         validate_tenant_path, normalize_path, is_exact,
         wildcard_prefix, build_tree,
     )
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     user_id = str(current_user["sub"])
     try:
@@ -1774,8 +1774,8 @@ def memory_trace(
     db: Session = Depends(get_db),
 ):
     """Follow the causal chain from the memory node at an exact path."""
-    from memory.memory_address_space import validate_tenant_path, normalize_path
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import validate_tenant_path, normalize_path
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     user_id = str(current_user["sub"])
     try:
@@ -1830,8 +1830,8 @@ def list_syscalls(
           "total_count": 9
         }
     """
-    from kernel.syscall_registry import SYSCALL_REGISTRY
-    from kernel.syscall_versioning import SyscallSpec
+    from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
+    from AINDY.kernel.syscall_versioning import SyscallSpec
 
     versioned = SYSCALL_REGISTRY.versioned
     available_versions = SYSCALL_REGISTRY.versions()
@@ -1934,8 +1934,8 @@ def dispatch_syscall(
       HTTP-level errors (4xx) are raised by this route for missing syscalls,
       capability violations, and validation failures so SDK error mapping works.
     """
-    from kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
-    from kernel.syscall_registry import DEFAULT_NODUS_CAPABILITIES
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+    from AINDY.kernel.syscall_registry import DEFAULT_NODUS_CAPABILITIES
 
     user_id = str(current_user.get("user_id") or current_user.get("sub") or "")
 

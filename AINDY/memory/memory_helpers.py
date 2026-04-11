@@ -57,7 +57,7 @@ def enrich_context(context: dict) -> dict:
     user_id = context.get("user_id")
 
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         memories = MemoryNodeDAO(db).recall(tags=tags, limit=5, user_id=user_id)
         context["memory_context"] = memories
@@ -92,7 +92,7 @@ def record_execution_feedback(context: dict, outcome: str) -> None:
 
     user_id = context.get("user_id")
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(db)
         for memory in memories:
             node_id = memory.get("id")

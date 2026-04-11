@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from runtime.memory.memory_feedback import MemoryFeedbackEngine
-from runtime.memory_loop import ExecutionLoop
-from runtime.memory import MemoryOrchestrator, MemoryContext, MemoryItem
+from AINDY.runtime.memory.memory_feedback import MemoryFeedbackEngine
+from AINDY.runtime.memory_loop import ExecutionLoop
+from AINDY.runtime.memory import MemoryOrchestrator, MemoryContext, MemoryItem
 
 
 class FakeNode:
@@ -67,7 +67,7 @@ class FakeRuntime:
 
 @pytest.mark.asyncio
 async def test_nodus_execution_injects_memory_context(monkeypatch):
-    from routes.memory_router import NodusTaskRequest, execute_nodus_task
+    from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
     def fake_get_context(*args, **kwargs):
         return MemoryContext(
@@ -140,7 +140,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
 @pytest.mark.asyncio
 async def test_nodus_execution_blocks_restricted_source(monkeypatch):
     from fastapi import HTTPException
-    from routes.memory_router import NodusTaskRequest, execute_nodus_task
+    from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
     body = NodusTaskRequest(
         task_name="blocked",
@@ -162,7 +162,7 @@ async def test_nodus_execution_blocks_restricted_source(monkeypatch):
 @pytest.mark.asyncio
 async def test_nodus_execution_blocks_write_ops_without_token(monkeypatch):
     from fastapi import HTTPException
-    from routes.memory_router import NodusTaskRequest, execute_nodus_task
+    from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
     body = NodusTaskRequest(
         task_name="blocked-write",

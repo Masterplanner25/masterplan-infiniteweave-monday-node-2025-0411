@@ -1,5 +1,5 @@
-from memory.bridge import create_memory_node, create_memory_link, recall_memories
-from memory.nodus_memory_bridge import NodusMemoryBridge, create_nodus_bridge
+from AINDY.memory.bridge import create_memory_node, create_memory_link, recall_memories
+from AINDY.memory.nodus_memory_bridge import NodusMemoryBridge, create_nodus_bridge
 
 
 def suggest_from_memory(
@@ -15,7 +15,7 @@ def suggest_from_memory(
     Returns {"suggestions": [...]} or {} on error.
     """
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(db)
         return dao.suggest(
             query=query,

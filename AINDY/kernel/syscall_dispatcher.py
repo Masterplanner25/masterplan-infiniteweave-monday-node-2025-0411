@@ -34,7 +34,7 @@ The dispatcher NEVER raises. Every code path returns the envelope.
 
 Usage
 -----
-    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, SyscallContext
 
     ctx = SyscallContext(
         execution_unit_id="run-123",
@@ -56,14 +56,14 @@ from contextvars import ContextVar
 from typing import Any
 
 # Re-export SyscallContext so callers only need one import.
-from kernel.syscall_registry import (  # noqa: F401
+from AINDY.kernel.syscall_registry import (  # noqa: F401
     DEFAULT_NODUS_CAPABILITIES,
     SYSCALL_REGISTRY,
     SyscallContext,
     SyscallEntry,
     register_syscall,
 )
-from kernel.syscall_versioning import (
+from AINDY.kernel.syscall_versioning import (
     parse_syscall_name,
     validate_input,
     validate_output,
@@ -93,7 +93,7 @@ _EU_ID_CTX: ContextVar[str] = ContextVar("syscall_eu_id", default="")
 # Lazy import of ResourceManager to avoid circular imports at module load.
 # The resource manager is only consulted inside dispatch(), so it's safe.
 def _get_rm():
-    from kernel.resource_manager import get_resource_manager
+    from AINDY.kernel.resource_manager import get_resource_manager
     return get_resource_manager()
 
 logger = logging.getLogger(__name__)
@@ -390,9 +390,9 @@ class SyscallDispatcher:
         so a broken event bus never kills a syscall execution.
         """
         try:
-            from db.database import SessionLocal
-            from core.system_event_service import emit_system_event
-            from core.system_event_types import SystemEventTypes
+            from AINDY.db.database import SessionLocal
+            from AINDY.core.system_event_service import emit_system_event
+            from AINDY.core.system_event_types import SystemEventTypes
 
             db = SessionLocal()
             try:

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 class TestFlowEngineCore:
 
     def test_flow_engine_importable(self):
-        from runtime.flow_engine import (
+        from AINDY.runtime.flow_engine import (
             FLOW_REGISTRY,
             NODE_REGISTRY,
             PersistentFlowRunner,
@@ -25,7 +25,7 @@ class TestFlowEngineCore:
         assert PersistentFlowRunner is not None
 
     def test_register_node_decorator(self):
-        from runtime.flow_engine import NODE_REGISTRY, register_node
+        from AINDY.runtime.flow_engine import NODE_REGISTRY, register_node
 
         @register_node("test_node_phase_b")
         def test_node(state, context):
@@ -34,7 +34,7 @@ class TestFlowEngineCore:
         assert "test_node_phase_b" in NODE_REGISTRY
 
     def test_register_flow(self):
-        from runtime.flow_engine import FLOW_REGISTRY, register_flow
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
 
         register_flow(
             "test_flow_phase_b",
@@ -44,14 +44,14 @@ class TestFlowEngineCore:
         assert "test_flow_phase_b" in FLOW_REGISTRY
 
     def test_resolve_next_node_simple(self):
-        from runtime.flow_engine import resolve_next_node
+        from AINDY.runtime.flow_engine import resolve_next_node
 
         flow = {"edges": {"node_a": ["node_b"]}}
         result = resolve_next_node("node_a", {}, flow)
         assert result == "node_b"
 
     def test_resolve_next_node_conditional(self):
-        from runtime.flow_engine import resolve_next_node
+        from AINDY.runtime.flow_engine import resolve_next_node
 
         flow = {
             "edges": {
@@ -74,13 +74,13 @@ class TestFlowEngineCore:
         assert result == "default_node"
 
     def test_resolve_next_node_no_edges(self):
-        from runtime.flow_engine import resolve_next_node
+        from AINDY.runtime.flow_engine import resolve_next_node
 
         result = resolve_next_node("orphan_node", {}, {"edges": {}})
         assert result is None
 
     def test_enforce_policy_blocks_node(self):
-        from runtime.flow_engine import POLICY, enforce_policy
+        from AINDY.runtime.flow_engine import POLICY, enforce_policy
 
         POLICY["blocked_nodes"].append("test_blocked_node")
 
@@ -91,7 +91,7 @@ class TestFlowEngineCore:
             POLICY["blocked_nodes"].remove("test_blocked_node")
 
     def test_execute_node_unknown_raises(self, mock_db):
-        from runtime.flow_engine import execute_node
+        from AINDY.runtime.flow_engine import execute_node
 
         with pytest.raises(KeyError):
             execute_node(
@@ -101,7 +101,7 @@ class TestFlowEngineCore:
             )
 
     def test_compile_plan_to_flow(self):
-        from runtime.flow_engine import compile_plan_to_flow
+        from AINDY.runtime.flow_engine import compile_plan_to_flow
 
         plan = {"steps": ["step_a", "step_b", "step_c"]}
         flow = compile_plan_to_flow(plan)
@@ -112,7 +112,7 @@ class TestFlowEngineCore:
         assert flow["edges"]["step_b"] == ["step_c"]
 
     def test_compile_empty_plan_raises(self):
-        from runtime.flow_engine import compile_plan_to_flow
+        from AINDY.runtime.flow_engine import compile_plan_to_flow
 
         with pytest.raises(ValueError):
             compile_plan_to_flow({"steps": []})
@@ -122,7 +122,7 @@ class TestPersistentFlowRunner:
 
     @staticmethod
     def _create_run(db_session, current_node, user_id, state=None):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             id=str(uuid4()),
@@ -140,7 +140,7 @@ class TestPersistentFlowRunner:
         return run
 
     def test_runner_instantiates(self, db_session, test_user):
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "node_a", "edges": {}, "end": ["node_a"]},
@@ -152,7 +152,7 @@ class TestPersistentFlowRunner:
 
     def test_runner_handles_missing_run(self, db_session):
         """resume() returns FAILED if run not found."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -163,7 +163,7 @@ class TestPersistentFlowRunner:
 
     def test_flow_success_path(self, db_session, test_user):
         """Single-node flow completes successfully."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("test_success_node_b")
         def success_node(state, context):
@@ -189,7 +189,7 @@ class TestPersistentFlowRunner:
 
     def test_flow_failure_path(self, db_session, test_user):
         """Node returning FAILURE fails the run."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("test_failure_node_b")
         def failure_node(state, context):
@@ -214,7 +214,7 @@ class TestPersistentFlowRunner:
 
     def test_flow_wait_path(self, db_session, test_user):
         """Node returning WAIT suspends the run."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("test_wait_node_b")
         def wait_node(state, context):
@@ -240,7 +240,7 @@ class TestPersistentFlowRunner:
 
     def test_flow_wait_without_wait_for_is_failure(self, db_session, test_user):
         """Node returning WAIT without wait_for treats as FAILURE."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("test_wait_no_event_node_b")
         def bad_wait_node(state, context):
@@ -265,7 +265,7 @@ class TestPersistentFlowRunner:
 
     def test_flow_exception_in_node_fails_run(self, db_session, test_user):
         """Unhandled exception in node fn fails the run."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("test_exception_node_b")
         def exploding_node(state, context):
@@ -291,7 +291,7 @@ class TestPersistentFlowRunner:
 
     def test_multi_node_flow_advances(self, db_session, test_user):
         """Two-node flow: node_a → node_b (end)."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         call_order = []
 
@@ -327,8 +327,8 @@ class TestPersistentFlowRunner:
 class TestFlowDefinitions:
 
     def test_all_flows_registered_at_startup(self):
-        from runtime.flow_definitions import register_all_flows
-        from runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
 
         register_all_flows()
 
@@ -337,8 +337,8 @@ class TestFlowDefinitions:
             assert flow_name in FLOW_REGISTRY, f"Flow not registered: {flow_name}"
 
     def test_all_flow_nodes_in_registry(self):
-        from runtime.flow_definitions import register_all_flows
-        from runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
 
         register_all_flows()
 
@@ -358,8 +358,8 @@ class TestFlowDefinitions:
 
     def test_flow_graphs_valid(self):
         """All flow graphs have valid structure."""
-        from runtime.flow_definitions import register_all_flows
-        from runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
 
         register_all_flows()
 
@@ -370,8 +370,8 @@ class TestFlowDefinitions:
             assert isinstance(flow["end"], list), f"Flow {name} 'end' must be a list"
 
     def test_arm_validate_input_passes_with_file_path(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["arm_validate_input"]
@@ -379,8 +379,8 @@ class TestFlowDefinitions:
         assert result["status"] == "SUCCESS"
 
     def test_arm_validate_input_fails_without_file_path(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["arm_validate_input"]
@@ -388,8 +388,8 @@ class TestFlowDefinitions:
         assert result["status"] == "FAILURE"
 
     def test_task_validate_passes_with_task_name(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["task_validate"]
@@ -397,8 +397,8 @@ class TestFlowDefinitions:
         assert result["status"] == "SUCCESS"
 
     def test_task_validate_fails_without_task_name(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["task_validate"]
@@ -406,8 +406,8 @@ class TestFlowDefinitions:
         assert result["status"] == "FAILURE"
 
     def test_leadgen_validate_passes_with_query(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["leadgen_validate"]
@@ -415,8 +415,8 @@ class TestFlowDefinitions:
         assert result["status"] == "SUCCESS"
 
     def test_leadgen_validate_fails_without_query(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
         node_fn = NODE_REGISTRY["leadgen_validate"]
@@ -425,8 +425,8 @@ class TestFlowDefinitions:
 
     def test_store_nodes_return_success_on_exception(self, mock_db):
         """Storage failure nodes return SUCCESS even when exception occurs."""
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
 
         register_all_flows()
 
@@ -515,7 +515,7 @@ class TestFlowRouterEndpoints:
 class TestStrategySelection:
 
     def test_select_strategy_no_strategies(self, db_session, test_user):
-        from runtime.flow_engine import select_strategy
+        from AINDY.runtime.flow_engine import select_strategy
 
         result = select_strategy(
             intent_type="unknown_intent", db=db_session, user_id=test_user.id
@@ -523,8 +523,8 @@ class TestStrategySelection:
         assert result is None
 
     def test_update_strategy_score_success(self, db_session, test_user):
-        from db.models.flow_run import Strategy
-        from runtime.flow_engine import update_strategy_score
+        from AINDY.db.models.flow_run import Strategy
+        from AINDY.runtime.flow_engine import update_strategy_score
 
         strategy = Strategy(
             id=str(uuid4()),
@@ -551,8 +551,8 @@ class TestStrategySelection:
         assert strategy.success_count == 1
 
     def test_update_strategy_score_failure(self, db_session, test_user):
-        from db.models.flow_run import Strategy
-        from runtime.flow_engine import update_strategy_score
+        from AINDY.db.models.flow_run import Strategy
+        from AINDY.runtime.flow_engine import update_strategy_score
 
         strategy = Strategy(
             id=str(uuid4()),
@@ -580,8 +580,8 @@ class TestStrategySelection:
 
     def test_strategy_score_floor(self, db_session, test_user):
         """Score cannot go below 0.1."""
-        from db.models.flow_run import Strategy
-        from runtime.flow_engine import update_strategy_score
+        from AINDY.db.models.flow_run import Strategy
+        from AINDY.runtime.flow_engine import update_strategy_score
 
         strategy = Strategy(
             id=str(uuid4()),
@@ -608,8 +608,8 @@ class TestStrategySelection:
 
     def test_strategy_score_ceiling(self, db_session, test_user):
         """Score cannot exceed 2.0."""
-        from db.models.flow_run import Strategy
-        from runtime.flow_engine import update_strategy_score
+        from AINDY.db.models.flow_run import Strategy
+        from AINDY.runtime.flow_engine import update_strategy_score
 
         strategy = Strategy(
             id=str(uuid4()),
@@ -636,7 +636,7 @@ class TestStrategySelection:
 
     def test_update_strategy_score_no_strategy_is_noop(self, db_session, test_user):
         """update_strategy_score is a no-op when no strategy found."""
-        from runtime.flow_engine import update_strategy_score
+        from AINDY.runtime.flow_engine import update_strategy_score
 
         # Should not raise
         update_strategy_score(
@@ -652,25 +652,25 @@ class TestRuntimeRedirects:
 
     def test_memory_loop_redirects_to_flow_engine(self):
         """runtime/memory_loop.py re-exports from flow_engine."""
-        from runtime import memory_loop
+        from AINDY.runtime import memory_loop
 
         assert hasattr(memory_loop, "PersistentFlowRunner")
 
     def test_memory_loop_preserves_execution_loop_class_name(self):
         """ExecutionLoop class is still accessible (existing code depends on it)."""
-        from runtime import memory_loop
+        from AINDY.runtime import memory_loop
 
         assert hasattr(memory_loop, "ExecutionLoop")
 
     def test_execution_registry_redirects(self):
         """runtime/execution_registry.py re-exports from flow_engine."""
-        from runtime import execution_registry
+        from AINDY.runtime import execution_registry
 
         assert hasattr(execution_registry, "NODE_REGISTRY")
 
     def test_execution_registry_preserves_existing_registry(self):
         """REGISTRY singleton is still accessible (existing code depends on it)."""
-        from runtime import execution_registry
+        from AINDY.runtime import execution_registry
 
         assert hasattr(execution_registry, "REGISTRY")
 
@@ -678,27 +678,27 @@ class TestRuntimeRedirects:
 class TestFlowEngineModels:
 
     def test_flow_run_model_importable(self):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         assert FlowRun.__tablename__ == "flow_runs"
 
     def test_flow_history_model_importable(self):
-        from db.models.flow_run import FlowHistory
+        from AINDY.db.models.flow_run import FlowHistory
 
         assert FlowHistory.__tablename__ == "flow_history"
 
     def test_event_outcome_model_importable(self):
-        from db.models.flow_run import EventOutcome
+        from AINDY.db.models.flow_run import EventOutcome
 
         assert EventOutcome.__tablename__ == "event_outcomes"
 
     def test_strategy_model_importable(self):
-        from db.models.flow_run import Strategy
+        from AINDY.db.models.flow_run import Strategy
 
         assert Strategy.__tablename__ == "strategies"
 
     def test_models_exported_from_package(self):
-        from db.models import EventOutcome, FlowHistory, FlowRun, Strategy
+        from AINDY.db.models import EventOutcome, FlowHistory, FlowRun, Strategy
 
         assert FlowRun is not None
         assert FlowHistory is not None
@@ -706,7 +706,7 @@ class TestFlowEngineModels:
         assert Strategy is not None
 
     def test_flow_run_instantiates(self):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             flow_name="test_flow",
@@ -720,7 +720,7 @@ class TestFlowEngineModels:
         assert run.status == "running"
 
     def test_flow_history_instantiates(self):
-        from db.models.flow_run import FlowHistory
+        from AINDY.db.models.flow_run import FlowHistory
 
         history = FlowHistory(
             flow_run_id="test-run-id",
@@ -731,7 +731,7 @@ class TestFlowEngineModels:
         assert history.status == "SUCCESS"
 
     def test_strategy_instantiates(self):
-        from db.models.flow_run import Strategy
+        from AINDY.db.models.flow_run import Strategy
 
         strategy = Strategy(
             intent_type="arm_analysis",
@@ -742,7 +742,7 @@ class TestFlowEngineModels:
         assert strategy.score == 1.0
 
     def test_event_outcome_instantiates(self):
-        from db.models.flow_run import EventOutcome
+        from AINDY.db.models.flow_run import EventOutcome
 
         outcome = EventOutcome(
             event_type="arm_analysis",
@@ -753,7 +753,7 @@ class TestFlowEngineModels:
         assert outcome.success is True
 
     def test_flow_run_id_has_uuid_default(self):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         id_col = FlowRun.__table__.columns["id"]
         assert id_col.default is not None
@@ -763,33 +763,33 @@ class TestFlowEngineModels:
 class TestGeneratePlanFromIntent:
 
     def test_arm_analysis_plan(self):
-        from runtime.flow_engine import generate_plan_from_intent
+        from AINDY.runtime.flow_engine import generate_plan_from_intent
 
         plan = generate_plan_from_intent({"workflow_type": "arm_analysis"})
         assert "steps" in plan
         assert len(plan["steps"]) >= 1
 
     def test_task_completion_plan(self):
-        from runtime.flow_engine import generate_plan_from_intent
+        from AINDY.runtime.flow_engine import generate_plan_from_intent
 
         plan = generate_plan_from_intent({"workflow_type": "task_completion"})
         assert "steps" in plan
 
     def test_leadgen_search_plan(self):
-        from runtime.flow_engine import generate_plan_from_intent
+        from AINDY.runtime.flow_engine import generate_plan_from_intent
 
         plan = generate_plan_from_intent({"workflow_type": "leadgen_search"})
         assert "steps" in plan
 
     def test_generic_plan_fallback(self):
-        from runtime.flow_engine import generate_plan_from_intent
+        from AINDY.runtime.flow_engine import generate_plan_from_intent
 
         plan = generate_plan_from_intent({"workflow_type": "nonexistent_type"})
         assert "steps" in plan
         assert len(plan["steps"]) >= 1
 
     def test_missing_workflow_type_defaults_to_generic(self):
-        from runtime.flow_engine import generate_plan_from_intent
+        from AINDY.runtime.flow_engine import generate_plan_from_intent
 
         plan = generate_plan_from_intent({})
         assert "steps" in plan
@@ -826,7 +826,7 @@ class TestFlowRunnerEUFailFast:
         # _trace_id_ctx without saving a token. Reset to the default sentinel
         # so downstream tests that call get_current_trace_id() (e.g. run_loop)
         # don't pick up a leaked UUID and write events with the wrong trace_id.
-        from utils.trace_context import _trace_id_ctx
+        from AINDY.utils.trace_context import _trace_id_ctx
         _trace_id_ctx.set("-")
 
     @staticmethod
@@ -843,7 +843,7 @@ class TestFlowRunnerEUFailFast:
 
     @staticmethod
     def _runner(mock_db, user_id=None):
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
         uid = user_id or TestFlowRunnerEUFailFast._TEST_USER_ID
         return PersistentFlowRunner(
             flow={"start": "noop_node", "edges": {}, "end": ["noop_node"]},
@@ -880,7 +880,7 @@ class TestFlowRunnerEUFailFast:
         captured_run = {}
 
         def _capture_add(obj):
-            from db.models.flow_run import FlowRun
+            from AINDY.db.models.flow_run import FlowRun
             if isinstance(obj, FlowRun):
                 captured_run["obj"] = obj
 

@@ -8,25 +8,25 @@ from threading import Lock
 from typing import Any, Callable
 from uuid import UUID
 
-from config import settings
-from db.database import SessionLocal
-from db.models.automation_log import AutomationLog
-from db.models.system_event import SystemEvent
-from core.execution_signal_helper import queue_system_event
-from agents.autonomous_controller import build_decision_response
-from agents.autonomous_controller import evaluate_live_trigger
-from agents.autonomous_controller import record_decision
-from core.execution_envelope import error as execution_error
-from core.execution_envelope import success as execution_success
-from core.execution_record_service import record_from_automation_log
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
-from utils.trace_context import get_parent_event_id
-from utils.trace_context import reset_parent_event_id
-from utils.trace_context import reset_trace_id
-from utils.trace_context import set_parent_event_id
-from utils.trace_context import set_trace_id
-from utils.user_ids import parse_user_id
+from AINDY.config import settings
+from AINDY.db.database import SessionLocal
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.agents.autonomous_controller import build_decision_response
+from AINDY.agents.autonomous_controller import evaluate_live_trigger
+from AINDY.agents.autonomous_controller import record_decision
+from AINDY.core.execution_envelope import error as execution_error
+from AINDY.core.execution_envelope import success as execution_success
+from AINDY.core.execution_record_service import record_from_automation_log
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.utils.trace_context import get_parent_event_id
+from AINDY.utils.trace_context import reset_parent_event_id
+from AINDY.utils.trace_context import reset_trace_id
+from AINDY.utils.trace_context import set_parent_event_id
+from AINDY.utils.trace_context import set_trace_id
+from AINDY.utils.user_ids import parse_user_id
 
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
@@ -36,7 +36,7 @@ _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 # single authoritative source for the INLINE vs ASYNC decision.  Re-exported
 # here so existing callers (flow_definitions_extended, memory_router, arm_router)
 # continue to work without modification.
-from core.execution_dispatcher import async_heavy_execution_enabled  # noqa: E402, F401
+from AINDY.core.execution_dispatcher import async_heavy_execution_enabled  # noqa: E402, F401
 
 
 def shutdown_async_jobs(*, wait: bool = True) -> None:
@@ -174,7 +174,7 @@ def _session_dialect_name(db) -> str | None:
 
 
 def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
-    from core.system_event_service import emit_system_event
+    from AINDY.core.system_event_service import emit_system_event
 
     return emit_system_event(
         db=db,
@@ -238,7 +238,7 @@ def submit_async_job(
         db.commit()
         db.refresh(log)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             ExecutionUnitService(db).create(
                 eu_type="job",
                 user_id=user_uuid,
@@ -284,7 +284,7 @@ def submit_async_job(
         # INLINE vs ASYNC decision.  JOB_DISPATCH_STUB carries async_hint=True
         # to bypass the global env flag (test-mode inline execution was already
         # handled above; reaching this line means we are in a real async env).
-        from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+        from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
         _dr = _dispatch(
             JOB_DISPATCH_STUB,
             handler_fn=lambda: _execute_job(log_id, task_name, payload),
@@ -366,7 +366,7 @@ def defer_async_job(
         db.commit()
         db.refresh(log)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             ExecutionUnitService(db).create(
                 eu_type="job",
                 user_id=user_uuid,
@@ -538,7 +538,7 @@ def process_deferred_jobs(limit: int = 25) -> int:
             else:
                 # Removed: direct _get_executor().submit() call.
                 # Route through dispatcher — single owner of thread-pool access.
-                from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+                from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
                 _lid, _tn, _pl = log.id, log.task_name, log.payload or {}
                 _dispatch(
                     JOB_DISPATCH_STUB,
@@ -614,7 +614,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         log.started_at = datetime.now(timezone.utc)
         log.attempt_count += 1
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
             if _eu:
                 ExecutionUnitService(db).update_status(_eu.id, "executing")
@@ -666,7 +666,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         log.result = _normalize_result(result)
         log.completed_at = datetime.now(timezone.utc)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
             if _eu:
                 ExecutionUnitService(db).update_status(_eu.id, "completed")
@@ -727,7 +727,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                     task_name, log.attempt_count, log.max_attempts, exc,
                 )
                 # Removed: direct _get_executor().submit() call.
-                from core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+                from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
                 _dispatch(
                     JOB_DISPATCH_STUB,
                     handler_fn=lambda: _execute_job(log_id, task_name, payload),
@@ -741,7 +741,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             log.result = _normalize_result(failure_response)
             log.completed_at = datetime.now(timezone.utc)
             try:
-                from core.execution_unit_service import ExecutionUnitService
+                from AINDY.core.execution_unit_service import ExecutionUnitService
                 _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
                 if _eu:
                     ExecutionUnitService(db).update_status(_eu.id, "failed")
@@ -822,7 +822,7 @@ def _get_analyzer():
     if _ANALYZER is None:
         with _ANALYZER_LOCK:
             if _ANALYZER is None:
-                from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+                from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 
                 _ANALYZER = DeepSeekCodeAnalyzer()
     return _ANALYZER
@@ -830,7 +830,7 @@ def _get_analyzer():
 
 @register_async_job("agent.create_run")
 def _job_agent_create_run(payload: dict[str, Any], db):
-    from agents.agent_runtime import create_run, execute_run, to_execution_response
+    from AINDY.agents.agent_runtime import create_run, execute_run, to_execution_response
 
     user_id = payload["user_id"]
     run = create_run(goal=payload["goal"], user_id=user_id, db=db)
@@ -843,7 +843,7 @@ def _job_agent_create_run(payload: dict[str, Any], db):
 
 @register_async_job("agent.approve_run")
 def _job_agent_approve_run(payload: dict[str, Any], db):
-    from agents.agent_runtime import approve_run, to_execution_response
+    from AINDY.agents.agent_runtime import approve_run, to_execution_response
 
     run = approve_run(run_id=payload["run_id"], user_id=payload["user_id"], db=db)
     if not run:
@@ -882,7 +882,7 @@ def _job_arm_generate(payload: dict[str, Any], db):
 
 @register_async_job("genesis.message")
 def _job_genesis_message(payload: dict[str, Any], db):
-    from runtime.flow_engine import execute_intent
+    from AINDY.runtime.flow_engine import execute_intent
 
     return execute_intent(
         intent_data={
@@ -897,8 +897,8 @@ def _job_genesis_message(payload: dict[str, Any], db):
 
 @register_async_job("genesis.synthesize")
 def _job_genesis_synthesize(payload: dict[str, Any], db):
-    from db.models import GenesisSessionDB
-    from domain.genesis_ai import call_genesis_synthesis_llm
+    from AINDY.db.models import GenesisSessionDB
+    from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
 
     user_id = UUID(str(payload["user_id"]))
     session = (
@@ -923,8 +923,8 @@ def _job_genesis_synthesize(payload: dict[str, Any], db):
 
 @register_async_job("genesis.audit")
 def _job_genesis_audit(payload: dict[str, Any], db):
-    from db.models import GenesisSessionDB
-    from domain.genesis_ai import validate_draft_integrity
+    from AINDY.db.models import GenesisSessionDB
+    from AINDY.domain.genesis_ai import validate_draft_integrity
 
     user_id = UUID(str(payload["user_id"]))
     session = (
@@ -939,7 +939,7 @@ def _job_genesis_audit(payload: dict[str, Any], db):
 
 @register_async_job("memory.nodus.execute")
 def _job_memory_nodus_execute(payload: dict[str, Any], db):
-    from runtime.nodus_execution_service import execute_nodus_task_payload
+    from AINDY.runtime.nodus_execution_service import execute_nodus_task_payload
 
     return execute_nodus_task_payload(
         task_name=payload["task_name"],
@@ -955,7 +955,7 @@ def _job_memory_nodus_execute(payload: dict[str, Any], db):
 
 @register_async_job("watcher.ingest")
 def _job_watcher_ingest(payload: dict[str, Any], db):
-    from runtime.flow_engine import execute_intent
+    from AINDY.runtime.flow_engine import execute_intent
 
     return execute_intent(
         intent_data={
@@ -969,14 +969,14 @@ def _job_watcher_ingest(payload: dict[str, Any], db):
 
 @register_async_job("automation.execute")
 def _job_automation_execute(payload: dict[str, Any], db):
-    from domain.automation_execution_service import execute_automation_action
+    from AINDY.domain.automation_execution_service import execute_automation_action
 
     return execute_automation_action(payload, db)
 
 
 @register_async_job("freelance.generate_delivery")
 def _job_freelance_generate_delivery(payload: dict[str, Any], db):
-    from domain.freelance_service import generate_deliverable
+    from AINDY.domain.freelance_service import generate_deliverable
 
     return generate_deliverable(
         db=db,
@@ -986,7 +986,7 @@ def _job_freelance_generate_delivery(payload: dict[str, Any], db):
 
 
 # Register late-bound handlers that depend on async_job_service.
-from memory import embedding_jobs as _embedding_jobs  # noqa: E402,F401
+from AINDY.memory import embedding_jobs as _embedding_jobs  # noqa: E402,F401
 
 
 

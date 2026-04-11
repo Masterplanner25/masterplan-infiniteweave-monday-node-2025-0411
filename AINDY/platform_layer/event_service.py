@@ -129,7 +129,7 @@ def subscribe_webhook(
 
     if db is not None:
         try:
-            from db.models.webhook_subscription import WebhookSubscription as WS
+            from AINDY.db.models.webhook_subscription import WebhookSubscription as WS
             db.add(WS(
                 id=uuid.UUID(subscription_id),
                 event_type=event_type,
@@ -199,7 +199,7 @@ def unsubscribe_webhook(subscription_id: str, *, db: Session | None = None) -> b
 
     if db is not None:
         try:
-            from db.models.webhook_subscription import WebhookSubscription as WS
+            from AINDY.db.models.webhook_subscription import WebhookSubscription as WS
             row = db.query(WS).filter(WS.id == uuid.UUID(subscription_id)).first()
             if row:
                 row.is_active = False

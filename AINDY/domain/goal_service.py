@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from db.models.goal_state import GoalState
-from db.models.goals import Goal
-from utils.uuid_utils import normalize_uuid
+from AINDY.db.models.goal_state import GoalState
+from AINDY.db.models.goals import Goal
+from AINDY.utils.uuid_utils import normalize_uuid
 
 
 def create_goal(
@@ -205,7 +205,7 @@ def distribute_goals(
     *,
     agent_candidates: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    from agents.agent_coordinator import list_agents
+    from AINDY.agents.agent_coordinator import list_agents
 
     candidates = agent_candidates or list_agents(db)
     assignments: list[dict[str, Any]] = []

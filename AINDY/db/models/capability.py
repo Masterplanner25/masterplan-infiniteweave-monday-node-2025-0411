@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class Capability(Base):

@@ -131,7 +131,7 @@ class ExecutionPipeline:
     ) -> ExecutionResult:
         # Lazy import to avoid circular dependency (execution_gate ↔ execution_pipeline).
         # Must be at the top of run() so the name is bound before the try/except.
-        from core.execution_gate import ExecutionWaitSignal
+        from AINDY.core.execution_gate import ExecutionWaitSignal
 
         trace_id = str(ctx.request_id)
         ctx.metadata.setdefault("trace_id", trace_id)
@@ -396,7 +396,7 @@ class ExecutionPipeline:
         if db is None:
             return None
         try:
-            from core.system_event_service import emit_system_event
+            from AINDY.core.system_event_service import emit_system_event
 
             event_id = emit_system_event(
                 db=db,
@@ -417,7 +417,7 @@ class ExecutionPipeline:
         if not parent_event_id:
             return None
         try:
-            from utils.trace_context import set_parent_event_id
+            from AINDY.utils.trace_context import set_parent_event_id
 
             return set_parent_event_id(parent_event_id)
         except Exception:
@@ -428,7 +428,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from utils.trace_context import reset_parent_event_id
+            from AINDY.utils.trace_context import reset_parent_event_id
 
             reset_parent_event_id(token)
         except Exception:
@@ -555,7 +555,7 @@ class ExecutionPipeline:
             if db is None:
                 continue
             try:
-                from core.system_event_service import emit_system_event
+                from AINDY.core.system_event_service import emit_system_event
 
                 event_id = emit_system_event(
                     db=db,
@@ -596,7 +596,7 @@ class ExecutionPipeline:
         if db is None:
             return False
         try:
-            from memory.memory_capture_engine import MemoryCaptureEngine
+            from AINDY.memory.memory_capture_engine import MemoryCaptureEngine
 
             engine = MemoryCaptureEngine(
                 db=db,
@@ -623,8 +623,8 @@ class ExecutionPipeline:
         if db is None or not ctx.user_id:
             return 0
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.runtime.memory import MemoryOrchestrator
 
             query = ""
             if isinstance(ctx.input_payload, dict):
@@ -652,7 +652,7 @@ class ExecutionPipeline:
 
     def _handle_contract_violation(self, message: str) -> None:
         try:
-            from config import settings
+            from AINDY.config import settings
 
             if settings.ENFORCE_EXECUTION_CONTRACT:
                 raise RuntimeError(message)
@@ -662,7 +662,7 @@ class ExecutionPipeline:
 
     def _safe_set_pipeline_active(self) -> Any:
         try:
-            from utils.trace_context import set_pipeline_active
+            from AINDY.utils.trace_context import set_pipeline_active
 
             return set_pipeline_active(True)
         except Exception:
@@ -673,7 +673,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from utils.trace_context import reset_pipeline_active
+            from AINDY.utils.trace_context import reset_pipeline_active
 
             reset_pipeline_active(token)
         except Exception:
@@ -681,7 +681,7 @@ class ExecutionPipeline:
 
     def _safe_set_current_execution_context(self, ctx: ExecutionContext) -> Any:
         try:
-            from utils.trace_context import set_current_execution_context
+            from AINDY.utils.trace_context import set_current_execution_context
 
             return set_current_execution_context(ctx)
         except Exception:
@@ -692,7 +692,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from utils.trace_context import reset_current_execution_context
+            from AINDY.utils.trace_context import reset_current_execution_context
 
             reset_current_execution_context(token)
         except Exception:
@@ -717,7 +717,7 @@ class ExecutionPipeline:
         The raise-based path is handled by ``except ExecutionWaitSignal``
         in ``run()``.  This method only handles the return-value form.
         """
-        from core.execution_gate import ExecutionWaitSignal  # lazy to avoid circular
+        from AINDY.core.execution_gate import ExecutionWaitSignal  # lazy to avoid circular
 
         if isinstance(result, ExecutionWaitSignal):
             return result.wait_for, result.payload, result.wait_condition
@@ -790,8 +790,8 @@ class ExecutionPipeline:
         # ─────────────────────────────────────────────────────────────────────
 
         try:
-            from core.execution_unit_service import ExecutionUnitService
-            from core.wait_condition import WaitCondition
+            from AINDY.core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.wait_condition import WaitCondition
 
             # Build a WaitCondition if the caller didn't provide one.
             if wait_condition is None:
@@ -805,7 +805,7 @@ class ExecutionPipeline:
             # Register with SchedulerEngine so notify_event(event_type) can
             # re-enqueue this EU when the awaited event fires.
             try:
-                from kernel.scheduler_engine import get_scheduler_engine, PRIORITY_NORMAL
+                from AINDY.kernel.scheduler_engine import get_scheduler_engine, PRIORITY_NORMAL
 
                 _eu_id = eu_id
                 _db = db
@@ -856,7 +856,7 @@ class ExecutionPipeline:
         if not isinstance(result, dict):
             return result
         try:
-            from core.execution_gate import to_envelope
+            from AINDY.core.execution_gate import to_envelope
 
             result.setdefault(
                 "execution_envelope",
@@ -892,7 +892,7 @@ class ExecutionPipeline:
         if db is None or not ctx.user_id:
             return None
         try:
-            from core.execution_gate import require_execution_unit
+            from AINDY.core.execution_gate import require_execution_unit
 
             eu = require_execution_unit(
                 db=db,
@@ -932,7 +932,7 @@ class ExecutionPipeline:
         if db is None:
             return
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
 
             ExecutionUnitService(db).update_status(eu_id, status)
             logger.debug(

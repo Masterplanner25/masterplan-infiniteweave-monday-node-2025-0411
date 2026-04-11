@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from db.models.automation_log import AutomationLog
-from db.models.flow_run import FlowHistory, FlowRun
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.flow_run import FlowHistory, FlowRun
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 

@@ -1,11 +1,9 @@
-from openai import OpenAI
-import os
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-import requests, openai
+import requests
+from AINDY.utils.openai_client import get_openai_client
 from datetime import datetime
 from sqlalchemy.orm import Session
-from db import models
-from platform_layer.external_call_service import perform_external_call
+from AINDY.db import models
+from AINDY.platform_layer.external_call_service import perform_external_call
 
 def web_search(query: str) -> str:
     """External web or API search."""
@@ -28,7 +26,7 @@ def ai_analyze(content: str) -> str:
         model="gpt-4o",
         method="openai.chat",
         extra={"purpose": "research_ai_analyze"},
-        operation=lambda: client.chat.completions.create(
+        operation=lambda: get_openai_client().chat.completions.create(
             model="gpt-4o",
             messages=[{"role":"user","content":prompt}]
         ),

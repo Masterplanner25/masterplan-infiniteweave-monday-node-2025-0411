@@ -1,11 +1,11 @@
 import logging
 from datetime import datetime, timedelta
 from uuid import UUID
-from core.execution_signal_helper import queue_memory_capture
+from AINDY.core.execution_signal_helper import queue_memory_capture
 from sqlalchemy.orm import Session
-from db.models import MasterPlan, GenesisSessionDB
-from analytics.posture import determine_posture  # adjust import if needed
-from core.observability_events import emit_observability_event
+from AINDY.db.models import MasterPlan, GenesisSessionDB
+from AINDY.analytics.posture import determine_posture  # adjust import if needed
+from AINDY.core.observability_events import emit_observability_event
 
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
     # Observe for identity inference (non-blocking)
     if user_id:
         try:
-            from domain.identity_service import IdentityService
+            from AINDY.domain.identity_service import IdentityService
             id_service = IdentityService(db=db, user_id=user_id)
             id_service.observe(
                 event_type="masterplan_locked",

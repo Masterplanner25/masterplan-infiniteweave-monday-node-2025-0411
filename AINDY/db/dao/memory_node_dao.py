@@ -16,9 +16,9 @@ from sqlalchemy import or_
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
-from utils.trace_context import get_current_trace_id
-from utils.user_ids import parse_user_id, require_user_id
+from AINDY.memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
+from AINDY.utils.trace_context import get_current_trace_id
+from AINDY.utils.user_ids import parse_user_id, require_user_id
 
 logger = logging.getLogger(__name__)
 VALID_MEMORY_TYPES = {"decision", "outcome", "failure", "insight"}
@@ -498,7 +498,7 @@ class MemoryNodeDAO:
 
         At least one of query or tags required.
         """
-        from memory.embedding_service import generate_query_embedding
+        from AINDY.memory.embedding_service import generate_query_embedding
         import math
 
         candidates = []
@@ -715,7 +715,7 @@ class MemoryNodeDAO:
         Queries each specified agent's shared memory and
         merges results by resonance score.
         """
-        from db.models.agent import SYSTEM_AGENTS
+        from AINDY.db.models.agent import SYSTEM_AGENTS
 
         namespaces = agent_namespaces or list(SYSTEM_AGENTS)
 
@@ -808,7 +808,7 @@ class MemoryNodeDAO:
         user_id: str = None,
     ) -> list:
         """Retrieve memories of a specific type."""
-        from memory.memory_persistence import VALID_NODE_TYPES
+        from AINDY.memory.memory_persistence import VALID_NODE_TYPES
         if node_type not in VALID_NODE_TYPES:
             raise ValueError(
                 f"Invalid node_type. Must be one of: {VALID_NODE_TYPES}"
@@ -838,7 +838,7 @@ class MemoryNodeDAO:
 
         Returns updated node or None if not found.
         """
-        from db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
 
         node = self._get_model_by_id(node_id, user_id=user_id)
         if not node:
@@ -897,7 +897,7 @@ class MemoryNodeDAO:
 
     def _enqueue_embedding(self, node: MemoryNodeModel) -> None:
         try:
-            from memory.embedding_jobs import enqueue_embedding
+            from AINDY.memory.embedding_jobs import enqueue_embedding
 
             enqueue_embedding(
                 memory_id=str(node.id),
@@ -953,7 +953,7 @@ class MemoryNodeDAO:
         Get the change history for a memory node.
         Returns entries in reverse chronological order.
         """
-        from db.models.memory_node_history import MemoryNodeHistory
+        from AINDY.db.models.memory_node_history import MemoryNodeHistory
 
         node = self._get_model_by_id(node_id, user_id=user_id)
         if not node:
@@ -1482,7 +1482,7 @@ class MemoryNodeDAO:
         The path must be a full leaf address including node_id.
         namespace, addr_type, and parent_path are derived from the path.
         """
-        from memory.memory_address_space import parse_path, parent_path_of, enrich_node_with_path
+        from AINDY.memory.memory_address_space import parse_path, parent_path_of, enrich_node_with_path
 
         parsed = parse_path(path)
         ns = parsed.get("namespace") or "general"
@@ -1507,7 +1507,7 @@ class MemoryNodeDAO:
 
     def get_by_path(self, path: str, user_id: str = None) -> Optional[dict]:
         """Return the node at an exact MAS path, or None."""
-        from memory.memory_address_space import enrich_node_with_path
+        from AINDY.memory.memory_address_space import enrich_node_with_path
 
         query = self.db.query(MemoryNodeModel).filter(MemoryNodeModel.path == path)
         owner = parse_user_id(user_id)
@@ -1521,7 +1521,7 @@ class MemoryNodeDAO:
 
     def list_path(self, parent_path: str, user_id: str = None, limit: int = 100) -> List[dict]:
         """Return nodes whose parent_path equals *parent_path* (one level)."""
-        from memory.memory_address_space import enrich_node_with_path
+        from AINDY.memory.memory_address_space import enrich_node_with_path
 
         query = self.db.query(MemoryNodeModel).filter(
             MemoryNodeModel.parent_path == parent_path
@@ -1534,7 +1534,7 @@ class MemoryNodeDAO:
 
     def walk_path(self, prefix: str, user_id: str = None, limit: int = 200) -> List[dict]:
         """Return all nodes whose path starts with *prefix* (recursive)."""
-        from memory.memory_address_space import enrich_node_with_path
+        from AINDY.memory.memory_address_space import enrich_node_with_path
 
         safe_prefix = prefix.rstrip("/") + "/"
         query = self.db.query(MemoryNodeModel).filter(
@@ -1562,7 +1562,7 @@ class MemoryNodeDAO:
           - prefix/*    → delegates to list_path
           - None        → no path filter (use tags/query only)
         """
-        from memory.memory_address_space import (
+        from AINDY.memory.memory_address_space import (
             is_exact, is_wildcard, is_recursive, wildcard_prefix,
             enrich_node_with_path,
         )
@@ -1608,7 +1608,7 @@ class MemoryNodeDAO:
         Traverses source_event_id → root_event_id links to build a causal history.
         Returns a list ordered from the origin node down to its earliest ancestor.
         """
-        from memory.memory_address_space import enrich_node_with_path
+        from AINDY.memory.memory_address_space import enrich_node_with_path
 
         origin = self.get_by_path(path, user_id=user_id)
         if origin is None:

@@ -20,8 +20,8 @@ from fastapi.security import (
 )
 from sqlalchemy.orm import Session
 
-from config import settings
-from db.database import get_db
+from AINDY.config import settings
+from AINDY.db.database import get_db
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -69,7 +69,7 @@ def _normalize_username_candidate(value: str | None) -> str:
 
 
 def _resolve_username(*, email: str, username: str | None, db: Session) -> str:
-    from db.models.user import User
+    from AINDY.db.models.user import User
 
     base = _normalize_username_candidate(username or email.split("@", 1)[0])
     candidate = base
@@ -135,7 +135,7 @@ def _resolve_platform_key_as_user(raw_key: str, db: Session) -> dict:
     import hashlib
     import json as _json
     from sqlalchemy import text as _text
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     record = db.query(PlatformAPIKey).filter(PlatformAPIKey.key_hash == key_hash).first()
@@ -193,7 +193,7 @@ def get_optional_user(
 
 def register_user(email: str, password: str, username: str | None, db: Session):
     """Create a new user in the database. Raises 409 if email already exists."""
-    from db.models.user import User
+    from AINDY.db.models.user import User
     existing = db.query(User).filter(User.email == email).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -211,7 +211,7 @@ def register_user(email: str, password: str, username: str | None, db: Session):
 
 def authenticate_user(email: str, password: str, db: Session):
     """Verify credentials and return user. Raises 401 on invalid credentials."""
-    from db.models.user import User
+    from AINDY.db.models.user import User
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.hashed_password):
         raise HTTPException(

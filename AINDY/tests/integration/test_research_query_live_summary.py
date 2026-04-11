@@ -1,6 +1,6 @@
 def test_research_query_uses_ai_analyze(monkeypatch):
-    from routes.research_results_router import run_research_query
-    from schemas.research_results_schema import ResearchResultCreate
+    from AINDY.routes.research_results_router import run_research_query
+    from AINDY.schemas.research_results_schema import ResearchResultCreate
 
     def _fake_web_search(query: str) -> str:
         return "Raw search content"

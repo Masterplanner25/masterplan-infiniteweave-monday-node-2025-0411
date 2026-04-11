@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.flow_run_rehydration import rehydrate_waiting_flow_runs
+from AINDY.core.flow_run_rehydration import rehydrate_waiting_flow_runs
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -637,26 +637,26 @@ class TestDeriveWaitCondition:
     # ── Event-based ────────────────────────────────────────────────────────────
 
     def test_event_type_for_waiting_for(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for="plan.approved")
         wc = derive_wait_condition_from_flow(r)
         assert wc is not None
         assert wc.type == "event"
 
     def test_event_name_matches_waiting_for(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for="task.done")
         wc = derive_wait_condition_from_flow(r)
         assert wc.event_name == "task.done"
 
     def test_correlation_id_uses_trace_id(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for="x.event", trace_id="trace-foo")
         wc = derive_wait_condition_from_flow(r)
         assert wc.correlation_id == "trace-foo"
 
     def test_correlation_id_falls_back_to_run_id_when_no_trace(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         run_id = str(uuid.uuid4())
         r = _run(waiting_for="x.event", trace_id=None, run_id=run_id)
         r.trace_id = None
@@ -665,7 +665,7 @@ class TestDeriveWaitCondition:
 
     def test_event_beats_state_trigger(self):
         """waiting_for takes priority over state time fields."""
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(
             waiting_for="my.event",
             state={"trigger_at": "2099-01-01T00:00:00Z"},
@@ -675,7 +675,7 @@ class TestDeriveWaitCondition:
         assert wc.event_name == "my.event"
 
     def test_trigger_at_is_none_for_event_condition(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for="plan.approved")
         wc = derive_wait_condition_from_flow(r)
         assert wc.trigger_at is None
@@ -683,21 +683,21 @@ class TestDeriveWaitCondition:
     # ── Time-based ─────────────────────────────────────────────────────────────
 
     def test_time_type_from_trigger_at_key(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state={"trigger_at": "2099-06-15T12:00:00Z"})
         wc = derive_wait_condition_from_flow(r)
         assert wc is not None
         assert wc.type == "time"
 
     def test_time_type_from_wait_until_key(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state={"wait_until": "2099-06-15T12:00:00+00:00"})
         wc = derive_wait_condition_from_flow(r)
         assert wc is not None
         assert wc.type == "time"
 
     def test_trigger_at_parsed_as_utc_aware_datetime(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         from datetime import datetime
         r = _run(waiting_for=None, state={"trigger_at": "2099-06-15T12:00:00Z"})
         wc = derive_wait_condition_from_flow(r)
@@ -705,7 +705,7 @@ class TestDeriveWaitCondition:
         assert wc.trigger_at.tzinfo is not None
 
     def test_trigger_at_key_wins_over_wait_until(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(
             waiting_for=None,
             state={
@@ -717,13 +717,13 @@ class TestDeriveWaitCondition:
         assert wc.trigger_at.month == 1  # trigger_at, not wait_until
 
     def test_event_name_none_for_time_condition(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state={"trigger_at": "2099-01-01T00:00:00Z"})
         wc = derive_wait_condition_from_flow(r)
         assert wc.event_name is None
 
     def test_correlation_id_set_for_time_condition(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, trace_id="trace-bar", state={"trigger_at": "2099-01-01T00:00:00Z"})
         wc = derive_wait_condition_from_flow(r)
         assert wc.correlation_id == "trace-bar"
@@ -731,28 +731,28 @@ class TestDeriveWaitCondition:
     # ── Returns None ───────────────────────────────────────────────────────────
 
     def test_returns_none_for_no_waiting_for_and_empty_state(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state={})
         assert derive_wait_condition_from_flow(r) is None
 
     def test_returns_none_for_no_waiting_for_and_null_state(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state=None)
         assert derive_wait_condition_from_flow(r) is None
 
     def test_returns_none_for_unparseable_trigger_at(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None, state={"trigger_at": "not-a-date"})
         assert derive_wait_condition_from_flow(r) is None
 
     def test_returns_none_for_empty_waiting_for_string(self):
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for="", state={})
         assert derive_wait_condition_from_flow(r) is None
 
     def test_non_dict_state_does_not_crash(self):
         """state might be a stale string from old serialization — must not raise."""
-        from core.flow_run_rehydration import derive_wait_condition_from_flow
+        from AINDY.core.flow_run_rehydration import derive_wait_condition_from_flow
         r = _run(waiting_for=None)
         r.state = "legacy string"
         assert derive_wait_condition_from_flow(r) is None
@@ -905,7 +905,7 @@ class TestEuCallbackFlowRunOwnershipGuard:
 
     def _extract_eu_callback(self, flow_run_id: str | None):
         """Return the registered resume_callback from rehydrate_waiting_eus()."""
-        from core.wait_rehydration import rehydrate_waiting_eus
+        from AINDY.core.wait_rehydration import rehydrate_waiting_eus
 
         eu = MagicMock()
         eu.id = str(uuid.uuid4())

@@ -7,7 +7,7 @@ Create Date: ${create_date}
 """
 from typing import Sequence, Union
 
-from alembic import op
+from AINDY.alembic import op
 import sqlalchemy as sa
 ${imports if imports else ""}
 

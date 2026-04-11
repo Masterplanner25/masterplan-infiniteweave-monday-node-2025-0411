@@ -13,8 +13,8 @@ from typing import Any
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from db.database import SessionLocal
-from db.models import (
+from AINDY.db.database import SessionLocal
+from AINDY.db.models import (
     AuthorDB,
     ClientFeedback,
     FreelanceOrder,

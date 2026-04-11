@@ -2,12 +2,12 @@ import uuid
 
 from fastapi import Depends, APIRouter, HTTPException, Request
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
-from schemas.masterplan import MasterPlanInput
-from schemas.analytics_inputs import (
+from AINDY.schemas.masterplan import MasterPlanInput
+from AINDY.schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
     AIEfficiencyInput,
@@ -24,9 +24,9 @@ from schemas.analytics_inputs import (
     DecisionEfficiencyInput,
     ViralityInput,
 )
-from schemas.batch import BatchInput
-from analytics.calculations import process_batch
-from analytics.calculation_services import (
+from AINDY.schemas.batch import BatchInput
+from AINDY.analytics.calculations import process_batch
+from AINDY.analytics.calculation_services import (
     calculate_effort,
     calculate_productivity,
     calculate_virality,
@@ -104,7 +104,7 @@ async def process_task(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         try:
             result = execute_infinity_orchestrator(
@@ -428,7 +428,7 @@ async def get_results(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from domain.compute_service import list_calculation_results
+        from AINDY.domain.compute_service import list_calculation_results
         return list_calculation_results(db, user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.results.list", handler, db=db, current_user=current_user)
@@ -440,7 +440,7 @@ async def get_masterplans(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from domain.compute_service import list_masterplans_compute
+        from AINDY.domain.compute_service import list_masterplans_compute
         return list_masterplans_compute(db, user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.masterplans.list", handler, db=db, current_user=current_user)
@@ -453,7 +453,7 @@ async def create_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from domain.compute_service import create_masterplan_compute
+        from AINDY.domain.compute_service import create_masterplan_compute
         return create_masterplan_compute(db, data=data.dict(), user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())

@@ -12,14 +12,14 @@ import sys
 import time
 import requests
 from sqlalchemy import create_engine, text
-from alembic.config import Config as AlembicConfig
-from alembic import command
+from AINDY.alembic.config import Config as AlembicConfig
+from AINDY.alembic import command
 
 # Ensure local imports work
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from config import settings
-from db.database import Base
+from AINDY.config import settings
+from AINDY.db.database import Base
 
 
 # ------------------------------------------------------

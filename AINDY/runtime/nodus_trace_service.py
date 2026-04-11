@@ -57,8 +57,8 @@ def query_nodus_trace(
         ``{"trace_id": str, "execution_unit_id": str, "count": int,
            "steps": [...], "summary": {...}}``
     """
-    from db.models.nodus_trace_event import NodusTraceEvent
-    from utils.uuid_utils import normalize_uuid
+    from AINDY.db.models.nodus_trace_event import NodusTraceEvent
+    from AINDY.utils.uuid_utils import normalize_uuid
 
     try:
         uid = normalize_uuid(user_id)

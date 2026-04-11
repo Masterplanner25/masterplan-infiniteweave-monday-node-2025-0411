@@ -3,7 +3,7 @@ import logging
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-from config import settings
+from AINDY.config import settings
 
 # Configuration
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_social_layer")

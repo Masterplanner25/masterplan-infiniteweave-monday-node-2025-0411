@@ -4,13 +4,13 @@ import random
 import uuid
 from unittest.mock import patch
 
-from db.models.agent_event import AgentEvent
-from db.models.agent_run import AgentRun, AgentStep
-from db.models.system_event import SystemEvent
-from agents.agent_runtime import execute_run
-from agents.capability_service import mint_token
-from core.system_event_types import SystemEventTypes
-from runtime.nodus_adapter import (
+from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.agent_run import AgentRun, AgentStep
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.agents.agent_runtime import execute_run
+from AINDY.agents.capability_service import mint_token
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.runtime.nodus_adapter import (
     NodusAgentAdapter,
     agent_execute_step,
     agent_finalize_run,

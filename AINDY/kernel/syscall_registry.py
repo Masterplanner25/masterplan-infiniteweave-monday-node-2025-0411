@@ -240,8 +240,8 @@ def _handle_memory_read(payload: dict, context: SyscallContext) -> dict:
         limit     (int)        — max results, default 5
         node_type (str)        — filter by node_type
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     path: str | None = payload.get("path")
     query: str | None = payload.get("query")
@@ -285,9 +285,9 @@ def _handle_memory_write(payload: dict, context: SyscallContext) -> dict:
         namespace    (str)        — optional namespace segment
         addr_type    (str)        — optional sub-category segment
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
-    from memory.memory_address_space import path_from_write_payload
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import path_from_write_payload
 
     content: str = payload.get("content", "")
     if not content:
@@ -301,7 +301,7 @@ def _handle_memory_write(payload: dict, context: SyscallContext) -> dict:
         {**payload, "node_type": node_type},
         tenant_id=str(context.user_id),
     )
-    from memory.memory_address_space import parent_path_of
+    from AINDY.memory.memory_address_space import parent_path_of
     parent_path = parent_path_of(full_path)
 
     db = SessionLocal()
@@ -333,8 +333,8 @@ def _handle_memory_search(payload: dict, context: SyscallContext) -> dict:
         limit  (int) — max results, default 5
         path   (str) — optional MAS path prefix to scope the search
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     query: str = payload.get("query", "")
     if not query:
@@ -370,8 +370,8 @@ def _handle_memory_list(payload: dict, context: SyscallContext) -> dict:
         path      (str) — required; MAS prefix (use /* for one level, /** for recursive)
         limit     (int) — max results, default 50
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     path: str = payload.get("path", "")
     if not path:
@@ -394,9 +394,9 @@ def _handle_memory_tree(payload: dict, context: SyscallContext) -> dict:
         path  (str) — required; MAS prefix
         limit (int) — max nodes to fetch before building tree, default 200
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
-    from memory.memory_address_space import build_tree, wildcard_prefix, is_exact, normalize_path
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import build_tree, wildcard_prefix, is_exact, normalize_path
 
     path: str = payload.get("path", "")
     if not path:
@@ -423,8 +423,8 @@ def _handle_memory_trace(payload: dict, context: SyscallContext) -> dict:
         path   (str) — required; exact MAS path to start from
         depth  (int) — max hops to follow, default 5
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     path: str = payload.get("path", "")
     if not path:
@@ -454,8 +454,8 @@ def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
                boundary is preserved. When absent the handler opens and closes
                its own session.
     """
-    from db.database import SessionLocal
-    from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+    from AINDY.db.database import SessionLocal
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
 
     flow_name: str = payload.get("flow_name", "")
     if not flow_name:
@@ -495,8 +495,8 @@ def _handle_event_emit(payload: dict, context: SyscallContext) -> dict:
         event_type (str)  — required; e.g. "task.completed"
         payload    (dict) — optional; merged into the event payload
     """
-    from db.database import SessionLocal
-    from core.system_event_service import emit_system_event
+    from AINDY.db.database import SessionLocal
+    from AINDY.core.system_event_service import emit_system_event
 
     event_type: str = payload.get("event_type", "")
     if not event_type:
@@ -540,8 +540,8 @@ def _handle_memory_read_v2(payload: dict, context: SyscallContext) -> dict:
     All v1 payload keys remain valid.  If *filters* is absent the response is
     identical to sys.v1.memory.read.
     """
-    from db.database import SessionLocal
-    from db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
     path: str | None = payload.get("path")
     query: str | None = payload.get("query")
@@ -590,7 +590,7 @@ def _handle_flow_execute_intent(payload: dict, context: SyscallContext) -> dict:
     Context metadata keys (internal use):
         _db — caller-provided SQLAlchemy Session (transaction preserved).
     """
-    from db.database import SessionLocal
+    from AINDY.db.database import SessionLocal
 
     intent_data: dict = payload.get("intent_data") or {}
     if not intent_data:
@@ -600,7 +600,7 @@ def _handle_flow_execute_intent(payload: dict, context: SyscallContext) -> dict:
     owns_session = external_db is None
     db = external_db if external_db is not None else SessionLocal()
     try:
-        from runtime.flow_engine import _execute_intent_direct
+        from AINDY.runtime.flow_engine import _execute_intent_direct
         result = _execute_intent_direct(
             intent_data=intent_data,
             db=db,
@@ -627,7 +627,7 @@ def _handle_nodus_execute(payload: dict, context: SyscallContext) -> dict:
         _db                 — caller-provided SQLAlchemy Session.
         _extra_initial_state — extra keys merged into initial flow state.
     """
-    from db.database import SessionLocal
+    from AINDY.db.database import SessionLocal
 
     script: str = payload.get("script", "")
     if not script:
@@ -644,7 +644,7 @@ def _handle_nodus_execute(payload: dict, context: SyscallContext) -> dict:
     owns_session = external_db is None
     db = external_db if external_db is not None else SessionLocal()
     try:
-        from runtime.nodus_execution_service import _run_nodus_via_flow_direct
+        from AINDY.runtime.nodus_execution_service import _run_nodus_via_flow_direct
         result = _run_nodus_via_flow_direct(
             script=script,
             input_payload=input_payload,
@@ -679,7 +679,7 @@ def _handle_job_submit(payload: dict, context: SyscallContext) -> dict:
     source: str = payload.get("source", "syscall")
     max_attempts: int = int(payload.get("max_attempts", 1))
 
-    from platform_layer.async_job_service import submit_async_job
+    from AINDY.platform_layer.async_job_service import submit_async_job
     log_id = submit_async_job(
         task_name=task_name,
         payload=job_payload,
@@ -699,7 +699,7 @@ def _handle_agent_execute(payload: dict, context: SyscallContext) -> dict:
     Context metadata keys (internal use):
         _db — caller-provided SQLAlchemy Session.
     """
-    from db.database import SessionLocal
+    from AINDY.db.database import SessionLocal
 
     run_id: str = payload.get("run_id", "")
     if not run_id:
@@ -709,7 +709,7 @@ def _handle_agent_execute(payload: dict, context: SyscallContext) -> dict:
     owns_session = external_db is None
     db = external_db if external_db is not None else SessionLocal()
     try:
-        from agents.agent_runtime import execute_run
+        from AINDY.agents.agent_runtime import execute_run
         result = execute_run(run_id=run_id, user_id=context.user_id, db=db)
         return {"run_result": result}
     finally:

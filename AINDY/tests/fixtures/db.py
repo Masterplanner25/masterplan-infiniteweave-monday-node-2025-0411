@@ -36,8 +36,8 @@ def _compile_vector_sqlite(type_, compiler, **kw):
 
 
 def _import_model_registry():
-    import db.models  # noqa: F401
-    import memory.memory_persistence  # noqa: F401
+    import AINDY.db.models  # noqa: F401
+    import AINDY.memory.memory_persistence  # noqa: F401
 
 
 @pytest.fixture(scope="session")
@@ -64,7 +64,7 @@ def test_engine():
         finally:
             cursor.close()
 
-    from db.database import Base
+    from AINDY.db.database import Base
 
     Base.metadata.create_all(bind=engine)
     yield engine
@@ -114,7 +114,7 @@ def db_session(db_session_factory):
 
 @pytest.fixture
 def mock_db(app, db_session):
-    from db.database import get_db
+    from AINDY.db.database import get_db
 
     def _override():
         yield db_session
@@ -154,7 +154,7 @@ def deterministic_random():
 @pytest.fixture(autouse=True)
 def cleanup_committed_test_state(test_engine):
     yield
-    from db.database import Base
+    from AINDY.db.database import Base
 
     with test_engine.begin() as connection:
         for table in reversed(Base.metadata.sorted_tables):

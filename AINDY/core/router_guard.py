@@ -14,7 +14,7 @@ Design:
     limiters, observability, and coordinator infrastructure are allowed.
 
 Usage:
-    from core.router_guard import validate_router_boundary
+    from AINDY.core.router_guard import validate_router_boundary
     validate_router_boundary()   # call once at application startup
 """
 from __future__ import annotations

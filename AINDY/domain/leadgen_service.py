@@ -11,21 +11,17 @@ import logging
 import json
 import re
 
-from core.execution_signal_helper import queue_memory_capture
-from analytics.search_scoring import score_lead_result
+from AINDY.core.execution_signal_helper import queue_memory_capture
+from AINDY.analytics.search_scoring import score_lead_result
 from datetime import datetime
 from sqlalchemy.orm import Session
-from openai import OpenAI
+from AINDY.memory.bridge import create_memory_node
+from AINDY.db.models.leadgen_model import LeadGenResult
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.domain.search_service import search_leads
+from AINDY.utils.trace_context import is_pipeline_active
+from AINDY.utils.openai_client import get_openai_client
 
-from memory.bridge import create_memory_node
-from db.models.leadgen_model import LeadGenResult
-from platform_layer.external_call_service import perform_external_call
-from domain.search_service import search_leads
-from utils.trace_context import is_pipeline_active
-import os
-
-# Initialize the OpenAI client (ensure API key is set in environment)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 logger = logging.getLogger(__name__)
 
 
@@ -48,8 +44,8 @@ def run_ai_search(query: str, user_id: str = None, db=None):
     # Step 1: Recall relevant past leadgen searches
     if user_id and db and not is_pipeline_active():
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.runtime.memory import MemoryOrchestrator
 
             orchestrator = MemoryOrchestrator(MemoryNodeDAO)
             context = orchestrator.get_context(
@@ -176,7 +172,7 @@ Each score must be a number between 0 and 100.
             model="gpt-4o-mini",
             method="openai.chat",
             extra={"purpose": "lead_scoring", "company": lead_data["company"]},
-            operation=lambda: client.chat.completions.create(
+            operation=lambda: get_openai_client().chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt.strip()},
@@ -269,7 +265,7 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
 
 def list_leads(db: Session, user_id: str) -> list[dict]:
     """Return all persisted LeadGenResult rows for a user, newest first."""
-    from db.models.leadgen_model import LeadGenResult
+    from AINDY.db.models.leadgen_model import LeadGenResult
 
     rows = (
         db.query(LeadGenResult)

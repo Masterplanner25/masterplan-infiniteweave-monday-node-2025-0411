@@ -258,9 +258,9 @@ class NodusRuntimeAdapter:
             if nodus_path not in sys.path:
                 sys.path.insert(0, nodus_path)
 
-            from nodus.runtime.embedding import NodusRuntime  # type: ignore[import]
-            from memory.nodus_memory_bridge import create_nodus_bridge
-            from runtime.nodus_builtins import NodusMemoryBuiltins, NodusEventBuiltins, NodusWaitSignal
+            from AINDY.nodus.runtime.embedding import NodusRuntime  # type: ignore[import]
+            from AINDY.memory.nodus_memory_bridge import create_nodus_bridge
+            from AINDY.runtime.nodus_builtins import NodusMemoryBuiltins, NodusEventBuiltins, NodusWaitSignal
 
             bridge = create_nodus_bridge(
                 db=self._db,
@@ -380,7 +380,7 @@ class NodusRuntimeAdapter:
                 else:
                     # Default: queue as A.I.N.D.Y. SystemEvent
                     try:
-                        from core.execution_signal_helper import queue_system_event
+                        from AINDY.core.execution_signal_helper import queue_system_event
                         queue_system_event(
                             db=self._db,
                             event_type=event_type,
@@ -416,7 +416,7 @@ class NodusRuntimeAdapter:
             # can call sys("sys.v1.memory.read", {...}) without knowing HTTP.
             # Capabilities default to DEFAULT_NODUS_CAPABILITIES; callers may
             # extend by passing {"syscall_capabilities": [...]} in input_payload.
-            from kernel.syscall_dispatcher import (
+            from AINDY.kernel.syscall_dispatcher import (
                 DEFAULT_NODUS_CAPABILITIES,
                 SyscallContext,
                 get_dispatcher,
@@ -573,7 +573,7 @@ class NodusRuntimeAdapter:
             # Check if the VM re-raised NodusWaitSignal (some VM implementations propagate
             # host function exceptions rather than wrapping them as script errors)
             try:
-                from runtime.nodus_builtins import NodusWaitSignal as _WaitSig
+                from AINDY.runtime.nodus_builtins import NodusWaitSignal as _WaitSig
                 if isinstance(exc, _WaitSig):
                     logger.info(
                         "[NodusRuntimeAdapter] '%s' → waiting_for='%s' eu=%s (re-raised)",
@@ -671,8 +671,8 @@ def _flush_nodus_traces(traces: list) -> None:
         return
     try:
         import uuid as _uuid
-        from db.database import SessionLocal
-        from db.models.nodus_trace_event import NodusTraceEvent
+        from AINDY.db.database import SessionLocal
+        from AINDY.db.models.nodus_trace_event import NodusTraceEvent
 
         db = SessionLocal()
         try:
@@ -726,7 +726,7 @@ def _build_event_sink(
     """
     def _sink(event_type: str, payload: dict) -> None:
         try:
-            from core.execution_signal_helper import queue_system_event
+            from AINDY.core.execution_signal_helper import queue_system_event
             queue_system_event(
                 db=db,
                 event_type=event_type,
@@ -754,7 +754,7 @@ def _flush_memory_writes(
     Queue a memory capture for each write collected during Nodus execution.
     Non-fatal — a single failed write does not abort the node.
     """
-    from core.execution_signal_helper import queue_memory_capture
+    from AINDY.core.execution_signal_helper import queue_memory_capture
 
     for write in memory_writes:
         args = write.get("args", [])

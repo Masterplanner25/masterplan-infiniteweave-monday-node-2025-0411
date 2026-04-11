@@ -4,7 +4,7 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 
 def score_memory(memory_node: dict[str, Any]) -> float:

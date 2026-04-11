@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 
 # ── Import the module under test ──────────────────────────────────────────────
-from analytics import calculation_services
-from schemas.analytics_inputs import (
+from AINDY.analytics import calculation_services
+from AINDY.schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
     AIEfficiencyInput,

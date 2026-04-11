@@ -94,7 +94,7 @@ class TestGenesisMessageEndpoint:
         This test verifies call_genesis_llm() is NOT a stub.
         """
         import inspect
-        from domain.genesis_ai import call_genesis_llm
+        from AINDY.domain.genesis_ai import call_genesis_llm
 
         source = inspect.getsource(call_genesis_llm)
         # Confirm it calls the OpenAI client
@@ -148,7 +148,7 @@ class TestGenesisSynthesizeEndpoint:
         )
 
         # Verify the function exists in genesis_ai
-        from domain.genesis_ai import call_genesis_synthesis_llm
+        from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
         assert callable(call_genesis_synthesis_llm), (
             "call_genesis_synthesis_llm does not exist in genesis_ai.py — it should"
         )
@@ -194,7 +194,7 @@ class TestGenesisBlock1:
 
     def test_genesis_session_has_synthesis_ready_column(self):
         """GenesisSessionDB must have synthesis_ready (Boolean) column."""
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         col_names = [c.key for c in GenesisSessionDB.__table__.columns]
         assert "synthesis_ready" in col_names, (
             f"synthesis_ready missing from genesis_sessions. Columns: {col_names}"
@@ -202,7 +202,7 @@ class TestGenesisBlock1:
 
     def test_genesis_session_has_draft_json_column(self):
         """GenesisSessionDB must have draft_json (JSON) column."""
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         col_names = [c.key for c in GenesisSessionDB.__table__.columns]
         assert "draft_json" in col_names, (
             f"draft_json missing from genesis_sessions. Columns: {col_names}"
@@ -210,7 +210,7 @@ class TestGenesisBlock1:
 
     def test_genesis_session_has_user_id_column(self):
         """GenesisSessionDB must have user_id (UUID) column."""
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         col_names = [c.key for c in GenesisSessionDB.__table__.columns]
         assert "user_id" in col_names, (
             f"user_id missing from genesis_sessions. Columns: {col_names}"
@@ -218,7 +218,7 @@ class TestGenesisBlock1:
 
     def test_genesis_session_has_locked_at_column(self):
         """GenesisSessionDB must have locked_at (DateTime) column."""
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         col_names = [c.key for c in GenesisSessionDB.__table__.columns]
         assert "locked_at" in col_names, (
             f"locked_at missing from genesis_sessions. Columns: {col_names}"
@@ -226,7 +226,7 @@ class TestGenesisBlock1:
 
     def test_master_plan_has_user_id_column(self):
         """MasterPlan must have user_id (String) column."""
-        from db.models import MasterPlan
+        from AINDY.db.models import MasterPlan
         col_names = [c.key for c in MasterPlan.__table__.columns]
         assert "user_id" in col_names, (
             f"user_id missing from master_plans. Columns: {col_names}"
@@ -234,7 +234,7 @@ class TestGenesisBlock1:
 
     def test_master_plan_has_status_column(self):
         """MasterPlan must have status (String) column."""
-        from db.models import MasterPlan
+        from AINDY.db.models import MasterPlan
         col_names = [c.key for c in MasterPlan.__table__.columns]
         assert "status" in col_names, (
             f"status missing from master_plans. Columns: {col_names}"
@@ -243,7 +243,7 @@ class TestGenesisBlock1:
     def test_create_masterplan_from_genesis_accepts_user_id(self):
         """create_masterplan_from_genesis must accept user_id keyword argument."""
         import inspect
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         sig = inspect.signature(create_masterplan_from_genesis)
         assert "user_id" in sig.parameters, (
             "create_masterplan_from_genesis does not accept user_id parameter"
@@ -316,7 +316,7 @@ class TestGenesisBlock3:
     def test_call_genesis_synthesis_llm_is_real_not_stub(self):
         """call_genesis_synthesis_llm must make a real OpenAI call, not return a static dict."""
         import inspect
-        from domain.genesis_ai import call_genesis_synthesis_llm
+        from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
         source = inspect.getsource(call_genesis_synthesis_llm)
         assert "client.chat.completions.create" in source, (
             "call_genesis_synthesis_llm appears to be a stub — does not call OpenAI"
@@ -339,7 +339,7 @@ class TestGenesisBlock3:
 
     def test_determine_posture_returns_valid_labels(self):
         """determine_posture must return one of four valid posture labels."""
-        from analytics.posture import determine_posture
+        from AINDY.analytics.posture import determine_posture
         valid = {"Stable", "Accelerated", "Aggressive", "Reduced"}
         test_cases = [
             {"time_horizon_years": 1, "ambition_score": 0.9},   # → Aggressive
@@ -355,17 +355,17 @@ class TestGenesisBlock3:
 
     def test_determine_posture_aggressive_short_high(self):
         """Short horizon + high ambition → Aggressive."""
-        from analytics.posture import determine_posture
+        from AINDY.analytics.posture import determine_posture
         assert determine_posture({"time_horizon_years": 1, "ambition_score": 0.9}) == "Aggressive"
 
     def test_determine_posture_reduced_long_low(self):
         """Long horizon + low ambition → Reduced."""
-        from analytics.posture import determine_posture
+        from AINDY.analytics.posture import determine_posture
         assert determine_posture({"time_horizon_years": 8, "ambition_score": 0.2}) == "Reduced"
 
     def test_posture_description_exists(self):
         """posture_description() helper must exist and return non-empty strings."""
-        from analytics.posture import posture_description
+        from AINDY.analytics.posture import posture_description
         for posture in ("Stable", "Accelerated", "Aggressive", "Reduced"):
             desc = posture_description(posture)
             assert isinstance(desc, str) and len(desc) > 0, (

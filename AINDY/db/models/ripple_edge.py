@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class RippleEdge(Base):

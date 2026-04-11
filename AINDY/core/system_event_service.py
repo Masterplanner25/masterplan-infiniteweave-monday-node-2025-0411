@@ -6,15 +6,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from config import settings
-from core.execution_signal_helper import queue_system_event
-from domain.rippletrace_service import link_events
-from core.system_event_types import SystemEventTypes
-from utils.trace_context import get_parent_event_id
-from utils.trace_context import get_trace_id
-from utils.trace_context import is_pipeline_active
-from config import settings
-from utils.uuid_utils import normalize_uuid
+from AINDY.config import settings
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.domain.rippletrace_service import link_events
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.utils.trace_context import get_parent_event_id
+from AINDY.utils.trace_context import get_trace_id
+from AINDY.utils.trace_context import is_pipeline_active
+from AINDY.config import settings
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 _VERBOSE_SYSTEM_EVENT_LOGS = os.getenv("AINDY_DEBUG_SYSTEM_EVENTS", "false").lower() in {
@@ -61,7 +61,7 @@ def _persist_system_event(
     agent_id: str | uuid.UUID | None,
     payload: Optional[dict[str, Any]],
  ) -> uuid.UUID:
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     normalized_parent_event_id = None
     if parent_event_id:
@@ -157,7 +157,7 @@ def _is_feedback_signal(event_type: str) -> bool:
 def _has_recent_feedback_event(db, *, trace_id: str | None, event_type: str, window_minutes: int = 15) -> bool:
     if not trace_id:
         return False
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
     return (
@@ -173,7 +173,7 @@ def _has_recent_feedback_event(db, *, trace_id: str | None, event_type: str, win
 
 
 def _recent_failure_count(db, *, user_id, payload: dict[str, Any], source: str | None) -> int:
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     workflow_type = str((payload or {}).get("workflow_type") or "")
     task_name = str((payload or {}).get("task_name") or "")
@@ -269,7 +269,7 @@ def _detect_behavioral_feedback_signals(
             latency_value = 0.0
         threshold = 2500.0
         try:
-            from db.models.request_metric import RequestMetric
+            from AINDY.db.models.request_metric import RequestMetric
             from sqlalchemy import func
 
             avg_latency = (
@@ -331,7 +331,7 @@ def _detect_behavioral_feedback_signals(
             )
 
     try:
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.models.automation_log import AutomationLog
 
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
         stale_logs = (
@@ -393,7 +393,7 @@ def _notify_scheduler_of_event(
     Non-fatal — any exception is swallowed and logged at DEBUG level.
     """
     try:
-        from kernel.event_bus import publish_event
+        from AINDY.kernel.event_bus import publish_event
 
         corr = (payload or {}).get("correlation_id") or trace_id
         resumed = publish_event(event_type, correlation_id=corr)
@@ -477,8 +477,8 @@ def emit_system_event(
                 signal_exc,
             )
         try:
-            from db.models.system_event import SystemEvent
-            from memory.memory_capture_engine import capture_system_event_as_memory
+            from AINDY.db.models.system_event import SystemEvent
+            from AINDY.memory.memory_capture_engine import capture_system_event_as_memory
 
             persisted_event = db.query(SystemEvent).filter(SystemEvent.id == event_id).first()
             if persisted_event:
@@ -493,7 +493,7 @@ def emit_system_event(
         # ── Webhook fan-out ───────────────────────────────────────────────
         # Fire-and-forget: runs in background thread pool, never blocks here.
         try:
-            from platform_layer.event_service import dispatch_webhooks_async
+            from AINDY.platform_layer.event_service import dispatch_webhooks_async
             dispatch_webhooks_async(
                 event_type=event_type,
                 event_id=str(event_id) if event_id else "",

@@ -47,7 +47,7 @@ Configuration (environment variables)
 Usage
 -----
     # Publisher (automatic — called inside notify_event())
-    from kernel.event_bus import get_event_bus
+    from AINDY.kernel.event_bus import get_event_bus
     get_event_bus().publish("task.completed", correlation_id="chain-abc")
 
     # Subscriber (called once at startup on every instance)
@@ -317,7 +317,7 @@ class EventBus:
 
         # ── Local notify (broadcast=False prevents re-publication) ─────────
         try:
-            from kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
+            from AINDY.kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
             get_scheduler_engine().notify_event(
                 event_type,
                 correlation_id=correlation_id,
@@ -388,7 +388,7 @@ def publish_event(
         Number of flows re-enqueued **locally** on this instance.
         Remote resume counts are not returned (fire-and-forget via Redis).
     """
-    from kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
+    from AINDY.kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
     return get_scheduler_engine().notify_event(
         event_type,
         correlation_id=correlation_id,

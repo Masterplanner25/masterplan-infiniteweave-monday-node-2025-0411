@@ -11,9 +11,9 @@ no behavior changes, just wrapped in the node contract:
 """
 import logging
 
-from core.execution_signal_helper import queue_memory_capture
-from runtime.flow_engine import FLOW_REGISTRY, NODE_REGISTRY, register_flow, register_node
-from runtime.flow_definitions_extended import register_extended_flows  # noqa: F401
+from AINDY.core.execution_signal_helper import queue_memory_capture
+from AINDY.runtime.flow_engine import FLOW_REGISTRY, NODE_REGISTRY, register_flow, register_node
+from AINDY.runtime.flow_definitions_extended import register_extended_flows  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dic
 
     This is the standard thin-wrapper pattern for all refactored flow nodes.
     """
-    from kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
 
     ctx = make_syscall_ctx_from_flow(context, capabilities=[capability])
     result = get_dispatcher().dispatch(name, state, ctx)
@@ -204,7 +204,7 @@ def genesis_message_execute(state, context):
 @register_node("genesis_message_orchestrate")
 def genesis_message_orchestrate(state, context):
     try:
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -234,12 +234,12 @@ def memory_execution_run(state, context):
     try:
         from types import SimpleNamespace
 
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory_loop import ExecutionLoop
-        from runtime.execution_registry import REGISTRY
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-        from domain.genesis_ai import call_genesis_llm
-        from domain.leadgen_service import create_lead_results
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory_loop import ExecutionLoop
+        from AINDY.runtime.execution_registry import REGISTRY
+        from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+        from AINDY.domain.genesis_ai import call_genesis_llm
+        from AINDY.domain.leadgen_service import create_lead_results
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -313,7 +313,7 @@ def memory_execution_run(state, context):
 def memory_execution_orchestrate(state, context):
     response = dict(state.get("memory_execution_response") or {})
     try:
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -450,8 +450,8 @@ def watcher_ingest_orchestrate(state, context):
     try:
         from uuid import UUID
 
-        from analytics.eta_service import recalculate_all_etas
-        from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.analytics.eta_service import recalculate_all_etas
+        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         session_ended_count = state.get("watcher_session_ended_count") or 0

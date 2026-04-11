@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 def get_arm_logs(db: Session, *, user_id: str, limit: int = 20) -> dict[str, Any]:
     """Return ARM analysis and code-generation logs for a user."""
-    from db.models.arm_models import AnalysisResult, CodeGeneration
+    from AINDY.db.models.arm_models import AnalysisResult, CodeGeneration
 
     uid = UUID(str(user_id))
     analyses = (

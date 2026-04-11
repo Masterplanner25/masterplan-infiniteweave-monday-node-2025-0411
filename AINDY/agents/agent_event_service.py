@@ -5,7 +5,7 @@ emit_event() is the single entry point for agent lifecycle persistence.
 Critical execution paths pass required=True so missing audit events fail closed.
 
 Usage:
-    from agents.agent_event_service import emit_event
+    from AINDY.agents.agent_event_service import emit_event
     emit_event(
         run_id=str(run.id),
         user_id=run.user_id,
@@ -22,11 +22,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from core.execution_signal_helper import queue_system_event
-from core.system_event_service import SystemEventEmissionError
-from utils.trace_context import get_parent_event_id
-from utils.trace_context import get_trace_id
-from utils.uuid_utils import normalize_uuid
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.core.system_event_service import SystemEventEmissionError
+from AINDY.utils.trace_context import get_parent_event_id
+from AINDY.utils.trace_context import get_trace_id
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def emit_event(
         payload:        Optional dict of event-specific data
     """
     try:
-        from db.models.agent_event import AgentEvent
+        from AINDY.db.models.agent_event import AgentEvent
 
         if event_type not in AGENT_EVENT_TYPES:
             logger.warning(

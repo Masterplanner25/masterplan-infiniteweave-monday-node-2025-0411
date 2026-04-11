@@ -71,7 +71,7 @@ def create_api_key(
     Returns (record, raw_key).  *raw_key* is the only time the plaintext key
     is available â€” it is not stored and cannot be recovered later.
     """
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     raw_key, key_hash = generate_key()
     key_prefix = raw_key[:16]  # first 16 chars (aindy_ + ~10) â€” safe to display
@@ -99,7 +99,7 @@ def revoke_api_key(key_id: str, user_id: str, db: Session) -> bool:
     Ownership-checked: only the owning user may revoke.
     Returns True if revoked, False if not found / not owned.
     """
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     record = db.query(PlatformAPIKey).filter(
         PlatformAPIKey.id == uuid.UUID(key_id),
@@ -117,7 +117,7 @@ def revoke_api_key(key_id: str, user_id: str, db: Session) -> bool:
 
 def list_api_keys(user_id: str, db: Session) -> list[dict]:
     """Return public metadata for all keys owned by *user_id* (no hash / plaintext)."""
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     records = db.query(PlatformAPIKey).filter(
         PlatformAPIKey.user_id == uuid.UUID(user_id),
@@ -128,7 +128,7 @@ def list_api_keys(user_id: str, db: Session) -> list[dict]:
 
 def get_api_key(key_id: str, user_id: str, db: Session) -> dict | None:
     """Return public metadata for a single key, or None if not found / not owned."""
-    from db.models.api_key import PlatformAPIKey
+    from AINDY.db.models.api_key import PlatformAPIKey
 
     record = db.query(PlatformAPIKey).filter(
         PlatformAPIKey.id == uuid.UUID(key_id),

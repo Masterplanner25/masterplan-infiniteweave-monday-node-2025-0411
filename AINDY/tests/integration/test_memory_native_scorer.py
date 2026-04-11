@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.memory import scorer as scorer_module
-from runtime.memory import native_scorer as native_module
-from runtime.memory.scorer import MemoryScorer
+from AINDY.runtime.memory import scorer as scorer_module
+from AINDY.runtime.memory import native_scorer as native_module
+from AINDY.runtime.memory.scorer import MemoryScorer
 
 
 def test_native_scoring_parity_with_python_fallback(monkeypatch):

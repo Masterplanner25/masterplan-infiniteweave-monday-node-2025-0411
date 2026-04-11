@@ -8,17 +8,17 @@ import pytest
 class TestInfinityLoopModels:
 
     def test_loop_adjustment_model_exists(self):
-        from db.models.infinity_loop import LoopAdjustment
+        from AINDY.db.models.infinity_loop import LoopAdjustment
 
         assert LoopAdjustment.__tablename__ == "loop_adjustments"
 
     def test_user_feedback_model_exists(self):
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
 
         assert UserFeedback.__tablename__ == "user_feedback"
 
     def test_loop_adjustment_columns_present(self):
-        from db.models.infinity_loop import LoopAdjustment
+        from AINDY.db.models.infinity_loop import LoopAdjustment
 
         cols = {c.name for c in LoopAdjustment.__table__.columns}
         for required in [
@@ -35,7 +35,7 @@ class TestInfinityLoopModels:
             assert required in cols
 
     def test_user_feedback_columns_present(self):
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
 
         cols = {c.name for c in UserFeedback.__table__.columns}
         for required in [
@@ -51,7 +51,7 @@ class TestInfinityLoopModels:
             assert required in cols
 
     def test_models_exported_from_db_package(self):
-        from db.models import LoopAdjustment, UserFeedback
+        from AINDY.db.models import LoopAdjustment, UserFeedback
 
         assert LoopAdjustment.__tablename__ == "loop_adjustments"
         assert UserFeedback.__tablename__ == "user_feedback"
@@ -86,29 +86,29 @@ class TestInfinityLoopMigration:
 class TestInfinityLoopHelpers:
 
     def test_normalize_trigger_event_task_completion(self):
-        from domain.infinity_loop import _normalize_trigger_event
+        from AINDY.domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("task_completion") == "task_completed"
 
     def test_normalize_trigger_event_arm_analysis(self):
-        from domain.infinity_loop import _normalize_trigger_event
+        from AINDY.domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("arm_analysis") == "arm_analyzed"
 
     def test_normalize_trigger_event_passthrough(self):
-        from domain.infinity_loop import _normalize_trigger_event
+        from AINDY.domain.infinity_loop import _normalize_trigger_event
 
         assert _normalize_trigger_event("scheduled") == "scheduled"
 
     def test_serialize_adjustment_none(self):
-        from domain.infinity_loop import serialize_adjustment
+        from AINDY.domain.infinity_loop import serialize_adjustment
 
         assert serialize_adjustment(None) is None
 
     def test_serialize_adjustment_shape(self):
         from datetime import datetime, timezone
 
-        from domain.infinity_loop import serialize_adjustment
+        from AINDY.domain.infinity_loop import serialize_adjustment
 
         adjustment = MagicMock()
         adjustment.id = uuid.uuid4()
@@ -122,13 +122,13 @@ class TestInfinityLoopHelpers:
         assert result["adjustment_payload"] == {"suggestions": []}
 
     def test_latest_adjustment_payload_helper_returns_none_without_adjustment(self):
-        from routes.score_router import _latest_adjustment_payload
+        from AINDY.routes.score_router import _latest_adjustment_payload
 
         with patch("domain.infinity_loop.get_latest_adjustment", return_value=None):
             assert _latest_adjustment_payload("u1", MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
-        from routes.score_router import _latest_adjustment_payload
+        from AINDY.routes.score_router import _latest_adjustment_payload
 
         with patch("domain.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
              patch("domain.infinity_loop.serialize_adjustment", return_value={
@@ -149,7 +149,7 @@ class TestInfinityLoopHelpers:
 class TestInfinityLoopDecisions:
 
     def test_decide_task_reprioritization_for_low_execution_speed(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 30.0,
@@ -161,7 +161,7 @@ class TestInfinityLoopDecisions:
         assert payload["reason"] == "execution_or_decision_below_threshold"
 
     def test_decide_task_reprioritization_for_low_decision_efficiency(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, _ = _decide({
             "execution_speed": 55.0,
@@ -172,7 +172,7 @@ class TestInfinityLoopDecisions:
         assert decision == "reprioritize_tasks"
 
     def test_decide_review_plan_for_low_focus(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -185,7 +185,7 @@ class TestInfinityLoopDecisions:
         assert payload["suggestions"][0]["tool"] == "memory.recall"
 
     def test_decide_review_plan_for_low_ai_boost(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -198,7 +198,7 @@ class TestInfinityLoopDecisions:
         assert payload["suggestions"][0]["tool"] == "arm.analyze"
 
     def test_decide_continue_highest_priority_task_for_neutral_scores(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, payload = _decide({
             "execution_speed": 55.0,
@@ -210,7 +210,7 @@ class TestInfinityLoopDecisions:
         assert payload["reason"] == "kpis_stable"
 
     def test_decide_review_plan_for_missing_snapshot(self):
-        from domain.infinity_loop import _decide
+        from AINDY.domain.infinity_loop import _decide
 
         decision, payload = _decide(None)
         assert decision == "review_plan"
@@ -220,7 +220,7 @@ class TestInfinityLoopDecisions:
 class TestTaskReprioritization:
 
     def test_reprioritize_tasks_updates_top_tasks_to_high(self):
-        from domain.infinity_loop import _reprioritize_tasks
+        from AINDY.domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         task1 = MagicMock(id=1, name="A", priority="low")
@@ -242,7 +242,7 @@ class TestTaskReprioritization:
         db.commit.assert_called_once()
 
     def test_reprioritize_tasks_handles_invalid_user_id(self):
-        from domain.infinity_loop import _reprioritize_tasks
+        from AINDY.domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         payload = _reprioritize_tasks(user_id="not-a-uuid", db=db)
@@ -250,7 +250,7 @@ class TestTaskReprioritization:
         assert payload["task_ids"] == []
 
     def test_reprioritize_tasks_returns_no_tasks_reason(self):
-        from domain.infinity_loop import _reprioritize_tasks
+        from AINDY.domain.infinity_loop import _reprioritize_tasks
 
         db = MagicMock()
         query = db.query.return_value
@@ -269,7 +269,7 @@ class TestTaskReprioritization:
 class TestRunLoop:
 
     def test_run_loop_persists_adjustment_with_next_action(self, monkeypatch):
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         db = MagicMock()
         db.refresh.return_value = None
@@ -296,7 +296,7 @@ class TestRunLoop:
     def test_run_loop_uses_thrash_guard(self, monkeypatch):
         from datetime import datetime, timezone
 
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         existing = MagicMock()
         existing.decision_type = "review_plan"
@@ -322,7 +322,7 @@ class TestRunLoop:
         db.add.assert_not_called()
 
     def test_run_loop_reprioritize_tasks_calls_helper(self, monkeypatch):
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         db = MagicMock()
         monkeypatch.setattr(
@@ -350,7 +350,7 @@ class TestRunLoop:
         assert called["user_id"] == "u1"
 
     def test_run_loop_never_raises(self, monkeypatch):
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         db = MagicMock()
         monkeypatch.setattr(
@@ -360,7 +360,7 @@ class TestRunLoop:
         assert run_loop("u1", "manual", db) is None
 
     def test_run_loop_normalizes_trigger_event_before_persist(self, monkeypatch):
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         db = MagicMock()
         captured = {}
@@ -382,7 +382,7 @@ class TestRunLoop:
         assert captured["trigger_event"] == "arm_analyzed"
 
     def test_run_loop_never_returns_empty_next_action(self, monkeypatch):
-        from domain.infinity_loop import run_loop
+        from AINDY.domain.infinity_loop import run_loop
 
         db = MagicMock()
         db.refresh.return_value = None
@@ -401,7 +401,7 @@ class TestRunLoop:
 class TestPersistedSuggestions:
 
     def test_suggest_tools_uses_latest_loop_adjustment_when_present(self):
-        from agents.agent_tools import suggest_tools
+        from AINDY.agents.agent_tools import suggest_tools
 
         db = MagicMock()
         latest = MagicMock()
@@ -417,7 +417,7 @@ class TestPersistedSuggestions:
         assert result[0]["tool"] == "memory.recall"
 
     def test_suggest_tools_falls_back_to_transient_rules_without_payload(self):
-        from agents.agent_tools import suggest_tools
+        from AINDY.agents.agent_tools import suggest_tools
 
         db = MagicMock()
         latest = MagicMock()
@@ -443,7 +443,7 @@ class TestScoreRouterLoopSurface:
     def test_get_score_includes_latest_adjustment_when_score_exists(
         self, client, auth_headers, db_session, test_user
     ):
-        from db.models.user_score import UserScore
+        from AINDY.db.models.user_score import UserScore
 
         db_session.add(
             UserScore(
@@ -510,7 +510,7 @@ class TestScoreRouterLoopSurface:
         assert response.status_code == 401
 
     def test_feedback_post_writes_row(self, client, auth_headers, db_session, test_user):
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
 
         response = client.post(
             "/scores/feedback",
@@ -529,7 +529,7 @@ class TestScoreRouterLoopSurface:
         assert feedback.feedback_value == 1
 
     def test_feedback_get_returns_history(self, client, auth_headers, db_session, test_user):
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
 
         db_session.add(
             UserFeedback(
@@ -550,7 +550,7 @@ class TestScoreRouterLoopSurface:
         assert data["count"] == 1
 
     def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, db_session, test_user):
-        from db.models.infinity_loop import LoopAdjustment
+        from AINDY.db.models.infinity_loop import LoopAdjustment
 
         adjustment = LoopAdjustment(
             id=uuid.uuid4(),
@@ -623,7 +623,7 @@ class TestLoopTriggerWiring:
 class TestInfinityOrchestrator:
 
     def test_execute_returns_score_adjustment_and_next_action(self, monkeypatch):
-        from domain.infinity_orchestrator import execute
+        from AINDY.domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
             "domain.infinity_orchestrator.calculate_infinity_score",
@@ -662,7 +662,7 @@ class TestInfinityOrchestrator:
         assert result["next_action"]["type"] == "continue_highest_priority_task"
 
     def test_execute_raises_when_adjustment_has_no_next_action(self, monkeypatch):
-        from domain.infinity_orchestrator import execute
+        from AINDY.domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
             "domain.infinity_orchestrator.calculate_infinity_score",

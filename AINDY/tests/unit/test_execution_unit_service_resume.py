@@ -24,7 +24,7 @@ import uuid
 
 import pytest
 
-from core.execution_unit_service import ExecutionUnitService
+from AINDY.core.execution_unit_service import ExecutionUnitService
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

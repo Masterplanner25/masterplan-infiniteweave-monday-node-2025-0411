@@ -18,13 +18,13 @@ import uuid
 from typing import Optional
 
 from sqlalchemy import text
-from core.execution_signal_helper import queue_memory_capture, queue_system_event
+from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
 emit_system_event = queue_system_event
-from core.observability_events import emit_observability_event
-from domain.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
-from utils.trace_context import get_current_trace_id
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.domain.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ AUTO_MEMORY_EVENT_TYPES = {
 
 
 def calculate_impact_score(db, event_id: str) -> float:
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     event_uuid = uuid.UUID(str(event_id))
     event = db.query(SystemEvent).filter(SystemEvent.id == event_uuid).first()
@@ -81,7 +81,7 @@ class MemoryCaptureEngine:
     @property
     def dao(self):
         if self._dao is None:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
             self._dao = MemoryNodeDAO(self.db)
         return self._dao
 
@@ -113,7 +113,7 @@ class MemoryCaptureEngine:
         force: bypass significance check (always store)
         """
         try:
-            from utils.trace_context import is_pipeline_active
+            from AINDY.utils.trace_context import is_pipeline_active
 
             if is_pipeline_active() and not allow_when_pipeline_active:
                 return None
@@ -483,7 +483,7 @@ class MemoryCaptureEngine:
                 if not self.user_id or r.get("user_id") == self.user_id
             ]
 
-            from memory.bridge import create_memory_link
+            from AINDY.memory.bridge import create_memory_link
 
             for related_node in related:
                 if related_node.get("id") == new_node.get("id"):

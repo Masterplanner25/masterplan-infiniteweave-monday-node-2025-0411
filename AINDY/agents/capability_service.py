@@ -16,8 +16,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from agents.agent_tools import TOOL_REGISTRY
-from utils.user_ids import parse_user_id, require_user_id
+from AINDY.agents.agent_tools import TOOL_REGISTRY
+from AINDY.utils.user_ids import parse_user_id, require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +124,7 @@ def _token_hash(
 
 def _get_trust(user_id: str, db) -> Optional[Any]:
     try:
-        from db.models.agent_run import AgentTrustSettings
+        from AINDY.db.models.agent_run import AgentTrustSettings
 
         return (
             db.query(AgentTrustSettings)
@@ -139,7 +139,7 @@ def _get_trust(user_id: str, db) -> Optional[Any]:
 def sync_capability_catalog(db) -> None:
     """Best-effort seed of the capability table."""
     try:
-        from db.models.capability import Capability
+        from AINDY.db.models.capability import Capability
 
         existing = {
             row.name: row
@@ -169,7 +169,7 @@ def sync_capability_catalog(db) -> None:
 
 def _get_capability_rows(db) -> dict[str, Any]:
     try:
-        from db.models.capability import Capability
+        from AINDY.db.models.capability import Capability
 
         sync_capability_catalog(db)
         return {row.name: row for row in db.query(Capability).all()}
@@ -186,7 +186,7 @@ def create_run_capability_mappings(
 ) -> None:
     """Best-effort persistence of run and agent-type capability mappings."""
     try:
-        from db.models.capability import AgentCapabilityMapping
+        from AINDY.db.models.capability import AgentCapabilityMapping
 
         rows = _get_capability_rows(db)
         if not rows:

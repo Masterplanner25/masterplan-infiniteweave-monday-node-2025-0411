@@ -5,11 +5,11 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from db.models.agent_run import AgentRun, AgentTrustSettings
-from db.models.automation_log import AutomationLog
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from services.auth_service import hash_password
+from AINDY.db.models.agent_run import AgentRun, AgentTrustSettings
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.services.auth_service import hash_password
 
 
 def _unwrap(payload):
@@ -180,8 +180,8 @@ def test_agent_run_async_create_persists_log_run_and_events(
     class _FakeResponse:
         choices = [_FakeChoice()]
 
-    from platform_layer.async_job_service import shutdown_async_jobs
-    import agents.agent_runtime as agent_runtime
+    from AINDY.platform_layer.async_job_service import shutdown_async_jobs
+    import AINDY.agents.agent_runtime as agent_runtime
 
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")

@@ -5,11 +5,11 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.models.automation_log import AutomationLog
-from memory.embedding_jobs import EMBEDDING_JOB_NAME
-from memory.embedding_jobs import process_embedding_job
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.memory.embedding_jobs import EMBEDDING_JOB_NAME
+from AINDY.memory.embedding_jobs import process_embedding_job
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 
 @pytest.fixture

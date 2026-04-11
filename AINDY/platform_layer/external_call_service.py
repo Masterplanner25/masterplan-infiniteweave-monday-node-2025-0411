@@ -3,8 +3,8 @@ from __future__ import annotations
 import time
 from typing import Any, Callable
 
-from core.system_event_service import emit_error_event, emit_system_event
-from utils.trace_context import get_current_trace_id
+from AINDY.core.system_event_service import emit_error_event, emit_system_event
+from AINDY.utils.trace_context import get_current_trace_id
 
 
 def external_metadata(
@@ -43,7 +43,7 @@ def perform_external_call(
     method: str | None = None,
     extra: dict[str, Any] | None = None,
 ):
-    from db.database import SessionLocal
+    from AINDY.db.database import SessionLocal
 
     owned_db = db is None
     active_db = db or SessionLocal()

@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any, Iterable
 
-from runtime.memory.types import MemoryContext
+from AINDY.runtime.memory.types import MemoryContext
 
 logger = logging.getLogger(__name__)
 

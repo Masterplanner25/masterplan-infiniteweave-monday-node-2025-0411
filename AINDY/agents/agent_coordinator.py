@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from db.models.agent_registry import AgentRegistry
-from db.models.system_event import SystemEvent
-from agents.agent_message_bus import publish_task_request
-from domain.goal_service import rank_goals
-from platform_layer.system_state_service import compute_current_state
-from utils.uuid_utils import normalize_uuid
+from AINDY.db.models.agent_registry import AgentRegistry
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.agents.agent_message_bus import publish_task_request
+from AINDY.domain.goal_service import rank_goals
+from AINDY.platform_layer.system_state_service import compute_current_state
+from AINDY.utils.uuid_utils import normalize_uuid
 
 
 STALE_AGENT_MINUTES = 10

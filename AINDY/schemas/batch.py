@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List
 
-from schemas.analytics_inputs import (
+from AINDY.schemas.analytics_inputs import (
     AIProductivityBoostInput,
     LostPotentialInput,
     DecisionEfficiencyInput,

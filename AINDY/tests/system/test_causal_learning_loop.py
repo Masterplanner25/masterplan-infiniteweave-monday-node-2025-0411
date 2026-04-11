@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import uuid
 
-from db.models.ripple_edge import RippleEdge
-from db.models.system_event import SystemEvent
-from db.models.task import Task
-from core.execution_signal_helper import queue_system_event
-from domain.infinity_loop import run_loop
-from memory.memory_persistence import MemoryNodeModel
-from memory.memory_scoring_service import get_relevant_memories, score_memory
-from domain.rippletrace_service import build_trace_graph
-from core.system_event_types import SystemEventTypes
+from AINDY.db.models.ripple_edge import RippleEdge
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.task import Task
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.domain.infinity_loop import run_loop
+from AINDY.memory.memory_persistence import MemoryNodeModel
+from AINDY.memory.memory_scoring_service import get_relevant_memories, score_memory
+from AINDY.domain.rippletrace_service import build_trace_graph
+from AINDY.core.system_event_types import SystemEventTypes
 
 
 def _stable_score_snapshot() -> dict:

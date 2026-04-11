@@ -60,8 +60,8 @@ from typing import TYPE_CHECKING
 
 # Module-level imports keep these patchable in tests via
 # "core.flow_run_rehydration.<name>".
-from core.wait_condition import WaitCondition, _parse_utc_datetime
-from kernel.scheduler_engine import get_scheduler_engine
+from AINDY.core.wait_condition import WaitCondition, _parse_utc_datetime
+from AINDY.kernel.scheduler_engine import get_scheduler_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -121,8 +121,8 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
     Returns:
         Number of FlowRuns successfully re-registered.
     """
-    from db.models.flow_run import FlowRun
-    from db.models.execution_unit import ExecutionUnit
+    from AINDY.db.models.flow_run import FlowRun
+    from AINDY.db.models.execution_unit import ExecutionUnit
 
     scheduler = get_scheduler_engine()
 
@@ -253,8 +253,8 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
             eid: str,
         ):
             def _callback() -> None:
-                from db.database import SessionLocal
-                from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+                from AINDY.db.database import SessionLocal
+                from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
 
                 flow = FLOW_REGISTRY.get(flow_name)
                 if flow is None:
@@ -271,7 +271,7 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
                     # ── Step 1: FlowRun atomic claim ──────────────────────────
                     # UPDATE WHERE status='waiting' ensures exactly one instance
                     # proceeds.  All others see rowcount=0 and exit immediately.
-                    from db.models.flow_run import FlowRun as _FlowRun
+                    from AINDY.db.models.flow_run import FlowRun as _FlowRun
 
                     claimed = (
                         _db.query(_FlowRun)
@@ -305,7 +305,7 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
                     # double-transition if this is somehow called twice.
                     if eid:
                         try:
-                            from core.execution_unit_service import ExecutionUnitService
+                            from AINDY.core.execution_unit_service import ExecutionUnitService
                             ExecutionUnitService(_db).resume_execution_unit(eid)
                         except Exception as _eu_exc:
                             logger.warning(
