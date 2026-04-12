@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
-from watcher.classifier import ActivityType, ClassificationResult
+from AINDY.watcher.classifier import ActivityType, ClassificationResult
 
 
 def _utcnow() -> datetime:

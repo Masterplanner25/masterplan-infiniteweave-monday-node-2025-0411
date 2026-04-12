@@ -4,16 +4,16 @@ import time
 from datetime import datetime
 from sqlalchemy.orm import Session
 
-from memory.memory_persistence import MemoryNodeDAO
-from db.models.arm_models import (
+from AINDY.memory.memory_persistence import MemoryNodeDAO
+from AINDY.db.models.arm_models import (
     ARMRun,
     ARMLog,
     ARMConfig,
 )
-from modules.deepseek.security_deepseek import SecurityValidator
-from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-from modules.deepseek.file_processor_deepseek import FileProcessor
-from modules.deepseek.config_manager_deepseek import ConfigManager
+from AINDY.modules.deepseek.security_deepseek import SecurityValidator
+from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+from AINDY.modules.deepseek.file_processor_deepseek import FileProcessor
+from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
 
 
 # -------------------------------------------------------------------

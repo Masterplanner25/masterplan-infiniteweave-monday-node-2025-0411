@@ -4,8 +4,8 @@ from typing import Dict, List
 
 from sqlalchemy.orm import Session
 
-from db.models import PlaybookDB, StrategyDB
-from analytics.playbook_engine import match_playbooks
+from AINDY.db.models import PlaybookDB, StrategyDB
+from AINDY.analytics.playbook_engine import match_playbooks
 
 
 def _safe_list(value):

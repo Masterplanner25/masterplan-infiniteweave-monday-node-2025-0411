@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from jose import jwt
 import os
 
-from main import app
+from AINDY.main import app
 
 client = TestClient(app)
 

@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 AGENT_EVENT_TYPES = {

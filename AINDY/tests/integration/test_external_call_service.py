@@ -14,7 +14,7 @@ class _FakeDB:
 
 
 def test_perform_external_call_success_emits_start_and_complete(monkeypatch):
-    from platform_layer.external_call_service import perform_external_call
+    from AINDY.platform_layer.external_call_service import perform_external_call
 
     events = []
     monkeypatch.setattr(
@@ -41,7 +41,7 @@ def test_perform_external_call_success_emits_start_and_complete(monkeypatch):
 
 
 def test_perform_external_call_failure_emits_failed_and_error(monkeypatch):
-    from platform_layer.external_call_service import perform_external_call
+    from AINDY.platform_layer.external_call_service import perform_external_call
 
     events = []
     monkeypatch.setattr(
@@ -70,8 +70,8 @@ def test_perform_external_call_failure_emits_failed_and_error(monkeypatch):
 
 
 def test_perform_external_call_raises_when_required_event_emission_fails(monkeypatch):
-    from platform_layer.external_call_service import perform_external_call
-    from core.system_event_service import SystemEventEmissionError
+    from AINDY.platform_layer.external_call_service import perform_external_call
+    from AINDY.core.system_event_service import SystemEventEmissionError
 
     def _emit_system_event(**kwargs):
         raise SystemEventEmissionError("missing event")
@@ -91,7 +91,7 @@ def test_perform_external_call_raises_when_required_event_emission_fails(monkeyp
 
 
 def test_generate_embedding_routes_through_external_call_wrapper(monkeypatch):
-    from memory import embedding_service
+    from AINDY.memory import embedding_service
     captured = {}
 
     monkeypatch.setattr(embedding_service, "get_client", lambda: SimpleNamespace())

@@ -11,7 +11,7 @@ from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, Stri
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects.postgresql import JSONB
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 def _utcnow() -> datetime:

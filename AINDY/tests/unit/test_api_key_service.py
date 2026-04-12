@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from platform_layer.api_key_service import (
+from AINDY.platform_layer.api_key_service import (
     create_api_key,
     generate_key,
     hash_key,
@@ -76,7 +76,7 @@ class TestGenerateKey:
 class TestApiKeyNotStoredPlain:
     def test_api_key_not_stored_plain(self, db_session, test_user):
         """Raw key must not appear in any column of the persisted record."""
-        from db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.api_key import PlatformAPIKey
 
         record, raw_key = create_api_key(
             user_id=str(test_user.id),
@@ -96,7 +96,7 @@ class TestApiKeyNotStoredPlain:
 
     def test_key_prefix_is_not_full_key(self, db_session, test_user):
         """key_prefix is a display hint only — shorter than any real key."""
-        from db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.api_key import PlatformAPIKey
 
         record, raw_key = create_api_key(
             user_id=str(test_user.id),
@@ -126,7 +126,7 @@ class TestApiKeyNotStoredPlain:
 class TestValidateKeyUsesHash:
     def test_correct_key_validates(self, db_session, test_user):
         """Providing the raw key must resolve to the active record via hash lookup."""
-        from db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.api_key import PlatformAPIKey
 
         record, raw_key = create_api_key(
             user_id=str(test_user.id),
@@ -144,7 +144,7 @@ class TestValidateKeyUsesHash:
 
     def test_wrong_key_does_not_validate(self, db_session, test_user):
         """A different raw key must not match the stored hash."""
-        from db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.api_key import PlatformAPIKey
 
         create_api_key(
             user_id=str(test_user.id),
@@ -162,7 +162,7 @@ class TestValidateKeyUsesHash:
         Core invariant: hash(raw_key_at_creation) == stored key_hash ==
         hash(raw_key_at_validation).
         """
-        from db.models.api_key import PlatformAPIKey
+        from AINDY.db.models.api_key import PlatformAPIKey
 
         record, raw_key = create_api_key(
             user_id=str(test_user.id),

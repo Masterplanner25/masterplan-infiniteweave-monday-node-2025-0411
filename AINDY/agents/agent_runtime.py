@@ -46,19 +46,19 @@ from typing import Optional
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
-from config import settings
-from agents.agent_tools import TOOL_REGISTRY
-from agents.capability_service import mint_token
-from agents.agent_coordinator import decide_execution_mode
-from agents.agent_coordinator import register_or_update_agent
-from core.execution_signal_helper import record_agent_event
-from platform_layer.external_call_service import perform_external_call
-from core.system_event_service import emit_error_event
-from utils.trace_context import get_parent_event_id
-from utils.trace_context import get_trace_id
-from utils.trace_context import reset_parent_event_id
-from utils.trace_context import set_parent_event_id
-from utils.user_ids import parse_user_id
+from AINDY.config import settings
+from AINDY.agents.agent_tools import TOOL_REGISTRY
+from AINDY.agents.capability_service import mint_token
+from AINDY.agents.agent_coordinator import decide_execution_mode
+from AINDY.agents.agent_coordinator import register_or_update_agent
+from AINDY.core.execution_signal_helper import record_agent_event
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.utils.trace_context import get_parent_event_id
+from AINDY.utils.trace_context import get_trace_id
+from AINDY.utils.trace_context import reset_parent_event_id
+from AINDY.utils.trace_context import set_parent_event_id
+from AINDY.utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,7 @@ def _requires_approval(overall_risk: str, user_id: str, db: Session) -> bool:
     if overall_risk == "high":
         return True
 
-    from db.models.agent_run import AgentTrustSettings
+    from AINDY.db.models.agent_run import AgentTrustSettings
     owner_user_id = parse_user_id(user_id)
     owner_filter_value = owner_user_id if owner_user_id is not None else user_id
 
@@ -177,7 +177,7 @@ def _build_kpi_context_block(user_id: str, db: Session) -> str:
     Never raises.
     """
     try:
-        from domain.infinity_service import get_user_kpi_snapshot
+        from AINDY.domain.infinity_service import get_user_kpi_snapshot
         snapshot = get_user_kpi_snapshot(user_id=_db_user_id(user_id), db=db)
         if not snapshot:
             return ""
@@ -219,7 +219,7 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         kpi_block = _build_kpi_context_block(user_id=user_id, db=db)
-        from memory.memory_helpers import enrich_context, format_memories_for_prompt
+        from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt
         _plan_ctx = enrich_context({
             "db": db,
             "user_id": str(user_id) if user_id else None,
@@ -283,7 +283,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
       - "approved"         if trust settings allow auto-execution
     """
     try:
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         user_db_id = _db_user_id(user_id)
 
         plan = generate_plan(goal=goal, user_id=user_db_id, db=db)
@@ -324,7 +324,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         db.commit()
         db.refresh(run)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             ExecutionUnitService(db).create(
                 eu_type="agent",
                 user_id=user_db_id,
@@ -423,8 +423,8 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     Never raises.
     """
     try:
-        from db.models.agent_run import AgentRun
-        from runtime.nodus_execution_service import execute_agent_run_via_nodus
+        from AINDY.db.models.agent_run import AgentRun
+        from AINDY.runtime.nodus_execution_service import execute_agent_run_via_nodus
         user_db_id = _db_user_id(user_id)
 
         db_run_id = _db_run_id(run_id)
@@ -524,7 +524,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.plan = execution_plan
         db.commit()
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
 
             _eu = ExecutionUnitService(db).get_by_source("agent_run", str(run.id))
             if _eu:
@@ -562,7 +562,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             result_payload = run.result if isinstance(run.result, dict) else {}
             if not result_payload.get("loop_enforced"):
                 try:
-                    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+                    from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
                     orchestration = execute_infinity_orchestrator(
                         user_id=user_db_id,
@@ -587,7 +587,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             run_id, run.status, run.steps_completed, run.steps_total,
         )
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
 
             _eu = ExecutionUnitService(db).get_by_source("agent_run", str(run.id))
             if _eu:
@@ -626,8 +626,8 @@ def _build_execution_memory_context(
     db: Session,
 ) -> dict:
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
         step_tools = [
             step.get("tool")
@@ -681,7 +681,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     Returns the final run dict or None on failure.
     """
     try:
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         user_db_id = _db_user_id(user_id)
 
         db_run_id = _db_run_id(run_id)
@@ -749,7 +749,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     """Reject a pending_approval run. Returns updated run dict or None."""
     try:
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         user_db_id = _db_user_id(user_id)
 
         db_run_id = _db_run_id(run_id)
@@ -796,7 +796,7 @@ def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _run_to_dict(run) -> dict:
-    from core.execution_record_service import record_from_agent_run
+    from AINDY.core.execution_record_service import record_from_agent_run
 
     capability_token = getattr(run, "capability_token", None)
     if not isinstance(capability_token, dict):
@@ -898,7 +898,7 @@ def _create_run_from_plan(
     Never raises.
     """
     try:
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
 
         overall_risk = plan.get("overall_risk", "high")
         needs_approval = _requires_approval(overall_risk, user_id, db)
@@ -983,7 +983,7 @@ def replay_run(
     Never raises.
     """
     try:
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
 
         db_run_id = _db_run_id(run_id)
         original = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()
@@ -1072,8 +1072,8 @@ def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     Never raises.
     """
     try:
-        from db.models.agent_run import AgentRun, AgentStep
-        from db.models.agent_event import AgentEvent
+        from AINDY.db.models.agent_run import AgentRun, AgentStep
+        from AINDY.db.models.agent_event import AgentEvent
 
         db_run_id = _db_run_id(run_id)
         run = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()

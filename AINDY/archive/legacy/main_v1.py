@@ -1,11 +1,11 @@
 import logging
 from fastapi import FastAPI
-from routes import router
+from AINDY.routes import router
 from fastapi_cache import FastAPICache
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
-from config import Base  # Import the Base from your config.py
+from AINDY.config import Base  # Import the Base from your config.py
 from fastapi_cache.backends.inmemory import InMemoryBackend 
 from app.api.routes import seo_routes 
 

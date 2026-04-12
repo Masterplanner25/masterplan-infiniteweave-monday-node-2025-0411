@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from db.models.memory_metrics import MemoryMetric
-from runtime.memory.memory_metrics import MemoryMetricsEngine
-from runtime.memory.metrics_store import MemoryMetricsStore
-from runtime.memory.types import MemoryContext, MemoryItem
+from AINDY.db.models.memory_metrics import MemoryMetric
+from AINDY.runtime.memory.memory_metrics import MemoryMetricsEngine
+from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
+from AINDY.runtime.memory.types import MemoryContext, MemoryItem
 
 
 def test_metrics_engine_quality_scores():

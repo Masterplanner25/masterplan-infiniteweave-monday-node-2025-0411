@@ -25,20 +25,20 @@ from unittest.mock import MagicMock, patch
 class TestAgentRunModels:
 
     def test_agent_run_importable(self):
-        from db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+        from AINDY.db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
         assert AgentRun.__tablename__ == "agent_runs"
         assert AgentStep.__tablename__ == "agent_steps"
         assert AgentTrustSettings.__tablename__ == "agent_trust_settings"
 
     def test_tables_in_orm_metadata(self):
-        from db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+        from AINDY.db.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
         table_names = set(AgentRun.metadata.tables)
         assert "agent_runs" in table_names
         assert "agent_steps" in table_names
         assert "agent_trust_settings" in table_names
 
     def test_agent_run_columns(self):
-        from db.models.agent_run import AgentRun
+        from AINDY.db.models.agent_run import AgentRun
         cols = {c.name for c in AgentRun.__table__.columns}
         required = [
             "id", "user_id", "goal", "plan", "executive_summary",
@@ -50,7 +50,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_runs missing column: {col}"
 
     def test_agent_step_columns(self):
-        from db.models.agent_run import AgentStep
+        from AINDY.db.models.agent_run import AgentStep
         cols = {c.name for c in AgentStep.__table__.columns}
         required = [
             "id", "run_id", "step_index", "tool_name", "tool_args",
@@ -61,7 +61,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_steps missing column: {col}"
 
     def test_agent_trust_settings_columns(self):
-        from db.models.agent_run import AgentTrustSettings
+        from AINDY.db.models.agent_run import AgentTrustSettings
         cols = {c.name for c in AgentTrustSettings.__table__.columns}
         required = [
             "id", "user_id", "auto_execute_low", "auto_execute_medium",
@@ -71,7 +71,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_trust_settings missing column: {col}"
 
     def test_agent_trust_settings_user_id_unique(self):
-        from db.models.agent_run import AgentTrustSettings
+        from AINDY.db.models.agent_run import AgentTrustSettings
         col = AgentTrustSettings.__table__.columns["user_id"]
         # unique constraint: check via table indexes or unique=True on column
         unique_cols = set()
@@ -85,7 +85,7 @@ class TestAgentRunModels:
             "agent_trust_settings.user_id must be unique"
 
     def test_agent_run_exported_from_models_init(self):
-        from db.models import AgentRun, AgentStep, AgentTrustSettings
+        from AINDY.db.models import AgentRun, AgentStep, AgentTrustSettings
         assert AgentRun is not None
         assert AgentStep is not None
         assert AgentTrustSettings is not None
@@ -123,21 +123,21 @@ EXPECTED_RISKS = {
 class TestToolRegistry:
 
     def test_tool_registry_importable(self):
-        from agents.agent_tools import TOOL_REGISTRY, register_tool, execute_tool
+        from AINDY.agents.agent_tools import TOOL_REGISTRY, register_tool, execute_tool
         assert isinstance(TOOL_REGISTRY, dict)
 
     def test_all_nine_tools_registered(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         for name in EXPECTED_TOOLS:
             assert name in TOOL_REGISTRY, f"Tool '{name}' not in TOOL_REGISTRY"
 
     def test_tool_registry_has_nine_entries(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         assert len(TOOL_REGISTRY) == 9, \
             f"Expected 9 tools, found {len(TOOL_REGISTRY)}: {list(TOOL_REGISTRY.keys())}"
 
     def test_each_tool_has_fn_risk_description(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         for name, entry in TOOL_REGISTRY.items():
             assert callable(entry["fn"]), f"Tool '{name}' fn is not callable"
             assert entry["risk"] in ("low", "medium", "high"), \
@@ -145,40 +145,40 @@ class TestToolRegistry:
             assert entry["description"], f"Tool '{name}' has no description"
 
     def test_risk_classifications_correct(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         for name, expected_risk in EXPECTED_RISKS.items():
             actual = TOOL_REGISTRY[name]["risk"]
             assert actual == expected_risk, \
                 f"Tool '{name}' risk: expected '{expected_risk}', got '{actual}'"
 
     def test_genesis_message_is_high_risk(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         assert TOOL_REGISTRY["genesis.message"]["risk"] == "high"
 
     def test_low_risk_tools_are_read_or_additive(self):
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         low_risk = [n for n, e in TOOL_REGISTRY.items() if e["risk"] == "low"]
         expected_low = {"task.create", "memory.recall", "memory.write", "research.query"}
         assert set(low_risk) == expected_low, f"Low-risk tools: {set(low_risk)}"
 
     def test_get_tool_risk_known(self):
-        from agents.agent_tools import get_tool_risk
+        from AINDY.agents.agent_tools import get_tool_risk
         assert get_tool_risk("task.create") == "low"
         assert get_tool_risk("genesis.message") == "high"
         assert get_tool_risk("arm.analyze") == "medium"
 
     def test_get_tool_risk_unknown_returns_high(self):
-        from agents.agent_tools import get_tool_risk
+        from AINDY.agents.agent_tools import get_tool_risk
         assert get_tool_risk("nonexistent.tool") == "high"
 
     def test_execute_tool_unknown_returns_failure(self):
-        from agents.agent_tools import execute_tool
+        from AINDY.agents.agent_tools import execute_tool
         result = execute_tool("nonexistent.tool", {}, "user_1", MagicMock())
         assert result["success"] is False
         assert "not found" in result["error"]
 
     def test_execute_tool_wraps_exceptions(self):
-        from agents.agent_tools import TOOL_REGISTRY, execute_tool
+        from AINDY.agents.agent_tools import TOOL_REGISTRY, execute_tool
         # Patch task.create to raise
         original = TOOL_REGISTRY["task.create"]["fn"]
         TOOL_REGISTRY["task.create"]["fn"] = lambda **kwargs: (_ for _ in ()).throw(
@@ -208,7 +208,7 @@ VALID_PLAN = {
 class TestAgentRuntime:
 
     def test_runtime_importable(self):
-        from agents.agent_runtime import (
+        from AINDY.agents.agent_runtime import (
             generate_plan,
             create_run,
             execute_run,
@@ -219,7 +219,7 @@ class TestAgentRuntime:
         assert generate_plan is not None
 
     def test_requires_approval_high_risk_always_true(self):
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         # High risk: always requires approval regardless of trust
         db.query.return_value.filter.return_value.first.return_value = MagicMock(
@@ -229,7 +229,7 @@ class TestAgentRuntime:
         assert _requires_approval("high", "user_1", db) is True
 
     def test_requires_approval_no_trust_settings(self):
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
         # No trust settings → require approval for all levels
@@ -237,28 +237,28 @@ class TestAgentRuntime:
         assert _requires_approval("medium", "user_1", db) is True
 
     def test_requires_approval_low_risk_auto_execute(self):
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=False)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("low", "user_1", db) is False
 
     def test_requires_approval_medium_risk_auto_execute(self):
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("medium", "user_1", db) is False
 
     def test_requires_approval_medium_risk_no_auto(self):
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=False)
         db.query.return_value.filter.return_value.first.return_value = trust
         assert _requires_approval("medium", "user_1", db) is True
 
     def test_generate_plan_returns_none_on_openai_failure(self):
-        from agents.agent_runtime import generate_plan
+        from AINDY.agents.agent_runtime import generate_plan
         db = MagicMock()
         with patch("agents.agent_runtime._get_client") as mock_client:
             mock_client.return_value.chat.completions.create.side_effect = RuntimeError("api error")
@@ -267,7 +267,7 @@ class TestAgentRuntime:
 
     def test_generate_plan_enforces_overall_risk_invariant(self):
         """If a step has high risk, overall_risk must be high."""
-        from agents.agent_runtime import generate_plan
+        from AINDY.agents.agent_runtime import generate_plan
         db = MagicMock()
         import json
         bad_plan = {
@@ -286,14 +286,14 @@ class TestAgentRuntime:
         assert result["overall_risk"] == "high"
 
     def test_create_run_returns_none_on_plan_failure(self):
-        from agents.agent_runtime import create_run
+        from AINDY.agents.agent_runtime import create_run
         db = MagicMock()
         with patch("agents.agent_runtime.generate_plan", return_value=None):
             result = create_run("goal", "user_1", db)
         assert result is None
 
     def test_create_run_sets_pending_approval_when_required(self):
-        from agents.agent_runtime import create_run
+        from AINDY.agents.agent_runtime import create_run
         db = MagicMock()
         db.add = MagicMock()
         db.commit = MagicMock()
@@ -350,53 +350,53 @@ class TestAgentRuntime:
 class TestAgentRouterStructure:
 
     def test_agent_router_importable(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         assert router is not None
 
     def test_router_prefix(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         assert router.prefix == "/agent"
 
     def test_router_registered_in_routes_init(self):
         import importlib
-        import routes as routes_pkg
+        import AINDY.routes as routes_pkg
         importlib.reload(routes_pkg)
-        from routes import ROUTERS
-        from routes.agent_router import router as agent_router
+        from AINDY.routes import ROUTERS
+        from AINDY.routes.agent_router import router as agent_router
         assert agent_router in ROUTERS, "agent_router not in ROUTERS list"
 
     def test_agent_router_has_post_run_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("/run" in p for p in paths)
 
     def test_agent_router_has_runs_list_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("/runs" in p for p in paths)
 
     def test_agent_router_has_approve_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("approve" in p for p in paths)
 
     def test_agent_router_has_reject_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("reject" in p for p in paths)
 
     def test_agent_router_has_steps_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("steps" in p for p in paths)
 
     def test_agent_router_has_tools_route(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("tools" in p for p in paths)
 
     def test_agent_router_has_trust_routes(self):
-        from routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("trust" in p for p in paths)
 
@@ -409,7 +409,7 @@ class TestTrustInvariants:
 
     def test_high_risk_always_blocked_regardless_of_trust(self):
         """The hardcoded high-risk invariant cannot be bypassed by trust settings."""
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         # Even with full trust enabled
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
@@ -419,7 +419,7 @@ class TestTrustInvariants:
 
     def test_trust_default_requires_approval_for_all_levels(self):
         """Without trust settings, all levels require approval."""
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         db.query.return_value.filter.return_value.first.return_value = None
         for level in ("low", "medium", "high"):
@@ -428,7 +428,7 @@ class TestTrustInvariants:
 
     def test_auto_execute_medium_does_not_affect_high(self):
         """Enabling medium auto-execute must NOT affect high-risk gate."""
-        from agents.agent_runtime import _requires_approval
+        from AINDY.agents.agent_runtime import _requires_approval
         db = MagicMock()
         trust = MagicMock(auto_execute_low=True, auto_execute_medium=True)
         db.query.return_value.filter.return_value.first.return_value = trust

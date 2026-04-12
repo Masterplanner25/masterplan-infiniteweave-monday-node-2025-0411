@@ -5,12 +5,12 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.models.agent_run import AgentRun
-from db.models.flow_run import FlowRun
-from db.models.user_score import UserScore
-from memory.memory_persistence import MemoryNodeModel
-from utils.user_ids import parse_user_id
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.models.agent_run import AgentRun
+from AINDY.db.models.flow_run import FlowRun
+from AINDY.db.models.user_score import UserScore
+from AINDY.memory.memory_persistence import MemoryNodeModel
+from AINDY.utils.user_ids import parse_user_id
 
 
 _BOOT_MEMORY_LIMIT = 20
@@ -53,7 +53,7 @@ def get_recent_agent_runs(
     *,
     limit: int = _BOOT_RUN_LIMIT,
 ) -> list[dict[str, Any]]:
-    from agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import _run_to_dict
 
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     rows = (

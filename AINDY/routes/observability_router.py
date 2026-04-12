@@ -3,15 +3,15 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
 
 
 def _run_flow_observability(flow_name: str, payload: dict, db: Session, user_id: str):
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")

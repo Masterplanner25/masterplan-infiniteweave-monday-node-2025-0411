@@ -8,13 +8,13 @@ Public endpoints (no auth required):
 Phase 3: Uses PostgreSQL User model via DB session (replaced in-memory store).
 """
 from fastapi import APIRouter, Depends, Request
-from core.execution_signal_helper import queue_system_event
+from AINDY.core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
-from services.auth_service import create_access_token, register_user, authenticate_user
-from domain.signup_initialization_service import initialize_signup_state
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
+from AINDY.services.auth_service import create_access_token, register_user, authenticate_user
+from AINDY.domain.signup_initialization_service import initialize_signup_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 emit_system_event = queue_system_event

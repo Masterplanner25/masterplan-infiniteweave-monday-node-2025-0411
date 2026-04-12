@@ -22,7 +22,7 @@ class TestWritePathFix:
     def test_function_signature_has_content_not_title(self):
         """New signature accepts content= not title=."""
         import inspect
-        from memory.bridge import create_memory_node
+        from AINDY.memory.bridge import create_memory_node
         sig = inspect.signature(create_memory_node)
         params = list(sig.parameters.keys())
         assert "content" in params
@@ -30,7 +30,7 @@ class TestWritePathFix:
 
     def test_function_accepts_source_and_user_id(self):
         import inspect
-        from memory.bridge import create_memory_node
+        from AINDY.memory.bridge import create_memory_node
         sig = inspect.signature(create_memory_node)
         params = list(sig.parameters.keys())
         assert "source" in params
@@ -40,13 +40,13 @@ class TestWritePathFix:
     def test_no_calculation_result_reference_in_source(self):
         """Regression: CalculationResult must not appear in create_memory_node source."""
         import inspect
-        import memory.bridge as bridge
+        import AINDY.memory.bridge as bridge
         source = inspect.getsource(bridge.create_memory_node)
         assert "CalculationResult" not in source
 
     def test_no_db_returns_transient_memory_node(self):
         """Without db, returns a MemoryNode (not persisted, no crash)."""
-        from memory.bridge import create_memory_node, MemoryNode
+        from AINDY.memory.bridge import create_memory_node, MemoryNode
         result = create_memory_node(content="hello", source="test", tags=["a", "b"])
         assert isinstance(result, MemoryNode)
         assert result.content == "hello"
@@ -55,8 +55,8 @@ class TestWritePathFix:
 
     def test_with_db_calls_dao_save(self):
         """With db provided, calls MemoryNodeDAO.save_memory_node()."""
-        from memory.bridge import create_memory_node
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.bridge import create_memory_node
+        from AINDY.memory.memory_persistence import MemoryNodeModel
 
         mock_persisted = MagicMock(spec=MemoryNodeModel)
         mock_persisted.id = uuid.uuid4()
@@ -84,18 +84,18 @@ class TestWritePathFix:
 
     def test_create_memory_link_exported_from_bridge(self):
         """create_memory_link must be exported from bridge/__init__.py."""
-        from memory.bridge import create_memory_link
+        from AINDY.memory.bridge import create_memory_link
         assert callable(create_memory_link)
 
     def test_create_memory_link_without_db_raises_value_error(self):
         """create_memory_link(db=None) must raise ValueError."""
-        from memory.bridge import create_memory_link
+        from AINDY.memory.bridge import create_memory_link
         with pytest.raises(ValueError, match="DB session"):
             create_memory_link("a", "b", db=None)
 
     def test_memory_trace_has_transient_docstring(self):
         """MemoryTrace docstring must mention 'transient' and 'not persisted'."""
-        from memory.bridge import MemoryTrace
+        from AINDY.memory.bridge import MemoryTrace
         doc = MemoryTrace.__doc__ or ""
         assert "transient" in doc.lower() or "not persisted" in doc.lower() or "not a source of truth" in doc.lower()
 
@@ -106,7 +106,7 @@ class TestMemoryNodeDAOUnit:
     """Unit tests for db/dao/memory_node_dao.py using mocked DB sessions."""
 
     def _make_mock_node(self, **kwargs):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         node = MagicMock(spec=MemoryNodeModel)
         node.id = kwargs.get("id", uuid.uuid4())
         node.content = kwargs.get("content", "test")
@@ -120,12 +120,12 @@ class TestMemoryNodeDAOUnit:
         return node
 
     def test_dao_importable(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert MemoryNodeDAO is not None
 
     def test_save_returns_dict(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.memory.memory_persistence import MemoryNodeModel
 
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
@@ -147,7 +147,7 @@ class TestMemoryNodeDAOUnit:
         assert "tags" in result
 
     def test_get_by_id_not_found_returns_none(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
         dao = MemoryNodeDAO(mock_db)
@@ -155,14 +155,14 @@ class TestMemoryNodeDAOUnit:
         assert result is None
 
     def test_get_by_id_invalid_uuid_returns_none(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
         result = dao.get_by_id("not-a-uuid")
         assert result is None
 
     def test_get_by_id_found_returns_dict(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         node_id = uuid.uuid4()
         mock_node = self._make_mock_node(id=node_id, content="found", tags=["t1"])
@@ -174,7 +174,7 @@ class TestMemoryNodeDAOUnit:
         assert result["id"] == str(node_id)
 
     def test_get_by_tags_returns_list(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value.limit.return_value.all.return_value = []
@@ -183,14 +183,14 @@ class TestMemoryNodeDAOUnit:
         assert isinstance(result, list)
 
     def test_get_linked_nodes_invalid_uuid_returns_empty(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
         result = dao.get_linked_nodes("not-a-valid-uuid")
         assert result == []
 
     def test_create_link_same_id_raises(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
         same_id = str(uuid.uuid4())
@@ -198,7 +198,7 @@ class TestMemoryNodeDAOUnit:
             dao.create_link(same_id, same_id)
 
     def test_create_link_missing_node_raises(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.count.return_value = 1  # not 2
         dao = MemoryNodeDAO(mock_db)
@@ -207,7 +207,7 @@ class TestMemoryNodeDAOUnit:
 
     def test_node_to_dict_includes_source_and_user_id(self):
         """_node_to_dict must include source and user_id fields (Phase 1 additions)."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         mock_db = MagicMock()
         dao = MemoryNodeDAO(mock_db)
         node = self._make_mock_node(source="service-x", user_id="user-99")
@@ -224,15 +224,15 @@ class TestMemoryRouterEndpoints:
     """Route registration, auth enforcement, and response shape."""
 
     def test_memory_router_importable(self):
-        from routes.memory_router import router
+        from AINDY.routes.memory_router import router
         assert router is not None
 
     def test_memory_router_prefix(self):
-        from routes.memory_router import router
+        from AINDY.routes.memory_router import router
         assert router.prefix == "/memory"
 
     def test_memory_router_registered_in_routers(self):
-        from routes import ROUTERS
+        from AINDY.routes import ROUTERS
         prefixes = [r.prefix for r in ROUTERS]
         assert "/memory" in prefixes
 
@@ -258,9 +258,9 @@ class TestMemoryRouterEndpoints:
 
     def test_create_node_with_auth_reaches_handler(self, client, auth_headers, mock_db):
         """POST /memory/nodes with valid JWT must reach handler (not 401/404)."""
-        from main import app
-        from db.database import get_db
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.main import app
+        from AINDY.db.database import get_db
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         saved = {
             "id": str(uuid.uuid4()),
@@ -286,9 +286,9 @@ class TestMemoryRouterEndpoints:
         assert data["content"] == "hello"
 
     def test_get_node_not_found_returns_404(self, client, auth_headers, mock_db):
-        from main import app
-        from db.database import get_db
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.main import app
+        from AINDY.db.database import get_db
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         app.dependency_overrides[get_db] = lambda: mock_db
         with patch.object(MemoryNodeDAO, "get_by_id", return_value=None):
@@ -301,9 +301,9 @@ class TestMemoryRouterEndpoints:
         assert resp.status_code == 404
 
     def test_search_nodes_returns_nodes_list(self, client, auth_headers, mock_db):
-        from main import app
-        from db.database import get_db
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.main import app
+        from AINDY.db.database import get_db
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         app.dependency_overrides[get_db] = lambda: mock_db
         with patch.object(MemoryNodeDAO, "get_by_tags", return_value=[]):
@@ -314,8 +314,8 @@ class TestMemoryRouterEndpoints:
         assert "nodes" in resp.json()
 
     def test_get_linked_nodes_invalid_direction_returns_422(self, client, auth_headers, mock_db):
-        from main import app
-        from db.database import get_db
+        from AINDY.main import app
+        from AINDY.db.database import get_db
 
         app.dependency_overrides[get_db] = lambda: mock_db
         resp = client.get(
@@ -327,9 +327,9 @@ class TestMemoryRouterEndpoints:
         assert resp.status_code == 422
 
     def test_create_link_value_error_returns_422(self, client, auth_headers, mock_db):
-        from main import app
-        from db.database import get_db
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.main import app
+        from AINDY.db.database import get_db
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         app.dependency_overrides[get_db] = lambda: mock_db
         with patch.object(MemoryNodeDAO, "create_link", side_effect=ValueError("does not exist")):
@@ -349,11 +349,11 @@ class TestCreateMemoryLinkUnit:
     """Unit tests for create_memory_link() bridge function."""
 
     def test_create_memory_link_importable(self):
-        from memory.bridge import create_memory_link
+        from AINDY.memory.bridge import create_memory_link
         assert callable(create_memory_link)
 
     def test_create_memory_link_calls_dao(self):
-        from memory.bridge import create_memory_link
+        from AINDY.memory.bridge import create_memory_link
 
         mock_db = MagicMock()
         src = str(uuid.uuid4())
@@ -369,7 +369,7 @@ class TestCreateMemoryLinkUnit:
 
     def test_create_memory_link_default_link_type(self):
         """Default link_type is 'related'."""
-        from memory.bridge import create_memory_link
+        from AINDY.memory.bridge import create_memory_link
 
         mock_db = MagicMock()
         src = str(uuid.uuid4())
@@ -380,12 +380,12 @@ class TestCreateMemoryLinkUnit:
 
     def test_memory_node_model_has_source_column(self):
         """MemoryNodeModel must have source column (added in Phase 1 migration)."""
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         columns = {c.key for c in MemoryNodeModel.__table__.columns}
         assert "source" in columns
 
     def test_memory_node_model_has_user_id_column(self):
         """MemoryNodeModel must have user_id column (added in Phase 1 migration)."""
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         columns = {c.key for c in MemoryNodeModel.__table__.columns}
         assert "user_id" in columns

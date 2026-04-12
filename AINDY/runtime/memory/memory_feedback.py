@@ -5,10 +5,10 @@ import uuid
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
-from core.observability_events import emit_observability_event
+from AINDY.core.observability_events import emit_observability_event
 
 
 class MemoryFeedbackEngine:

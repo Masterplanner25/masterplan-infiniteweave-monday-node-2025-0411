@@ -36,8 +36,8 @@ def emit_observability_event(
         # Lazy imports so this module is importable before DB initialises.
         # db.database.SessionLocal is patched to the test session factory
         # during tests, so this picks up the correct session automatically.
-        from db.database import SessionLocal
-        from core.execution_signal_helper import queue_system_event
+        from AINDY.db.database import SessionLocal
+        from AINDY.core.execution_signal_helper import queue_system_event
 
         db = SessionLocal()
         try:
@@ -57,3 +57,21 @@ def emit_observability_event(
             event_type,
             exc,
         )
+
+
+def emit_error_event(
+    *,
+    event_type: str,
+    user_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    source: str = "observability",
+) -> None:
+    """
+    Backwards-compatible alias for emit_observability_event when routers log error states.
+    """
+    emit_observability_event(
+        event_type=event_type,
+        user_id=user_id,
+        payload=payload,
+        source=source,
+    )

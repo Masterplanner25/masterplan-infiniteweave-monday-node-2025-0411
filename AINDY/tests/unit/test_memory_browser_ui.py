@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 @pytest.fixture
 def client():
-    from main import app
+    from AINDY.main import app
     return TestClient(app, raise_server_exceptions=False)
 
 

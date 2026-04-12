@@ -45,32 +45,32 @@ def _make_mock_response(body: dict, status: int = 200):
 class TestConfigHelpers:
     def test_api_url_default(self, monkeypatch):
         monkeypatch.delenv("AINDY_API_URL", raising=False)
-        from cli import _api_url
+        from AINDY.cli import _api_url
         assert _api_url() == "http://localhost:8000"
 
     def test_api_url_from_env(self, monkeypatch):
         monkeypatch.setenv("AINDY_API_URL", "http://my-server:9000")
-        from cli import _api_url
+        from AINDY.cli import _api_url
         assert _api_url() == "http://my-server:9000"
 
     def test_api_url_override_wins(self, monkeypatch):
         monkeypatch.setenv("AINDY_API_URL", "http://env-server")
-        from cli import _api_url
+        from AINDY.cli import _api_url
         assert _api_url("http://override-server") == "http://override-server"
 
     def test_api_url_trailing_slash_stripped(self, monkeypatch):
         monkeypatch.delenv("AINDY_API_URL", raising=False)
-        from cli import _api_url
+        from AINDY.cli import _api_url
         assert _api_url("http://server:8000/") == "http://server:8000"
 
     def test_api_token_none_when_unset(self, monkeypatch):
         monkeypatch.delenv("AINDY_API_TOKEN", raising=False)
-        from cli import _api_token
+        from AINDY.cli import _api_token
         assert _api_token() is None
 
     def test_api_token_from_env(self, monkeypatch):
         monkeypatch.setenv("AINDY_API_TOKEN", "my-secret-token")
-        from cli import _api_token
+        from AINDY.cli import _api_token
         assert _api_token() == "my-secret-token"
 
 
@@ -80,7 +80,7 @@ class TestConfigHelpers:
 
 class TestHttpHelpers:
     def test_http_post_success(self):
-        from cli import _http_post
+        from AINDY.cli import _http_post
         mock_resp = _make_mock_response({"status": "SUCCESS", "nodus_status": "success"})
         with patch("urllib.request.urlopen", return_value=mock_resp):
             code, data = _http_post("http://server/run", {"script": "x"}, token="tok")
@@ -88,7 +88,7 @@ class TestHttpHelpers:
         assert data["nodus_status"] == "success"
 
     def test_http_post_sets_bearer_header(self):
-        from cli import _http_post
+        from AINDY.cli import _http_post
         mock_resp = _make_mock_response({})
         captured = []
 
@@ -103,7 +103,7 @@ class TestHttpHelpers:
         assert captured[0].get_header("X-Platform-Key") is None
 
     def test_http_post_sets_platform_key_header(self):
-        from cli import _http_post
+        from AINDY.cli import _http_post
         mock_resp = _make_mock_response({})
         captured = []
 
@@ -118,7 +118,7 @@ class TestHttpHelpers:
         assert captured[0].get_header("Authorization") is None
 
     def test_http_post_http_error(self):
-        from cli import _http_post
+        from AINDY.cli import _http_post
         err = urllib.error.HTTPError(
             url="http://server/run",
             code=422,
@@ -132,7 +132,7 @@ class TestHttpHelpers:
         assert data["detail"] == "bad script"
 
     def test_http_get_success(self):
-        from cli import _http_get
+        from AINDY.cli import _http_get
         mock_resp = _make_mock_response({"trace_id": "abc", "count": 3})
         with patch("urllib.request.urlopen", return_value=mock_resp):
             code, data = _http_get("http://server/trace/abc", token=None)
@@ -140,7 +140,7 @@ class TestHttpHelpers:
         assert data["count"] == 3
 
     def test_http_get_404(self):
-        from cli import _http_get
+        from AINDY.cli import _http_get
         err = urllib.error.HTTPError(
             url="http://server/trace/missing",
             code=404,
@@ -153,7 +153,7 @@ class TestHttpHelpers:
         assert code == 404
 
     def test_http_get_sets_platform_key_header(self):
-        from cli import _http_get
+        from AINDY.cli import _http_get
         mock_resp = _make_mock_response({"trace_id": "abc", "count": 1})
         captured = []
 
@@ -168,7 +168,7 @@ class TestHttpHelpers:
         assert captured[0].get_header("Authorization") is None
 
     def test_http_post_no_token_omits_header(self):
-        from cli import _http_post
+        from AINDY.cli import _http_post
         mock_resp = _make_mock_response({})
         captured = []
 
@@ -188,7 +188,7 @@ class TestHttpHelpers:
 
 class TestFormatters:
     def test_unwraps_platform_execution_envelope(self):
-        from cli import _unwrap_platform_response
+        from AINDY.cli import _unwrap_platform_response
         resp = {
             "status": "success",
             "data": {
@@ -204,7 +204,7 @@ class TestFormatters:
         assert _unwrap_platform_response(resp) == resp["data"]
 
     def test_fmt_run_result_success(self):
-        from cli import _fmt_run_result
+        from AINDY.cli import _fmt_run_result
         resp = {
             "status": "SUCCESS",
             "nodus_status": "success",
@@ -221,7 +221,7 @@ class TestFormatters:
         assert "events_emitted: 1" in out
 
     def test_fmt_run_result_failure(self):
-        from cli import _fmt_run_result
+        from AINDY.cli import _fmt_run_result
         resp = {
             "status": "FAILED",
             "nodus_status": "failure",
@@ -237,7 +237,7 @@ class TestFormatters:
         assert "Script raised RuntimeError" in out
 
     def test_fmt_trace_shows_steps(self):
-        from cli import _fmt_trace
+        from AINDY.cli import _fmt_trace
         resp = {
             "trace_id": "abc-123",
             "count": 2,
@@ -260,7 +260,7 @@ class TestFormatters:
         assert "15ms total" in out
 
     def test_fmt_trace_empty(self):
-        from cli import _fmt_trace
+        from AINDY.cli import _fmt_trace
         resp = {
             "trace_id": "x",
             "count": 0,
@@ -277,7 +277,7 @@ class TestFormatters:
         assert "0 steps" in out
 
     def test_fmt_upload_result(self):
-        from cli import _fmt_upload_result
+        from AINDY.cli import _fmt_upload_result
         resp = {
             "name": "my_script",
             "size_bytes": 128,
@@ -289,7 +289,7 @@ class TestFormatters:
         assert "128B" in out
 
     def test_fmt_run_result_no_output_state(self):
-        from cli import _fmt_run_result
+        from AINDY.cli import _fmt_run_result
         resp = {
             "status": "SUCCESS",
             "nodus_status": "success",
@@ -326,7 +326,7 @@ class TestCmdRun:
         return defaults
 
     def test_posts_script_content(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         script_file = tmp_path / "test.nd"
         script_file.write_text("set_state('x', 1)", encoding="utf-8")
 
@@ -343,13 +343,13 @@ class TestCmdRun:
         assert posted["script"] == "set_state('x', 1)"
 
     def test_file_not_found(self, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         rc = cmd_run("nonexistent.nd", api_url="http://server", token=None)
         assert rc == 1
         assert "not found" in capsys.readouterr().err.lower()
 
     def test_api_error_returns_1(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli._http_post", return_value=(422, {"detail": "bad"})):
@@ -357,7 +357,7 @@ class TestCmdRun:
         assert rc == 1
 
     def test_nodus_failure_returns_1(self, tmp_path):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("fail", encoding="utf-8")
         with patch("cli._http_post", return_value=(200, self._run_resp(nodus_status="failure"))):
@@ -365,7 +365,7 @@ class TestCmdRun:
         assert rc == 1
 
     def test_passes_input_payload(self, tmp_path):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         posted = {}
@@ -374,7 +374,7 @@ class TestCmdRun:
         assert posted["input"] == {"goal": "test"}
 
     def test_trace_flag_fetches_trace(self, tmp_path):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         trace_resp = {
@@ -393,7 +393,7 @@ class TestCmdRun:
         assert "run-1234-5678" in call_url
 
     def test_trace_404_warns_not_fails(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli._http_post", return_value=(200, self._run_resp())), \
@@ -403,7 +403,7 @@ class TestCmdRun:
         assert "warn" in capsys.readouterr().err.lower()
 
     def test_dump_bytecode_warns_when_vm_unavailable(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli._local_disassemble", return_value=None), \
@@ -413,7 +413,7 @@ class TestCmdRun:
         assert "warn" in capsys.readouterr().err.lower()
 
     def test_dump_bytecode_prints_disassembly(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli._local_disassemble", return_value="LOAD_CONST 1\nRETURN"), \
@@ -423,7 +423,7 @@ class TestCmdRun:
         assert "LOAD_CONST" in out
 
     def test_json_flag_prints_raw(self, tmp_path, capsys):
-        from cli import cmd_run
+        from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         wrapped = {"status": "success", "data": self._run_resp()}
@@ -458,20 +458,20 @@ class TestCmdTrace:
         }
 
     def test_returns_0_on_success(self):
-        from cli import cmd_trace
+        from AINDY.cli import cmd_trace
         with patch("cli._http_get", return_value=(200, self._trace_resp())):
             rc = cmd_trace("abc-123", api_url="http://s", token=None)
         assert rc == 0
 
     def test_returns_1_on_404(self, capsys):
-        from cli import cmd_trace
+        from AINDY.cli import cmd_trace
         with patch("cli._http_get", return_value=(404, {})):
             rc = cmd_trace("missing", api_url="http://s", token=None)
         assert rc == 1
         assert "not found" in capsys.readouterr().err.lower()
 
     def test_prints_trace_summary(self, capsys):
-        from cli import cmd_trace
+        from AINDY.cli import cmd_trace
         with patch("cli._http_get", return_value=(200, self._trace_resp())):
             cmd_trace("abc-123", api_url="http://s", token=None)
         out = capsys.readouterr().out
@@ -479,14 +479,14 @@ class TestCmdTrace:
         assert "recall" in out
 
     def test_json_flag_prints_raw(self, capsys):
-        from cli import cmd_trace
+        from AINDY.cli import cmd_trace
         with patch("cli._http_get", return_value=(200, self._trace_resp())):
             cmd_trace("abc-123", api_url="http://s", token=None, json_output=True)
         parsed = json.loads(capsys.readouterr().out)
         assert parsed["trace_id"] == "abc-123"
 
     def test_api_error_returns_1(self, capsys):
-        from cli import cmd_trace
+        from AINDY.cli import cmd_trace
         with patch("cli._http_get", return_value=(500, {"detail": "server error"})):
             rc = cmd_trace("abc-123", api_url="http://s", token=None)
         assert rc == 1
@@ -498,7 +498,7 @@ class TestCmdTrace:
 
 class TestCmdUpload:
     def test_uploads_file_content(self, tmp_path):
-        from cli import cmd_upload
+        from AINDY.cli import cmd_upload
         f = tmp_path / "script.nd"
         f.write_text("let x = 1", encoding="utf-8")
         posted = {}
@@ -509,7 +509,7 @@ class TestCmdUpload:
         assert posted["content"] == "let x = 1"
 
     def test_uses_stem_as_name_when_not_given(self, tmp_path):
-        from cli import cmd_upload
+        from AINDY.cli import cmd_upload
         f = tmp_path / "my_processor.nd"
         f.write_text("x", encoding="utf-8")
         posted = {}
@@ -519,7 +519,7 @@ class TestCmdUpload:
         assert posted["name"] == "my_processor"
 
     def test_409_conflict_message(self, tmp_path, capsys):
-        from cli import cmd_upload
+        from AINDY.cli import cmd_upload
         f = tmp_path / "s.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli._http_post", return_value=(409, {"detail": "already exists"})):
@@ -528,12 +528,12 @@ class TestCmdUpload:
         assert "already exists" in capsys.readouterr().err.lower()
 
     def test_file_not_found(self, capsys):
-        from cli import cmd_upload
+        from AINDY.cli import cmd_upload
         rc = cmd_upload("nope.nd", api_url="http://s", token=None)
         assert rc == 1
 
     def test_overwrite_flag_forwarded(self, tmp_path):
-        from cli import cmd_upload
+        from AINDY.cli import cmd_upload
         f = tmp_path / "s.nd"
         f.write_text("x", encoding="utf-8")
         posted = {}
@@ -549,25 +549,25 @@ class TestCmdUpload:
 
 class TestMainDispatch:
     def test_no_args_prints_help(self, capsys):
-        from cli import main
+        from AINDY.cli import main
         rc = main(["cli.py"])
         assert rc == 0
         assert "Usage" in capsys.readouterr().out
 
     def test_help_flag(self, capsys):
-        from cli import main
+        from AINDY.cli import main
         rc = main(["cli.py", "--help"])
         assert rc == 0
         assert "run" in capsys.readouterr().out
 
     def test_unknown_command(self, capsys):
-        from cli import main
+        from AINDY.cli import main
         rc = main(["cli.py", "frobnicate"])
         assert rc == 1
         assert "Unknown" in capsys.readouterr().err
 
     def test_run_dispatches_to_cmd_run(self, tmp_path):
-        from cli import main
+        from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli.cmd_run", return_value=0) as mock_run:
@@ -576,7 +576,7 @@ class TestMainDispatch:
         mock_run.assert_called_once()
 
     def test_trace_dispatches_to_cmd_trace(self):
-        from cli import main
+        from AINDY.cli import main
         with patch("cli.cmd_trace", return_value=0) as mock_trace:
             rc = main(["cli.py", "trace", "some-trace-id"])
         assert rc == 0
@@ -584,7 +584,7 @@ class TestMainDispatch:
         assert mock_trace.call_args.args[0] == "some-trace-id"
 
     def test_upload_dispatches_to_cmd_upload(self, tmp_path):
-        from cli import main
+        from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         with patch("cli.cmd_upload", return_value=0) as mock_up:
@@ -593,7 +593,7 @@ class TestMainDispatch:
         mock_up.assert_called_once()
 
     def test_invalid_input_json_returns_1(self, tmp_path, capsys):
-        from cli import main
+        from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         rc = main(["cli.py", "run", str(f), "--input", "not-json"])
@@ -601,7 +601,7 @@ class TestMainDispatch:
         assert "Invalid" in capsys.readouterr().err
 
     def test_invalid_error_policy_returns_1(self, tmp_path, capsys):
-        from cli import main
+        from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         rc = main(["cli.py", "run", str(f), "--error-policy", "explode"])

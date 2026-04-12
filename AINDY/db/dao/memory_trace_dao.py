@@ -6,9 +6,9 @@ from typing import Optional
 
 from sqlalchemy import func
 
-from db.models.memory_trace import MemoryTrace
-from db.models.memory_trace_node import MemoryTraceNode
-from utils.user_ids import require_user_id
+from AINDY.db.models.memory_trace import MemoryTrace
+from AINDY.db.models.memory_trace_node import MemoryTraceNode
+from AINDY.utils.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 

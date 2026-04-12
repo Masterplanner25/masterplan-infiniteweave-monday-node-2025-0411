@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from memory.memory_address_space import (
+from AINDY.memory.memory_address_space import (
     MAS_ROOT,
     LEGACY_NAMESPACE,
     normalize_path,
@@ -383,7 +383,7 @@ class TestMemoryNodeDAOPathMethods:
         return node
 
     def test_get_by_path_returns_dict(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         dao = MemoryNodeDAO(self._mock_db(model))
         result = dao.get_by_path(model.path, user_id=_UID)
@@ -391,13 +391,13 @@ class TestMemoryNodeDAOPathMethods:
         assert result["path"] == model.path
 
     def test_get_by_path_not_found_returns_none(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(self._mock_db(None))
         result = dao.get_by_path("/memory/u/ns/type/missing", user_id=_UID)
         assert result is None
 
     def test_list_path_returns_list(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         dao = MemoryNodeDAO(self._mock_db(model))
         result = dao.list_path(f"/memory/{_UID}/tasks/pending", user_id=_UID)
@@ -405,21 +405,21 @@ class TestMemoryNodeDAOPathMethods:
         assert len(result) == 1
 
     def test_walk_path_returns_list(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         dao = MemoryNodeDAO(self._mock_db(model))
         result = dao.walk_path(f"/memory/{_UID}/tasks", user_id=_UID)
         assert isinstance(result, list)
 
     def test_query_path_exact_delegates_to_get_by_path(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         dao = MemoryNodeDAO(self._mock_db(model))
         nodes = dao.query_path(path_expr=model.path, user_id=_UID)
         assert len(nodes) == 1
 
     def test_query_path_with_tag_filter(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         dao = MemoryNodeDAO(self._mock_db(model))
         # tags filter on empty tags should return nothing
@@ -427,13 +427,13 @@ class TestMemoryNodeDAOPathMethods:
         assert nodes == []
 
     def test_causal_trace_no_origin_returns_empty(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(self._mock_db(None))
         result = dao.causal_trace("/memory/u/ns/type/missing", user_id=_UID)
         assert result == []
 
     def test_causal_trace_origin_only_returns_one(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         model = self._make_model()
         # No source_event_id → chain stops after origin
         dao = MemoryNodeDAO(self._mock_db(model))

@@ -7,11 +7,11 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.models.search_history import SearchHistory
-from runtime.memory import MemoryOrchestrator
-from analytics.search_scoring import score_research_result, score_seo_result
-from domain.seo_services import generate_meta_description, seo_analysis
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.models.search_history import SearchHistory
+from AINDY.runtime.memory import MemoryOrchestrator
+from AINDY.analytics.search_scoring import score_research_result, score_seo_result
+from AINDY.domain.seo_services import generate_meta_description, seo_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +324,7 @@ def search_leads(query: str, db=None, user_id: str | None = None, max_results: i
         raw = ""
         leads: list[dict[str, str]] = []
         try:
-            from modules.research_engine import web_search
+            from AINDY.modules.research_engine import web_search
 
             raw = web_search(query)
             parsed = None
@@ -382,7 +382,7 @@ def unified_query(
             _web_search = web_search_fn
             _ai_analyze = ai_analyze_fn
             if _web_search is None or _ai_analyze is None:
-                from modules.research_engine import web_search, ai_analyze
+                from AINDY.modules.research_engine import web_search, ai_analyze
 
                 _web_search = _web_search or web_search
                 _ai_analyze = _ai_analyze or ai_analyze

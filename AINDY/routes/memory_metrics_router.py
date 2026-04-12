@@ -5,11 +5,11 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from runtime.memory.metrics_store import MemoryMetricsStore
-from services.auth_service import get_current_user
-from utils.user_ids import require_user_id
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
+from AINDY.services.auth_service import get_current_user
+from AINDY.utils.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 

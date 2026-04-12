@@ -24,8 +24,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from db.models.arm_models import AnalysisResult, CodeGeneration
-from utils.user_ids import require_user_id
+from AINDY.db.models.arm_models import AnalysisResult, CodeGeneration
+from AINDY.utils.user_ids import require_user_id
 
 
 class ARMMetricsService:

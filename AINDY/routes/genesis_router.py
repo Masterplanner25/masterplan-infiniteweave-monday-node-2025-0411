@@ -6,29 +6,28 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from core.execution_gate import to_envelope
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from core.observability_events import emit_observability_event
-from db.database import get_db
-from db.models import GenesisSessionDB
-from services.auth_service import get_current_user
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.db.database import get_db
+from AINDY.db.models import GenesisSessionDB
+from AINDY.services.auth_service import get_current_user
 # Legacy import path preserved in source for regression tests:
 # from services.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
 # from services.masterplan_factory import create_masterplan_from_genesis
-from domain.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
-from domain.masterplan_factory import create_masterplan_from_genesis
-from runtime.flow_engine import execute_intent, run_flow
-from platform_layer.rate_limiter import limiter
-from core.system_event_types import SystemEventTypes
-from analytics.posture import posture_description
+from AINDY.domain.genesis_ai import call_genesis_synthesis_llm, validate_draft_integrity
+from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
+from AINDY.runtime.flow_engine import run_flow
+from AINDY.platform_layer.rate_limiter import limiter
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.analytics.posture import posture_description
 
 logger = logging.getLogger(__name__)
 
 _GENESIS_COMPAT_EXPORTS = (
     call_genesis_synthesis_llm,
     create_masterplan_from_genesis,
-    execute_intent,
 )
 
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
@@ -72,7 +71,7 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
 
 
 def _get_owned_session(db: Session, session_id: int, user_id: str) -> GenesisSessionDB | None:
-    from domain.genesis_service import get_owned_session
+    from AINDY.domain.genesis_service import get_owned_session
     return get_owned_session(db, session_id, user_id)
 
 
@@ -161,7 +160,7 @@ def genesis_message(
                 logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
             raise HTTPException(status_code=500, detail="Genesis message execution failed")
 
-        from domain.genesis_service import restore_synthesis_ready
+        from AINDY.domain.genesis_service import restore_synthesis_ready
         restore_synthesis_ready(db, session, existing_ready=existing_ready)
 
         try:
@@ -359,7 +358,7 @@ def lock_masterplan(
             user_id=user_id,
         )
         try:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
             MemoryNodeDAO(db).save(
                 content=f"Masterplan locked: {getattr(plan, 'version_label', 'unknown')} ({getattr(plan, 'posture', 'unknown')})",
@@ -441,7 +440,7 @@ def activate_masterplan(
         logger.warning("[genesis] observability start emit failed: %s", _obs_exc)
 
     def _activate_handler(_ctx):
-        from domain.genesis_service import activate_masterplan_genesis
+        from AINDY.domain.genesis_service import activate_masterplan_genesis
         try:
             result = activate_masterplan_genesis(db, plan_id=plan_id, user_id=user_id)
         except HTTPException:

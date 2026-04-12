@@ -43,21 +43,21 @@ from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
-from core.execution_envelope import error as execution_error
-from core.execution_envelope import success as execution_success
-from domain.goal_service import update_goals_from_execution
-from core.execution_signal_helper import queue_memory_capture, queue_system_event
+from AINDY.core.execution_envelope import error as execution_error
+from AINDY.core.execution_envelope import success as execution_success
+from AINDY.domain.goal_service import update_goals_from_execution
+from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
 emit_system_event = queue_system_event
-from core.system_event_service import emit_error_event
-from core.system_event_types import SystemEventTypes
-from utils.trace_context import ensure_trace_id
-from utils.trace_context import get_trace_id
-from utils.trace_context import reset_parent_event_id
-from utils.trace_context import reset_trace_id
-from utils.trace_context import set_parent_event_id
-from utils.trace_context import set_trace_id
-from utils.uuid_utils import normalize_uuid
-from utils.user_ids import parse_user_id
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.utils.trace_context import ensure_trace_id
+from AINDY.utils.trace_context import get_trace_id
+from AINDY.utils.trace_context import reset_parent_event_id
+from AINDY.utils.trace_context import reset_trace_id
+from AINDY.utils.trace_context import set_parent_event_id
+from AINDY.utils.trace_context import set_trace_id
+from AINDY.utils.uuid_utils import normalize_uuid
+from AINDY.utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def _json_safe(value):
 
 
 def _serialize_flow_events(db: Session, run_id) -> list[dict]:
-    from db.models.flow_run import FlowHistory
+    from AINDY.db.models.flow_run import FlowHistory
 
     history = (
         db.query(FlowHistory)
@@ -344,7 +344,7 @@ def _format_execution_response(
     run_id: object = None,
     state: Optional[dict] = None,
 ) -> dict:
-    from core.execution_record_service import build_execution_record
+    from AINDY.core.execution_record_service import build_execution_record
 
     if str(status).upper() == "ERROR":
         response = execution_error(
@@ -417,7 +417,7 @@ POLICY: dict = {
 # Retry decisions for flow-node retries are now resolved through RetryPolicy so
 # the central definition in core/retry_policy.py is the single source of truth.
 # _FLOW_RETRY_POLICY is resolved once at module load; it matches POLICY["max_retries"].
-from core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
+from AINDY.core.retry_policy import resolve_retry_policy as _resolve_retry_policy  # noqa: E402
 _FLOW_RETRY_POLICY = _resolve_retry_policy(execution_type="flow")
 
 
@@ -456,7 +456,7 @@ def execute_node(node_name: str, state: dict, context: dict) -> dict:
     # use the same recall logic. node_name is set here so it is available as
     # a tag signal alongside flow_name / workflow_type already in context.
     context["node_name"] = node_name
-    from memory.memory_helpers import enrich_context
+    from AINDY.memory.memory_helpers import enrich_context
     enrich_context(context)
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -477,7 +477,7 @@ def execute_node(node_name: str, state: dict, context: dict) -> dict:
         _outcome = "failure"
     else:
         _outcome = "neutral"  # RETRY / WAIT / unknown
-    from memory.memory_helpers import record_execution_feedback
+    from AINDY.memory.memory_helpers import record_execution_feedback
     record_execution_feedback(context, _outcome)
     # ──────────────────────────────────────────────────────────────────────────
 
@@ -563,7 +563,7 @@ class PersistentFlowRunner:
         Creates a FlowRun in DB and begins execution.
         Returns final result dict.
         """
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         trace_id = ensure_trace_id(
             initial_state.get("trace_id") if isinstance(initial_state, dict) else None
@@ -584,7 +584,7 @@ class PersistentFlowRunner:
         self.db.commit()
         self.db.refresh(run)
         try:
-            from core.execution_unit_service import ExecutionUnitService
+            from AINDY.core.execution_unit_service import ExecutionUnitService
             _tenant_id = str(self.user_id) if self.user_id else ""
             _eu = ExecutionUnitService(self.db).create(
                 eu_type="flow",
@@ -617,7 +617,7 @@ class PersistentFlowRunner:
             self._tenant_id = _tenant_id
             # Register execution with ResourceManager (concurrency tracking)
             try:
-                from kernel.resource_manager import get_resource_manager
+                from AINDY.kernel.resource_manager import get_resource_manager
                 get_resource_manager().mark_started(
                     _tenant_id, str(self._eu_id)
                 )
@@ -683,7 +683,7 @@ class PersistentFlowRunner:
         """
         Resume a flow run from its current node.
         """
-        from db.models.flow_run import FlowHistory, FlowRun
+        from AINDY.db.models.flow_run import FlowHistory, FlowRun
 
         db_run_id = str(run_id)
         run = self.db.query(FlowRun).filter(FlowRun.id == db_run_id).first()
@@ -783,7 +783,7 @@ class PersistentFlowRunner:
             run.completed_at = datetime.now(timezone.utc)
             self.db.commit()
             try:
-                from core.execution_unit_service import ExecutionUnitService
+                from AINDY.core.execution_unit_service import ExecutionUnitService
                 _eus = ExecutionUnitService(self.db)
                 _eu_id = getattr(self, "_eu_id", None)
                 if _eu_id:
@@ -794,7 +794,7 @@ class PersistentFlowRunner:
                         _eus.update_status(_eu.id, "failed")
                 # OS Layer: release concurrency slot
                 try:
-                    from kernel.resource_manager import get_resource_manager as _get_rm_f
+                    from AINDY.kernel.resource_manager import get_resource_manager as _get_rm_f
                     _get_rm_f().mark_completed(
                         getattr(self, "_tenant_id", str(self.user_id or "")),
                         str(_eu_id) if _eu_id else None,
@@ -873,7 +873,7 @@ class PersistentFlowRunner:
                 node_parent_token = set_parent_event_id(str(node_started_event_id) if node_started_event_id else root_event_id)
                 # ── OS Layer: resource quota pre-check ────────────────────────
                 try:
-                    from kernel.resource_manager import get_resource_manager as _get_rm
+                    from AINDY.kernel.resource_manager import get_resource_manager as _get_rm
                     _rm = _get_rm()
                     _tenant_id = getattr(self, "_tenant_id", str(self.user_id or ""))
                     _eu_id_str = str(getattr(self, "_eu_id", "") or "")
@@ -886,8 +886,8 @@ class PersistentFlowRunner:
                         run.state = _json_safe(state)
                         self.db.commit()
                         try:
-                            from kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
-                            from core.wait_condition import WaitCondition
+                            from AINDY.kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
+                            from AINDY.core.wait_condition import WaitCondition
                             _se = get_scheduler_engine()
                             _this_run_id = str(run.id)
                             _this_runner = self
@@ -976,7 +976,7 @@ class PersistentFlowRunner:
                 exec_ms = result.get("_execution_time_ms", 0) or int((time.monotonic() - _node_t_start) * 1000)
                 # ── OS Layer: record node resource usage ──────────────────────
                 try:
-                    from kernel.resource_manager import get_resource_manager as _get_rm2
+                    from AINDY.kernel.resource_manager import get_resource_manager as _get_rm2
                     _eu_id_str2 = str(getattr(self, "_eu_id", "") or "")
                     if _eu_id_str2:
                         _get_rm2().record_usage(
@@ -1060,8 +1060,8 @@ class PersistentFlowRunner:
                     # resume_callback re-enters PersistentFlowRunner.resume() so
                     # the resumed run re-uses the same flow checkpoint.
                     try:
-                        from kernel.scheduler_engine import get_scheduler_engine
-                        from core.wait_condition import WaitCondition
+                        from AINDY.kernel.scheduler_engine import get_scheduler_engine
+                        from AINDY.core.wait_condition import WaitCondition
                         _nw_run_id = str(run.id)
                         _nw_runner = self
                         _nw_trace = str(run.trace_id or _nw_run_id)
@@ -1231,7 +1231,7 @@ class PersistentFlowRunner:
             return
 
         try:
-            from db.models.flow_run import FlowHistory
+            from AINDY.db.models.flow_run import FlowHistory
 
             history = (
                 self.db.query(FlowHistory)
@@ -1277,7 +1277,7 @@ class PersistentFlowRunner:
                 context={"run_id": run.id, "total_ms": total_ms},
             )
             try:
-                from core.execution_unit_service import ExecutionUnitService
+                from AINDY.core.execution_unit_service import ExecutionUnitService
                 _eus = ExecutionUnitService(self.db)
                 _eu_id = getattr(self, "_eu_id", None)
                 if _eu_id:
@@ -1288,7 +1288,7 @@ class PersistentFlowRunner:
                         _eus.update_status(_eu.id, "completed")
                 # OS Layer: release concurrency slot
                 try:
-                    from kernel.resource_manager import get_resource_manager as _get_rm_s
+                    from AINDY.kernel.resource_manager import get_resource_manager as _get_rm_s
                     _get_rm_s().mark_completed(
                         getattr(self, "_tenant_id", str(self.user_id or "")),
                         str(_eu_id) if _eu_id else None,
@@ -1358,8 +1358,8 @@ def route_event(
         The caller receives an ack per run that got the state update; the actual
         resume count is determined by the scheduler.
     """
-    from db.models.flow_run import FlowRun
-    from kernel.scheduler_engine import get_scheduler_engine
+    from AINDY.db.models.flow_run import FlowRun
+    from AINDY.kernel.scheduler_engine import get_scheduler_engine
 
     scheduler = get_scheduler_engine()
     corr = (payload or {}).get("correlation_id") or None
@@ -1421,7 +1421,7 @@ def route_event(
     # waiters.  No runner.resume() calls, no FLOW_REGISTRY lookups, no status
     # mutations here — the scheduler and its callbacks handle all of that.
     try:
-        from kernel.event_bus import publish_event
+        from AINDY.kernel.event_bus import publish_event
         resumed = publish_event(event_type, correlation_id=corr)
         logger.info(
             "[route_event] publish_event resumed=%d event=%s corr=%s",
@@ -1455,7 +1455,7 @@ def record_outcome(
     if not db:
         return
 
-    from db.models.flow_run import EventOutcome
+    from AINDY.db.models.flow_run import EventOutcome
 
     try:
         outcome = EventOutcome(
@@ -1489,7 +1489,7 @@ def select_strategy(
 
     Returns the flow dict or None if no strategy found.
     """
-    from db.models.flow_run import Strategy
+    from AINDY.db.models.flow_run import Strategy
 
     # Try user-specific strategy first
     owner_user_id = parse_user_id(user_id)
@@ -1541,7 +1541,7 @@ def update_strategy_score(
     failure: -0.15 (min 0.1)
     — mirrors Memory Bridge adaptive weight logic
     """
-    from db.models.flow_run import Strategy
+    from AINDY.db.models.flow_run import Strategy
 
     query = db.query(Strategy).filter(Strategy.intent_type == intent_type)
     owner_user_id = parse_user_id(user_id)
@@ -1707,7 +1707,7 @@ def execute_intent(
         return _execute_intent_direct(intent_data, db, user_id)
 
     import uuid as _uuid
-    from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
 
     # Reuse parent trace/EU when running inside an existing syscall chain;
     # otherwise start a fresh root trace for this intent execution.
@@ -1795,7 +1795,7 @@ def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = Non
         return _run_flow_direct(flow_name, state or {}, db, user_id)
 
     import uuid as _uuid
-    from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX, get_dispatcher, SyscallContext
 
     # Reuse parent trace/EU when running inside an existing syscall chain;
     # otherwise start a fresh root trace for this flow run.

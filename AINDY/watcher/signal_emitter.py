@@ -22,8 +22,8 @@ from collections import deque
 from dataclasses import asdict
 from typing import List, Optional
 
-from platform_layer.external_call_service import perform_external_call
-from watcher.session_tracker import SessionEvent
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.watcher.session_tracker import SessionEvent
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class SystemStateSnapshot(Base):

@@ -73,7 +73,7 @@ class TestFreelanceIsolation:
 
     def test_freelance_service_passes_user_id(self):
         """freelance_service create_order and collect_feedback accept user_id."""
-        from domain.freelance_service import create_order, collect_feedback, get_all_orders, get_all_feedback
+        from AINDY.domain.freelance_service import create_order, collect_feedback, get_all_orders, get_all_feedback
         import inspect
         for fn in [create_order, collect_feedback, get_all_orders, get_all_feedback]:
             sig = inspect.signature(fn)
@@ -122,7 +122,7 @@ class TestResearchIsolation:
 
     def test_research_service_passes_user_id(self):
         """research_results_service functions accept user_id."""
-        from domain.research_results_service import (
+        from AINDY.domain.research_results_service import (
             create_research_result, get_all_research_results
         )
         for fn in [create_research_result, get_all_research_results]:
@@ -186,7 +186,7 @@ class TestRippletraceIsolation:
 
     def test_rippletrace_service_passes_user_id(self):
         """rippletrace_services functions accept user_id."""
-        from domain.rippletrace_services import (
+        from AINDY.domain.rippletrace_services import (
             add_drop_point, add_ping, get_all_drop_points,
             get_all_pings, get_recent_ripples, get_ripples,
         )
@@ -202,27 +202,27 @@ class TestUserIdColumnPresence:
     """Verify user_id columns exist in ORM model definitions for all target tables."""
 
     def test_freelance_orders_model_has_user_id(self):
-        from db.models.freelance import FreelanceOrder
+        from AINDY.db.models.freelance import FreelanceOrder
         cols = [c.name for c in FreelanceOrder.__table__.columns]
         assert 'user_id' in cols, "FreelanceOrder model missing user_id column"
 
     def test_client_feedback_model_has_user_id(self):
-        from db.models.freelance import ClientFeedback
+        from AINDY.db.models.freelance import ClientFeedback
         cols = [c.name for c in ClientFeedback.__table__.columns]
         assert 'user_id' in cols, "ClientFeedback model missing user_id column"
 
     def test_research_results_model_has_user_id(self):
-        from db.models.research_results import ResearchResult
+        from AINDY.db.models.research_results import ResearchResult
         cols = [c.name for c in ResearchResult.__table__.columns]
         assert 'user_id' in cols, "ResearchResult model missing user_id column"
 
     def test_drop_points_model_has_user_id(self):
-        from db.models.drop import DropPointDB
+        from AINDY.db.models.drop import DropPointDB
         cols = [c.name for c in DropPointDB.__table__.columns]
         assert 'user_id' in cols, "DropPointDB model missing user_id column"
 
     def test_pings_model_has_user_id(self):
-        from db.models.drop import PingDB
+        from AINDY.db.models.drop import PingDB
         cols = [c.name for c in PingDB.__table__.columns]
         assert 'user_id' in cols, "PingDB model missing user_id column"
 

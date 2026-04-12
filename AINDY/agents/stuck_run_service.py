@@ -30,8 +30,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
-from core.execution_signal_helper import record_agent_event
-from core.observability_events import emit_observability_event
+from AINDY.core.execution_signal_helper import record_agent_event
+from AINDY.core.observability_events import emit_observability_event
 
 _RECOVERY_ERROR_MSG = "Stuck run recovery: process terminated before completion"
 
@@ -52,7 +52,7 @@ def _recover_agent_run(flow_run, db: Session) -> None:
     Finds the linked AgentRun by flow_run_id, loads all completed
     AgentStep audit rows, then marks both FlowRun and AgentRun as failed.
     """
-    from db.models.agent_run import AgentRun, AgentStep
+    from AINDY.db.models.agent_run import AgentRun, AgentStep
 
     # Mark the FlowRun terminal
     flow_run.status = "failed"
@@ -146,9 +146,9 @@ def recover_stuck_agent_run(
       forbidden   → 403
       wrong_status / too_recent → 409
     """
-    from db.models.agent_run import AgentRun, AgentStep
-    from db.models.flow_run import FlowRun
-    from agents.agent_runtime import _run_to_dict
+    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from AINDY.db.models.flow_run import FlowRun
+    from AINDY.agents.agent_runtime import _run_to_dict
 
     threshold_minutes = _default_threshold_minutes()
 
@@ -270,7 +270,7 @@ def scan_and_recover_stuck_runs(
     recovered = 0
 
     try:
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         threshold_dt = datetime.now(timezone.utc) - timedelta(minutes=staleness_minutes)
 

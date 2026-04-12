@@ -19,7 +19,7 @@ from sqlalchemy import Column, String, Float, Integer, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
-from db.database import Base
+from AINDY.db.database import Base
 
 # KPI weights — must sum to 1.0
 KPI_WEIGHTS = {

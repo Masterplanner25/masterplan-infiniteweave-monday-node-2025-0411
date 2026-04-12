@@ -30,7 +30,7 @@ os.environ.setdefault("EXECUTION_MODE", "thread")
 # ===========================================================================
 
 def _make_job(job_id="job-1", task_name="test.task", attempt=0, is_retry=False):
-    from core.distributed_queue import QueueJobPayload
+    from AINDY.core.distributed_queue import QueueJobPayload
     return QueueJobPayload(
         job_id=job_id,
         task_name=task_name,
@@ -40,7 +40,7 @@ def _make_job(job_id="job-1", task_name="test.task", attempt=0, is_retry=False):
 
 
 def _fresh_queue():
-    from core.distributed_queue import InMemoryQueueBackend
+    from AINDY.core.distributed_queue import InMemoryQueueBackend
     return InMemoryQueueBackend()
 
 
@@ -110,7 +110,7 @@ class TestVisibilityTimeoutRecovery:
 
     def test_stale_recovery_thread_fires_immediately_on_start(self):
         """_run_stale_recovery calls requeue_stale_jobs on its first iteration."""
-        from worker.worker_loop import _STOP, _run_stale_recovery, reset_worker_state
+        from AINDY.worker.worker_loop import _STOP, _run_stale_recovery, reset_worker_state
         reset_worker_state()
 
         recovery_called = threading.Event()
@@ -143,17 +143,17 @@ class TestVisibilityTimeoutRecovery:
 
 class TestIdempotencyKey:
     def test_defaults_to_job_id(self):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         job = QueueJobPayload(job_id="my-job", task_name="t")
         assert job.idempotency_key == "my-job"
 
     def test_explicit_key_preserved(self):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         job = QueueJobPayload(job_id="j", task_name="t", idempotency_key="custom-key")
         assert job.idempotency_key == "custom-key"
 
     def test_roundtrip_preserves_key(self):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         job = QueueJobPayload(job_id="j", task_name="t", idempotency_key="ikey-1")
         restored = QueueJobPayload.from_json(job.to_json())
         assert restored.idempotency_key == "ikey-1"
@@ -161,7 +161,7 @@ class TestIdempotencyKey:
     def test_empty_key_becomes_job_id_on_deserialise(self):
         """Old payloads without idempotency_key get it set to job_id."""
         import json
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         raw = json.dumps({
             "job_id": "j2",
             "task_name": "t",
@@ -175,8 +175,8 @@ class TestIdempotencyKey:
 
     def test_idempotency_key_threaded_into_worker_context(self):
         """process_one_job logs idempotency_key and passes it to execution."""
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
-        from worker.worker_loop import reset_worker_state
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
 
         q = InMemoryQueueBackend()
@@ -199,7 +199,7 @@ class TestIdempotencyKey:
             patch("platform_layer.async_job_service._execute_job", side_effect=fake_exec),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             result = process_one_job(q)
 
         assert result is True
@@ -263,8 +263,8 @@ class TestDeadLetterQueue:
 
     def test_worker_calls_fail_on_exception(self):
         """process_one_job calls q.fail() when _execute_job raises."""
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
-        from worker.worker_loop import reset_worker_state
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
 
         q = InMemoryQueueBackend()
@@ -280,7 +280,7 @@ class TestDeadLetterQueue:
             patch("platform_layer.async_job_service._execute_job", side_effect=RuntimeError("kaboom")),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
 
         dlq = q.get_dead_letters()
@@ -294,14 +294,14 @@ class TestDeadLetterQueue:
 
 class TestRetryBackoff:
     def setup_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
         os.environ["EXECUTION_MODE"] = "distributed"
         os.environ["AINDY_RETRY_BACKOFF_BASE_MS"] = "500"
         os.environ["AINDY_RETRY_BACKOFF_MAX_MS"] = "4000"
 
     def teardown_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         os.environ["EXECUTION_MODE"] = "thread"
         os.environ.pop("AINDY_RETRY_BACKOFF_BASE_MS", None)
         os.environ.pop("AINDY_RETRY_BACKOFF_MAX_MS", None)
@@ -323,7 +323,7 @@ class TestRetryBackoff:
             patch("core.distributed_queue.get_queue", return_value=q),
             patch("core.execution_dispatcher._compute_retry_delay", return_value=2.0),
         ):
-            from core.execution_dispatcher import _enqueue_distributed
+            from AINDY.core.execution_dispatcher import _enqueue_distributed
             _enqueue_distributed(
                 self._eu_stub(),
                 {"log_id": "retry-job-1", "task_name": "t.task", "retry": True},
@@ -341,7 +341,7 @@ class TestRetryBackoff:
         q = _fresh_queue()
 
         with patch("core.distributed_queue.get_queue", return_value=q):
-            from core.execution_dispatcher import _enqueue_distributed
+            from AINDY.core.execution_dispatcher import _enqueue_distributed
             _enqueue_distributed(
                 self._eu_stub(),
                 {"log_id": "normal-job", "task_name": "t.task"},
@@ -351,7 +351,7 @@ class TestRetryBackoff:
 
     def test_compute_retry_delay_exponential(self):
         """Delay doubles with each attempt; caps at max."""
-        from core.execution_dispatcher import _compute_retry_delay
+        from AINDY.core.execution_dispatcher import _compute_retry_delay
 
         log_mock = MagicMock()
         # attempt 1 → base=500ms → 0.5s
@@ -391,26 +391,26 @@ class TestRetryBackoff:
 
 class TestConcurrencyGuard:
     def setup_method(self):
-        from worker.worker_loop import reset_worker_state
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
 
     def teardown_method(self):
         os.environ.pop("WORKER_MAX_CONCURRENT_JOBS", None)
-        from worker.worker_loop import reset_worker_state
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
     def test_no_semaphore_when_unlimited(self):
         """WORKER_MAX_CONCURRENT_JOBS=0 → _get_semaphore() returns None."""
         os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "0"
-        from worker.worker_loop import _get_semaphore
+        from AINDY.worker.worker_loop import _get_semaphore
         assert _get_semaphore() is None
 
     def test_semaphore_created_at_configured_size(self):
         """WORKER_MAX_CONCURRENT_JOBS=3 → Semaphore with 3 slots."""
         os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "3"
-        from worker.worker_loop import _get_semaphore, reset_worker_state
+        from AINDY.worker.worker_loop import _get_semaphore, reset_worker_state
         reset_worker_state()
         sem = _get_semaphore()
         assert sem is not None
@@ -426,10 +426,10 @@ class TestConcurrencyGuard:
     def test_at_capacity_job_is_requeued(self):
         """When all slots are taken, the dequeued job is re-enqueued."""
         os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "1"
-        from worker.worker_loop import _get_semaphore, reset_worker_state
+        from AINDY.worker.worker_loop import _get_semaphore, reset_worker_state
         reset_worker_state()
 
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
         q = InMemoryQueueBackend()
         q.enqueue(QueueJobPayload(
             job_id="cap-job",
@@ -441,7 +441,7 @@ class TestConcurrencyGuard:
         sem.acquire()  # Exhaust the one slot.
 
         try:
-            from worker.worker_loop import _STOP, process_one_job
+            from AINDY.worker.worker_loop import _STOP, process_one_job
             # Signal stop so the capacity-wait loop exits immediately.
             _STOP.set()
             result = process_one_job(q)
@@ -456,10 +456,10 @@ class TestConcurrencyGuard:
     def test_semaphore_released_after_successful_job(self):
         """Slot is released after a successful job so the next job can run."""
         os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "1"
-        from worker.worker_loop import _get_semaphore, reset_worker_state
+        from AINDY.worker.worker_loop import _get_semaphore, reset_worker_state
         reset_worker_state()
 
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
         q = InMemoryQueueBackend()
         for i in range(2):
             q.enqueue(QueueJobPayload(
@@ -476,7 +476,7 @@ class TestConcurrencyGuard:
                   side_effect=lambda *a: processed.append(a[0])),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
             process_one_job(q)
 
@@ -485,10 +485,10 @@ class TestConcurrencyGuard:
     def test_semaphore_released_after_failed_job(self):
         """Slot is released even when the job raises."""
         os.environ["WORKER_MAX_CONCURRENT_JOBS"] = "1"
-        from worker.worker_loop import _get_semaphore, reset_worker_state
+        from AINDY.worker.worker_loop import _get_semaphore, reset_worker_state
         reset_worker_state()
 
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
         q = InMemoryQueueBackend()
         for i in range(2):
             q.enqueue(QueueJobPayload(
@@ -504,7 +504,7 @@ class TestConcurrencyGuard:
                   side_effect=RuntimeError("boom")),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
 
         # Semaphore must have been released — acquire should succeed.
@@ -606,8 +606,8 @@ class TestOriginalBehaviourPreserved:
 
     def test_trace_context_preserved_across_job(self):
         """trace_id from queue payload arrives in the execution context."""
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
-        from worker.worker_loop import reset_worker_state
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
         os.environ.pop("WORKER_MAX_CONCURRENT_JOBS", None)
 
@@ -621,7 +621,7 @@ class TestOriginalBehaviourPreserved:
         captured: list[str] = []
 
         def fake_exec(log_id, task_name, payload):
-            from utils.trace_context import get_trace_id
+            from AINDY.utils.trace_context import get_trace_id
             captured.append(get_trace_id() or "")
 
         with (
@@ -630,16 +630,16 @@ class TestOriginalBehaviourPreserved:
             patch("platform_layer.async_job_service._execute_job", side_effect=fake_exec),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
 
         assert captured == ["EXPECTED-TRACE"]
 
     def test_trace_context_cleaned_up_after_job(self):
         """ContextVars are reset to their pre-job state after execution."""
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
-        from utils.trace_context import get_trace_id
-        from worker.worker_loop import reset_worker_state
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload
+        from AINDY.utils.trace_context import get_trace_id
+        from AINDY.worker.worker_loop import reset_worker_state
         reset_worker_state()
         os.environ.pop("WORKER_MAX_CONCURRENT_JOBS", None)
 
@@ -658,7 +658,7 @@ class TestOriginalBehaviourPreserved:
             patch("platform_layer.async_job_service._execute_job"),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
 
         assert get_trace_id() == before

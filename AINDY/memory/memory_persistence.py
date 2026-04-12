@@ -9,12 +9,12 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from pgvector.sqlalchemy import Vector
-from utils import prepare_input_text
-from utils.trace_context import get_current_trace_id
-from utils.user_ids import parse_user_id
+from AINDY.utils import prepare_input_text
+from AINDY.utils.trace_context import get_current_trace_id
+from AINDY.utils.user_ids import parse_user_id
 
 # import your project's Base (must exist)
-from db.database import Base
+from AINDY.db.database import Base
 
 VALID_NODE_TYPES = {"decision", "outcome", "insight", "relationship"}
 VALID_MEMORY_TYPES = {"decision", "outcome", "failure", "insight"}

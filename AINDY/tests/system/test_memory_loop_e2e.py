@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from runtime.memory_loop import ExecutionLoop
-from runtime.memory import MemoryOrchestrator
+from AINDY.runtime.memory_loop import ExecutionLoop
+from AINDY.runtime.memory import MemoryOrchestrator
 
 
 @dataclass

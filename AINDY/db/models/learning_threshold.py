@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, String, Float, DateTime
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class LearningThresholdDB(Base):

@@ -14,7 +14,7 @@ import uuid
 from sqlalchemy import Column, String, Integer, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class AutomationLog(Base):

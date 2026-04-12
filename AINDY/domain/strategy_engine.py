@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import (
+from AINDY.db.models import (
     StrategyDB,
     DropPointDB,
     LearningRecordDB,

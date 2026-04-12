@@ -29,9 +29,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Importing nodus_adapter triggers node registration in NODE_REGISTRY
-import runtime.nodus_adapter  # noqa: F401  — side-effect: registers nodes
-from runtime.flow_engine import NODE_REGISTRY
-from runtime.nodus_runtime_adapter import (
+import AINDY.runtime.nodus_adapter  # noqa: F401  — side-effect: registers nodes
+from AINDY.runtime.flow_engine import NODE_REGISTRY
+from AINDY.runtime.nodus_runtime_adapter import (
     NODUS_SCRIPT_FLOW,
     NodusExecutionResult,
 )

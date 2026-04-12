@@ -23,7 +23,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import patch
 
-from core.system_event_types import SystemEventTypes
+from AINDY.core.system_event_types import SystemEventTypes
 
 
 # ── Session patching ──────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ def _patch_session_local_to_engine(app, testing_session_factory, monkeypatch):
     emit its own connection so its commits are real and survive subsequent
     rollbacks on the test connection.
     """
-    import db.database as _db_module
+    import AINDY.db.database as _db_module
 
     monkeypatch.setattr(_db_module, "SessionLocal", testing_session_factory, raising=False)
 
@@ -59,7 +59,7 @@ def _task_name(suffix: str) -> str:
 
 def _events_of_type(db_session, event_type: str):
     """Return all SystemEvent rows matching event_type (refreshed)."""
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     db_session.expire_all()
     return (
@@ -120,7 +120,7 @@ def test_task_start_emits_task_started_event(db_session, test_user):
     """
     Calling start_task() via the service layer must emit a 'task.started' event.
     """
-    from domain.task_services import create_task, start_task
+    from AINDY.domain.task_services import create_task, start_task
 
     name = _task_name("start")
     create_task(db_session, name, user_id=_TEST_USER_ID)
@@ -142,7 +142,7 @@ def test_task_complete_emits_task_completed_event(db_session, test_user):
     """
     Calling complete_task() via the service layer must emit a 'task.completed' event.
     """
-    from domain.task_services import create_task, start_task, complete_task
+    from AINDY.domain.task_services import create_task, start_task, complete_task
 
     name = _task_name("complete")
     create_task(db_session, name, user_id=_TEST_USER_ID)
@@ -165,7 +165,7 @@ def test_task_pause_emits_task_paused_event(db_session, test_user):
     """
     Calling pause_task() via the service layer must emit a 'task.paused' event.
     """
-    from domain.task_services import create_task, start_task, pause_task
+    from AINDY.domain.task_services import create_task, start_task, pause_task
 
     name = _task_name("pause")
     create_task(db_session, name, user_id=_TEST_USER_ID)

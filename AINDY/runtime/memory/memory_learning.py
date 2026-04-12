@@ -4,7 +4,7 @@ import logging
 import math
 import uuid
 
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 logger = logging.getLogger(__name__)
 

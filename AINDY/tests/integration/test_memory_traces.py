@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.dao.memory_trace_dao import MemoryTraceDAO
-from db.models.user import User
-from services.auth_service import hash_password
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
+from AINDY.db.models.user import User
+from AINDY.services.auth_service import hash_password
 
 
 def _create_other_user(db_session) -> User:

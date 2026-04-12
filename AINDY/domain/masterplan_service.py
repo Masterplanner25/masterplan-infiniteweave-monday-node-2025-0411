@@ -6,9 +6,9 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from analytics.posture import posture_description
-from db.models import MasterPlan
-from domain.masterplan_factory import create_masterplan_from_genesis
+from AINDY.analytics.posture import posture_description
+from AINDY.db.models import MasterPlan
+from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
 
 
 # ── list_masterplans ──────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ def get_masterplan_projection(
         )
 
     try:
-        from analytics import eta_service
+        from AINDY.analytics import eta_service
 
         return eta_service.calculate_eta(db=db, masterplan_id=plan_id, user_id=user_id)
     except HTTPException:

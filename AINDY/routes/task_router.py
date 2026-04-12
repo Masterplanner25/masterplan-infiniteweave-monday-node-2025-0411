@@ -3,14 +3,14 @@ import logging
 
 from fastapi import APIRouter, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
-from core.execution_gate import to_envelope
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from core.observability_events import emit_observability_event
-from db.database import get_db
-from schemas.task_schemas import TaskCreate, TaskAction
-from services.auth_service import get_current_user
-from core.system_event_types import SystemEventTypes
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.db.database import get_db
+from AINDY.schemas.task_schemas import TaskCreate, TaskAction
+from AINDY.services.auth_service import get_current_user
+from AINDY.core.system_event_types import SystemEventTypes
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def create_task(
     _task_result: dict = {}
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "task_create",
             {
@@ -139,7 +139,7 @@ def start_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "task_start",
             {"task_name": task.name},
@@ -164,7 +164,7 @@ def pause_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "task_pause",
             {"task_name": task.name},
@@ -189,7 +189,7 @@ def complete_task(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "task_completion",
             {"task_name": task.name},
@@ -212,7 +212,7 @@ def list_tasks(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from domain.task_services import list_tasks
+        from AINDY.domain.task_services import list_tasks
         tasks = list_tasks(db, user_id=current_user["sub"])
         return {
             "tasks": [_serialize_task(task) for task in tasks],
@@ -232,7 +232,7 @@ def trigger_recurrence(
     """Triggers the recurrence check job asynchronously."""
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("tasks_recurrence_check", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Recurrence check failed"))

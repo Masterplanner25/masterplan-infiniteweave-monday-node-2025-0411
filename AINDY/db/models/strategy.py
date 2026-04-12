@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, Integer, JSON, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class StrategyDB(Base):

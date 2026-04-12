@@ -10,25 +10,25 @@ from unittest.mock import MagicMock, patch
 class TestAgentModel:
 
     def test_agent_model_importable(self):
-        from db.models.agent import Agent, SYSTEM_AGENTS
+        from AINDY.db.models.agent import Agent, SYSTEM_AGENTS
         assert Agent.__tablename__ == "agents"
         assert "arm" in SYSTEM_AGENTS
         assert "genesis" in SYSTEM_AGENTS
         assert "nodus" in SYSTEM_AGENTS
 
     def test_agents_table_in_db(self):
-        from db.models.agent import Agent
+        from AINDY.db.models.agent import Agent
         assert Agent.__tablename__ in Agent.metadata.tables
 
     def test_source_agent_column_on_memory_nodes(self):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         cols = list(MemoryNodeModel.__table__.columns.keys())
         assert "source_agent" in cols
         assert "is_shared" in cols
 
     def test_system_agents_seeded(self, mock_db):
         """System agents should be in the registry."""
-        from db.models.agent import (
+        from AINDY.db.models.agent import (
             Agent, AGENT_ARM, AGENT_GENESIS,
             AGENT_NODUS, AGENT_LEADGEN
         )
@@ -56,23 +56,23 @@ class TestAgentModel:
 class TestFederatedMemoryDAO:
 
     def test_save_as_agent_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "save_as_agent")
 
     def test_recall_from_agent_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "recall_from_agent")
 
     def test_recall_federated_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "recall_federated")
 
     def test_share_memory_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "share_memory")
 
     def test_recall_federated_structure(self, mock_db, mocker):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mocker.patch(
             "db.dao.memory_node_dao.MemoryNodeDAO"
@@ -96,7 +96,7 @@ class TestFederatedMemoryDAO:
         Cross-agent queries must not return private nodes.
         include_private=False is enforced in recall_federated.
         """
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         import inspect
 
         source = inspect.getsource(MemoryNodeDAO.recall_federated)
@@ -108,14 +108,14 @@ class TestFederatedMemoryDAO:
 class TestCaptureEngineNamespacing:
 
     def test_capture_engine_accepts_namespace(self):
-        from memory.memory_capture_engine import MemoryCaptureEngine
+        from AINDY.memory.memory_capture_engine import MemoryCaptureEngine
         import inspect
         sig = inspect.signature(MemoryCaptureEngine.__init__)
         assert "agent_namespace" in sig.parameters
 
     def test_arm_uses_arm_namespace(self):
         import inspect
-        from modules.deepseek import deepseek_code_analyzer
+        from AINDY.modules.deepseek import deepseek_code_analyzer
         source = inspect.getsource(deepseek_code_analyzer)
         assert "arm" in source and "agent_namespace" in source, (
             "ARM should use agent_namespace='arm'"
@@ -123,7 +123,7 @@ class TestCaptureEngineNamespacing:
 
     def test_genesis_uses_genesis_namespace(self):
         import inspect
-        from domain import genesis_ai
+        from AINDY.domain import genesis_ai
         source = inspect.getsource(genesis_ai)
         assert "genesis" in source and "agent_namespace" in source, (
             "Genesis should use agent_namespace='genesis'"
@@ -133,25 +133,25 @@ class TestCaptureEngineNamespacing:
 class TestFederationNodusbridge:
 
     def test_bridge_has_recall_from(self):
-        from memory.nodus_memory_bridge import NodusMemoryBridge
+        from AINDY.memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "recall_from")
 
     def test_bridge_has_recall_all_agents(self):
-        from memory.nodus_memory_bridge import NodusMemoryBridge
+        from AINDY.memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "recall_all_agents")
 
     def test_bridge_has_share(self):
-        from memory.nodus_memory_bridge import NodusMemoryBridge
+        from AINDY.memory.nodus_memory_bridge import NodusMemoryBridge
         assert hasattr(NodusMemoryBridge, "share")
 
     def test_recall_from_without_db_returns_empty(self):
-        from memory.nodus_memory_bridge import create_nodus_bridge
+        from AINDY.memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(db=None)
         result = bridge.recall_from("arm", query="test")
         assert result == []
 
     def test_share_without_db_returns_false(self):
-        from memory.nodus_memory_bridge import create_nodus_bridge
+        from AINDY.memory.nodus_memory_bridge import create_nodus_bridge
         bridge = create_nodus_bridge(db=None)
         result = bridge.share("some-node-id")
         assert result is False
@@ -215,8 +215,8 @@ class TestFederationEndpoints:
             assert "federation_summary" in data
 
     def test_list_agents_with_auth(self, client, auth_headers, mock_db, test_user):
-        from db.models.agent import Agent
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.db.models.agent import Agent
+        from AINDY.memory.memory_persistence import MemoryNodeModel
 
         mock_db.add(
             Agent(

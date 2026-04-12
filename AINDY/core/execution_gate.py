@@ -85,8 +85,8 @@ class ExecutionWaitSignal(Exception):
 
     Usage
     -----
-        from core.execution_gate import ExecutionWaitSignal
-        from core.wait_condition import WaitCondition
+        from AINDY.core.execution_gate import ExecutionWaitSignal
+        from AINDY.core.wait_condition import WaitCondition
 
         # Event-based (default):
         raise ExecutionWaitSignal(
@@ -168,7 +168,7 @@ def _resolve_policy_for_eu(eu_type: str, extra: dict[str, Any]) -> dict[str, Any
       2. ``extra["workflow_type"]`` — checked for "nodus_*" to route to nodus
       3. ``eu_type`` mapped to execution_type via ``_EU_TYPE_TO_EXEC_TYPE``
     """
-    from core.retry_policy import resolve_retry_policy
+    from AINDY.core.retry_policy import resolve_retry_policy
 
     exec_type = _EU_TYPE_TO_EXEC_TYPE.get((eu_type or "").lower(), "job")
 
@@ -220,7 +220,7 @@ def require_execution_unit(
     Callers that need a non-default policy should set those keys in ``extra``
     before calling this function.
     """
-    from core.execution_unit_service import ExecutionUnitService
+    from AINDY.core.execution_unit_service import ExecutionUnitService
 
     try:
         merged_extra: dict[str, Any] = dict(extra or {})
@@ -343,7 +343,7 @@ def gate_and_dispatch(
         Keys ``risk_level`` and ``workflow_type`` influence retry-policy
         resolution; ``async_hint`` overrides the dispatch-mode decision.
     """
-    from core.execution_dispatcher import ExecutionMode, dispatch
+    from AINDY.core.execution_dispatcher import ExecutionMode, dispatch
 
     start = time.monotonic()
 

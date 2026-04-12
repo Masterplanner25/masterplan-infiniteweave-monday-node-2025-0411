@@ -3,17 +3,17 @@ from __future__ import annotations
 import time
 import uuid
 
-from db.models.agent_event import AgentEvent
-from db.models.agent_run import AgentRun
-from db.models.agent_run import AgentTrustSettings
-from db.models.automation_log import AutomationLog
-from db.models.request_metric import RequestMetric
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from agents.agent_runtime import execute_run
-from services.auth_service import hash_password
-from agents.capability_service import mint_token
-from tests.fixtures.auth import build_access_token
+from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.agent_run import AgentRun
+from AINDY.db.models.agent_run import AgentTrustSettings
+from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.request_metric import RequestMetric
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.agents.agent_runtime import execute_run
+from AINDY.services.auth_service import hash_password
+from AINDY.agents.capability_service import mint_token
+from AINDY.tests.fixtures.auth import build_access_token
 
 
 VALID_PLAN = {
@@ -84,7 +84,7 @@ def _make_run(db_session, user_id, *, status: str = "approved", plan: dict | Non
 
 
 def test_every_execution_emits_events(client, db_session, test_user, auth_headers, monkeypatch):
-    from platform_layer.async_job_service import shutdown_async_jobs
+    from AINDY.platform_layer.async_job_service import shutdown_async_jobs
 
     db_session.add(
         AgentTrustSettings(

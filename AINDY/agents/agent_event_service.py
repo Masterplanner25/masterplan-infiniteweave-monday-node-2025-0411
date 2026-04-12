@@ -5,7 +5,7 @@ emit_event() is the single entry point for agent lifecycle persistence.
 Critical execution paths pass required=True so missing audit events fail closed.
 
 Usage:
-    from agents.agent_event_service import emit_event
+    from AINDY.agents.agent_event_service import emit_event
     emit_event(
         run_id=str(run.id),
         user_id=run.user_id,
@@ -22,11 +22,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from core.execution_signal_helper import queue_system_event
-from core.system_event_service import SystemEventEmissionError
-from utils.trace_context import get_parent_event_id
-from utils.trace_context import get_trace_id
-from utils.uuid_utils import normalize_uuid
+from AINDY.core.execution_signal_helper import queue_system_event
+from AINDY.core.system_event_service import SystemEventEmissionError
+from AINDY.utils.trace_context import get_parent_event_id
+from AINDY.utils.trace_context import get_trace_id
+from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def emit_event(
         payload:        Optional dict of event-specific data
     """
     try:
-        from db.models.agent_event import AgentEvent
+        from AINDY.db.models.agent_event import AgentEvent
 
         if event_type not in AGENT_EVENT_TYPES:
             logger.warning(
@@ -101,9 +101,31 @@ def emit_event(
             required=required,
         )
 
-        normalized_system_event_id = (
-            normalize_uuid(system_event_id) if system_event_id else None
-        )
+        normalized_system_event_id = None
+        if system_event_id:
+            try:
+                candidate = uuid.UUID(str(system_event_id))
+                from AINDY.db.models.system_event import SystemEvent
+
+                exists = (
+                    db.query(SystemEvent.id)
+                    .filter(SystemEvent.id == candidate)
+                    .first()
+                )
+                if exists:
+                    normalized_system_event_id = normalize_uuid(candidate)
+                else:
+                    logger.warning(
+                        "[AgentEventService] SystemEvent %s missing; linking skipped for %s",
+                        system_event_id,
+                        event_type,
+                    )
+            except Exception:
+                logger.warning(
+                    "[AgentEventService] Invalid SystemEvent %s for %s",
+                    system_event_id,
+                    event_type,
+                )
 
         event = AgentEvent(
             id=uuid.uuid4(),

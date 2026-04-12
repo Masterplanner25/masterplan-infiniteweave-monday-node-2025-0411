@@ -17,7 +17,7 @@ def log_bridge_user_event(
     occurred_at: datetime,
 ) -> None:
     """Persist a bridge user event. Non-fatal: logs a warning on failure."""
-    from db.models.bridge_user_event import BridgeUserEvent
+    from AINDY.db.models.bridge_user_event import BridgeUserEvent
 
     try:
         db.add(

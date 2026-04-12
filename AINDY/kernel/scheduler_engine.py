@@ -23,7 +23,7 @@ re-enqueues matched runs at their registered priority.
 
 Usage
 -----
-    from kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
+    from AINDY.kernel.scheduler_engine import get_scheduler_engine, ScheduledItem
 
     se = get_scheduler_engine()
 
@@ -51,7 +51,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from kernel.resource_manager import get_resource_manager
+from AINDY.kernel.resource_manager import get_resource_manager
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +229,7 @@ class SchedulerEngine:
             Number of items actually dispatched (not re-enqueued) this cycle.
         """
         # Lazy import — avoids circular dependency (kernel → core) at module load.
-        from core.execution_dispatcher import dispatch as _dispatch
+        from AINDY.core.execution_dispatcher import dispatch as _dispatch
 
         # Fire any time-based waits whose trigger_at has passed before
         # draining the queues, so they are available in this same cycle.
@@ -462,7 +462,7 @@ class SchedulerEngine:
         # Non-fatal: a failing publish never interrupts local scheduling.
         if broadcast:
             try:
-                from kernel.event_bus import get_event_bus  # noqa: PLC0415
+                from AINDY.kernel.event_bus import get_event_bus  # noqa: PLC0415
                 get_event_bus().publish(event_type, correlation_id=correlation_id)
             except Exception as _bus_exc:
                 logger.debug(

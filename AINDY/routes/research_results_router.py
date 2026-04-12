@@ -6,14 +6,14 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from schemas.research_results_schema import ResearchResultCreate
-from domain.search_service import build_learning_context, unified_query
-from domain import research_results_service
-from modules.research_engine import ai_analyze, web_search
-from services.auth_service import get_current_user
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.schemas.research_results_schema import ResearchResultCreate
+from AINDY.domain.search_service import build_learning_context, unified_query
+from AINDY.domain import research_results_service
+from AINDY.modules.research_engine import ai_analyze, web_search
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
 search_history_router = APIRouter(prefix="/search", tags=["Search History"], dependencies=[Depends(get_current_user)])
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str):
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")

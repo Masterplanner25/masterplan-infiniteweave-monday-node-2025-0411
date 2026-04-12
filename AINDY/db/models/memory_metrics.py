@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class MemoryMetric(Base):

@@ -1,9 +1,9 @@
 # routes/db_verify_router.py
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import inspect
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import engine
-from services.auth_service import verify_api_key
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import engine
+from AINDY.services.auth_service import verify_api_key
 
 router = APIRouter(prefix="/db", tags=["Database Verification"], dependencies=[Depends(verify_api_key)])
 

@@ -7,9 +7,9 @@ from typing import Any
 
 from fastapi import Request
 
-from core.execution_pipeline import ExecutionContext, ExecutionPipeline
-from core.response_adapter import adapt_response
-from utils.trace_context import get_current_request
+from AINDY.core.execution_pipeline import ExecutionContext, ExecutionPipeline
+from AINDY.core.response_adapter import adapt_response
+from AINDY.utils.trace_context import get_current_request
 
 logger = logging.getLogger(__name__)
 

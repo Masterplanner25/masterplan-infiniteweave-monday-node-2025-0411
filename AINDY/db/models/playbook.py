@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Column, String, Text, Float, DateTime
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class PlaybookDB(Base):

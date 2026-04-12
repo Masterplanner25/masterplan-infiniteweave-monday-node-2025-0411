@@ -40,7 +40,7 @@ def _make_mock_run(run_id="test-run-id", state=None, current_node="node_a"):
 
 
 def _seed_flow_history(db_session, flow_run_id, entries=None):
-    from db.models.flow_run import FlowHistory, FlowRun
+    from AINDY.db.models.flow_run import FlowHistory, FlowRun
 
     entries = entries or [
         {
@@ -87,8 +87,8 @@ class TestGenesisNodesRegistered:
     """All genesis Phase C nodes must be in NODE_REGISTRY."""
 
     def test_genesis_nodes_registered(self):
-        from runtime.flow_engine import NODE_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import NODE_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
         expected = [
             "genesis_validate_session",
@@ -99,14 +99,14 @@ class TestGenesisNodesRegistered:
             assert name in NODE_REGISTRY, f"Node not registered: {name}"
 
     def test_genesis_conversation_flow_registered(self):
-        from runtime.flow_engine import FLOW_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
         assert "genesis_conversation" in FLOW_REGISTRY
 
     def test_genesis_conversation_flow_structure(self):
-        from runtime.flow_engine import FLOW_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         assert flow["start"] == "genesis_validate_session"
@@ -115,8 +115,8 @@ class TestGenesisNodesRegistered:
         assert flow["end"] == ["genesis_store_synthesis"]
 
     def test_genesis_conversation_has_conditional_edge(self):
-        from runtime.flow_engine import FLOW_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         edges = flow["edges"]["genesis_record_exchange"]
@@ -129,12 +129,12 @@ class TestGenesisNodesRegistered:
 class TestGenesisValidateSession:
 
     def test_passes_with_session_id(self):
-        from runtime.flow_definitions import genesis_validate_session
+        from AINDY.runtime.flow_definitions import genesis_validate_session
         result = genesis_validate_session({"session_id": 42}, {"attempts": {}})
         assert result["status"] == "SUCCESS"
 
     def test_fails_without_session_id(self):
-        from runtime.flow_definitions import genesis_validate_session
+        from AINDY.runtime.flow_definitions import genesis_validate_session
         result = genesis_validate_session({}, {"attempts": {}})
         assert result["status"] == "FAILURE"
         assert "session_id" in result["error"]
@@ -143,7 +143,7 @@ class TestGenesisValidateSession:
 class TestGenesisRecordExchange:
 
     def test_returns_wait_when_not_ready(self):
-        from runtime.flow_definitions import genesis_record_exchange
+        from AINDY.runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange(
             {"session_id": 1, "synthesis_ready": False},
             {"attempts": {}},
@@ -152,13 +152,13 @@ class TestGenesisRecordExchange:
         assert result["wait_for"] == "genesis_user_message"
 
     def test_returns_wait_when_no_synthesis_ready_key(self):
-        from runtime.flow_definitions import genesis_record_exchange
+        from AINDY.runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange({"session_id": 1}, {"attempts": {}})
         assert result["status"] == "WAIT"
         assert result["wait_for"] == "genesis_user_message"
 
     def test_returns_success_when_ready_in_state(self):
-        from runtime.flow_definitions import genesis_record_exchange
+        from AINDY.runtime.flow_definitions import genesis_record_exchange
         result = genesis_record_exchange(
             {"session_id": 1, "synthesis_ready": True},
             {"attempts": {}},
@@ -168,7 +168,7 @@ class TestGenesisRecordExchange:
 
     def test_returns_success_when_ready_in_event(self):
         """After WAIT resume, synthesis_ready comes from state['event'] payload."""
-        from runtime.flow_definitions import genesis_record_exchange
+        from AINDY.runtime.flow_definitions import genesis_record_exchange
         state = {
             "session_id": 1,
             "synthesis_ready": False,
@@ -180,8 +180,8 @@ class TestGenesisRecordExchange:
 
     def test_conditional_edge_matches_when_ready(self):
         """The conditional edge lambda evaluates correctly for synthesis_ready."""
-        from runtime.flow_engine import FLOW_REGISTRY
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
         flow = FLOW_REGISTRY["genesis_conversation"]
         condition = flow["edges"]["genesis_record_exchange"][0]["condition"]
@@ -200,7 +200,7 @@ class TestGenesisRecordExchange:
 class TestGenesisStoreSynthesis:
 
     def test_returns_success_normally(self, mock_db):
-        from runtime.flow_definitions import genesis_store_synthesis
+        from AINDY.runtime.flow_definitions import genesis_store_synthesis
         with patch("runtime.flow_definitions.logger"):
             result = genesis_store_synthesis(
                 {"session_id": 1},
@@ -210,7 +210,7 @@ class TestGenesisStoreSynthesis:
 
     def test_returns_success_even_on_exception(self, mock_db):
         """Storage failure is non-fatal — must return SUCCESS."""
-        from runtime.flow_definitions import genesis_store_synthesis
+        from AINDY.runtime.flow_definitions import genesis_store_synthesis
 
         with patch(
             "memory.memory_capture_engine.MemoryCaptureEngine",
@@ -292,7 +292,7 @@ class TestRouteEventSchedulerDelegation:
     """
 
     def _make_waiting_run(self, db_session, user_id, event_type="task.completed"):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
         run = FlowRun(
             id=str(uuid.uuid4()),
             flow_name="test_flow",
@@ -311,7 +311,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_payload_injected_into_state(self, db_session, test_user):
         """route_event() writes payload into FlowRun.state['event']."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         run = self._make_waiting_run(db_session, test_user.id)
 
@@ -325,7 +325,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_status_not_mutated(self, db_session, test_user):
         """route_event() must NOT change run.status or run.waiting_for."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         run = self._make_waiting_run(db_session, test_user.id)
 
@@ -340,7 +340,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_notify_event_called_with_event_type(self, db_session, test_user):
         """SchedulerEngine.notify_event() is called with the correct event_type."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         self._make_waiting_run(db_session, test_user.id, event_type="genesis_user_message")
 
@@ -355,7 +355,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_notify_event_receives_correlation_id_from_payload(self, db_session, test_user):
         """correlation_id from payload is forwarded to both peek and notify_event."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         self._make_waiting_run(db_session, test_user.id)
 
@@ -378,7 +378,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_no_runner_resume_called(self, db_session, test_user):
         """PersistentFlowRunner.resume() must NOT be called by route_event."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         self._make_waiting_run(db_session, test_user.id)
 
@@ -392,7 +392,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_returns_list_of_acknowledgements(self, db_session, test_user):
         """Return value is list[{run_id, payload_injected}] per injected run."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         run = self._make_waiting_run(db_session, test_user.id)
 
@@ -407,7 +407,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_no_match_returns_empty_list(self, db_session, test_user):
         """No waiting runs for the event → empty list, notify_event still called."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
@@ -419,7 +419,7 @@ class TestRouteEventSchedulerDelegation:
 
     def test_notify_event_called_even_when_no_db_runs(self, db_session, test_user):
         """notify_event() fires even if no FlowRuns matched the DB query."""
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
@@ -439,7 +439,7 @@ class TestRouteEventSchedulerDelegation:
         A run that is NOT in the scheduler's match set does NOT receive it,
         even if it is owned by the same user.
         """
-        from runtime.flow_engine import route_event
+        from AINDY.runtime.flow_engine import route_event
 
         matched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
         unmatched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
@@ -472,7 +472,7 @@ class TestGenesisWaitResumeRoundTrip:
 
     @staticmethod
     def _create_flow_run(db_session, user_id, state, current_node):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             id=str(uuid.uuid4()),
@@ -494,8 +494,8 @@ class TestGenesisWaitResumeRoundTrip:
         First message starts a genesis_conversation FlowRun.
         synthesis_ready=False → flow enters WAIT.
         """
-        from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
 
         run = self._create_flow_run(
@@ -522,8 +522,8 @@ class TestGenesisWaitResumeRoundTrip:
         When synthesis_ready=True in state, genesis_record_exchange returns SUCCESS
         and the flow advances to genesis_store_synthesis (end node → SUCCESS).
         """
-        from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-        from runtime.flow_definitions import register_all_flows
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+        from AINDY.runtime.flow_definitions import register_all_flows
         register_all_flows()
 
         run = self._create_flow_run(
@@ -554,13 +554,13 @@ class TestGenesisWaitResumeRoundTrip:
 class TestFlowCompletionEventSignificance:
 
     def test_flow_completion_in_event_significance(self):
-        from memory.memory_capture_engine import EVENT_SIGNIFICANCE
+        from AINDY.memory.memory_capture_engine import EVENT_SIGNIFICANCE
         assert "flow_completion" in EVENT_SIGNIFICANCE, (
             "flow_completion must be in EVENT_SIGNIFICANCE for Phase D"
         )
 
     def test_flow_completion_significance_value(self):
-        from memory.memory_capture_engine import EVENT_SIGNIFICANCE
+        from AINDY.memory.memory_capture_engine import EVENT_SIGNIFICANCE
         score = EVENT_SIGNIFICANCE["flow_completion"]
         assert 0.3 <= score <= 1.0, (
             f"flow_completion significance must be between 0.3 and 1.0, got {score}"
@@ -570,7 +570,7 @@ class TestFlowCompletionEventSignificance:
 class TestCaptureFlowCompletionMethod:
 
     def test_method_exists_on_runner(self, db_session, test_user):
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -583,7 +583,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_skipped_when_no_user_id(self, db_session):
         """No user_id → capture skipped, no exception."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -595,7 +595,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_skipped_when_no_workflow_type(self, db_session, test_user):
         """No workflow_type → capture skipped, no exception."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
             db=db_session,
@@ -607,7 +607,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_non_fatal_when_memory_capture_raises(self, db_session, test_user):
         """Exception in MemoryCaptureEngine must not propagate."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -630,7 +630,7 @@ class TestCaptureFlowCompletionMethod:
 
     def test_skipped_when_no_history(self, db_session, test_user):
         """Empty FlowHistory → capture skipped gracefully."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -649,7 +649,7 @@ class TestCaptureFlowCompletionEventTypeMapping:
     """Correct event_type is passed to MemoryCaptureEngine for each workflow."""
 
     def _run_capture(self, workflow_type, db_session, test_user):
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         runner = PersistentFlowRunner(
             flow={"start": "n", "edges": {}, "end": ["n"]},
@@ -731,7 +731,7 @@ class TestPhaseDAuto:
 
     @staticmethod
     def _create_run(db_session, user_id, current_node):
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             id=str(uuid.uuid4()),
@@ -750,7 +750,7 @@ class TestPhaseDAuto:
 
     def test_capture_called_on_success(self, db_session, test_user):
         """_capture_flow_completion must be called when flow reaches end node."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("phase_d_success_node")
         def success_node(state, context):
@@ -780,7 +780,7 @@ class TestPhaseDAuto:
 
     def test_capture_not_called_on_failure(self, db_session, test_user):
         """_capture_flow_completion must NOT be called when flow fails."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("phase_d_fail_node")
         def fail_node(state, context):
@@ -823,7 +823,7 @@ class TestResumeSoftLock:
     @staticmethod
     def _make_waiting_run(db_session, user_id):
         """Create a FlowRun with status='waiting' and return it."""
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             id=str(uuid.uuid4()),
@@ -844,7 +844,7 @@ class TestResumeSoftLock:
     @staticmethod
     def _make_running_run(db_session, user_id, node_name="node_a"):
         """Create a FlowRun with status='running' (start() path)."""
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
 
         run = FlowRun(
             id=str(uuid.uuid4()),
@@ -863,7 +863,7 @@ class TestResumeSoftLock:
 
     def test_claim_succeeds_when_waiting(self, db_session, test_user):
         """Winning instance claims the run — status transitions to 'executing'."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("soft_lock_success_node")
         def success_node(state, context):
@@ -899,7 +899,7 @@ class TestResumeSoftLock:
         (triggering the claim branch) while the UPDATE returns 0 (concurrent
         claim already won).
         """
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         # Build a mock FlowRun that looks 'waiting'
         mock_run = MagicMock()
@@ -936,7 +936,7 @@ class TestResumeSoftLock:
 
     def test_start_path_not_blocked_by_claim(self, db_session, test_user):
         """start() creates FlowRuns with status='running' — claim guard skips them."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("soft_lock_run_node")
         def run_node(state, context):
@@ -964,7 +964,7 @@ class TestResumeSoftLock:
 
     def test_claim_commit_failure_returns_skipped(self, db_session, test_user):
         """If the claim commit raises, resume() exits with SKIPPED (non-fatal)."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         run = self._make_waiting_run(db_session, test_user.id)
 
@@ -994,7 +994,7 @@ class TestResumeSoftLock:
 
     def test_run_not_found_returns_failed(self, db_session, test_user):
         """Non-existent run_id returns FAILED (not SKIPPED)."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         flow = {"start": "node_a", "edges": {}, "end": ["node_a"]}
         runner = PersistentFlowRunner(
@@ -1010,7 +1010,7 @@ class TestResumeSoftLock:
 
     def test_non_waiting_status_skips_claim(self, db_session, test_user):
         """FlowRun with status other than 'waiting' bypasses claim entirely."""
-        from runtime.flow_engine import PersistentFlowRunner, register_node
+        from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 
         @register_node("soft_lock_bypass_node")
         def bypass_node(state, context):
@@ -1039,7 +1039,7 @@ class TestResumeSoftLock:
 
     def test_skipped_result_has_no_events(self, db_session, test_user):
         """SKIPPED response must include empty events list and correct run_id."""
-        from runtime.flow_engine import PersistentFlowRunner
+        from AINDY.runtime.flow_engine import PersistentFlowRunner
 
         run_id = str(uuid.uuid4())
 

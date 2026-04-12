@@ -43,7 +43,7 @@ def _module():
 
 class TestNodusRunRequestSchema:
     def _schema(self):
-        from routes.platform_router import NodusRunRequest
+        from AINDY.routes.platform_router import NodusRunRequest
         return NodusRunRequest
 
     def test_inline_script_valid(self):
@@ -82,7 +82,7 @@ class TestNodusRunRequestSchema:
 
 class TestNodusScriptUploadSchema:
     def _schema(self):
-        from routes.platform_router import NodusScriptUpload
+        from AINDY.routes.platform_router import NodusScriptUpload
         return NodusScriptUpload
 
     def test_valid_name_and_content(self):
@@ -110,7 +110,7 @@ class TestNodusScriptUploadSchema:
 
 class TestValidateNodusSource:
     def _validate(self, source: str, field: str = "script"):
-        from routes.platform_router import _validate_nodus_source
+        from AINDY.routes.platform_router import _validate_nodus_source
         _validate_nodus_source(source, field)
 
     def test_clean_source_passes(self):
@@ -140,7 +140,7 @@ class TestValidateNodusSource:
 
 class TestFormatNodusResponse:
     def _format(self, flow_result: dict) -> dict:
-        from routes.platform_router import _format_nodus_response
+        from AINDY.routes.platform_router import _format_nodus_response
         return _format_nodus_response(flow_result)
 
     def test_success_fields_extracted(self):
@@ -250,7 +250,7 @@ class TestEnsureNodusFlowRegistered:
 
         with patch("routes.platform_router._ensure_nodus_flow_registered"):
             # Just verify the function exists and is callable
-            from routes.platform_router import _ensure_nodus_flow_registered
+            from AINDY.routes.platform_router import _ensure_nodus_flow_registered
             assert callable(_ensure_nodus_flow_registered)
 
     def test_registers_nodus_execute_into_flow_registry(self):
@@ -269,7 +269,7 @@ class TestRunNodusScript:
             "runtime.nodus_execution_service.run_nodus_script_via_flow",
             return_value={"status": "SUCCESS", "state": {}, "data": {}},
         ) as mock_run:
-            from routes.platform_router import _run_nodus_script
+            from AINDY.routes.platform_router import _run_nodus_script
             result = _run_nodus_script(
                 script="let x = 1",
                 input_payload={"goal": "test"},
@@ -289,7 +289,7 @@ class TestRunNodusScriptEndpoint:
 
     def _run(self, body_dict: dict, registry: dict | None = None) -> dict:
         """Call the handler function directly with mocked deps."""
-        from routes.platform_router import NodusRunRequest, _NODUS_SCRIPT_REGISTRY, run_nodus_script
+        from AINDY.routes.platform_router import NodusRunRequest, _NODUS_SCRIPT_REGISTRY, run_nodus_script
 
         body = NodusRunRequest(**body_dict)
         db = MagicMock()
@@ -367,7 +367,7 @@ class TestRunNodusScriptEndpoint:
                  patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_dir.__truediv__.return_value.exists.return_value = False
                 with pytest.raises(HTTPException) as exc_info:
-                    from routes.platform_router import NodusRunRequest, run_nodus_script
+                    from AINDY.routes.platform_router import NodusRunRequest, run_nodus_script
                     body = NodusRunRequest(script_name="nonexistent")
                     run_nodus_script(
                         request=MagicMock(),
@@ -388,7 +388,7 @@ class TestRunNodusScriptEndpoint:
                        detail={"error": "nodus_security_violation", "message": "import blocked", "field": "script"},
                    )):
             with pytest.raises(HTTPException) as exc_info:
-                from routes.platform_router import NodusRunRequest, run_nodus_script
+                from AINDY.routes.platform_router import NodusRunRequest, run_nodus_script
                 body = NodusRunRequest(script="import os")
                 run_nodus_script(
                     request=MagicMock(),
@@ -403,7 +403,7 @@ class TestRunNodusScriptEndpoint:
 
 class TestUploadNodusScriptEndpoint:
     def _upload(self, body_dict: dict, registry_override: dict | None = None) -> dict:
-        from routes.platform_router import NodusScriptUpload, upload_nodus_script
+        from AINDY.routes.platform_router import NodusScriptUpload, upload_nodus_script
         m = _module()
 
         body = NodusScriptUpload(**body_dict)
@@ -447,7 +447,7 @@ class TestUploadNodusScriptEndpoint:
                 mock_dir.mkdir = MagicMock()
                 mock_path.write_text = MagicMock()
 
-                from routes.platform_router import NodusScriptUpload, upload_nodus_script
+                from AINDY.routes.platform_router import NodusScriptUpload, upload_nodus_script
                 upload_nodus_script(
                     body=NodusScriptUpload(name="stored-script", content="let y = 2"),
                     current_user={"sub": str(uuid.uuid4())},
@@ -482,7 +482,7 @@ class TestUploadNodusScriptEndpoint:
                        detail={"error": "nodus_security_violation", "message": "eval blocked", "field": "content"},
                    )):
             with pytest.raises(HTTPException) as exc_info:
-                from routes.platform_router import NodusScriptUpload, upload_nodus_script
+                from AINDY.routes.platform_router import NodusScriptUpload, upload_nodus_script
                 upload_nodus_script(
                     body=NodusScriptUpload(name="bad", content="eval(x)"),
                     current_user={"sub": str(uuid.uuid4())},
@@ -494,7 +494,7 @@ class TestUploadNodusScriptEndpoint:
 
 class TestListNodusScriptsEndpoint:
     def _list(self, registry: dict) -> dict:
-        from routes.platform_router import list_nodus_scripts
+        from AINDY.routes.platform_router import list_nodus_scripts
         m = _module()
 
         original = dict(m._NODUS_SCRIPT_REGISTRY)
@@ -572,7 +572,7 @@ class TestListNodusScriptsEndpoint:
                 mock_dir.exists.return_value = True
                 mock_dir.glob.return_value = [mock_path]
 
-                from routes.platform_router import list_nodus_scripts
+                from AINDY.routes.platform_router import list_nodus_scripts
                 result = list_nodus_scripts(current_user={"sub": str(uuid.uuid4())})
 
             assert any(s["name"] == "disk-script" for s in result["scripts"])

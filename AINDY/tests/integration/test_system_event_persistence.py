@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 
 def test_emit_system_event_persists_to_test_db(db_session, test_user):
-    from db.models.system_event import SystemEvent
-    from core.execution_signal_helper import queue_system_event
+    from AINDY.db.models.system_event import SystemEvent
+    from AINDY.core.execution_signal_helper import queue_system_event
 
     trace_id = str(uuid.uuid4())
     queue_system_event(
@@ -26,7 +26,7 @@ def test_emit_system_event_persists_to_test_db(db_session, test_user):
 
 def test_emit_system_event_notifies_scheduler(db_session, test_user):
     """emit_system_event() calls _notify_scheduler_of_event after persistence."""
-    from core.system_event_service import emit_system_event
+    from AINDY.core.system_event_service import emit_system_event
 
     with patch(
         "core.system_event_service._notify_scheduler_of_event"
@@ -48,9 +48,9 @@ def test_emit_system_event_notifies_scheduler(db_session, test_user):
 
 def test_notify_scheduler_wakes_waiting_run(db_session, test_user):
     """End-to-end: emit → notify_event → run enqueued in scheduler."""
-    from kernel.scheduler_engine import SchedulerEngine
-    from core.wait_condition import WaitCondition
-    from core.system_event_service import emit_system_event
+    from AINDY.kernel.scheduler_engine import SchedulerEngine
+    from AINDY.core.wait_condition import WaitCondition
+    from AINDY.core.system_event_service import emit_system_event
 
     se = SchedulerEngine()
     wc = WaitCondition.for_event("task.completed")

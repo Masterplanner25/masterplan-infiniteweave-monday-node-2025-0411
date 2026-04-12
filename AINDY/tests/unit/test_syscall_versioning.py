@@ -24,7 +24,7 @@ import pytest
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _ctx(**kwargs):
-    from kernel.syscall_registry import SyscallContext
+    from AINDY.kernel.syscall_registry import SyscallContext
     defaults = dict(
         execution_unit_id="eu-test",
         user_id="user-abc",
@@ -42,43 +42,43 @@ def _ctx(**kwargs):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestParseSyscallName:
-    from kernel.syscall_versioning import parse_syscall_name
+    from AINDY.kernel.syscall_versioning import parse_syscall_name
 
     def test_standard_name(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         assert parse_syscall_name("sys.v1.memory.read") == ("v1", "memory.read")
 
     def test_v2_name(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         assert parse_syscall_name("sys.v2.memory.read") == ("v2", "memory.read")
 
     def test_multi_dot_action(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         v, a = parse_syscall_name("sys.v1.task.complete_full")
         assert v == "v1"
         assert a == "task.complete_full"
 
     def test_wrong_prefix_raises(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         with pytest.raises(ValueError, match="must start with"):
             parse_syscall_name("bad.v1.memory.read")
 
     def test_missing_action_raises(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         with pytest.raises(ValueError):
             parse_syscall_name("sys.v1")
 
     def test_missing_version_raises(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         with pytest.raises(ValueError):
             parse_syscall_name("sys.")
 
     def test_event_emit(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         assert parse_syscall_name("sys.v1.event.emit") == ("v1", "event.emit")
 
     def test_flow_run(self):
-        from kernel.syscall_versioning import parse_syscall_name
+        from AINDY.kernel.syscall_versioning import parse_syscall_name
         assert parse_syscall_name("sys.v1.flow.run") == ("v1", "flow.run")
 
 
@@ -88,55 +88,55 @@ class TestParseSyscallName:
 
 class TestValidatePayload:
     def test_empty_schema_always_valid(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         assert validate_payload({}, {"anything": "goes"}) == []
 
     def test_required_field_present(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"required": ["content"]}
         assert validate_payload(schema, {"content": "hello"}) == []
 
     def test_required_field_missing(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"required": ["content"]}
         errors = validate_payload(schema, {})
         assert len(errors) == 1
         assert "content" in errors[0]
 
     def test_multiple_required_missing(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"required": ["a", "b", "c"]}
         errors = validate_payload(schema, {"a": 1})
         assert len(errors) == 2
 
     def test_type_check_string_ok(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"properties": {"name": {"type": "string"}}}
         assert validate_payload(schema, {"name": "alice"}) == []
 
     def test_type_check_string_fail(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"properties": {"limit": {"type": "int"}}}
         errors = validate_payload(schema, {"limit": "ten"})
         assert errors
 
     def test_type_check_list(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"properties": {"tags": {"type": "list"}}}
         assert validate_payload(schema, {"tags": ["a", "b"]}) == []
 
     def test_optional_field_absent_is_ok(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"properties": {"optional_field": {"type": "string"}}}
         assert validate_payload(schema, {}) == []
 
     def test_unknown_type_skipped(self):
-        from kernel.syscall_versioning import validate_payload
+        from AINDY.kernel.syscall_versioning import validate_payload
         schema = {"properties": {"x": {"type": "uuid"}}}
         assert validate_payload(schema, {"x": "any-value"}) == []
 
     def test_validate_input_alias(self):
-        from kernel.syscall_versioning import validate_input
+        from AINDY.kernel.syscall_versioning import validate_input
         schema = {"required": ["query"]}
         assert validate_input(schema, {"query": "hello"}) == []
 
@@ -147,23 +147,23 @@ class TestValidatePayload:
 
 class TestValidateOutput:
     def test_valid_output(self):
-        from kernel.syscall_versioning import validate_output
+        from AINDY.kernel.syscall_versioning import validate_output
         schema = {"required": ["nodes", "count"]}
         assert validate_output(schema, {"nodes": [], "count": 0}) == []
 
     def test_missing_required_output_field(self):
-        from kernel.syscall_versioning import validate_output
+        from AINDY.kernel.syscall_versioning import validate_output
         schema = {"required": ["nodes", "count"]}
         errors = validate_output(schema, {"nodes": []})
         assert len(errors) == 1
         assert "count" in errors[0]
 
     def test_empty_schema_valid(self):
-        from kernel.syscall_versioning import validate_output
+        from AINDY.kernel.syscall_versioning import validate_output
         assert validate_output({}, {"anything": "works"}) == []
 
     def test_type_mismatch_detected(self):
-        from kernel.syscall_versioning import validate_output
+        from AINDY.kernel.syscall_versioning import validate_output
         schema = {"properties": {"count": {"type": "int"}}}
         errors = validate_output(schema, {"count": "five"})
         assert errors
@@ -175,17 +175,17 @@ class TestValidateOutput:
 
 class TestSyscallSpec:
     def test_full_name_derived(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(name="memory.read", version="v1")
         assert spec.full_name == "sys.v1.memory.read"
 
     def test_deprecation_message_none_if_not_deprecated(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(name="memory.read", version="v1")
         assert spec.deprecation_message() is None
 
     def test_deprecation_message_with_replacement(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(
             name="memory.read", version="v1",
             deprecated=True, deprecated_since="v1.3",
@@ -197,7 +197,7 @@ class TestSyscallSpec:
         assert "sys.v2.memory.read" in msg
 
     def test_to_dict_contains_required_keys(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(name="memory.read", version="v1", capability="memory.read")
         d = spec.to_dict()
         assert d["full_name"] == "sys.v1.memory.read"
@@ -206,12 +206,12 @@ class TestSyscallSpec:
         assert "deprecated" in d
 
     def test_to_dict_deprecated_false_by_default(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(name="flow.run", version="v1")
         assert spec.to_dict()["deprecated"] is False
 
     def test_stable_true_by_default(self):
-        from kernel.syscall_versioning import SyscallSpec
+        from AINDY.kernel.syscall_versioning import SyscallSpec
         spec = SyscallSpec(name="event.emit", version="v1")
         assert spec.stable is True
 
@@ -222,18 +222,18 @@ class TestSyscallSpec:
 
 class TestVersionedSyscallRegistry:
     def _make_entry(self, cap="test.cap"):
-        from kernel.syscall_registry import SyscallEntry
+        from AINDY.kernel.syscall_registry import SyscallEntry
         return SyscallEntry(handler=lambda p, c: {}, capability=cap)
 
     def test_flat_set_and_get(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         e = self._make_entry()
         reg["sys.v1.test.ping"] = e
         assert reg["sys.v1.test.ping"] is e
 
     def test_versioned_view_populated(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         e = self._make_entry()
         reg["sys.v1.test.ping"] = e
@@ -241,7 +241,7 @@ class TestVersionedSyscallRegistry:
         assert "test.ping" in reg.versioned["v1"]
 
     def test_multi_version_separation(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         e1 = self._make_entry("test.cap1")
         e2 = self._make_entry("test.cap2")
@@ -251,7 +251,7 @@ class TestVersionedSyscallRegistry:
         assert reg.get_version("v2")["test.action"] is e2
 
     def test_delete_removes_from_both_views(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         reg["sys.v1.test.del"] = self._make_entry()
         del reg["sys.v1.test.del"]
@@ -259,7 +259,7 @@ class TestVersionedSyscallRegistry:
         assert "test.del" not in reg.get_version("v1")
 
     def test_pop_removes_from_both_views(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         e = self._make_entry()
         reg["sys.v1.test.pop"] = e
@@ -268,35 +268,35 @@ class TestVersionedSyscallRegistry:
         assert "sys.v1.test.pop" not in reg
 
     def test_contains_uses_flat_key(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         reg["sys.v1.test.contains"] = self._make_entry()
         assert "sys.v1.test.contains" in reg
         assert "sys.v9.test.contains" not in reg
 
     def test_versions_sorted(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         reg["sys.v2.x.y"] = self._make_entry()
         reg["sys.v1.x.y"] = self._make_entry()
         assert reg.versions() == ["v1", "v2"]
 
     def test_len_counts_flat_entries(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         reg["sys.v1.a.b"] = self._make_entry()
         reg["sys.v2.a.b"] = self._make_entry()
         assert len(reg) == 2
 
     def test_iter_yields_flat_keys(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         reg["sys.v1.a.b"] = self._make_entry()
         reg["sys.v1.a.c"] = self._make_entry()
         assert set(reg) == {"sys.v1.a.b", "sys.v1.a.c"}
 
     def test_non_sys_key_not_in_versioned(self):
-        from kernel.syscall_registry import VersionedSyscallRegistry
+        from AINDY.kernel.syscall_registry import VersionedSyscallRegistry
         reg = VersionedSyscallRegistry()
         # Store an entry with a non-standard key (shouldn't happen in prod,
         # but the mapping must not crash)
@@ -312,8 +312,8 @@ class TestVersionedSyscallRegistry:
 
 class TestDispatcherInputValidation:
     def setup_method(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
         self.dispatcher = SyscallDispatcher()
         SYSCALL_REGISTRY["sys.v1.test.validated"] = SyscallEntry(
             handler=lambda p, c: {"ok": True},
@@ -328,7 +328,7 @@ class TestDispatcherInputValidation:
         )
 
     def teardown_method(self):
-        from kernel.syscall_registry import SYSCALL_REGISTRY
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
         SYSCALL_REGISTRY.pop("sys.v1.test.validated", None)
 
     def test_valid_payload_passes(self):
@@ -359,7 +359,7 @@ class TestDispatcherInputValidation:
         assert "optional_int" in result["error"]
 
     def test_no_schema_skips_validation(self):
-        from kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
         SYSCALL_REGISTRY["sys.v1.test.noschema"] = SyscallEntry(
             handler=lambda p, c: {"ok": True},
             capability="test.cap",
@@ -383,8 +383,8 @@ class TestDispatcherInputValidation:
 
 class TestDispatcherDeprecation:
     def setup_method(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
         self.dispatcher = SyscallDispatcher()
         SYSCALL_REGISTRY["sys.v1.test.deprecated"] = SyscallEntry(
             handler=lambda p, c: {"result": "ok"},
@@ -400,7 +400,7 @@ class TestDispatcherDeprecation:
         )
 
     def teardown_method(self):
-        from kernel.syscall_registry import SYSCALL_REGISTRY
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
         SYSCALL_REGISTRY.pop("sys.v1.test.deprecated", None)
         SYSCALL_REGISTRY.pop("sys.v1.test.nodep", None)
 
@@ -433,8 +433,8 @@ class TestDispatcherDeprecation:
 
 class TestDispatcherVersionEnvelope:
     def setup_method(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
         self.dispatcher = SyscallDispatcher()
         for ver in ("v1", "v2"):
             SYSCALL_REGISTRY[f"sys.{ver}.test.versioned"] = SyscallEntry(
@@ -443,7 +443,7 @@ class TestDispatcherVersionEnvelope:
             )
 
     def teardown_method(self):
-        from kernel.syscall_registry import SYSCALL_REGISTRY
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
         SYSCALL_REGISTRY.pop("sys.v1.test.versioned", None)
         SYSCALL_REGISTRY.pop("sys.v2.test.versioned", None)
 
@@ -466,7 +466,7 @@ class TestDispatcherVersionEnvelope:
 
     def test_version_v2_in_builtin_registry(self):
         # sys.v2.memory.read is registered in the built-in registry
-        from kernel.syscall_registry import SYSCALL_REGISTRY
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
         assert "sys.v2.memory.read" in SYSCALL_REGISTRY
         assert SYSCALL_REGISTRY.get_version("v2").get("memory.read") is not None
 
@@ -477,8 +477,8 @@ class TestDispatcherVersionEnvelope:
 
 class TestDispatcherVersionFallback:
     def setup_method(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallEntry
         self.dispatcher = SyscallDispatcher()
         SYSCALL_REGISTRY["sys.v1.test.fallback_target"] = SyscallEntry(
             handler=lambda p, c: {"fallback": True},
@@ -486,7 +486,7 @@ class TestDispatcherVersionFallback:
         )
 
     def teardown_method(self):
-        from kernel.syscall_registry import SYSCALL_REGISTRY
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
         SYSCALL_REGISTRY.pop("sys.v1.test.fallback_target", None)
 
     def test_unknown_version_no_fallback_returns_error(self):
@@ -497,13 +497,13 @@ class TestDispatcherVersionFallback:
 
     def test_fallback_enabled_routes_to_latest_stable(self):
         """With fallback enabled, unknown version falls back to v1."""
-        import kernel.syscall_dispatcher as _disp_mod
+        import AINDY.kernel.syscall_dispatcher as _disp_mod
         original = _disp_mod.SYSCALL_VERSION_FALLBACK
         try:
             _disp_mod.SYSCALL_VERSION_FALLBACK = True
             # Re-import resolve_version with new constant from module
             import importlib
-            import kernel.syscall_versioning as _ver_mod
+            import AINDY.kernel.syscall_versioning as _ver_mod
             # Patch resolve_version to use fallback=True
             with patch.object(_ver_mod, "SYSCALL_VERSION_FALLBACK", True):
                 with patch("kernel.syscall_dispatcher.SYSCALL_VERSION_FALLBACK", True):
@@ -517,12 +517,12 @@ class TestDispatcherVersionFallback:
             _disp_mod.SYSCALL_VERSION_FALLBACK = original
 
     def test_resolve_version_no_fallback(self):
-        from kernel.syscall_versioning import resolve_version
+        from AINDY.kernel.syscall_versioning import resolve_version
         result = resolve_version("v9", frozenset({"v1"}), fallback=False)
         assert result is None
 
     def test_resolve_version_with_fallback(self):
-        from kernel.syscall_versioning import resolve_version
+        from AINDY.kernel.syscall_versioning import resolve_version
         result = resolve_version("v9", frozenset({"v1"}), fallback=True)
         assert result == "v1"
 
@@ -542,7 +542,7 @@ def _make_headers():
 class TestSyscallsEndpoint:
     def _client(self):
         from fastapi.testclient import TestClient
-        from main import app
+        from AINDY.main import app
         return TestClient(app, raise_server_exceptions=False)
 
     def _auth(self, client):

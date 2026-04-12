@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 import uuid
 
-from db.models.author_model import AuthorDB
-from db.models.drop import DropPointDB, PingDB
-from db.models.user import User
-from services.auth_service import hash_password
+from AINDY.db.models.author_model import AuthorDB
+from AINDY.db.models.drop import DropPointDB, PingDB
+from AINDY.db.models.user import User
+from AINDY.services.auth_service import hash_password
 
 
 def _unwrap(payload):

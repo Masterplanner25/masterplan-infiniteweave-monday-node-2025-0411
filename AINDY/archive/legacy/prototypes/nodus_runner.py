@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, Column, Integer, String, JSON, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from tenacity import retry, stop_after_attempt, wait_exponential
-from apscheduler.schedulers.background import BackgroundScheduler
+from AINDY.apscheduler.schedulers.background import BackgroundScheduler
 
 # --- CONFIGURATION ---
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:pass@localhost/dbname")

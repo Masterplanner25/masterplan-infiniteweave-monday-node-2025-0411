@@ -8,12 +8,12 @@ from pydantic import BaseModel
 from pymongo.database import Database
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from db.database import get_db
-from db.models.social_models import FeedItem, SocialPost, SocialProfile, TrustTier
-from db.mongo_setup import get_mongo_db
-from services.auth_service import get_current_user
-from domain.social_performance_service import (
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.db.database import get_db
+from AINDY.db.models.social_models import FeedItem, SocialPost, SocialProfile, TrustTier
+from AINDY.db.mongo_setup import get_mongo_db
+from AINDY.services.auth_service import get_current_user
+from AINDY.domain.social_performance_service import (
     compute_conversion_signal,
     compute_engagement_score,
     summarize_social_performance,
@@ -289,7 +289,7 @@ def get_feed(
                     memory_hints.extend(hints)
 
         author_ids = list({doc.get("author_id") for doc in post_docs if doc.get("author_id")})
-        from domain.social_service import get_user_scores
+        from AINDY.domain.social_service import get_user_scores
         author_scores = get_user_scores(sql_db, author_ids)
 
         feed_items = []

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from watcher.window_detector import WindowInfo
+from AINDY.watcher.window_detector import WindowInfo
 
 
 class ActivityType(str, Enum):

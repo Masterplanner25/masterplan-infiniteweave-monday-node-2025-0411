@@ -4,8 +4,8 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from db.models import PlaybookDB, StrategyDB
-from domain.strategy_engine import match_strategies, get_strategy
+from AINDY.db.models import PlaybookDB, StrategyDB
+from AINDY.domain.strategy_engine import match_strategies, get_strategy
 
 DEFAULT_TEMPLATE = (
     "Title: [Topic] — [Insight]\n\n"

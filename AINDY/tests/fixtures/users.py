@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from db.models.user import User
+from AINDY.db.models.user import User
 from AINDY.tests.fixtures.auth import TEST_PASSWORD, TEST_USER_EMAIL, TEST_USER_ID, TEST_USERNAME
 from AINDY.services.auth_service import hash_password
 

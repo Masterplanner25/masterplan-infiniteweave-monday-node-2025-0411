@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from db.models import LearningRecordDB, LearningThresholdDB, ScoreSnapshotDB
+from AINDY.db.models import LearningRecordDB, LearningThresholdDB, ScoreSnapshotDB
 
 DEFAULT_VELOCITY_TREND = 0.35
 DEFAULT_NARRATIVE_TREND = 1.0

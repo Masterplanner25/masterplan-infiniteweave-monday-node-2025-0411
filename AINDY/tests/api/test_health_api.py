@@ -2,7 +2,7 @@ from __future__ import annotations
 
 
 def test_health_returns_ok_and_persists_event(client, db_session):
-    from db.models.system_event import SystemEvent
+    from AINDY.db.models.system_event import SystemEvent
 
     response = client.get("/health")
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-import core.execution_signal_helper as helper
+import AINDY.core.execution_signal_helper as helper
 
 
 def test_queue_system_event_queues_during_pipeline(monkeypatch):
@@ -42,7 +42,7 @@ def test_queue_system_event_queues_during_pipeline(monkeypatch):
 
 
 def test_queue_system_event_emits_immediately_outside_pipeline(monkeypatch):
-    import core.system_event_service as event_service
+    import AINDY.core.system_event_service as event_service
 
     emit = MagicMock(return_value="persisted-id")
     monkeypatch.setattr(helper, "is_pipeline_active", lambda: False)
@@ -115,7 +115,7 @@ def test_queue_memory_capture_queues_during_pipeline(monkeypatch):
 
 
 def test_queue_memory_capture_executes_engine_when_allowed(monkeypatch):
-    import memory.memory_capture_engine as capture_engine_module
+    import AINDY.memory.memory_capture_engine as capture_engine_module
 
     ctx = SimpleNamespace(metadata={})
     engine = MagicMock()
@@ -156,7 +156,7 @@ def test_queue_memory_capture_executes_engine_when_allowed(monkeypatch):
 
 
 def test_record_agent_event_delegates(monkeypatch):
-    import agents.agent_event_service as agent_event_service
+    import AINDY.agents.agent_event_service as agent_event_service
 
     emit = MagicMock(return_value={"ok": True})
     monkeypatch.setattr(agent_event_service, "emit_event", emit)

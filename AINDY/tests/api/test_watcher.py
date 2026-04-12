@@ -23,8 +23,8 @@ class TestClassifier:
     """classify() maps (app_name, window_title) to the correct ActivityType."""
 
     def setup_method(self):
-        from watcher.classifier import classify
-        from watcher.window_detector import WindowInfo
+        from AINDY.watcher.classifier import classify
+        from AINDY.watcher.window_detector import WindowInfo
         self.classify = classify
         self.WindowInfo = WindowInfo
 
@@ -32,75 +32,75 @@ class TestClassifier:
         return self.WindowInfo(app_name=app, window_title=title)
 
     def test_work_cursor(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("cursor.exe", "main.py"))
         assert r.activity_type == ActivityType.WORK
 
     def test_work_vscode(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("code.exe", "test.py"))
         assert r.activity_type == ActivityType.WORK
 
     def test_work_terminal(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("windowsterminal.exe"))
         assert r.activity_type == ActivityType.WORK
 
     def test_work_python(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("python.exe"))
         assert r.activity_type == ActivityType.WORK
 
     def test_communication_slack(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("slack.exe"))
         assert r.activity_type == ActivityType.COMMUNICATION
 
     def test_communication_zoom(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("zoom.exe"))
         assert r.activity_type == ActivityType.COMMUNICATION
 
     def test_distraction_youtube_process(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("youtube.exe"))
         assert r.activity_type == ActivityType.DISTRACTION
 
     def test_distraction_browser_youtube_title(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("chrome.exe", "Never Gonna Give You Up - YouTube"))
         assert r.activity_type == ActivityType.DISTRACTION
 
     def test_distraction_browser_reddit(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("firefox.exe", "r/programming - Reddit"))
         assert r.activity_type == ActivityType.DISTRACTION
 
     def test_distraction_browser_twitter(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("edge.exe", "Elon Musk on Twitter"))
         assert r.activity_type == ActivityType.DISTRACTION
 
     def test_browser_non_distraction_title(self):
         """Browser with non-distraction title should NOT be classified as distraction."""
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("chrome.exe", "FastAPI Docs — uvicorn docs"))
         assert r.activity_type != ActivityType.DISTRACTION
 
     def test_idle_no_window(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(None)
         assert r.activity_type == ActivityType.IDLE
         assert r.confidence == 1.0
         assert r.matched_rule == "no_active_window"
 
     def test_idle_lockscreen(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("lockapp.exe"))
         assert r.activity_type == ActivityType.IDLE
 
     def test_unknown_process(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("randombinaryxyz.exe", "Some Random Window"))
         assert r.activity_type == ActivityType.UNKNOWN
 
@@ -113,13 +113,13 @@ class TestClassifier:
         assert r.matched_rule != ""
 
     def test_confidence_range(self):
-        from watcher.window_detector import WindowInfo
+        from AINDY.watcher.window_detector import WindowInfo
         for app in ["cursor.exe", "slack.exe", "chrome.exe", "unknownthing.exe"]:
             r = self.classify(WindowInfo(app_name=app, window_title=""))
             assert 0.0 <= r.confidence <= 1.0
 
     def test_distraction_steam(self):
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.classifier import ActivityType
         r = self.classify(self._w("steam.exe", "Steam Store"))
         assert r.activity_type == ActivityType.DISTRACTION
 
@@ -129,7 +129,7 @@ class TestClassifier:
 # ---------------------------------------------------------------------------
 
 def _make_result(activity_type, app="cursor.exe", title=""):
-    from watcher.classifier import ActivityType, ClassificationResult
+    from AINDY.watcher.classifier import ActivityType, ClassificationResult
     return ClassificationResult(
         activity_type=activity_type,
         confidence=0.9,
@@ -148,29 +148,29 @@ class TestSessionTrackerIdle:
     """IDLE state — no events until work confirmed."""
 
     def test_initial_state_is_idle(self):
-        from watcher.session_tracker import SessionState, SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionState, SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0)
         assert t.state == SessionState.IDLE
 
     def test_idle_on_non_work_stays_idle(self):
-        from watcher.session_tracker import SessionState, SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionState, SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0)
         events = t.update(_make_result(ActivityType.COMMUNICATION), now=_ts(0))
         assert t.state == SessionState.IDLE
         assert events == []
 
     def test_work_transitions_to_confirming(self):
-        from watcher.session_tracker import SessionState, SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionState, SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0)
         t.update(_make_result(ActivityType.WORK), now=_ts(0))
         assert t.state == SessionState.CONFIRMING_WORK
 
     def test_confirming_resets_on_non_work(self):
-        from watcher.session_tracker import SessionState, SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionState, SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0)
         t.update(_make_result(ActivityType.WORK), now=_ts(0))
         t.update(_make_result(ActivityType.DISTRACTION), now=_ts(1))
@@ -181,8 +181,8 @@ class TestSessionTrackerWorking:
     """WORKING state — session_started emitted, transitions on distraction/idle."""
 
     def setup_method(self):
-        from watcher.session_tracker import SessionTracker, SessionState
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionTracker, SessionState
+        from AINDY.watcher.classifier import ActivityType
         self.SessionTracker = SessionTracker
         self.SessionState = SessionState
         self.ActivityType = ActivityType
@@ -245,8 +245,8 @@ class TestSessionTrackerContextSwitch:
     """context_switch events are emitted on category change within session."""
 
     def test_context_switch_emitted(self):
-        from watcher.session_tracker import SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0, distraction_timeout=999.0)
         # Confirm session
         t.update(_make_result(ActivityType.WORK, app="cursor.exe"), now=_ts(0))
@@ -259,8 +259,8 @@ class TestSessionTrackerContextSwitch:
         assert "context_switch" in signal_types
 
     def test_no_context_switch_same_app(self):
-        from watcher.session_tracker import SessionTracker
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionTracker
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0, distraction_timeout=999.0)
         t.update(_make_result(ActivityType.WORK, app="cursor.exe"), now=_ts(0))
         t.update(_make_result(ActivityType.WORK, app="cursor.exe"), now=_ts(6))
@@ -273,8 +273,8 @@ class TestSessionTrackerRecovery:
     """RECOVERING state — focus_achieved emitted after recovery_delay."""
 
     def test_focus_achieved_after_recovery(self):
-        from watcher.session_tracker import SessionTracker, SessionState
-        from watcher.classifier import ActivityType
+        from AINDY.watcher.session_tracker import SessionTracker, SessionState
+        from AINDY.watcher.classifier import ActivityType
         t = SessionTracker(confirmation_delay=5.0, distraction_timeout=10.0, recovery_delay=5.0)
         # Confirm session
         t.update(_make_result(ActivityType.WORK), now=_ts(0))
@@ -308,7 +308,7 @@ def watcher_mock_db(app):
     import sys
     mod = sys.modules.get("routes.watcher_router")
     if mod is None:
-        from db.database import get_db as _get_db
+        from AINDY.db.database import get_db as _get_db
         target_get_db = _get_db
     else:
         target_get_db = mod.get_db
@@ -586,24 +586,24 @@ class TestWatcherRouterGet:
 class TestWatcherConfig:
 
     def test_load_defaults(self):
-        from watcher.config import load
+        from AINDY.watcher.config import load
         cfg = load()
         assert cfg.api_url == "http://localhost:8000"
         assert cfg.poll_interval == 5.0
         assert cfg.batch_size == 20
 
     def test_dry_run_default_false(self):
-        from watcher.config import load
+        from AINDY.watcher.config import load
         cfg = load()
         assert cfg.dry_run is False
 
     def test_signals_endpoint_built_from_api_url(self):
-        from watcher.config import load
+        from AINDY.watcher.config import load
         cfg = load()
         assert cfg.signals_endpoint.endswith("/watcher/signals")
 
     def test_validate_missing_api_key_in_live_mode(self):
-        from watcher.config import WatcherConfig, validate
+        from AINDY.watcher.config import WatcherConfig, validate
         cfg = WatcherConfig(
             api_url="http://localhost:8000",
             api_key="",
@@ -622,7 +622,7 @@ class TestWatcherConfig:
         assert any("AINDY_API_KEY" in e for e in errors)
 
     def test_validate_dry_run_no_api_key_ok(self):
-        from watcher.config import WatcherConfig, validate
+        from AINDY.watcher.config import WatcherConfig, validate
         cfg = WatcherConfig(
             api_url="http://localhost:8000",
             api_key="",
@@ -641,7 +641,7 @@ class TestWatcherConfig:
         assert errors == []
 
     def test_validate_poll_interval_too_short(self):
-        from watcher.config import WatcherConfig, validate
+        from AINDY.watcher.config import WatcherConfig, validate
         cfg = WatcherConfig(
             api_url="http://localhost:8000",
             api_key="key",
@@ -662,7 +662,7 @@ class TestWatcherConfig:
     def test_load_env_override(self, monkeypatch):
         monkeypatch.setenv("AINDY_WATCHER_POLL_INTERVAL", "15")
         monkeypatch.setenv("AINDY_WATCHER_DRY_RUN", "true")
-        from watcher import config
+        from AINDY.watcher import config
         import importlib
         importlib.reload(config)
         cfg = config.load()
@@ -678,7 +678,7 @@ class TestSignalEmitterDryRun:
     """Dry-run mode logs signals without making HTTP calls."""
 
     def _make_event(self, signal_type="session_started"):
-        from watcher.session_tracker import SessionEvent
+        from AINDY.watcher.session_tracker import SessionEvent
         return SessionEvent(
             signal_type=signal_type,
             session_id="test-session-id",
@@ -690,7 +690,7 @@ class TestSignalEmitterDryRun:
         )
 
     def test_emit_does_not_raise(self):
-        from watcher.signal_emitter import SignalEmitter
+        from AINDY.watcher.signal_emitter import SignalEmitter
         emitter = SignalEmitter(
             api_url="http://localhost:8000/watcher/signals",
             api_key="test",
@@ -699,7 +699,7 @@ class TestSignalEmitterDryRun:
         emitter.emit(self._make_event())  # Should not raise
 
     def test_emit_many_queues_all(self):
-        from watcher.signal_emitter import SignalEmitter
+        from AINDY.watcher.signal_emitter import SignalEmitter
         emitter = SignalEmitter(
             api_url="http://localhost:8000/watcher/signals",
             api_key="test",
@@ -710,7 +710,7 @@ class TestSignalEmitterDryRun:
         assert len(emitter._queue) == 3
 
     def test_queue_overflow_drops_oldest(self):
-        from watcher.signal_emitter import SignalEmitter
+        from AINDY.watcher.signal_emitter import SignalEmitter
         emitter = SignalEmitter(
             api_url="http://localhost:8000/watcher/signals",
             api_key="test",
@@ -728,7 +728,7 @@ class TestSignalEmitterDryRun:
         assert "session-4" in remaining_ids
 
     def test_dry_run_send_logs_not_http(self):
-        from watcher.signal_emitter import SignalEmitter
+        from AINDY.watcher.signal_emitter import SignalEmitter
         emitter = SignalEmitter(
             api_url="http://localhost:8000/watcher/signals",
             api_key="test",
@@ -740,7 +740,7 @@ class TestSignalEmitterDryRun:
             mock_client.assert_not_called()
 
     def test_start_stop_lifecycle(self):
-        from watcher.signal_emitter import SignalEmitter
+        from AINDY.watcher.signal_emitter import SignalEmitter
         emitter = SignalEmitter(
             api_url="http://localhost:8000/watcher/signals",
             api_key="test",
@@ -761,21 +761,21 @@ class TestWindowDetector:
     """get_active_window() never raises and returns WindowInfo or None."""
 
     def test_never_raises(self):
-        from watcher.window_detector import get_active_window
+        from AINDY.watcher.window_detector import get_active_window
         # Should not raise regardless of platform
         result = get_active_window()
         # Result is WindowInfo or None
         assert result is None or hasattr(result, "app_name")
 
     def test_result_app_name_not_empty_when_returned(self):
-        from watcher.window_detector import get_active_window, WindowInfo
+        from AINDY.watcher.window_detector import get_active_window, WindowInfo
         result = get_active_window()
         if result is not None:
             assert isinstance(result, WindowInfo)
             assert result.app_name != ""
 
     def test_window_info_dataclass(self):
-        from watcher.window_detector import WindowInfo
+        from AINDY.watcher.window_detector import WindowInfo
         w = WindowInfo(app_name="cursor.exe", window_title="test.py", pid=1234)
         assert w.app_name == "cursor.exe"
         assert w.window_title == "test.py"
@@ -784,8 +784,8 @@ class TestWindowDetector:
     def test_window_detector_psutil_fallback(self):
         """When platform detectors return None, psutil fallback is used."""
         import platform
-        from watcher import window_detector
-        from watcher.window_detector import WindowInfo
+        from AINDY.watcher import window_detector
+        from AINDY.watcher.window_detector import WindowInfo
 
         fake_info = WindowInfo(app_name="python.exe", window_title="", pid=999)
 

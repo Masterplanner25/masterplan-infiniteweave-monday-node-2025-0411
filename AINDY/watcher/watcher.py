@@ -31,10 +31,10 @@ _WATCHER_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _WATCHER_ROOT not in sys.path:
     sys.path.insert(0, _WATCHER_ROOT)
 
-from watcher import classifier, config
-from watcher.session_tracker import SessionTracker
-from watcher.signal_emitter import SignalEmitter
-from watcher.window_detector import get_active_window
+from AINDY.watcher import classifier, config
+from AINDY.watcher.session_tracker import SessionTracker
+from AINDY.watcher.signal_emitter import SignalEmitter
+from AINDY.watcher.window_detector import get_active_window
 
 
 def _configure_logging(level: str) -> None:

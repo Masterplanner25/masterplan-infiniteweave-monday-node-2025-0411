@@ -3,7 +3,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, func, ForeignKey
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.dialects.postgresql import UUID
-from db.database import Base
+from AINDY.db.database import Base
 
 # ✅ SQLAlchemy Model
 class ResearchResult(Base):

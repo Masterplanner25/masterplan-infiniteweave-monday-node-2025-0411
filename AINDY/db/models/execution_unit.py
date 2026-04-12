@@ -44,7 +44,7 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class ExecutionUnit(Base):

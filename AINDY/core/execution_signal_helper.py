@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from utils.trace_context import get_current_execution_context, is_pipeline_active
+from AINDY.utils.trace_context import get_current_execution_context, is_pipeline_active
 
 
 def _ensure_signal_bucket(ctx: Any) -> dict[str, list[dict[str, Any]]]:
@@ -45,7 +45,7 @@ def queue_system_event(
         )
         return provisional_id
 
-    from core.system_event_service import emit_system_event
+    from AINDY.core.system_event_service import emit_system_event
 
     return emit_system_event(
         db=db,
@@ -99,7 +99,7 @@ def queue_memory_capture(
             "source": source,
         }
 
-    from memory.memory_capture_engine import MemoryCaptureEngine
+    from AINDY.memory.memory_capture_engine import MemoryCaptureEngine
 
     engine = MemoryCaptureEngine(
         db=db,
@@ -120,7 +120,7 @@ def queue_memory_capture(
 
 
 def record_agent_event(*args, **kwargs):
-    from agents.agent_event_service import emit_event
+    from AINDY.agents.agent_event_service import emit_event
 
     return emit_event(*args, **kwargs)
 

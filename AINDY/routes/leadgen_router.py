@@ -14,13 +14,13 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from schemas.leadgen_schema import LeadGenItem
-from services.auth_service import get_current_user
-from platform_layer.rate_limiter import limiter
-from domain.search_service import build_learning_context, get_cached_search_result, search_leads
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.schemas.leadgen_schema import LeadGenItem
+from AINDY.services.auth_service import get_current_user
+from AINDY.platform_layer.rate_limiter import limiter
+from AINDY.domain.search_service import build_learning_context, get_cached_search_result
 
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 legacy_router = APIRouter(tags=["Lead Generation"])
@@ -73,7 +73,7 @@ def generate_b2b_leads(
                 "_execution_meta": {"cached": True, "count": len(cached_results)},
             }
 
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "leadgen_search",
             {"query": query},
@@ -112,6 +112,7 @@ def preview_lead_search(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
+        from AINDY.domain.search_service import search_leads
         return search_leads(query=query, db=db, user_id=user_id)
     return _execute_leadgen(request, "leadgen.search", handler, db=db, user_id=user_id, input_payload={"query": query})
 
@@ -125,7 +126,7 @@ def list_all_leads(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from domain.leadgen_service import list_leads
+        from AINDY.domain.leadgen_service import list_leads
         return list_leads(db, user_id=user_id)
 
     return _execute_leadgen(request, "leadgen.list", handler, db=db, user_id=user_id)

@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from kernel.syscall_registry import SyscallContext, register_syscall
+from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +56,8 @@ def _handle_task_create(payload: dict, context: SyscallContext) -> dict:
         reminder_time     (str | None)
         recurrence        (str | None)
     """
-    from db.database import SessionLocal
-    from domain.task_services import create_task
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import create_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -106,8 +106,8 @@ def _handle_task_complete(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.task_services import complete_task
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import complete_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -127,8 +127,8 @@ def _handle_task_complete_full(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.task_services import execute_task_completion
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import execute_task_completion
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -148,8 +148,8 @@ def _handle_task_start(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.task_services import start_task
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import start_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -169,8 +169,8 @@ def _handle_task_pause(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.task_services import pause_task
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import pause_task
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -190,8 +190,8 @@ def _handle_task_orchestrate(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.task_services import orchestrate_task_completion
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.task_services import orchestrate_task_completion
 
     name = payload.get("task_name") or payload.get("name")
     if not name:
@@ -215,8 +215,8 @@ def _handle_leadgen_search(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.leadgen_service import create_lead_results
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.leadgen_service import create_lead_results
 
     query = payload.get("query", "")
     if not query:
@@ -254,8 +254,8 @@ def _handle_leadgen_search_ai(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from db.database import SessionLocal
-    from domain.leadgen_service import run_ai_search
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.leadgen_service import run_ai_search
 
     query = payload.get("query", "")
     if not query:
@@ -276,8 +276,8 @@ def _handle_leadgen_store(payload: dict, context: SyscallContext) -> dict:
         query    (str)        — required
         results  (list[dict]) — required; serialized lead result dicts
     """
-    from core.execution_signal_helper import queue_memory_capture
-    from db.database import SessionLocal
+    from AINDY.core.execution_signal_helper import queue_memory_capture
+    from AINDY.db.database import SessionLocal
 
     query: str = payload.get("query", "")
     results: list = payload.get("results") or []
@@ -297,7 +297,7 @@ def _handle_leadgen_store(payload: dict, context: SyscallContext) -> dict:
 
         if context.user_id and query and results:
             try:
-                from domain.search_service import persist_search_result
+                from AINDY.domain.search_service import persist_search_result
                 persist_search_result(
                     db=db,
                     user_id=context.user_id,
@@ -326,8 +326,8 @@ def _handle_arm_analyze(payload: dict, context: SyscallContext) -> dict:
         file_path           (str) — required
         additional_context  (str) — optional
     """
-    from db.database import SessionLocal
-    from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+    from AINDY.db.database import SessionLocal
+    from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 
     file_path = payload.get("file_path")
     if not file_path:
@@ -366,8 +366,8 @@ def _handle_arm_generate(payload: dict, context: SyscallContext) -> dict:
         complexity      (str) — optional
         urgency         (str) — optional
     """
-    from db.database import SessionLocal
-    from modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+    from AINDY.db.database import SessionLocal
+    from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 
     prompt = payload.get("prompt")
     if not prompt:
@@ -405,8 +405,8 @@ def _handle_arm_store(payload: dict, context: SyscallContext) -> dict:
         event_type   (str)        — default "arm_analysis_complete"
         score        (int | float) — optional; for context metadata
     """
-    from core.execution_signal_helper import queue_memory_capture
-    from db.database import SessionLocal
+    from AINDY.core.execution_signal_helper import queue_memory_capture
+    from AINDY.db.database import SessionLocal
 
     result = payload.get("result", {})
     event_type = payload.get("event_type", "arm_analysis_complete")
@@ -445,9 +445,9 @@ def _handle_genesis_execute_llm(payload: dict, context: SyscallContext) -> dict:
     """
     import uuid
 
-    from db.database import SessionLocal
-    from db.models import GenesisSessionDB
-    from domain.genesis_ai import call_genesis_llm
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models import GenesisSessionDB
+    from AINDY.domain.genesis_ai import call_genesis_llm
 
     session_id = payload.get("session_id")
     message = payload.get("message")
@@ -511,8 +511,8 @@ def _handle_genesis_message(payload: dict, context: SyscallContext) -> dict:
         session_id  (str) — required
         message     (str) — required
     """
-    from db.database import SessionLocal
-    from runtime.flow_engine import execute_intent
+    from AINDY.db.database import SessionLocal
+    from AINDY.runtime.flow_engine import execute_intent
 
     session_id = payload.get("session_id")
     message = payload.get("message")
@@ -547,8 +547,8 @@ def _handle_score_recalculate(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         trigger_event  (str) — default "manual"
     """
-    from db.database import SessionLocal
-    from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
 
     trigger = payload.get("trigger_event", "manual")
 
@@ -580,8 +580,8 @@ def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
     from datetime import datetime, timezone
     from uuid import UUID
 
-    from db.database import SessionLocal
-    from db.models.infinity_loop import LoopAdjustment, UserFeedback
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.infinity_loop import LoopAdjustment, UserFeedback
 
     db = SessionLocal()
     try:
@@ -631,9 +631,9 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
     from datetime import datetime, timezone
     from uuid import UUID
 
-    from db.database import SessionLocal
-    from db.models.watcher_signal import WatcherSignal
-    from routes.watcher_router import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.watcher_signal import WatcherSignal
+    from AINDY.routes.watcher_router import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
 
     signals: list = payload.get("signals") or []
     if not isinstance(signals, list) or not signals:
@@ -708,8 +708,8 @@ def _handle_goal_create(payload: dict, context: SyscallContext) -> dict:
         status          (str)   — default "active"
         success_metric  (dict)  — optional
     """
-    from db.database import SessionLocal
-    from domain.goal_service import create_goal
+    from AINDY.db.database import SessionLocal
+    from AINDY.domain.goal_service import create_goal
 
     name = payload.get("name")
     if not name:
@@ -742,7 +742,7 @@ def _handle_research_query(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from modules.research_engine import web_search
+    from AINDY.modules.research_engine import web_search
 
     query = payload.get("query", "")
     if not query:
@@ -763,7 +763,7 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
         kpi_snapshot  (dict) — required; keys: focus_quality, execution_speed,
                                ai_productivity_boost, master_score
     """
-    from db.database import SessionLocal
+    from AINDY.db.database import SessionLocal
 
     kpi_snapshot: dict = payload.get("kpi_snapshot") or {}
 
@@ -772,7 +772,7 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
     try:
         if context.user_id:
             try:
-                from domain.infinity_loop import get_latest_adjustment
+                from AINDY.domain.infinity_loop import get_latest_adjustment
                 latest = get_latest_adjustment(user_id=context.user_id, db=db)
                 if latest and latest.adjustment_payload:
                     persisted = latest.adjustment_payload.get("suggestions")
@@ -840,19 +840,19 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
 
 def _mas_memory_list(payload: dict, context) -> dict:
     """sys.v1.memory.list — list MAS nodes at a path prefix."""
-    from kernel.syscall_registry import _handle_memory_list
+    from AINDY.kernel.syscall_registry import _handle_memory_list
     return _handle_memory_list(payload, context)
 
 
 def _mas_memory_tree(payload: dict, context) -> dict:
     """sys.v1.memory.tree — hierarchical tree of nodes under a path."""
-    from kernel.syscall_registry import _handle_memory_tree
+    from AINDY.kernel.syscall_registry import _handle_memory_tree
     return _handle_memory_tree(payload, context)
 
 
 def _mas_memory_trace(payload: dict, context) -> dict:
     """sys.v1.memory.trace — causal trace from node at path."""
-    from kernel.syscall_registry import _handle_memory_trace
+    from AINDY.kernel.syscall_registry import _handle_memory_trace
     return _handle_memory_trace(payload, context)
 
 

@@ -1,6 +1,6 @@
-from config import engine
-from db.database import Base
-import main
+from AINDY.config import engine
+from AINDY.db.database import Base
+import AINDY.main
 import models
 
 Base.metadata.create_all(bind=engine)

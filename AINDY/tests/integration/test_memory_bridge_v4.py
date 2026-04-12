@@ -12,7 +12,7 @@ class TestFeedbackColumns:
 
     def test_feedback_columns_in_db(self):
         from sqlalchemy import inspect
-        from db.database import engine
+        from AINDY.db.database import engine
         try:
             insp = inspect(engine)
             if "memory_nodes" not in insp.get_table_names():
@@ -30,7 +30,7 @@ class TestFeedbackColumns:
                 f"memory_nodes missing: {col}"
 
     def test_feedback_columns_on_model(self):
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         cols = [c.key for c in mapper.columns]
@@ -39,7 +39,7 @@ class TestFeedbackColumns:
             assert col in cols
 
     def test_record_feedback_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "record_feedback")
         assert callable(MemoryNodeDAO.record_feedback)
 
@@ -85,7 +85,7 @@ class TestSuccessRate:
 
     def test_success_rate_no_data(self, mock_db):
         """No feedback = 0.5 neutral prior."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(mock_db)
 
         mock_node = MagicMock()
@@ -97,7 +97,7 @@ class TestSuccessRate:
 
     def test_success_rate_all_success(self, mock_db):
         """All successes = 1.0."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(mock_db)
 
         mock_node = MagicMock()
@@ -109,7 +109,7 @@ class TestSuccessRate:
 
     def test_success_rate_mixed(self, mock_db):
         """3 success, 1 failure = 0.75."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(mock_db)
 
         mock_node = MagicMock()
@@ -189,14 +189,14 @@ class TestResonanceV2:
 class TestSuggestionEngine:
 
     def test_suggest_method_exists(self):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         assert hasattr(MemoryNodeDAO, "suggest")
         assert callable(MemoryNodeDAO.suggest)
 
     def test_suggest_returns_correct_structure(
         self, mock_db, mocker
     ):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mocker.patch(
             "db.dao.memory_node_dao.MemoryNodeDAO.recall",
@@ -216,7 +216,7 @@ class TestSuggestionEngine:
     def test_suggest_requires_query_or_tags(
         self, mock_db
     ):
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(mock_db)
         result = dao.suggest(user_id="test-user")
         assert result["suggestions"] == []
@@ -228,7 +228,7 @@ class TestSuggestionEngine:
         Suggestion engine should prefer high-performing
         memories over low-performing ones.
         """
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         high_performer = {
             "id": "high-id",
@@ -277,7 +277,7 @@ class TestSuggestionEngine:
         self, mock_db, mocker
     ):
         """Suggestions with failures should include warning."""
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         risky_memory = {
             "id": "risky-id",
@@ -394,11 +394,11 @@ class TestFeedbackEndpoints:
 class TestSuggestBridgeExport:
 
     def test_suggest_from_memory_importable(self):
-        from bridge import suggest_from_memory
+        from AINDY.bridge import suggest_from_memory
         assert callable(suggest_from_memory)
 
     def test_suggest_from_memory_returns_empty_on_error(self):
-        from bridge import suggest_from_memory
+        from AINDY.bridge import suggest_from_memory
         result = suggest_from_memory(
             db=None,
             query="test"

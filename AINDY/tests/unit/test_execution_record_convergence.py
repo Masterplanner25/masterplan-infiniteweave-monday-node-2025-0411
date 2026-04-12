@@ -6,7 +6,7 @@ from uuid import uuid4
 
 
 def test_build_queued_response_includes_execution_record():
-    from platform_layer.async_job_service import build_queued_response
+    from AINDY.platform_layer.async_job_service import build_queued_response
 
     response = build_queued_response("log-1", task_name="agent.create_run", source="agent")
 
@@ -17,7 +17,7 @@ def test_build_queued_response_includes_execution_record():
 
 
 def test_flow_execution_response_includes_execution_record():
-    from runtime.flow_engine import _format_execution_response
+    from AINDY.runtime.flow_engine import _format_execution_response
 
     response = _format_execution_response(
         status="SUCCESS",
@@ -34,7 +34,7 @@ def test_flow_execution_response_includes_execution_record():
 
 
 def test_run_to_dict_includes_execution_record():
-    from agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import _run_to_dict
 
     run = SimpleNamespace(
         id=uuid4(),

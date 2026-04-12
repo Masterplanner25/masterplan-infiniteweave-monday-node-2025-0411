@@ -1,4 +1,4 @@
-from analytics.rate_calculator import calculate_rates
+from AINDY.analytics.rate_calculator import calculate_rates
 
 
 def linkedin_adapter(raw):

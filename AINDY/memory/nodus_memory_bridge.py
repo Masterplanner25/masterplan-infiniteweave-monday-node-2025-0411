@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from core.execution_signal_helper import queue_memory_capture
+from AINDY.core.execution_signal_helper import queue_memory_capture
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +53,14 @@ class NodusMemoryBridge:
     @property
     def dao(self):
         if self._dao is None and self.db:
-            from db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
             self._dao = MemoryNodeDAO(self.db)
         return self._dao
 
     @property
     def engine(self):
         if self._engine is None and self.db:
-            from memory.memory_capture_engine import MemoryCaptureEngine
+            from AINDY.memory.memory_capture_engine import MemoryCaptureEngine
             self._engine = MemoryCaptureEngine(
                 db=self.db,
                 user_id=self.user_id,
@@ -96,8 +96,8 @@ class NodusMemoryBridge:
                 set((tags or []) + self.session_tags)
             )
 
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
             metadata = {
                 "tags": combined_tags or None,
@@ -339,8 +339,8 @@ class NodusMemoryBridge:
                 set((tags or []) + self.session_tags)
             )
 
-            from db.dao.memory_node_dao import MemoryNodeDAO
-            from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+            from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+            from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
 
             metadata = {
                 "tags": combined_tags or None,

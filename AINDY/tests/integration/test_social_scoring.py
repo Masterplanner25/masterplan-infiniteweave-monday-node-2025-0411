@@ -1,7 +1,7 @@
 import pytest
 
-from db.models.social_models import SocialPost, TrustTier
-from routes.social_router import _compute_visibility_score
+from AINDY.db.models.social_models import SocialPost, TrustTier
+from AINDY.routes.social_router import _compute_visibility_score
 
 
 def test_visibility_score_trust_tier_weighting():

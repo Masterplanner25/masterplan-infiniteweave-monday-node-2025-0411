@@ -9,17 +9,17 @@ from __future__ import annotations
 
 import logging
 
-from core.execution_signal_helper import queue_system_event
+from AINDY.core.execution_signal_helper import queue_system_event
 emit_system_event = queue_system_event
-from domain.identity_boot_service import get_recent_memory, get_user_metrics
-from domain.goal_service import rank_goals
-from domain.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
-from domain.infinity_service import calculate_infinity_score, orchestrator_score_context
-from memory.memory_scoring_service import get_relevant_memories
-from domain.social_performance_service import get_social_performance_signals
-from platform_layer.system_state_service import compute_current_state
-from domain.task_services import get_task_graph_context
-from utils.trace_context import get_current_trace_id
+from AINDY.domain.identity_boot_service import get_recent_memory, get_user_metrics
+from AINDY.domain.goal_service import rank_goals
+from AINDY.domain.infinity_loop import evaluate_pending_adjustment, run_loop, serialize_adjustment
+from AINDY.domain.infinity_service import calculate_infinity_score, orchestrator_score_context
+from AINDY.memory.memory_scoring_service import get_relevant_memories
+from AINDY.domain.social_performance_service import get_social_performance_signals
+from AINDY.platform_layer.system_state_service import compute_current_state
+from AINDY.domain.task_services import get_task_graph_context
+from AINDY.utils.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 

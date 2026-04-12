@@ -104,15 +104,15 @@ class TestTaskRouteResponses:
 
 class TestTaskSchemas:
     def test_task_create_schema_importable(self):
-        from schemas.task_schemas import TaskCreate
+        from AINDY.schemas.task_schemas import TaskCreate
         assert TaskCreate is not None
 
     def test_task_action_schema_importable(self):
-        from schemas.task_schemas import TaskAction
+        from AINDY.schemas.task_schemas import TaskAction
         assert TaskAction is not None
 
     def test_task_create_requires_name(self):
-        from schemas.task_schemas import TaskCreate
+        from AINDY.schemas.task_schemas import TaskCreate
         import pydantic
         with pytest.raises(pydantic.ValidationError):
             TaskCreate()  # name is required

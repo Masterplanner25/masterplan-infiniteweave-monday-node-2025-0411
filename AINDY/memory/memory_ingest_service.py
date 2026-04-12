@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.dao.memory_trace_dao import MemoryTraceDAO
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
 
 logger = logging.getLogger(__name__)
 

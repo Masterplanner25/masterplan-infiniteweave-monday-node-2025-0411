@@ -56,7 +56,7 @@ Usage
     WORKER_CONCURRENCY=4 WORKER_MAX_CONCURRENT_JOBS=8 python -m worker.worker_loop
 
     # Programmatic:
-    from worker.worker_loop import run_worker_loop
+    from AINDY.worker.worker_loop import run_worker_loop
     run_worker_loop(concurrency=2)
 
 Environment variables
@@ -76,7 +76,7 @@ import time
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from core.distributed_queue import DistributedQueueBackend, QueueJobPayload
+    from AINDY.core.distributed_queue import DistributedQueueBackend, QueueJobPayload
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def _restore_trace_context(context: dict) -> tuple:
     ``async_job_service``) and the ``kernel.syscall_dispatcher`` ContextVars
     (used by nested syscall chains) so the full trace is continuous.
     """
-    from utils.trace_context import set_trace_id
+    from AINDY.utils.trace_context import set_trace_id
 
     trace_id: str = context.get("trace_id") or ""
     eu_id: str = context.get("eu_id") or ""
@@ -157,7 +157,7 @@ def _restore_trace_context(context: dict) -> tuple:
     tok_trace = set_trace_id(trace_id) if trace_id else None
 
     try:
-        from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
+        from AINDY.kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
         tok_syscall_trace = _TRACE_ID_CTX.set(trace_id) if trace_id else None
         tok_eu = _EU_ID_CTX.set(eu_id) if eu_id else None
     except Exception:
@@ -172,14 +172,14 @@ def _reset_trace_context(tokens: tuple) -> None:
     tok_trace, tok_syscall_trace, tok_eu = tokens
 
     try:
-        from utils.trace_context import reset_trace_id
+        from AINDY.utils.trace_context import reset_trace_id
         if tok_trace is not None:
             reset_trace_id(tok_trace)
     except Exception:
         pass
 
     try:
-        from kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
+        from AINDY.kernel.syscall_dispatcher import _EU_ID_CTX, _TRACE_ID_CTX
         if tok_syscall_trace is not None:
             _TRACE_ID_CTX.reset(tok_syscall_trace)
         if tok_eu is not None:
@@ -206,8 +206,8 @@ def _try_claim_job(log_id: str) -> bool:
     """
     from datetime import datetime, timezone
 
-    from db.database import SessionLocal
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     try:
@@ -246,8 +246,8 @@ def _fetch_job_data(log_id: str) -> Optional[tuple[str, dict]]:
     omits it to avoid large blobs crossing the wire.  Returns ``None`` when
     the record is missing (job was cancelled or already completed).
     """
-    from db.database import SessionLocal
-    from db.models.automation_log import AutomationLog
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     try:
@@ -278,8 +278,8 @@ def _emit_worker_event(
 ) -> None:
     """Fire-and-forget system event.  Never raises; failures are debug-logged."""
     try:
-        from core.system_event_service import emit_system_event
-        from db.database import SessionLocal
+        from AINDY.core.system_event_service import emit_system_event
+        from AINDY.db.database import SessionLocal
 
         db = SessionLocal()
         try:
@@ -332,7 +332,7 @@ def process_one_job(
     9. On exception: emit ``job_failed``, call ``q.fail()``.
     10. Release semaphore and reset trace context.
     """
-    from core.distributed_queue import get_queue
+    from AINDY.core.distributed_queue import get_queue
 
     q = queue_backend or get_queue()
     job: Optional["QueueJobPayload"] = q.dequeue(timeout=5)
@@ -402,7 +402,7 @@ def process_one_job(
 
         # Execute via the same path as the thread-pool backend.
         # _execute_job_inline drives: EU status, retry logic, events, DB commit.
-        from platform_layer.async_job_service import _execute_job
+        from AINDY.platform_layer.async_job_service import _execute_job
 
         _execute_job(job.job_id, task_name, payload)
 
@@ -518,7 +518,7 @@ def run_worker_loop(
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    from core.distributed_queue import get_queue
+    from AINDY.core.distributed_queue import get_queue
     q = queue_backend or get_queue()
 
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECS", "300"))

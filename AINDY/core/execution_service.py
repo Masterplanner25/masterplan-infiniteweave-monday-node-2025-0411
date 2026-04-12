@@ -8,8 +8,8 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline_sync
-from core.execution_envelope import adapt_pipeline_result
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.core.execution_envelope import adapt_pipeline_result
 
 
 @dataclass(slots=True)

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from runtime.nodus_runtime_adapter import NodusExecutionResult
+from AINDY.runtime.nodus_runtime_adapter import NodusExecutionResult
 
 
 def _memory_context():
@@ -12,7 +12,7 @@ def _memory_context():
 
 
 def test_build_nodus_execution_record_normalizes_runtime_metadata():
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     nodus_result = NodusExecutionResult(
         output_state={"answer": 42},
@@ -52,7 +52,7 @@ def test_build_nodus_execution_record_normalizes_runtime_metadata():
 
 
 def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     adapter_instance = MagicMock()
     adapter_instance.run_script.return_value = NodusExecutionResult(
@@ -120,7 +120,7 @@ def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
 
 
 def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(monkeypatch):
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     monkeypatch.setattr(service, "authorize_nodus_execution", lambda **kwargs: {
         "allowed_operations": ["recall"],
@@ -149,7 +149,7 @@ def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(mo
 
 
 def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     mock_runner = MagicMock()
     mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "run-1", "trace_id": "trace-1"}
@@ -186,7 +186,7 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
 
 
 def test_format_nodus_flow_result_uses_shared_execution_record_shape():
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     result = service.format_nodus_flow_result(
         {
@@ -217,7 +217,7 @@ def test_format_nodus_flow_result_uses_shared_execution_record_shape():
 
 
 def test_execute_agent_run_via_nodus_delegates_to_canonical_agent_flow_helper():
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
         result = service.execute_agent_run_via_nodus(
@@ -242,7 +242,7 @@ def test_execute_agent_run_via_nodus_delegates_to_canonical_agent_flow_helper():
 
 
 def test_adapter_execute_with_flow_is_compatibility_wrapper():
-    from runtime.nodus_adapter import NodusAgentAdapter
+    from AINDY.runtime.nodus_adapter import NodusAgentAdapter
 
     with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
         result = NodusAgentAdapter.execute_with_flow(
@@ -267,7 +267,7 @@ def test_adapter_execute_with_flow_is_compatibility_wrapper():
 
 
 def test_execute_agent_run_via_nodus_honors_patched_adapter_entrypoint():
-    from runtime import nodus_execution_service as service
+    from AINDY.runtime import nodus_execution_service as service
 
     with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS", "patched": True}) as mock_execute:
         result = service.execute_agent_run_via_nodus(

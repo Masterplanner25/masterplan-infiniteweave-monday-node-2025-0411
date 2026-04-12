@@ -42,24 +42,24 @@ from .health_router import router as health_router
 from .health_dashboard_router import router as health_dashboard_router
 from .social_router import router as social_router
 from .analytics_router import router as analytics_router
-from routes.genesis_router import router as genesis_router
-from routes.auth_router import router as auth_router
-from routes.masterplan_router import router as masterplan_router
-from routes.memory_router import router as memory_router
-from routes.memory_metrics_router import router as memory_metrics_router
-from routes.memory_trace_router import router as memory_trace_router
-from routes.identity_router import router as identity_router
-from routes.observability_router import router as observability_router
-from routes.system_state_router import router as system_state_router
-from routes.automation_router import router as automation_router
-from routes.flow_router import router as flow_router
-from routes.watcher_router import router as watcher_router
-from routes.score_router import router as score_router
-from routes.agent_router import router as agent_router
-from routes.autonomy_router import router as autonomy_router
-from routes.goals_router import router as goals_router
-from routes.coordination_router import router as coordination_router
-from routes.platform_router import router as platform_router
+from AINDY.routes.genesis_router import router as genesis_router
+from AINDY.routes.auth_router import router as auth_router
+from AINDY.routes.masterplan_router import router as masterplan_router
+from AINDY.routes.memory_router import router as memory_router
+from AINDY.routes.memory_metrics_router import router as memory_metrics_router
+from AINDY.routes.memory_trace_router import router as memory_trace_router
+from AINDY.routes.identity_router import router as identity_router
+from AINDY.routes.observability_router import router as observability_router
+from AINDY.routes.system_state_router import router as system_state_router
+from AINDY.routes.automation_router import router as automation_router
+from AINDY.routes.flow_router import router as flow_router
+from AINDY.routes.watcher_router import router as watcher_router
+from AINDY.routes.score_router import router as score_router
+from AINDY.routes.agent_router import router as agent_router
+from AINDY.routes.autonomy_router import router as autonomy_router
+from AINDY.routes.goals_router import router as goals_router
+from AINDY.routes.coordination_router import router as coordination_router
+from AINDY.routes.platform_router import router as platform_router
 
 
 # ---------------------------------------------------------------------------

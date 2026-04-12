@@ -43,6 +43,6 @@ def _patch_session_local_to_engine(app, testing_session_factory, monkeypatch):
     connection, so its commits are real and survive subsequent rollbacks
     on the test connection.
     """
-    import db.database as _db_module
+    import AINDY.db.database as _db_module
 
     monkeypatch.setattr(_db_module, "SessionLocal", testing_session_factory, raising=False)

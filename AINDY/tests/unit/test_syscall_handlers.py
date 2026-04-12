@@ -26,7 +26,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from kernel.syscall_registry import SyscallContext, SYSCALL_REGISTRY
+from AINDY.kernel.syscall_registry import SyscallContext, SYSCALL_REGISTRY
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ def _make_db_modules(session_instance=None):
 
 class TestRegisterAllDomainHandlers:
     def test_registers_handlers(self):
-        from kernel.syscall_handlers import register_all_domain_handlers
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
         register_all_domain_handlers()
         domain_syscalls = [k for k in SYSCALL_REGISTRY if k not in (
             "sys.v1.memory.read", "sys.v1.memory.write", "sys.v1.memory.search",
@@ -70,7 +70,7 @@ class TestRegisterAllDomainHandlers:
         assert len(domain_syscalls) >= 23
 
     def test_all_expected_names_registered(self):
-        from kernel.syscall_handlers import register_all_domain_handlers
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
         register_all_domain_handlers()
         expected = [
             "sys.v1.task.create", "sys.v1.task.complete", "sys.v1.task.complete_full",
@@ -88,14 +88,14 @@ class TestRegisterAllDomainHandlers:
             assert name in SYSCALL_REGISTRY, f"Missing: {name}"
 
     def test_idempotent_registration(self):
-        from kernel.syscall_handlers import register_all_domain_handlers
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
         register_all_domain_handlers()
         count_after_first = len(SYSCALL_REGISTRY)
         register_all_domain_handlers()
         assert len(SYSCALL_REGISTRY) == count_after_first
 
     def test_entries_have_handler_and_capability(self):
-        from kernel.syscall_handlers import register_all_domain_handlers
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
         register_all_domain_handlers()
         entry = SYSCALL_REGISTRY["sys.v1.task.create"]
         assert callable(entry.handler)
@@ -108,7 +108,7 @@ class TestRegisterAllDomainHandlers:
 
 class TestTaskHandlers:
     def test_task_create_returns_task_fields(self):
-        from kernel.syscall_handlers import _handle_task_create
+        from AINDY.kernel.syscall_handlers import _handle_task_create
 
         mock_task = MagicMock()
         mock_task.id = "tid-1"
@@ -137,12 +137,12 @@ class TestTaskHandlers:
         assert result["category"] == "dev"
 
     def test_task_create_raises_on_missing_name(self):
-        from kernel.syscall_handlers import _handle_task_create
+        from AINDY.kernel.syscall_handlers import _handle_task_create
         with pytest.raises(ValueError, match="requires 'task_name'"):
             _handle_task_create({}, _ctx())
 
     def test_task_create_accepts_name_key(self):
-        from kernel.syscall_handlers import _handle_task_create
+        from AINDY.kernel.syscall_handlers import _handle_task_create
 
         mock_task = MagicMock()
         mock_task.id = "tid-2"
@@ -169,7 +169,7 @@ class TestTaskHandlers:
         assert result["task_name"] == "Review PR"
 
     def test_task_complete_returns_task_result(self):
-        from kernel.syscall_handlers import _handle_task_complete
+        from AINDY.kernel.syscall_handlers import _handle_task_complete
 
         mock_db = MagicMock()
         mock_task_svc = MagicMock(complete_task=MagicMock(return_value={"completed": True}))
@@ -183,12 +183,12 @@ class TestTaskHandlers:
         assert result["task_result"] == {"completed": True}
 
     def test_task_complete_raises_on_missing_name(self):
-        from kernel.syscall_handlers import _handle_task_complete
+        from AINDY.kernel.syscall_handlers import _handle_task_complete
         with pytest.raises(ValueError):
             _handle_task_complete({}, _ctx())
 
     def test_task_complete_full_returns_service_result(self):
-        from kernel.syscall_handlers import _handle_task_complete_full
+        from AINDY.kernel.syscall_handlers import _handle_task_complete_full
 
         mock_db = MagicMock()
         svc_result = {"status": "done", "score_delta": 5}
@@ -203,7 +203,7 @@ class TestTaskHandlers:
         assert result == svc_result
 
     def test_task_start_returns_message(self):
-        from kernel.syscall_handlers import _handle_task_start
+        from AINDY.kernel.syscall_handlers import _handle_task_start
 
         mock_db = MagicMock()
         mock_task_svc = MagicMock(start_task=MagicMock(return_value="Task started"))
@@ -217,7 +217,7 @@ class TestTaskHandlers:
         assert result["task_start_result"]["message"] == "Task started"
 
     def test_task_pause_returns_message(self):
-        from kernel.syscall_handlers import _handle_task_pause
+        from AINDY.kernel.syscall_handlers import _handle_task_pause
 
         mock_db = MagicMock()
         mock_task_svc = MagicMock(pause_task=MagicMock(return_value="Task paused"))
@@ -237,7 +237,7 @@ class TestTaskHandlers:
 
 class TestLeadgenHandlers:
     def test_leadgen_search_returns_serialized_results(self):
-        from kernel.syscall_handlers import _handle_leadgen_search
+        from AINDY.kernel.syscall_handlers import _handle_leadgen_search
 
         mock_lead = MagicMock(
             company="Acme", url="https://acme.com", fit_score=0.9,
@@ -260,12 +260,12 @@ class TestLeadgenHandlers:
         assert result["search_results"][0]["company"] == "Acme"
 
     def test_leadgen_search_raises_on_empty_query(self):
-        from kernel.syscall_handlers import _handle_leadgen_search
+        from AINDY.kernel.syscall_handlers import _handle_leadgen_search
         with pytest.raises(ValueError, match="requires 'query'"):
             _handle_leadgen_search({}, _ctx())
 
     def test_leadgen_search_ai_returns_leads(self):
-        from kernel.syscall_handlers import _handle_leadgen_search_ai
+        from AINDY.kernel.syscall_handlers import _handle_leadgen_search_ai
 
         mock_db = MagicMock()
         mock_svc = MagicMock(run_ai_search=MagicMock(return_value=[{"name": "Lead A"}]))
@@ -280,7 +280,7 @@ class TestLeadgenHandlers:
         assert result["leads"][0]["name"] == "Lead A"
 
     def test_leadgen_store_skips_memory_on_no_user(self):
-        from kernel.syscall_handlers import _handle_leadgen_store
+        from AINDY.kernel.syscall_handlers import _handle_leadgen_store
 
         mock_db = MagicMock()
         mock_qmc = MagicMock()
@@ -299,7 +299,7 @@ class TestLeadgenHandlers:
         assert result["stored"] is True
 
     def test_leadgen_store_returns_count(self):
-        from kernel.syscall_handlers import _handle_leadgen_store
+        from AINDY.kernel.syscall_handlers import _handle_leadgen_store
 
         mock_db = MagicMock()
 
@@ -322,7 +322,7 @@ class TestLeadgenHandlers:
 
 class TestArmHandlers:
     def test_arm_analyze_returns_analysis_fields(self):
-        from kernel.syscall_handlers import _handle_arm_analyze
+        from AINDY.kernel.syscall_handlers import _handle_arm_analyze
 
         mock_db = MagicMock()
         analysis_result = {
@@ -346,12 +346,12 @@ class TestArmHandlers:
         assert result["analysis_id"] == "ana-1"
 
     def test_arm_analyze_raises_on_missing_file_path(self):
-        from kernel.syscall_handlers import _handle_arm_analyze
+        from AINDY.kernel.syscall_handlers import _handle_arm_analyze
         with pytest.raises(ValueError, match="requires 'file_path'"):
             _handle_arm_analyze({}, _ctx())
 
     def test_arm_generate_returns_generated_code(self):
-        from kernel.syscall_handlers import _handle_arm_generate
+        from AINDY.kernel.syscall_handlers import _handle_arm_generate
 
         mock_db = MagicMock()
         gen_result = {
@@ -373,12 +373,12 @@ class TestArmHandlers:
         assert result["generation_id"] == "gen-1"
 
     def test_arm_generate_raises_on_missing_prompt(self):
-        from kernel.syscall_handlers import _handle_arm_generate
+        from AINDY.kernel.syscall_handlers import _handle_arm_generate
         with pytest.raises(ValueError, match="requires 'prompt'"):
             _handle_arm_generate({}, _ctx())
 
     def test_arm_store_returns_stored_true(self):
-        from kernel.syscall_handlers import _handle_arm_store
+        from AINDY.kernel.syscall_handlers import _handle_arm_store
 
         mock_db = MagicMock()
         mock_qmc = MagicMock()
@@ -399,7 +399,7 @@ class TestArmHandlers:
 
 class TestGenesisHandlers:
     def test_genesis_execute_llm_returns_reply(self):
-        from kernel.syscall_handlers import _handle_genesis_execute_llm
+        from AINDY.kernel.syscall_handlers import _handle_genesis_execute_llm
 
         mock_session = MagicMock()
         mock_session.summarized_state = {"confidence": 0.5}
@@ -430,17 +430,17 @@ class TestGenesisHandlers:
         assert result["genesis_response"]["reply"] == "Let's plan your goals."
 
     def test_genesis_execute_llm_raises_on_missing_session_id(self):
-        from kernel.syscall_handlers import _handle_genesis_execute_llm
+        from AINDY.kernel.syscall_handlers import _handle_genesis_execute_llm
         with pytest.raises(ValueError, match="requires 'session_id'"):
             _handle_genesis_execute_llm({"message": "hello"}, _ctx())
 
     def test_genesis_execute_llm_raises_on_missing_message(self):
-        from kernel.syscall_handlers import _handle_genesis_execute_llm
+        from AINDY.kernel.syscall_handlers import _handle_genesis_execute_llm
         with pytest.raises(ValueError, match="requires 'message'"):
             _handle_genesis_execute_llm({"session_id": "sess-1"}, _ctx())
 
     def test_genesis_execute_llm_raises_on_session_not_found(self):
-        from kernel.syscall_handlers import _handle_genesis_execute_llm
+        from AINDY.kernel.syscall_handlers import _handle_genesis_execute_llm
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -459,7 +459,7 @@ class TestGenesisHandlers:
                 )
 
     def test_genesis_message_calls_execute_intent(self):
-        from kernel.syscall_handlers import _handle_genesis_message
+        from AINDY.kernel.syscall_handlers import _handle_genesis_message
 
         mock_db = MagicMock()
         intent_result = {"status": "completed", "reply": "Done"}
@@ -484,7 +484,7 @@ class TestGenesisHandlers:
 
 class TestScoreHandlers:
     def test_score_recalculate_returns_score_data(self):
-        from kernel.syscall_handlers import _handle_score_recalculate
+        from AINDY.kernel.syscall_handlers import _handle_score_recalculate
 
         mock_db = MagicMock()
         orch_result = {"score": {"master_score": 72.5}}
@@ -499,7 +499,7 @@ class TestScoreHandlers:
         assert result["score_recalculate_result"] == {"master_score": 72.5}
 
     def test_score_recalculate_raises_on_empty_result(self):
-        from kernel.syscall_handlers import _handle_score_recalculate
+        from AINDY.kernel.syscall_handlers import _handle_score_recalculate
 
         mock_db = MagicMock()
         mock_orch = MagicMock(execute=MagicMock(return_value=None))
@@ -512,7 +512,7 @@ class TestScoreHandlers:
                 _handle_score_recalculate({}, _ctx())
 
     def test_score_recalculate_uses_manual_trigger_by_default(self):
-        from kernel.syscall_handlers import _handle_score_recalculate
+        from AINDY.kernel.syscall_handlers import _handle_score_recalculate
 
         mock_db = MagicMock()
         mock_execute = MagicMock(return_value={"score": {}})
@@ -529,7 +529,7 @@ class TestScoreHandlers:
         assert call_kwargs.get("trigger_event") == "manual"
 
     def test_score_feedback_persists_and_returns_id(self):
-        from kernel.syscall_handlers import _handle_score_feedback
+        from AINDY.kernel.syscall_handlers import _handle_score_feedback
 
         mock_feedback_obj = MagicMock()
         mock_feedback_obj.id = "fb-123"
@@ -553,7 +553,7 @@ class TestScoreHandlers:
         mock_db.commit.assert_called_once()
 
     def test_score_feedback_rolls_back_on_error(self):
-        from kernel.syscall_handlers import _handle_score_feedback
+        from AINDY.kernel.syscall_handlers import _handle_score_feedback
 
         mock_db = MagicMock()
         mock_db.commit.side_effect = RuntimeError("DB error")
@@ -586,12 +586,12 @@ class TestWatcherHandlers:
         }
 
     def test_watcher_ingest_raises_on_empty_signals(self):
-        from kernel.syscall_handlers import _handle_watcher_ingest
+        from AINDY.kernel.syscall_handlers import _handle_watcher_ingest
         with pytest.raises(ValueError, match="requires non-empty 'signals'"):
             _handle_watcher_ingest({"signals": []}, _ctx())
 
     def test_watcher_ingest_raises_on_invalid_signal_type(self):
-        from kernel.syscall_handlers import _handle_watcher_ingest
+        from AINDY.kernel.syscall_handlers import _handle_watcher_ingest
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock()
@@ -613,7 +613,7 @@ class TestWatcherHandlers:
                 _handle_watcher_ingest({"signals": [sig]}, _ctx())
 
     def test_watcher_ingest_persists_signals(self):
-        from kernel.syscall_handlers import _handle_watcher_ingest
+        from AINDY.kernel.syscall_handlers import _handle_watcher_ingest
 
         mock_db = MagicMock()
         mock_row = MagicMock()
@@ -636,7 +636,7 @@ class TestWatcherHandlers:
         mock_db.commit.assert_called_once()
 
     def test_watcher_ingest_counts_session_ended(self):
-        from kernel.syscall_handlers import _handle_watcher_ingest
+        from AINDY.kernel.syscall_handlers import _handle_watcher_ingest
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock(WatcherSignal=MagicMock(return_value=MagicMock()))
@@ -666,12 +666,12 @@ class TestWatcherHandlers:
 
 class TestGoalHandlers:
     def test_goal_create_raises_on_missing_name(self):
-        from kernel.syscall_handlers import _handle_goal_create
+        from AINDY.kernel.syscall_handlers import _handle_goal_create
         with pytest.raises(ValueError, match="requires 'name'"):
             _handle_goal_create({}, _ctx())
 
     def test_goal_create_returns_goal(self):
-        from kernel.syscall_handlers import _handle_goal_create
+        from AINDY.kernel.syscall_handlers import _handle_goal_create
 
         mock_db = MagicMock()
         goal_result = {"id": "goal-1", "name": "Ship v2"}
@@ -686,7 +686,7 @@ class TestGoalHandlers:
         assert result["goal_create_result"] == goal_result
 
     def test_goal_create_passes_defaults(self):
-        from kernel.syscall_handlers import _handle_goal_create
+        from AINDY.kernel.syscall_handlers import _handle_goal_create
 
         mock_db = MagicMock()
         mock_create = MagicMock(return_value={"id": "g1", "name": "N"})
@@ -710,12 +710,12 @@ class TestGoalHandlers:
 
 class TestResearchAndAgentHandlers:
     def test_research_query_raises_on_empty_query(self):
-        from kernel.syscall_handlers import _handle_research_query
+        from AINDY.kernel.syscall_handlers import _handle_research_query
         with pytest.raises(ValueError, match="requires 'query'"):
             _handle_research_query({}, _ctx())
 
     def test_research_query_returns_raw_result(self):
-        from kernel.syscall_handlers import _handle_research_query
+        from AINDY.kernel.syscall_handlers import _handle_research_query
 
         mock_research = MagicMock(web_search=MagicMock(return_value="Some result text"))
 
@@ -726,7 +726,7 @@ class TestResearchAndAgentHandlers:
         assert result["raw_result"] == "Some result text"
 
     def test_research_query_truncates_long_results(self):
-        from kernel.syscall_handlers import _handle_research_query
+        from AINDY.kernel.syscall_handlers import _handle_research_query
 
         long_text = "x" * 5000
         mock_research = MagicMock(web_search=MagicMock(return_value=long_text))
@@ -737,7 +737,7 @@ class TestResearchAndAgentHandlers:
         assert len(result["raw_result"]) == 2000
 
     def test_agent_suggest_tools_returns_empty_on_no_kpi(self):
-        from kernel.syscall_handlers import _handle_agent_suggest_tools
+        from AINDY.kernel.syscall_handlers import _handle_agent_suggest_tools
 
         mock_db = MagicMock()
         mock_infinity = MagicMock(get_latest_adjustment=MagicMock(return_value=None))
@@ -751,7 +751,7 @@ class TestResearchAndAgentHandlers:
         assert result["suggestions"] == []
 
     def test_agent_suggest_tools_returns_suggestions_for_low_focus(self):
-        from kernel.syscall_handlers import _handle_agent_suggest_tools
+        from AINDY.kernel.syscall_handlers import _handle_agent_suggest_tools
 
         mock_db = MagicMock()
         mock_infinity = MagicMock(get_latest_adjustment=MagicMock(return_value=None))

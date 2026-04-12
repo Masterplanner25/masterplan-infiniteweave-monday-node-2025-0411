@@ -5,12 +5,11 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel
 import logging
 
-from core.execution_gate import to_envelope
-from core.execution_helper import execute_with_pipeline
-from db.database import get_db
-from db.dao.memory_node_dao import MemoryNodeDAO
-from runtime.nodus_security import NodusSecurityError
-from services.auth_service import get_current_user
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.database import get_db
+from AINDY.runtime.nodus_security import NodusSecurityError
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
 logger = logging.getLogger(__name__)
@@ -33,7 +32,7 @@ def _flow_failure(result: dict) -> str:
 
 def _mem_run_flow(flow_name: str, payload: dict, db, user_id: str):
     """Run a memory flow and decode node HTTP errors."""
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     data = result.get("data")
 
@@ -209,6 +208,7 @@ async def create_node(
 ):
     def handler(ctx):
         from fastapi.encoders import jsonable_encoder
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(db)
         node = dao.save(
             content=body.content,
@@ -219,13 +219,29 @@ async def create_node(
             extra=body.extra or {},
         )
         data = jsonable_encoder(node) if not isinstance(node, dict) else node
-        data.setdefault("execution_envelope", to_envelope(
-            eu_id=None, trace_id=None, status="SUCCESS",
-            output=None, error=None, duration_ms=None, attempt_count=1,
-        ))
+        data.setdefault(
+            "execution_envelope",
+            to_envelope(
+                eu_id=None,
+                trace_id=None,
+                status="SUCCESS",
+                output=None,
+                error=None,
+                duration_ms=None,
+                attempt_count=1,
+            ),
+        )
         return data
 
-    return await _execute_memory(request, "memory.nodes.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
+    return await _execute_memory(
+        request,
+        "memory.nodes.create",
+        handler,
+        db=db,
+        current_user=current_user,
+        input_payload=body.model_dump(),
+        success_status_code=201,
+    )
 @router.get("/nodes/{node_id}")
 async def get_node(
     request: Request,
@@ -306,6 +322,7 @@ async def create_link(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(db)
         source_node = dao.get_by_id(body.source_id, user_id=user_id)
         target_node = dao.get_by_id(body.target_id, user_id=user_id)
@@ -371,7 +388,8 @@ async def search_similar_nodes(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from memory.embedding_service import generate_query_embedding
+        from AINDY.memory.embedding_service import generate_query_embedding
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         query_embedding = generate_query_embedding(body.query)
         dao = MemoryNodeDAO(db)
@@ -407,6 +425,7 @@ async def recall_memories(
                 detail={"error": "query_or_tags_required", "message": "Provide at least one of: query, tags"},
             )
 
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         dao = MemoryNodeDAO(db)
         results = dao.recall(
             query=body.query,
@@ -546,14 +565,14 @@ async def execute_nodus_task(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from utils.user_ids import require_user_id
-    from core.execution_dispatcher import async_heavy_execution_enabled
+    from AINDY.utils.user_ids import require_user_id
+    from AINDY.core.execution_dispatcher import async_heavy_execution_enabled
 
     user_id = str(require_user_id(current_user["sub"]))
 
     # ── Async path: submit as a tracked background job (202 Accepted) ─────────
     if request is not None and async_heavy_execution_enabled():
-        from platform_layer.async_job_service import submit_async_job, build_queued_response
+        from AINDY.platform_layer.async_job_service import submit_async_job, build_queued_response
         from fastapi.responses import JSONResponse
 
         log_id = submit_async_job(
@@ -575,7 +594,7 @@ async def execute_nodus_task(
 
     # ── Sync path: inline execution through the pipeline ─────────────────────
     async def _run_nodus():
-        from runtime.nodus_execution_service import execute_nodus_task_payload
+        from AINDY.runtime.nodus_execution_service import execute_nodus_task_payload
 
         try:
             result = execute_nodus_task_payload(

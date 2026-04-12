@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, Column, DateTime, String
 from sqlalchemy.dialects.postgresql import JSON, UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class DynamicNode(Base):

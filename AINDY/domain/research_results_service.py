@@ -2,10 +2,10 @@
 import logging
 import uuid
 from sqlalchemy.orm import Session
-from core.execution_signal_helper import queue_memory_capture
-from db.models.research_results import ResearchResult
-from schemas.research_results_schema import ResearchResultCreate
-from utils.trace_context import is_pipeline_active
+from AINDY.core.execution_signal_helper import queue_memory_capture
+from AINDY.db.models.research_results import ResearchResult
+from AINDY.schemas.research_results_schema import ResearchResultCreate
+from AINDY.utils.trace_context import is_pipeline_active
 
 logger = logging.getLogger(__name__)
 

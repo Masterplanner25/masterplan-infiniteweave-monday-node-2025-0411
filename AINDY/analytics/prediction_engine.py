@@ -3,9 +3,9 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import PingDB, ScoreSnapshotDB
-from analytics.delta_engine import compute_deltas, drop_point_ids_with_history
-from analytics.learning_engine import get_learning_thresholds, record_prediction
+from AINDY.db.models import PingDB, ScoreSnapshotDB
+from AINDY.analytics.delta_engine import compute_deltas, drop_point_ids_with_history
+from AINDY.analytics.learning_engine import get_learning_thresholds, record_prediction
 
 
 def _normalize(value: Optional[float]) -> float:

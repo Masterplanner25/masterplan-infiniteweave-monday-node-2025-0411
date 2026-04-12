@@ -11,7 +11,7 @@ def _request(path: str, method: str = "GET") -> Request:
 
 
 def test_execute_durable_search_reuses_cached_result(monkeypatch):
-    from domain import search_service
+    from AINDY.domain import search_service
 
     cached = {"query": "agency", "results": [{"company": "Acme"}], "history_id": "h-1"}
 
@@ -35,8 +35,8 @@ def test_execute_durable_search_reuses_cached_result(monkeypatch):
 
 
 def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
-    from routes.research_results_router import run_research_query
-    from schemas.research_results_schema import ResearchResultCreate
+    from AINDY.routes.research_results_router import run_research_query
+    from AINDY.schemas.research_results_schema import ResearchResultCreate
 
     captured: dict[str, object] = {}
 
@@ -176,7 +176,7 @@ def test_seo_analyze_route_uses_shared_search_contract(client, auth_headers, mon
 
 
 def test_legacy_twr_response_exposes_memory_learning_context():
-    from routes.main_router import _legacy_twr_response
+    from AINDY.routes.main_router import _legacy_twr_response
 
     class _Task:
         task_name = "Ship v1"

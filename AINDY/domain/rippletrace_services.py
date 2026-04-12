@@ -5,8 +5,8 @@ from datetime import datetime
 import uuid
 from sqlalchemy.orm import Session
 
-from db.models import DropPointDB, PingDB
-from utils.threadweaver import analyze_drop_point, classify_connection_type
+from AINDY.db.models import DropPointDB, PingDB
+from AINDY.utils.threadweaver import analyze_drop_point, classify_connection_type
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
     Ensures the referenced DropPoint exists before inserting.
     user_id is optional — system-internal calls (bridge hooks) pass None.
     """
-    from db.models import DropPointDB, PingDB
+    from AINDY.db.models import DropPointDB, PingDB
     from datetime import datetime
 
     drop_id = event.get("drop_point_id", "bridge")
@@ -134,7 +134,7 @@ def get_recent_ripples(db: Session, limit: int = 10, user_id: str = None):
     """
     Fetch the most recent ripple/ping events for dashboard visualization.
     """
-    from db.models import PingDB
+    from AINDY.db.models import PingDB
     q = db.query(PingDB).order_by(PingDB.date_detected.desc())
     if user_id:
         q = q.filter(PingDB.user_id == uuid.UUID(str(user_id)))

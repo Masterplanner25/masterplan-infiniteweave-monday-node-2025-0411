@@ -13,7 +13,7 @@ def get_user_scores(db: Session, user_ids: list[str | UUID]) -> dict[str, float]
     Accepts mixed str / UUID inputs and normalises them before querying.
     Returns an empty dict when user_ids is empty.
     """
-    from db.models.user_score import UserScore
+    from AINDY.db.models.user_score import UserScore
 
     if not user_ids:
         return {}

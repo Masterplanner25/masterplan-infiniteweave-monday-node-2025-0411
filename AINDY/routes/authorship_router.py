@@ -9,9 +9,9 @@ reclaimed, watermarked version with a visible + invisible authorship signature.
 
 # /routes/authorship_router.py
 from fastapi import APIRouter, Depends, Request
-from core.execution_helper import execute_with_pipeline_sync
-from domain.authorship_services import reclaim_authorship
-from services.auth_service import get_current_user
+from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.domain.authorship_services import reclaim_authorship
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depends(get_current_user)])
 

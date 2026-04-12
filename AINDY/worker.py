@@ -5,9 +5,9 @@ import time
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
-from db.database import SessionLocal
-from platform_layer import scheduler_service
-from domain import task_services
+from AINDY.db.database import SessionLocal
+from AINDY.platform_layer import scheduler_service
+from AINDY.domain import task_services
 logger = logging.getLogger(__name__)
 _RUNNING = True
 

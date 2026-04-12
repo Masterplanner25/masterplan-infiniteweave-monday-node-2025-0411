@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, DateTime, Float, Boolean
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class LearningRecordDB(Base):

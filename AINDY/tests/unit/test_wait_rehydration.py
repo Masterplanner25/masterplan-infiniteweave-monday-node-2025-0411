@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from core.wait_rehydration import rehydrate_waiting_eus, _TIME_SENTINEL
+from AINDY.core.wait_rehydration import rehydrate_waiting_eus, _TIME_SENTINEL
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

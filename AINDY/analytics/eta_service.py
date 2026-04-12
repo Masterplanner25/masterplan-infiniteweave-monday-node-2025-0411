@@ -14,10 +14,10 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from utils.user_ids import require_user_id
+from AINDY.utils.user_ids import require_user_id
 
-from db.models.masterplan import MasterPlan
-from db.models.task import Task
+from AINDY.db.models.masterplan import MasterPlan
+from AINDY.db.models.task import Task
 
 logger = logging.getLogger(__name__)
 

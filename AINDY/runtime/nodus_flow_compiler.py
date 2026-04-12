@@ -234,7 +234,7 @@ def compile_nodus_flow(script: str, flow_name: str) -> dict:
         script-level error.
     """
     try:
-        from nodus.runtime.embedding import NodusRuntime
+        from AINDY.nodus.runtime.embedding import NodusRuntime
     except ImportError as exc:
         raise RuntimeError(
             "Nodus VM not installed — run: pip install nodus"

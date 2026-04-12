@@ -1,7 +1,7 @@
 from sqlalchemy import Column, DateTime, JSON, String, func
 from sqlalchemy.dialects.postgresql import UUID
 
-from db.database import Base
+from AINDY.db.database import Base
 
 
 class SearchHistory(Base):

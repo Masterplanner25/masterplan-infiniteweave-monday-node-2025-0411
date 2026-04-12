@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 
-from db.models.agent_run import AgentRun
-from db.models.flow_run import FlowRun
-from db.models.system_event import SystemEvent
-from db.models.user import User
-from db.models.user_identity import UserIdentity
-from db.models.user_score import UserScore
-from services.auth_service import hash_password
-from memory.memory_persistence import MemoryNodeModel
+from AINDY.db.models.agent_run import AgentRun
+from AINDY.db.models.flow_run import FlowRun
+from AINDY.db.models.system_event import SystemEvent
+from AINDY.db.models.user import User
+from AINDY.db.models.user_identity import UserIdentity
+from AINDY.db.models.user_score import UserScore
+from AINDY.services.auth_service import hash_password
+from AINDY.memory.memory_persistence import MemoryNodeModel
 
 
 def test_identity_requires_auth(client):

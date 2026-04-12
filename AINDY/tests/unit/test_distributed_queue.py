@@ -30,7 +30,7 @@ os.environ.setdefault("EXECUTION_MODE", "thread")
 
 class TestQueueJobPayload:
     def _make(self, **kwargs):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         defaults = dict(
             job_id="job-1",
             task_name="agent.create_run",
@@ -48,7 +48,7 @@ class TestQueueJobPayload:
         assert "trace_id" in raw
 
     def test_round_trip(self):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         job = self._make()
         restored = QueueJobPayload.from_json(job.to_json())
         assert restored.job_id == job.job_id
@@ -58,7 +58,7 @@ class TestQueueJobPayload:
 
     def test_from_json_ignores_unknown_fields(self):
         import json
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         raw = json.dumps({
             "job_id": "j",
             "task_name": "t",
@@ -71,7 +71,7 @@ class TestQueueJobPayload:
         assert job.job_id == "j"
 
     def test_enqueued_at_auto_populated(self):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         job = QueueJobPayload(job_id="x", task_name="y")
         assert job.enqueued_at  # not empty
 
@@ -82,11 +82,11 @@ class TestQueueJobPayload:
 
 class TestInMemoryQueueBackend:
     def _backend(self):
-        from core.distributed_queue import InMemoryQueueBackend
+        from AINDY.core.distributed_queue import InMemoryQueueBackend
         return InMemoryQueueBackend()
 
     def _job(self, job_id="j1", task_name="t1"):
-        from core.distributed_queue import QueueJobPayload
+        from AINDY.core.distributed_queue import QueueJobPayload
         return QueueJobPayload(job_id=job_id, task_name=task_name)
 
     def test_enqueue_dequeue_roundtrip(self):
@@ -148,32 +148,32 @@ class TestInMemoryQueueBackend:
 
 class TestGetQueueFactory:
     def setup_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
     def teardown_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
     def test_returns_in_memory_when_testing(self):
         """TESTING=true (set at module top) → InMemoryQueueBackend."""
-        from core.distributed_queue import InMemoryQueueBackend, get_queue
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, get_queue
         q = get_queue()
         assert isinstance(q, InMemoryQueueBackend)
 
     def test_singleton_same_instance(self):
-        from core.distributed_queue import get_queue
+        from AINDY.core.distributed_queue import get_queue
         assert get_queue() is get_queue()
 
     def test_force_memory_returns_fresh_instance(self):
-        from core.distributed_queue import InMemoryQueueBackend, get_queue
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, get_queue
         a = get_queue(force_memory=True)
         b = get_queue(force_memory=True)
         assert isinstance(a, InMemoryQueueBackend)
         assert a is not b  # force_memory always returns a new instance
 
     def test_reset_queue_clears_singleton(self):
-        from core.distributed_queue import get_queue, reset_queue
+        from AINDY.core.distributed_queue import get_queue, reset_queue
         first = get_queue()
         reset_queue()
         second = get_queue()
@@ -188,13 +188,13 @@ class TestExecutionDispatcherDistributed:
     """Verify dispatch() routes to get_queue().enqueue() when EXECUTION_MODE=distributed."""
 
     def setup_method(self):
-        from core.distributed_queue import InMemoryQueueBackend, reset_queue
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, reset_queue
         reset_queue()
         self._mem_q = InMemoryQueueBackend()
         os.environ["EXECUTION_MODE"] = "distributed"
 
     def teardown_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         os.environ["EXECUTION_MODE"] = "thread"
         reset_queue()
 
@@ -207,11 +207,11 @@ class TestExecutionDispatcherDistributed:
         return stub
 
     def test_dispatch_distributed_enqueues_job(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
         with patch("core.distributed_queue.get_queue", return_value=self._mem_q):
-            from core.execution_dispatcher import dispatch
+            from AINDY.core.execution_dispatcher import dispatch
 
             eu = self._eu_stub()
             result = dispatch(
@@ -232,7 +232,7 @@ class TestExecutionDispatcherDistributed:
     def test_dispatch_thread_mode_does_not_enqueue(self):
         """EXECUTION_MODE=thread must still use ThreadPoolExecutor, not the queue."""
         os.environ["EXECUTION_MODE"] = "thread"
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
         executed = threading.Event()
@@ -242,7 +242,7 @@ class TestExecutionDispatcherDistributed:
                 "core.execution_dispatcher.async_heavy_execution_enabled",
                 return_value=False,
             ):
-                from core.execution_dispatcher import dispatch
+                from AINDY.core.execution_dispatcher import dispatch
 
                 eu = self._eu_stub()
                 eu.extra = {}  # no async_hint — will use INLINE
@@ -253,14 +253,14 @@ class TestExecutionDispatcherDistributed:
         assert self._mem_q.qsize() == 0
 
     def test_distributed_payload_carries_trace_context(self):
-        from core.distributed_queue import reset_queue
-        from utils.trace_context import set_trace_id, reset_trace_id
+        from AINDY.core.distributed_queue import reset_queue
+        from AINDY.utils.trace_context import set_trace_id, reset_trace_id
         reset_queue()
 
         tok = set_trace_id("trace-propagated-001")
         try:
             with patch("core.distributed_queue.get_queue", return_value=self._mem_q):
-                from core.execution_dispatcher import dispatch
+                from AINDY.core.execution_dispatcher import dispatch
 
                 eu = self._eu_stub()
                 dispatch(
@@ -284,7 +284,7 @@ class TestWorkerLoopProcessOneJob:
     """process_one_job() with fully mocked DB and execution layers."""
 
     def setup_method(self):
-        from core.distributed_queue import InMemoryQueueBackend, QueueJobPayload, reset_queue
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, QueueJobPayload, reset_queue
         reset_queue()
         self._q = InMemoryQueueBackend()
 
@@ -297,7 +297,7 @@ class TestWorkerLoopProcessOneJob:
         ))
 
     def teardown_method(self):
-        from core.distributed_queue import reset_queue
+        from AINDY.core.distributed_queue import reset_queue
         reset_queue()
 
     def test_job_is_processed_and_acked(self):
@@ -308,7 +308,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job") as mock_exec,
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
 
             result = process_one_job(self._q)
 
@@ -318,8 +318,8 @@ class TestWorkerLoopProcessOneJob:
 
     def test_returns_false_when_queue_empty(self):
         """No job available → returns False."""
-        from core.distributed_queue import InMemoryQueueBackend
-        from worker.worker_loop import process_one_job
+        from AINDY.core.distributed_queue import InMemoryQueueBackend
+        from AINDY.worker.worker_loop import process_one_job
 
         empty_q = InMemoryQueueBackend()
         result = process_one_job(empty_q)
@@ -332,7 +332,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job") as mock_exec,
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
 
             result = process_one_job(self._q)
 
@@ -347,7 +347,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job") as mock_exec,
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
 
             result = process_one_job(self._q)
 
@@ -359,7 +359,7 @@ class TestWorkerLoopProcessOneJob:
         captured_trace: list[str] = []
 
         def capture_exec(log_id, task_name, payload):
-            from utils.trace_context import get_trace_id
+            from AINDY.utils.trace_context import get_trace_id
             captured_trace.append(get_trace_id() or "")
 
         with (
@@ -368,7 +368,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job", side_effect=capture_exec),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(self._q)
 
         assert captured_trace == ["t-worker"]
@@ -381,8 +381,8 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job"),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from utils.trace_context import get_trace_id
-            from worker.worker_loop import process_one_job
+            from AINDY.utils.trace_context import get_trace_id
+            from AINDY.worker.worker_loop import process_one_job
 
             # Ensure no trace is set before we start.
             before = get_trace_id()
@@ -398,7 +398,7 @@ class TestWorkerLoopProcessOneJob:
 
         class _TrackingQueue:
             def dequeue(self, timeout=5):
-                from core.distributed_queue import QueueJobPayload
+                from AINDY.core.distributed_queue import QueueJobPayload
                 return QueueJobPayload(
                     job_id="fail-job",
                     task_name="boom",
@@ -417,7 +417,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job", side_effect=RuntimeError("boom")),
             patch("worker.worker_loop._emit_worker_event"),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             result = process_one_job(_TrackingQueue())
 
         assert result is True
@@ -437,7 +437,7 @@ class TestWorkerLoopProcessOneJob:
             patch("platform_layer.async_job_service._execute_job"),
             patch("worker.worker_loop._emit_worker_event", side_effect=capture_emit),
         ):
-            from worker.worker_loop import process_one_job
+            from AINDY.worker.worker_loop import process_one_job
             process_one_job(self._q)
 
         assert "job_started" in emitted_types
@@ -453,7 +453,7 @@ class TestThreadModeBackwardCompat:
 
     def test_inline_execution_unchanged(self):
         """eu.type=task + async disabled → INLINE, handler runs on caller thread."""
-        from core.execution_dispatcher import ExecutionMode, dispatch
+        from AINDY.core.execution_dispatcher import ExecutionMode, dispatch
 
         ran = []
 

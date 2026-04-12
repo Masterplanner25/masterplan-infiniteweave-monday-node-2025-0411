@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from db.models import (
+from AINDY.db.models import (
     DropPointDB,
     LearningRecordDB,
     LearningThresholdDB,
@@ -12,7 +12,7 @@ from db.models import (
     ScoreSnapshotDB,
     StrategyDB,
 )
-from analytics import (
+from AINDY.analytics import (
     causal_engine,
     delta_engine,
     learning_engine,
@@ -20,7 +20,7 @@ from analytics import (
     prediction_engine,
     recommendation_engine,
 )
-from domain import content_generator, strategy_engine
+from AINDY.domain import content_generator, strategy_engine
 
 
 class FakeQuery:

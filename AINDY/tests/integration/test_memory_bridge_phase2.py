@@ -39,7 +39,7 @@ def make_mock_openai_response(embedding=None):
 class TestEmbeddingService:
 
     def test_embedding_service_importable(self):
-        from memory import embedding_service
+        from AINDY.memory import embedding_service
         assert embedding_service is not None
     def test_generate_embedding_returns_1536_dims(self):
         """generate_embedding returns 1536-dim list, mocking OpenAI."""
@@ -47,7 +47,7 @@ class TestEmbeddingService:
         mock_client.embeddings.create.return_value = make_mock_openai_response()
 
         with patch("memory.embedding_service._client", mock_client):
-            from memory.embedding_service import generate_embedding
+            from AINDY.memory.embedding_service import generate_embedding
             result = generate_embedding("hello world")
 
         assert isinstance(result, list)
@@ -56,19 +56,19 @@ class TestEmbeddingService:
 
     def test_empty_content_returns_zero_vector(self):
         """Empty or whitespace-only input returns zero vector without calling OpenAI."""
-        from memory.embedding_service import generate_embedding
+        from AINDY.memory.embedding_service import generate_embedding
         assert generate_embedding("") == [0.0] * 1536
         assert generate_embedding("   ") == [0.0] * 1536
 
     def test_cosine_similarity_identical_vectors(self):
         """Identical non-zero vectors have similarity 1.0."""
-        from memory.embedding_service import cosine_similarity_python
+        from AINDY.memory.embedding_service import cosine_similarity_python
         result = cosine_similarity_python(MOCK_EMBEDDING, MOCK_EMBEDDING)
         assert abs(result - 1.0) < 1e-6
 
     def test_cosine_similarity_orthogonal_vectors(self):
         """Orthogonal vectors have similarity 0.0."""
-        from memory.embedding_service import cosine_similarity_python
+        from AINDY.memory.embedding_service import cosine_similarity_python
         a = [1.0] + [0.0] * 1535
         b = [0.0, 1.0] + [0.0] * 1534
         result = cosine_similarity_python(a, b)
@@ -96,7 +96,7 @@ class TestEmbeddingService:
 
     def test_cosine_similarity_falls_back_to_python(self):
         """cosine_similarity falls back to Python when C++ import fails."""
-        from memory.embedding_service import cosine_similarity_python
+        from AINDY.memory.embedding_service import cosine_similarity_python
 
         # The Python fallback itself must work correctly
         result = cosine_similarity_python(MOCK_EMBEDDING, MOCK_EMBEDDING)
@@ -117,7 +117,7 @@ class TestEmbeddingService:
 
         with patch("memory.embedding_service._client", mock_client):
             with patch("memory.embedding_service.time.sleep"):
-                from memory.embedding_service import generate_embedding
+                from AINDY.memory.embedding_service import generate_embedding
                 result = generate_embedding("test content")
 
         assert result == [0.0] * 1536
@@ -131,7 +131,7 @@ class TestMemoryNodeEmbeddingColumn:
 
     def test_embedding_column_on_model(self):
         """MemoryNodeModel ORM mapper has an 'embedding' attribute."""
-        from memory.memory_persistence import MemoryNodeModel
+        from AINDY.memory.memory_persistence import MemoryNodeModel
         from sqlalchemy import inspect as sa_inspect
         mapper = sa_inspect(MemoryNodeModel)
         col_names = [c.key for c in mapper.attrs]
@@ -223,19 +223,19 @@ class TestMemoryTypeEnforcement:
 
     def test_valid_node_types(self):
         """VALID_NODE_TYPES contains exactly 4 valid types."""
-        from memory.memory_persistence import VALID_NODE_TYPES
+        from AINDY.memory.memory_persistence import VALID_NODE_TYPES
         assert VALID_NODE_TYPES == {"decision", "outcome", "insight", "relationship"}
         assert len(VALID_NODE_TYPES) == 4
 
     def test_invalid_type_not_in_set(self):
         """'generic' and 'research' are not valid node types."""
-        from memory.memory_persistence import VALID_NODE_TYPES
+        from AINDY.memory.memory_persistence import VALID_NODE_TYPES
         assert "generic" not in VALID_NODE_TYPES
         assert "research" not in VALID_NODE_TYPES
 
     def test_node_type_literal_in_schema(self):
         """CreateNodeRequest accepts valid node_type, rejects invalid."""
-        from routes.memory_router import CreateNodeRequest
+        from AINDY.routes.memory_router import CreateNodeRequest
         from pydantic import ValidationError
 
         # Valid types should parse without error
@@ -249,7 +249,7 @@ class TestMemoryTypeEnforcement:
 
     def test_none_node_type_allowed_in_phase2(self):
         """node_type=None is allowed (optional field)."""
-        from routes.memory_router import CreateNodeRequest
+        from AINDY.routes.memory_router import CreateNodeRequest
         req = CreateNodeRequest(content="x", source="test", node_type=None)
         assert req.node_type is None
 

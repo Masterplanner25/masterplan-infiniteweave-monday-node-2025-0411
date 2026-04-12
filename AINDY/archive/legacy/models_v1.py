@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, Float, DateTime, func
-from config import Base  
+from AINDY.config import Base  
 from seo import SEOInput, MetaInput
 
 class CalculationResult(Base):

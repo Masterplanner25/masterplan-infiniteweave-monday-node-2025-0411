@@ -10,12 +10,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline
-from core.execution_signal_helper import queue_memory_capture
-from db.dao.memory_node_dao import MemoryNodeDAO
-from db.database import get_db
-from config import settings
-from services.auth_service import get_current_user, verify_api_key
+from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.core.execution_signal_helper import queue_memory_capture
+from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+from AINDY.db.database import get_db
+from AINDY.config import settings
+from AINDY.services.auth_service import get_current_user, verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -275,7 +275,7 @@ async def bridge_user_event(
 ):
 
     def handler(ctx):
-        from domain.bridge_service import log_bridge_user_event
+        from AINDY.domain.bridge_service import log_bridge_user_event
 
         timestamp = event.timestamp or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         occurred_at = _parse_event_timestamp(event.timestamp) or datetime.now(timezone.utc)

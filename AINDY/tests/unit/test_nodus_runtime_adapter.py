@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from runtime.nodus_runtime_adapter import (
+from AINDY.runtime.nodus_runtime_adapter import (
     NodusExecutionContext,
     NodusExecutionResult,
     NodusRuntimeAdapter,

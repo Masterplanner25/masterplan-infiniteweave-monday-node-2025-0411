@@ -3,21 +3,21 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from schemas.freelance import (
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.schemas.freelance import (
     FeedbackCreate,
     FreelanceDeliveryConfigUpdate,
     FreelanceOrderCreate,
 )
-from services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depends(get_current_user)])
 
 
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str):
-    from runtime.flow_engine import run_flow
+    from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
         error = result.get("error", "")

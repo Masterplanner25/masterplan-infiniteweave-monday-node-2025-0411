@@ -24,9 +24,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import kernel.syscall_dispatcher as _disp_mod
-import kernel.syscall_registry as _reg_mod
-from kernel.syscall_dispatcher import (
+import AINDY.kernel.syscall_dispatcher as _disp_mod
+import AINDY.kernel.syscall_registry as _reg_mod
+from AINDY.kernel.syscall_dispatcher import (
     DEFAULT_NODUS_CAPABILITIES,
     SyscallContext,
     _EU_ID_CTX,
@@ -35,8 +35,8 @@ from kernel.syscall_dispatcher import (
     get_dispatcher,
     register_syscall,
 )
-from kernel.syscall_dispatcher import SyscallDispatcher
-from kernel.syscall_registry import SYSCALL_REGISTRY
+from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -313,7 +313,7 @@ class TestMemoryReadHandler:
     """Test _handle_memory_read by calling it directly with mocked dependencies."""
 
     def _call(self, payload: dict, user_id: str = "u1") -> dict:
-        from kernel.syscall_registry import _handle_memory_read
+        from AINDY.kernel.syscall_registry import _handle_memory_read
         ctx = _ctx(user_id=user_id)
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -330,7 +330,7 @@ class TestMemoryReadHandler:
             return _handle_memory_read(payload, ctx), mock_dao
 
     def test_recall_called_with_user_id(self):
-        from kernel.syscall_registry import _handle_memory_read
+        from AINDY.kernel.syscall_registry import _handle_memory_read
         ctx = _ctx(user_id="u-test")
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -346,7 +346,7 @@ class TestMemoryReadHandler:
         assert call_kwargs["limit"] == 3
 
     def test_returns_nodes_and_count(self):
-        from kernel.syscall_registry import _handle_memory_read
+        from AINDY.kernel.syscall_registry import _handle_memory_read
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -360,7 +360,7 @@ class TestMemoryReadHandler:
         assert len(result["nodes"]) == 2
 
     def test_default_limit_is_5(self):
-        from kernel.syscall_registry import _handle_memory_read
+        from AINDY.kernel.syscall_registry import _handle_memory_read
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -384,7 +384,7 @@ class TestMemoryReadHandler:
 
 class TestMemoryWriteHandler:
     def _call_write(self, payload: dict) -> dict:
-        from kernel.syscall_registry import _handle_memory_write
+        from AINDY.kernel.syscall_registry import _handle_memory_write
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -405,7 +405,7 @@ class TestMemoryWriteHandler:
         assert result["node"]["id"] == "new-node"
 
     def test_empty_content_raises_value_error(self):
-        from kernel.syscall_registry import _handle_memory_write
+        from AINDY.kernel.syscall_registry import _handle_memory_write
         ctx = _ctx()
         with pytest.raises(ValueError, match="content"):
             _handle_memory_write({"content": ""}, ctx)
@@ -421,7 +421,7 @@ class TestMemoryWriteHandler:
 
 class TestMemorySearchHandler:
     def test_search_returns_nodes(self):
-        from kernel.syscall_registry import _handle_memory_search
+        from AINDY.kernel.syscall_registry import _handle_memory_search
         ctx = _ctx()
         mock_db = MagicMock()
         mock_dao = MagicMock()
@@ -434,7 +434,7 @@ class TestMemorySearchHandler:
         assert result["count"] == 1
 
     def test_empty_query_raises(self):
-        from kernel.syscall_registry import _handle_memory_search
+        from AINDY.kernel.syscall_registry import _handle_memory_search
         ctx = _ctx()
         with pytest.raises(ValueError, match="query"):
             _handle_memory_search({"query": ""}, ctx)
@@ -450,13 +450,13 @@ class TestMemorySearchHandler:
 
 class TestFlowRunHandler:
     def test_missing_flow_name_raises(self):
-        from kernel.syscall_registry import _handle_flow_run
+        from AINDY.kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         with pytest.raises(ValueError, match="flow_name"):
             _handle_flow_run({}, ctx)
 
     def test_unknown_flow_raises(self):
-        from kernel.syscall_registry import _handle_flow_run
+        from AINDY.kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         mock_registry = {}
         with patch.dict("sys.modules", {
@@ -470,7 +470,7 @@ class TestFlowRunHandler:
                 _handle_flow_run({"flow_name": "NO_SUCH"}, ctx)
 
     def test_runs_flow_and_returns_result(self):
-        from kernel.syscall_registry import _handle_flow_run
+        from AINDY.kernel.syscall_registry import _handle_flow_run
         ctx = _ctx()
         mock_db = MagicMock()
         mock_runner = MagicMock()
@@ -497,13 +497,13 @@ class TestFlowRunHandler:
 
 class TestEventEmitHandler:
     def test_missing_event_type_raises(self):
-        from kernel.syscall_registry import _handle_event_emit
+        from AINDY.kernel.syscall_registry import _handle_event_emit
         ctx = _ctx()
         with pytest.raises(ValueError, match="event_type"):
             _handle_event_emit({}, ctx)
 
     def test_emit_called_with_correct_type(self):
-        from kernel.syscall_registry import _handle_event_emit
+        from AINDY.kernel.syscall_registry import _handle_event_emit
         ctx = _ctx(user_id="u1", trace_id="t1")
         mock_db = MagicMock()
         mock_emit = MagicMock(return_value="ev-123")
@@ -519,7 +519,7 @@ class TestEventEmitHandler:
         assert call_kwargs["trace_id"] == "t1"
 
     def test_returns_event_id(self):
-        from kernel.syscall_registry import _handle_event_emit
+        from AINDY.kernel.syscall_registry import _handle_event_emit
         import uuid as _uuid
         ctx = _ctx()
         ev_id = _uuid.uuid4()
@@ -557,7 +557,7 @@ class TestNodusIntegration:
 
     def test_sys_key_in_initial_globals(self):
         """After _execute() builds initial_globals, 'sys' must be callable."""
-        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter
+        from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter
         # We check that the code path to build initial_globals includes 'sys'
         # by inspecting the source rather than running the VM (VM not required).
         import inspect
@@ -566,7 +566,7 @@ class TestNodusIntegration:
 
     def test_sys_global_is_callable(self):
         """_nodus_syscall must be a callable wrapping get_dispatcher().dispatch."""
-        from kernel.syscall_dispatcher import DEFAULT_NODUS_CAPABILITIES, SyscallContext, get_dispatcher
+        from AINDY.kernel.syscall_dispatcher import DEFAULT_NODUS_CAPABILITIES, SyscallContext, get_dispatcher
 
         # Simulate what nodus_runtime_adapter builds
         ctx = self._make_exec_context()

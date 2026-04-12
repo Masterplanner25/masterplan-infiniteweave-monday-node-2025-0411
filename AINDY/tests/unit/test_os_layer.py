@@ -21,13 +21,13 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from kernel.tenant_context import (
+from AINDY.kernel.tenant_context import (
     TenantContext,
     TENANT_VIOLATION,
     build_tenant_context,
     tenant_context_from_syscall_context,
 )
-from kernel.resource_manager import (
+from AINDY.kernel.resource_manager import (
     MAX_CONCURRENT_PER_TENANT,
     MAX_CPU_TIME_MS,
     MAX_SYSCALLS_PER_EXECUTION,
@@ -35,7 +35,7 @@ from kernel.resource_manager import (
     ResourceManager,
     ResourceLimitError,
 )
-from kernel.scheduler_engine import (
+from AINDY.kernel.scheduler_engine import (
     PRIORITY_HIGH,
     PRIORITY_LOW,
     PRIORITY_NORMAL,
@@ -613,7 +613,7 @@ class TestSchedulerNotifyEvent:
     """notify_event() matches on wait_condition.event_name and correlation_id."""
 
     def _register(self, se, *, run_id, event_name, corr=None, priority=PRIORITY_NORMAL, eu_type="flow"):
-        from core.wait_condition import WaitCondition
+        from AINDY.core.wait_condition import WaitCondition
         wc = WaitCondition.for_event(event_name, correlation_id=corr)
         calls = []
         se.register_wait(
@@ -700,7 +700,7 @@ class TestSchedulerNotifyEvent:
         assert count == 1
 
     def test_notify_event_external_type_resumes(self):
-        from core.wait_condition import WaitCondition
+        from AINDY.core.wait_condition import WaitCondition
         se = SchedulerEngine()
         wc = WaitCondition.for_external("webhook.received")
         se.register_wait(
@@ -716,7 +716,7 @@ class TestSchedulerNotifyEvent:
 
     def test_notify_event_time_type_not_resumed(self):
         """Time-based waits are NOT resumed by notify_event (tick_time_waits handles them)."""
-        from core.wait_condition import WaitCondition
+        from AINDY.core.wait_condition import WaitCondition
         import datetime
         se = SchedulerEngine()
         future = datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone.utc)
@@ -741,7 +741,7 @@ class TestSchedulerNotifyEvent:
 
 class TestSyscallDispatcherOsLayer:
     def _ctx(self, user_id="user-1", caps=None):
-        from kernel.syscall_registry import SyscallContext
+        from AINDY.kernel.syscall_registry import SyscallContext
         return SyscallContext(
             execution_unit_id="eu-test",
             user_id=user_id,
@@ -750,8 +750,8 @@ class TestSyscallDispatcherOsLayer:
         )
 
     def test_dispatch_blocks_on_missing_user_id(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import register_syscall
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.noop", lambda p, c: {}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -761,8 +761,8 @@ class TestSyscallDispatcherOsLayer:
         assert "TENANT_VIOLATION" in result["error"]
 
     def test_dispatch_records_syscall_usage(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import register_syscall
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.echo", lambda p, c: {"ok": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -778,8 +778,8 @@ class TestSyscallDispatcherOsLayer:
         assert snap["syscall_count"] >= 1
 
     def test_dispatch_blocks_on_syscall_quota_exceeded(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import register_syscall
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.heavy", lambda p, c: {}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -796,8 +796,8 @@ class TestSyscallDispatcherOsLayer:
         assert RESOURCE_LIMIT_EXCEEDED in result["error"]
 
     def test_dispatch_succeeds_with_valid_tenant(self):
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import register_syscall
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.ok", lambda p, c: {"done": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -812,8 +812,8 @@ class TestSyscallDispatcherOsLayer:
 
     def test_dispatch_rm_failure_is_non_fatal(self):
         """ResourceManager failure must not kill a successful syscall."""
-        from kernel.syscall_dispatcher import SyscallDispatcher
-        from kernel.syscall_registry import register_syscall
+        from AINDY.kernel.syscall_dispatcher import SyscallDispatcher
+        from AINDY.kernel.syscall_registry import register_syscall
 
         register_syscall("sys.v1.test.safe", lambda p, c: {"safe": True}, "test.cap", "test")
         dispatcher = SyscallDispatcher()
@@ -834,25 +834,25 @@ class TestSyscallDispatcherOsLayer:
 
 class TestExecutionUnitModel:
     def test_model_has_tenant_id(self):
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
         cols = {c.name for c in ExecutionUnit.__table__.columns}
         assert "tenant_id" in cols
 
     def test_model_has_resource_fields(self):
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
         cols = {c.name for c in ExecutionUnit.__table__.columns}
         assert "cpu_time_ms" in cols
         assert "memory_bytes" in cols
         assert "syscall_count" in cols
 
     def test_model_has_scheduling_fields(self):
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
         cols = {c.name for c in ExecutionUnit.__table__.columns}
         assert "priority" in cols
         assert "quota_group" in cols
 
     def test_model_priority_default_is_normal(self):
-        from db.models.execution_unit import ExecutionUnit
+        from AINDY.db.models.execution_unit import ExecutionUnit
         priority_col = next(c for c in ExecutionUnit.__table__.columns if c.name == "priority")
         assert priority_col.default.arg == "normal"
 
@@ -945,7 +945,7 @@ class TestSchedulerResourceIntegration:
         assert "resumed" in results
 
     def test_resource_manager_singleton_is_stable(self):
-        from kernel.resource_manager import get_resource_manager
+        from AINDY.kernel.resource_manager import get_resource_manager
         rm1 = get_resource_manager()
         rm2 = get_resource_manager()
         assert rm1 is rm2

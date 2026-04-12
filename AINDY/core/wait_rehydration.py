@@ -40,8 +40,8 @@ from typing import TYPE_CHECKING
 # Module-level imports that are safe to resolve immediately (no circular deps).
 # Keeping them here makes them patchable in tests via
 # "core.wait_rehydration.<name>".
-from core.wait_condition import WaitCondition, WAIT_TYPE_TIME
-from kernel.scheduler_engine import get_scheduler_engine
+from AINDY.core.wait_condition import WaitCondition, WAIT_TYPE_TIME
+from AINDY.kernel.scheduler_engine import get_scheduler_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -62,7 +62,7 @@ def rehydrate_waiting_eus(db: "Session") -> int:
     Returns:
         Number of EUs successfully re-registered.
     """
-    from db.models.execution_unit import ExecutionUnit
+    from AINDY.db.models.execution_unit import ExecutionUnit
 
     scheduler = get_scheduler_engine()
 
@@ -155,14 +155,14 @@ def rehydrate_waiting_eus(db: "Session") -> int:
         # - No flow_run_id (standalone EU) → no check needed; proceed directly.
         def _make_resume_callback(eid: str, flow_run_id: str | None):
             def _callback():
-                from db.database import SessionLocal
-                from core.execution_unit_service import ExecutionUnitService
+                from AINDY.db.database import SessionLocal
+                from AINDY.core.execution_unit_service import ExecutionUnitService
 
                 _db = SessionLocal()
                 try:
                     # ── FlowRun ownership guard ───────────────────────────────
                     if flow_run_id:
-                        from db.models.flow_run import FlowRun as _FlowRun
+                        from AINDY.db.models.flow_run import FlowRun as _FlowRun
 
                         fr = (
                             _db.query(_FlowRun)

@@ -3,10 +3,10 @@ from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.execution_helper import execute_with_pipeline
+from AINDY.core.execution_helper import execute_with_pipeline
 
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 
 router = APIRouter(prefix="/scores", tags=["Infinity Score"])
@@ -23,7 +23,7 @@ class FeedbackRequest(BaseModel):
 
 
 def _latest_adjustment_payload(user_id: str, db: Session):
-    from domain.infinity_loop import get_latest_adjustment, serialize_adjustment
+    from AINDY.domain.infinity_loop import get_latest_adjustment, serialize_adjustment
 
     latest = get_latest_adjustment(user_id, db)
     if latest is None:
@@ -43,7 +43,7 @@ async def get_my_score(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
 
         result = run_flow("score_get", {}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
@@ -69,7 +69,7 @@ async def recalculate_my_score(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "score_recalculate",
             {},
@@ -94,7 +94,7 @@ async def get_score_history(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("score_history", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise HTTPException(status_code=500, detail="Score history fetch failed")
@@ -114,7 +114,7 @@ async def record_score_feedback(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "score_feedback",
             {
@@ -142,7 +142,7 @@ async def get_score_feedback(
     current_user=Depends(get_current_user),
 ):
     def handler(ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("score_feedback_list", {"limit": limit}, db=db, user_id=str(current_user["sub"]))
         if result.get("status") == "error":
             raise HTTPException(status_code=500, detail="Score feedback list failed")

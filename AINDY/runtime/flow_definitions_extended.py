@@ -12,7 +12,7 @@ Special HTTP responses are encoded in the result key as:
   {"_http_error": {"status_code": N, "detail": ...}} for 4xx/5xx from nodes
 """
 import logging
-from runtime.flow_engine import FLOW_REGISTRY, register_flow, register_node
+from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow, register_node
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ _single = lambda start: {"start": start, "edges": {}, "end": [start]}  # noqa: E
 def arm_logs_node(state, context):
     try:
         from uuid import UUID
-        from db.models.arm_models import AnalysisResult, CodeGeneration
+        from AINDY.db.models.arm_models import AnalysisResult, CodeGeneration
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         limit = state.get("limit", 20)
@@ -91,7 +91,7 @@ def arm_logs_node(state, context):
 @register_node("arm_config_get_node")
 def arm_config_get_node(state, context):
     try:
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         return {"status": "SUCCESS", "output_patch": {"arm_config_get_result": ConfigManager().get_all()}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
@@ -100,7 +100,7 @@ def arm_config_get_node(state, context):
 @register_node("arm_config_update_node")
 def arm_config_update_node(state, context):
     try:
-        from modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
         updated = ConfigManager().update(state.get("updates", {}))
         return {"status": "SUCCESS", "output_patch": {"arm_config_update_result": {"status": "updated", "config": updated}}}
     except Exception as e:
@@ -110,7 +110,7 @@ def arm_config_update_node(state, context):
 @register_node("arm_metrics_node")
 def arm_metrics_node(state, context):
     try:
-        from analytics.arm_metrics_service import ARMMetricsService
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService
         db = context.get("db")
         user_id = context.get("user_id")
         window = state.get("window", 30)
@@ -123,8 +123,8 @@ def arm_metrics_node(state, context):
 @register_node("arm_config_suggest_node")
 def arm_config_suggest_node(state, context):
     try:
-        from modules.deepseek.config_manager_deepseek import ConfigManager
-        from analytics.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
+        from AINDY.modules.deepseek.config_manager_deepseek import ConfigManager
+        from AINDY.analytics.arm_metrics_service import ARMMetricsService, ARMConfigSuggestionEngine
         db = context.get("db")
         user_id = context.get("user_id")
         window = state.get("window", 30)
@@ -149,7 +149,7 @@ def arm_config_suggest_node(state, context):
 @register_node("goals_list_node")
 def goals_list_node(state, context):
     try:
-        from domain.goal_service import get_active_goals
+        from AINDY.domain.goal_service import get_active_goals
         db = context.get("db")
         user_id = context.get("user_id")
         return {"status": "SUCCESS", "output_patch": {"goals_list_result": get_active_goals(db, user_id)}}
@@ -160,7 +160,7 @@ def goals_list_node(state, context):
 @register_node("goals_state_node")
 def goals_state_node(state, context):
     try:
-        from domain.goal_service import detect_goal_drift, get_goal_states
+        from AINDY.domain.goal_service import detect_goal_drift, get_goal_states
         db = context.get("db")
         user_id = context.get("user_id")
         result = {
@@ -178,13 +178,13 @@ def goals_state_node(state, context):
 def score_get_node(state, context):
     try:
         import uuid
-        from db.models.user_score import UserScore, KPI_WEIGHTS
+        from AINDY.db.models.user_score import UserScore, KPI_WEIGHTS
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
 
         score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
         if not score:
-            from domain.infinity_orchestrator import execute as execute_infinity_orchestrator
+            from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
             result = execute_infinity_orchestrator(user_id=user_id, db=db, trigger_event="manual")
             if result:
                 return {"status": "SUCCESS", "output_patch": {"score_get_result": result["score"]}}
@@ -192,7 +192,7 @@ def score_get_node(state, context):
                 "user_id": str(user_id), "master_score": 0.0, "kpis": {}, "message": "No score yet.",
             }}}
 
-        from domain.infinity_loop import get_latest_adjustment, serialize_adjustment
+        from AINDY.domain.infinity_loop import get_latest_adjustment, serialize_adjustment
         latest = get_latest_adjustment(user_id=str(user_id), db=db)
         serialized = serialize_adjustment(latest)
         latest_payload = None
@@ -242,7 +242,7 @@ def score_get_node(state, context):
 def score_history_node(state, context):
     try:
         import uuid
-        from db.models.user_score import ScoreHistory
+        from AINDY.db.models.user_score import ScoreHistory
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         limit = state.get("limit", 30)
@@ -272,7 +272,7 @@ def score_history_node(state, context):
 def score_feedback_list_node(state, context):
     try:
         import uuid
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         limit = state.get("limit", 50)
@@ -297,8 +297,8 @@ def score_feedback_list_node(state, context):
 def leadgen_list_node(state, context):
     try:
         import uuid
-        from db.models.leadgen_model import LeadGenResult
-        from schemas.leadgen_schema import LeadGenItem
+        from AINDY.db.models.leadgen_model import LeadGenResult
+        from AINDY.schemas.leadgen_schema import LeadGenItem
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         results = (
@@ -328,7 +328,7 @@ def leadgen_list_node(state, context):
 @register_node("leadgen_preview_search_node")
 def leadgen_preview_search_node(state, context):
     try:
-        from domain.search_service import search_leads
+        from AINDY.domain.search_service import search_leads
         db = context.get("db")
         user_id = context.get("user_id")
         query = state.get("query", "")
@@ -344,7 +344,7 @@ def leadgen_preview_search_node(state, context):
 def tasks_list_node(state, context):
     try:
         import uuid
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         tasks = db.query(Task).filter(Task.user_id == user_id).all()
@@ -374,7 +374,7 @@ def tasks_list_node(state, context):
 def tasks_recurrence_check_node(state, context):
     try:
         import threading
-        from domain.task_services import handle_recurrence
+        from AINDY.domain.task_services import handle_recurrence
         t = threading.Thread(target=handle_recurrence, daemon=True)
         t.start()
         return {"status": "SUCCESS", "output_patch": {"tasks_recurrence_check_result": {
@@ -389,14 +389,14 @@ def tasks_recurrence_check_node(state, context):
 @register_node("agent_run_create_node")
 def agent_run_create_node(state, context):
     try:
-        from agents.agent_runtime import create_run, execute_run, to_execution_response
-        from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
-        from platform_layer.async_job_service import defer_async_job
-        from utils.trace_context import ensure_trace_id
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_runtime import create_run, execute_run, to_execution_response
+        from AINDY.agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
+        from AINDY.platform_layer.async_job_service import defer_async_job
+        from AINDY.utils.trace_context import ensure_trace_id
+        from AINDY.utils.uuid_utils import normalize_uuid
 
-        from core.execution_dispatcher import async_heavy_execution_enabled
-        from platform_layer.async_job_service import submit_autonomous_async_job
+        from AINDY.core.execution_dispatcher import async_heavy_execution_enabled
+        from AINDY.platform_layer.async_job_service import submit_autonomous_async_job
 
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
@@ -457,9 +457,9 @@ def agent_run_create_node(state, context):
 @register_node("agent_runs_list_node")
 def agent_runs_list_node(state, context):
     try:
-        from db.models.agent_run import AgentRun
-        from agents.agent_runtime import _run_to_dict
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentRun
+        from AINDY.agents.agent_runtime import _run_to_dict
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         status_filter = state.get("status")
@@ -476,9 +476,9 @@ def agent_runs_list_node(state, context):
 @register_node("agent_run_get_node")
 def agent_run_get_node(state, context):
     try:
-        from db.models.agent_run import AgentRun
-        from agents.agent_runtime import _run_to_dict
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentRun
+        from AINDY.agents.agent_runtime import _run_to_dict
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         try:
@@ -498,11 +498,11 @@ def agent_run_get_node(state, context):
 @register_node("agent_run_approve_node")
 def agent_run_approve_node(state, context):
     try:
-        from agents.agent_runtime import approve_run, to_execution_response
-        from agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
-        from platform_layer.async_job_service import defer_async_job
-        from utils.trace_context import ensure_trace_id
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_runtime import approve_run, to_execution_response
+        from AINDY.agents.autonomous_controller import build_decision_response, evaluate_live_trigger, record_decision
+        from AINDY.platform_layer.async_job_service import defer_async_job
+        from AINDY.utils.trace_context import ensure_trace_id
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         run_id = state.get("run_id")
@@ -547,8 +547,8 @@ def agent_run_approve_node(state, context):
 @register_node("agent_run_reject_node")
 def agent_run_reject_node(state, context):
     try:
-        from agents.agent_runtime import reject_run, to_execution_response
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_runtime import reject_run, to_execution_response
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         run = reject_run(run_id=state.get("run_id"), user_id=user_id, db=db)
@@ -562,9 +562,9 @@ def agent_run_reject_node(state, context):
 @register_node("agent_run_recover_node")
 def agent_run_recover_node(state, context):
     try:
-        from agents.agent_runtime import to_execution_response
-        from agents.stuck_run_service import recover_stuck_agent_run
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_runtime import to_execution_response
+        from AINDY.agents.stuck_run_service import recover_stuck_agent_run
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         result = recover_stuck_agent_run(
@@ -584,8 +584,8 @@ def agent_run_recover_node(state, context):
 @register_node("agent_run_replay_node")
 def agent_run_replay_node(state, context):
     try:
-        from agents.agent_runtime import replay_run, to_execution_response
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_runtime import replay_run, to_execution_response
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         new_run = replay_run(run_id=state.get("run_id"), user_id=user_id, db=db)
@@ -599,8 +599,8 @@ def agent_run_replay_node(state, context):
 @register_node("agent_run_steps_node")
 def agent_run_steps_node(state, context):
     try:
-        from db.models.agent_run import AgentRun, AgentStep
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentRun, AgentStep
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         run_id = normalize_uuid(state.get("run_id"))
@@ -637,9 +637,9 @@ def agent_run_steps_node(state, context):
 @register_node("agent_run_events_node")
 def agent_run_events_node(state, context):
     try:
-        from db.models.agent_run import AgentRun
-        from agents.agent_runtime import get_run_events
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentRun
+        from AINDY.agents.agent_runtime import get_run_events
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         run_id = state.get("run_id")
@@ -661,7 +661,7 @@ def agent_run_events_node(state, context):
 @register_node("agent_tools_list_node")
 def agent_tools_list_node(state, context):
     try:
-        from agents.agent_tools import TOOL_REGISTRY
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
         data = [
             {
                 "name": name,
@@ -682,9 +682,9 @@ def agent_tools_list_node(state, context):
 @register_node("agent_trust_get_node")
 def agent_trust_get_node(state, context):
     try:
-        from db.models.agent_run import AgentTrustSettings
-        from agents.capability_service import get_auto_grantable_tools
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentTrustSettings
+        from AINDY.agents.capability_service import get_auto_grantable_tools
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         trust = db.query(AgentTrustSettings).filter(AgentTrustSettings.user_id == user_id).first()
@@ -708,9 +708,9 @@ def agent_trust_get_node(state, context):
 def agent_trust_update_node(state, context):
     try:
         from datetime import datetime, timezone
-        from db.models.agent_run import AgentTrustSettings
-        from agents.agent_tools import TOOL_REGISTRY
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent_run import AgentTrustSettings
+        from AINDY.agents.agent_tools import TOOL_REGISTRY
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         trust = db.query(AgentTrustSettings).filter(AgentTrustSettings.user_id == user_id).first()
@@ -747,9 +747,9 @@ def agent_trust_update_node(state, context):
 @register_node("agent_suggestions_get_node")
 def agent_suggestions_get_node(state, context):
     try:
-        from agents.agent_tools import suggest_tools
-        from domain.infinity_service import get_user_kpi_snapshot
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.agents.agent_tools import suggest_tools
+        from AINDY.domain.infinity_service import get_user_kpi_snapshot
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
@@ -765,10 +765,10 @@ def agent_suggestions_get_node(state, context):
 def analytics_linkedin_ingest_node(state, context):
     try:
         import uuid
-        from db.models import MasterPlan
-        from db.models.metrics_models import CanonicalMetricDB
-        from schemas.analytics import LinkedInRawInput
-        from analytics.linkedin_adapter import linkedin_adapter
+        from AINDY.db.models import MasterPlan
+        from AINDY.db.models.metrics_models import CanonicalMetricDB
+        from AINDY.schemas.analytics import LinkedInRawInput
+        from AINDY.analytics.linkedin_adapter import linkedin_adapter
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         data_dict = state.get("data", {})
@@ -813,8 +813,8 @@ def analytics_linkedin_ingest_node(state, context):
 def analytics_masterplan_get_node(state, context):
     try:
         import uuid
-        from db.models import MasterPlan
-        from db.models.metrics_models import CanonicalMetricDB
+        from AINDY.db.models import MasterPlan
+        from AINDY.db.models.metrics_models import CanonicalMetricDB
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         masterplan_id = state.get("masterplan_id")
@@ -848,8 +848,8 @@ def analytics_masterplan_get_node(state, context):
 def analytics_masterplan_summary_node(state, context):
     try:
         import uuid
-        from db.models import MasterPlan
-        from db.models.metrics_models import CanonicalMetricDB
+        from AINDY.db.models import MasterPlan
+        from AINDY.db.models.metrics_models import CanonicalMetricDB
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         masterplan_id = state.get("masterplan_id")
@@ -936,7 +936,7 @@ def analytics_masterplan_summary_node(state, context):
 def watcher_signals_list_node(state, context):
     try:
         from uuid import UUID
-        from db.models.watcher_signal import WatcherSignal
+        from AINDY.db.models.watcher_signal import WatcherSignal
         db = context.get("db")
         session_id = state.get("session_id")
         signal_type = state.get("signal_type")
@@ -980,7 +980,7 @@ def watcher_signals_list_node(state, context):
 def genesis_session_create_node(state, context):
     try:
         import uuid
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session = GenesisSessionDB(
@@ -1003,7 +1003,7 @@ def genesis_session_create_node(state, context):
 def genesis_session_get_node(state, context):
     try:
         import uuid
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1030,7 +1030,7 @@ def genesis_session_get_node(state, context):
 def genesis_draft_get_node(state, context):
     try:
         import uuid
-        from db.models import GenesisSessionDB
+        from AINDY.db.models import GenesisSessionDB
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1056,8 +1056,8 @@ def genesis_draft_get_node(state, context):
 def genesis_synthesize_node(state, context):
     try:
         import uuid
-        from db.models import GenesisSessionDB
-        from domain.genesis_ai import call_genesis_synthesis_llm
+        from AINDY.db.models import GenesisSessionDB
+        from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1084,8 +1084,8 @@ def genesis_synthesize_node(state, context):
 def genesis_audit_node(state, context):
     try:
         import uuid
-        from db.models import GenesisSessionDB
-        from domain.genesis_ai import validate_draft_integrity
+        from AINDY.db.models import GenesisSessionDB
+        from AINDY.domain.genesis_ai import validate_draft_integrity
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1108,9 +1108,9 @@ def genesis_audit_node(state, context):
 def genesis_lock_node(state, context):
     try:
         import uuid
-        from core.execution_signal_helper import queue_memory_capture
-        from db.models import GenesisSessionDB
-        from domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.core.execution_signal_helper import queue_memory_capture
+        from AINDY.db.models import GenesisSessionDB
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         session_id = state.get("session_id")
@@ -1152,8 +1152,8 @@ def genesis_activate_node(state, context):
     try:
         import uuid
         from datetime import datetime
-        from core.execution_signal_helper import queue_memory_capture
-        from db.models import MasterPlan
+        from AINDY.core.execution_signal_helper import queue_memory_capture
+        from AINDY.db.models import MasterPlan
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         plan_id = state.get("plan_id")
@@ -1186,7 +1186,7 @@ def genesis_activate_node(state, context):
 def flow_runs_list_node(state, context):
     try:
         from uuid import UUID
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         status_filter = state.get("status")
@@ -1228,7 +1228,7 @@ def flow_runs_list_node(state, context):
 def flow_run_get_node(state, context):
     try:
         from uuid import UUID
-        from db.models.flow_run import FlowRun
+        from AINDY.db.models.flow_run import FlowRun
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         run_id = state.get("run_id")
@@ -1258,7 +1258,7 @@ def flow_run_get_node(state, context):
 def flow_run_history_node(state, context):
     try:
         from uuid import UUID
-        from db.models.flow_run import FlowHistory, FlowRun
+        from AINDY.db.models.flow_run import FlowHistory, FlowRun
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         run_id = state.get("run_id")
@@ -1299,8 +1299,8 @@ def flow_run_history_node(state, context):
 def flow_run_resume_node(state, context):
     try:
         from uuid import UUID
-        from db.models.flow_run import FlowRun
-        from runtime.flow_engine import route_event
+        from AINDY.db.models.flow_run import FlowRun
+        from AINDY.runtime.flow_engine import route_event
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         run_id = state.get("run_id")
@@ -1326,7 +1326,7 @@ def flow_run_resume_node(state, context):
 @register_node("flow_registry_get_node")
 def flow_registry_get_node(state, context):
     try:
-        from runtime.flow_engine import FLOW_REGISTRY, NODE_REGISTRY
+        from AINDY.runtime.flow_engine import FLOW_REGISTRY, NODE_REGISTRY
         result = {
             "flows": {
                 name: {
@@ -1350,7 +1350,7 @@ def flow_registry_get_node(state, context):
 @register_node("memory_node_create_node")
 def memory_node_create_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         dao = MemoryNodeDAO(db)
@@ -1370,8 +1370,8 @@ def memory_node_create_node(state, context):
 @register_node("memory_node_get_node")
 def memory_node_get_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         dao = MemoryNodeDAO(db)
@@ -1388,7 +1388,7 @@ def memory_node_get_node(state, context):
 @register_node("memory_node_update_node")
 def memory_node_update_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         dao = MemoryNodeDAO(db)
@@ -1410,7 +1410,7 @@ def memory_node_update_node(state, context):
 @register_node("memory_node_history_node")
 def memory_node_history_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1427,7 +1427,7 @@ def memory_node_history_node(state, context):
 @register_node("memory_node_links_node")
 def memory_node_links_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1447,7 +1447,7 @@ def memory_node_links_node(state, context):
 @register_node("memory_nodes_search_tags_node")
 def memory_nodes_search_tags_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         tags_str = state.get("tags", "")
@@ -1467,7 +1467,7 @@ def memory_nodes_search_tags_node(state, context):
 @register_node("memory_link_create_node")
 def memory_link_create_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         dao = MemoryNodeDAO(db)
@@ -1489,7 +1489,7 @@ def memory_link_create_node(state, context):
 @register_node("memory_node_traverse_node")
 def memory_node_traverse_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1512,7 +1512,7 @@ def memory_node_traverse_node(state, context):
 @register_node("memory_nodes_expand_node")
 def memory_nodes_expand_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_ids = state.get("node_ids", [])
@@ -1534,8 +1534,8 @@ def memory_nodes_expand_node(state, context):
 @register_node("memory_nodes_search_similar_node")
 def memory_nodes_search_similar_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from memory.embedding_service import generate_query_embedding
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.memory.embedding_service import generate_query_embedding
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query = state.get("query", "")
@@ -1558,8 +1558,8 @@ def memory_nodes_search_similar_node(state, context):
 @register_node("memory_recall_node")
 def memory_recall_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query = state.get("query")
@@ -1588,8 +1588,8 @@ def memory_recall_node(state, context):
 @register_node("memory_recall_v3_node")
 def memory_recall_v3_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator, memory_items_to_dicts
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query = state.get("query")
@@ -1631,8 +1631,8 @@ def memory_recall_v3_node(state, context):
 @register_node("memory_recall_federated_node")
 def memory_recall_federated_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         query = state.get("query")
@@ -1654,9 +1654,9 @@ def memory_recall_federated_node(state, context):
 @register_node("memory_agents_list_node")
 def memory_agents_list_node(state, context):
     try:
-        from db.models.agent import Agent
-        from memory.memory_persistence import MemoryNodeModel
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.models.agent import Agent
+        from AINDY.memory.memory_persistence import MemoryNodeModel
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         agents = db.query(Agent).filter(Agent.is_active.is_(True)).all()
@@ -1691,8 +1691,8 @@ def memory_agents_list_node(state, context):
 @register_node("memory_node_share_node")
 def memory_node_share_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1712,8 +1712,8 @@ def memory_node_share_node(state, context):
 @register_node("memory_agent_recall_node")
 def memory_agent_recall_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from utils.uuid_utils import normalize_uuid
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.utils.uuid_utils import normalize_uuid
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
         namespace = state.get("namespace", "")
@@ -1736,7 +1736,7 @@ def memory_agent_recall_node(state, context):
 @register_node("memory_node_feedback_node")
 def memory_node_feedback_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1765,7 +1765,7 @@ def memory_node_feedback_node(state, context):
 @register_node("memory_node_performance_node")
 def memory_node_performance_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         node_id = state.get("node_id")
@@ -1808,7 +1808,7 @@ def memory_node_performance_node(state, context):
 @register_node("memory_suggest_node")
 def memory_suggest_node(state, context):
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query = state.get("query")
@@ -1828,11 +1828,11 @@ def memory_suggest_node(state, context):
 @register_node("memory_nodus_execute_node")
 def memory_nodus_execute_node(state, context):
     try:
-        from core.execution_envelope import success
-        from runtime.nodus_execution_service import execute_nodus_task_payload
-        from runtime.nodus_security import NodusSecurityError
-        from utils.trace_context import ensure_trace_id
-        from utils.user_ids import require_user_id
+        from AINDY.core.execution_envelope import success
+        from AINDY.runtime.nodus_execution_service import execute_nodus_task_payload
+        from AINDY.runtime.nodus_security import NodusSecurityError
+        from AINDY.utils.trace_context import ensure_trace_id
+        from AINDY.utils.user_ids import require_user_id
         db = context.get("db")
         user_id = str(require_user_id(context.get("user_id")))
         # Removed: if async_heavy_execution_enabled(): submit_async_job(...)
@@ -1863,7 +1863,7 @@ def memory_nodus_execute_node(state, context):
 def automation_logs_list_node(state, context):
     try:
         from uuid import UUID
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.models.automation_log import AutomationLog
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         status = state.get("status")
@@ -1899,7 +1899,7 @@ def automation_logs_list_node(state, context):
 def automation_log_get_node(state, context):
     try:
         from uuid import UUID
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.models.automation_log import AutomationLog
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         log_id = state.get("log_id")
@@ -1929,7 +1929,7 @@ def automation_log_get_node(state, context):
 def automation_log_replay_node(state, context):
     try:
         from uuid import UUID
-        from db.models.automation_log import AutomationLog
+        from AINDY.db.models.automation_log import AutomationLog
         db = context.get("db")
         user_id = UUID(str(context.get("user_id")))
         log_id = state.get("log_id")
@@ -1943,7 +1943,7 @@ def automation_log_replay_node(state, context):
             return {"status": "FAILURE", "error": f"HTTP_400:Cannot replay log with status '{log.status}'. Only failed or retrying logs can be replayed."}
         payload = log.payload or {}
         if isinstance(payload, dict) and payload.get("execution_token"):
-            from agents.capability_service import validate_token
+            from AINDY.agents.capability_service import validate_token
             validation = validate_token(
                 token=payload.get("execution_token"),
                 run_id=str(payload.get("run_id", "")),
@@ -1951,7 +1951,7 @@ def automation_log_replay_node(state, context):
             )
             if not validation["ok"]:
                 return {"status": "FAILURE", "error": f"HTTP_403:Execution token invalid for replay: {validation['error']}"}
-        from platform_layer.scheduler_service import replay_task
+        from AINDY.platform_layer.scheduler_service import replay_task
         result = replay_task(log_id)
         if not result:
             return {"status": "FAILURE", "error": "HTTP_500:Replay failed - task function not registered. Check task registry."}
@@ -1967,7 +1967,7 @@ def automation_log_replay_node(state, context):
 @register_node("automation_scheduler_status_node")
 def automation_scheduler_status_node(state, context):
     try:
-        from platform_layer.scheduler_service import get_scheduler
+        from AINDY.platform_layer.scheduler_service import get_scheduler
         try:
             scheduler = get_scheduler()
             jobs = scheduler.get_jobs()
@@ -1994,7 +1994,7 @@ def automation_scheduler_status_node(state, context):
 @register_node("automation_task_trigger_node")
 def automation_task_trigger_node(state, context):
     try:
-        from domain.task_services import get_task_by_id, queue_task_automation
+        from AINDY.domain.task_services import get_task_by_id, queue_task_automation
         db = context.get("db")
         user_id = context.get("user_id")
         task_id = state.get("task_id")
@@ -2024,8 +2024,8 @@ def automation_task_trigger_node(state, context):
 @register_node("freelance_order_create_node")
 def freelance_order_create_node(state, context):
     try:
-        from schemas.freelance import FreelanceOrderCreate, FreelanceOrderResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import FreelanceOrderCreate, FreelanceOrderResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order = FreelanceOrderCreate(**state.get("order", {}))
@@ -2041,9 +2041,9 @@ def freelance_order_create_node(state, context):
 def freelance_order_deliver_node(state, context):
     try:
         import uuid as _uuid
-        from db.models.freelance import FreelanceOrder
-        from schemas.freelance import FreelanceOrderResponse
-        from domain import freelance_service
+        from AINDY.db.models.freelance import FreelanceOrder
+        from AINDY.schemas.freelance import FreelanceOrderResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order_id = state.get("order_id")
@@ -2065,8 +2065,8 @@ def freelance_order_deliver_node(state, context):
 @register_node("freelance_delivery_update_node")
 def freelance_delivery_update_node(state, context):
     try:
-        from schemas.freelance import FreelanceOrderResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import FreelanceOrderResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         try:
@@ -2086,8 +2086,8 @@ def freelance_delivery_update_node(state, context):
 @register_node("freelance_feedback_collect_node")
 def freelance_feedback_collect_node(state, context):
     try:
-        from schemas.freelance import FeedbackCreate, FeedbackResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import FeedbackCreate, FeedbackResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         feedback = FeedbackCreate(**state.get("feedback", {}))
@@ -2105,8 +2105,8 @@ def freelance_feedback_collect_node(state, context):
 @register_node("freelance_orders_list_node")
 def freelance_orders_list_node(state, context):
     try:
-        from schemas.freelance import FreelanceOrderResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import FreelanceOrderResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         orders = freelance_service.get_all_orders(db, user_id=user_id)
@@ -2120,8 +2120,8 @@ def freelance_orders_list_node(state, context):
 @register_node("freelance_feedback_list_node")
 def freelance_feedback_list_node(state, context):
     try:
-        from schemas.freelance import FeedbackResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import FeedbackResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         items = freelance_service.get_all_feedback(db, user_id=user_id)
@@ -2135,8 +2135,8 @@ def freelance_feedback_list_node(state, context):
 @register_node("freelance_metrics_latest_node")
 def freelance_metrics_latest_node(state, context):
     try:
-        from schemas.freelance import RevenueMetricsResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import RevenueMetricsResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         metric = freelance_service.get_latest_metrics(db)
         if not metric:
@@ -2151,8 +2151,8 @@ def freelance_metrics_latest_node(state, context):
 @register_node("freelance_metrics_update_node")
 def freelance_metrics_update_node(state, context):
     try:
-        from schemas.freelance import RevenueMetricsResponse
-        from domain import freelance_service
+        from AINDY.schemas.freelance import RevenueMetricsResponse
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         metric = freelance_service.update_revenue_metrics(db, user_id=user_id)
@@ -2167,8 +2167,8 @@ def freelance_metrics_update_node(state, context):
 def freelance_delivery_generate_node(state, context):
     try:
         import uuid as _uuid
-        from db.models.freelance import FreelanceOrder
-        from domain import freelance_service
+        from AINDY.db.models.freelance import FreelanceOrder
+        from AINDY.domain import freelance_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order_id = state.get("order_id")
@@ -2192,8 +2192,8 @@ def freelance_delivery_generate_node(state, context):
 @register_node("research_create_node")
 def research_create_node(state, context):
     try:
-        from schemas.research_results_schema import ResearchResultCreate
-        from domain import research_results_service
+        from AINDY.schemas.research_results_schema import ResearchResultCreate
+        from AINDY.domain import research_results_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         result_obj = ResearchResultCreate(**state.get("result", {}))
@@ -2213,7 +2213,7 @@ def research_create_node(state, context):
 @register_node("research_list_node")
 def research_list_node(state, context):
     try:
-        from domain import research_results_service
+        from AINDY.domain import research_results_service
         db = context.get("db")
         user_id = str(context.get("user_id"))
         items = research_results_service.get_all_research_results(db, user_id=user_id)
@@ -2233,11 +2233,11 @@ def research_list_node(state, context):
 def research_query_node(state, context):
     try:
         import time as _time
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator
-        from schemas.research_results_schema import ResearchResultCreate
-        from domain import research_results_service
-        from domain.search_service import unified_query
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator
+        from AINDY.schemas.research_results_schema import ResearchResultCreate
+        from AINDY.domain import research_results_service
+        from AINDY.domain.search_service import unified_query
         db = context.get("db")
         user_id = str(context.get("user_id"))
         query_str = state.get("query", "")
@@ -2289,7 +2289,7 @@ def research_query_node(state, context):
 @register_node("search_history_list_node")
 def search_history_list_node(state, context):
     try:
-        from domain.search_service import get_search_history
+        from AINDY.domain.search_service import get_search_history
         db = context.get("db")
         user_id = str(context.get("user_id"))
         limit = state.get("limit", 25)
@@ -2312,7 +2312,7 @@ def search_history_list_node(state, context):
 @register_node("search_history_get_node")
 def search_history_get_node(state, context):
     try:
-        from domain.search_service import get_search_history_item
+        from AINDY.domain.search_service import get_search_history_item
         db = context.get("db")
         user_id = str(context.get("user_id"))
         history_id = state.get("history_id")
@@ -2332,7 +2332,7 @@ def search_history_get_node(state, context):
 @register_node("search_history_delete_node")
 def search_history_delete_node(state, context):
     try:
-        from domain.search_service import delete_search_history_item
+        from AINDY.domain.search_service import delete_search_history_item
         db = context.get("db")
         user_id = str(context.get("user_id"))
         history_id = state.get("history_id")
@@ -2351,9 +2351,9 @@ def search_history_delete_node(state, context):
 @register_node("masterplan_lock_from_genesis_node")
 def masterplan_lock_from_genesis_node(state, context):
     try:
-        from domain.masterplan_factory import create_masterplan_from_genesis
-        from domain.masterplan_execution_service import sync_masterplan_tasks
-        from analytics.posture import posture_description
+        from AINDY.domain.masterplan_factory import create_masterplan_from_genesis
+        from AINDY.domain.masterplan_execution_service import sync_masterplan_tasks
+        from AINDY.analytics.posture import posture_description
         db = context.get("db")
         user_id = str(context.get("user_id"))
         session_id = state.get("session_id")
@@ -2383,8 +2383,8 @@ def masterplan_lock_from_genesis_node(state, context):
 def masterplan_lock_node(state, context):
     try:
         from datetime import datetime
-        from db.models import MasterPlan
-        from domain.masterplan_execution_service import sync_masterplan_tasks
+        from AINDY.db.models import MasterPlan
+        from AINDY.domain.masterplan_execution_service import sync_masterplan_tasks
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2407,7 +2407,7 @@ def masterplan_lock_node(state, context):
 @register_node("masterplan_list_node")
 def masterplan_list_node(state, context):
     try:
-        from db.models import MasterPlan
+        from AINDY.db.models import MasterPlan
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plans = db.query(MasterPlan).filter(MasterPlan.user_id == user_id).order_by(MasterPlan.id.desc()).all()
@@ -2428,8 +2428,8 @@ def masterplan_list_node(state, context):
 @register_node("masterplan_get_node")
 def masterplan_get_node(state, context):
     try:
-        from db.models import MasterPlan
-        from domain.masterplan_execution_service import get_masterplan_execution_status
+        from AINDY.db.models import MasterPlan
+        from AINDY.domain.masterplan_execution_service import get_masterplan_execution_status
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2452,7 +2452,7 @@ def masterplan_get_node(state, context):
 def masterplan_anchor_node(state, context):
     try:
         from datetime import datetime
-        from db.models import MasterPlan
+        from AINDY.db.models import MasterPlan
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2486,8 +2486,8 @@ def masterplan_anchor_node(state, context):
 @register_node("masterplan_projection_node")
 def masterplan_projection_node(state, context):
     try:
-        from db.models import MasterPlan
-        from analytics.eta_service import calculate_eta
+        from AINDY.db.models import MasterPlan
+        from AINDY.analytics.eta_service import calculate_eta
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2507,8 +2507,8 @@ def masterplan_projection_node(state, context):
 def masterplan_activate_node(state, context):
     try:
         from datetime import datetime
-        from db.models import MasterPlan
-        from domain.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
+        from AINDY.db.models import MasterPlan
+        from AINDY.domain.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
         db = context.get("db")
         user_id = str(context.get("user_id"))
         plan_id = state.get("plan_id")
@@ -2535,9 +2535,9 @@ def masterplan_activate_node(state, context):
 @register_node("observability_scheduler_status_node")
 def observability_scheduler_status_node(state, context):
     try:
-        import platform_layer.scheduler_service as _sched_svc
-        import domain.task_services as _task_svc
-        from db.models.background_task_lease import BackgroundTaskLease
+        import AINDY.platform_layer.scheduler_service as _sched_svc
+        import AINDY.domain.task_services as _task_svc
+        from AINDY.db.models.background_task_lease import BackgroundTaskLease
         db = context.get("db")
         try:
             sched = _sched_svc.get_scheduler()
@@ -2570,7 +2570,7 @@ def observability_requests_node(state, context):
         import uuid as _uuid
         from datetime import datetime, timedelta
         from sqlalchemy import func
-        from db.models.request_metric import RequestMetric
+        from AINDY.db.models.request_metric import RequestMetric
         db = context.get("db")
         user_id = _uuid.UUID(str(context.get("user_id")))
         limit = state.get("limit", 50)
@@ -2618,11 +2618,11 @@ def observability_dashboard_node(state, context):
         from collections import Counter
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import func
-        from db.models.agent_event import AgentEvent
-        from db.models.flow_run import FlowRun
-        from db.models.request_metric import RequestMetric
-        from db.models.system_event import SystemEvent
-        from db.models.system_health_log import SystemHealthLog
+        from AINDY.db.models.agent_event import AgentEvent
+        from AINDY.db.models.flow_run import FlowRun
+        from AINDY.db.models.request_metric import RequestMetric
+        from AINDY.db.models.system_event import SystemEvent
+        from AINDY.db.models.system_health_log import SystemHealthLog
         db = context.get("db")
         user_id = _uuid.UUID(str(context.get("user_id")))
         window_hours = state.get("window_hours", 24)
@@ -2782,8 +2782,8 @@ def observability_dashboard_node(state, context):
 def observability_rippletrace_node(state, context):
     try:
         import uuid as _uuid
-        from db.models.system_event import SystemEvent
-        from domain.rippletrace_service import (
+        from AINDY.db.models.system_event import SystemEvent
+        from AINDY.domain.rippletrace_service import (
             build_trace_graph, calculate_ripple_span,
             detect_root_event, detect_terminal_events, generate_trace_insights,
         )
@@ -2820,8 +2820,8 @@ def dashboard_overview_node(state, context):
     try:
         import uuid
         from datetime import datetime
-        from db.models.author_model import AuthorDB
-        from db.models import PingDB
+        from AINDY.db.models.author_model import AuthorDB
+        from AINDY.db.models import PingDB
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -2880,7 +2880,7 @@ def dashboard_overview_node(state, context):
 @register_node("autonomy_decisions_list_node")
 def autonomy_decisions_list_node(state, context):
     try:
-        from agents.autonomous_controller import list_recent_decisions
+        from AINDY.agents.autonomous_controller import list_recent_decisions
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -2903,7 +2903,7 @@ def autonomy_decisions_list_node(state, context):
 def watcher_evaluate_trigger_node(state, context):
     """Call evaluate_live_trigger and store the evaluation dict in state."""
     try:
-        from agents.autonomous_controller import evaluate_live_trigger
+        from AINDY.agents.autonomous_controller import evaluate_live_trigger
 
         db = context.get("db")
         user_id = state.get("user_id")
@@ -2934,8 +2934,8 @@ def watcher_evaluate_trigger_node(state, context):
 def watcher_record_decision_node(state, context):
     """Persist the autonomy decision and emit the AUTONOMY_DECISION system event."""
     try:
-        from utils.trace_context import ensure_trace_id
-        from agents.autonomous_controller import record_decision
+        from AINDY.utils.trace_context import ensure_trace_id
+        from AINDY.agents.autonomous_controller import record_decision
 
         db = context.get("db")
         user_id = state.get("user_id")
@@ -2962,7 +2962,7 @@ def watcher_record_decision_node(state, context):
 def watcher_defer_job_node(state, context):
     """Create a deferred AutomationLog entry and build the DEFERRED response."""
     try:
-        from platform_layer.async_job_service import build_deferred_response, defer_async_job
+        from AINDY.platform_layer.async_job_service import build_deferred_response, defer_async_job
 
         user_id = state.get("user_id")
         evaluation = state.get("watcher_evaluation") or {}
@@ -3001,7 +3001,7 @@ def watcher_defer_job_node(state, context):
 def watcher_ignore_node(state, context):
     """Build the IGNORED response — no ingest, no deferred job."""
     try:
-        from agents.autonomous_controller import build_decision_response
+        from AINDY.agents.autonomous_controller import build_decision_response
 
         evaluation = state.get("watcher_evaluation") or {}
         trace_id = state.get("watcher_trace_id") or ""
@@ -3040,7 +3040,7 @@ def watcher_execute_wrap_node(state, context):
 @register_node("health_dashboard_list_node")
 def health_dashboard_list_node(state, context):
     try:
-        from db.models.system_health_log import SystemHealthLog
+        from AINDY.db.models.system_health_log import SystemHealthLog
 
         db = context.get("db")
         limit = int(state.get("limit") or 20)

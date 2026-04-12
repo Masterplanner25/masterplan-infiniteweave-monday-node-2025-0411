@@ -22,30 +22,30 @@ class TestStartBackgroundTasksReturnValue:
     """start_background_tasks() must return bool so main.py can gate scheduler."""
 
     def test_returns_false_when_disabled(self):
-        from domain.task_services import start_background_tasks
+        from AINDY.domain.task_services import start_background_tasks
         result = start_background_tasks(enable=False)
         assert result is False
 
     def test_returns_true_when_lease_acquired(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_acquire_background_lease", return_value=True):
             result = task_services.start_background_tasks(enable=True)
         assert result is True
 
     def test_returns_false_when_lease_not_acquired(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_acquire_background_lease", return_value=False):
             result = task_services.start_background_tasks(enable=True)
         assert result is False
 
     def test_return_type_is_bool(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_acquire_background_lease", return_value=True):
             result = task_services.start_background_tasks(enable=True)
         assert isinstance(result, bool)
 
     def test_acquire_background_lease_handles_naive_db_timestamp(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         lease = SimpleNamespace(
             name="task_background_runner",
             owner_id="other-instance",
@@ -90,26 +90,26 @@ class TestHeartbeatLeaseJob:
     """_heartbeat_lease_job calls _refresh_background_lease and handles failures."""
 
     def test_calls_refresh_on_success(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_refresh_background_lease", return_value=True) as mock_refresh:
             task_services._heartbeat_lease_job()
         mock_refresh.assert_called_once()
 
     def test_logs_warning_when_refresh_returns_false(self, caplog):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_refresh_background_lease", return_value=False):
             with caplog.at_level(logging.WARNING, logger="domain.task_services"):
                 task_services._heartbeat_lease_job()
         assert any("lease refresh failed" in r.message for r in caplog.records)
 
     def test_does_not_raise_when_refresh_raises(self):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_refresh_background_lease", side_effect=RuntimeError("db gone")):
             # Must not propagate the exception
             task_services._heartbeat_lease_job()
 
     def test_no_warning_logged_on_success(self, caplog):
-        from domain import task_services
+        from AINDY.domain import task_services
         with patch.object(task_services, "_refresh_background_lease", return_value=True):
             with caplog.at_level(logging.WARNING, logger="domain.task_services"):
                 task_services._heartbeat_lease_job()
@@ -124,13 +124,13 @@ class TestRefreshLeaseHeartbeatJob:
     """_refresh_lease_heartbeat is the APScheduler job wrapper in scheduler_service."""
 
     def test_delegates_to_task_services_heartbeat(self):
-        from platform_layer import scheduler_service
+        from AINDY.platform_layer import scheduler_service
         with patch("domain.task_services._heartbeat_lease_job") as mock_hb:
             scheduler_service._refresh_lease_heartbeat()
         mock_hb.assert_called_once()
 
     def test_does_not_raise_if_import_fails(self):
-        from platform_layer import scheduler_service
+        from AINDY.platform_layer import scheduler_service
         import builtins
         real_import = builtins.__import__
 
@@ -145,7 +145,7 @@ class TestRefreshLeaseHeartbeatJob:
 
     def test_heartbeat_job_registered_in_system_jobs(self):
         """_register_system_jobs must add background_lease_heartbeat job."""
-        from platform_layer import scheduler_service
+        from AINDY.platform_layer import scheduler_service
         mock_scheduler = MagicMock()
         scheduler_service._register_system_jobs(mock_scheduler)
         job_ids = [call_args.kwargs.get("id") or call_args[1][1] if len(call_args[1]) > 1 else None
@@ -167,8 +167,8 @@ class TestMainStartupOrder:
         Simulate the main.py startup block in isolation.
         Returns (start_called: bool).
         """
-        import domain.task_services as ts
-        import platform_layer.scheduler_service as ss
+        import AINDY.domain.task_services as ts
+        import AINDY.platform_layer.scheduler_service as ss
 
         with patch.object(ts, "_acquire_background_lease", return_value=lease_acquired), \
              patch.object(ss, "start") as mock_start, \
@@ -185,8 +185,8 @@ class TestMainStartupOrder:
         assert self._run_startup_block(lease_acquired=False) is False
 
     def test_scheduler_does_not_start_when_disabled(self):
-        import domain.task_services as ts
-        import platform_layer.scheduler_service as ss
+        import AINDY.domain.task_services as ts
+        import AINDY.platform_layer.scheduler_service as ss
 
         with patch.object(ts, "_acquire_background_lease", return_value=True), \
              patch.object(ss, "start") as mock_start, \
@@ -198,8 +198,8 @@ class TestMainStartupOrder:
 
     def test_start_background_tasks_called_before_scheduler_start(self):
         """Verify call ordering: start_background_tasks precedes scheduler.start()."""
-        import domain.task_services as ts
-        import platform_layer.scheduler_service as ss
+        import AINDY.domain.task_services as ts
+        import AINDY.platform_layer.scheduler_service as ss
 
         call_order = []
         with patch.object(ts, "_acquire_background_lease", return_value=True), \

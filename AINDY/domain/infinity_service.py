@@ -49,7 +49,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from utils.user_ids import parse_user_id
+from AINDY.utils.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def _ensure_orchestrated() -> None:
         )
 
 # ── KPI Weights ──────────────────────────────────────────────────────────────
-from db.models.user_score import KPI_WEIGHTS
+from AINDY.db.models.user_score import KPI_WEIGHTS
 
 # ── Scoring window ───────────────────────────────────────────────────────────
 SCORING_WINDOW_DAYS = 14
@@ -129,7 +129,7 @@ def calculate_execution_speed(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from db.models.task import Task
+        from AINDY.db.models.task import Task
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
@@ -193,8 +193,8 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from db.models.task import Task
-        from db.models.arm_models import AnalysisResult
+        from AINDY.db.models.task import Task
+        from AINDY.db.models.arm_models import AnalysisResult
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
@@ -260,7 +260,7 @@ def calculate_ai_productivity_boost(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from db.models.arm_models import AnalysisResult
+        from AINDY.db.models.arm_models import AnalysisResult
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
@@ -320,7 +320,7 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from db.models.watcher_signal import WatcherSignal
+        from AINDY.db.models.watcher_signal import WatcherSignal
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
@@ -389,8 +389,8 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from db.models.masterplan import MasterPlan
-        from db.models.task import Task
+        from AINDY.db.models.masterplan import MasterPlan
+        from AINDY.db.models.task import Task
 
         plan = db.query(MasterPlan).filter(
             MasterPlan.user_id == user_id,
@@ -438,7 +438,7 @@ def get_user_kpi_snapshot(user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         user_db_id = _db_user_id(user_id)
-        from db.models.user_score import UserScore
+        from AINDY.db.models.user_score import UserScore
 
         score = db.query(UserScore).filter(
             UserScore.user_id == user_db_id
@@ -481,7 +481,7 @@ def calculate_infinity_score(
     """
     try:
         _ensure_orchestrated()
-        from db.models.user_score import UserScore, ScoreHistory
+        from AINDY.db.models.user_score import UserScore, ScoreHistory
         user_db_id = _db_user_id(user_id)
 
         now = datetime.now(timezone.utc)

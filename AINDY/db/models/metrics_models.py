@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, Float, String, Date, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from db.database import Base
+from AINDY.db.database import Base
 from datetime import datetime
 
 

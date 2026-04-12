@@ -31,7 +31,7 @@ def list_signals(
     Validates signal_type and user_id before querying.
     Raises HTTPException on invalid inputs.
     """
-    from db.models.watcher_signal import WatcherSignal
+    from AINDY.db.models.watcher_signal import WatcherSignal
 
     if signal_type and signal_type not in _VALID_SIGNAL_TYPES:
         raise HTTPException(status_code=422, detail=f"Unknown signal_type: {signal_type!r}")

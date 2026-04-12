@@ -3,14 +3,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import case
-from domain.task_services import get_next_ready_task
+from AINDY.domain.task_services import get_next_ready_task
 
 logger = logging.getLogger(__name__)
-from domain.goal_service import calculate_goal_alignment
-from core.observability_events import emit_observability_event
-from core.system_event_service import emit_error_event
-from utils.trace_context import get_current_trace_id
-from utils.user_ids import parse_user_id
+from AINDY.domain.goal_service import calculate_goal_alignment
+from AINDY.core.observability_events import emit_observability_event
+from AINDY.core.system_event_service import emit_error_event
+from AINDY.utils.trace_context import get_current_trace_id
+from AINDY.utils.user_ids import parse_user_id
 
 THRASH_GUARD_MINUTES = 60
 TASK_REPRIORITIZATION_LIMIT = 5
@@ -37,7 +37,7 @@ def _normalize_user_id(user_id: str | uuid.UUID | None):
 
 def get_latest_adjustment(user_id: str, db):
     try:
-        from db.models.infinity_loop import LoopAdjustment
+        from AINDY.db.models.infinity_loop import LoopAdjustment
         owner_user_id = _normalize_user_id(user_id)
         if owner_user_id is None:
             return None
@@ -96,7 +96,7 @@ def _build_expectation(decision_type: str, score_snapshot: dict | None) -> tuple
 
 def _get_strategy_accuracy_context(user_id: str, db, limit: int = 20) -> dict[str, float]:
     try:
-        from db.models.infinity_loop import LoopAdjustment
+        from AINDY.db.models.infinity_loop import LoopAdjustment
         owner_user_id = _normalize_user_id(user_id)
         if owner_user_id is None:
             return {}
@@ -162,7 +162,7 @@ def evaluate_pending_adjustment(
     actual_score: float | None,
     db,
 ) -> dict | None:
-    from db.models.infinity_loop import LoopAdjustment
+    from AINDY.db.models.infinity_loop import LoopAdjustment
 
     try:
         owner_user_id = _normalize_user_id(user_id)
@@ -227,7 +227,7 @@ def evaluate_pending_adjustment(
 
 def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
     try:
-        from db.models.infinity_loop import UserFeedback
+        from AINDY.db.models.infinity_loop import UserFeedback
         owner_user_id = _normalize_user_id(user_id)
         if owner_user_id is None:
             return {"count": 0, "positive": 0, "negative": 0, "latest_feedback_text": None}
@@ -267,7 +267,7 @@ def _get_top_incomplete_task(user_id: str, db) -> dict | None:
     except Exception as exc:
         logger.warning("[InfinityLoop] next ready task lookup failed for %s: %s", user_id, exc)
 
-    from db.models.task import Task
+    from AINDY.db.models.task import Task
 
     user_uuid = _normalize_user_id(user_id) or user_id
 
@@ -715,7 +715,7 @@ def _decide(
 
 
 def _reprioritize_tasks(user_id: str, db) -> dict:
-    from db.models.task import Task
+    from AINDY.db.models.task import Task
 
     user_uuid = _normalize_user_id(user_id)
     if user_uuid is None:
@@ -764,14 +764,14 @@ def run_loop(
     feedback_context: dict | None = None,
     loop_context: dict | None = None,
 ):
-    from db.models.infinity_loop import LoopAdjustment
+    from AINDY.db.models.infinity_loop import LoopAdjustment
 
     try:
         normalized_trigger = _normalize_trigger_event(trigger_event)
         persisted_user_id = _normalize_user_id(user_id)
         owner_user_id = persisted_user_id or user_id
         if score_snapshot is None:
-            from domain.infinity_service import get_user_kpi_snapshot
+            from AINDY.domain.infinity_service import get_user_kpi_snapshot
 
             score_snapshot = get_user_kpi_snapshot(user_id=owner_user_id, db=db)
         feedback_context = feedback_context or _get_recent_feedback_context(user_id=owner_user_id, db=db)

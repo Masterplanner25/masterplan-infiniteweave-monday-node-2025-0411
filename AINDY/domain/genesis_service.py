@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def get_owned_session(db: Session, session_id: int, user_id: str) -> Any | None:
     """Return the GenesisSessionDB for the given session_id if it belongs to user_id."""
-    from db.models import GenesisSessionDB
+    from AINDY.db.models import GenesisSessionDB
 
     return (
         db.query(GenesisSessionDB)
@@ -49,7 +49,7 @@ def activate_masterplan_genesis(db: Session, *, plan_id: int, user_id: str) -> d
     Returns the result dict consumed by the route handler.
     Raises HTTPException on not-found.
     """
-    from db.models import MasterPlan
+    from AINDY.db.models import MasterPlan
 
     uid = uuid.UUID(str(user_id))
     plan = (
@@ -74,7 +74,7 @@ def activate_masterplan_genesis(db: Session, *, plan_id: int, user_id: str) -> d
         db.commit()
 
     try:
-        from db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         MemoryNodeDAO(db).save(
             content=f"Masterplan activated: {getattr(plan, 'version_label', plan_id)}",

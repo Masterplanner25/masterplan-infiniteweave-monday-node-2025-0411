@@ -4,7 +4,7 @@ import logging
 
 from fastapi import HTTPException, Request
 
-from config import settings
+from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
 

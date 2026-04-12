@@ -75,9 +75,9 @@ def load_dynamic_registry(db: Session) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 def _load_nodes(db: Session, stats: dict[str, int]) -> None:
-    from db.models.dynamic_node import DynamicNode
-    from runtime.flow_engine import NODE_REGISTRY
-    from platform_layer.node_registry import register_external_node
+    from AINDY.db.models.dynamic_node import DynamicNode
+    from AINDY.runtime.flow_engine import NODE_REGISTRY
+    from AINDY.platform_layer.node_registry import register_external_node
 
     try:
         rows = db.query(DynamicNode).filter(DynamicNode.is_active).all()
@@ -119,9 +119,9 @@ def _load_nodes(db: Session, stats: dict[str, int]) -> None:
 
 
 def _load_flows(db: Session, stats: dict[str, int]) -> None:
-    from db.models.dynamic_flow import DynamicFlow
-    from runtime.flow_engine import FLOW_REGISTRY
-    from runtime.flow_registry import register_dynamic_flow
+    from AINDY.db.models.dynamic_flow import DynamicFlow
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY
+    from AINDY.runtime.flow_registry import register_dynamic_flow
 
     try:
         rows = db.query(DynamicFlow).filter(DynamicFlow.is_active).all()
@@ -156,8 +156,8 @@ def _load_flows(db: Session, stats: dict[str, int]) -> None:
 
 
 def _load_webhooks(db: Session, stats: dict[str, int]) -> None:
-    from db.models.webhook_subscription import WebhookSubscription as WS
-    from platform_layer.event_service import _SUBSCRIPTIONS, _load_subscription
+    from AINDY.db.models.webhook_subscription import WebhookSubscription as WS
+    from AINDY.platform_layer.event_service import _SUBSCRIPTIONS, _load_subscription
 
     try:
         rows = db.query(WS).filter(WS.is_active).all()

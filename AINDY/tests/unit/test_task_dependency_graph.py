@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from domain.task_services import build_task_graph
+from AINDY.domain.task_services import build_task_graph
 
 
 def _task(task_id, name, status="pending", priority="medium", parent_task_id=None, depends_on=None):

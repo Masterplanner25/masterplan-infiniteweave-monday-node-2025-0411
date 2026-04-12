@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from main import app
+from AINDY.main import app
 from AINDY.services.auth_service import hash_password
 from AINDY.tests.fixtures.auth import (
     TEST_USER_EMAIL,
@@ -7,8 +7,8 @@ from AINDY.tests.fixtures.auth import (
     TEST_PASSWORD,
     build_access_token,
 )
-from db.database import SessionLocal
-from db.models.user import User
+from AINDY.db.database import SessionLocal
+from AINDY.db.models.user import User
 
 client = TestClient(app)
 AUTH_HEADERS = {"Authorization": f"Bearer {build_access_token()}"}

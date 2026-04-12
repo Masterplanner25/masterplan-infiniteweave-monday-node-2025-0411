@@ -3,7 +3,7 @@ from typing import Dict, List, Set
 
 from sqlalchemy.orm import Session
 
-from db.models import DropPointDB, PingDB
+from AINDY.db.models import DropPointDB, PingDB
 
 
 def _split_terms(value: str) -> Set[str]:

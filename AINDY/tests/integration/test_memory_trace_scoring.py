@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from runtime.memory.scorer import MemoryScorer
-from runtime.memory.types import RecallRequest
+from AINDY.runtime.memory.scorer import MemoryScorer
+from AINDY.runtime.memory.types import RecallRequest
 
 
 def test_trace_bonus_applied():

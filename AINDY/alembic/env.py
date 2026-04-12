@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from db.models import metrics_models  # ensures Alembic sees new models
+from AINDY.db.models import metrics_models  # ensures Alembic sees new models
 
 
 
@@ -66,20 +66,20 @@ if config.config_file_name is not None:
 
 try:
     # config with DATABASE_URL defined (memory bridge)
-    from config import DATABASE_URL  # optional, used if present
+    from AINDY.config import DATABASE_URL  # optional, used if present
 except Exception:
     DATABASE_URL = None  # will fallback to alembic.ini value later
 
 # Bring in Base and model modules
-from db.database import Base     # declarative_base() lives here
-import db.models  # imports all models inside db/models.py
-import memory.memory_persistence
+from AINDY.db.database import Base     # declarative_base() lives here
+import AINDY.db.models  # imports all models inside db/models.py
+import AINDY.memory.memory_persistence
 
 # Explicitly import model files not covered by db.models wildcard import.
 # Each import registers its table(s) with Base.metadata so autogenerate sees them.
-import db.models.nodus_scheduled_job   # nodus_scheduled_jobs
-import db.models.nodus_trace_event     # nodus_trace_events
-import db.models.watcher_signal        # watcher_signals
+import AINDY.db.models.nodus_scheduled_job   # nodus_scheduled_jobs
+import AINDY.db.models.nodus_trace_event     # nodus_trace_events
+import AINDY.db.models.watcher_signal        # watcher_signals
 
 # Combine all known metadata objects
 from sqlalchemy import MetaData
@@ -104,7 +104,7 @@ except Exception:
 
 # Updated import for Memory Bridge models
 try:
-    from memory import memory_persistence
+    from AINDY.memory import memory_persistence
 except ImportError:
     import warnings
     warnings.warn("memory_persistence module not found — skipping Memory Bridge model registration")

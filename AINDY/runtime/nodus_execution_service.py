@@ -8,16 +8,16 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from core.execution_record_service import build_execution_record as build_canonical_execution_record
-from runtime.nodus_runtime_adapter import NodusExecutionContext
-from runtime.nodus_runtime_adapter import NodusRuntimeAdapter
-from runtime.nodus_security import (
+from AINDY.core.execution_record_service import build_execution_record as build_canonical_execution_record
+from AINDY.runtime.nodus_runtime_adapter import NodusExecutionContext
+from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter
+from AINDY.runtime.nodus_security import (
     ALLOWED_OPERATION_CAPABILITIES,
     NodusSecurityError,
     authorize_nodus_execution,
 )
-from utils.user_ids import parse_user_id
-from utils.user_ids import require_user_id
+from AINDY.utils.user_ids import parse_user_id
+from AINDY.utils.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +94,9 @@ def ensure_nodus_script_flow_registered() -> None:
     """
     Register the canonical Nodus script flow and its nodes exactly once.
     """
-    import runtime.nodus_adapter  # noqa: F401
-    from runtime.flow_engine import FLOW_REGISTRY, register_flow
-    from runtime.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
+    import AINDY.runtime.nodus_adapter  # noqa: F401
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
+    from AINDY.runtime.nodus_runtime_adapter import NODUS_SCRIPT_FLOW
 
     if "nodus_execute" not in FLOW_REGISTRY:
         register_flow("nodus_execute", NODUS_SCRIPT_FLOW)
@@ -131,8 +131,8 @@ def _run_nodus_via_flow_direct(
 
         None (default) → the flow-engine default (3 attempts) applies unchanged.
     """
-    from runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
-    from utils.uuid_utils import normalize_uuid
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+    from AINDY.utils.uuid_utils import normalize_uuid
 
     ensure_nodus_script_flow_registered()
 
@@ -204,7 +204,7 @@ def run_nodus_script_via_flow(
         )
 
     import uuid as _uuid
-    from kernel.syscall_dispatcher import get_dispatcher, SyscallContext
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, SyscallContext
 
     _trace_id = trace_id or str(_uuid.uuid4())
     ctx = SyscallContext(
@@ -276,11 +276,11 @@ def execute_agent_flow_orchestration(
     """
     from datetime import datetime, timezone
 
-    from agents.capability_service import check_execution_capability
-    from core.execution_signal_helper import queue_system_event, record_agent_event
-    from db.models.agent_run import AgentRun, AgentStep
-    from runtime.flow_engine import PersistentFlowRunner
-    from runtime.nodus_adapter import AGENT_FLOW, _db_run_id
+    from AINDY.agents.capability_service import check_execution_capability
+    from AINDY.core.execution_signal_helper import queue_system_event, record_agent_event
+    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from AINDY.runtime.flow_engine import PersistentFlowRunner
+    from AINDY.runtime.nodus_adapter import AGENT_FLOW, _db_run_id
 
     emit_system_event = queue_system_event
 
@@ -428,7 +428,7 @@ def execute_agent_run_via_nodus(
     (_step_policy in nodus_adapter._execute_agent_step). This function executes
     exactly once per invocation; the flow engine controls whether it is retried.
     """
-    from runtime.nodus_adapter import NodusAgentAdapter
+    from AINDY.runtime.nodus_adapter import NodusAgentAdapter
 
     adapter_entrypoint = NodusAgentAdapter.execute_with_flow
     if not getattr(adapter_entrypoint, "__aindy_compat_wrapper__", False):
@@ -482,8 +482,8 @@ def execute_nodus_runtime(
     parsed_user_id = parse_user_id(user_id)
     normalized_user_id = str(parsed_user_id) if parsed_user_id is not None else str(user_id)
     if adapter_cls is None or context_cls is None:
-        from runtime.nodus_runtime_adapter import NodusExecutionContext as _RuntimeExecutionContext
-        from runtime.nodus_runtime_adapter import NodusRuntimeAdapter as _RuntimeAdapter
+        from AINDY.runtime.nodus_runtime_adapter import NodusExecutionContext as _RuntimeExecutionContext
+        from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter as _RuntimeAdapter
 
         adapter_cls = adapter_cls or _RuntimeAdapter
         context_cls = context_cls or _RuntimeExecutionContext
@@ -523,7 +523,7 @@ def execute_nodus_task_payload(
     # run is always recoverable even if the process dies mid-execution.
     _pre_eu = None
     try:
-        from core.execution_gate import require_execution_unit as _require_eu
+        from AINDY.core.execution_gate import require_execution_unit as _require_eu
         _pre_eu = _require_eu(
             db=db,
             eu_type="job",
@@ -552,12 +552,12 @@ def execute_nodus_task_payload(
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
 
-        from nodus.runtime.embedding import NodusRuntime  # noqa: F401
+        from AINDY.nodus.runtime.embedding import NodusRuntime  # noqa: F401
 
-        from db.dao.memory_node_dao import MemoryNodeDAO
-        from runtime.memory import MemoryOrchestrator
-        from runtime.memory.memory_feedback import MemoryFeedbackEngine
-        from bridge import create_memory_node
+        from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+        from AINDY.runtime.memory import MemoryOrchestrator
+        from AINDY.runtime.memory.memory_feedback import MemoryFeedbackEngine
+        from AINDY.bridge import create_memory_node
 
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)
         feedback_engine = MemoryFeedbackEngine()
@@ -598,7 +598,7 @@ def execute_nodus_task_payload(
         )
         try:
             if _pre_eu is not None:
-                from core.execution_unit_service import ExecutionUnitService
+                from AINDY.core.execution_unit_service import ExecutionUnitService
                 ExecutionUnitService(db).update_status(
                     _pre_eu.id,
                     "completed" if nodus_result.status == "success" else "failed",

@@ -32,11 +32,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Pre-import source modules so patching works
-import db.models.nodus_scheduled_job  # noqa: F401
-import db.models.automation_log       # noqa: F401
-import db.database                    # noqa: F401
-import utils.uuid_utils               # noqa: F401
-import runtime.nodus_schedule_service  # noqa: F401
+import AINDY.db.models.nodus_scheduled_job  # noqa: F401
+import AINDY.db.models.automation_log       # noqa: F401
+import AINDY.db.database                    # noqa: F401
+import AINDY.utils.uuid_utils               # noqa: F401
+import AINDY.runtime.nodus_schedule_service  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -81,27 +81,27 @@ def _make_db_with_result(result=None):
 
 class TestParseCron:
     def test_valid_expression_returns_trigger(self):
-        from runtime.nodus_schedule_service import _parse_cron
-        from apscheduler.triggers.cron import CronTrigger
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
+        from AINDY.apscheduler.triggers.cron import CronTrigger
         assert isinstance(_parse_cron("0 10 * * *"), CronTrigger)
 
     def test_every_minute(self):
-        from runtime.nodus_schedule_service import _parse_cron
-        from apscheduler.triggers.cron import CronTrigger
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
+        from AINDY.apscheduler.triggers.cron import CronTrigger
         assert isinstance(_parse_cron("* * * * *"), CronTrigger)
 
     def test_invalid_expression_raises(self):
-        from runtime.nodus_schedule_service import _parse_cron
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
         with pytest.raises(ValueError, match="Invalid cron"):
             _parse_cron("not_a_cron")
 
     def test_six_fields_raises(self):
-        from runtime.nodus_schedule_service import _parse_cron
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
         with pytest.raises(ValueError):
             _parse_cron("0 10 * * * *")
 
     def test_apscheduler_missing_raises(self):
-        from runtime.nodus_schedule_service import _parse_cron
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
         with patch.dict("sys.modules", {
             "apscheduler": None,
             "apscheduler.triggers": None,
@@ -111,8 +111,8 @@ class TestParseCron:
                 _parse_cron("0 10 * * *")
 
     def test_weekday_range_valid(self):
-        from runtime.nodus_schedule_service import _parse_cron
-        from apscheduler.triggers.cron import CronTrigger
+        from AINDY.runtime.nodus_schedule_service import _parse_cron
+        from AINDY.apscheduler.triggers.cron import CronTrigger
         assert isinstance(_parse_cron("0 9 * * 1-5"), CronTrigger)
 
 
@@ -129,7 +129,7 @@ class TestCreateNodusScheduledJob:
     ]
 
     def _call(self, **kwargs):
-        from runtime.nodus_schedule_service import create_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import create_nodus_scheduled_job
 
         job_row = kwargs.pop("job_row", _make_job_row())
         db = MagicMock()
@@ -168,7 +168,7 @@ class TestCreateNodusScheduledJob:
         db.commit.assert_called()
 
     def test_register_with_scheduler_called(self):
-        from runtime.nodus_schedule_service import create_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import create_nodus_scheduled_job
         job_row = _make_job_row()
         db = MagicMock()
         db.refresh.side_effect = lambda r: None
@@ -184,7 +184,7 @@ class TestCreateNodusScheduledJob:
         mock_reg.assert_called_once()
 
     def test_invalid_cron_raises_before_db_write(self):
-        from runtime.nodus_schedule_service import create_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import create_nodus_scheduled_job
         db = MagicMock()
         with pytest.raises(ValueError, match="Invalid cron"):
             create_nodus_scheduled_job(
@@ -199,7 +199,7 @@ class TestCreateNodusScheduledJob:
 
 class TestListNodusScheduledJobs:
     def test_returns_list_of_dicts(self):
-        from runtime.nodus_schedule_service import list_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import list_nodus_scheduled_jobs
 
         job = _make_job_row()
         db = _make_db_with_result(job)
@@ -213,7 +213,7 @@ class TestListNodusScheduledJobs:
         assert "id" in result[0]
 
     def test_empty_when_no_jobs(self):
-        from runtime.nodus_schedule_service import list_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import list_nodus_scheduled_jobs
 
         db = _make_db_with_result(None)
 
@@ -224,7 +224,7 @@ class TestListNodusScheduledJobs:
         assert result == []
 
     def test_multiple_jobs(self):
-        from runtime.nodus_schedule_service import list_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import list_nodus_scheduled_jobs
 
         jobs = [_make_job_row(job_name=f"job_{i}") for i in range(3)]
         db = MagicMock()
@@ -249,7 +249,7 @@ class TestDeleteNodusScheduledJob:
     _VALID_JOB_ID = str(uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 
     def test_returns_true_on_success(self):
-        from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
@@ -262,7 +262,7 @@ class TestDeleteNodusScheduledJob:
         assert result is True
 
     def test_sets_is_active_false(self):
-        from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
@@ -276,7 +276,7 @@ class TestDeleteNodusScheduledJob:
         db.commit.assert_called()
 
     def test_calls_remove_from_scheduler(self):
-        from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
@@ -289,7 +289,7 @@ class TestDeleteNodusScheduledJob:
         mock_rm.assert_called_once_with(self._VALID_JOB_ID)
 
     def test_returns_false_when_not_found(self):
-        from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         db = _make_db_with_result(None)
         with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
@@ -300,7 +300,7 @@ class TestDeleteNodusScheduledJob:
         assert result is False
 
     def test_returns_false_for_invalid_uuid(self):
-        from runtime.nodus_schedule_service import delete_nodus_scheduled_job
+        from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         db = MagicMock()
         with patch("utils.uuid_utils.normalize_uuid", return_value="uid"):
@@ -315,7 +315,7 @@ class TestDeleteNodusScheduledJob:
 
 class TestRestoreNodusScheduledJobs:
     def test_restores_active_jobs(self):
-        from runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
 
         jobs = [_make_job_row(), _make_job_row()]
         mock_db = MagicMock()
@@ -334,7 +334,7 @@ class TestRestoreNodusScheduledJobs:
         assert mock_reg.call_count == 2
 
     def test_returns_zero_when_no_jobs(self):
-        from runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
 
         mock_db = MagicMock()
         q = MagicMock()
@@ -349,7 +349,7 @@ class TestRestoreNodusScheduledJobs:
         assert count == 0
 
     def test_skips_job_with_bad_cron_continues_next(self):
-        from runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
 
         jobs = [_make_job_row(), _make_job_row()]
         mock_db = MagicMock()
@@ -369,7 +369,7 @@ class TestRestoreNodusScheduledJobs:
         assert mock_reg.call_count == 1
 
     def test_db_session_closed_even_on_scan_error(self):
-        from runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
+        from AINDY.runtime.nodus_schedule_service import restore_nodus_scheduled_jobs
 
         mock_db = MagicMock()
         mock_db.query.side_effect = RuntimeError("db down")
@@ -390,7 +390,7 @@ class TestRunScheduledNodusJob:
         return str(uuid.uuid4())
 
     def test_skips_when_not_leader(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         with patch("domain.task_services.is_background_leader", return_value=False), \
              patch("db.database.SessionLocal") as mock_session:
@@ -399,7 +399,7 @@ class TestRunScheduledNodusJob:
         mock_session.assert_not_called()
 
     def test_skips_when_job_not_found(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         mock_db = _make_db_with_result(None)
 
@@ -411,7 +411,7 @@ class TestRunScheduledNodusJob:
         mock_db.add.assert_not_called()
 
     def test_skips_when_job_inactive(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         job = _make_job_row(is_active=False)
         mock_db = _make_db_with_result(job)
@@ -425,7 +425,7 @@ class TestRunScheduledNodusJob:
 
     def _run_with_result(self, flow_result, job=None):
         """Helper to run _run_scheduled_nodus_job with a mock flow result."""
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         _job = job or _make_job_row()
         mock_db = _make_db_with_result(_job)
@@ -476,7 +476,7 @@ class TestRunScheduledNodusJob:
         assert job.last_run_status == "failure"
 
     def test_runner_exception_sets_error_status_does_not_raise(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
@@ -491,7 +491,7 @@ class TestRunScheduledNodusJob:
         assert job.last_run_status == "error"
 
     def test_db_session_always_closed(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
@@ -520,7 +520,7 @@ class TestRunScheduledNodusJob:
         mock_db.close.assert_called_once()
 
     def test_uses_shared_nodus_flow_runner(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
@@ -551,7 +551,7 @@ class TestRunScheduledNodusJob:
         assert mock_run.call_args.kwargs["trace_id"] is not None
 
     def test_leader_check_exception_skips_gracefully(self):
-        from runtime.nodus_schedule_service import _run_scheduled_nodus_job
+        from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
         with patch("domain.task_services.is_background_leader", side_effect=RuntimeError("no db")), \
              patch("db.database.SessionLocal") as mock_session:
@@ -566,7 +566,7 @@ class TestRunScheduledNodusJob:
 
 class TestSerializeJob:
     def test_contains_all_expected_keys(self):
-        from runtime.nodus_schedule_service import _serialize_job
+        from AINDY.runtime.nodus_schedule_service import _serialize_job
 
         row = _make_job_row()
         result = _serialize_job(row)
@@ -579,28 +579,28 @@ class TestSerializeJob:
         assert expected == set(result.keys())
 
     def test_id_is_string(self):
-        from runtime.nodus_schedule_service import _serialize_job
+        from AINDY.runtime.nodus_schedule_service import _serialize_job
 
         row = _make_job_row(id=uuid.UUID("aaaabbbb-cccc-dddd-eeee-ffff00001111"))
         result = _serialize_job(row)
         assert isinstance(result["id"], str)
 
     def test_next_run_at_passed_through(self):
-        from runtime.nodus_schedule_service import _serialize_job
+        from AINDY.runtime.nodus_schedule_service import _serialize_job
 
         row = _make_job_row()
         result = _serialize_job(row, next_run_at="2026-04-02T10:00:00+00:00")
         assert result["next_run_at"] == "2026-04-02T10:00:00+00:00"
 
     def test_last_run_at_none_when_not_set(self):
-        from runtime.nodus_schedule_service import _serialize_job
+        from AINDY.runtime.nodus_schedule_service import _serialize_job
 
         row = _make_job_row(last_run_at=None)
         result = _serialize_job(row)
         assert result["last_run_at"] is None
 
     def test_created_at_is_isoformat_string(self):
-        from runtime.nodus_schedule_service import _serialize_job
+        from AINDY.runtime.nodus_schedule_service import _serialize_job
 
         now = datetime.now(timezone.utc)
         row = _make_job_row(created_at=now)

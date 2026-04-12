@@ -3,11 +3,11 @@ from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from db.models import DropPointDB, PingDB, ScoreSnapshotDB
-from analytics.causal_engine import get_causal_chain
-from analytics.delta_engine import compute_deltas
-from analytics.prediction_engine import predict_drop_point
-from analytics.recommendation_engine import recommend_for_drop_point
+from AINDY.db.models import DropPointDB, PingDB, ScoreSnapshotDB
+from AINDY.analytics.causal_engine import get_causal_chain
+from AINDY.analytics.delta_engine import compute_deltas
+from AINDY.analytics.prediction_engine import predict_drop_point
+from AINDY.analytics.recommendation_engine import recommend_for_drop_point
 
 
 def _split_terms(value: Optional[str]) -> Set[str]:

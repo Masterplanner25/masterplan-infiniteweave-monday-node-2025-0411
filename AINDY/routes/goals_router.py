@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from core.execution_service import ExecutionContext
-from core.execution_service import run_execution
-from db.database import get_db
-from services.auth_service import get_current_user
+from AINDY.core.execution_service import ExecutionContext
+from AINDY.core.execution_service import run_execution
+from AINDY.db.database import get_db
+from AINDY.services.auth_service import get_current_user
 
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
@@ -42,7 +42,7 @@ def list_goals(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("goals_list", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Goals list flow failed"))
@@ -60,7 +60,7 @@ def create_goal_route(
     user_id = str(current_user["sub"])
 
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow(
             "goal_create",
             {
@@ -99,7 +99,7 @@ def list_goal_state(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        from runtime.flow_engine import run_flow
+        from AINDY.runtime.flow_engine import run_flow
         result = run_flow("goals_state", {}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError((result.get("data") or {}).get("message", "Goals state flow failed"))
