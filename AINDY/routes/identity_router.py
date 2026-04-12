@@ -46,6 +46,7 @@ async def boot_identity(
 
     def handler(ctx):
         result = boot_identity_context(user_id, db)
+
         try:
             queue_system_event(
                 db=db,
@@ -64,6 +65,7 @@ async def boot_identity(
                 status_code=500,
                 detail="Identity boot event emission failed",
             ) from exc
+
         return result
 
     return await execute_with_pipeline(
@@ -71,7 +73,7 @@ async def boot_identity(
         route_name="identity.boot",
         handler=handler,
         user_id=str(user_id),
-        metadata={"db": db},
+        metadata={"db": db, "disable_memory_capture": True},
     )
 
 

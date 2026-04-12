@@ -286,23 +286,23 @@ class TestMasterScoreCalculation:
         from AINDY.domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
-            "domain.infinity_service.calculate_execution_speed",
+            "AINDY.domain.infinity_service.calculate_execution_speed",
             return_value=(75.0, 10)
         )
         mocker.patch(
-            "domain.infinity_service.calculate_decision_efficiency",
+            "AINDY.domain.infinity_service.calculate_decision_efficiency",
             return_value=(65.0, 15)
         )
         mocker.patch(
-            "domain.infinity_service.calculate_ai_productivity_boost",
+            "AINDY.domain.infinity_service.calculate_ai_productivity_boost",
             return_value=(80.0, 5)
         )
         mocker.patch(
-            "domain.infinity_service.calculate_focus_quality",
+            "AINDY.domain.infinity_service.calculate_focus_quality",
             return_value=(70.0, 8)
         )
         mocker.patch(
-            "domain.infinity_service.calculate_masterplan_progress",
+            "AINDY.domain.infinity_service.calculate_masterplan_progress",
             return_value=(60.0, 20)
         )
 
@@ -350,7 +350,7 @@ class TestMasterScoreCalculation:
             "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(50.0, 5))
+            mocker.patch(f"AINDY.domain.infinity_service.{kpi}", return_value=(50.0, 5))
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -364,7 +364,7 @@ class TestMasterScoreCalculation:
         from AINDY.domain.infinity_service import calculate_infinity_score, orchestrator_score_context
 
         mocker.patch(
-            "domain.infinity_service.calculate_execution_speed",
+            "AINDY.domain.infinity_service.calculate_execution_speed",
             side_effect=Exception("deliberate failure"),
         )
 
@@ -382,7 +382,7 @@ class TestMasterScoreCalculation:
             "calculate_ai_productivity_boost", "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(100.0, 1))
+            mocker.patch(f"AINDY.domain.infinity_service.{kpi}", return_value=(100.0, 1))
 
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
@@ -402,7 +402,7 @@ class TestMasterScoreCalculation:
             "calculate_ai_productivity_boost", "calculate_focus_quality",
             "calculate_masterplan_progress",
         ]:
-            mocker.patch(f"domain.infinity_service.{kpi}", return_value=(80.0, 5))
+            mocker.patch(f"AINDY.domain.infinity_service.{kpi}", return_value=(80.0, 5))
 
         prev = MagicMock(spec=UserScore)
         prev.master_score = 70.0
@@ -447,7 +447,7 @@ class TestScoreEndpoints:
         self, client, auth_headers, mocker
     ):
         mocker.patch(
-            "domain.infinity_orchestrator.execute",
+            "AINDY.domain.infinity_orchestrator.execute",
             return_value=None,
         )
 
@@ -500,11 +500,12 @@ class TestEventTriggers:
         import inspect
         # routes/__init__.py exports the APIRouter object as watcher_router;
         # we need the source module for inspection.
-        mod = sys.modules.get("routes.watcher_router")
-        assert mod is not None, "routes.watcher_router module not loaded"
+        mod = sys.modules.get("AINDY.routes.watcher_router")
+        assert mod is not None, "AINDY.routes.watcher_router module not loaded"
         src = inspect.getsource(mod)
-        assert "execute_intent" in src, "watcher_router not using the canonical execution flow"
-        assert "watcher_ingest" in src, "watcher_router must target watcher_ingest workflow"
+        assert "watcher_signals_receive" in src or "run_flow" in src, (
+            "watcher_router must route through the canonical flow engine"
+        )
 
     def test_arm_analyzer_triggers_score(self):
         """ARM analyzer calls the Infinity orchestrator after analysis."""

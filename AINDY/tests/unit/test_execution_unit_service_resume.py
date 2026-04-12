@@ -81,7 +81,7 @@ class TestResumeIdempotencyGuard:
         import logging
         eu = _eu(status)
         eus = _eus(eu)
-        with caplog.at_level(logging.DEBUG, logger="core.execution_unit_service"):
+        with caplog.at_level(logging.DEBUG, logger="AINDY.core.execution_unit_service"):
             eus.resume_execution_unit(str(eu.id))
         assert any("skipped duplicate resume" in r.message for r in caplog.records)
 

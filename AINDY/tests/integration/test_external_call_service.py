@@ -18,11 +18,11 @@ def test_perform_external_call_success_emits_start_and_complete(monkeypatch):
 
     events = []
     monkeypatch.setattr(
-        "platform_layer.external_call_service.emit_system_event",
+        "AINDY.platform_layer.external_call_service.emit_system_event",
         lambda **kwargs: events.append(kwargs["event_type"]),
     )
     monkeypatch.setattr(
-        "platform_layer.external_call_service.emit_error_event",
+        "AINDY.platform_layer.external_call_service.emit_error_event",
         lambda **kwargs: events.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -45,11 +45,11 @@ def test_perform_external_call_failure_emits_failed_and_error(monkeypatch):
 
     events = []
     monkeypatch.setattr(
-        "platform_layer.external_call_service.emit_system_event",
+        "AINDY.platform_layer.external_call_service.emit_system_event",
         lambda **kwargs: events.append(kwargs["event_type"]),
     )
     monkeypatch.setattr(
-        "platform_layer.external_call_service.emit_error_event",
+        "AINDY.platform_layer.external_call_service.emit_error_event",
         lambda **kwargs: events.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -76,8 +76,8 @@ def test_perform_external_call_raises_when_required_event_emission_fails(monkeyp
     def _emit_system_event(**kwargs):
         raise SystemEventEmissionError("missing event")
 
-    monkeypatch.setattr("platform_layer.external_call_service.emit_system_event", _emit_system_event)
-    monkeypatch.setattr("platform_layer.external_call_service.emit_error_event", lambda **kwargs: None)
+    monkeypatch.setattr("AINDY.platform_layer.external_call_service.emit_system_event", _emit_system_event)
+    monkeypatch.setattr("AINDY.platform_layer.external_call_service.emit_error_event", lambda **kwargs: None)
 
     with pytest.raises(SystemEventEmissionError, match="missing event"):
         perform_external_call(

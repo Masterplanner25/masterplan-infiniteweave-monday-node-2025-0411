@@ -9,6 +9,7 @@ from AINDY.config import settings
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal, engine, get_db
+from AINDY.db.models.system_event import SystemEvent
 from AINDY.services.auth_service import verify_api_key
 
 router = APIRouter(tags=["Health"])
@@ -95,22 +96,15 @@ def liveness() -> dict:
     summary="Check Liveness",
     description="Performs a liveness check with a shallow database probe. Returns the current service status and database reachability.",
 )
-def liveness_http(request: Request) -> dict:
+def liveness_http(request: Request, db: Session = Depends(get_db)) -> dict:
     payload = _compute_liveness()
     def handler(_ctx):
-        event_db = SessionLocal()
-        try:
-            emit_system_event(
-                db=event_db,
-                event_type="health.liveness.completed",
-                payload=payload,
-                required=False,
-            )
-        finally:
-            event_db.close()
+        event = SystemEvent(type="health.liveness.completed", payload={})
+        db.add(event)
+        db.commit()
         return payload
 
-    return _execute_health(request, "health.liveness", handler)
+    return _execute_health(request, "health.liveness", handler, db=db)
 
 
 def liveness_legacy_alias() -> dict:

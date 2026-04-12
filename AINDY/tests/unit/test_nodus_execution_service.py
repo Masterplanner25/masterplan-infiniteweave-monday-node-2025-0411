@@ -85,9 +85,9 @@ def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
         "nodus.runtime": MagicMock(),
         "nodus.runtime.embedding": MagicMock(NodusRuntime=MagicMock()),
     }):
-        with patch("runtime.memory.MemoryOrchestrator", orchestrator_cls), \
-             patch("runtime.memory.memory_feedback.MemoryFeedbackEngine", feedback_cls), \
-             patch("bridge.create_memory_node", create_memory_node):
+        with patch("AINDY.runtime.memory.MemoryOrchestrator", orchestrator_cls), \
+             patch("AINDY.runtime.memory.memory_feedback.MemoryFeedbackEngine", feedback_cls), \
+             patch("AINDY.bridge.create_memory_node", create_memory_node):
             result = service.execute_nodus_task_payload(
                 task_name="memory smoke",
                 task_code="remember('x')",
@@ -128,20 +128,31 @@ def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(mo
         "restricted_operations": [],
     })
 
+    import sys
+
+    # Remove both bare and AINDY-prefixed module from cache so the lazy import triggers
+    _saved = {}
+    for key in list(sys.modules.keys()):
+        if "nodus.runtime.embedding" in key:
+            _saved[key] = sys.modules.pop(key)
+
     real_import = __import__
 
     def _import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "nodus.runtime.embedding":
+        if "nodus.runtime.embedding" in name:
             raise ImportError("nodus runtime missing")
         return real_import(name, globals, locals, fromlist, level)
 
-    with patch("builtins.__import__", side_effect=_import):
-        result = service.execute_nodus_task_payload(
-            task_name="missing runtime",
-            task_code="let x = 1",
-            db=MagicMock(),
-            user_id="11111111-1111-1111-1111-111111111111",
-        )
+    try:
+        with patch("builtins.__import__", side_effect=_import):
+            result = service.execute_nodus_task_payload(
+                task_name="missing runtime",
+                task_code="let x = 1",
+                db=MagicMock(),
+                user_id="11111111-1111-1111-1111-111111111111",
+            )
+    finally:
+        sys.modules.update(_saved)
 
     assert result["status"] == "bridge_ready"
     assert "Nodus runtime not found" in result["message"]
@@ -157,9 +168,9 @@ def test_run_nodus_script_via_flow_uses_canonical_flow_runner(monkeypatch):
 
     monkeypatch.setattr(service, "ensure_nodus_script_flow_registered", lambda: None)
 
-    with patch("runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": {"start": "nodus.execute"}}), \
-         patch("runtime.flow_engine.PersistentFlowRunner", runner_cls), \
-         patch("utils.uuid_utils.normalize_uuid", return_value="user-1"):
+    with patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"nodus_execute": {"start": "nodus.execute"}}), \
+         patch("AINDY.runtime.flow_engine.PersistentFlowRunner", runner_cls), \
+         patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="user-1"):
         result = service.run_nodus_script_via_flow(
             script="let x = 1",
             input_payload={"value": 1},
@@ -219,7 +230,7 @@ def test_format_nodus_flow_result_uses_shared_execution_record_shape():
 def test_execute_agent_run_via_nodus_delegates_to_canonical_agent_flow_helper():
     from AINDY.runtime import nodus_execution_service as service
 
-    with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
+    with patch("AINDY.runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
         result = service.execute_agent_run_via_nodus(
             run_id="run-1",
             plan={"steps": []},
@@ -244,7 +255,7 @@ def test_execute_agent_run_via_nodus_delegates_to_canonical_agent_flow_helper():
 def test_adapter_execute_with_flow_is_compatibility_wrapper():
     from AINDY.runtime.nodus_adapter import NodusAgentAdapter
 
-    with patch("runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
+    with patch("AINDY.runtime.nodus_execution_service.execute_agent_flow_orchestration", return_value={"status": "SUCCESS"}) as mock_execute:
         result = NodusAgentAdapter.execute_with_flow(
             run_id="run-2",
             plan={"steps": [{"tool": "task.create"}]},
@@ -269,7 +280,7 @@ def test_adapter_execute_with_flow_is_compatibility_wrapper():
 def test_execute_agent_run_via_nodus_honors_patched_adapter_entrypoint():
     from AINDY.runtime import nodus_execution_service as service
 
-    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS", "patched": True}) as mock_execute:
+    with patch("AINDY.runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", return_value={"status": "SUCCESS", "patched": True}) as mock_execute:
         result = service.execute_agent_run_via_nodus(
             run_id="run-3",
             plan={"steps": [{"tool": "task.create"}]},

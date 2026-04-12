@@ -124,14 +124,14 @@ class TestInfinityLoopHelpers:
     def test_latest_adjustment_payload_helper_returns_none_without_adjustment(self):
         from AINDY.routes.score_router import _latest_adjustment_payload
 
-        with patch("domain.infinity_loop.get_latest_adjustment", return_value=None):
+        with patch("AINDY.domain.infinity_loop.get_latest_adjustment", return_value=None):
             assert _latest_adjustment_payload("u1", MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
         from AINDY.routes.score_router import _latest_adjustment_payload
 
-        with patch("domain.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
-             patch("domain.infinity_loop.serialize_adjustment", return_value={
+        with patch("AINDY.domain.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
+             patch("AINDY.domain.infinity_loop.serialize_adjustment", return_value={
                  "id": "adj-1",
                  "decision_type": "continue_highest_priority_task",
                  "applied_at": "2026-01-01T00:00:00+00:00",
@@ -275,7 +275,7 @@ class TestRunLoop:
         db.refresh.return_value = None
 
         monkeypatch.setattr(
-            "domain.infinity_service.get_user_kpi_snapshot",
+            "AINDY.domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 55.0,
                 "decision_efficiency": 55.0,
@@ -284,7 +284,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "domain.infinity_loop.get_latest_adjustment",
+            "AINDY.domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -304,7 +304,7 @@ class TestRunLoop:
 
         db = MagicMock()
         monkeypatch.setattr(
-            "domain.infinity_service.get_user_kpi_snapshot",
+            "AINDY.domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 55.0,
                 "decision_efficiency": 55.0,
@@ -313,7 +313,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "domain.infinity_loop.get_latest_adjustment",
+            "AINDY.domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: existing,
         )
 
@@ -326,7 +326,7 @@ class TestRunLoop:
 
         db = MagicMock()
         monkeypatch.setattr(
-            "domain.infinity_service.get_user_kpi_snapshot",
+            "AINDY.domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: {
                 "execution_speed": 30.0,
                 "decision_efficiency": 55.0,
@@ -335,7 +335,7 @@ class TestRunLoop:
             },
         )
         monkeypatch.setattr(
-            "domain.infinity_loop.get_latest_adjustment",
+            "AINDY.domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
         called = {}
@@ -344,7 +344,7 @@ class TestRunLoop:
             called["user_id"] = user_id
             return {"task_ids": [1, 2, 3]}
 
-        monkeypatch.setattr("domain.infinity_loop._reprioritize_tasks", fake_reprio)
+        monkeypatch.setattr("AINDY.domain.infinity_loop._reprioritize_tasks", fake_reprio)
         adjustment = run_loop("u1", "task_completed", db)
         assert adjustment is not None
         assert called["user_id"] == "u1"
@@ -354,7 +354,7 @@ class TestRunLoop:
 
         db = MagicMock()
         monkeypatch.setattr(
-            "domain.infinity_service.get_user_kpi_snapshot",
+            "AINDY.domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: (_ for _ in ()).throw(RuntimeError("boom")),
         )
         assert run_loop("u1", "manual", db) is None
@@ -370,11 +370,11 @@ class TestRunLoop:
 
         db.add.side_effect = capture_add
         monkeypatch.setattr(
-            "domain.infinity_service.get_user_kpi_snapshot",
+            "AINDY.domain.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: None,
         )
         monkeypatch.setattr(
-            "domain.infinity_loop.get_latest_adjustment",
+            "AINDY.domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -387,11 +387,11 @@ class TestRunLoop:
         db = MagicMock()
         db.refresh.return_value = None
         monkeypatch.setattr(
-            "domain.infinity_loop._decide",
+            "AINDY.domain.infinity_loop._decide",
             lambda score_snapshot, feedback_context=None: ("review_plan", {"reason": "x"}),
         )
         monkeypatch.setattr(
-            "domain.infinity_loop.get_latest_adjustment",
+            "AINDY.domain.infinity_loop.get_latest_adjustment",
             lambda user_id, db: None,
         )
 
@@ -411,7 +411,7 @@ class TestPersistedSuggestions:
             ]
         }
 
-        with patch("domain.infinity_loop.get_latest_adjustment", return_value=latest):
+        with patch("AINDY.domain.infinity_loop.get_latest_adjustment", return_value=latest):
             result = suggest_tools({}, user_id="u1", db=db)
 
         assert result[0]["tool"] == "memory.recall"
@@ -423,7 +423,7 @@ class TestPersistedSuggestions:
         latest = MagicMock()
         latest.adjustment_payload = {"task_ids": [1, 2]}
 
-        with patch("domain.infinity_loop.get_latest_adjustment", return_value=latest):
+        with patch("AINDY.domain.infinity_loop.get_latest_adjustment", return_value=latest):
             result = suggest_tools(
                 {
                     "focus_quality": 20.0,
@@ -461,7 +461,7 @@ class TestScoreRouterLoopSurface:
         )
         db_session.commit()
 
-        with patch("routes.score_router._latest_adjustment_payload", return_value={
+        with patch("AINDY.routes.score_router._latest_adjustment_payload", return_value={
             "decision_type": "suggestion_refresh",
             "applied_at": "2026-01-01T00:00:00+00:00",
             "adjustment_payload": {"suggestions": []},
@@ -475,7 +475,7 @@ class TestScoreRouterLoopSurface:
 
     def test_recalculate_calls_orchestrator(self, client, auth_headers, mock_db, mocker):
         orchestrator_mock = mocker.patch(
-            "domain.infinity_orchestrator.execute",
+            "AINDY.domain.infinity_orchestrator.execute",
             return_value={
                 "score": {
                     "user_id": "u1",
@@ -491,7 +491,7 @@ class TestScoreRouterLoopSurface:
                 "next_action": {"type": "review_plan"},
             },
         )
-        mocker.patch("routes.score_router._latest_adjustment_payload", return_value=None)
+        mocker.patch("AINDY.routes.score_router._latest_adjustment_payload", return_value=None)
 
         response = client.post("/scores/me/recalculate", headers=auth_headers)
         assert response.status_code == 200
@@ -596,8 +596,8 @@ class TestLoopTriggerWiring:
 
     def test_watcher_calls_orchestrator(self):
         src = pathlib.Path("routes/watcher_router.py").read_text(encoding="utf-8")
-        assert "execute_intent" in src
-        assert "watcher_ingest" in src
+        assert "execute_with_pipeline_sync" in src
+        assert "receive_signals" in src
 
     def test_task_services_calls_orchestrator(self):
         src = pathlib.Path("services/task_services.py").read_text(encoding="utf-8")
@@ -626,7 +626,7 @@ class TestInfinityOrchestrator:
         from AINDY.domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.calculate_infinity_score",
+            "AINDY.domain.infinity_orchestrator.calculate_infinity_score",
             lambda user_id, db, trigger_event: {
                 "user_id": user_id,
                 "master_score": 60.0,
@@ -643,11 +643,11 @@ class TestInfinityOrchestrator:
         )
         fake_adjustment = MagicMock()
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.run_loop",
+            "AINDY.domain.infinity_orchestrator.run_loop",
             lambda user_id, trigger_event, db, score_snapshot=None: fake_adjustment,
         )
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.serialize_adjustment",
+            "AINDY.domain.infinity_orchestrator.serialize_adjustment",
             lambda adjustment: {
                 "id": "adj-1",
                 "decision_type": "continue_highest_priority_task",
@@ -665,7 +665,7 @@ class TestInfinityOrchestrator:
         from AINDY.domain.infinity_orchestrator import execute
 
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.calculate_infinity_score",
+            "AINDY.domain.infinity_orchestrator.calculate_infinity_score",
             lambda user_id, db, trigger_event: {
                 "user_id": user_id,
                 "master_score": 60.0,
@@ -681,11 +681,11 @@ class TestInfinityOrchestrator:
             },
         )
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.run_loop",
+            "AINDY.domain.infinity_orchestrator.run_loop",
             lambda user_id, trigger_event, db, score_snapshot=None: MagicMock(),
         )
         monkeypatch.setattr(
-            "domain.infinity_orchestrator.serialize_adjustment",
+            "AINDY.domain.infinity_orchestrator.serialize_adjustment",
             lambda adjustment: {
                 "id": "adj-1",
                 "decision_type": "review_plan",

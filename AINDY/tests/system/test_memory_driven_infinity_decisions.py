@@ -91,20 +91,20 @@ def _prime_memory_weight(db_session, source_event_id: uuid.UUID, *, expected_typ
 
 
 def _patch_orchestrator_dependencies(monkeypatch, task_name: str):
-    monkeypatch.setattr("domain.infinity_orchestrator.get_recent_memory", lambda *args, **kwargs: [])
-    monkeypatch.setattr("domain.infinity_orchestrator.get_user_metrics", lambda *args, **kwargs: {})
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.get_recent_memory", lambda *args, **kwargs: [])
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.get_user_metrics", lambda *args, **kwargs: {})
     monkeypatch.setattr(
-        "domain.infinity_orchestrator.compute_current_state",
+        "AINDY.domain.infinity_orchestrator.compute_current_state",
         lambda db: {"health_status": "healthy", "failure_rate": 0.0, "system_load": 0.1},
     )
-    monkeypatch.setattr("domain.infinity_orchestrator.rank_goals", lambda *args, **kwargs: [])
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.rank_goals", lambda *args, **kwargs: [])
     monkeypatch.setattr(
-        "domain.infinity_orchestrator.get_task_graph_context",
+        "AINDY.domain.infinity_orchestrator.get_task_graph_context",
         lambda db, user_id: {"ready": [{"task_name": task_name}], "blocked": [], "critical_path": []},
     )
-    monkeypatch.setattr("domain.infinity_orchestrator.get_social_performance_signals", lambda *args, **kwargs: [])
-    monkeypatch.setattr("domain.infinity_orchestrator.calculate_infinity_score", lambda **kwargs: _stable_score())
-    monkeypatch.setattr("domain.infinity_orchestrator.get_current_trace_id", lambda: "trace-memory-driven")
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.get_social_performance_signals", lambda *args, **kwargs: [])
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.calculate_infinity_score", lambda **kwargs: _stable_score())
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.get_current_trace_id", lambda: "trace-memory-driven")
 
 
 def test_failure_memory_changes_orchestrator_decision(db_session, test_user, monkeypatch):

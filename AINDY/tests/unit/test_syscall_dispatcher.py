@@ -318,14 +318,16 @@ class TestMemoryReadHandler:
         mock_db = MagicMock()
         mock_dao = MagicMock()
         mock_dao.recall.return_value = [{"id": "n1", "content": "hello"}]
-        with patch("kernel.syscall_registry.SessionLocal", return_value=mock_db):
-            with patch("kernel.syscall_registry.MemoryNodeDAO", return_value=mock_dao):
+        with patch("AINDY.kernel.syscall_registry.SessionLocal", return_value=mock_db):
+            with patch("AINDY.kernel.syscall_registry.MemoryNodeDAO", return_value=mock_dao):
                 # SessionLocal() is called inside handler; patch it as a context manager
                 pass
         # Patch both imports inside the handler's lazy import scope
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             return _handle_memory_read(payload, ctx), mock_dao
 
@@ -337,7 +339,9 @@ class TestMemoryReadHandler:
         mock_dao.recall.return_value = []
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             result = _handle_memory_read({"query": "test", "limit": 3}, ctx)
         mock_dao.recall.assert_called_once()
@@ -353,7 +357,9 @@ class TestMemoryReadHandler:
         mock_dao.recall.return_value = [{"id": "a"}, {"id": "b"}]
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             result = _handle_memory_read({}, ctx)
         assert result["count"] == 2
@@ -367,7 +373,9 @@ class TestMemoryReadHandler:
         mock_dao.recall.return_value = []
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             _handle_memory_read({}, ctx)
         assert mock_dao.recall.call_args[1]["limit"] == 5
@@ -391,7 +399,9 @@ class TestMemoryWriteHandler:
         mock_dao.save.return_value = {"id": "new-node", "content": payload.get("content", "")}
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             return _handle_memory_write(payload, ctx), mock_dao
 
@@ -428,7 +438,9 @@ class TestMemorySearchHandler:
         mock_dao.recall.return_value = [{"id": "x"}]
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
+            "AINDY.db.dao.memory_node_dao": MagicMock(MemoryNodeDAO=MagicMock(return_value=mock_dao)),
         }):
             result = _handle_memory_search({"query": "auth"}, ctx)
         assert result["count"] == 1
@@ -461,7 +473,12 @@ class TestFlowRunHandler:
         mock_registry = {}
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock()),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock()),
             "runtime.flow_engine": MagicMock(
+                FLOW_REGISTRY=mock_registry,
+                PersistentFlowRunner=MagicMock(),
+            ),
+            "AINDY.runtime.flow_engine": MagicMock(
                 FLOW_REGISTRY=mock_registry,
                 PersistentFlowRunner=MagicMock(),
             ),
@@ -478,7 +495,12 @@ class TestFlowRunHandler:
         mock_flow = {"start": "node_a", "edges": {}}
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "runtime.flow_engine": MagicMock(
+                FLOW_REGISTRY={"MY_FLOW": mock_flow},
+                PersistentFlowRunner=MagicMock(return_value=mock_runner),
+            ),
+            "AINDY.runtime.flow_engine": MagicMock(
                 FLOW_REGISTRY={"MY_FLOW": mock_flow},
                 PersistentFlowRunner=MagicMock(return_value=mock_runner),
             ),
@@ -509,7 +531,9 @@ class TestEventEmitHandler:
         mock_emit = MagicMock(return_value="ev-123")
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.system_event_service": MagicMock(emit_system_event=mock_emit),
+            "AINDY.core.system_event_service": MagicMock(emit_system_event=mock_emit),
         }):
             result = _handle_event_emit({"event_type": "task.done"}, ctx)
         mock_emit.assert_called_once()
@@ -527,7 +551,9 @@ class TestEventEmitHandler:
         mock_emit = MagicMock(return_value=ev_id)
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.system_event_service": MagicMock(emit_system_event=mock_emit),
+            "AINDY.core.system_event_service": MagicMock(emit_system_event=mock_emit),
         }):
             result = _handle_event_emit({"event_type": "x"}, ctx)
         assert result["event_id"] == str(ev_id)
@@ -628,7 +654,7 @@ class TestQuotaEnforcement:
         mock_rm = MagicMock()
         mock_rm.check_quota.return_value = (False, "over limit")
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
             result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
 
         assert result["status"] == "error"
@@ -639,7 +665,7 @@ class TestQuotaEnforcement:
         mock_rm = MagicMock()
         mock_rm.check_quota.return_value = (True, None)
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
             result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
 
         assert result["status"] == "success"
@@ -649,14 +675,14 @@ class TestQuotaEnforcement:
         mock_rm = MagicMock()
         mock_rm.check_quota.side_effect = RuntimeError("rm unavailable")
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=mock_rm):
             result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
 
         assert result["status"] == "success"
 
     def test_get_rm_exception_fails_open(self):
         """If _get_rm() itself raises, dispatch must still succeed (fail-open)."""
-        with patch("kernel.syscall_dispatcher._get_rm", side_effect=RuntimeError("db down")):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", side_effect=RuntimeError("db down")):
             result = self.dispatcher.dispatch(_QUOTA_SYSCALL, {}, self._ctx_with_cap())
 
         assert result["status"] == "success"

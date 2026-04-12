@@ -91,10 +91,10 @@ class TestNodeRegistration:
 # ── nodus.execute — source validation ─────────────────────────────────────────
 
 # The node uses lazy imports so patches must target the source modules, not nodus_adapter.
-_ADAPTER_PATH = "runtime.nodus_runtime_adapter.NodusRuntimeAdapter"
-_SINK_PATH = "runtime.nodus_runtime_adapter._build_event_sink"
-_FLUSH_PATH = "runtime.nodus_runtime_adapter._flush_memory_writes"
-_EVENT_PATH = "core.execution_signal_helper.queue_system_event"
+_ADAPTER_PATH = "AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter"
+_SINK_PATH = "AINDY.runtime.nodus_runtime_adapter._build_event_sink"
+_FLUSH_PATH = "AINDY.runtime.nodus_runtime_adapter._flush_memory_writes"
+_EVENT_PATH = "AINDY.core.execution_signal_helper.queue_system_event"
 
 
 class TestNodusExecuteSourceValidation:
@@ -245,8 +245,8 @@ class TestNodusExecuteFailure:
 
 # ── nodus.execute — context injection ─────────────────────────────────────────
 
-_CTX_PATH = "runtime.nodus_runtime_adapter.NodusExecutionContext"
-_CANONICAL_EXEC_PATH = "runtime.nodus_adapter.execute_nodus_runtime"
+_CTX_PATH = "AINDY.runtime.nodus_runtime_adapter.NodusExecutionContext"
+_CANONICAL_EXEC_PATH = "AINDY.runtime.nodus_adapter.execute_nodus_runtime"
 
 
 class TestNodusExecuteContextInjection:

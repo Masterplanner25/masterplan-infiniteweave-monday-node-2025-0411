@@ -98,7 +98,7 @@ class TestGenesisMessageEndpoint:
 
         source = inspect.getsource(call_genesis_llm)
         # Confirm it calls the OpenAI client
-        assert "client.chat.completions.create" in source, (
+        assert "chat.completions.create" in source, (
             "call_genesis_llm() appears to be a stub — does not call OpenAI"
         )
         # Confirm it is NOT a stub (stubs typically just return a dict immediately)
@@ -318,7 +318,7 @@ class TestGenesisBlock3:
         import inspect
         from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
         source = inspect.getsource(call_genesis_synthesis_llm)
-        assert "client.chat.completions.create" in source, (
+        assert "chat.completions.create" in source, (
             "call_genesis_synthesis_llm appears to be a stub — does not call OpenAI"
         )
 

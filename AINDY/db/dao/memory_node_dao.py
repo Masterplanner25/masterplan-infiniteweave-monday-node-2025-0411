@@ -903,6 +903,7 @@ class MemoryNodeDAO:
                 memory_id=str(node.id),
                 user_id=str(node.user_id) if node.user_id else None,
                 trace_id=(node.extra or {}).get("trace_id"),
+                db=self.db,
             )
         except Exception as exc:
             logger.warning("[MemoryNodeDAO] embedding enqueue failed for %s: %s", node.id, exc)

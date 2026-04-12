@@ -16,7 +16,7 @@ from AINDY.services.auth_service import get_current_user
 router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depends(get_current_user)])
 
 
-def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str):
+def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str, *, return_full: bool = False):
     from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
@@ -27,7 +27,7 @@ def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str
             msg = parts[1] if len(parts) > 1 else error
             raise HTTPException(status_code=code, detail=msg)
         raise HTTPException(status_code=500, detail=error or f"{flow_name} failed")
-    return result.get("data")
+    return result if return_full else result.get("data")
 
 
 def _execute_freelance(request: Request, route_name: str, handler, *, db: Session, user_id: str,
@@ -119,7 +119,12 @@ def get_all_orders(
 ):
     user_id = str(current_user["sub"])
     def handler(_ctx):
-        return _run_flow_freelance("freelance_orders_list", {}, db, user_id)
+        result = _run_flow_freelance("freelance_orders_list", {}, db, user_id, return_full=True)
+        data = result.get("data") or {}
+        return {
+            "status": result.get("status"),
+            "orders": data.get("orders", []),
+        }
     return _execute_freelance(request, "freelance.orders.list", handler, db=db, user_id=user_id)
 
 

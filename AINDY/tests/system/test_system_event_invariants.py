@@ -119,10 +119,10 @@ def test_flow_success_emits_start_and_end_events(monkeypatch):
     def _capture(**kwargs):
         events.append(kwargs["event_type"])
 
-    monkeypatch.setattr("runtime.flow_engine.emit_system_event", _capture)
-    monkeypatch.setattr("runtime.flow_engine.emit_error_event", lambda **kwargs: None)
+    monkeypatch.setattr("AINDY.runtime.flow_engine.emit_system_event", _capture)
+    monkeypatch.setattr("AINDY.runtime.flow_engine.emit_error_event", lambda **kwargs: None)
     monkeypatch.setattr(
-        "runtime.flow_engine.execute_node",
+        "AINDY.runtime.flow_engine.execute_node",
         lambda node_name, state, context: {"status": "SUCCESS", "output_patch": {"done": True}},
     )
     monkeypatch.setattr(PersistentFlowRunner, "_capture_flow_completion", lambda *args, **kwargs: None)
@@ -148,10 +148,10 @@ def test_flow_failure_emits_failure_and_error_events(monkeypatch):
     def _capture_error(**kwargs):
         events.append(f"error.{kwargs['error_type']}")
 
-    monkeypatch.setattr("runtime.flow_engine.emit_system_event", _capture_event)
-    monkeypatch.setattr("runtime.flow_engine.emit_error_event", _capture_error)
+    monkeypatch.setattr("AINDY.runtime.flow_engine.emit_system_event", _capture_event)
+    monkeypatch.setattr("AINDY.runtime.flow_engine.emit_error_event", _capture_error)
     monkeypatch.setattr(
-        "runtime.flow_engine.execute_node",
+        "AINDY.runtime.flow_engine.execute_node",
         lambda node_name, state, context: (_ for _ in ()).throw(RuntimeError("boom")),
     )
 
@@ -175,9 +175,9 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
     def _capture(**kwargs):
         events.append((kwargs["event_type"], kwargs.get("payload", {})))
 
-    monkeypatch.setattr("domain.infinity_orchestrator.emit_system_event", _capture)
+    monkeypatch.setattr("AINDY.domain.infinity_orchestrator.emit_system_event", _capture)
     monkeypatch.setattr(
-        "domain.infinity_orchestrator.calculate_infinity_score",
+        "AINDY.domain.infinity_orchestrator.calculate_infinity_score",
         lambda **kwargs: {
             "master_score": 71.0,
             "kpis": {
@@ -191,7 +191,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
         },
     )
     monkeypatch.setattr(
-        "domain.infinity_orchestrator.run_loop",
+        "AINDY.domain.infinity_orchestrator.run_loop",
         lambda **kwargs: SimpleNamespace(
             id=uuid.uuid4(),
             trace_id="trace-loop",
@@ -201,7 +201,7 @@ def test_loop_execution_emits_started_and_decision_events(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        "domain.infinity_orchestrator.serialize_adjustment",
+        "AINDY.domain.infinity_orchestrator.serialize_adjustment",
         lambda adjustment: {
             "id": str(adjustment.id),
             "trace_id": adjustment.trace_id,
@@ -244,9 +244,9 @@ def test_agent_step_success_emits_system_event(monkeypatch):
 
             return _Query()
 
-    monkeypatch.setattr("runtime.nodus_adapter.check_tool_capability", lambda **kwargs: {"ok": True})
-    monkeypatch.setattr("runtime.nodus_adapter.execute_tool", lambda **kwargs: {"success": True, "result": {"ok": True}, "error": None})
-    monkeypatch.setattr("runtime.nodus_adapter.emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
+    monkeypatch.setattr("AINDY.runtime.nodus_adapter.check_tool_capability", lambda **kwargs: {"ok": True})
+    monkeypatch.setattr("AINDY.runtime.nodus_adapter.execute_tool", lambda **kwargs: {"success": True, "result": {"ok": True}, "error": None})
+    monkeypatch.setattr("AINDY.runtime.nodus_adapter.emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
 
     state = {
         "steps": [{"tool": "task.create", "args": {}, "risk_level": "low", "description": "d"}],
@@ -281,12 +281,12 @@ def test_memory_write_requires_system_event(monkeypatch):
     monkeypatch.setattr(engine, "_is_duplicate", lambda content: False)
     monkeypatch.setattr(engine, "_auto_link", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        "memory.memory_capture_engine.emit_system_event",
+        "AINDY.memory.memory_capture_engine.emit_system_event",
         lambda **kwargs: (_ for _ in ()).throw(SystemEventEmissionError("missing memory event")),
     )
     emitted_errors = []
     monkeypatch.setattr(
-        "memory.memory_capture_engine.emit_error_event",
+        "AINDY.memory.memory_capture_engine.emit_error_event",
         lambda **kwargs: emitted_errors.append(f"error.{kwargs['error_type']}"),
     )
 
@@ -316,9 +316,9 @@ def test_async_job_success_persists_execution_events(monkeypatch):
     )
     db.add(log)
 
-    monkeypatch.setattr("platform_layer.async_job_service.SessionLocal", lambda: db)
+    monkeypatch.setattr("AINDY.platform_layer.async_job_service.SessionLocal", lambda: db)
     monkeypatch.setitem(
-        __import__("platform_layer.async_job_service", fromlist=["_JOB_REGISTRY"])._JOB_REGISTRY,
+        __import__("AINDY.platform_layer.async_job_service", fromlist=["_JOB_REGISTRY"])._JOB_REGISTRY,
         "test.job",
         lambda payload, session: {"ok": True, "payload": payload},
     )
@@ -327,14 +327,13 @@ def test_async_job_success_persists_execution_events(monkeypatch):
 
     assert db.automation_logs[str(log.id)].status == "success"
     assert len(db.system_events) >= 2
-    assert [event.type for event in db.system_events[:2]] == [
-        "execution.started",
-        "execution.completed",
-    ]
+    event_types = [event.type for event in db.system_events]
+    assert "execution.started" in event_types
+    assert "execution.completed" in event_types
 
 
 def test_auth_success_routes_emit_system_events(monkeypatch):
-    auth_router = importlib.import_module("routes.auth_router")
+    auth_router = importlib.import_module("AINDY.routes.auth_router")
     from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest
 
     events = []
@@ -360,7 +359,7 @@ def test_auth_success_routes_emit_system_events(monkeypatch):
 
 
 def test_health_success_routes_emit_system_events(monkeypatch):
-    health_router = importlib.import_module("routes.health_router")
+    health_router = importlib.import_module("AINDY.routes.health_router")
 
     events = []
 

@@ -95,8 +95,8 @@ class TestWaitGuardDirect:
         mock_db = MagicMock()
         ctx = _ctx(eu_id="eu-ok", db=mock_db)
         # Inner logic will import and call services — patch them to be safe.
-        with patch("core.execution_unit_service.ExecutionUnitService") as mock_eus, \
-             patch("kernel.scheduler_engine.get_scheduler_engine"):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService") as mock_eus, \
+             patch("AINDY.kernel.scheduler_engine.get_scheduler_engine"):
             mock_eus.return_value.update_status.return_value = True
             mock_eus.return_value.set_wait_condition.return_value = True
             # Should NOT raise
@@ -144,11 +144,11 @@ class TestDictBasedWaitGuard:
         def handler(ctx):
             return {"status": "WAITING", "wait_for": "approval"}
 
-        with patch("core.execution_unit_service.ExecutionUnitService") as mock_eus, \
-             patch("kernel.scheduler_engine.get_scheduler_engine"), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_emit_event", return_value=None), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_require_eu"), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_recall_memory_count", return_value=0):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService") as mock_eus, \
+             patch("AINDY.kernel.scheduler_engine.get_scheduler_engine"), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_emit_event", return_value=None), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_require_eu"), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_recall_memory_count", return_value=0):
             mock_eus.return_value.update_status.return_value = True
             mock_eus.return_value.set_wait_condition.return_value = True
             result = _run_pipeline(handler, eu_id="eu-ok", db=mock_db)
@@ -208,11 +208,11 @@ class TestRaiseBasedWaitGuard:
             from AINDY.core.execution_gate import ExecutionWaitSignal
             raise ExecutionWaitSignal("webhook.received")
 
-        with patch("core.execution_unit_service.ExecutionUnitService") as mock_eus, \
-             patch("kernel.scheduler_engine.get_scheduler_engine"), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_emit_event", return_value=None), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_require_eu"), \
-             patch("core.execution_pipeline.ExecutionPipeline._safe_recall_memory_count", return_value=0):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService") as mock_eus, \
+             patch("AINDY.kernel.scheduler_engine.get_scheduler_engine"), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_emit_event", return_value=None), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_require_eu"), \
+             patch("AINDY.core.execution_pipeline.ExecutionPipeline._safe_recall_memory_count", return_value=0):
             mock_eus.return_value.update_status.return_value = True
             mock_eus.return_value.set_wait_condition.return_value = True
             result = _run_pipeline(handler, eu_id="eu-ok", db=mock_db)

@@ -98,7 +98,7 @@ class TestValidateDraftIntegrity:
         source = _read_source("services/genesis_ai.py")
         func_start = source.index("def validate_draft_integrity(")
         func_body = source[func_start:]
-        assert "client.chat.completions.create" in func_body, (
+        assert "chat.completions.create" in func_body, (
             "validate_draft_integrity() does not call OpenAI"
         )
 
@@ -121,8 +121,7 @@ class TestValidateDraftIntegrity:
     def test_validate_draft_integrity_has_failsafe(self):
         """If OpenAI fails, function must return a valid fallback dict."""
         from AINDY.domain.genesis_ai import validate_draft_integrity
-        with patch("domain.genesis_ai.client") as mock_client:
-            mock_client.chat.completions.create.side_effect = Exception("Network error")
+        with patch("AINDY.domain.genesis_ai.perform_external_call", side_effect=Exception("Network error")):
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert isinstance(result, dict), "Fail-safe must return a dict"
         assert "audit_passed" in result
@@ -133,8 +132,7 @@ class TestValidateDraftIntegrity:
     def test_validate_draft_integrity_failsafe_audit_passed_false(self):
         """Fail-safe result must have audit_passed=False."""
         from AINDY.domain.genesis_ai import validate_draft_integrity
-        with patch("domain.genesis_ai.client") as mock_client:
-            mock_client.chat.completions.create.side_effect = Exception("fail")
+        with patch("AINDY.domain.genesis_ai.perform_external_call", side_effect=Exception("fail")):
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is False
 
@@ -144,8 +142,7 @@ class TestValidateDraftIntegrity:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT)
-        with patch("domain.genesis_ai.client") as mock_client:
-            mock_client.chat.completions.create.return_value = mock_response
+        with patch("AINDY.domain.genesis_ai.perform_external_call", return_value=mock_response):
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is True
         assert result["overall_confidence"] == 0.82
@@ -157,8 +154,7 @@ class TestValidateDraftIntegrity:
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
         mock_response.choices[0].message.content = json.dumps(SAMPLE_AUDIT_RESULT_FAILED)
-        with patch("domain.genesis_ai.client") as mock_client:
-            mock_client.chat.completions.create.return_value = mock_response
+        with patch("AINDY.domain.genesis_ai.perform_external_call", return_value=mock_response):
             result = validate_draft_integrity(SAMPLE_DRAFT)
         assert result["audit_passed"] is False
         assert len(result["findings"]) == 1

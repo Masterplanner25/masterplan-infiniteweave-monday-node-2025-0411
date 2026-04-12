@@ -64,6 +64,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Optional
 
+from sqlalchemy.orm import Session
+
 logger = logging.getLogger(__name__)
 
 
@@ -449,6 +451,7 @@ def dispatch_job(
     source: str,
     max_attempts: int = 1,
     execute_inline_in_test_mode: bool = True,
+    db: Session | None = None,
 ) -> DispatchResult:
     """
     Public dispatcher entry point for fire-and-forget job work.
@@ -458,6 +461,11 @@ def dispatch_job(
     it handles AutomationLog persistence, DB-backed ExecutionUnit creation,
     test-mode inline fallback, and the final thread-pool submission via
     ``dispatch(JOB_DISPATCH_STUB, ...)``.
+
+    Parameters
+    ----------
+    db: Session | None
+        Optional SQLAlchemy session reused when inline fallback is triggered.
 
     Returns
     -------

@@ -857,8 +857,8 @@ class TestFlowRunnerEUFailFast:
         db = self._mock_db()
         runner = self._runner(db)
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None):
             with pytest.raises(RuntimeError, match="ExecutionUnit creation returned None"):
                 runner.start({"input": "data"}, flow_name="test_flow")
 
@@ -866,8 +866,8 @@ class TestFlowRunnerEUFailFast:
         db = self._mock_db()
         runner = self._runner(db)
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None):
             with pytest.raises(RuntimeError) as exc_info:
                 runner.start({}, flow_name="my_important_flow")
 
@@ -886,8 +886,8 @@ class TestFlowRunnerEUFailFast:
 
         db.add.side_effect = _capture_add
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None):
             with pytest.raises(RuntimeError):
                 runner.start({}, flow_name="failing_flow")
 
@@ -903,8 +903,8 @@ class TestFlowRunnerEUFailFast:
         db = self._mock_db()
         runner = self._runner(db)
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None), \
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None), \
              patch.object(runner, "resume") as mock_resume:
             with pytest.raises(RuntimeError):
                 runner.start({}, flow_name="test_flow")
@@ -919,8 +919,8 @@ class TestFlowRunnerEUFailFast:
         db = self._mock_db()
         runner = self._runner(db)
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None):
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=None), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None):
             with pytest.raises(RuntimeError):
                 runner.start({}, flow_name="test_flow")
 
@@ -935,8 +935,8 @@ class TestFlowRunnerEUFailFast:
         mock_eu = MagicMock()
         mock_eu.id = _uuid.uuid4()
 
-        with patch("core.execution_unit_service.ExecutionUnitService.create", return_value=mock_eu), \
-             patch("runtime.flow_engine.emit_system_event", return_value=None), \
+        with patch("AINDY.core.execution_unit_service.ExecutionUnitService.create", return_value=mock_eu), \
+             patch("AINDY.runtime.flow_engine.emit_system_event", return_value=None), \
              patch.object(runner, "resume", return_value={"status": "SUCCESS"}) as mock_resume:
             result = runner.start({}, flow_name="eu_guard_noop_flow")
 

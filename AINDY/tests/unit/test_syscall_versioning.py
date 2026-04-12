@@ -506,7 +506,7 @@ class TestDispatcherVersionFallback:
             import AINDY.kernel.syscall_versioning as _ver_mod
             # Patch resolve_version to use fallback=True
             with patch.object(_ver_mod, "SYSCALL_VERSION_FALLBACK", True):
-                with patch("kernel.syscall_dispatcher.SYSCALL_VERSION_FALLBACK", True):
+                with patch("AINDY.kernel.syscall_dispatcher.SYSCALL_VERSION_FALLBACK", True):
                     result = self.dispatcher.dispatch(
                         "sys.v9.test.fallback_target", {}, _ctx()
                     )

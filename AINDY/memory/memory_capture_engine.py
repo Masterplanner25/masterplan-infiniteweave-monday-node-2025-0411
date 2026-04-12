@@ -14,10 +14,12 @@ No manual memory calls needed in v5+.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from typing import Optional
 
 from sqlalchemy import text
+from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
 emit_system_event = queue_system_event
 from AINDY.core.observability_events import emit_observability_event
@@ -50,6 +52,7 @@ EVENT_SIGNIFICANCE = {
 
 AUTO_MEMORY_EVENT_TYPES = {
     SystemEventTypes.EXECUTION_COMPLETED,
+    SystemEventTypes.EXECUTION_STARTED,
     SystemEventTypes.EXECUTION_FAILED,
     "capability.denied",
     SystemEventTypes.FEEDBACK_RETRY_DETECTED,
@@ -112,6 +115,11 @@ class MemoryCaptureEngine:
         context: additional context for significance scoring
         force: bypass significance check (always store)
         """
+        if context and context.get("disable_memory_capture"):
+            logger.info(
+                "[MemoryCapture] Disabled for event=%s (identity boot)", event_type
+            )
+            return None
         try:
             from AINDY.utils.trace_context import is_pipeline_active
 
@@ -119,6 +127,16 @@ class MemoryCaptureEngine:
                 return None
         except Exception:
             pass
+        env_name = os.getenv("ENV", "").lower()
+        testing_flag = os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}
+        prevent_capture_for_tests = (
+            settings.is_testing or env_name == "test" or testing_flag
+        )
+        if prevent_capture_for_tests and not force and not str(event_type or "").startswith("execution."):
+            logger.info(
+                "[MemoryCapture] Skipping capture during testing for event=%s", event_type
+            )
+            return None
         try:
             # Step 1: Score significance
             score = self._score_significance(

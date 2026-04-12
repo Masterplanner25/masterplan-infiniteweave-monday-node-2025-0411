@@ -74,7 +74,7 @@ def test_agent_execute_step_persists_step_and_updates_run(db_session, test_user)
         "correlation_id": run.correlation_id,
     }
 
-    with patch("runtime.nodus_adapter.execute_tool", return_value={"success": True, "result": {"task_id": "t1"}}):
+    with patch("AINDY.runtime.nodus_adapter.execute_tool", return_value={"success": True, "result": {"task_id": "t1"}}):
         result = agent_execute_step(state, {"db": db_session, "trace_id": run.trace_id})
 
     db_session.refresh(run)
@@ -98,7 +98,7 @@ def test_agent_finalize_run_marks_completed_and_emits_events(db_session, test_us
     run = _make_run(db_session, test_user, status="executing")
 
     with patch(
-        "domain.infinity_orchestrator.execute",
+        "AINDY.domain.infinity_orchestrator.execute",
         return_value={"next_action": "ship_the_followup"},
     ):
         result = agent_finalize_run(
@@ -146,7 +146,7 @@ def test_execute_run_persists_started_and_completed_state(db_session, test_user)
         db_session.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    with patch("runtime.nodus_execution_service.execute_agent_run_via_nodus", side_effect=_complete_run):
+    with patch("AINDY.runtime.nodus_execution_service.execute_agent_run_via_nodus", side_effect=_complete_run):
         result = execute_run(run.id, test_user.id, db_session)
 
     db_session.refresh(run)

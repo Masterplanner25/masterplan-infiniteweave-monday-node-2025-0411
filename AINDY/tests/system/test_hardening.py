@@ -61,12 +61,12 @@ def test_async_job_never_disappears(client, db_session, testing_session_factory,
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
-    monkeypatch.setattr("agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
+    monkeypatch.setattr("AINDY.agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
 
     def _complete_run(**kwargs):
         return {"status": "SUCCESS", "run_id": str(uuid.uuid4())}
 
-    monkeypatch.setattr("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
+    monkeypatch.setattr("AINDY.runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
 
     response = client.post("/apps/agent/run", headers=auth_headers, json={"goal": "Harden async execution"})
     assert response.status_code == 202

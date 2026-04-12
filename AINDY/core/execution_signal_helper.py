@@ -76,6 +76,14 @@ def queue_memory_capture(
     allow_when_pipeline_active: bool = False,
 ):
     ctx = get_current_execution_context()
+    ctx_metadata = getattr(ctx, "metadata", {}) or {}
+    disable_flag = bool(ctx_metadata.get("disable_memory_capture"))
+    if disable_flag:
+        return {
+            "skipped": True,
+            "event_type": event_type,
+            "source": source,
+        }
     if is_pipeline_active() and ctx is not None and not allow_when_pipeline_active:
         queued = _ensure_signal_bucket(ctx)
         queued["memory"].append(
@@ -112,7 +120,7 @@ def queue_memory_capture(
         source=source,
         tags=tags,
         node_type=node_type,
-        context=context,
+        context={**(context or {}), **({"disable_memory_capture": True} if disable_flag else {})},
         extra=extra,
         force=force,
         allow_when_pipeline_active=True,

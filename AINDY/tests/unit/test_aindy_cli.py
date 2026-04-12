@@ -336,7 +336,7 @@ class TestCmdRun:
             posted.update(payload)
             return 200, self._run_resp()
 
-        with patch("cli._http_post", side_effect=fake_post):
+        with patch("AINDY.cli._http_post", side_effect=fake_post):
             rc = cmd_run(str(script_file), api_url="http://server", token=None)
 
         assert rc == 0
@@ -352,7 +352,7 @@ class TestCmdRun:
         from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._http_post", return_value=(422, {"detail": "bad"})):
+        with patch("AINDY.cli._http_post", return_value=(422, {"detail": "bad"})):
             rc = cmd_run(str(f), api_url="http://server", token=None)
         assert rc == 1
 
@@ -360,7 +360,7 @@ class TestCmdRun:
         from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("fail", encoding="utf-8")
-        with patch("cli._http_post", return_value=(200, self._run_resp(nodus_status="failure"))):
+        with patch("AINDY.cli._http_post", return_value=(200, self._run_resp(nodus_status="failure"))):
             rc = cmd_run(str(f), api_url="http://server", token=None)
         assert rc == 1
 
@@ -369,7 +369,7 @@ class TestCmdRun:
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         posted = {}
-        with patch("cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (200, self._run_resp()))[1]):
+        with patch("AINDY.cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (200, self._run_resp()))[1]):
             cmd_run(str(f), api_url="http://s", token=None, input_payload={"goal": "test"})
         assert posted["input"] == {"goal": "test"}
 
@@ -384,8 +384,8 @@ class TestCmdRun:
             "steps": [{"sequence": 1, "fn_name": "recall", "duration_ms": 5, "status": "ok", "error": None}],
             "summary": {"total_calls": 1, "total_duration_ms": 5, "fn_counts": {"recall": 1}, "error_count": 0, "fn_names": ["recall"]},
         }
-        with patch("cli._http_post", return_value=(200, self._run_resp())), \
-             patch("cli._http_get", return_value=(200, trace_resp)) as mock_get:
+        with patch("AINDY.cli._http_post", return_value=(200, self._run_resp())), \
+             patch("AINDY.cli._http_get", return_value=(200, trace_resp)) as mock_get:
             cmd_run(str(f), api_url="http://s", token=None, trace=True)
 
         mock_get.assert_called_once()
@@ -396,8 +396,8 @@ class TestCmdRun:
         from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._http_post", return_value=(200, self._run_resp())), \
-             patch("cli._http_get", return_value=(404, {})):
+        with patch("AINDY.cli._http_post", return_value=(200, self._run_resp())), \
+             patch("AINDY.cli._http_get", return_value=(404, {})):
             rc = cmd_run(str(f), api_url="http://s", token=None, trace=True)
         assert rc == 0
         assert "warn" in capsys.readouterr().err.lower()
@@ -406,8 +406,8 @@ class TestCmdRun:
         from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._local_disassemble", return_value=None), \
-             patch("cli._http_post", return_value=(200, self._run_resp())):
+        with patch("AINDY.cli._local_disassemble", return_value=None), \
+             patch("AINDY.cli._http_post", return_value=(200, self._run_resp())):
             rc = cmd_run(str(f), api_url="http://s", token=None, dump_bytecode=True)
         assert rc == 0
         assert "warn" in capsys.readouterr().err.lower()
@@ -416,8 +416,8 @@ class TestCmdRun:
         from AINDY.cli import cmd_run
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._local_disassemble", return_value="LOAD_CONST 1\nRETURN"), \
-             patch("cli._http_post", return_value=(200, self._run_resp())):
+        with patch("AINDY.cli._local_disassemble", return_value="LOAD_CONST 1\nRETURN"), \
+             patch("AINDY.cli._http_post", return_value=(200, self._run_resp())):
             cmd_run(str(f), api_url="http://s", token=None, dump_bytecode=True)
         out = capsys.readouterr().out
         assert "LOAD_CONST" in out
@@ -427,7 +427,7 @@ class TestCmdRun:
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
         wrapped = {"status": "success", "data": self._run_resp()}
-        with patch("cli._http_post", return_value=(200, wrapped)):
+        with patch("AINDY.cli._http_post", return_value=(200, wrapped)):
             cmd_run(str(f), api_url="http://s", token=None, json_output=True)
         raw = capsys.readouterr().out
         parsed = json.loads(raw)
@@ -459,20 +459,20 @@ class TestCmdTrace:
 
     def test_returns_0_on_success(self):
         from AINDY.cli import cmd_trace
-        with patch("cli._http_get", return_value=(200, self._trace_resp())):
+        with patch("AINDY.cli._http_get", return_value=(200, self._trace_resp())):
             rc = cmd_trace("abc-123", api_url="http://s", token=None)
         assert rc == 0
 
     def test_returns_1_on_404(self, capsys):
         from AINDY.cli import cmd_trace
-        with patch("cli._http_get", return_value=(404, {})):
+        with patch("AINDY.cli._http_get", return_value=(404, {})):
             rc = cmd_trace("missing", api_url="http://s", token=None)
         assert rc == 1
         assert "not found" in capsys.readouterr().err.lower()
 
     def test_prints_trace_summary(self, capsys):
         from AINDY.cli import cmd_trace
-        with patch("cli._http_get", return_value=(200, self._trace_resp())):
+        with patch("AINDY.cli._http_get", return_value=(200, self._trace_resp())):
             cmd_trace("abc-123", api_url="http://s", token=None)
         out = capsys.readouterr().out
         assert "abc-123" in out
@@ -480,14 +480,14 @@ class TestCmdTrace:
 
     def test_json_flag_prints_raw(self, capsys):
         from AINDY.cli import cmd_trace
-        with patch("cli._http_get", return_value=(200, self._trace_resp())):
+        with patch("AINDY.cli._http_get", return_value=(200, self._trace_resp())):
             cmd_trace("abc-123", api_url="http://s", token=None, json_output=True)
         parsed = json.loads(capsys.readouterr().out)
         assert parsed["trace_id"] == "abc-123"
 
     def test_api_error_returns_1(self, capsys):
         from AINDY.cli import cmd_trace
-        with patch("cli._http_get", return_value=(500, {"detail": "server error"})):
+        with patch("AINDY.cli._http_get", return_value=(500, {"detail": "server error"})):
             rc = cmd_trace("abc-123", api_url="http://s", token=None)
         assert rc == 1
 
@@ -503,7 +503,7 @@ class TestCmdUpload:
         f.write_text("let x = 1", encoding="utf-8")
         posted = {}
         resp = {"name": "script", "size_bytes": 9, "uploaded_at": "2026-04-01", "uploaded_by": "u"}
-        with patch("cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
+        with patch("AINDY.cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
             rc = cmd_upload(str(f), api_url="http://s", token=None)
         assert rc == 0
         assert posted["content"] == "let x = 1"
@@ -514,7 +514,7 @@ class TestCmdUpload:
         f.write_text("x", encoding="utf-8")
         posted = {}
         resp = {"name": "my_processor", "size_bytes": 1, "uploaded_at": "", "uploaded_by": ""}
-        with patch("cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
+        with patch("AINDY.cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
             cmd_upload(str(f), api_url="http://s", token=None)
         assert posted["name"] == "my_processor"
 
@@ -522,7 +522,7 @@ class TestCmdUpload:
         from AINDY.cli import cmd_upload
         f = tmp_path / "s.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli._http_post", return_value=(409, {"detail": "already exists"})):
+        with patch("AINDY.cli._http_post", return_value=(409, {"detail": "already exists"})):
             rc = cmd_upload(str(f), api_url="http://s", token=None)
         assert rc == 1
         assert "already exists" in capsys.readouterr().err.lower()
@@ -538,7 +538,7 @@ class TestCmdUpload:
         f.write_text("x", encoding="utf-8")
         posted = {}
         resp = {"name": "s", "size_bytes": 1, "uploaded_at": "", "uploaded_by": ""}
-        with patch("cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
+        with patch("AINDY.cli._http_post", side_effect=lambda url, p, **kw: (posted.update(p), (201, resp))[1]):
             cmd_upload(str(f), api_url="http://s", token=None, overwrite=True)
         assert posted["overwrite"] is True
 
@@ -550,19 +550,19 @@ class TestCmdUpload:
 class TestMainDispatch:
     def test_no_args_prints_help(self, capsys):
         from AINDY.cli import main
-        rc = main(["cli.py"])
+        rc = main(["AINDY.cli.py"])
         assert rc == 0
         assert "Usage" in capsys.readouterr().out
 
     def test_help_flag(self, capsys):
         from AINDY.cli import main
-        rc = main(["cli.py", "--help"])
+        rc = main(["AINDY.cli.py", "--help"])
         assert rc == 0
         assert "run" in capsys.readouterr().out
 
     def test_unknown_command(self, capsys):
         from AINDY.cli import main
-        rc = main(["cli.py", "frobnicate"])
+        rc = main(["AINDY.cli.py", "frobnicate"])
         assert rc == 1
         assert "Unknown" in capsys.readouterr().err
 
@@ -570,15 +570,15 @@ class TestMainDispatch:
         from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli.cmd_run", return_value=0) as mock_run:
-            rc = main(["cli.py", "run", str(f)])
+        with patch("AINDY.cli.cmd_run", return_value=0) as mock_run:
+            rc = main(["AINDY.cli.py", "run", str(f)])
         assert rc == 0
         mock_run.assert_called_once()
 
     def test_trace_dispatches_to_cmd_trace(self):
         from AINDY.cli import main
-        with patch("cli.cmd_trace", return_value=0) as mock_trace:
-            rc = main(["cli.py", "trace", "some-trace-id"])
+        with patch("AINDY.cli.cmd_trace", return_value=0) as mock_trace:
+            rc = main(["AINDY.cli.py", "trace", "some-trace-id"])
         assert rc == 0
         mock_trace.assert_called_once()
         assert mock_trace.call_args.args[0] == "some-trace-id"
@@ -587,8 +587,8 @@ class TestMainDispatch:
         from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        with patch("cli.cmd_upload", return_value=0) as mock_up:
-            rc = main(["cli.py", "upload", str(f)])
+        with patch("AINDY.cli.cmd_upload", return_value=0) as mock_up:
+            rc = main(["AINDY.cli.py", "upload", str(f)])
         assert rc == 0
         mock_up.assert_called_once()
 
@@ -596,7 +596,7 @@ class TestMainDispatch:
         from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        rc = main(["cli.py", "run", str(f), "--input", "not-json"])
+        rc = main(["AINDY.cli.py", "run", str(f), "--input", "not-json"])
         assert rc == 1
         assert "Invalid" in capsys.readouterr().err
 
@@ -604,6 +604,6 @@ class TestMainDispatch:
         from AINDY.cli import main
         f = tmp_path / "t.nd"
         f.write_text("x", encoding="utf-8")
-        rc = main(["cli.py", "run", str(f), "--error-policy", "explode"])
+        rc = main(["AINDY.cli.py", "run", str(f), "--error-policy", "explode"])
         assert rc == 1
         assert "error-policy" in capsys.readouterr().err

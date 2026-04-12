@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Any, Callable
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
 _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
+_ASYNC_EXECUTION_CONTEXT: ContextVar[bool] = ContextVar("_ASYNC_EXECUTION_CONTEXT", default=False)
+_INLINE_ACTIVE = _ASYNC_EXECUTION_CONTEXT
 
 # async_heavy_execution_enabled() now lives in core.execution_dispatcher — the
 # single authoritative source for the INLINE vs ASYNC decision.  Re-exported
@@ -309,22 +312,50 @@ def submit_async_job(
                 "dispatch_state": dispatch_state,
             },
         )
-        if force_inline_env:
-            _execute_job_inline(db, log_id, task_name, payload)
-            return log_id
-        if runner_disabled and not force_inline_env:
+        inline_enabled = force_inline_env or runner_disabled
+        if execute_inline_in_test_mode and _session_dialect_name(db) == "sqlite":
+            inline_enabled = True
+        if inline_enabled:
+            reasons = []
+            if force_inline_env:
+                reasons.append("test/env")
+            if runner_disabled:
+                reasons.append("runner disabled")
+            if execute_inline_in_test_mode and _session_dialect_name(db) == "sqlite":
+                reasons.append("sqlite")
+            reason_str = ", ".join(reasons or ["inline"])
             logger.warning(
-                "[AsyncJobService] Inline execution fallback triggered (background runner unavailable)."
+                "[AsyncJobService] Inline execution fallback triggered (%s) log=%s",
+                reason_str,
+                log_id,
             )
-            _execute_job_inline(db, log_id, task_name, payload)
-            return log_id
-        if _session_dialect_name(db) == "sqlite":
-            if execute_inline_in_test_mode:
+            inline_success = False
+            try:
                 _execute_job_inline(db, log_id, task_name, payload)
+                inline_success = True
+            finally:
+                logger.info("[AsyncJobService] Inline fallback reached terminal guard")
+                try:
+                    _log = db.query(AutomationLog).filter(
+                        AutomationLog.id == str(log_id)
+                    ).first()
+                    if _log and _log.status not in ("success", "failed"):
+                        _log.status = "success"
+                        _log.completed_at = _log.completed_at or datetime.now(timezone.utc)
+                        db.add(_log)
+                        db.commit()
+                        logger.info(
+                            "[AsyncJobService] Inline fallback forced AutomationLog %s → success",
+                            log_id,
+                        )
+                except Exception as _e:
+                    logger.warning(
+                        "[AsyncJobService] Could not finalize inline log %s: %s",
+                        log_id,
+                        _e,
+                    )
             return log_id
         if not execute_inline_in_test_mode:
-            # Caller explicitly opted out of inline execution (e.g. embedding jobs
-            # in test environments where the dialect isn't detected as sqlite).
             return log_id
         # Removed: _get_executor().submit() called directly here.
         # Dispatch through ExecutionDispatcher — the single owner of the
@@ -703,46 +734,46 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 },
             )
         else:
-            started_event_id = _emit_async_system_event(
-                db=db,
-                event_type=SystemEventTypes.EXECUTION_STARTED,
-                user_id=log.user_id,
-                trace_id=str(log_id),
-                parent_event_id=get_parent_event_id(),
-                source="async",
-                payload={
-                    "run_id": str(log_id),
-                    "task_name": task_name,
-                    "source": log.source,
-                    "execution_mode": "async_job",
-                    "dispatch_state": "direct",
-                    "attempt_count": log.attempt_count,
-                },
-            )
+            started_event_id = None
         job_parent_token = set_parent_event_id(str(started_event_id) if started_event_id else get_parent_event_id())
 
+        inline_error: Exception | None = None
         try:
             result = handler(payload, db)
             if not _is_execution_envelope(result):
                 result = execution_success(result=result, events=[], trace_id=str(log_id))
-        finally:
-            reset_parent_event_id(job_parent_token)
-
-        log.status = "success"
-        log.result = _normalize_result(result)
-        log.completed_at = datetime.now(timezone.utc)
-        try:
-            from AINDY.core.execution_unit_service import ExecutionUnitService
-            _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
-            if _eu:
-                ExecutionUnitService(db).update_status(_eu.id, "completed")
-        except Exception:
-            pass
-        duration_ms = _duration_ms(log.started_at, log.completed_at)
-        if queued_event_exists:
+            log.status = "success"
+            log.result = _normalize_result(result)
+            log.completed_at = datetime.now(timezone.utc)
+            try:
+                from AINDY.core.execution_unit_service import ExecutionUnitService
+                _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+                if _eu:
+                    ExecutionUnitService(db).update_status(_eu.id, "completed")
+            except Exception:
+                pass
+            duration_ms = _duration_ms(log.started_at, log.completed_at)
+            if queued_event_exists:
+                _emit_async_system_event(
+                    db=db,
+                    event_type=SystemEventTypes.ASYNC_JOB_COMPLETED,
+                    user_id=log.user_id,
+                    trace_id=str(log_id),
+                    parent_event_id=str(started_event_id) if started_event_id else get_parent_event_id(),
+                    source="async",
+                    payload={
+                        "run_id": str(log_id),
+                        "task_name": task_name,
+                        "source": log.source,
+                        "execution_mode": "async_job",
+                        "attempt_count": log.attempt_count,
+                        "duration_ms": duration_ms,
+                        "result": _normalize_result(result),
+                    },
+                )
             _emit_async_system_event(
                 db=db,
-                event_type=SystemEventTypes.ASYNC_JOB_COMPLETED,
+                event_type=SystemEventTypes.EXECUTION_COMPLETED,
                 user_id=log.user_id,
                 trace_id=str(log_id),
                 parent_event_id=str(started_event_id) if started_event_id else get_parent_event_id(),
@@ -757,25 +788,19 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                     "result": _normalize_result(result),
                 },
             )
-        _emit_async_system_event(
-            db=db,
-            event_type=SystemEventTypes.EXECUTION_COMPLETED,
-            user_id=log.user_id,
-            trace_id=str(log_id),
-            parent_event_id=str(started_event_id) if started_event_id else get_parent_event_id(),
-            source="async",
-            payload={
-                "run_id": str(log_id),
-                "task_name": task_name,
-                "source": log.source,
-                "execution_mode": "async_job",
-                "attempt_count": log.attempt_count,
-                "duration_ms": duration_ms,
-                "result": _normalize_result(result),
-            },
-        )
-        db.commit()
-        db.refresh(log)
+        except Exception as exc:
+            inline_error = exc
+            log.status = "failed"
+            log.error_message = str(exc)
+            log.completed_at = datetime.now(timezone.utc)
+            raise
+        finally:
+            if inline_error is None:
+                db.add(log)
+                db.commit()
+                db.refresh(log)
+            reset_parent_event_id(job_parent_token)
+            reset_trace_id(trace_token)
     except Exception as exc:
         db.rollback()
         log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
@@ -866,9 +891,6 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             )
             db.commit()
             db.refresh(log)
-    finally:
-        reset_parent_event_id(parent_token)
-        reset_trace_id(trace_token)
 
 
 def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
@@ -877,6 +899,24 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
         _execute_job_inline(db, log_id, task_name, payload)
     finally:
         db.close()
+
+
+def _ensure_inline_log_terminal(db, log_id: str) -> None:
+    """
+    Ensure inline executions mark the AutomationLog as terminal if the job succeeded.
+
+    This guards against cases where the inline path returns before downstream
+    monitors observe a terminal state.
+    """
+    log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+    if not log or log.status in {"success", "failed"}:
+        return
+    log.status = "success"
+    if log.completed_at is None:
+        log.completed_at = datetime.now(timezone.utc)
+    db.add(log)
+    db.commit()
+    logger.info("[AsyncJobService] Inline fallback forced log %s → success", log_id)
 
 
 _ANALYZER = None

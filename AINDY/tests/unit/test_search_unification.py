@@ -74,8 +74,8 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
         captured["source"] = source
         return _Record(result.query, result.summary, source=source, data=data)
 
-    monkeypatch.setattr("routes.research_results_router.unified_query", _fake_unified)
-    monkeypatch.setattr("domain.research_results_service.create_research_result", _fake_create)
+    monkeypatch.setattr("AINDY.routes.research_results_router.unified_query", _fake_unified)
+    monkeypatch.setattr("AINDY.domain.research_results_service.create_research_result", _fake_create)
 
     result = run_research_query(
         request=ResearchResultCreate(query="durable search", summary="fallback"),
@@ -92,7 +92,7 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
 
 
 def test_preview_lead_search_route_uses_shared_search_service(client, auth_headers, monkeypatch):
-    leadgen_router = importlib.import_module("routes.leadgen_router")
+    import AINDY.domain.search_service as _search_service
 
     captured: dict[str, object] = {}
 
@@ -116,7 +116,7 @@ def test_preview_lead_search_route_uses_shared_search_service(client, auth_heade
             },
         }
 
-    monkeypatch.setattr(leadgen_router, "search_leads", _fake_search_leads)
+    monkeypatch.setattr(_search_service, "search_leads", _fake_search_leads)
 
     response = client.get("/leadgen/search", params={"query": "agency"}, headers=auth_headers)
 
@@ -131,7 +131,7 @@ def test_preview_lead_search_route_uses_shared_search_service(client, auth_heade
 
 
 def test_seo_analyze_route_uses_shared_search_contract(client, auth_headers, monkeypatch):
-    seo_routes = importlib.import_module("routes.seo_routes")
+    seo_routes = importlib.import_module("AINDY.routes.seo_routes")
 
     captured: dict[str, object] = {}
 

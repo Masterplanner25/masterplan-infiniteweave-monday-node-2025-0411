@@ -129,8 +129,8 @@ class TestNodusRuntimeAdapterRunScript:
             wraps=None,
         ), runtime
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_run_script_success(self, mock_bridge_factory, mock_runtime_cls):
         mock_bridge_factory.return_value = MagicMock(
             recall=MagicMock(),
@@ -148,8 +148,10 @@ class TestNodusRuntimeAdapterRunScript:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context()
@@ -161,8 +163,8 @@ class TestNodusRuntimeAdapterRunScript:
         assert isinstance(result.emitted_events, list)
         assert isinstance(result.memory_writes, list)
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_run_script_failure_from_vm(self, mock_bridge_factory, mock_runtime_cls):
         mock_bridge_factory.return_value = MagicMock(
             recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
@@ -175,8 +177,10 @@ class TestNodusRuntimeAdapterRunScript:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context()
@@ -193,6 +197,7 @@ class TestNodusRuntimeAdapterRunScript:
             "nodus": None,
             "nodus.runtime": None,
             "nodus.runtime.embedding": None,
+            "AINDY.nodus.runtime.embedding": None,
         }):
             with patch("builtins.__import__", side_effect=ImportError("nodus not found")):
                 # Trigger the ImportError path via _execute directly
@@ -201,8 +206,8 @@ class TestNodusRuntimeAdapterRunScript:
         assert result.status == "failure"
         assert "nodus" in (result.error or "").lower() or result.status == "failure"
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_duplicate_builtin_override_error_is_tolerated(self, mock_bridge_factory, mock_runtime_cls):
         bridge = MagicMock(
             recall=MagicMock(),
@@ -231,8 +236,10 @@ class TestNodusRuntimeAdapterRunScript:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context()
@@ -279,8 +286,8 @@ class TestNodusRuntimeAdapterEventSink:
     def _adapter(self) -> NodusRuntimeAdapter:
         return NodusRuntimeAdapter(db=MagicMock())
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_custom_event_sink_receives_emit_calls(self, mock_bridge_factory, mock_runtime_cls):
         """emit() inside a script routes to the caller-supplied event_sink."""
         sink_calls: list[tuple[str, dict]] = []
@@ -311,8 +318,10 @@ class TestNodusRuntimeAdapterEventSink:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context(event_sink=my_sink)
@@ -323,8 +332,8 @@ class TestNodusRuntimeAdapterEventSink:
             registered_fns["emit"]("task.done", {"result": 1})
             assert sink_calls == [("task.done", {"result": 1})]
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_memory_writes_captured(self, mock_bridge_factory, mock_runtime_cls):
         """remember() calls are collected in NodusExecutionResult.memory_writes."""
         bridge = MagicMock(
@@ -349,8 +358,10 @@ class TestNodusRuntimeAdapterEventSink:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context()
@@ -360,8 +371,8 @@ class TestNodusRuntimeAdapterEventSink:
         if "remember" in registered_fns:
             assert callable(registered_fns["remember"])
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_state_mutation_via_set_state(self, mock_bridge_factory, mock_runtime_cls):
         """set_state(k, v) inside a script is reflected in output_state."""
         bridge = MagicMock(
@@ -385,8 +396,10 @@ class TestNodusRuntimeAdapterEventSink:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = self._adapter()
             ctx = _make_context(state={"counter": 0})
@@ -401,8 +414,8 @@ class TestNodusRuntimeAdapterEventSink:
 class TestNodusRuntimeAdapterContextInjection:
     """Verify context globals are passed to the VM before execution."""
 
-    @patch("runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
+    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
     def test_initial_globals_contain_all_context_fields(self, mock_bridge_factory, mock_runtime_cls):
         bridge = MagicMock(
             recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
@@ -419,8 +432,10 @@ class TestNodusRuntimeAdapterContextInjection:
             "nodus": MagicMock(),
             "nodus.runtime": MagicMock(),
             "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
             "bridge": MagicMock(),
             "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
         }):
             adapter = NodusRuntimeAdapter(db=MagicMock())
             ctx = _make_context(
@@ -467,8 +482,10 @@ def _make_sys_modules_patch(runtime_mock, bridge_mock):
         "nodus": MagicMock(),
         "nodus.runtime": MagicMock(),
         "nodus.runtime.embedding": MagicMock(NodusRuntime=runtime_cls),
+            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=runtime_cls),
         "bridge": MagicMock(),
         "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=bridge_factory),
+            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=bridge_factory),
     }
 
 

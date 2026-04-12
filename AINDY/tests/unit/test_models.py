@@ -98,9 +98,9 @@ class TestCalculationResultModel:
         )
 
         # Additional: confirm db/models/models.py doesn't exist
-        import importlib.util
-        spec = importlib.util.find_spec("db.models.models")
-        assert spec is None, (
+        from pathlib import Path
+        db_models_models = Path(__file__).resolve().parents[3] / "db" / "models" / "models.py"
+        assert not db_models_models.exists(), (
             "db/models/models.py now exists — bridge.py import bug may be partially fixed. "
             "Verify create_memory_node() still uses the correct table."
         )

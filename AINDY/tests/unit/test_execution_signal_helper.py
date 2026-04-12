@@ -148,7 +148,7 @@ def test_queue_memory_capture_executes_engine_when_allowed(monkeypatch):
         source="feedback.loop",
         tags=None,
         node_type=None,
-        context=None,
+        context={},
         extra=None,
         force=False,
         allow_when_pipeline_active=True,

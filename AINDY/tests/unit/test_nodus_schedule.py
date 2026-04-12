@@ -106,6 +106,9 @@ class TestParseCron:
             "apscheduler": None,
             "apscheduler.triggers": None,
             "apscheduler.triggers.cron": None,
+            "AINDY.apscheduler": None,
+            "AINDY.apscheduler.triggers": None,
+            "AINDY.apscheduler.triggers.cron": None,
         }):
             with pytest.raises(ValueError, match="not installed"):
                 _parse_cron("0 10 * * *")
@@ -124,8 +127,8 @@ class TestCreateNodusScheduledJob:
     """Patch _parse_cron/_register_with_scheduler so we don't need APScheduler running."""
 
     _PATCHES = [
-        "runtime.nodus_schedule_service._register_with_scheduler",
-        "runtime.nodus_schedule_service._next_run",
+        "AINDY.runtime.nodus_schedule_service._register_with_scheduler",
+        "AINDY.runtime.nodus_schedule_service._next_run",
     ]
 
     def _call(self, **kwargs):
@@ -135,10 +138,10 @@ class TestCreateNodusScheduledJob:
         db = MagicMock()
         db.refresh.side_effect = lambda r: None
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob", return_value=job_row), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
-             patch("runtime.nodus_schedule_service._register_with_scheduler"), \
-             patch("runtime.nodus_schedule_service._next_run", return_value="2026-04-02T10:00:00+00:00"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob", return_value=job_row), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
+             patch("AINDY.runtime.nodus_schedule_service._register_with_scheduler"), \
+             patch("AINDY.runtime.nodus_schedule_service._next_run", return_value="2026-04-02T10:00:00+00:00"):
             return create_nodus_scheduled_job(
                 db=db,
                 script=kwargs.get("script", "set_state('x', 1)"),
@@ -173,10 +176,10 @@ class TestCreateNodusScheduledJob:
         db = MagicMock()
         db.refresh.side_effect = lambda r: None
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob", return_value=job_row), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid"), \
-             patch("runtime.nodus_schedule_service._register_with_scheduler") as mock_reg, \
-             patch("runtime.nodus_schedule_service._next_run", return_value=None):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob", return_value=job_row), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid"), \
+             patch("AINDY.runtime.nodus_schedule_service._register_with_scheduler") as mock_reg, \
+             patch("AINDY.runtime.nodus_schedule_service._next_run", return_value=None):
             create_nodus_scheduled_job(
                 db=db, script="x", cron_expression="0 10 * * *", user_id="u"
             )
@@ -204,8 +207,8 @@ class TestListNodusScheduledJobs:
         job = _make_job_row()
         db = _make_db_with_result(job)
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
             result = list_nodus_scheduled_jobs(db=db, user_id="user-abc")
 
         assert isinstance(result, list)
@@ -217,8 +220,8 @@ class TestListNodusScheduledJobs:
 
         db = _make_db_with_result(None)
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
             result = list_nodus_scheduled_jobs(db=db, user_id="user-abc")
 
         assert result == []
@@ -234,8 +237,8 @@ class TestListNodusScheduledJobs:
         q.order_by.return_value = q
         q.all.return_value = jobs
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
             result = list_nodus_scheduled_jobs(db=db, user_id="user-abc")
 
         assert len(result) == 3
@@ -254,9 +257,9 @@ class TestDeleteNodusScheduledJob:
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
-             patch("runtime.nodus_schedule_service._remove_from_scheduler"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
+             patch("AINDY.runtime.nodus_schedule_service._remove_from_scheduler"):
             result = delete_nodus_scheduled_job(db=db, job_id=self._VALID_JOB_ID, user_id="u")
 
         assert result is True
@@ -267,9 +270,9 @@ class TestDeleteNodusScheduledJob:
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
-             patch("runtime.nodus_schedule_service._remove_from_scheduler"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
+             patch("AINDY.runtime.nodus_schedule_service._remove_from_scheduler"):
             delete_nodus_scheduled_job(db=db, job_id=self._VALID_JOB_ID, user_id="u")
 
         assert job.is_active is False
@@ -281,9 +284,9 @@ class TestDeleteNodusScheduledJob:
         job = _make_job_row(id=uuid.UUID(self._VALID_JOB_ID))
         db = _make_db_with_result(job)
 
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
-             patch("runtime.nodus_schedule_service._remove_from_scheduler") as mock_rm:
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"), \
+             patch("AINDY.runtime.nodus_schedule_service._remove_from_scheduler") as mock_rm:
             delete_nodus_scheduled_job(db=db, job_id=self._VALID_JOB_ID, user_id="u")
 
         mock_rm.assert_called_once_with(self._VALID_JOB_ID)
@@ -292,8 +295,8 @@ class TestDeleteNodusScheduledJob:
         from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         db = _make_db_with_result(None)
-        with patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
+        with patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid-norm"):
             result = delete_nodus_scheduled_job(
                 db=db, job_id=self._VALID_JOB_ID, user_id="u"
             )
@@ -303,7 +306,7 @@ class TestDeleteNodusScheduledJob:
         from AINDY.runtime.nodus_schedule_service import delete_nodus_scheduled_job
 
         db = MagicMock()
-        with patch("utils.uuid_utils.normalize_uuid", return_value="uid"):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="uid"):
             result = delete_nodus_scheduled_job(db=db, job_id="not-a-uuid", user_id="u")
         assert result is False
         db.add.assert_not_called()
@@ -324,10 +327,10 @@ class TestRestoreNodusScheduledJobs:
         q.filter.return_value = q
         q.all.return_value = jobs
 
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("runtime.nodus_schedule_service._parse_cron", return_value=MagicMock()), \
-             patch("runtime.nodus_schedule_service._register_with_scheduler") as mock_reg:
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.runtime.nodus_schedule_service._parse_cron", return_value=MagicMock()), \
+             patch("AINDY.runtime.nodus_schedule_service._register_with_scheduler") as mock_reg:
             count = restore_nodus_scheduled_jobs()
 
         assert count == 2
@@ -342,8 +345,8 @@ class TestRestoreNodusScheduledJobs:
         q.filter.return_value = q
         q.all.return_value = []
 
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"):
             count = restore_nodus_scheduled_jobs()
 
         assert count == 0
@@ -358,11 +361,11 @@ class TestRestoreNodusScheduledJobs:
         q.filter.return_value = q
         q.all.return_value = jobs
 
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("runtime.nodus_schedule_service._parse_cron",
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.runtime.nodus_schedule_service._parse_cron",
                    side_effect=[ValueError("bad"), MagicMock()]), \
-             patch("runtime.nodus_schedule_service._register_with_scheduler") as mock_reg:
+             patch("AINDY.runtime.nodus_schedule_service._register_with_scheduler") as mock_reg:
             count = restore_nodus_scheduled_jobs()
 
         assert count == 1
@@ -374,8 +377,8 @@ class TestRestoreNodusScheduledJobs:
         mock_db = MagicMock()
         mock_db.query.side_effect = RuntimeError("db down")
 
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"):
             restore_nodus_scheduled_jobs()  # must not raise
 
         mock_db.close.assert_called_once()
@@ -392,8 +395,8 @@ class TestRunScheduledNodusJob:
     def test_skips_when_not_leader(self):
         from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
-        with patch("domain.task_services.is_background_leader", return_value=False), \
-             patch("db.database.SessionLocal") as mock_session:
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=False), \
+             patch("AINDY.db.database.SessionLocal") as mock_session:
             _run_scheduled_nodus_job(self._job_id())
 
         mock_session.assert_not_called()
@@ -403,9 +406,9 @@ class TestRunScheduledNodusJob:
 
         mock_db = _make_db_with_result(None)
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"):
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"):
             _run_scheduled_nodus_job(self._job_id())
 
         mock_db.add.assert_not_called()
@@ -416,9 +419,9 @@ class TestRunScheduledNodusJob:
         job = _make_job_row(is_active=False)
         mock_db = _make_db_with_result(job)
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"):
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"):
             _run_scheduled_nodus_job(self._job_id())
 
         mock_db.add.assert_not_called()
@@ -431,12 +434,12 @@ class TestRunScheduledNodusJob:
         mock_db = _make_db_with_result(_job)
         mock_log = MagicMock()
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("db.models.automation_log.AutomationLog", return_value=mock_log), \
-             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
-             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.db.models.automation_log.AutomationLog", return_value=mock_log), \
+             patch("AINDY.runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
+             patch("AINDY.runtime.nodus_execution_service.format_nodus_flow_result", return_value={
                  "status": flow_result.get("status"),
                  "trace_id": flow_result.get("trace_id"),
                  "run_id": flow_result.get("run_id"),
@@ -481,11 +484,11 @@ class TestRunScheduledNodusJob:
         job = _make_job_row()
         mock_db = _make_db_with_result(job)
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", side_effect=RuntimeError("boom")):
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.db.models.automation_log.AutomationLog", return_value=MagicMock()), \
+             patch("AINDY.runtime.nodus_execution_service.run_nodus_script_via_flow", side_effect=RuntimeError("boom")):
             _run_scheduled_nodus_job(str(job.id))  # must not raise
 
         assert job.last_run_status == "error"
@@ -500,12 +503,12 @@ class TestRunScheduledNodusJob:
             "state": {"nodus_status": "success", "nodus_events": [], "nodus_memory_writes": []},
         }
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
-             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.db.models.automation_log.AutomationLog", return_value=MagicMock()), \
+             patch("AINDY.runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result), \
+             patch("AINDY.runtime.nodus_execution_service.format_nodus_flow_result", return_value={
                  "status": "SUCCESS",
                  "trace_id": "trace-r",
                  "run_id": "r",
@@ -529,12 +532,12 @@ class TestRunScheduledNodusJob:
             "state": {"nodus_status": "success", "nodus_events": [], "nodus_memory_writes": []},
         }
 
-        with patch("domain.task_services.is_background_leader", return_value=True), \
-             patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_scheduled_job.NodusScheduledJob"), \
-             patch("db.models.automation_log.AutomationLog", return_value=MagicMock()), \
-             patch("runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result) as mock_run, \
-             patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value={
+        with patch("AINDY.domain.task_services.is_background_leader", return_value=True), \
+             patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_scheduled_job.NodusScheduledJob"), \
+             patch("AINDY.db.models.automation_log.AutomationLog", return_value=MagicMock()), \
+             patch("AINDY.runtime.nodus_execution_service.run_nodus_script_via_flow", return_value=flow_result) as mock_run, \
+             patch("AINDY.runtime.nodus_execution_service.format_nodus_flow_result", return_value={
                  "status": "SUCCESS",
                  "trace_id": "trace-r",
                  "run_id": "r",
@@ -553,8 +556,8 @@ class TestRunScheduledNodusJob:
     def test_leader_check_exception_skips_gracefully(self):
         from AINDY.runtime.nodus_schedule_service import _run_scheduled_nodus_job
 
-        with patch("domain.task_services.is_background_leader", side_effect=RuntimeError("no db")), \
-             patch("db.database.SessionLocal") as mock_session:
+        with patch("AINDY.domain.task_services.is_background_leader", side_effect=RuntimeError("no db")), \
+             patch("AINDY.db.database.SessionLocal") as mock_session:
             _run_scheduled_nodus_job(self._job_id())  # must not raise
 
         mock_session.assert_not_called()

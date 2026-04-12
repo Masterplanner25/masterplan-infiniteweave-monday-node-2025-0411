@@ -128,7 +128,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_create({"task_name": "Write tests"}, _ctx())
 
@@ -162,7 +164,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_create({"name": "Review PR"}, _ctx())
 
@@ -176,7 +180,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_complete({"task_name": "Write tests"}, _ctx())
 
@@ -196,7 +202,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_complete_full({"task_name": "Write tests"}, _ctx())
 
@@ -210,7 +218,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_start({"task_name": "Write tests"}, _ctx())
 
@@ -224,7 +234,9 @@ class TestTaskHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.task_services": mock_task_svc,
+            "AINDY.domain.task_services": mock_task_svc,
         }):
             result = _handle_task_pause({"task_name": "Write tests"}, _ctx())
 
@@ -252,7 +264,9 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.leadgen_service": mock_leadgen_svc,
+            "AINDY.domain.leadgen_service": mock_leadgen_svc,
         }):
             result = _handle_leadgen_search({"query": "fintech startup"}, _ctx())
 
@@ -272,7 +286,9 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.leadgen_service": mock_svc,
+            "AINDY.domain.leadgen_service": mock_svc,
         }):
             result = _handle_leadgen_search_ai({"query": "saas companies"}, _ctx())
 
@@ -287,8 +303,11 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.execution_signal_helper": MagicMock(queue_memory_capture=mock_qmc),
+            "AINDY.core.execution_signal_helper": MagicMock(queue_memory_capture=mock_qmc),
             "domain.search_service": MagicMock(persist_search_result=MagicMock()),
+            "AINDY.domain.search_service": MagicMock(persist_search_result=MagicMock()),
         }):
             result = _handle_leadgen_store(
                 {"query": "test", "results": []},
@@ -305,8 +324,11 @@ class TestLeadgenHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.execution_signal_helper": MagicMock(queue_memory_capture=MagicMock()),
+            "AINDY.core.execution_signal_helper": MagicMock(queue_memory_capture=MagicMock()),
             "domain.search_service": MagicMock(persist_search_result=MagicMock()),
+            "AINDY.domain.search_service": MagicMock(persist_search_result=MagicMock()),
         }):
             result = _handle_leadgen_store(
                 {"query": "test", "results": [{"name": "A"}, {"name": "B"}]},
@@ -337,7 +359,9 @@ class TestArmHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "modules.deepseek.deepseek_code_analyzer": mock_deepseek,
+            "AINDY.modules.deepseek.deepseek_code_analyzer": mock_deepseek,
         }):
             result = _handle_arm_analyze({"file_path": "app.py"}, _ctx())
 
@@ -365,7 +389,9 @@ class TestArmHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "modules.deepseek.deepseek_code_analyzer": mock_deepseek,
+            "AINDY.modules.deepseek.deepseek_code_analyzer": mock_deepseek,
         }):
             result = _handle_arm_generate({"prompt": "write foo"}, _ctx())
 
@@ -385,7 +411,9 @@ class TestArmHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "core.execution_signal_helper": MagicMock(queue_memory_capture=mock_qmc),
+            "AINDY.core.execution_signal_helper": MagicMock(queue_memory_capture=mock_qmc),
         }):
             result = _handle_arm_store({"result": {"score": 8}}, _ctx())
 
@@ -419,8 +447,12 @@ class TestGenesisHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
+            "AINDY.db.models": mock_genesis_model,
+            "AINDY.db.models": mock_genesis_model,
             "domain.genesis_ai": mock_genesis_ai,
+            "AINDY.domain.genesis_ai": mock_genesis_ai,
         }):
             result = _handle_genesis_execute_llm(
                 {"session_id": "sess-1", "message": "Plan my week"},
@@ -449,8 +481,12 @@ class TestGenesisHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
+            "AINDY.db.models": mock_genesis_model,
+            "AINDY.db.models": mock_genesis_model,
             "domain.genesis_ai": MagicMock(),
+            "AINDY.domain.genesis_ai": MagicMock(),
         }):
             with pytest.raises(ValueError, match="not found"):
                 _handle_genesis_execute_llm(
@@ -467,7 +503,9 @@ class TestGenesisHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "runtime.flow_engine": mock_flow_engine,
+            "AINDY.runtime.flow_engine": mock_flow_engine,
         }):
             result = _handle_genesis_message(
                 {"session_id": "sess-1", "message": "Run plan"},
@@ -492,7 +530,9 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.infinity_orchestrator": mock_orch,
+            "AINDY.domain.infinity_orchestrator": mock_orch,
         }):
             result = _handle_score_recalculate({}, _ctx())
 
@@ -506,7 +546,9 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.infinity_orchestrator": mock_orch,
+            "AINDY.domain.infinity_orchestrator": mock_orch,
         }):
             with pytest.raises(ValueError, match="empty result"):
                 _handle_score_recalculate({}, _ctx())
@@ -520,7 +562,9 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.infinity_orchestrator": mock_orch,
+            "AINDY.domain.infinity_orchestrator": mock_orch,
         }):
             _handle_score_recalculate({}, _ctx())
 
@@ -541,7 +585,9 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.infinity_loop": mock_infinity_loop,
+            "AINDY.db.models.infinity_loop": mock_infinity_loop,
         }):
             result = _handle_score_feedback(
                 {"source_type": "manual", "feedback_value": 0.8},
@@ -563,7 +609,9 @@ class TestScoreHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.infinity_loop": mock_infinity_loop,
+            "AINDY.db.models.infinity_loop": mock_infinity_loop,
         }):
             with pytest.raises(RuntimeError):
                 _handle_score_feedback({"source_type": "manual"}, _ctx())
@@ -606,8 +654,11 @@ class TestWatcherHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
+            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
             "routes.watcher_router": mock_watcher_router,
+            "AINDY.routes.watcher_router": mock_watcher_router,
         }):
             with pytest.raises(ValueError, match="unknown signal_type"):
                 _handle_watcher_ingest({"signals": [sig]}, _ctx())
@@ -626,8 +677,11 @@ class TestWatcherHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
+            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
             "routes.watcher_router": mock_watcher_router,
+            "AINDY.routes.watcher_router": mock_watcher_router,
         }):
             result = _handle_watcher_ingest({"signals": [self._valid_signal()]}, _ctx())
 
@@ -651,8 +705,11 @@ class TestWatcherHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
+            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
             "routes.watcher_router": mock_watcher_router,
+            "AINDY.routes.watcher_router": mock_watcher_router,
         }):
             result = _handle_watcher_ingest({"signals": [sig1, sig2]}, _ctx())
 
@@ -679,7 +736,9 @@ class TestGoalHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.goal_service": mock_goal_svc,
+            "AINDY.domain.goal_service": mock_goal_svc,
         }):
             result = _handle_goal_create({"name": "Ship v2"}, _ctx())
 
@@ -694,7 +753,9 @@ class TestGoalHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.goal_service": mock_goal_svc,
+            "AINDY.domain.goal_service": mock_goal_svc,
         }):
             _handle_goal_create({"name": "N"}, _ctx())
 
@@ -719,7 +780,7 @@ class TestResearchAndAgentHandlers:
 
         mock_research = MagicMock(web_search=MagicMock(return_value="Some result text"))
 
-        with patch.dict("sys.modules", {"modules.research_engine": mock_research}):
+        with patch.dict("sys.modules", {"modules.research_engine": mock_research, "AINDY.modules.research_engine": mock_research}):
             result = _handle_research_query({"query": "python best practices"}, _ctx())
 
         assert "raw_result" in result
@@ -731,7 +792,7 @@ class TestResearchAndAgentHandlers:
         long_text = "x" * 5000
         mock_research = MagicMock(web_search=MagicMock(return_value=long_text))
 
-        with patch.dict("sys.modules", {"modules.research_engine": mock_research}):
+        with patch.dict("sys.modules", {"modules.research_engine": mock_research, "AINDY.modules.research_engine": mock_research}):
             result = _handle_research_query({"query": "something"}, _ctx())
 
         assert len(result["raw_result"]) == 2000
@@ -744,7 +805,9 @@ class TestResearchAndAgentHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.infinity_loop": mock_infinity,
+            "AINDY.domain.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({}, _ctx())
 
@@ -760,7 +823,9 @@ class TestResearchAndAgentHandlers:
 
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "domain.infinity_loop": mock_infinity,
+            "AINDY.domain.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({"kpi_snapshot": kpi}, _ctx())
 

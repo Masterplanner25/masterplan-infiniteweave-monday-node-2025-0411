@@ -98,7 +98,7 @@ class TestMemoryCaptureEngine:
 
         mock_node = {"id": "forced-node-id"}
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.save",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.save",
             return_value=mock_node,
         )
 
@@ -174,7 +174,7 @@ class TestNodusMemoryBridge:
         from AINDY.memory.nodus_memory_bridge import create_nodus_bridge
 
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[],
         )
 
@@ -227,15 +227,15 @@ class TestExecutionLoopEndpoints:
         self, client, auth_headers, mock_db, mocker
     ):
         mocker.patch(
-            "memory.embedding_service.generate_query_embedding",
+            "AINDY.memory.embedding_service.generate_query_embedding",
             return_value=[0.1] * 1536,
         )
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[],
         )
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.suggest",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.suggest",
             return_value={"suggestions": []},
         )
 

@@ -33,10 +33,10 @@ from pydantic import ValidationError
 
 def _module():
     """Return the platform_router module, not the router object re-exported by routes/__init__."""
-    if "routes.platform_router" in sys.modules:
-        return sys.modules["routes.platform_router"]
+    if "AINDY.routes.platform_router" in sys.modules:
+        return sys.modules["AINDY.routes.platform_router"]
     import importlib
-    return importlib.import_module("routes.platform_router")
+    return importlib.import_module("AINDY.routes.platform_router")
 
 
 # ── Schema tests ──────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ class TestFormatNodusResponse:
 
     def test_delegates_to_shared_runtime_formatter(self):
         expected = {"status": "SUCCESS", "run_id": "r1"}
-        with patch("runtime.nodus_execution_service.format_nodus_flow_result", return_value=expected) as mock_format:
+        with patch("AINDY.runtime.nodus_execution_service.format_nodus_flow_result", return_value=expected) as mock_format:
             result = self._format({"status": "SUCCESS"})
         mock_format.assert_called_once_with({"status": "SUCCESS"})
         assert result == expected
@@ -248,13 +248,13 @@ class TestEnsureNodusFlowRegistered:
         def mock_register_flow(name, flow):
             mock_registry[name] = flow
 
-        with patch("routes.platform_router._ensure_nodus_flow_registered"):
+        with patch("AINDY.routes.platform_router._ensure_nodus_flow_registered"):
             # Just verify the function exists and is callable
             from AINDY.routes.platform_router import _ensure_nodus_flow_registered
             assert callable(_ensure_nodus_flow_registered)
 
     def test_registers_nodus_execute_into_flow_registry(self):
-        with patch("runtime.nodus_execution_service.ensure_nodus_script_flow_registered") as mock_ensure:
+        with patch("AINDY.runtime.nodus_execution_service.ensure_nodus_script_flow_registered") as mock_ensure:
             m = _module()
             m._ensure_nodus_flow_registered()
 
@@ -266,7 +266,7 @@ class TestEnsureNodusFlowRegistered:
 class TestRunNodusScript:
     def test_delegates_to_persistent_flow_runner(self):
         with patch(
-            "runtime.nodus_execution_service.run_nodus_script_via_flow",
+            "AINDY.runtime.nodus_execution_service.run_nodus_script_via_flow",
             return_value={"status": "SUCCESS", "state": {}, "data": {}},
         ) as mock_run:
             from AINDY.routes.platform_router import _run_nodus_script
@@ -323,9 +323,9 @@ class TestRunNodusScriptEndpoint:
             m._NODUS_SCRIPT_REGISTRY.update(registry)
 
         try:
-            with patch("routes.platform_router._validate_nodus_source"), \
-                 patch("routes.platform_router._run_nodus_script", return_value=flow_result), \
-                 patch("routes.platform_router.execute_with_pipeline_sync",
+            with patch("AINDY.routes.platform_router._validate_nodus_source"), \
+                 patch("AINDY.routes.platform_router._run_nodus_script", return_value=flow_result), \
+                 patch("AINDY.routes.platform_router.execute_with_pipeline_sync",
                        side_effect=lambda **kw: kw["handler"](None)):
                 return run_nodus_script(
                     request=request, body=body, db=db, current_user=current_user
@@ -363,8 +363,8 @@ class TestRunNodusScriptEndpoint:
         original = dict(m._NODUS_SCRIPT_REGISTRY)
         m._NODUS_SCRIPT_REGISTRY.clear()
         try:
-            with patch("routes.platform_router._validate_nodus_source"), \
-                 patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.routes.platform_router._validate_nodus_source"), \
+                 patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_dir.__truediv__.return_value.exists.return_value = False
                 with pytest.raises(HTTPException) as exc_info:
                     from AINDY.routes.platform_router import NodusRunRequest, run_nodus_script
@@ -382,7 +382,7 @@ class TestRunNodusScriptEndpoint:
 
     def test_security_violation_raises_422(self):
         from fastapi import HTTPException
-        with patch("routes.platform_router._validate_nodus_source",
+        with patch("AINDY.routes.platform_router._validate_nodus_source",
                    side_effect=HTTPException(
                        status_code=422,
                        detail={"error": "nodus_security_violation", "message": "import blocked", "field": "script"},
@@ -415,8 +415,8 @@ class TestUploadNodusScriptEndpoint:
             m._NODUS_SCRIPT_REGISTRY.update(registry_override)
 
         try:
-            with patch("routes.platform_router._validate_nodus_source"), \
-                 patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.routes.platform_router._validate_nodus_source"), \
+                 patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_path = MagicMock()
                 mock_dir.__truediv__ = lambda self, other: mock_path
                 mock_dir.mkdir = MagicMock()
@@ -440,8 +440,8 @@ class TestUploadNodusScriptEndpoint:
         original = dict(m._NODUS_SCRIPT_REGISTRY)
         m._NODUS_SCRIPT_REGISTRY.clear()
         try:
-            with patch("routes.platform_router._validate_nodus_source"), \
-                 patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.routes.platform_router._validate_nodus_source"), \
+                 patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_path = MagicMock()
                 mock_dir.__truediv__ = lambda self, other: mock_path
                 mock_dir.mkdir = MagicMock()
@@ -476,7 +476,7 @@ class TestUploadNodusScriptEndpoint:
 
     def test_security_violation_raises_422(self):
         from fastapi import HTTPException
-        with patch("routes.platform_router._validate_nodus_source",
+        with patch("AINDY.routes.platform_router._validate_nodus_source",
                    side_effect=HTTPException(
                        status_code=422,
                        detail={"error": "nodus_security_violation", "message": "eval blocked", "field": "content"},
@@ -502,7 +502,7 @@ class TestListNodusScriptsEndpoint:
         m._NODUS_SCRIPT_REGISTRY.update(registry)
 
         try:
-            with patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = False  # skip disk scan
                 return list_nodus_scripts(current_user={"sub": str(uuid.uuid4())})
         finally:
@@ -568,7 +568,7 @@ class TestListNodusScriptsEndpoint:
         mock_path.read_text.return_value = disk_script_content
 
         try:
-            with patch("routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = True
                 mock_dir.glob.return_value = [mock_path]
 

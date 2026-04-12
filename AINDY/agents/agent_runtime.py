@@ -1015,20 +1015,21 @@ def replay_run(
             replayed_from_run_id=str(original.id),
         )
 
-        # Emit REPLAY_CREATED lifecycle event on the new run
-        if new_run:
-            record_agent_event(
-                run_id=new_run["run_id"],
-                user_id=user_id,
-                event_type="REPLAY_CREATED",
-                db=db,
-                correlation_id=new_run.get("correlation_id"),
-                payload={
-                    "original_run_id": str(original.id),
-                    "mode": mode,
-                },
-                required=True,
-            )
+        if not new_run:
+            return None
+
+        record_agent_event(
+            run_id=new_run["run_id"],
+            user_id=user_id,
+            event_type="REPLAY_CREATED",
+            db=db,
+            correlation_id=new_run.get("correlation_id"),
+            payload={
+                "original_run_id": str(original.id),
+                "mode": mode,
+            },
+            required=True,
+        )
 
         return new_run
 

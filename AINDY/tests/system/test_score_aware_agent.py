@@ -259,7 +259,7 @@ class TestBuildKpiContextBlock:
     def test_returns_empty_when_no_snapshot(self):
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = _build_kpi_context_block("user-123", mock_db)
         assert result == ""
 
@@ -267,7 +267,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot()
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "Infinity Score" in result
         assert "70.0" in result
@@ -276,7 +276,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(focus=25.0)
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "memory.recall" in result or "focus" in result.lower()
 
@@ -284,7 +284,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(exec_speed=30.0)
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "task.create" in result or "momentum" in result.lower()
 
@@ -292,7 +292,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(ai_boost=20.0)
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "arm.analyze" in result
 
@@ -300,7 +300,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot(master=85.0)
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "medium-risk" in result or "strong performance" in result.lower()
 
@@ -309,7 +309,7 @@ class TestBuildKpiContextBlock:
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
         snap = self._snapshot()  # all 70.0, master 70.0
-        with patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = _build_kpi_context_block("user-123", mock_db)
         assert "Focus quality is low" not in result
         assert "Execution speed is low" not in result
@@ -317,8 +317,8 @@ class TestBuildKpiContextBlock:
     def test_never_raises_on_import_error(self):
         from AINDY.agents.agent_runtime import _build_kpi_context_block
         mock_db = MagicMock()
-        with patch("agents.agent_runtime._build_kpi_context_block", wraps=_build_kpi_context_block):
-            with patch("domain.infinity_service.get_user_kpi_snapshot", side_effect=RuntimeError("fail")):
+        with patch("AINDY.agents.agent_runtime._build_kpi_context_block", wraps=_build_kpi_context_block):
+            with patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", side_effect=RuntimeError("fail")):
                 result = _build_kpi_context_block("user-123", mock_db)
         assert result == ""
 
@@ -350,8 +350,8 @@ class TestGeneratePlanKpiInjection:
             captured_messages.extend(kwargs.get("messages", []))
             return mock_response
 
-        with patch("agents.agent_runtime._get_client") as mock_client, \
-             patch("agents.agent_runtime._build_kpi_context_block",
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client, \
+             patch("AINDY.agents.agent_runtime._build_kpi_context_block",
                    return_value="\n## User Performance Context\nmaster: 75.0"):
             mock_client.return_value.chat.completions.create.side_effect = capture_create
             result = generate_plan("write a test task", "user-123", mock_db)
@@ -368,8 +368,8 @@ class TestGeneratePlanKpiInjection:
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
 
-        with patch("agents.agent_runtime._get_client") as mock_client, \
-             patch("agents.agent_runtime._build_kpi_context_block", return_value=""):
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client, \
+             patch("AINDY.agents.agent_runtime._build_kpi_context_block", return_value=""):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             result = generate_plan("create a task", "user-abc", mock_db)
 
@@ -383,8 +383,8 @@ class TestGeneratePlanKpiInjection:
         mock_db = MagicMock()
         mock_response = self._make_mock_plan_response()
 
-        with patch("agents.agent_runtime._get_client") as mock_client, \
-             patch("agents.agent_runtime._build_kpi_context_block", return_value="## KPI\nfocus: 30.0"):
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client, \
+             patch("AINDY.agents.agent_runtime._build_kpi_context_block", return_value="## KPI\nfocus: 30.0"):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             result = generate_plan("run analysis", "user-xyz", mock_db)
 
@@ -397,8 +397,8 @@ class TestGeneratePlanKpiInjection:
         from AINDY.agents.agent_runtime import generate_plan
 
         mock_db = MagicMock()
-        with patch("agents.agent_runtime._get_client") as mock_client, \
-             patch("agents.agent_runtime._build_kpi_context_block", return_value=""):
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client, \
+             patch("AINDY.agents.agent_runtime._build_kpi_context_block", return_value=""):
             mock_client.return_value.chat.completions.create.side_effect = RuntimeError("API error")
             result = generate_plan("some goal", "user-123", mock_db)
 
@@ -417,8 +417,8 @@ class TestGeneratePlanKpiInjection:
             captured_args["db"] = db
             return ""
 
-        with patch("agents.agent_runtime._get_client") as mock_client, \
-             patch("agents.agent_runtime._build_kpi_context_block", side_effect=capture_block):
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client, \
+             patch("AINDY.agents.agent_runtime._build_kpi_context_block", side_effect=capture_block):
             mock_client.return_value.chat.completions.create.return_value = mock_response
             generate_plan("test goal", "user-target", mock_db)
 
@@ -536,8 +536,8 @@ class TestSuggestionsEndpoint:
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
-        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
+        with patch("AINDY.routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert isinstance(result, list)
@@ -557,8 +557,8 @@ class TestSuggestionsEndpoint:
             "confidence": "low",
         }
 
-        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
+        with patch("AINDY.routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=snap):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert len(result) >= 1
@@ -570,8 +570,8 @@ class TestSuggestionsEndpoint:
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
-        with patch("routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("domain.infinity_service.get_user_kpi_snapshot", return_value=None):
+        with patch("AINDY.routes.agent_router.get_current_user", return_value=mock_user), \
+             patch("AINDY.domain.infinity_service.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert result == []

@@ -81,7 +81,7 @@ def test_create_run_auto_mints_capability_token(db_session, test_user):
     db_session.add(trust)
     db_session.commit()
 
-    with patch("agents.agent_runtime.generate_plan", return_value=VALID_PLAN):
+    with patch("AINDY.agents.agent_runtime.generate_plan", return_value=VALID_PLAN):
         run = create_run("follow up with prospect", test_user.id, db_session)
 
     persisted = db_session.get(AgentRun, uuid.UUID(run["run_id"]))
@@ -107,7 +107,7 @@ def test_approve_run_mints_token_and_executes_real_path(db_session, test_user):
         db_session.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    with patch("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", side_effect=_complete_run):
+    with patch("AINDY.runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", side_effect=_complete_run):
         approved = approve_run(run.id, test_user.id, db_session)
 
     db_session.refresh(run)

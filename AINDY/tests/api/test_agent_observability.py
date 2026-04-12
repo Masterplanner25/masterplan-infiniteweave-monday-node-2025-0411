@@ -636,7 +636,7 @@ class TestReplayRunForbidden:
 
 class TestReplayRunCreatesNewRun:
     def test_new_run_returned_on_success(self):
-        from AINDY.agents.agent_runtime import replay_run
+        from agents.agent_runtime import replay_run
 
         plan = {
             "steps": [{"tool": "task.create", "args": {}, "risk_level": "low",
@@ -675,7 +675,7 @@ class TestReplayRunCreatesNewRun:
 class TestReplayRunSetsLineage:
     def test_replayed_from_run_id_set(self):
         """replay_run passes replayed_from_run_id through to _create_run_from_plan."""
-        from AINDY.agents.agent_runtime import replay_run
+        from agents.agent_runtime import replay_run
 
         plan = {"steps": [], "overall_risk": "low", "executive_summary": ""}
         original = MagicMock()
@@ -762,7 +762,7 @@ class TestRunToDictReplayedFromRunId:
         assert d["replayed_from_run_id"] == ORIGIN_RUN_ID
 
     def test_replayed_from_run_id_none_when_not_set(self):
-        from AINDY.agents.agent_runtime import _run_to_dict
+        from agents.agent_runtime import _run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()

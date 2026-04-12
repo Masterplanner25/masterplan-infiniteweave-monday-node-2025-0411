@@ -346,7 +346,7 @@ _VALID_SIGNAL = {
 def _successful_ingest_response(accepted=1, session_ended_count=0, next_action=None):
     return {
         "status": "SUCCESS",
-        "result": {
+        "data": {
             "accepted": accepted,
             "session_ended_count": session_ended_count,
             "orchestration": {
@@ -355,9 +355,6 @@ def _successful_ingest_response(accepted=1, session_ended_count=0, next_action=N
                 "next_action": next_action,
             },
         },
-        "events": [],
-        "next_action": next_action,
-        "trace_id": "trace-watcher-test",
     }
 
 
@@ -385,7 +382,7 @@ class TestWatcherRouterPost:
     """POST /watcher/signals — persistence and validation."""
 
     def test_post_valid_signal_returns_201(self, client, watcher_mock_db, api_key_headers):
-        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+        with patch("AINDY.runtime.flow_engine.run_flow", return_value=_successful_ingest_response()):
             resp = client.post(
                 "/watcher/signals",
                 json={"signals": [_VALID_SIGNAL]},
@@ -394,7 +391,7 @@ class TestWatcherRouterPost:
         assert resp.status_code == 201
 
     def test_post_returns_accepted_count(self, client, watcher_mock_db, api_key_headers):
-        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+        with patch("AINDY.runtime.flow_engine.run_flow", return_value=_successful_ingest_response()):
             resp = client.post(
                 "/watcher/signals",
                 json={"signals": [_VALID_SIGNAL]},
@@ -408,7 +405,7 @@ class TestWatcherRouterPost:
         signals = [dict(_VALID_SIGNAL), dict(_VALID_SIGNAL)]
         signals[1]["signal_type"] = "heartbeat"
         with patch(
-            "routes.watcher_router.execute_intent",
+            "AINDY.runtime.flow_engine.run_flow",
             return_value=_successful_ingest_response(accepted=2),
         ):
             resp = client.post(
@@ -458,7 +455,7 @@ class TestWatcherRouterPost:
         """session_ended batches surface orchestration metadata in the response."""
         ended = dict(_VALID_SIGNAL, signal_type="session_ended")
         with patch(
-            "routes.watcher_router.execute_intent",
+            "AINDY.runtime.flow_engine.run_flow",
             return_value=_successful_ingest_response(
                 session_ended_count=1,
                 next_action="review_focus_session",
@@ -477,7 +474,7 @@ class TestWatcherRouterPost:
 
     def test_post_non_session_ended_does_not_trigger_eta(self, client, watcher_mock_db, api_key_headers):
         with patch(
-            "routes.watcher_router.execute_intent",
+            "AINDY.runtime.flow_engine.run_flow",
             return_value=_successful_ingest_response(session_ended_count=0),
         ):
             resp = client.post(
@@ -500,7 +497,7 @@ class TestWatcherRouterPost:
         ]
         for st in valid_types:
             sig = dict(_VALID_SIGNAL, signal_type=st)
-            with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+            with patch("AINDY.runtime.flow_engine.run_flow", return_value=_successful_ingest_response()):
                 resp = client.post(
                     "/watcher/signals",
                     json={"signals": [sig]},
@@ -510,7 +507,7 @@ class TestWatcherRouterPost:
 
     def test_post_passes_batch_to_flow_engine(self, client, watcher_mock_db, api_key_headers):
         with patch(
-            "routes.watcher_router.execute_intent",
+            "AINDY.runtime.flow_engine.run_flow",
             return_value=_successful_ingest_response(),
         ) as mock_execute:
             resp = client.post(
@@ -519,12 +516,13 @@ class TestWatcherRouterPost:
                 headers=api_key_headers,
             )
         assert resp.status_code == 201
-        kwargs = mock_execute.call_args.kwargs
-        assert kwargs["intent_data"]["workflow_type"] == "watcher_ingest"
-        assert kwargs["intent_data"]["signals"][0]["signal_type"] == "session_started"
+        args = mock_execute.call_args
+        # run_flow(flow_name, payload, db=..., user_id=...)
+        assert args[0][0] == "watcher_signals_receive"
+        assert args[0][1]["signals"][0]["signal_type"] == "session_started"
 
     def test_post_returns_explicit_response_shape(self, client, watcher_mock_db, api_key_headers):
-        with patch("routes.watcher_router.execute_intent", return_value=_successful_ingest_response()):
+        with patch("AINDY.runtime.flow_engine.run_flow", return_value=_successful_ingest_response()):
             resp = client.post(
                 "/watcher/signals",
                 json={"signals": [_VALID_SIGNAL]},

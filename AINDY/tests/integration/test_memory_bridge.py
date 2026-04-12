@@ -111,7 +111,7 @@ class TestCreateMemoryNodeWrongTable:
 
         mock_db.refresh.side_effect = lambda obj: None
 
-        with patch("memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=refreshed):
+        with patch("AINDY.memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=refreshed):
             result = create_memory_node(
                 content="Some content",
                 source="pytest",

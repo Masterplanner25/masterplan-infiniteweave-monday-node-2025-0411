@@ -128,7 +128,7 @@ class TestSanitizeResult:
 class TestFlushNodusTraces:
     def test_empty_list_is_noop(self):
         from AINDY.runtime.nodus_runtime_adapter import _flush_nodus_traces
-        with patch("db.database.SessionLocal") as mock_sl:
+        with patch("AINDY.db.database.SessionLocal") as mock_sl:
             _flush_nodus_traces([])
         mock_sl.assert_not_called()
 
@@ -148,8 +148,8 @@ class TestFlushNodusTraces:
             "timestamp": datetime.now(timezone.utc),
         }
         mock_db = MagicMock()
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_trace_event.NodusTraceEvent") as MockEvt:
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_trace_event.NodusTraceEvent") as MockEvt:
             _flush_nodus_traces([trace])
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
@@ -174,8 +174,8 @@ class TestFlushNodusTraces:
             for i in range(3)
         ]
         mock_db = MagicMock()
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_trace_event.NodusTraceEvent"):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_trace_event.NodusTraceEvent"):
             _flush_nodus_traces(traces)
         assert mock_db.add.call_count == 3
 
@@ -194,7 +194,7 @@ class TestFlushNodusTraces:
             "user_id": None,
             "timestamp": None,
         }
-        with patch("db.database.SessionLocal", side_effect=RuntimeError("DB down")):
+        with patch("AINDY.db.database.SessionLocal", side_effect=RuntimeError("DB down")):
             # Must not raise
             _flush_nodus_traces([trace])
 
@@ -214,8 +214,8 @@ class TestFlushNodusTraces:
             "timestamp": None,
         }
         mock_db = MagicMock()
-        with patch("db.database.SessionLocal", return_value=mock_db), \
-             patch("db.models.nodus_trace_event.NodusTraceEvent"):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_db), \
+             patch("AINDY.db.models.nodus_trace_event.NodusTraceEvent"):
             _flush_nodus_traces([trace])
         mock_db.add.assert_called_once()
 
@@ -246,7 +246,7 @@ class TestQueryNodusTrace:
         row = self._make_row(sequence=1)
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [row]
 
-        with patch("utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
             result = query_nodus_trace(db=db, trace_id="exec-1", user_id="user-1")
 
         assert result["count"] == 1
@@ -258,7 +258,7 @@ class TestQueryNodusTrace:
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
-        with patch("utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
             result = query_nodus_trace(db=db, trace_id="missing", user_id="user-1")
 
         assert result["count"] == 0
@@ -270,7 +270,7 @@ class TestQueryNodusTrace:
         rows = [self._make_row(i, "recall") for i in range(3)]
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = rows
 
-        with patch("utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
             result = query_nodus_trace(db=db, trace_id="exec-1", user_id="user-1")
 
         assert "summary" in result
@@ -281,7 +281,7 @@ class TestQueryNodusTrace:
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
-        with patch("utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
             query_nodus_trace(db=db, trace_id="exec-1", user_id="user-1", limit=10)
 
         db.query.return_value.filter.return_value.order_by.return_value.limit.assert_called_once_with(10)
@@ -291,7 +291,7 @@ class TestQueryNodusTrace:
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
-        with patch("utils.uuid_utils.normalize_uuid", side_effect=ValueError("bad uuid")):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", side_effect=ValueError("bad uuid")):
             result = query_nodus_trace(db=db, trace_id="exec-1", user_id="bad")
 
         assert result["count"] == 0
@@ -301,7 +301,7 @@ class TestQueryNodusTrace:
         db = MagicMock()
         db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
 
-        with patch("utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
+        with patch("AINDY.utils.uuid_utils.normalize_uuid", return_value=uuid.uuid4()):
             result = query_nodus_trace(db=db, trace_id="exec-99", user_id="user-1")
 
         assert result["execution_unit_id"] == "exec-99"
@@ -409,7 +409,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=trace_result):
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=trace_result):
             resp = client.get("/platform/nodus/trace/exec-1")
 
         assert resp.status_code == 200
@@ -430,7 +430,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=empty):
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=empty):
             resp = client.get("/platform/nodus/trace/missing")
 
         assert resp.status_code == 404
@@ -470,7 +470,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/my-trace")
 
         mock_q.assert_called_once()
@@ -496,7 +496,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/exec-1")
 
         kwargs = mock_q.call_args.kwargs
@@ -521,7 +521,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result):
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=result):
             resp = client.get("/platform/nodus/trace/exec-1")
 
         body = resp.json()
@@ -547,7 +547,7 @@ class TestNodusTraceEndpoint:
         }
         client = self._make_app(lambda: db, lambda: user)
 
-        with patch("runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
+        with patch("AINDY.runtime.nodus_trace_service.query_nodus_trace", return_value=result) as mock_q:
             client.get("/platform/nodus/trace/exec-1?limit=50")
 
         kwargs = mock_q.call_args.kwargs

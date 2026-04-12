@@ -81,7 +81,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 1
@@ -92,7 +92,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -103,7 +103,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -115,7 +115,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 1
@@ -127,7 +127,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 1
@@ -139,7 +139,7 @@ class TestRehydrateHappyPath:
         db = _db_with(eus)
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 4
@@ -150,7 +150,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -161,7 +161,7 @@ class TestRehydrateHappyPath:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -182,7 +182,7 @@ class TestRehydrateIdempotency:
         # Simulate eu already in scheduler
         se = _scheduler(already_waiting_ids=[str(eu.id)])
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 0
@@ -194,7 +194,7 @@ class TestRehydrateIdempotency:
         db = _db_with([eu_fresh, eu_dupe])
         se = _scheduler(already_waiting_ids=[str(eu_dupe.id)])
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 1
@@ -219,7 +219,7 @@ class TestRehydrateIdempotency:
         se.register_wait.side_effect = _fake_register_wait
         se.waiting_for.side_effect = _fake_waiting_for
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             first  = rehydrate_waiting_eus(db)
             second = rehydrate_waiting_eus(db)
 
@@ -238,7 +238,7 @@ class TestRehydrateDegradation:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 0
@@ -249,7 +249,7 @@ class TestRehydrateDegradation:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         # Empty dict → from_dict returns a default event WC with no event_name
@@ -261,7 +261,7 @@ class TestRehydrateDegradation:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 0
@@ -272,7 +272,7 @@ class TestRehydrateDegradation:
         db.query.side_effect = Exception("connection lost")
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 0
@@ -285,7 +285,7 @@ class TestRehydrateDegradation:
         # First call raises, second succeeds
         se.register_wait.side_effect = [RuntimeError("quota error"), None]
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         # eu_bad failed (counted as skipped), eu_good succeeded
@@ -295,7 +295,7 @@ class TestRehydrateDegradation:
         db = _db_with([])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_eus(db)
 
         assert count == 0
@@ -313,7 +313,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -325,7 +325,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -336,7 +336,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -347,7 +347,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -358,7 +358,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -369,7 +369,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -380,7 +380,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -392,7 +392,7 @@ class TestRehydrateFieldMapping:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -410,7 +410,7 @@ class TestRehydrateCallback:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -421,8 +421,8 @@ class TestRehydrateCallback:
         mock_session = MagicMock()
 
         # Invoke the closure, patching the lazy imports it uses internally
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
             callback()
 
         mock_eus.resume_execution_unit.assert_called_once_with(str(eu.id))
@@ -432,7 +432,7 @@ class TestRehydrateCallback:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -442,8 +442,8 @@ class TestRehydrateCallback:
         mock_eus = MagicMock()
         mock_eus.resume_execution_unit.return_value = True
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
             callback()
 
         mock_session.close.assert_called_once()
@@ -453,7 +453,7 @@ class TestRehydrateCallback:
         db = _db_with([eu])
         se = _scheduler()
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -463,8 +463,8 @@ class TestRehydrateCallback:
         mock_eus = MagicMock()
         mock_eus.resume_execution_unit.side_effect = RuntimeError("db error")
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.core.execution_unit_service.ExecutionUnitService", return_value=mock_eus):
             callback()  # must not raise
 
         mock_session.close.assert_called_once()

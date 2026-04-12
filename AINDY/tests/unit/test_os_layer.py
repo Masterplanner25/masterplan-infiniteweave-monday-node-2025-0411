@@ -218,7 +218,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", "eu-0")
 
         mock_se.notify_event.assert_called_once_with("resource_available", correlation_id=None, broadcast=True)
@@ -232,7 +232,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", "eu-0")
 
         mock_se.notify_event.assert_not_called()
@@ -243,7 +243,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", None)
 
         mock_se.notify_event.assert_not_called()
@@ -255,7 +255,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", "eu-0")   # MAX → MAX-1 → fires
             rm.mark_completed("t1", "eu-1")   # MAX-1 → MAX-2 → does NOT fire
 
@@ -270,7 +270,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", "eu-extra")  # MAX+1 → MAX, still blocked
 
         mock_se.notify_event.assert_not_called()
@@ -284,7 +284,7 @@ class TestResourceManagerCapacityEvent:
         mock_se = MagicMock()
         mock_se.notify_event.side_effect = RuntimeError("scheduler down")
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("t1", "eu-0")  # must not raise
 
         # Count decremented correctly despite the error
@@ -299,7 +299,7 @@ class TestResourceManagerCapacityEvent:
 
         from unittest.mock import MagicMock, patch
         mock_se = MagicMock()
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             rm.mark_completed("full-tenant", "eu-0")
             rm.mark_completed("partial-tenant", "eu-p1")
 
@@ -520,7 +520,7 @@ class TestSchedulerFairness:
         calls = []
         se.enqueue(_item("eu-1", callback=lambda: calls.append("eu-1")))
         se.enqueue(_item("eu-2", callback=lambda: calls.append("eu-2")))
-        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
         assert dispatched == 2
         assert "eu-1" in calls
@@ -770,7 +770,7 @@ class TestSyscallDispatcherOsLayer:
         ctx = self._ctx(caps=["test.cap"])
         rm.mark_started("user-1", "eu-test")
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.echo", {}, ctx)
 
         assert result["status"] == "success"
@@ -789,7 +789,7 @@ class TestSyscallDispatcherOsLayer:
         # Exhaust syscall quota
         rm.record_usage("eu-test", {"syscall_count": MAX_SYSCALLS_PER_EXECUTION + 1})
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.heavy", {}, ctx)
 
         assert result["status"] == "error"
@@ -804,7 +804,7 @@ class TestSyscallDispatcherOsLayer:
         rm = ResourceManager()
         ctx = self._ctx(user_id="user-valid", caps=["test.cap"])
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.ok", {}, ctx)
 
         assert result["status"] == "success"
@@ -822,7 +822,7 @@ class TestSyscallDispatcherOsLayer:
         broken_rm.check_quota.return_value = (True, None)
         broken_rm.record_usage.side_effect = RuntimeError("DB exploded")
 
-        with patch("kernel.syscall_dispatcher._get_rm", return_value=broken_rm):
+        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=broken_rm):
             result = dispatcher.dispatch("sys.v1.test.safe", {}, ctx)
 
         assert result["status"] == "success"
@@ -873,7 +873,7 @@ class TestSchedulerResourceIntegration:
         calls = []
         se.enqueue(_item("eu-blocked", tenant_id="t1", callback=lambda: calls.append("ran")))
 
-        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
 
         assert dispatched == 0
@@ -890,7 +890,7 @@ class TestSchedulerResourceIntegration:
         calls = []
         se.enqueue(_item("eu-ok", tenant_id="t1", callback=lambda: calls.append("ran")))
 
-        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
 
         assert dispatched == 1
@@ -909,7 +909,7 @@ class TestSchedulerResourceIntegration:
         # Tenant B item - should run
         se.enqueue(_item("eu-B", tenant_id="tenant-B", callback=lambda: calls_b.append("B")))
 
-        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             # First dequeue: A is picked (high in queue), blocked, re-enqueued
             # Scheduler stops because can_execute returned False for A
             # This tests that the scheduler correctly handles partial drainage
@@ -939,7 +939,7 @@ class TestSchedulerResourceIntegration:
         assert resumed == 1
         assert se.queue_depth()[PRIORITY_HIGH] == 1
 
-        with patch("kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             se.schedule()
 
         assert "resumed" in results

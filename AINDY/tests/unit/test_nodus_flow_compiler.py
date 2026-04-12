@@ -321,7 +321,7 @@ class TestCompileNodusFlow:
     def test_returns_valid_flow_dict_for_sequential_steps(self):
         mock_rt = MagicMock()
         mock_rt.run_source.side_effect = _make_fake_run("a", "b", "c")
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             flow = compile_nodus_flow("flow.step('a')...", "my_flow")
         assert flow["start"] == "a"
         assert flow["end"] == ["c"]
@@ -333,7 +333,7 @@ class TestCompileNodusFlow:
         mock_rt = MagicMock()
         # step("a"), step("b", when="flag"), step("c")
         mock_rt.run_source.side_effect = _make_fake_run("a", "b", "c", conditions={1: "flag"})
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             flow = compile_nodus_flow("...", "cond_flow")
         edges_a = flow["edges"]["a"]
         assert len(edges_a) == 2
@@ -343,27 +343,27 @@ class TestCompileNodusFlow:
     def test_runtime_called_with_flow_global(self):
         mock_rt = MagicMock()
         mock_rt.run_source.side_effect = _make_fake_run("node")
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             compile_nodus_flow("flow.step('node')", "f")
         call_kwargs = mock_rt.run_source.call_args
         assert "flow" in (call_kwargs.kwargs.get("host_globals") or {})
 
     def test_vm_not_installed_raises_runtime_error(self):
-        with patch.dict("sys.modules", {"nodus": None, "nodus.runtime": None, "nodus.runtime.embedding": None}):
+        with patch.dict("sys.modules", {"nodus": None, "nodus.runtime": None, "nodus.runtime.embedding": None, "AINDY.nodus.runtime.embedding": None}):
             with pytest.raises(RuntimeError, match="not installed"):
                 compile_nodus_flow("flow.step('x')", "f")
 
     def test_vm_error_raises_value_error(self):
         mock_rt = MagicMock()
         mock_rt.run_source.return_value = {"ok": False, "error": "syntax error"}
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             with pytest.raises(ValueError, match="syntax error"):
                 compile_nodus_flow("bad script", "f")
 
     def test_vm_ok_false_no_error_message_still_raises(self):
         mock_rt = MagicMock()
         mock_rt.run_source.return_value = {"ok": False}
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             with pytest.raises(ValueError):
                 compile_nodus_flow("bad", "f")
 
@@ -371,7 +371,7 @@ class TestCompileNodusFlow:
         mock_rt = MagicMock()
         # VM succeeds but script never calls flow.step()
         mock_rt.run_source.return_value = {"ok": True}
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_rt):
             with pytest.raises(ValueError, match="no steps"):
                 compile_nodus_flow("# empty", "f")
 
@@ -403,7 +403,7 @@ class TestNodusFlowCompileNode:
     def test_returns_success_and_compiled_flow(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": [], "b": []}, "end": ["b"]}
-        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
+        with patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "SUCCESS"
         assert result["output_patch"]["nodus_compiled_flow"] == mock_flow
@@ -411,20 +411,20 @@ class TestNodusFlowCompileNode:
     def test_echoes_flow_name_in_output_patch(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": []}, "end": ["a"]}
-        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
+        with patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["output_patch"]["nodus_flow_name"] == "my_flow"
 
     def test_defaults_flow_name_to_nodus_flow(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_compile_node
         mock_flow = {"start": "a", "edges": {"a": []}, "end": ["a"]}
-        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow) as mock_compile:
+        with patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", return_value=mock_flow) as mock_compile:
             nodus_flow_compile_node({"nodus_flow_script": "flow.step('a')"}, _make_node_context())
         mock_compile.assert_called_once_with("flow.step('a')", "nodus_flow")
 
     def test_returns_failure_on_value_error_from_compiler(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_compile_node
-        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=ValueError("bad script")):
+        with patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=ValueError("bad script")):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "bad script" in result["error"]
@@ -432,7 +432,7 @@ class TestNodusFlowCompileNode:
 
     def test_returns_failure_on_runtime_error_from_compiler(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_compile_node
-        with patch("runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=RuntimeError("not installed")):
+        with patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=RuntimeError("not installed")):
             result = nodus_flow_compile_node(_make_compile_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "not installed" in result["error"]
@@ -468,7 +468,7 @@ class TestNodusFlowRunNode:
             "run_id": "inner-run-1",
             "trace_id": "trace-1",
         }
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "SUCCESS"
         assert result["output_patch"]["nodus_flow_status"] == "SUCCESS"
@@ -482,7 +482,7 @@ class TestNodusFlowRunNode:
             "error": "inner node failed",
             "run_id": "inner-run-2",
         }
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "inner node failed" in result["error"]
@@ -492,7 +492,7 @@ class TestNodusFlowRunNode:
         mock_runner = MagicMock()
         mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "r"}
         state = _make_run_state(nodus_flow_input={"my_key": "my_val"})
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             nodus_flow_run_node(state, _make_node_context())
         call_args = mock_runner.start.call_args
         assert call_args.kwargs.get("initial_state") == {"my_key": "my_val"} or \
@@ -500,7 +500,7 @@ class TestNodusFlowRunNode:
 
     def test_runner_exception_returns_failure(self):
         from AINDY.runtime.nodus_adapter import nodus_flow_run_node
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", side_effect=RuntimeError("db down")):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", side_effect=RuntimeError("db down")):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["status"] == "FAILURE"
         assert "db down" in result["error"]
@@ -511,7 +511,7 @@ class TestNodusFlowRunNode:
         full_result = {"status": "SUCCESS", "run_id": "r", "trace_id": "t", "state": {"x": 1}}
         mock_runner = MagicMock()
         mock_runner.start.return_value = full_result
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             result = nodus_flow_run_node(_make_run_state(), _make_node_context())
         assert result["output_patch"]["nodus_flow_result"] == full_result
 
@@ -521,7 +521,7 @@ class TestNodusFlowRunNode:
         mock_runner.start.return_value = {"status": "SUCCESS", "run_id": "r"}
         state = _make_run_state()
         state.pop("nodus_flow_name")  # omit name — should default
-        with patch("runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.runtime.nodus_adapter.PersistentFlowRunner", return_value=mock_runner):
             nodus_flow_run_node(state, _make_node_context())
         call_kwargs = mock_runner.start.call_args.kwargs
         assert call_kwargs.get("flow_name") == "nodus_flow"
