@@ -8,9 +8,9 @@ def test_research_query_uses_ai_analyze(monkeypatch):
     def _fake_ai_analyze(content: str) -> str:
         return "Summarized content"
 
-    monkeypatch.setattr("routes.research_results_router.web_search", _fake_web_search)
-    monkeypatch.setattr("routes.research_results_router.ai_analyze", _fake_ai_analyze)
-    monkeypatch.setattr("db.dao.memory_node_dao.MemoryNodeDAO.recall", lambda *args, **kwargs: [])
+    monkeypatch.setattr("AINDY.routes.research_results_router.web_search", _fake_web_search)
+    monkeypatch.setattr("AINDY.routes.research_results_router.ai_analyze", _fake_ai_analyze)
+    monkeypatch.setattr("AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall", lambda *args, **kwargs: [])
 
     class _DB:
         def add(self, _):
@@ -36,7 +36,7 @@ def test_research_query_uses_ai_analyze(monkeypatch):
         return _Result(result.query, result.summary, source=source, data=data)
 
     monkeypatch.setattr(
-        "domain.research_results_service.create_research_result",
+        "AINDY.domain.research_results_service.create_research_result",
         _fake_create,
     )
 

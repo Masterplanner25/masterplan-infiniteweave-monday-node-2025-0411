@@ -413,9 +413,9 @@ class TestAdapterIntegration:
         )
 
         # All three are lazy imports inside _execute() — patch at source module
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("bridge.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_builtins):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
+             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
+             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_builtins):
             adapter = NodusRuntimeAdapter(db=db)
             result = adapter._execute("let x = 1", "<test>", ctx)
 
@@ -464,9 +464,9 @@ class TestAdapterIntegration:
         db = MagicMock()
         ctx = NodusExecutionContext(user_id="specific-user", execution_unit_id="eu-1")
 
-        with patch("nodus.runtime.embedding.NodusRuntime") as MockRuntime, \
-             patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("runtime.nodus_builtins.NodusMemoryBuiltins") as MockBuiltins:
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime") as MockRuntime, \
+             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
+             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins") as MockBuiltins:
             MockRuntime.return_value.run_source.return_value = {"ok": True, "error": None}
             mock_instance = MagicMock()
             mock_instance._writes = []

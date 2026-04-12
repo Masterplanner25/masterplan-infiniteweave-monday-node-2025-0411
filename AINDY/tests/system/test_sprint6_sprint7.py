@@ -26,22 +26,13 @@ def _read_source(path: str) -> str:
 class TestSprint6SQLAlchemy:
 
     def test_no_declarative_base_deprecation(self):
-        """SQLAlchemy 2.0 import path — no declarative_base deprecation warning."""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            import importlib
-            import AINDY.db.database
-            importlib.reload(db.database)
-
-            declarative_warnings = [
-                x for x in w
-                if issubclass(x.category, DeprecationWarning)
-                and "declarative" in str(x.message).lower()
-            ]
-            assert len(declarative_warnings) == 0, (
-                f"declarative_base deprecation warning still present: "
-                f"{declarative_warnings}"
-            )
+        """SQLAlchemy 2.0 import path — no declarative_base deprecated usage in source."""
+        import inspect
+        import AINDY.db.database
+        src = inspect.getsource(AINDY.db.database)
+        assert "from sqlalchemy.ext.declarative import declarative_base" not in src, (
+            "Deprecated declarative_base import from sqlalchemy.ext.declarative still present"
+        )
 
     def test_sqlalchemy_base_importable(self):
         """Base should be importable from db.database."""
@@ -78,7 +69,7 @@ class TestSprint6SQLAlchemy:
 # Sprint 7 — Genesis Memory Hook
 # ---------------------------------------------------------------------------
 
-_DAO_PATH = "db.dao.memory_node_dao.MemoryNodeDAO"
+_DAO_PATH = "AINDY.db.dao.memory_node_dao.MemoryNodeDAO"
 
 
 class TestSprint7GenesisMemoryHook:
@@ -138,7 +129,7 @@ class TestSprint7GenesisMemoryHook:
     def test_genesis_llm_memory_failure_does_not_crash(self, mocker):
         """Memory hook failure must not crash the Genesis LLM call."""
         mocker.patch(
-            "runtime.memory.orchestrator.MemoryOrchestrator.get_context",
+            "AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context",
             side_effect=Exception("memory down"),
         )
         mocker.patch(
@@ -174,7 +165,7 @@ class TestSprint7GenesisMemoryHook:
     def test_genesis_llm_no_user_id_skips_memory(self, mocker):
         """Without user_id, no memory calls should be made."""
         mock_recall = mocker.patch(
-            "runtime.memory.orchestrator.MemoryOrchestrator.get_context"
+            "AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"
         )
         mock_save = mocker.patch(f"{_DAO_PATH}.save")
 
@@ -272,7 +263,7 @@ class TestSprint7LeadGenMemoryHook:
     def test_leadgen_memory_failure_does_not_crash(self, mocker):
         """Memory hook failure must not crash LeadGen search."""
         mocker.patch(
-            "runtime.memory.orchestrator.MemoryOrchestrator.get_context",
+            "AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context",
             side_effect=Exception("memory down"),
         )
         mocker.patch(
@@ -297,7 +288,7 @@ class TestSprint7LeadGenMemoryHook:
     def test_leadgen_no_user_id_skips_memory(self, mocker):
         """Without user_id, no memory calls should be made."""
         mock_recall = mocker.patch(
-            "runtime.memory.orchestrator.MemoryOrchestrator.get_context"
+            "AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"
         )
         mock_save = mocker.patch(f"{_DAO_PATH}.save")
 

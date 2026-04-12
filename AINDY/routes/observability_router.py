@@ -31,7 +31,7 @@ def _execute_observability(request: Request, route_name: str, handler, *, db: Se
         handler=handler,
         user_id=user_id,
         input_payload=input_payload,
-        metadata={"db": db},
+        metadata={"db": db, "disable_memory_capture": True},
     )
 
 

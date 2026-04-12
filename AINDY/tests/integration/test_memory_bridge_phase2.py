@@ -46,7 +46,7 @@ class TestEmbeddingService:
         mock_client = MagicMock()
         mock_client.embeddings.create.return_value = make_mock_openai_response()
 
-        with patch("memory.embedding_service._client", mock_client):
+        with patch("AINDY.memory.embedding_service._client", mock_client):
             from AINDY.memory.embedding_service import generate_embedding
             result = generate_embedding("hello world")
 
@@ -115,8 +115,8 @@ class TestEmbeddingService:
         mock_client = MagicMock()
         mock_client.embeddings.create.side_effect = Exception("API down")
 
-        with patch("memory.embedding_service._client", mock_client):
-            with patch("memory.embedding_service.time.sleep"):
+        with patch("AINDY.memory.embedding_service._client", mock_client):
+            with patch("AINDY.memory.embedding_service.time.sleep"):
                 from AINDY.memory.embedding_service import generate_embedding
                 result = generate_embedding("test content")
 
@@ -290,21 +290,20 @@ class TestMemoryRoutePhase2:
         mock_dao = MagicMock()
         mock_dao.recall.return_value = []
 
-        with patch("memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
-            with patch("routes.memory_router.MemoryNodeDAO", return_value=mock_dao):
-                with patch("db.database.get_db"):
-                    response = client.post(
-                        "/memory/recall",
-                        json={"query": "strategic decisions"},
-                        headers=auth_headers,
-                    )
+        with patch("AINDY.memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
+            with patch("AINDY.db.dao.memory_node_dao.MemoryNodeDAO", return_value=mock_dao):
+                response = client.post(
+                    "/memory/recall",
+                    json={"query": "strategic decisions"},
+                    headers=auth_headers,
+                )
 
-                    assert response.status_code == 200
-                    payload = response.json()
-                    data = payload.get("data", payload)
-                    assert "results" in data
-                    assert data["scoring_version"] == "v2"
-                    assert "formula" in data
+        assert response.status_code == 200
+        payload = response.json()
+        data = payload.get("data", payload)
+        assert "results" in data
+        assert data["scoring_version"] == "v2"
+        assert "formula" in data
         assert data["formula"]["semantic"] == 0.40
         assert data["formula"]["graph"] == 0.15
         assert data["formula"]["recency"] == 0.15
@@ -316,19 +315,18 @@ class TestMemoryRoutePhase2:
         mock_dao = MagicMock()
         mock_dao.find_similar.return_value = []
 
-        with patch("memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
-            with patch("routes.memory_router.MemoryNodeDAO", return_value=mock_dao):
-                with patch("db.database.get_db"):
-                    response = client.post(
-                        "/memory/nodes/search",
-                        json={"query": "important decisions"},
-                        headers=auth_headers,
-                    )
+        with patch("AINDY.memory.embedding_service.generate_query_embedding", return_value=MOCK_EMBEDDING):
+            with patch("AINDY.db.dao.memory_node_dao.MemoryNodeDAO", return_value=mock_dao):
+                response = client.post(
+                    "/memory/nodes/search",
+                    json={"query": "important decisions"},
+                    headers=auth_headers,
+                )
 
-                    assert response.status_code == 200
-                    payload = response.json()
-                    data = payload.get("data", payload)
-                    assert "query" in data
-                    assert data["query"] == "important decisions"
-                    assert "results" in data
+        assert response.status_code == 200
+        payload = response.json()
+        data = payload.get("data", payload)
+        assert "query" in data
+        assert data["query"] == "important decisions"
+        assert "results" in data
         assert "count" in data

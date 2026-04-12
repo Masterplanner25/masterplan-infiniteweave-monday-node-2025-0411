@@ -26,7 +26,7 @@ async def ingest_linkedin_manual(
 
     def handler(ctx):
         from AINDY.domain.masterplan_service import assert_masterplan_owned
-        from AINDY.runtime.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, data.masterplan_id, user_id)
 
@@ -67,7 +67,7 @@ async def get_masterplan_analytics(
 
     def handler(ctx):
         from AINDY.domain.masterplan_service import assert_masterplan_owned
-        from AINDY.runtime.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, masterplan_id, user_id)
 
@@ -101,7 +101,7 @@ async def get_masterplan_summary(
 
     def handler(ctx):
         from AINDY.domain.masterplan_service import assert_masterplan_owned
-        from AINDY.runtime.flow_engine import run_flow
+        from runtime.flow_engine import run_flow
 
         assert_masterplan_owned(db, masterplan_id, user_id)
 

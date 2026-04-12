@@ -194,10 +194,10 @@ class TestIdempotencyKey:
             pass
 
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("t", {})),
-            patch("platform_layer.async_job_service._execute_job", side_effect=fake_exec),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("t", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job", side_effect=fake_exec),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             result = process_one_job(q)
@@ -275,10 +275,10 @@ class TestDeadLetterQueue:
         ))
 
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("boom", {})),
-            patch("platform_layer.async_job_service._execute_job", side_effect=RuntimeError("kaboom")),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("boom", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job", side_effect=RuntimeError("kaboom")),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
@@ -320,8 +320,8 @@ class TestRetryBackoff:
         q = _fresh_queue()
 
         with (
-            patch("core.distributed_queue.get_queue", return_value=q),
-            patch("core.execution_dispatcher._compute_retry_delay", return_value=2.0),
+            patch("AINDY.core.distributed_queue.get_queue", return_value=q),
+            patch("AINDY.core.execution_dispatcher._compute_retry_delay", return_value=2.0),
         ):
             from AINDY.core.execution_dispatcher import _enqueue_distributed
             _enqueue_distributed(
@@ -340,7 +340,7 @@ class TestRetryBackoff:
         """Normal (non-retry) jobs are enqueued without delay."""
         q = _fresh_queue()
 
-        with patch("core.distributed_queue.get_queue", return_value=q):
+        with patch("AINDY.core.distributed_queue.get_queue", return_value=q):
             from AINDY.core.execution_dispatcher import _enqueue_distributed
             _enqueue_distributed(
                 self._eu_stub(),
@@ -356,7 +356,7 @@ class TestRetryBackoff:
         log_mock = MagicMock()
         # attempt 1 → base=500ms → 0.5s
         log_mock.attempt_count = 1
-        with patch("db.database.SessionLocal") as mock_sl:
+        with patch("AINDY.db.database.SessionLocal") as mock_sl:
             mock_sl.return_value.__enter__ = lambda s: s
             mock_sl.return_value.__exit__ = MagicMock(return_value=False)
             mock_sl.return_value.query.return_value.filter.return_value.first.return_value = log_mock
@@ -470,11 +470,11 @@ class TestConcurrencyGuard:
 
         processed = []
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("t", {})),
-            patch("platform_layer.async_job_service._execute_job",
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("t", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job",
                   side_effect=lambda *a: processed.append(a[0])),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
@@ -498,11 +498,11 @@ class TestConcurrencyGuard:
             ))
 
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("t", {})),
-            patch("platform_layer.async_job_service._execute_job",
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("t", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job",
                   side_effect=RuntimeError("boom")),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
@@ -625,10 +625,10 @@ class TestOriginalBehaviourPreserved:
             captured.append(get_trace_id() or "")
 
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("t", {})),
-            patch("platform_layer.async_job_service._execute_job", side_effect=fake_exec),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("t", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job", side_effect=fake_exec),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)
@@ -653,10 +653,10 @@ class TestOriginalBehaviourPreserved:
         before = get_trace_id()
 
         with (
-            patch("worker.worker_loop._try_claim_job", return_value=True),
-            patch("worker.worker_loop._fetch_job_data", return_value=("t", {})),
-            patch("platform_layer.async_job_service._execute_job"),
-            patch("worker.worker_loop._emit_worker_event"),
+            patch("AINDY.worker.worker_loop._try_claim_job", return_value=True),
+            patch("AINDY.worker.worker_loop._fetch_job_data", return_value=("t", {})),
+            patch("AINDY.platform_layer.async_job_service._execute_job"),
+            patch("AINDY.worker.worker_loop._emit_worker_event"),
         ):
             from AINDY.worker.worker_loop import process_one_job
             process_one_job(q)

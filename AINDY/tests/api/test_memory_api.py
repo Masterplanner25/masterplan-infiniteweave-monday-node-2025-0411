@@ -65,7 +65,7 @@ def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     monkeypatch,
 ):
     other_user = _create_other_user(db_session)
-    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("AINDY.memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
         "/apps/memory/nodes",

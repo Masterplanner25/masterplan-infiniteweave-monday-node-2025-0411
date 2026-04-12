@@ -31,8 +31,8 @@ class TestIsBackgroundLeader:
 
 class TestSchedulerStatusEndpoint:
     def test_returns_200_and_required_keys(self, client, auth_headers):
-        with patch("platform_layer.scheduler_service.get_scheduler", side_effect=RuntimeError("not started")), patch(
-            "domain.task_services.is_background_leader", return_value=False
+        with patch("AINDY.platform_layer.scheduler_service.get_scheduler", side_effect=RuntimeError("not started")), patch(
+            "AINDY.domain.task_services.is_background_leader", return_value=False
         ):
             response = client.get("/observability/scheduler/status", headers=auth_headers)
 
@@ -66,8 +66,8 @@ class TestSchedulerStatusEndpoint:
         class _Scheduler:
             running = True
 
-        with patch("platform_layer.scheduler_service.get_scheduler", return_value=_Scheduler()), patch(
-            "domain.task_services.is_background_leader", return_value=True
+        with patch("AINDY.platform_layer.scheduler_service.get_scheduler", return_value=_Scheduler()), patch(
+            "AINDY.domain.task_services.is_background_leader", return_value=True
         ):
             response = client.get("/observability/scheduler/status", headers=auth_headers)
 

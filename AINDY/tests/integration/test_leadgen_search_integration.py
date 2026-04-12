@@ -25,7 +25,7 @@ def test_run_ai_search_uses_external_search(monkeypatch):
     def _fake_search(query: str) -> str:
         return '{"results":[{"title":"Example","url":"https://example.com","snippet":"Best fit"}]}'
 
-    monkeypatch.setattr("modules.research_engine.web_search", _fake_search)
+    monkeypatch.setattr("AINDY.modules.research_engine.web_search", _fake_search)
     results = run_ai_search("test query")
     assert results
     assert results[0]["url"] == "https://example.com"
@@ -35,7 +35,7 @@ def test_run_ai_search_falls_back_on_error(monkeypatch):
     def _boom(query: str) -> str:
         raise RuntimeError("search down")
 
-    monkeypatch.setattr("modules.research_engine.web_search", _boom)
+    monkeypatch.setattr("AINDY.modules.research_engine.web_search", _boom)
     results = run_ai_search("test query")
     assert results
     assert all("company" in r and "url" in r and "context" in r for r in results)

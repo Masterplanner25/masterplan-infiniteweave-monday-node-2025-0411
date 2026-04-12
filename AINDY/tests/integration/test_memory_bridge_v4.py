@@ -199,7 +199,7 @@ class TestSuggestionEngine:
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[]
         )
 
@@ -257,7 +257,7 @@ class TestSuggestionEngine:
         }
 
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[high_performer, low_performer]
         )
 
@@ -293,7 +293,7 @@ class TestSuggestionEngine:
         }
 
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[risky_memory]
         )
 
@@ -369,12 +369,12 @@ class TestFeedbackEndpoints:
         self, client, auth_headers, mock_db, mocker
     ):
         mocker.patch(
-            "memory.embedding_service"
+            "AINDY.memory.embedding_service"
             ".generate_query_embedding",
             return_value=[0.1] * 1536
         )
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.suggest",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.suggest",
             return_value={
                 "suggestions": [],
                 "message": "Not enough data yet",

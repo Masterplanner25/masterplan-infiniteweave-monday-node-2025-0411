@@ -75,7 +75,7 @@ class TestFederatedMemoryDAO:
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO"
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO"
             ".recall_from_agent",
             return_value=[],
         )
@@ -188,7 +188,7 @@ class TestFederationEndpoints:
 
     def test_federated_recall_with_auth(self, client, auth_headers, mock_db, mocker):
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO"
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO"
             ".recall_federated",
             return_value={
                 "query": "test",

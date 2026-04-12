@@ -153,7 +153,7 @@ class TestEventBusHandleMessage:
         bus = _bus(instance_id="inst-B")
         mock_se = MagicMock()
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(self._make_payload(source="inst-A"))
 
         mock_se.notify_event.assert_called_once_with(
@@ -165,7 +165,7 @@ class TestEventBusHandleMessage:
         bus = _bus(instance_id="inst-B")
         mock_se = MagicMock()
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(
                 self._make_payload(correlation_id="chain-abc", source="inst-A")
             )
@@ -179,7 +179,7 @@ class TestEventBusHandleMessage:
         bus = _bus(instance_id="inst-B")
         mock_se = MagicMock()
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(self._make_payload(source="inst-A"))
 
         _, kwargs = mock_se.notify_event.call_args
@@ -190,7 +190,7 @@ class TestEventBusHandleMessage:
         bus = _bus(instance_id="inst-A")
         mock_se = MagicMock()
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(self._make_payload(source="inst-A"))  # same instance
 
         mock_se.notify_event.assert_not_called()
@@ -200,7 +200,7 @@ class TestEventBusHandleMessage:
         bus = _bus()
         mock_se = MagicMock()
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message("not-valid-json{{{")
 
         mock_se.notify_event.assert_not_called()
@@ -211,7 +211,7 @@ class TestEventBusHandleMessage:
         mock_se = MagicMock()
         raw = json.dumps({"source_instance_id": "inst-A"})  # no event_type
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(raw)
 
         mock_se.notify_event.assert_not_called()
@@ -222,7 +222,7 @@ class TestEventBusHandleMessage:
         mock_se = MagicMock()
         raw = json.dumps({"event_type": "", "source_instance_id": "inst-A"})
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(raw)
 
         mock_se.notify_event.assert_not_called()
@@ -233,7 +233,7 @@ class TestEventBusHandleMessage:
         mock_se = MagicMock()
         mock_se.notify_event.side_effect = RuntimeError("scheduler crashed")
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(self._make_payload(source="inst-A"))  # must not raise
 
     def test_handle_message_ignores_non_string_event_type(self):
@@ -242,7 +242,7 @@ class TestEventBusHandleMessage:
         mock_se = MagicMock()
         raw = json.dumps({"event_type": 42, "source_instance_id": "inst-A"})
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine", return_value=mock_se):
             bus._handle_message(raw)
 
         mock_se.notify_event.assert_not_called()
@@ -264,7 +264,7 @@ class TestSchedulerNotifyEventBroadcast:
         se = self._make_scheduler()
         mock_bus = MagicMock()
 
-        with patch("kernel.event_bus.get_event_bus", return_value=mock_bus):
+        with patch("AINDY.kernel.event_bus.get_event_bus", return_value=mock_bus):
             se.notify_event("task.completed", correlation_id="cid-1")
 
         mock_bus.publish.assert_called_once_with(
@@ -276,7 +276,7 @@ class TestSchedulerNotifyEventBroadcast:
         se = self._make_scheduler()
         mock_bus = MagicMock()
 
-        with patch("kernel.event_bus.get_event_bus", return_value=mock_bus):
+        with patch("AINDY.kernel.event_bus.get_event_bus", return_value=mock_bus):
             se.notify_event("task.completed", broadcast=False)
 
         mock_bus.publish.assert_not_called()
@@ -297,7 +297,7 @@ class TestSchedulerNotifyEventBroadcast:
             wait_condition=WaitCondition.for_event("task.completed"),
         )
 
-        with patch("kernel.event_bus.get_event_bus", side_effect=RuntimeError("bus gone")):
+        with patch("AINDY.kernel.event_bus.get_event_bus", side_effect=RuntimeError("bus gone")):
             count = se.notify_event("task.completed")  # must not raise
 
         # Local match is recorded; callback is enqueued (dispatched by schedule())
@@ -325,7 +325,7 @@ class TestSchedulerNotifyEventBroadcast:
         mock_bus = MagicMock()
         mock_bus.publish.side_effect = lambda *a, **kw: call_order.append("bus_publish")
 
-        with patch("kernel.event_bus.get_event_bus", return_value=mock_bus):
+        with patch("AINDY.kernel.event_bus.get_event_bus", return_value=mock_bus):
             se.notify_event("order.placed")
 
         # Callback is enqueued, bus publish is last.
@@ -351,7 +351,7 @@ class TestSchedulerNotifyEventBroadcast:
         mock_bus = MagicMock()
         mock_bus.publish.return_value = False  # simulate Redis failure
 
-        with patch("kernel.event_bus.get_event_bus", return_value=mock_bus):
+        with patch("AINDY.kernel.event_bus.get_event_bus", return_value=mock_bus):
             count = se.notify_event("ping")
 
         assert count == 1  # local match, regardless of bus result

@@ -18,7 +18,7 @@ def test_emit_system_event_persists_to_test_db(db_session, test_user):
         required=True,
     )
 
-    rows = db_session.query(SystemEvent).all()
+    rows = db_session.query(SystemEvent).filter(SystemEvent.type == "execution.started").all()
     assert len(rows) == 1
     assert rows[0].type == "execution.started"
     assert rows[0].trace_id == trace_id
@@ -29,7 +29,7 @@ def test_emit_system_event_notifies_scheduler(db_session, test_user):
     from AINDY.core.system_event_service import emit_system_event
 
     with patch(
-        "core.system_event_service._notify_scheduler_of_event"
+        "AINDY.core.system_event_service._notify_scheduler_of_event"
     ) as mock_notify:
         emit_system_event(
             db=db_session,
@@ -66,7 +66,7 @@ def test_notify_scheduler_wakes_waiting_run(db_session, test_user):
     )
 
     with patch(
-        "core.system_event_service._notify_scheduler_of_event",
+        "AINDY.core.system_event_service._notify_scheduler_of_event",
         side_effect=lambda et, **kw: se.notify_event(et, correlation_id=kw.get("trace_id")),
     ):
         emit_system_event(

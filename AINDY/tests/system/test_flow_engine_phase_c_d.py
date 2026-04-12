@@ -201,7 +201,7 @@ class TestGenesisStoreSynthesis:
 
     def test_returns_success_normally(self, mock_db):
         from AINDY.runtime.flow_definitions import genesis_store_synthesis
-        with patch("runtime.flow_definitions.logger"):
+        with patch("AINDY.runtime.flow_definitions.logger"):
             result = genesis_store_synthesis(
                 {"session_id": 1},
                 {"db": None, "user_id": None, "attempts": {}},
@@ -213,7 +213,7 @@ class TestGenesisStoreSynthesis:
         from AINDY.runtime.flow_definitions import genesis_store_synthesis
 
         with patch(
-            "memory.memory_capture_engine.MemoryCaptureEngine",
+            "AINDY.memory.memory_capture_engine.MemoryCaptureEngine",
             side_effect=Exception("DB down"),
         ):
             result = genesis_store_synthesis(
@@ -245,8 +245,8 @@ class TestGenesisRouterIntegration:
 
     def test_router_uses_execute_intent(self):
         src = self._router_source()
-        assert "execute_intent" in src, (
-            "genesis_router.py must execute through execute_intent"
+        assert "run_flow" in src, (
+            "genesis_router.py must execute through run_flow"
         )
 
     def test_router_sets_genesis_message_workflow_type(self):
@@ -315,7 +315,7 @@ class TestRouteEventSchedulerDelegation:
 
         run = self._make_waiting_run(db_session, test_user.id)
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = [str(run.id)]
             mock_se.return_value.notify_event.return_value = 1
             route_event("task.completed", {"result": "ok"}, db_session, user_id=test_user.id)
@@ -329,7 +329,7 @@ class TestRouteEventSchedulerDelegation:
 
         run = self._make_waiting_run(db_session, test_user.id)
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             route_event("task.completed", {}, db_session, user_id=test_user.id)
@@ -344,7 +344,7 @@ class TestRouteEventSchedulerDelegation:
 
         self._make_waiting_run(db_session, test_user.id, event_type="genesis_user_message")
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event("genesis_user_message", {}, db_session, user_id=test_user.id)
@@ -359,7 +359,7 @@ class TestRouteEventSchedulerDelegation:
 
         self._make_waiting_run(db_session, test_user.id)
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event(
@@ -382,7 +382,7 @@ class TestRouteEventSchedulerDelegation:
 
         self._make_waiting_run(db_session, test_user.id)
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 1
             route_event("task.completed", {}, db_session, user_id=test_user.id)
@@ -396,7 +396,7 @@ class TestRouteEventSchedulerDelegation:
 
         run = self._make_waiting_run(db_session, test_user.id)
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = [str(run.id)]
             mock_se.return_value.notify_event.return_value = 1
             results = route_event("task.completed", {"x": 1}, db_session, user_id=test_user.id)
@@ -409,7 +409,7 @@ class TestRouteEventSchedulerDelegation:
         """No waiting runs for the event → empty list, notify_event still called."""
         from AINDY.runtime.flow_engine import route_event
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             results = route_event("unknown.event", {}, db_session, user_id=test_user.id)
@@ -421,7 +421,7 @@ class TestRouteEventSchedulerDelegation:
         """notify_event() fires even if no FlowRuns matched the DB query."""
         from AINDY.runtime.flow_engine import route_event
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             mock_se.return_value.peek_matching_run_ids.return_value = []
             mock_se.return_value.notify_event.return_value = 0
             route_event("some.event", {}, db_session)  # no user_id filter
@@ -444,7 +444,7 @@ class TestRouteEventSchedulerDelegation:
         matched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
         unmatched_run = self._make_waiting_run(db_session, test_user.id, event_type="payment.confirmed")
 
-        with patch("kernel.scheduler_engine.get_scheduler_engine") as mock_se:
+        with patch("AINDY.kernel.scheduler_engine.get_scheduler_engine") as mock_se:
             # Only matched_run is in the scheduler's scope
             mock_se.return_value.peek_matching_run_ids.return_value = [str(matched_run.id)]
             mock_se.return_value.notify_event.return_value = 1
@@ -623,7 +623,7 @@ class TestCaptureFlowCompletionMethod:
         )
 
         with patch(
-            "memory.memory_capture_engine.MemoryCaptureEngine",
+            "AINDY.memory.memory_capture_engine.MemoryCaptureEngine",
             side_effect=Exception("capture failed"),
         ):
             runner._capture_flow_completion(mock_run, {})
@@ -640,7 +640,7 @@ class TestCaptureFlowCompletionMethod:
         )
         mock_run = _make_mock_run(run_id=str(uuid.uuid4()))
 
-        with patch("memory.memory_capture_engine.MemoryCaptureEngine") as mock_engine:
+        with patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine") as mock_engine:
             runner._capture_flow_completion(mock_run, {})
             mock_engine.assert_not_called()
 
@@ -676,7 +676,7 @@ class TestCaptureFlowCompletionEventTypeMapping:
 
         # MemoryCaptureEngine is imported lazily inside _capture_flow_completion.
         # Patch at the source module so the lazy import picks up the mock.
-        with patch("memory.memory_capture_engine.MemoryCaptureEngine", _MockEngine):
+        with patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine", _MockEngine):
             runner._capture_flow_completion(mock_run, {})
 
         return captured_calls

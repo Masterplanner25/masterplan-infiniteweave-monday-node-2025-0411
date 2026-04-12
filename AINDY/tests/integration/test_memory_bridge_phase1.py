@@ -69,7 +69,7 @@ class TestWritePathFix:
 
         mock_db = MagicMock()
 
-        with patch("memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=mock_persisted):
+        with patch("AINDY.memory.memory_persistence.MemoryNodeDAO.save_memory_node", return_value=mock_persisted):
             result = create_memory_node(
                 content="test content",
                 source="unittest",
@@ -134,7 +134,7 @@ class TestMemoryNodeDAOUnit:
         mock_node = self._make_mock_node(id=node_id, content="hello")
         mock_db.refresh.side_effect = lambda obj: None
 
-        with patch("db.dao.memory_node_dao.MemoryNodeModel", return_value=mock_node):
+        with patch("AINDY.db.dao.memory_node_dao.MemoryNodeModel", return_value=mock_node):
             with patch.object(dao.db, "add"), \
                  patch.object(dao.db, "commit"), \
                  patch.object(dao.db, "refresh"):
@@ -361,7 +361,7 @@ class TestCreateMemoryLinkUnit:
         expected = {"id": str(uuid.uuid4()), "link_type": "related"}
 
         # create_memory_link uses memory.memory_persistence.MemoryNodeDAO
-        with patch("memory.memory_persistence.MemoryNodeDAO.create_link", return_value=expected) as mock_create:
+        with patch("AINDY.memory.memory_persistence.MemoryNodeDAO.create_link", return_value=expected) as mock_create:
             result = create_memory_link(src, tgt, link_type="related", db=mock_db)
             mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 
@@ -374,7 +374,7 @@ class TestCreateMemoryLinkUnit:
         mock_db = MagicMock()
         src = str(uuid.uuid4())
         tgt = str(uuid.uuid4())
-        with patch("memory.memory_persistence.MemoryNodeDAO.create_link", return_value={}) as mock_create:
+        with patch("AINDY.memory.memory_persistence.MemoryNodeDAO.create_link", return_value={}) as mock_create:
             create_memory_link(src, tgt, db=mock_db)
             mock_create.assert_called_once_with(src, tgt, "related", 0.5)
 

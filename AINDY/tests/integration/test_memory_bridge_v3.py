@@ -83,7 +83,7 @@ class TestMemoryNodeHistory:
         from AINDY.memory.memory_persistence import MemoryNodeModel
 
         mocker.patch(
-            "memory.embedding_service.generate_embedding",
+            "AINDY.memory.embedding_service.generate_embedding",
             return_value=[0.1] * 1536,
         )
 
@@ -348,11 +348,11 @@ class TestRecallV3:
 
     def test_recall_v3_returns_scoring_metadata(self, client, auth_headers, mock_db, mocker):
         mocker.patch(
-            "memory.embedding_service.generate_query_embedding",
+            "AINDY.memory.embedding_service.generate_query_embedding",
             return_value=[0.1] * 1536,
         )
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value=[],
         )
         r = client.post(
@@ -369,11 +369,11 @@ class TestRecallV3:
     def test_recall_v3_expand_parameter(self, client, auth_headers, mock_db, mocker):
         """expand_results=True returns dict with expanded."""
         mocker.patch(
-            "memory.embedding_service.generate_query_embedding",
+            "AINDY.memory.embedding_service.generate_query_embedding",
             return_value=[0.1] * 1536,
         )
         mocker.patch(
-            "db.dao.memory_node_dao.MemoryNodeDAO.recall",
+            "AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall",
             return_value={
                 "results": [],
                 "expanded": [],

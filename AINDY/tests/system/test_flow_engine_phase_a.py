@@ -77,7 +77,7 @@ class TestSchedulerService:
 
         # replay_task does `from db.database import SessionLocal` locally
         # so we must patch the source module, not scheduler_service
-        with patch("db.database.SessionLocal", return_value=mock_session):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session):
             result = replay_task("nonexistent-log-id-xyz")
 
         assert result is False
@@ -92,7 +92,7 @@ class TestSchedulerService:
         mock_session = MagicMock()
         mock_session.query.return_value.filter.return_value.first.return_value = mock_log
 
-        with patch("db.database.SessionLocal", return_value=mock_session):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session):
             result = replay_task("some-log-id")
 
         assert result is False
@@ -109,7 +109,7 @@ class TestSchedulerService:
         mock_session = MagicMock()
         mock_session.query.return_value.filter.return_value.first.return_value = mock_log
 
-        with patch("db.database.SessionLocal", return_value=mock_session):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session):
             result = replay_task("some-log-id")
 
         assert result is False
@@ -385,7 +385,7 @@ class TestAutomationEndpoints:
         app.dependency_overrides[get_db] = lambda: db
 
         client = TestClient(app)
-        with patch("agents.capability_service.validate_token", return_value={"ok": False, "error": "token mismatch"}):
+        with patch("AINDY.agents.capability_service.validate_token", return_value={"ok": False, "error": "token mismatch"}):
             resp = client.post("/automation/logs/log-1/replay")
 
         assert resp.status_code == 403

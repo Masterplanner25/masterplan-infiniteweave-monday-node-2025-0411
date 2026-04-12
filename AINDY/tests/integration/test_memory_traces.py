@@ -53,7 +53,7 @@ class TestMemoryTraceRoutes:
         auth_headers,
         monkeypatch,
     ):
-        monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+        monkeypatch.setattr("AINDY.memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
         other_user = _create_other_user(db_session)
 
         create_trace_response = client.post(

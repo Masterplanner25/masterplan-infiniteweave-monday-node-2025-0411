@@ -15,8 +15,8 @@ from unittest.mock import MagicMock, patch, call
 
 # MemoryNodeDAO lives here — all lazy imports inside bridge/arm/task/genesis
 # ultimately resolve to this module for the class definition.
-_ORCH_PATH = "runtime.memory.orchestrator.MemoryOrchestrator"
-_DAO_PATH = "db.dao.memory_node_dao.MemoryNodeDAO"
+_ORCH_PATH = "AINDY.runtime.memory.orchestrator.MemoryOrchestrator"
+_DAO_PATH = "AINDY.db.dao.memory_node_dao.MemoryNodeDAO"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -183,7 +183,7 @@ class TestARMAnalysisMemoryHook:
         """Build a DeepSeekCodeAnalyzer with mocked dependencies."""
         import pathlib
         from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-        with patch("modules.deepseek.deepseek_code_analyzer.OpenAI"):
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.OpenAI"):
             analyzer = DeepSeekCodeAnalyzer.__new__(DeepSeekCodeAnalyzer)
         analyzer.client = MagicMock()
         analyzer.config = {
@@ -219,27 +219,21 @@ class TestARMAnalysisMemoryHook:
         analyzer.file_processor.chunk_content.return_value = ["def foo(): pass"]
         analyzer.client.chat.completions.create.return_value = self._mock_openai_response()
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = []
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture") as mock_qmc:
+            mock_qmc.return_value = MOCK_NODE_DICT
             result = analyzer.run_analysis(
                 file_path="/fake/app.py",
                 db=mock_db,
                 user_id=TEST_USER_ID,
             )
 
-        save_calls = mock_dao_instance.save.call_args_list
-        assert len(save_calls) >= 1
-        write_kwargs = save_calls[0][1]
-        assert write_kwargs["node_type"] == "insight"
-        assert write_kwargs["source"].startswith("arm_analysis")
-        assert "app.py" in write_kwargs["content"] or "ARM analysis" in write_kwargs["content"]
+        assert mock_qmc.called
+        call_kwargs = mock_qmc.call_args.kwargs
+        assert call_kwargs["source"].startswith("arm_analysis")
+        assert "app.py" in call_kwargs["content"] or "ARM analysis" in call_kwargs["content"]
 
     def test_analysis_recall_runs_before_prompt(self):
-        """Verify that recall_memories is called (retrieval hook fires)."""
+        """Verify that MemoryOrchestrator.get_context is called (retrieval hook fires)."""
         analyzer = self._make_analyzer()
         mock_db = MagicMock()
         mock_path = self._mock_path()
@@ -247,22 +241,20 @@ class TestARMAnalysisMemoryHook:
         analyzer.file_processor.chunk_content.return_value = ["code"]
         analyzer.client.chat.completions.create.return_value = self._mock_openai_response('{"summary": "OK"}')
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = MOCK_RECALL_RESULTS
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
+        with patch(_ORCH_PATH + ".get_context") as mock_get_context:
+            from AINDY.runtime.memory import MemoryContext
+            mock_get_context.return_value = MemoryContext(items=[], total_tokens=0, metadata={})
+            with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture"):
+                analyzer.run_analysis(
+                    file_path="/fake/app.py",
+                    db=mock_db,
+                    user_id=TEST_USER_ID,
+                )
 
-            analyzer.run_analysis(
-                file_path="/fake/app.py",
-                db=mock_db,
-                user_id=TEST_USER_ID,
-            )
-
-        recall_calls = mock_dao_instance.recall.call_args_list
-        assert len(recall_calls) >= 1
-        recall_kwargs = recall_calls[0][1]
-        assert "arm" in recall_kwargs.get("tags", [])
+        assert mock_get_context.called
+        call_kwargs = mock_get_context.call_args.kwargs
+        meta_tags = call_kwargs.get("metadata", {}).get("tags", [])
+        assert "arm" in meta_tags
 
     def test_analysis_memory_write_skipped_when_no_user_id(self):
         analyzer = self._make_analyzer()
@@ -272,15 +264,10 @@ class TestARMAnalysisMemoryHook:
         analyzer.file_processor.chunk_content.return_value = ["code"]
         analyzer.client.chat.completions.create.return_value = self._mock_openai_response('{"summary": "OK"}')
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = []
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture") as mock_qmc:
             analyzer.run_analysis(file_path="/fake/app.py", db=mock_db, user_id=None)
 
-        mock_dao_instance.save.assert_not_called()
+        mock_qmc.assert_not_called()
 
     def test_analysis_memory_failure_does_not_raise(self):
         """Memory write failure must not propagate to caller."""
@@ -291,12 +278,8 @@ class TestARMAnalysisMemoryHook:
         analyzer.file_processor.chunk_content.return_value = ["code"]
         analyzer.client.chat.completions.create.return_value = self._mock_openai_response('{"summary": "OK"}')
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.recall.return_value = []
-            mock_dao_instance.save.side_effect = Exception("DB exploded")
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture",
+                   side_effect=Exception("DB exploded")):
             result = analyzer.run_analysis(
                 file_path="/fake/app.py",
                 db=mock_db,
@@ -315,7 +298,7 @@ class TestARMCodegenMemoryHook:
 
     def _make_analyzer(self):
         from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-        with patch("modules.deepseek.deepseek_code_analyzer.OpenAI"):
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.OpenAI"):
             analyzer = DeepSeekCodeAnalyzer.__new__(DeepSeekCodeAnalyzer)
         analyzer.client = MagicMock()
         analyzer.config = {
@@ -340,11 +323,8 @@ class TestARMCodegenMemoryHook:
         mock_db = MagicMock()
         analyzer.client.chat.completions.create.return_value = self._mock_codegen_response()
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture") as mock_qmc:
+            mock_qmc.return_value = MOCK_NODE_DICT
             result = analyzer.generate_code(
                 prompt="Write a Python function to add two numbers",
                 language="python",
@@ -352,23 +332,18 @@ class TestARMCodegenMemoryHook:
                 user_id=TEST_USER_ID,
             )
 
-        save_calls = mock_dao_instance.save.call_args_list
-        assert len(save_calls) >= 1
-        write_kwargs = save_calls[0][1]
-        assert write_kwargs["node_type"] == "outcome"
-        assert write_kwargs["source"].startswith("arm_codegen")
-        assert "python" in write_kwargs["tags"]
+        assert mock_qmc.called
+        call_kwargs = mock_qmc.call_args.kwargs
+        assert call_kwargs["source"].startswith("arm_codegen")
+        assert "python" in call_kwargs["tags"]
 
     def test_codegen_memory_failure_does_not_raise(self):
         analyzer = self._make_analyzer()
         mock_db = MagicMock()
         analyzer.client.chat.completions.create.return_value = self._mock_codegen_response()
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.save.side_effect = Exception("memory failure")
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture",
+                   side_effect=Exception("memory failure")):
             result = analyzer.generate_code(
                 prompt="test prompt",
                 language="python",
@@ -383,11 +358,7 @@ class TestARMCodegenMemoryHook:
         mock_db = MagicMock()
         analyzer.client.chat.completions.create.return_value = self._mock_codegen_response()
 
-        with patch(_DAO_PATH) as MockDAO:
-            mock_dao_instance = MagicMock()
-            mock_dao_instance.save.return_value = MOCK_NODE_DICT
-            MockDAO.return_value = mock_dao_instance
-
+        with patch("AINDY.modules.deepseek.deepseek_code_analyzer.queue_memory_capture") as mock_qmc:
             analyzer.generate_code(
                 prompt="test",
                 language="python",
@@ -395,7 +366,7 @@ class TestARMCodegenMemoryHook:
                 user_id=None,
             )
 
-        mock_dao_instance.save.assert_not_called()
+        mock_qmc.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -421,12 +392,12 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("domain.task_services.find_task", return_value=mock_task), \
-             patch("domain.task_services.calculate_twr", return_value=8.5), \
-             patch("domain.task_services.save_calculation"), \
-             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
-             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
+        with patch("AINDY.domain.task_services.find_task", return_value=mock_task), \
+             patch("AINDY.domain.task_services.calculate_twr", return_value=8.5), \
+             patch("AINDY.domain.task_services.save_calculation"), \
+             patch("AINDY.domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
+             patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
             from AINDY.domain.task_services import orchestrate_task_completion
@@ -443,11 +414,11 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("domain.task_services.find_task", return_value=mock_task), \
-             patch("domain.task_services.calculate_twr", return_value=5.0), \
-             patch("domain.task_services.save_calculation"), \
-             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
+        with patch("AINDY.domain.task_services.find_task", return_value=mock_task), \
+             patch("AINDY.domain.task_services.calculate_twr", return_value=5.0), \
+             patch("AINDY.domain.task_services.save_calculation"), \
+             patch("AINDY.domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
 
             from AINDY.domain.task_services import orchestrate_task_completion
             orchestrate_task_completion(mock_db, "Test Task", None)
@@ -458,12 +429,12 @@ class TestTaskCompletionMemoryHook:
         mock_db = MagicMock()
         mock_task = self._make_task()
 
-        with patch("domain.task_services.find_task", return_value=mock_task), \
-             patch("domain.task_services.calculate_twr", return_value=5.0), \
-             patch("domain.task_services.save_calculation"), \
-             patch("domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
-             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
-             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
+        with patch("AINDY.domain.task_services.find_task", return_value=mock_task), \
+             patch("AINDY.domain.task_services.calculate_twr", return_value=5.0), \
+             patch("AINDY.domain.task_services.save_calculation"), \
+             patch("AINDY.domain.task_services.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
+             patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
 
             from AINDY.domain.task_services import orchestrate_task_completion
@@ -510,8 +481,8 @@ class TestGenesisMemoryHooks:
         mock_masterplan.posture = "aggressive"
         mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
-        with patch("routes.genesis_router._get_user_session"), \
-             patch("routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
+        with patch("AINDY.routes.genesis_router._get_user_session"), \
+             patch("AINDY.routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
              patch(_DAO_PATH) as MockDAO:
 
             mock_dao_instance = MagicMock()
@@ -539,8 +510,8 @@ class TestGenesisMemoryHooks:
         mock_masterplan.posture = "balanced"
         mock_user = {"sub": "00000000-0000-0000-0000-000000000002"}
 
-        with patch("routes.genesis_router._get_user_session"), \
-             patch("routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
+        with patch("AINDY.routes.genesis_router._get_user_session"), \
+             patch("AINDY.routes.genesis_router.create_masterplan_from_genesis", return_value=mock_masterplan), \
              patch(_DAO_PATH) as MockDAO:
 
             mock_dao_instance = MagicMock()

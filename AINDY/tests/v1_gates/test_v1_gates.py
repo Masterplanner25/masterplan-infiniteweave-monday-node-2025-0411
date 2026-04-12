@@ -73,7 +73,7 @@ def test_quota_is_fatal_when_exceeded():
         trace_id="t-quota-001",
     )
 
-    with patch("kernel.syscall_dispatcher._get_rm") as mock_get_rm:
+    with patch("AINDY.kernel.syscall_dispatcher._get_rm") as mock_get_rm:
         mock_rm = MagicMock()
         mock_rm.check_quota.return_value = (False, "quota_exceeded: 100 syscalls used, limit is 100")
         mock_get_rm.return_value = mock_rm

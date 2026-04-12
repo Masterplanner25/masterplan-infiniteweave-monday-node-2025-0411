@@ -118,13 +118,13 @@ class TestEventEmit:
     def test_does_not_call_queue_when_sink_provided(self):
         sink = MagicMock()
         b, _ = _make_event_builtins(event_sink=sink)
-        with patch("core.execution_signal_helper.queue_system_event") as mock_q:
+        with patch("AINDY.core.execution_signal_helper.queue_system_event") as mock_q:
             b.emit("e")
         mock_q.assert_not_called()
 
     def test_calls_queue_system_event_when_no_sink(self):
         b, _ = _make_event_builtins()
-        with patch("runtime.nodus_builtins.NodusEventBuiltins._queue") as mock_q:
+        with patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins._queue") as mock_q:
             b.emit("event.a", {"data": 1})
         mock_q.assert_called_once()
         args = mock_q.call_args
@@ -269,10 +269,10 @@ class TestAdapterEventIntegration:
         db = MagicMock()
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu-1")
 
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("bridge.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("runtime.nodus_builtins.NodusEventBuiltins") as MockEvent:
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
+             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
+             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins") as MockEvent:
             real_builtins, _ = _make_event_builtins()
             real_builtins._context_state = ctx.state
             MockEvent.return_value = real_builtins
@@ -308,10 +308,10 @@ class TestAdapterEventIntegration:
         mock_memory = MagicMock()
         mock_memory._writes = []
 
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("runtime.nodus_builtins.NodusEventBuiltins", return_value=mock_event):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
+             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
+             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins", return_value=mock_event):
             adapter = NodusRuntimeAdapter(db=MagicMock())
             adapter._execute("x", "<t>", ctx)
 
@@ -334,10 +334,10 @@ class TestAdapterEventIntegration:
         mock_memory = MagicMock()
         mock_memory._writes = []
 
-        with patch("nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("bridge.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("runtime.nodus_builtins.NodusEventBuiltins", return_value=real_event):
+        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
+             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
+             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
+             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins", return_value=real_event):
             result = NodusRuntimeAdapter(db=MagicMock())._execute("x", "<t>", ctx)
 
         assert any(e["event_type"] == "injected.event" for e in result.emitted_events)
@@ -380,8 +380,8 @@ class TestNodusExecuteNodeWait:
 
         waiting_result = self._make_waiting_result(wait_for=wait_for)
 
-        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
-             patch("runtime.nodus_adapter.queue_system_event"):
+        with patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
+             patch("AINDY.runtime.nodus_adapter.queue_system_event"):
             mock_adapter = MagicMock()
             mock_adapter.run_script.return_value = waiting_result
             mock_adapter.run_file.return_value = waiting_result
@@ -423,8 +423,8 @@ class TestNodusExecuteNodeWait:
             "db": MagicMock(), "user_id": "u1", "run_id": "r1",
             "trace_id": "t1", "flow_name": "f", "memory_context": {}, "attempts": {},
         }
-        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
-             patch("runtime.nodus_adapter.queue_system_event"):
+        with patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
+             patch("AINDY.runtime.nodus_adapter.queue_system_event"):
             MockA.return_value.run_script.return_value = bad_result
             result = nodus_execute_node(
                 state={"nodus_script": "x"},
@@ -465,8 +465,8 @@ class TestNodusExecuteResumeBridge:
 
         captured_ctx: list = []
 
-        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
-             patch("runtime.nodus_adapter.queue_system_event"):
+        with patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockAdapter, \
+             patch("AINDY.runtime.nodus_adapter.queue_system_event"):
             mock_adapter = MagicMock()
             mock_adapter.run_script.return_value = success_result
 
@@ -516,8 +516,8 @@ class TestNodusExecuteResumeBridge:
         }
         captured_ctx: list = []
 
-        with patch("runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
-             patch("runtime.nodus_adapter.queue_system_event"):
+        with patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter") as MockA, \
+             patch("AINDY.runtime.nodus_adapter.queue_system_event"):
             def cap(script, ctx):
                 captured_ctx.append(ctx)
                 return success

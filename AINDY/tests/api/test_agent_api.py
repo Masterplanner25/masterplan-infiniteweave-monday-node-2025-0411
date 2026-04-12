@@ -157,6 +157,7 @@ def test_agent_run_async_create_persists_log_run_and_events(
     test_user,
     auth_headers,
     monkeypatch,
+    testing_session_factory,
 ):
     class _FakeMessage:
         content = json.dumps(
@@ -182,11 +183,13 @@ def test_agent_run_async_create_persists_log_run_and_events(
 
     from AINDY.platform_layer.async_job_service import shutdown_async_jobs
     import AINDY.agents.agent_runtime as agent_runtime
+    import AINDY.platform_layer.async_job_service as async_job_service
 
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
     monkeypatch.setattr(agent_runtime, "perform_external_call", lambda **kwargs: _FakeResponse())
+    monkeypatch.setattr(async_job_service, "SessionLocal", testing_session_factory)
 
     shutdown_async_jobs(wait=True)
     try:

@@ -678,6 +678,7 @@ def _handle_job_submit(payload: dict, context: SyscallContext) -> dict:
     job_payload: dict = payload.get("payload") or {}
     source: str = payload.get("source", "syscall")
     max_attempts: int = int(payload.get("max_attempts", 1))
+    external_db = context.metadata.get("_db")
 
     from AINDY.platform_layer.async_job_service import submit_async_job
     log_id = submit_async_job(
@@ -686,6 +687,7 @@ def _handle_job_submit(payload: dict, context: SyscallContext) -> dict:
         user_id=context.user_id,
         source=source,
         max_attempts=max_attempts,
+        db=external_db,
     )
     return {"log_id": log_id, "task_name": task_name, "source": source}
 

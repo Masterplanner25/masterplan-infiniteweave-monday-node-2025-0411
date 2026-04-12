@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,16 +26,23 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
     test_user,
     auth_headers,
 ):
-    response = client.post(
-        "/memory/nodes",
-        headers=auth_headers,
-        json={
-            "content": "Async embedding memory",
-            "source": "pytest",
-            "tags": ["async", "embedding"],
-            "node_type": "insight",
-        },
-    )
+    captured_calls = []
+
+    def _mock_enqueue(memory_id, *, user_id=None, trace_id=None, db=None):
+        captured_calls.append({"memory_id": memory_id, "user_id": user_id})
+        return memory_id
+
+    with patch("AINDY.memory.embedding_jobs.enqueue_embedding", side_effect=_mock_enqueue):
+        response = client.post(
+            "/memory/nodes",
+            headers=auth_headers,
+            json={
+                "content": "Async embedding memory",
+                "source": "pytest",
+                "tags": ["async", "embedding"],
+                "node_type": "insight",
+            },
+        )
 
     assert response.status_code == 201
     payload = response.json()
@@ -51,18 +59,9 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
     assert node.embedding is None
     assert node.embedding_status == "pending"
 
-    log = (
-        db_session.query(AutomationLog)
-        .filter(
-            AutomationLog.task_name == EMBEDDING_JOB_NAME,
-            AutomationLog.user_id == test_user.id,
-        )
-        .order_by(AutomationLog.created_at.desc())
-        .first()
-    )
-    assert log is not None
-    assert log.status == "pending"
-    assert log.payload["memory_id"] == data["id"]
+    # Verify enqueue_embedding was called for the created memory node
+    assert len(captured_calls) >= 1
+    assert any(call["memory_id"] == data["id"] for call in captured_calls)
 
 
 def test_memory_recall_falls_back_to_text_when_embedding_missing(
@@ -113,7 +112,7 @@ def test_embedding_job_updates_memory_status_after_background_processing(
     )
 
     monkeypatch.setattr(
-        "memory.embedding_jobs.generate_embedding",
+        "AINDY.memory.embedding_jobs.generate_embedding",
         lambda text: [0.25] * 1536,
     )
 

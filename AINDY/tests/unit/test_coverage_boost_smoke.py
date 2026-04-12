@@ -20,11 +20,11 @@ def test_execution_service_run_execution_success(monkeypatch):
         return {"result": result}
 
     monkeypatch.setattr(
-        "core.execution_service.execute_with_pipeline_sync",
+        "AINDY.core.execution_service.execute_with_pipeline_sync",
         fake_execute_with_pipeline_sync,
     )
     monkeypatch.setattr(
-        "core.execution_service.adapt_pipeline_result",
+        "AINDY.core.execution_service.adapt_pipeline_result",
         lambda pipeline_result, next_action=None: {
             "pipeline_result": pipeline_result,
             "next_action": next_action,
@@ -63,11 +63,11 @@ def test_execution_service_run_execution_maps_exception(monkeypatch):
         return kwargs["handler"](None)
 
     monkeypatch.setattr(
-        "core.execution_service.execute_with_pipeline_sync",
+        "AINDY.core.execution_service.execute_with_pipeline_sync",
         fake_execute_with_pipeline_sync,
     )
     monkeypatch.setattr(
-        "core.execution_service.adapt_pipeline_result",
+        "AINDY.core.execution_service.adapt_pipeline_result",
         lambda pipeline_result, next_action=None: pipeline_result,
     )
 
@@ -269,7 +269,7 @@ def test_projection_service_smoke():
 
 
 def test_worker_schema_helpers_and_main(monkeypatch):
-    import AINDY.worker
+    import AINDY.worker as worker
 
     session = MagicMock()
     session.bind = object()
@@ -314,16 +314,16 @@ def test_system_event_service_emit_smoke(monkeypatch):
     from AINDY.core.system_event_service import emit_system_event
 
     event_id = uuid.uuid4()
-    monkeypatch.setattr("core.system_event_service._persist_system_event", lambda **kwargs: event_id)
-    monkeypatch.setattr("core.system_event_service._detect_behavioral_feedback_signals", lambda **kwargs: None)
-    monkeypatch.setattr("core.system_event_service.get_trace_id", lambda: "trace-1")
-    monkeypatch.setattr("core.system_event_service.get_parent_event_id", lambda: None)
-    monkeypatch.setattr("core.system_event_service.is_pipeline_active", lambda: True)
-    monkeypatch.setattr("core.system_event_service.capture_system_event_as_memory", lambda db, event: None, raising=False)
+    monkeypatch.setattr("AINDY.core.system_event_service._persist_system_event", lambda **kwargs: event_id)
+    monkeypatch.setattr("AINDY.core.system_event_service._detect_behavioral_feedback_signals", lambda **kwargs: None)
+    monkeypatch.setattr("AINDY.core.system_event_service.get_trace_id", lambda: "trace-1")
+    monkeypatch.setattr("AINDY.core.system_event_service.get_parent_event_id", lambda: None)
+    monkeypatch.setattr("AINDY.core.system_event_service.is_pipeline_active", lambda: True)
+    monkeypatch.setattr("AINDY.core.system_event_service.capture_system_event_as_memory", lambda db, event: None, raising=False)
 
     fake_dispatch = []
     monkeypatch.setattr(
-        "platform_layer.event_service.dispatch_webhooks_async",
+        "AINDY.platform_layer.event_service.dispatch_webhooks_async",
         lambda **kwargs: fake_dispatch.append(kwargs),
     )
 

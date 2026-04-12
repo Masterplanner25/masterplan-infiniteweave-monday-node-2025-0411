@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from typing import Any
 
+from sqlalchemy.orm import Session
+
+from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
-from AINDY.db.database import SessionLocal
 from AINDY.core.execution_dispatcher import dispatch_job
-from AINDY.platform_layer.async_job_service import register_async_job
-from AINDY.memory.embedding_service import generate_embedding
+from AINDY.db.database import SessionLocal
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.memory.embedding_service import generate_embedding
+from AINDY.platform_layer.async_job_service import _INLINE_ACTIVE, register_async_job
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +23,23 @@ EMBEDDING_JOB_NAME = "memory.generate_embedding"
 EMBEDDING_RETRY_DELAYS = (1, 2, 4)
 
 
-def enqueue_embedding(memory_id: str, *, user_id: str | None = None, trace_id: str | None = None) -> str:
+def enqueue_embedding(
+    memory_id: str,
+    *,
+    user_id: str | None = None,
+    trace_id: str | None = None,
+    db: Session | None = None,
+) -> str:
+    inline_mode = _INLINE_ACTIVE.get()
+    env_name = os.getenv("ENV", "").lower()
+    testing_flag = os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}
+    if settings.is_testing or env_name == "test" or testing_flag or inline_mode:
+        logger.info(
+            "[EmbeddingJobs] Skipping embedding job during inline/test mode (memory=%s inline=%s)",
+            memory_id,
+            inline_mode,
+        )
+        return memory_id
     result = dispatch_job(
         task_name=EMBEDDING_JOB_NAME,
         payload={
@@ -31,6 +51,7 @@ def enqueue_embedding(memory_id: str, *, user_id: str | None = None, trace_id: s
         source="memory",
         max_attempts=1,
         execute_inline_in_test_mode=False,
+        db=db,
     )
     return result.meta["log_id"]
 

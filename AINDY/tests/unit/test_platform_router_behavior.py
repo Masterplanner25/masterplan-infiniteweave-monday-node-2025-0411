@@ -36,9 +36,9 @@ def test_dispatch_syscall_uses_default_capabilities_for_jwt(platform_client):
         "warning": None,
     }
 
-    with patch("kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read", "event.emit"]), \
-         patch("kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx") as make_ctx, \
-         patch("kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
+    with patch("AINDY.kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read", "event.emit"]), \
+         patch("AINDY.kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx") as make_ctx, \
+         patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
         response = platform_client.post(
             "/platform/syscall",
             json={"name": "sys.v1.memory.read", "payload": {"query": "auth"}},
@@ -74,9 +74,9 @@ def test_dispatch_syscall_intersects_api_key_scopes():
     }
 
     try:
-        with patch("kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read", "event.emit"]), \
-             patch("kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx") as make_ctx, \
-             patch("kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
+        with patch("AINDY.kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read", "event.emit"]), \
+             patch("AINDY.kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx") as make_ctx, \
+             patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
             response = client.post(
                 "/platform/syscall",
                 json={"name": "sys.v1.memory.read", "payload": {}},
@@ -111,9 +111,9 @@ def test_dispatch_syscall_maps_dispatcher_errors(platform_client, message, statu
         "data": None,
     }
 
-    with patch("kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read"]), \
-         patch("kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx"), \
-         patch("kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
+    with patch("AINDY.kernel.syscall_registry.DEFAULT_NODUS_CAPABILITIES", ["memory.read"]), \
+         patch("AINDY.kernel.syscall_dispatcher.make_syscall_ctx_from_tool", return_value="ctx"), \
+         patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
         response = platform_client.post(
             "/platform/syscall",
             json={"name": "sys.v1.memory.read", "payload": {}},
@@ -127,9 +127,9 @@ def test_list_memory_path_normalizes_and_filters_tags(platform_client):
     dao = MagicMock()
     dao.query_path.return_value = [{"id": "m1", "path": "/memory/user-1/tasks/test"}]
 
-    with patch("memory.memory_address_space.normalize_path", return_value="/memory/user-1/tasks/*") as normalize, \
-         patch("memory.memory_address_space.validate_tenant_path") as validate, \
-         patch("db.dao.memory_node_dao.MemoryNodeDAO", return_value=dao):
+    with patch("AINDY.memory.memory_address_space.normalize_path", return_value="/memory/user-1/tasks/*") as normalize, \
+         patch("AINDY.memory.memory_address_space.validate_tenant_path") as validate, \
+         patch("AINDY.db.dao.memory_node_dao.MemoryNodeDAO", return_value=dao):
         response = platform_client.get(
             "/platform/memory",
             params={
@@ -158,8 +158,8 @@ def test_list_memory_path_normalizes_and_filters_tags(platform_client):
 
 
 def test_list_memory_path_returns_400_for_invalid_path(platform_client):
-    with patch("memory.memory_address_space.normalize_path", return_value="/memory/user-2/tasks/*"), \
-         patch("memory.memory_address_space.validate_tenant_path", side_effect=PermissionError("tenant mismatch")):
+    with patch("AINDY.memory.memory_address_space.normalize_path", return_value="/memory/user-2/tasks/*"), \
+         patch("AINDY.memory.memory_address_space.validate_tenant_path", side_effect=PermissionError("tenant mismatch")):
         response = platform_client.get(
             "/platform/memory",
             params={"path": "/memory/user-2/tasks/*"},
@@ -173,9 +173,9 @@ def test_memory_trace_returns_404_when_no_chain(platform_client):
     dao = MagicMock()
     dao.causal_trace.return_value = []
 
-    with patch("memory.memory_address_space.normalize_path", return_value="/memory/user-1/tasks/root"), \
-         patch("memory.memory_address_space.validate_tenant_path"), \
-         patch("db.dao.memory_node_dao.MemoryNodeDAO", return_value=dao):
+    with patch("AINDY.memory.memory_address_space.normalize_path", return_value="/memory/user-1/tasks/root"), \
+         patch("AINDY.memory.memory_address_space.validate_tenant_path"), \
+         patch("AINDY.db.dao.memory_node_dao.MemoryNodeDAO", return_value=dao):
         response = platform_client.get(
             "/platform/memory/trace",
             params={"path": "/memory/user-1/tasks/root", "depth": 7},

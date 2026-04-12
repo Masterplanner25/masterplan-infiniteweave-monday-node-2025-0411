@@ -95,7 +95,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 1
@@ -106,7 +106,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -117,7 +117,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -128,7 +128,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -139,7 +139,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -152,7 +152,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with(runs)
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 5
@@ -163,7 +163,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -173,7 +173,7 @@ class TestFlowRunRehydrateHappyPath:
         db = _db_with([])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 0
@@ -191,7 +191,7 @@ class TestFlowRunRehydrateIdempotency:
         db = _db_with([run])
         se = _scheduler(already_waiting_ids=[str(run.id)])
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 0
@@ -203,7 +203,7 @@ class TestFlowRunRehydrateIdempotency:
         db = _db_with([run_fresh, run_dupe])
         se = _scheduler(already_waiting_ids=[str(run_dupe.id)])
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 1
@@ -225,7 +225,7 @@ class TestFlowRunRehydrateIdempotency:
         se.register_wait.side_effect = _fake_register
         se.waiting_for.side_effect = _fake_waiting_for
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             # First call: fresh DB mock
             db1 = _db_with([run])
             first = rehydrate_waiting_flow_runs(db1)
@@ -250,7 +250,7 @@ class TestFlowRunRehydrateIdempotency:
         se = MagicMock()
         se.waiting_for.side_effect = lambda rid: "ev" if rid == eu_id_str else None
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 1
@@ -265,7 +265,7 @@ class TestFlowRunRehydrateIdempotency:
         se = MagicMock()
         se.waiting_for.return_value = None  # nothing registered yet
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         kwargs = se.register_wait.call_args.kwargs
@@ -285,7 +285,7 @@ class TestFlowRunRehydrateIdempotency:
         se = MagicMock()
         se.waiting_for.side_effect = lambda rid: "ev" if rid == eu_id_str else None
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         # Must register (Guard 1 did not incorrectly block it)
@@ -303,7 +303,7 @@ class TestFlowRunRehydrateDegradation:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 0
@@ -314,7 +314,7 @@ class TestFlowRunRehydrateDegradation:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 0
@@ -325,7 +325,7 @@ class TestFlowRunRehydrateDegradation:
         db.query.side_effect = Exception("connection lost")
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 0
@@ -338,7 +338,7 @@ class TestFlowRunRehydrateDegradation:
         se = _scheduler()
         se.register_wait.side_effect = [RuntimeError("quota exceeded"), None]
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 1  # run_good registered; run_bad skipped
@@ -357,7 +357,7 @@ class TestFlowRunRehydrateDegradation:
 
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             count = rehydrate_waiting_flow_runs(db)
 
         assert count == 1
@@ -378,7 +378,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -389,7 +389,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -401,7 +401,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run], eus=[eu])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -412,7 +412,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run], eus=[])  # no EU for this run
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -424,7 +424,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run], eus=[eu])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -435,7 +435,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run], eus=[])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -448,7 +448,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run], eus=[eu])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -459,7 +459,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -471,7 +471,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -482,7 +482,7 @@ class TestFlowRunRehydrateFieldMapping:
         db = _db_with([run])
         se = _scheduler()
 
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
 
         _, kwargs = se.register_wait.call_args
@@ -498,7 +498,7 @@ class TestFlowRunRehydrateCallback:
     def _extract_callback(self, run, eus=None):
         db = _db_with([run], eus=eus or [])
         se = _scheduler()
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
         _, kwargs = se.register_wait.call_args
         return kwargs["resume_callback"]
@@ -511,12 +511,12 @@ class TestFlowRunRehydrateCallback:
         mock_runner = MagicMock()
         mock_session = MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
              patch(
-                 "runtime.flow_engine.FLOW_REGISTRY",
+                 "AINDY.runtime.flow_engine.FLOW_REGISTRY",
                  {"test_flow": mock_flow},
              ), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
             callback()
 
         mock_runner.resume.assert_called_once_with(str(run.id))
@@ -529,9 +529,9 @@ class TestFlowRunRehydrateCallback:
         mock_runner = MagicMock()
         mock_session = MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
             callback()
 
         mock_session.close.assert_called_once()
@@ -545,9 +545,9 @@ class TestFlowRunRehydrateCallback:
         mock_runner.resume.side_effect = RuntimeError("resume failed")
         mock_session = MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner):
             callback()  # must not raise
 
         mock_session.close.assert_called_once()
@@ -558,9 +558,9 @@ class TestFlowRunRehydrateCallback:
 
         mock_session = MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {}), \
-             patch("runtime.flow_engine.PersistentFlowRunner") as mock_runner_cls:
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner") as mock_runner_cls:
             callback()  # must not raise
 
         mock_runner_cls.assert_not_called()
@@ -580,9 +580,9 @@ class TestFlowRunRehydrateCallback:
             runner_kwargs["user_id"] = user_id
             return MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
             callback()
 
         assert runner_kwargs["user_id"] == uid
@@ -599,9 +599,9 @@ class TestFlowRunRehydrateCallback:
             runner_kwargs["workflow_type"] = workflow_type
             return MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
             callback()
 
         assert runner_kwargs["workflow_type"] == "arm_analysis"
@@ -619,9 +619,9 @@ class TestFlowRunRehydrateCallback:
             runner_kwargs["workflow_type"] = workflow_type
             return MagicMock()
 
-        with patch("db.database.SessionLocal", return_value=mock_session), \
-             patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
-             patch("runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
+        with patch("AINDY.db.database.SessionLocal", return_value=mock_session), \
+             patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": mock_flow}), \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", side_effect=_capture_runner):
             callback()
 
         assert runner_kwargs["workflow_type"] == "flow"
@@ -776,7 +776,7 @@ class TestFlowRunCallbackOrdering:
         """Return the registered resume_callback from rehydrate_waiting_flow_runs."""
         db = _db_with([run], eus=[eu] if eu else [])
         se = _scheduler()
-        with patch("core.flow_run_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.flow_run_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_flow_runs(db)
         _, kwargs = se.register_wait.call_args
         return kwargs["resume_callback"]
@@ -805,11 +805,11 @@ class TestFlowRunCallbackOrdering:
         mock_runner = MagicMock()
 
         with (
-            patch("db.database.SessionLocal", return_value=mock_session),
-            patch("runtime.flow_engine.FLOW_REGISTRY", {flow_name: self._MOCK_FLOW}),
-            patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner),
+            patch("AINDY.db.database.SessionLocal", return_value=mock_session),
+            patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {flow_name: self._MOCK_FLOW}),
+            patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner),
             patch(
-                "core.execution_unit_service.ExecutionUnitService",
+                "AINDY.core.execution_unit_service.ExecutionUnitService",
                 return_value=mock_eu_svc,
             ),
         ):
@@ -850,11 +850,11 @@ class TestFlowRunCallbackOrdering:
         mock_session.query.return_value.filter.return_value.update.return_value = 1
 
         with (
-            patch("db.database.SessionLocal", return_value=mock_session),
-            patch("runtime.flow_engine.FLOW_REGISTRY", {"test_flow": self._MOCK_FLOW}),
-            patch("runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner),
+            patch("AINDY.db.database.SessionLocal", return_value=mock_session),
+            patch("AINDY.runtime.flow_engine.FLOW_REGISTRY", {"test_flow": self._MOCK_FLOW}),
+            patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=mock_runner),
             patch(
-                "core.execution_unit_service.ExecutionUnitService",
+                "AINDY.core.execution_unit_service.ExecutionUnitService",
                 return_value=mock_eu_svc,
             ),
         ):
@@ -924,7 +924,7 @@ class TestEuCallbackFlowRunOwnershipGuard:
         se = MagicMock()
         se.waiting_for.return_value = None
 
-        with patch("core.wait_rehydration.get_scheduler_engine", return_value=se):
+        with patch("AINDY.core.wait_rehydration.get_scheduler_engine", return_value=se):
             rehydrate_waiting_eus(db)
 
         _, kwargs = se.register_wait.call_args
@@ -947,9 +947,9 @@ class TestEuCallbackFlowRunOwnershipGuard:
         )
 
         with (
-            patch("db.database.SessionLocal", return_value=mock_db),
+            patch("AINDY.db.database.SessionLocal", return_value=mock_db),
             patch(
-                "core.execution_unit_service.ExecutionUnitService",
+                "AINDY.core.execution_unit_service.ExecutionUnitService",
                 return_value=mock_eu_service,
             ),
         ):
@@ -995,9 +995,9 @@ class TestEuCallbackFlowRunOwnershipGuard:
         mock_eu_service = MagicMock()
 
         with (
-            patch("db.database.SessionLocal", return_value=mock_db),
+            patch("AINDY.db.database.SessionLocal", return_value=mock_db),
             patch(
-                "core.execution_unit_service.ExecutionUnitService",
+                "AINDY.core.execution_unit_service.ExecutionUnitService",
                 return_value=mock_eu_service,
             ),
         ):

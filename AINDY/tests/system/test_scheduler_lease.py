@@ -125,7 +125,7 @@ class TestRefreshLeaseHeartbeatJob:
 
     def test_delegates_to_task_services_heartbeat(self):
         from AINDY.platform_layer import scheduler_service
-        with patch("domain.task_services._heartbeat_lease_job") as mock_hb:
+        with patch("AINDY.domain.task_services._heartbeat_lease_job") as mock_hb:
             scheduler_service._refresh_lease_heartbeat()
         mock_hb.assert_called_once()
 

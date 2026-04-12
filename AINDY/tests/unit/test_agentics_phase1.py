@@ -260,7 +260,7 @@ class TestAgentRuntime:
     def test_generate_plan_returns_none_on_openai_failure(self):
         from AINDY.agents.agent_runtime import generate_plan
         db = MagicMock()
-        with patch("agents.agent_runtime._get_client") as mock_client:
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client:
             mock_client.return_value.chat.completions.create.side_effect = RuntimeError("api error")
             result = generate_plan("some goal", "user_1", db)
         assert result is None
@@ -279,7 +279,7 @@ class TestAgentRuntime:
         }
         mock_resp = MagicMock()
         mock_resp.choices[0].message.content = json.dumps(bad_plan)
-        with patch("agents.agent_runtime._get_client") as mock_client:
+        with patch("AINDY.agents.agent_runtime._get_client") as mock_client:
             mock_client.return_value.chat.completions.create.return_value = mock_resp
             result = generate_plan("some goal", "user_1", db)
         assert result is not None
@@ -288,7 +288,7 @@ class TestAgentRuntime:
     def test_create_run_returns_none_on_plan_failure(self):
         from AINDY.agents.agent_runtime import create_run
         db = MagicMock()
-        with patch("agents.agent_runtime.generate_plan", return_value=None):
+        with patch("AINDY.agents.agent_runtime.generate_plan", return_value=None):
             result = create_run("goal", "user_1", db)
         assert result is None
 
@@ -316,9 +316,9 @@ class TestAgentRuntime:
         fake_run.started_at = None
         fake_run.completed_at = None
 
-        with patch("agents.agent_runtime.generate_plan", return_value=VALID_PLAN), \
-             patch("agents.agent_runtime._requires_approval", return_value=True), \
-             patch("db.models.agent_run.AgentRun", return_value=fake_run):
+        with patch("AINDY.agents.agent_runtime.generate_plan", return_value=VALID_PLAN), \
+             patch("AINDY.agents.agent_runtime._requires_approval", return_value=True), \
+             patch("AINDY.db.models.agent_run.AgentRun", return_value=fake_run):
             db.refresh.side_effect = lambda r: None
             result = create_run("test goal", "user_1", db)
 

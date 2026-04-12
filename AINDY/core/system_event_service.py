@@ -10,6 +10,7 @@ from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.domain.rippletrace_service import link_events
 from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.platform_layer.async_execution_context import is_async_execution_active
 from AINDY.utils.trace_context import get_parent_event_id
 from AINDY.utils.trace_context import get_trace_id
 from AINDY.utils.trace_context import is_pipeline_active
@@ -117,7 +118,7 @@ def _persist_system_event(
             target_event_id=event_id,
             relationship_type=relationship_type,
         )
-        db.commit()
+    db.commit()
     return event_id
 
 
@@ -438,13 +439,16 @@ def emit_system_event(
     agent_id: str | uuid.UUID | None = None,
     payload: Optional[dict[str, Any]] = None,
     required: bool = False,
+    skip_memory_capture: bool = False,
 ) -> uuid.UUID | None:
     """Durable system event emission; may raise when required=True."""
-    if str(event_type).startswith("execution.") and not is_pipeline_active():
-        message = f"ExecutionContract violation: execution event '{event_type}' emitted outside pipeline"
-        if settings.ENFORCE_EXECUTION_CONTRACT:
-            raise RuntimeError(message)
-        logger.warning(message)
+    if str(event_type).startswith("execution."):
+        in_pipeline = is_pipeline_active()
+        if not in_pipeline and not is_async_execution_active():
+            message = f"ExecutionContract violation: execution event '{event_type}' emitted outside pipeline"
+            if settings.ENFORCE_EXECUTION_CONTRACT:
+                raise RuntimeError(message)
+            logger.warning(message)
     effective_trace_id = trace_id or get_trace_id()
     effective_parent_event_id = parent_event_id or get_parent_event_id()
     logger_method = logger.info if _VERBOSE_SYSTEM_EVENT_LOGS else logger.debug
@@ -496,12 +500,13 @@ def emit_system_event(
                 signal_exc,
             )
         try:
-            from AINDY.db.models.system_event import SystemEvent
-            from AINDY.memory.memory_capture_engine import capture_system_event_as_memory
+            if not skip_memory_capture:
+                from AINDY.db.models.system_event import SystemEvent
+                from AINDY.memory.memory_capture_engine import capture_system_event_as_memory
 
-            persisted_event = db.query(SystemEvent).filter(SystemEvent.id == event_id).first()
-            if persisted_event:
-                capture_system_event_as_memory(db, persisted_event)
+                persisted_event = db.query(SystemEvent).filter(SystemEvent.id == event_id).first()
+                if persisted_event:
+                    capture_system_event_as_memory(db, persisted_event)
         except Exception as capture_exc:
             logger.warning(
                 "[SystemEvent] memory auto-capture skipped for %s id=%s: %s",

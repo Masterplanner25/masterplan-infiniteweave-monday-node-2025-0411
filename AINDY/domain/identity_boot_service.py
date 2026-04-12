@@ -47,6 +47,42 @@ def get_recent_memory(
     return [_tag_memory_context(dao._node_to_dict(row), context=context) for row in rows]
 
 
+def _count_user_memory(user_id: str | UUID, db: Session) -> int:
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
+    if normalized_user_id is None:
+        return 0
+    return (
+        db.query(MemoryNodeModel.id)
+        .filter(MemoryNodeModel.user_id == normalized_user_id)
+        .count()
+    )
+
+
+def _count_user_agent_runs(user_id: str | UUID, db: Session) -> int:
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
+    if normalized_user_id is None:
+        return 0
+    return (
+        db.query(AgentRun.id)
+        .filter(AgentRun.user_id == normalized_user_id)
+        .count()
+    )
+
+
+def _count_active_flows(user_id: str | UUID, db: Session) -> int:
+    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
+    if normalized_user_id is None:
+        return 0
+    return (
+        db.query(FlowRun.id)
+        .filter(
+            FlowRun.user_id == normalized_user_id,
+            FlowRun.status.in_(("running", "waiting")),
+        )
+        .count()
+    )
+
+
 def get_recent_agent_runs(
     user_id: str | UUID,
     db: Session,
@@ -137,10 +173,10 @@ def boot_identity_context(user_id: str | UUID, db: Session) -> dict[str, Any]:
     flows = get_active_flows(user_id, db)
 
     system_state = {
-        "memory_count": len(memory_nodes),
-        "active_runs": len(agent_runs),
+        "memory_count": _count_user_memory(user_id, db),
+        "active_runs": _count_user_agent_runs(user_id, db),
         "score": metrics.get("master_score") if metrics else None,
-        "active_flows": len(flows),
+        "active_flows": _count_active_flows(user_id, db),
     }
 
     return {

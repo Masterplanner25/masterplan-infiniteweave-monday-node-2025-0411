@@ -99,7 +99,7 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("TEST_MODE", "false")
     monkeypatch.setenv("AINDY_ASYNC_HEAVY_EXECUTION", "true")
-    monkeypatch.setattr("agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
+    monkeypatch.setattr("AINDY.agents.agent_runtime.generate_plan", lambda **kwargs: VALID_PLAN)
 
     def _complete_run(**kwargs):
         # Use the session passed into execute_with_flow (the job's own session),
@@ -116,7 +116,7 @@ def test_every_execution_emits_events(client, db_session, test_user, auth_header
                 db.commit()
         return {"status": "SUCCESS", "run_id": "flow-123"}
 
-    monkeypatch.setattr("runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
+    monkeypatch.setattr("AINDY.runtime.nodus_adapter.NodusAgentAdapter.execute_with_flow", _complete_run)
 
     shutdown_async_jobs(wait=True)
     try:
@@ -148,7 +148,7 @@ def test_no_cross_user_leakage(client, db_session, test_user, auth_headers, monk
     other_headers = {
         "Authorization": f"Bearer {build_access_token(user_id=other_user.id, email=other_user.email)}"
     }
-    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("AINDY.memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     create_response = client.post(
         "/apps/memory/nodes",
@@ -191,7 +191,7 @@ def test_capability_enforcement_changes_execution_path(db_session, test_user):
 
 
 def test_memory_consistency(client, auth_headers, monkeypatch):
-    monkeypatch.setattr("memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
+    monkeypatch.setattr("AINDY.memory.embedding_service.generate_embedding", lambda text: [0.0] * 1536)
 
     payload = {
         "content": "Persistent memory invariant",

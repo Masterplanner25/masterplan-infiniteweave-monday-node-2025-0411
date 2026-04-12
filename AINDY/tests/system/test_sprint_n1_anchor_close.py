@@ -35,8 +35,8 @@ def router_mock_db(app):
     # routes/__init__.py rebinds 'routes.masterplan_router' to the APIRouter object,
     # so 'import routes.masterplan_router as mr' returns the router, not the module.
     # We need the MODULE to access the captured get_db reference that FastAPI uses.
-    mr_module = sys.modules.get("routes.masterplan_router")
-    assert mr_module is not None, "routes.masterplan_router module not loaded"
+    mr_module = sys.modules.get("AINDY.routes.masterplan_router")
+    assert mr_module is not None, "AINDY.routes.masterplan_router module not loaded"
 
     db = MagicMock()
     db.query.return_value = db
@@ -172,14 +172,14 @@ class TestDualDAOConsolidation:
         import sys
         import importlib
         # Re-import to get module object (not the router attribute)
-        if "routes.bridge_router" in sys.modules:
-            br = sys.modules["routes.bridge_router"]
+        if "AINDY.routes.bridge_router" in sys.modules:
+            br = sys.modules["AINDY.routes.bridge_router"]
         else:
-            br = importlib.import_module("routes.bridge_router")
+            br = importlib.import_module("AINDY.routes.bridge_router")
         src_file = br.__file__
         with open(src_file, "r", encoding="utf-8") as f:
             source = f.read()
-        assert "from db.dao.memory_node_dao import MemoryNodeDAO" in source
+        assert "MemoryNodeDAO" in source
         assert "from memory.memory_persistence import MemoryNodeDAO" not in source
 
 
@@ -220,7 +220,7 @@ class TestMemoryNodeChildrenPersistence:
         child_mock.id = child_id
         mock_db.query.return_value.filter.return_value.first.return_value = child_mock
 
-        with patch("memory.embedding_service.generate_embedding", return_value=None):
+        with patch("AINDY.memory.embedding_service.generate_embedding", return_value=None):
             dao = MemoryNodeDAO(mock_db)
             # Manually assign the parent node after add (simulates refresh)
             with patch.object(dao, "_node_to_dict", return_value={"id": str(parent_node.id)}):
@@ -558,7 +558,7 @@ class TestETAService:
         plan2 = self._make_plan(plan_id=2, user_id=uuid4(), anchor_date=datetime(2028, 6, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1, plan2]
 
-        with patch("analytics.eta_service.calculate_eta") as mock_calc:
+        with patch("AINDY.analytics.eta_service.calculate_eta") as mock_calc:
             mock_calc.return_value = {"velocity": 1.0}
             count = recalculate_all_etas(mock_db)
 
@@ -574,7 +574,7 @@ class TestETAService:
         plan1 = self._make_plan(plan_id=1, user_id=uuid4(), anchor_date=datetime(2027, 1, 1))
         mock_db.query.return_value.filter.return_value.all.return_value = [plan1]
 
-        with patch("analytics.eta_service.calculate_eta", side_effect=RuntimeError("DB down")):
+        with patch("AINDY.analytics.eta_service.calculate_eta", side_effect=RuntimeError("DB down")):
             count = recalculate_all_etas(mock_db)
 
         assert count == 0  # failed, but no exception raised
@@ -605,7 +605,7 @@ class TestProjectionEndpoint:
             "remaining_tasks": 70,
             "eta_last_calculated": "2026-03-23T06:00:00+00:00",
         }
-        with patch("analytics.eta_service.calculate_eta", return_value=eta_result):
+        with patch("AINDY.analytics.eta_service.calculate_eta", return_value=eta_result):
             resp = client.get("/masterplans/1/projection", headers=auth_headers)
 
         assert resp.status_code == 200
@@ -629,7 +629,7 @@ class TestSchedulerETAJob:
         scheduler = BackgroundScheduler()
         from AINDY.platform_layer.scheduler_service import _register_system_jobs
 
-        with patch("platform_layer.scheduler_service._recalculate_all_etas_job"):
+        with patch("AINDY.platform_layer.scheduler_service._recalculate_all_etas_job"):
             _register_system_jobs(scheduler)
 
         job_ids = [j.id for j in scheduler.get_jobs()]
@@ -644,7 +644,7 @@ class TestSchedulerETAJob:
         """_recalculate_all_etas_job must not raise even if DB is unavailable."""
         from AINDY.platform_layer.scheduler_service import _recalculate_all_etas_job
         # SessionLocal is a local import inside the job — patch at the db.database level
-        with patch("db.database.SessionLocal", side_effect=RuntimeError("no DB")):
+        with patch("AINDY.db.database.SessionLocal", side_effect=RuntimeError("no DB")):
             # Should not raise
             _recalculate_all_etas_job()
 
@@ -673,12 +673,12 @@ class TestCompleteTaskETAHook:
         fake_plan.anchor_date = datetime(2027, 1, 1)
         fake_plan.user_id = "00000000-0000-0000-0000-000000000001"
 
-        with patch("domain.task_services.find_task", return_value=mock_task), \
-             patch("domain.task_services.get_mongo_client", return_value=None), \
-             patch("memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
-             patch("runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \
-             patch("domain.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
-             patch("analytics.eta_service.calculate_eta") as mock_eta:
+        with patch("AINDY.domain.task_services.find_task", return_value=mock_task), \
+             patch("AINDY.domain.task_services.get_mongo_client", return_value=None), \
+             patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
+             patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \
+             patch("AINDY.domain.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
+             patch("AINDY.analytics.eta_service.calculate_eta") as mock_eta:
             mock_context.return_value.ids = []
             mock_db.query.return_value.filter.return_value.first.return_value = fake_plan
 

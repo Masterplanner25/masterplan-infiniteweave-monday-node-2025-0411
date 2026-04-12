@@ -17,6 +17,7 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
             continue
         if not (
             module_name == "main"
+            or module_name == "AINDY.main"
             or module_name.startswith("routes.")
             or module_name.startswith("services.")
             or module_name.startswith("platform_layer.")
@@ -26,6 +27,14 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
             or module_name.startswith("domain.")
             or module_name.startswith("core.")
             or module_name == "worker"
+            or module_name.startswith("AINDY.routes.")
+            or module_name.startswith("AINDY.services.")
+            or module_name.startswith("AINDY.platform_layer.")
+            or module_name.startswith("AINDY.runtime.")
+            or module_name.startswith("AINDY.agents.")
+            or module_name.startswith("AINDY.memory.")
+            or module_name.startswith("AINDY.domain.")
+            or module_name.startswith("AINDY.core.")
         ):
             continue
         if hasattr(module, "SessionLocal"):

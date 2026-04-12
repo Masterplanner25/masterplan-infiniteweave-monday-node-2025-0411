@@ -233,11 +233,11 @@ def test_masterplan_activate_node_success(monkeypatch):
     db.query.return_value = query
 
     monkeypatch.setattr(
-        "domain.masterplan_execution_service.sync_masterplan_tasks",
+        "AINDY.domain.masterplan_execution_service.sync_masterplan_tasks",
         lambda **kwargs: {"generated": 2, "skipped": False},
     )
     monkeypatch.setattr(
-        "domain.masterplan_execution_service.get_masterplan_execution_status",
+        "AINDY.domain.masterplan_execution_service.get_masterplan_execution_status",
         lambda **kwargs: {"tasks": {"total": 2}},
     )
 
@@ -275,10 +275,10 @@ def test_observability_scheduler_status_node_success(monkeypatch):
     db.query.return_value = _LeaseQuery(lease)
 
     monkeypatch.setattr(
-        "platform_layer.scheduler_service.get_scheduler",
+        "AINDY.platform_layer.scheduler_service.get_scheduler",
         lambda: SimpleNamespace(running=True),
     )
-    monkeypatch.setattr("domain.task_services.is_background_leader", lambda: True)
+    monkeypatch.setattr("AINDY.domain.task_services.is_background_leader", lambda: True)
 
     result = observability_scheduler_status_node({}, {"db": db, "user_id": "user-1"})
 

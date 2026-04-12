@@ -407,6 +407,7 @@ class ExecutionPipeline:
                 source=str(ctx.metadata.get("source") or ctx.route_name),
                 payload=payload or {},
                 required=False,
+                skip_memory_capture=bool(ctx.metadata.get("disable_memory_capture")),
             )
             return str(event_id) if event_id else None
         except Exception:

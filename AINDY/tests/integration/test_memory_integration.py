@@ -85,7 +85,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "runtime.memory.orchestrator.MemoryOrchestrator.get_context",
+        "AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context",
         fake_get_context,
     )
 
@@ -106,9 +106,10 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
     monkeypatch.setitem(sys.modules, "nodus", nodus_module)
     monkeypatch.setitem(sys.modules, "nodus.runtime", runtime_module)
     monkeypatch.setitem(sys.modules, "nodus.runtime.embedding", embedding_module)
+    monkeypatch.setitem(sys.modules, "AINDY.nodus.runtime.embedding", embedding_module)
 
     monkeypatch.setattr(
-        "bridge.create_memory_node",
+        "AINDY.memory.bridge.create_memory_node",
         lambda *args, **kwargs: None,
     )
 
@@ -209,7 +210,7 @@ def test_memory_loop_runs_and_feedback(monkeypatch):
         called["ids"] = memory_ids
 
     monkeypatch.setattr(loop.feedback, "record_usage", fake_record_usage)
-    monkeypatch.setattr("runtime.memory_loop.create_memory_node", lambda *args, **kwargs: None)
+    monkeypatch.setattr("AINDY.runtime.memory_loop.create_memory_node", lambda *args, **kwargs: None)
 
     task = SimpleNamespace(type="analysis", input="alpha", tags=["t"])
     result = loop.run(
