@@ -450,7 +450,6 @@ class TestGenesisHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
             "AINDY.db.models": mock_genesis_model,
-            "AINDY.db.models": mock_genesis_model,
             "domain.genesis_ai": mock_genesis_ai,
             "AINDY.domain.genesis_ai": mock_genesis_ai,
         }):
@@ -483,7 +482,6 @@ class TestGenesisHandlers:
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models": mock_genesis_model,
-            "AINDY.db.models": mock_genesis_model,
             "AINDY.db.models": mock_genesis_model,
             "domain.genesis_ai": MagicMock(),
             "AINDY.domain.genesis_ai": MagicMock(),

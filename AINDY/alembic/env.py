@@ -20,21 +20,18 @@ from sqlalchemy import engine_from_config, pool, create_engine
 
 # Load .env into os.environ so get_database_url() can read DATABASE_URL directly.
 # python-dotenv is already in requirements.txt; override=False so real env vars win.
-try:
-    from dotenv import load_dotenv as _load_dotenv
-    _load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
-except ImportError:
-    pass
-
-from AINDY.db.models import metrics_models  # ensures Alembic sees new models
-
-
-
 # -------------------------
 # Project root and sys.path
 # -------------------------
-# PROJECT_ROOT = <repo>/A.I.N.D.Y  (two levels or one depending on layout)
-# We choose parents[1] to match your earlier setup where alembic/ lives at <repo>/A.I.N.D.Y/alembic
+# env.py lives at AINDY/alembic/env.py
+# parents[0] = AINDY/alembic/
+# parents[1] = AINDY/
+# parents[2] = repo root  (where AINDY/ package lives)
+# CI runs with working-directory: AINDY, so we must add the repo root explicitly.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -42,6 +39,14 @@ if str(PROJECT_ROOT) not in sys.path:
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
+except ImportError:
+    pass
+
+from AINDY.db.models import metrics_models  # ensures Alembic sees new models
 
 
 # -------------------------
