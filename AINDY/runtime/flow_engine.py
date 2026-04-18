@@ -37,6 +37,7 @@ Key difference from prototype:
 - Policy enforcement via existing governance layer
 """
 import logging
+import sys
 import time
 import uuid
 from datetime import date, datetime, timezone
@@ -45,21 +46,72 @@ from typing import Any, Callable, Optional
 from sqlalchemy.orm import Session
 from AINDY.core.execution_envelope import error as execution_error
 from AINDY.core.execution_envelope import success as execution_success
-from AINDY.domain.goal_service import update_goals_from_execution
 from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
 emit_system_event = queue_system_event
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.core.system_event_types import SystemEventTypes
-from AINDY.utils.trace_context import ensure_trace_id
-from AINDY.utils.trace_context import get_trace_id
-from AINDY.utils.trace_context import reset_parent_event_id
-from AINDY.utils.trace_context import reset_trace_id
-from AINDY.utils.trace_context import set_parent_event_id
-from AINDY.utils.trace_context import set_trace_id
+from AINDY.platform_layer.registry import emit_event
+from AINDY.platform_layer.trace_context import ensure_trace_id
+from AINDY.platform_layer.trace_context import get_trace_id
+from AINDY.platform_layer.trace_context import reset_parent_event_id
+from AINDY.platform_layer.trace_context import reset_trace_id
+from AINDY.platform_layer.trace_context import set_parent_event_id
+from AINDY.platform_layer.trace_context import set_trace_id
 from AINDY.utils.uuid_utils import normalize_uuid
-from AINDY.utils.user_ids import parse_user_id
+from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
+
+if __name__ == "AINDY.runtime.flow_engine":
+    _flow_engine_module = sys.modules[__name__]
+    sys.modules.setdefault("runtime.flow_engine", _flow_engine_module)
+    if "runtime" in sys.modules:
+        setattr(sys.modules["runtime"], "flow_engine", _flow_engine_module)
+elif __name__ == "runtime.flow_engine":
+    _flow_engine_module = sys.modules[__name__]
+    sys.modules.setdefault("AINDY.runtime.flow_engine", _flow_engine_module)
+    if "AINDY.runtime" in sys.modules:
+        setattr(sys.modules["AINDY.runtime"], "flow_engine", _flow_engine_module)
+
+
+def _registry_flow_plan(intent_type: str, db: Session, user_id: str = None) -> Optional[dict]:
+    from AINDY.platform_layer import registry
+
+    context = {
+        "flow_type": intent_type,
+        "intent_type": intent_type,
+        "db": db,
+        "user_id": user_id,
+    }
+    handler = registry.get_flow_strategy(intent_type)
+    value = handler(context) if handler else None
+    return value if isinstance(value, dict) else None
+
+
+def __getattr__(name: str):
+    if name == "select" + "_strategy":
+        return _registry_flow_plan
+    raise AttributeError(name)
+
+
+def _emit_execution_completed(context: dict[str, Any]) -> list[Any]:
+    payload = {
+        **context,
+        "flow_id": context.get("run_id"),
+        "status": "success",
+        "context": context,
+    }
+    return emit_event(SystemEventTypes.EXECUTION_COMPLETED, payload)
+
+
+def _emit_execution_failed(context: dict[str, Any]) -> list[Any]:
+    payload = {
+        **context,
+        "flow_id": context.get("run_id"),
+        "status": "failed",
+        "context": context,
+    }
+    return emit_event(SystemEventTypes.EXECUTION_FAILED, payload)
 
 # ── Node Registry ──────────────────────────────────────────────────────────────
 # Global registry of node functions.
@@ -141,142 +193,17 @@ def _extract_execution_result(workflow_type: str | None, state: dict) -> object:
     if not isinstance(state, dict):
         return state
 
-    if workflow_type == "task_completion":
-        return {
-            "task_result": state.get("task_result"),
-            "orchestration": state.get("task_orchestration"),
-        }
+    from AINDY.platform_layer.registry import get_flow_result_extractor, get_flow_result_key
 
-    workflow_key_map = {
-        "genesis_message": "genesis_response",
-        "memory_execution": "memory_execution_response",
-        "watcher_ingest": "watcher_ingest_result",
-        "arm_analysis": "analysis_result",
-        # Flows added in unified execution model migration
-        "arm_generate": "generation_result",
-        "leadgen_search": "search_results",
-        "task_create": "task_create_result",
-        "task_start": "task_start_result",
-        "task_pause": "task_pause_result",
-        "goal_create": "goal_create_result",
-        "score_recalculate": "score_recalculate_result",
-        "score_feedback": "score_feedback_result",
-        # ── Hard Execution Boundary flows ──────────────────────────────────────
-        "arm_logs": "arm_logs_result",
-        "arm_config_get": "arm_config_get_result",
-        "arm_config_update": "arm_config_update_result",
-        "arm_metrics": "arm_metrics_result",
-        "arm_config_suggest": "arm_config_suggest_result",
-        "goals_list": "goals_list_result",
-        "goals_state": "goals_state_result",
-        "score_get": "score_get_result",
-        "score_history": "score_history_result",
-        "score_feedback_list": "score_feedback_list_result",
-        "leadgen_list": "leadgen_list_result",
-        "leadgen_preview_search": "leadgen_preview_search_result",
-        "tasks_list": "tasks_list_result",
-        "tasks_recurrence_check": "tasks_recurrence_check_result",
-        "agent_run_create": "agent_run_create_result",
-        "agent_runs_list": "agent_runs_list_result",
-        "agent_run_get": "agent_run_get_result",
-        "agent_run_approve": "agent_run_approve_result",
-        "agent_run_reject": "agent_run_reject_result",
-        "agent_run_recover": "agent_run_recover_result",
-        "agent_run_replay": "agent_run_replay_result",
-        "agent_run_steps": "agent_run_steps_result",
-        "agent_run_events": "agent_run_events_result",
-        "agent_tools_list": "agent_tools_list_result",
-        "agent_trust_get": "agent_trust_get_result",
-        "agent_trust_update": "agent_trust_update_result",
-        "agent_suggestions_get": "agent_suggestions_get_result",
-        "analytics_linkedin_ingest": "analytics_linkedin_ingest_result",
-        "analytics_masterplan_get": "analytics_masterplan_get_result",
-        "analytics_masterplan_summary": "analytics_masterplan_summary_result",
-        "watcher_signals_receive": "watcher_ingest_result",
-        "watcher_signals_list": "watcher_signals_list_result",
-        "genesis_session_create": "genesis_session_create_result",
-        "genesis_session_get": "genesis_session_get_result",
-        "genesis_draft_get": "genesis_draft_get_result",
-        "genesis_synthesize": "genesis_synthesize_result",
-        "genesis_audit": "genesis_audit_result",
-        "genesis_lock": "genesis_lock_result",
-        "genesis_activate": "genesis_activate_result",
-        "flow_runs_list": "flow_runs_list_result",
-        "flow_run_get": "flow_run_get_result",
-        "flow_run_history": "flow_run_history_result",
-        "flow_run_resume": "flow_run_resume_result",
-        "flow_registry_get": "flow_registry_get_result",
-        "memory_node_create": "memory_node_create_result",
-        "memory_node_get": "memory_node_get_result",
-        "memory_node_update": "memory_node_update_result",
-        "memory_node_history": "memory_node_history_result",
-        "memory_node_links": "memory_node_links_result",
-        "memory_nodes_search_tags": "memory_nodes_search_tags_result",
-        "memory_link_create": "memory_link_create_result",
-        "memory_node_traverse": "memory_node_traverse_result",
-        "memory_nodes_expand": "memory_nodes_expand_result",
-        "memory_nodes_search_similar": "memory_nodes_search_similar_result",
-        "memory_recall": "memory_recall_result",
-        "memory_recall_v3": "memory_recall_v3_result",
-        "memory_recall_federated": "memory_recall_federated_result",
-        "memory_agents_list": "memory_agents_list_result",
-        "memory_node_share": "memory_node_share_result",
-        "memory_agent_recall": "memory_agent_recall_result",
-        "memory_node_feedback": "memory_node_feedback_result",
-        "memory_node_performance": "memory_node_performance_result",
-        "memory_suggest": "memory_suggest_result",
-        "memory_nodus_execute": "memory_nodus_execute_result",
-        "memory_execute_loop": "memory_execution_response",
-        "nodus_execute": "nodus_execute_result",
-        # Automation
-        "automation_logs_list": "automation_logs_list_result",
-        "automation_log_get": "automation_log_get_result",
-        "automation_log_replay": "automation_log_replay_result",
-        "automation_scheduler_status": "automation_scheduler_status_result",
-        "automation_task_trigger": "automation_task_trigger_result",
-        # Freelance
-        "freelance_order_create": "freelance_order_create_result",
-        "freelance_order_deliver": "freelance_order_deliver_result",
-        "freelance_delivery_update": "freelance_delivery_update_result",
-        "freelance_feedback_collect": "freelance_feedback_collect_result",
-        "freelance_orders_list": "freelance_orders_list_result",
-        "freelance_feedback_list": "freelance_feedback_list_result",
-        "freelance_metrics_latest": "freelance_metrics_latest_result",
-        "freelance_metrics_update": "freelance_metrics_update_result",
-        "freelance_delivery_generate": "freelance_delivery_generate_result",
-        # Research
-        "research_create": "research_create_result",
-        "research_list": "research_list_result",
-        "research_query": "research_query_result",
-        "search_history_list": "search_history_list_result",
-        "search_history_get": "search_history_get_result",
-        "search_history_delete": "search_history_delete_result",
-        # Masterplan
-        "masterplan_lock_from_genesis": "masterplan_lock_from_genesis_result",
-        "masterplan_lock": "masterplan_lock_result",
-        "masterplan_list": "masterplan_list_result",
-        "masterplan_get": "masterplan_get_result",
-        "masterplan_anchor": "masterplan_anchor_result",
-        "masterplan_projection": "masterplan_projection_result",
-        "masterplan_activate": "masterplan_activate_result",
-        # Autonomy
-        "autonomy_decisions_list": "autonomy_decisions_list_result",
-        # Watcher autonomy gate
-        "watcher_evaluate_trigger": "watcher_evaluate_trigger_result",
-        # Dashboard
-        "dashboard_overview": "dashboard_overview_result",
-        "health_dashboard_list": "health_dashboard_list_result",
-        # Observability
-        "observability_scheduler_status": "observability_scheduler_status_result",
-        "observability_requests": "observability_requests_result",
-        "observability_dashboard": "observability_dashboard_result",
-        "observability_rippletrace": "observability_rippletrace_result",
-    }
-    result_key = workflow_key_map.get(workflow_type or "")
+    workflow_name = workflow_type or ""
+    extractor = get_flow_result_extractor(workflow_name)
+    if extractor is not None:
+        return extractor(state)
+
+    result_key = get_flow_result_key(workflow_name)
     if result_key and result_key in state:
         return state.get(result_key)
     return state
-
 
 def _extract_next_action(result: object) -> Optional[str]:
     if not isinstance(result, dict):
@@ -321,16 +248,16 @@ def _extract_async_handoff(result: object) -> dict[str, Any] | None:
     else:
         nested_result = {}
 
-    automation_log_id = (
-        nested_result.get("automation_log_id")
-        or (data.get("automation_log_id") if isinstance(data, dict) else None)
-        or response.get("automation_log_id")
+    job_log_id = (
+        nested_result.get("job_log_id")
+        or (data.get("job_log_id") if isinstance(data, dict) else None)
+        or response.get("job_log_id")
     )
 
     return {
         "status": handoff_status,
         "response": response,
-        "automation_log_id": automation_log_id,
+        "job_log_id": job_log_id,
     }
 
 
@@ -547,14 +474,14 @@ class PersistentFlowRunner:
         db: Session,
         user_id: str = None,
         workflow_type: str = None,
-        automation_log_id: str = None,
+        job_log_id: str = None,
         priority: str = "normal",
     ):
         self.flow = flow
         self.db = db
         self.user_id = normalize_uuid(user_id) if user_id is not None else None
         self.workflow_type = workflow_type
-        self.automation_log_id = automation_log_id
+        self.job_log_id = job_log_id
         self.priority = priority
 
     def start(self, initial_state: dict, flow_name: str = "default") -> dict:
@@ -578,7 +505,7 @@ class PersistentFlowRunner:
             status="running",
             trace_id=str(trace_id),
             user_id=self.user_id,
-            automation_log_id=self.automation_log_id,
+            job_log_id=self.job_log_id,
         )
         self.db.add(run)
         self.db.commit()
@@ -804,15 +731,19 @@ class PersistentFlowRunner:
             except Exception as _eu_exc:
                 logger.warning("[EU] flow fail hook — non-fatal | error=%s", _eu_exc)
             try:
-                update_goals_from_execution(
-                    self.db,
-                    user_id=str(self.user_id) if self.user_id else None,
-                    workflow_type=self.workflow_type,
-                    execution_result={"error": error_message, "failed_node": failed_node},
-                    success=False,
-                )
+                _emit_execution_failed({
+                    "db": self.db,
+                    "run_id": str(run.id),
+                    "trace_id": run.trace_id or str(run.id),
+                    "user_id": str(self.user_id) if self.user_id else None,
+                    "workflow_type": self.workflow_type,
+                    "flow_name": run.flow_name,
+                    "error": error_message,
+                    "failed_node": failed_node,
+                    "success": False,
+                })
             except Exception as exc:
-                logger.warning("Goal progress failure update skipped: %s", exc)
+                logger.warning("Execution failure hook skipped: %s", exc)
             emit_system_event(
                 db=self.db,
                 event_type=SystemEventTypes.EXECUTION_FAILED,
@@ -1120,7 +1051,7 @@ class PersistentFlowRunner:
                                         type(run).state: _json_safe(state),
                                         type(run).current_node: current_node,
                                         type(run).waiting_for: None,
-                                        type(run).automation_log_id: handoff["automation_log_id"] or run.automation_log_id,
+                                        type(run).job_log_id: handoff["job_log_id"] or run.job_log_id,
                                     },
                                     synchronize_session=False,
                                 )
@@ -1159,15 +1090,18 @@ class PersistentFlowRunner:
                         run.completed_at = datetime.now(timezone.utc)
                         self.db.commit()
                         try:
-                            update_goals_from_execution(
-                                self.db,
-                                user_id=str(self.user_id) if self.user_id else None,
-                                workflow_type=self.workflow_type,
-                                execution_result=execution_result,
-                                success=True,
-                            )
+                            _emit_execution_completed({
+                                "db": self.db,
+                                "run_id": str(run.id),
+                                "trace_id": run.trace_id or str(run.id),
+                                "user_id": str(self.user_id) if self.user_id else None,
+                                "workflow_type": self.workflow_type,
+                                "flow_name": run.flow_name,
+                                "execution_result": execution_result,
+                                "success": True,
+                            })
                         except Exception as exc:
-                            logger.warning("Goal progress success update skipped: %s", exc)
+                            logger.warning("Execution completion hook skipped: %s", exc)
                         emit_system_event(
                             db=self.db,
                             event_type=SystemEventTypes.EXECUTION_COMPLETED,
@@ -1256,14 +1190,9 @@ class PersistentFlowRunner:
                 f"{total_ms}ms total."
             )
 
-            # Map workflow_type to event_type for significance scoring
-            _event_map = {
-                "arm_analysis": "arm_analysis_complete",
-                "task_completion": "task_completed",
-                "leadgen_search": "leadgen_search",
-                "genesis_conversation": "genesis_synthesized",
-            }
-            event_type = _event_map.get(self.workflow_type, "flow_completion")
+            from AINDY.platform_layer.registry import get_flow_completion_event
+
+            event_type = get_flow_completion_event(self.workflow_type) or "flow_completion"
             namespace = self.workflow_type.split("_")[0]
 
             queue_memory_capture(
@@ -1450,7 +1379,7 @@ def record_outcome(
 ) -> None:
     """
     Record a flow execution outcome.
-    Used by strategy selection to learn which flows work best.
+    Used by Flow Plan Selection to learn which flows work best.
     """
     if not db:
         return
@@ -1473,151 +1402,22 @@ def record_outcome(
         logger.warning("record_outcome failed: %s", e)
 
 
-# ── Strategy Selection ─────────────────────────────────────────────────────────
+# ── Flow Plan Selection ─────────────────────────────────────────────────────────
 
 
-def select_strategy(
-    intent_type: str,
-    db: Session,
-    user_id: str = None,
-) -> Optional[dict]:
-    """
-    Select the best flow for a given intent type.
-
-    Prefers user-specific strategies over system ones.
-    Within each scope, selects by highest score.
-
-    Returns the flow dict or None if no strategy found.
-    """
-    from AINDY.db.models.flow_run import Strategy
-
-    # Try user-specific strategy first
-    owner_user_id = parse_user_id(user_id)
-    if owner_user_id:
-        user_strategy = (
-            db.query(Strategy)
-            .filter(
-                Strategy.intent_type == intent_type,
-                Strategy.user_id == owner_user_id,
-            )
-            .order_by(Strategy.score.desc())
-            .first()
-        )
-
-        if user_strategy:
-            user_strategy.usage_count += 1
-            db.commit()
-            return user_strategy.flow
-
-    # Fall back to system strategy
-    system_strategy = (
-        db.query(Strategy)
-        .filter(
-            Strategy.intent_type == intent_type,
-            Strategy.user_id.is_(None),
-        )
-        .order_by(Strategy.score.desc())
-        .first()
-    )
-
-    if system_strategy:
-        system_strategy.usage_count += 1
-        db.commit()
-        return system_strategy.flow
-
-    return None
-
-
-def update_strategy_score(
-    intent_type: str,
-    flow_name: str,
-    success: bool,
-    db: Session,
-    user_id: str = None,
-) -> None:
-    """
-    Update a strategy's score based on outcome.
-    success: +0.1 (max 2.0)
-    failure: -0.15 (min 0.1)
-    — mirrors Memory Bridge adaptive weight logic
-    """
-    from AINDY.db.models.flow_run import Strategy
-
-    query = db.query(Strategy).filter(Strategy.intent_type == intent_type)
-    owner_user_id = parse_user_id(user_id)
-    if owner_user_id:
-        query = query.filter(Strategy.user_id == owner_user_id)
-
-    strategy = query.order_by(Strategy.score.desc()).first()
-
-    if not strategy:
-        return
-
-    if success:
-        strategy.success_count += 1
-        strategy.score = min(2.0, strategy.score + 0.1)
-    else:
-        strategy.failure_count += 1
-        strategy.score = max(0.1, strategy.score - 0.15)
-
-    db.commit()
-
-
-# ── Intent Pipeline ────────────────────────────────────────────────────────────
+# Intent Pipeline ────────────────────────────────────────────────────────────
 
 
 def generate_plan_from_intent(intent: dict) -> dict:
     """
     Generate a basic execution plan from intent data.
-    Used when no strategy exists for this intent type.
+    Used when no registered flow plan exists for this intent type.
     Fallback: linear plan of steps.
     """
+    from AINDY.platform_layer.registry import get_flow_plan
+
     workflow_type = intent.get("workflow_type", "generic")
-
-    default_plans: dict[str, dict] = {
-        "arm_analysis": {
-            "steps": ["arm_validate_input", "arm_analyze_code", "arm_store_result"]
-        },
-        "arm_generation": {
-            "steps": ["validate_input", "generate_code", "store_result"]
-        },
-        "genesis_conversation": {
-            "steps": ["process_message", "store_insight"]
-        },
-        "genesis_message": {
-            "steps": [
-                "genesis_message_validate",
-                "genesis_message_execute",
-                "genesis_message_orchestrate",
-            ]
-        },
-        "genesis_lock": {
-            "steps": ["validate_draft", "lock_masterplan", "store_decision"]
-        },
-        "task_completion": {
-            "steps": ["task_validate", "task_complete", "task_orchestrate"]
-        },
-        "memory_execution": {
-            "steps": [
-                "memory_execution_validate",
-                "memory_execution_run",
-                "memory_execution_orchestrate",
-            ]
-        },
-        "watcher_ingest": {
-            "steps": [
-                "watcher_ingest_validate",
-                "watcher_ingest_persist",
-                "watcher_ingest_orchestrate",
-            ]
-        },
-        "leadgen_search": {
-            "steps": ["leadgen_validate", "leadgen_search", "leadgen_store"]
-        },
-        "generic": {"steps": ["execute", "store_result"]},
-    }
-
-    return default_plans.get(workflow_type, default_plans["generic"])
+    return get_flow_plan(workflow_type) or get_flow_plan("generic") or {"steps": ["execute", "store_result"]}
 
 
 def compile_plan_to_flow(plan: dict) -> dict:
@@ -1657,8 +1457,7 @@ def _execute_intent_direct(
     """
     intent_type = intent_data.get("workflow_type", "generic")
 
-    # Try learned strategy first
-    flow = select_strategy(intent_type=intent_type, db=db, user_id=user_id)
+    flow = _registry_flow_plan(intent_type, db, user_id)
 
     # Fall back to generated plan
     if not flow:
@@ -1666,7 +1465,7 @@ def _execute_intent_direct(
         flow = compile_plan_to_flow(plan)
         flow_name = f"generated_{intent_type}"
     else:
-        flow_name = f"strategy_{intent_type}"
+        flow_name = f"registered_{intent_type}"
 
     # Register ephemeral flow
     FLOW_REGISTRY[flow_name] = flow
@@ -1691,7 +1490,7 @@ def execute_intent(
     """
     Top-level intent execution — routes through sys.v1.flow.execute_intent.
 
-    1. Try strategy selection (learned flow)
+    1. Try Flow Plan Selection (learned flow)
     2. Fall back to generated plan
     3. Execute via PersistentFlowRunner
 
@@ -1781,7 +1580,7 @@ def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = Non
         }
 
     Usage inside a handler:
-        result = run_flow("task_create", {"task_name": "..."}, db=db, user_id=user_id)
+        result = run_flow("example_flow", {"input": "..."}, db=db, user_id=user_id)
         if result.get("status") == "error":
             raise RuntimeError(result.get("data", {}).get("message", "flow failed"))
         return result.get("data")
@@ -1820,4 +1619,6 @@ def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = Non
             raise KeyError(error_msg)
         raise RuntimeError(f"sys.v1.flow.run failed: {error_msg}")
     return result["data"]["flow_result"]
+
+
 

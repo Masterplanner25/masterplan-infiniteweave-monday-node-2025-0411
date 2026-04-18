@@ -24,8 +24,8 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.system_event_service import SystemEventEmissionError
-from AINDY.utils.trace_context import get_parent_event_id
-from AINDY.utils.trace_context import get_trace_id
+from AINDY.platform_layer.trace_context import get_parent_event_id
+from AINDY.platform_layer.trace_context import get_trace_id
 from AINDY.utils.uuid_utils import normalize_uuid
 
 logger = logging.getLogger(__name__)

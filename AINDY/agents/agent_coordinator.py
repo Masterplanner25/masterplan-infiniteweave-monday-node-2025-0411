@@ -5,9 +5,8 @@ from typing import Any
 
 from AINDY.db.models.agent_registry import AgentRegistry
 from AINDY.db.models.system_event import SystemEvent
-from AINDY.agents.agent_message_bus import publish_task_request
-from AINDY.domain.goal_service import rank_goals
-from AINDY.platform_layer.system_state_service import compute_current_state
+from AINDY.agents.agent_message_bus import publish_operation_request
+from AINDY.platform_layer.registry import get_agent_ranking_strategy
 from AINDY.utils.uuid_utils import normalize_uuid
 
 
@@ -65,47 +64,47 @@ def get_agent_status(db) -> dict[str, Any]:
     }
 
 
-def assign_task(
+def assign_operation(
     db,
-    task: dict[str, Any],
+    operation: dict[str, Any],
     *,
     user_id: str | None = None,
     trace_id: str | None = None,
     sender_agent_id: str | None = None,
 ) -> dict[str, Any] | None:
-    candidates = _rank_candidate_agents(db, task, user_id=user_id)
+    candidates = _rank_candidate_agents(db, operation, user_id=user_id)
     if not candidates:
         return None
     best = candidates[0]
     if sender_agent_id:
-        publish_task_request(
+        publish_operation_request(
             db=db,
             sender_agent_id=sender_agent_id,
             recipient_agent_id=best["agent_id"],
-            task=task,
+            operation=operation,
             user_id=user_id,
             trace_id=trace_id,
         )
     return best
 
 
-def broadcast_task(
+def broadcast_operation(
     db,
-    task: dict[str, Any],
+    operation: dict[str, Any],
     *,
     user_id: str | None = None,
     trace_id: str | None = None,
     sender_agent_id: str | None = None,
     limit: int = 5,
 ) -> list[dict[str, Any]]:
-    ranked = _rank_candidate_agents(db, task, user_id=user_id)[:limit]
+    ranked = _rank_candidate_agents(db, operation, user_id=user_id)[:limit]
     if sender_agent_id:
         for candidate in ranked:
-            publish_task_request(
+            publish_operation_request(
                 db=db,
                 sender_agent_id=sender_agent_id,
                 recipient_agent_id=candidate["agent_id"],
-                task=task,
+                operation=operation,
                 user_id=user_id,
                 trace_id=trace_id,
             )
@@ -116,10 +115,10 @@ def decide_execution_mode(
     db,
     *,
     local_agent_id: str | None,
-    task: dict[str, Any],
+    operation: dict[str, Any],
     user_id: str | None = None,
 ) -> dict[str, Any]:
-    ranked = _rank_candidate_agents(db, task, user_id=user_id)
+    ranked = _rank_candidate_agents(db, operation, user_id=user_id)
     if not ranked:
         return {"mode": "local", "selected_agent": None, "candidates": []}
 
@@ -171,50 +170,56 @@ def coordination_graph(db, *, user_id: str | None = None, limit: int = 100) -> d
     return {"nodes": list(nodes.values()), "edges": edges}
 
 
-def _rank_candidate_agents(db, task: dict[str, Any], *, user_id: str | None = None) -> list[dict[str, Any]]:
-    system_state = compute_current_state(db)
-    goals = rank_goals(db, user_id, system_state=system_state) if user_id else []
-    task_capabilities = set(task.get("required_capabilities") or task.get("capabilities") or [])
-    task_text = " ".join(
-        filter(None, [str(task.get("name") or ""), str(task.get("description") or ""), str(task.get("goal") or "")])
-    ).lower()
+def _rank_candidate_agents(db, operation: dict[str, Any], *, user_id: str | None = None) -> list[dict[str, Any]]:
+    operation_capabilities = set(operation.get("required_capabilities") or operation.get("capabilities") or [])
+    candidates = [
+        _enrich_candidate_for_coordination(db, row, operation_capabilities=operation_capabilities, user_id=user_id)
+        for row in list_agents(db, include_stale=False)
+    ]
+    context = {
+        "db": db,
+        "operation": operation,
+        "user_id": user_id,
+        "required_capabilities": sorted(operation_capabilities),
+    }
 
-    rows = list_agents(db, include_stale=False)
-    ranked = []
-    for row in rows:
-        capability_overlap = 0.0
-        capabilities = set(row.get("capabilities") or [])
-        if task_capabilities:
-            capability_overlap = len(task_capabilities & capabilities) / max(1, len(task_capabilities))
-        elif capabilities:
-            capability_overlap = 0.5
+    ranking_strategy = get_agent_ranking_strategy()
+    if ranking_strategy is not None:
+        ranked = ranking_strategy(candidates, context)
+        if isinstance(ranked, list):
+            return ranked
 
-        goal_bonus = 0.0
-        if goals and task_text:
-            goal_bonus = max(
-                (
-                    goal.get("ranked_priority", 0.0)
-                    for goal in goals
-                    if any(term in task_text for term in str(goal.get("name") or "").lower().split())
-                ),
-                default=0.0,
-            ) * 0.15
-
-        past_performance = _agent_performance_score(db, row["agent_id"], user_id=user_id)
-        score = (
-            capability_overlap * 0.45
-            + (1.0 - float(row.get("load") or 0.0)) * 0.20
-            + past_performance * 0.20
-            + (0.15 if row.get("health_status") == "healthy" else 0.05 if row.get("health_status") == "degraded" else 0.0)
-            + goal_bonus
-        )
-        enriched = dict(row)
-        enriched["coordination_score"] = round(max(0.0, min(1.5, score)), 4)
-        enriched["capability_overlap"] = round(capability_overlap, 4)
-        enriched["past_performance"] = round(past_performance, 4)
-        ranked.append(enriched)
+    ranked = list(candidates)
     ranked.sort(key=lambda item: item["coordination_score"], reverse=True)
     return ranked
+
+
+def _enrich_candidate_for_coordination(
+    db,
+    row: dict[str, Any],
+    *,
+    operation_capabilities: set[str],
+    user_id: str | None = None,
+) -> dict[str, Any]:
+    capability_overlap = 0.0
+    capabilities = set(row.get("capabilities") or [])
+    if operation_capabilities:
+        capability_overlap = len(operation_capabilities & capabilities) / max(1, len(operation_capabilities))
+    elif capabilities:
+        capability_overlap = 0.5
+
+    past_performance = _agent_performance_score(db, row["agent_id"], user_id=user_id)
+    score = (
+        capability_overlap * 0.45
+        + (1.0 - float(row.get("load") or 0.0)) * 0.20
+        + past_performance * 0.20
+        + (0.15 if row.get("health_status") == "healthy" else 0.05 if row.get("health_status") == "degraded" else 0.0)
+    )
+    enriched = dict(row)
+    enriched["coordination_score"] = round(max(0.0, min(1.0, score)), 4)
+    enriched["capability_overlap"] = round(capability_overlap, 4)
+    enriched["past_performance"] = round(past_performance, 4)
+    return enriched
 
 
 def resolve_conflict(candidates: list[dict[str, Any]]) -> dict[str, Any]:

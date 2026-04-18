@@ -26,7 +26,7 @@ Contract guarantees
 
 Relationship to existing nodus services
 ========================================
-  nodus_execution_service.py   low-level task runner (route handler helper)
+  nodus_execution_service.py   low-level operation runner (route handler helper)
   nodus_adapter.py             deterministic agent flow via PersistentFlowRunner
   nodus_runtime_adapter.py     THIS FILE — generic VM ↔ runtime contract layer
 """
@@ -163,7 +163,7 @@ class NodusRuntimeAdapter:
             user_id=user_id,
             execution_unit_id=eu_id,
             memory_context=recalled_nodes,
-            input_payload={"goal": "..."},
+            input_payload={"objective": "..."},
         )
         result = adapter.run_script(script_source, ctx)
         if result.status == "success":
@@ -800,12 +800,12 @@ def _flush_memory_writes(
 #   result = runner.start(
 #       {
 #           "nodus_script": """
-#               let goal = input_payload["goal"]
-#               remember(goal, "nodus_goal")
-#               emit("goal.processed", {goal: goal})
+#               let objective = input_payload["objective"]
+#               remember(objective, "nodus_objective")
+#               emit("objective.processed", {objective: objective})
 #               set_state("processed", true)
 #           """,
-#           "nodus_input_payload": {"goal": "Improve Q2 conversion"},
+#           "nodus_input_payload": {"objective": "Improve Q2 conversion"},
 #           "nodus_error_policy": "retry",   # optional; defaults to "fail"
 #       },
 #       flow_name="nodus_script_flow",

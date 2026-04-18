@@ -9,9 +9,9 @@ Structured builtins exposed to Nodus scripts as namespaced objects:
 Nodus script usage
 ------------------
     # Memory namespace
-    memories = memory.recall(["task", "goal"], 5)
+    memories = memory.recall(["operation", "objective"], 5)
     node     = memory.write("Completed planning step", ["step", "plan"])
-    results  = memory.search("goal prioritization strategies")
+    results  = memory.search("objective prioritization strategies")
 
     # Event namespace
     event.emit("step.completed", {step: "plan"})
@@ -190,7 +190,7 @@ class NodusMemoryBuiltins:
 
         Example
         -------
-            memories = memory.recall(["task", "goal"], 5)
+            memories = memory.recall(["operation", "objective"], 5)
             for m in memories:
                 emit("memory.loaded", {content: m["content"]})
         """
@@ -303,7 +303,7 @@ class NodusMemoryBuiltins:
 
         Example
         -------
-            results = memory.search("goal prioritization strategies")
+            results = memory.search("objective prioritization strategies")
             best = results[0]["content"] if results else ""
         """
         if not query or not isinstance(query, str):

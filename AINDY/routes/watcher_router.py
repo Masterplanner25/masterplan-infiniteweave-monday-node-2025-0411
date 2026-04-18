@@ -195,7 +195,7 @@ def list_signals(
 ) -> Dict[str, Any]:
     """Query stored watcher signals."""
     def handler(ctx):
-        from AINDY.domain.watcher_service import list_signals as svc_list_signals
+        from AINDY.platform_layer.watcher_service import list_signals as svc_list_signals
         rows = svc_list_signals(
             db,
             session_id=session_id,

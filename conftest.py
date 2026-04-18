@@ -13,9 +13,9 @@ if os.path.isdir(SDK_DIR) and SDK_DIR not in sys.path:
     sys.path.insert(0, SDK_DIR)
 
 pytest_plugins = [
-    "AINDY.tests.fixtures.db",
-    "AINDY.tests.fixtures.auth",
-    "AINDY.tests.fixtures.users",
-    "AINDY.tests.fixtures.client",
-    "AINDY.tests.fixtures.common",
+    "tests.fixtures.db",
+    "tests.fixtures.auth",
+    "tests.fixtures.users",
+    "tests.fixtures.client",
+    "tests.fixtures.common",
 ]

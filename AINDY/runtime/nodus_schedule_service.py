@@ -1,35 +1,33 @@
-"""
-nodus_schedule_service.py — Scheduled Nodus script execution.
+﻿"""
+nodus_schedule_service.py â€” Scheduled Nodus script execution.
 
 Allows cron-scheduled execution of Nodus scripts via the APScheduler
-background scheduler.  Every execution is audited via AutomationLog and
+background scheduler.  Every execution is audited via JobLog and
 run through PersistentFlowRunner so the full Nodus runtime
 (memory, event, WAIT/RESUME, retries) is available to scripts.
 
 Leader election
 ===============
-Each APScheduler callback starts by calling ``is_background_leader()``
-from task_services.  On multi-worker deployments only the instance that
-holds the background task DB lease actually executes the job; all other
-instances return immediately.  This matches the existing pattern used by
-all other scheduled system jobs.
+Each APScheduler callback emits a generic scheduler tick event. App-owned
+handlers may veto execution, allowing multi-worker coordination without
+hardcoded app job names in the runtime.
 
 Retry handling
 ==============
-* ``error_policy="retry"`` → the ``nodus.execute`` flow node returns RETRY
+* ``error_policy="retry"`` â†’ the ``nodus.execute`` flow node returns RETRY
   on script failure, and PersistentFlowRunner retries up to ``max_retries``
   times (exponential back-off managed by the flow engine).
-* ``error_policy="fail"`` (default) → script errors are recorded as
+* ``error_policy="fail"`` (default) â†’ script errors are recorded as
   ``last_run_status="failure"`` and the run ends immediately.
 * Outer (infrastructure) exceptions (DB down, VM crash) are caught, logged,
-  and recorded in the AutomationLog; they never propagate to APScheduler.
+  and recorded in the JobLog; they never propagate to APScheduler.
 
 Persistence
 ===========
 ``create_nodus_scheduled_job()`` registers the job with APScheduler *and*
 writes a ``NodusScheduledJob`` row to DB.  On server restart,
 ``restore_nodus_scheduled_jobs()`` reads all active rows and re-registers
-them — call this from ``scheduler_service._register_system_jobs()``.
+them â€” call this from ``scheduler_service._register_system_jobs()``.
 """
 from __future__ import annotations
 
@@ -40,9 +38,11 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
+from AINDY.db.models.job_log import JobLog
+
 logger = logging.getLogger(__name__)
 
-# APScheduler job ID prefix — makes jobs easy to identify in scheduler listings
+# APScheduler job ID prefix â€” makes jobs easy to identify in scheduler listings
 _JOB_ID_PREFIX = "nodus_scheduled_"
 
 
@@ -56,48 +56,53 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
 
     Responsibilities
     ----------------
-    1. Bail out if this instance is not the background task leader.
+    1. Emit a scheduler tick lifecycle event; handlers may veto execution.
     2. Load ``NodusScheduledJob`` from DB; bail out if inactive.
-    3. Create an ``AutomationLog`` entry for this execution.
+    3. Create an ``JobLog`` entry for this execution.
     4. Run the Nodus script via ``PersistentFlowRunner(NODUS_SCRIPT_FLOW)``.
-    5. Update ``AutomationLog`` and ``NodusScheduledJob`` with the outcome.
+    5. Update ``JobLog`` and ``NodusScheduledJob`` with the outcome.
 
-    All errors are caught — this function never raises so APScheduler does not
+    All errors are caught â€” this function never raises so APScheduler does not
     disable the job due to an unhandled exception.
     """
-    # ── 1. Leader election ────────────────────────────────────────────────────
+    # â”€â”€ 1. Leader election â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
-        from AINDY.domain.task_services import is_background_leader
-        if not is_background_leader():
-            logger.debug("[NodusSchedule] Not leader — skipping job %s", job_id)
+        from AINDY.platform_layer.registry import emit_event
+
+        tick_results = emit_event(
+            "scheduler.tick",
+            {"job_id": str(job_id), "source": "nodus_schedule"},
+        )
+        if any(result is False for result in tick_results):
+            logger.debug("[NodusSchedule] Scheduler tick vetoed job %s", job_id)
             return
     except Exception as _le_exc:
-        logger.warning("[NodusSchedule] Leader check failed — skipping: %s", _le_exc)
+        logger.warning("[NodusSchedule] Scheduler tick failed - skipping: %s", _le_exc)
+        return
         return
 
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.nodus_scheduled_job import NodusScheduledJob
-    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
-    log: Optional[AutomationLog] = None
+    log: Optional[JobLog] = None
 
     try:
-        # ── 2. Load job row ───────────────────────────────────────────────────
+        # â”€â”€ 2. Load job row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         job = (
             db.query(NodusScheduledJob)
             .filter(NodusScheduledJob.id == job_id)
             .first()
         )
         if not job or not job.is_active:
-            logger.info("[NodusSchedule] Job %s not found or inactive — skipping", job_id)
+            logger.info("[NodusSchedule] Job %s not found or inactive â€” skipping", job_id)
             return
 
         label = job.job_name or f"nodus_job_{job_id}"
         trace_id = str(uuid.uuid4())
 
-        # ── 3. Create AutomationLog ───────────────────────────────────────────
-        log = AutomationLog(
+        # â”€â”€ 3. Create JobLog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        log = JobLog(
             source="nodus_schedule",
             task_name=label,
             payload={
@@ -114,7 +119,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         db.add(log)
         db.commit()
 
-        # ── 4. Execute via the shared Nodus orchestration helper ─────────────
+        # â”€â”€ 4. Execute via the shared Nodus orchestration helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         from AINDY.runtime.nodus_execution_service import format_nodus_flow_result
         from AINDY.runtime.nodus_execution_service import run_nodus_script_via_flow
 
@@ -131,7 +136,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         )
         formatted_result = format_nodus_flow_result(result)
 
-        # ── 5. Record outcome ─────────────────────────────────────────────────
+        # â”€â”€ 5. Record outcome â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         flow_succeeded = result.get("status") == "SUCCESS"
         nodus_ok = formatted_result.get("nodus_status") != "failure"
 
@@ -156,7 +161,7 @@ def _run_scheduled_nodus_job(job_id: str) -> None:
         db.commit()
 
         logger.info(
-            "[NodusSchedule] Job %r (%s) completed — status=%s run_id=%s",
+            "[NodusSchedule] Job %r (%s) completed â€” status=%s run_id=%s",
             label,
             job_id,
             run_status,
@@ -208,12 +213,12 @@ def create_nodus_scheduled_job(
         Active SQLAlchemy session (committed before APScheduler registration).
     script:
         Resolved Nodus source code (caller is responsible for resolving
-        ``script_name`` → content before calling this function).
+        ``script_name`` â†’ content before calling this function).
     cron_expression:
         Standard 5-field cron string.  Validated via
         ``CronTrigger.from_crontab()`` before DB write.
     user_id:
-        Job owner — used for memory scoping inside the script.
+        Job owner â€” used for memory scoping inside the script.
     job_name:
         Human-readable label (optional).
     script_name:
@@ -228,7 +233,7 @@ def create_nodus_scheduled_job(
     Returns
     -------
     dict
-        Serialised job metadata (id, job_name, cron_expression, next_run_at, …).
+        Serialised job metadata (id, job_name, cron_expression, next_run_at, â€¦).
 
     Raises
     ------
@@ -332,7 +337,7 @@ def delete_nodus_scheduled_job(
     row.is_active = False
     db.commit()
 
-    # Remove from APScheduler (best-effort — may already be gone)
+    # Remove from APScheduler (best-effort â€” may already be gone)
     _remove_from_scheduler(job_id)
 
     logger.info("[NodusSchedule] Deleted job %s", job_id)
@@ -396,7 +401,7 @@ def _parse_cron(cron_expression: str):
     try:
         from AINDY.apscheduler.triggers.cron import CronTrigger
     except ImportError as exc:
-        raise ValueError("APScheduler is not installed — cannot schedule Nodus jobs") from exc
+        raise ValueError("APScheduler is not installed â€” cannot schedule Nodus jobs") from exc
 
     try:
         return CronTrigger.from_crontab(cron_expression)
@@ -438,7 +443,7 @@ def _register_with_scheduler(job_row: Any, trigger: Any) -> None:
 
 
 def _remove_from_scheduler(job_id: str) -> None:
-    """Remove a job from APScheduler (best-effort — never raises)."""
+    """Remove a job from APScheduler (best-effort â€” never raises)."""
     try:
         from AINDY.platform_layer.scheduler_service import get_scheduler
         scheduler = get_scheduler()
@@ -467,5 +472,7 @@ def _serialize_job(row: Any, next_run_at: Optional[str] = None) -> dict:
         "next_run_at": next_run_at,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+
 
 

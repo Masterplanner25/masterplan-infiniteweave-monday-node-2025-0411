@@ -46,7 +46,7 @@ Usage
     eu = require_execution_unit(
         db=db, eu_type="job", user_id=user_id,
         source_type="memory_nodus_execute", source_id=eu_id,
-        extra={"task_name": task_name, "workflow_type": "memory_nodus_execute"},
+        extra={"operation_name": operation_name, "task_name": task_name, "workflow_type": "memory_nodus_execute"},
     )
     # eu.extra["retry_policy"] is now populated.
 
@@ -77,7 +77,7 @@ class ExecutionWaitSignal(Exception):
     ``{"status": "WAIT", "wait_for": "event_type"}``) is preserved and
     continues to trigger the EU transition via dict-based detection in the
     pipeline.  This signal provides the same capability to agents, jobs,
-    and bare task handlers that do not run inside a ``FlowRun``.
+    and bare operation handlers that do not run inside a ``FlowRun``.
 
     The pipeline catches this *before* ``HTTPException`` and ``Exception``
     so it is never misclassified as a failure.  The EU is transitioned to
@@ -150,6 +150,7 @@ class ExecutionWaitSignal(Exception):
 
 # Map eu_type to the execution_type expected by resolve_retry_policy().
 # "job" covers both AutomationLog jobs and bare Nodus execution.
+# "task" remains accepted as a legacy operation label and falls back to job policy.
 _EU_TYPE_TO_EXEC_TYPE: dict[str, str] = {
     "flow": "flow",
     "agent": "agent",
@@ -316,14 +317,14 @@ def gate_and_dispatch(
         agent  → lambda: execute_run(...)
         nodus  → lambda: run_nodus_script_via_flow(...)
         job    → lambda: _execute_job_inline(...)
-        task   → lambda: task_service.complete_task(...)
+        task   → lambda: operation_handler(...)  # legacy operation label
 
     Parameters
     ----------
     db:
         Active SQLAlchemy session for EU creation / status update.
     eu_type:
-        One of "flow", "agent", "nodus", "job", "task".  Drives both the
+        One of "flow", "agent", "nodus", "job", or legacy "task".  Drives both the
         retry-policy resolution in ``require_execution_unit()`` and the
         INLINE/ASYNC decision in ``ExecutionDispatcher``.
     user_id:

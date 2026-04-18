@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from AINDY.utils.trace_context import get_current_execution_context, is_pipeline_active
+from AINDY.platform_layer.trace_context import get_current_execution_context, is_pipeline_active
 
 
 def _ensure_signal_bucket(ctx: Any) -> dict[str, list[dict[str, Any]]]:

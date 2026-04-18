@@ -1,0 +1,497 @@
+"""Platform extension registry.
+
+The platform owns registries, not application behavior. Applications register
+routers, syscalls, jobs, flows, event handlers, capture rules, and agent tools
+from their own bootstrap modules.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+import logging
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Callable, Iterable
+
+logger = logging.getLogger(__name__)
+
+Handler = Callable[..., Any]
+
+_routers: list[Any] = []
+_root_routers: list[Any] = []
+_legacy_root_routers: list[Any] = []
+_syscalls: dict[str, Handler] = {}
+_jobs: dict[str, Handler] = {}
+_flows: list[Handler] = []
+_flow_result_keys: dict[str, str] = {}
+_flow_result_extractors: dict[str, Handler] = {}
+_flow_completion_events: dict[str, str] = {}
+_flow_plans: dict[str, dict[str, Any]] = {}
+_event_handlers: dict[str, list[Handler]] = defaultdict(list)
+_event_types: set[str] = set()
+_capture_rules: dict[str, Any] = {}
+_memory_policies: dict[str, Any] = {}
+_scheduled_jobs: dict[str, dict[str, Any]] = {}
+_response_adapters: dict[str, Handler] = {}
+_route_guards: dict[str, Handler] = {}
+_execution_adapters: dict[str, Handler] = {}
+_startup_hooks: list[Handler] = []
+_agent_tools: dict[str, Any] = {}
+_agent_planner_contexts: dict[str, Handler] = {}
+_agent_run_tools: dict[str, Handler] = {}
+_agent_event_emitters: dict[str, list[Handler]] = defaultdict(list)
+_agent_ranking_strategy: Handler | None = None
+_trigger_evaluators: dict[str, Handler] = {}
+_flow_strategies: dict[str, Handler] = {}
+_capability_definitions: dict[str, dict[str, Any]] = {}
+_tool_capabilities: dict[str, list[str]] = {}
+_agent_capabilities: dict[str, list[str]] = {}
+_restricted_tools: set[str] = set()
+_route_prefixes: dict[str, str] = {
+    "flow": "flow",
+    "memory": "flow",
+    "nodus": "nodus",
+    "platform": "job",
+}
+_symbols: dict[str, Any] = {}
+_loaded_plugins: set[str] = set()
+
+
+def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
+    if legacy_root:
+        _legacy_root_routers.append(router)
+    elif root:
+        _root_routers.append(router)
+    else:
+        _routers.append(router)
+    return router
+
+
+def get_routers() -> list[Any]:
+    return list(_routers)
+
+
+def get_root_routers() -> list[Any]:
+    return list(_root_routers)
+
+
+def get_legacy_root_routers() -> list[Any]:
+    return list(_legacy_root_routers)
+
+
+def register_syscall(name: str, handler: Handler) -> Handler:
+    _syscalls[name] = handler
+    return handler
+
+
+def get_syscall(name: str) -> Handler | None:
+    return _syscalls.get(name)
+
+
+def iter_syscalls() -> Iterable[tuple[str, Handler]]:
+    return tuple(_syscalls.items())
+
+
+def register_job(name: str, handler: Handler) -> Handler:
+    _jobs[name] = handler
+    return handler
+
+
+def get_job(name: str) -> Handler | None:
+    return _jobs.get(name)
+
+
+def iter_jobs() -> Iterable[tuple[str, Handler]]:
+    return tuple(_jobs.items())
+
+
+def register_flow(register_fn: Handler) -> Handler:
+    _flows.append(register_fn)
+    return register_fn
+
+
+def register_flows() -> None:
+    for register_fn in tuple(_flows):
+        register_fn()
+
+
+def register_flow_result(
+    flow_name: str,
+    *,
+    result_key: str | None = None,
+    extractor: Handler | None = None,
+    completion_event: str | None = None,
+) -> None:
+    if result_key is not None:
+        _flow_result_keys[flow_name] = result_key
+    if extractor is not None:
+        _flow_result_extractors[flow_name] = extractor
+    if completion_event is not None:
+        _flow_completion_events[flow_name] = completion_event
+
+
+def get_flow_result_key(flow_name: str) -> str | None:
+    return _flow_result_keys.get(flow_name)
+
+
+def get_flow_result_extractor(flow_name: str) -> Handler | None:
+    return _flow_result_extractors.get(flow_name)
+
+
+def get_flow_completion_event(flow_name: str) -> str | None:
+    return _flow_completion_events.get(flow_name)
+
+
+def register_flow_plan(flow_name: str, plan: dict[str, Any]) -> None:
+    _flow_plans[flow_name] = plan
+
+
+def get_flow_plan(flow_name: str) -> dict[str, Any] | None:
+    return _flow_plans.get(flow_name)
+
+
+def register_event_handler(event_type: str, handler: Handler) -> Handler:
+    register_event_type(event_type)
+    _event_handlers[event_type].append(handler)
+    return handler
+
+
+def get_event_handlers(event_type: str) -> list[Handler]:
+    return list(_event_handlers.get(event_type, ()))
+
+
+def register_event_type(event_type: str) -> str:
+    if not event_type or not event_type.strip():
+        raise ValueError("event_type must be a non-empty string")
+    _event_types.add(event_type)
+    return event_type
+
+
+def get_event_types() -> set[str]:
+    return set(_event_types)
+
+
+def emit_event(event_type: str, context: dict[str, Any] | None = None) -> list[Any]:
+    """Dispatch a generic registry event to app-registered handlers."""
+    load_plugins()
+    payload = context or {}
+    results: list[Any] = []
+    handlers = tuple(_event_handlers.get(event_type, ())) + tuple(_event_handlers.get("*", ()))
+    for handler in handlers:
+        results.append(handler(payload))
+    return results
+
+
+def register_scheduled_job(
+    job_id: str,
+    handler: Handler,
+    *,
+    name: str | None = None,
+    trigger: str = "interval",
+    trigger_kwargs: dict[str, Any] | None = None,
+    replace_existing: bool = True,
+) -> Handler:
+    if not job_id or not job_id.strip():
+        raise ValueError("job_id must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _scheduled_jobs[job_id] = {
+        "id": job_id,
+        "handler": handler,
+        "name": name or job_id,
+        "trigger": trigger,
+        "trigger_kwargs": dict(trigger_kwargs or {}),
+        "replace_existing": replace_existing,
+    }
+    return handler
+
+
+def get_scheduled_jobs() -> tuple[dict[str, Any], ...]:
+    load_plugins()
+    return tuple(dict(job) for job in _scheduled_jobs.values())
+
+
+def register_response_adapter(route_prefix: str, handler: Handler) -> Handler:
+    if not route_prefix or not route_prefix.strip():
+        raise ValueError("route_prefix must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _response_adapters[route_prefix.rstrip(".")] = handler
+    return handler
+
+
+def get_response_adapter(route_prefix: str) -> Handler | None:
+    load_plugins()
+    return _response_adapters.get(route_prefix.rstrip("."))
+
+
+def register_route_guard(route_prefix: str, handler: Handler) -> Handler:
+    if not route_prefix or not route_prefix.strip():
+        raise ValueError("route_prefix must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _route_guards[route_prefix.rstrip(".")] = handler
+    return handler
+
+
+def get_route_guard(route_prefix: str) -> Handler | None:
+    load_plugins()
+    return _route_guards.get(route_prefix.rstrip("."))
+
+
+def register_execution_adapter(entity_type: str, handler: Handler) -> Handler:
+    if not entity_type or not entity_type.strip():
+        raise ValueError("entity_type must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _execution_adapters[entity_type.strip()] = handler
+    return handler
+
+
+def get_execution_adapter(entity_type: str) -> Handler | None:
+    load_plugins()
+    return _execution_adapters.get(entity_type.strip())
+
+
+def register_startup_hook(handler: Handler) -> Handler:
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _startup_hooks.append(handler)
+    return handler
+
+
+def run_startup_hooks(context: dict[str, Any] | None = None) -> list[Any]:
+    load_plugins()
+    payload = context or {}
+    results: list[Any] = []
+    for handler in tuple(_startup_hooks):
+        results.append(handler(payload))
+    return results
+
+
+def register_capture_rule(event_type: str, rule: Any) -> Any:
+    return register_memory_policy(event_type, rule)
+
+
+def get_capture_rule(event_type: str) -> Any | None:
+    return get_memory_policy(event_type)
+
+
+def get_capture_rules() -> dict[str, Any]:
+    load_plugins()
+    return dict(_capture_rules)
+
+
+def register_memory_policy(event_type: str, policy: Any) -> Any:
+    _memory_policies[event_type] = policy
+    _capture_rules[event_type] = policy
+    try:
+        from AINDY.memory import memory_capture_engine
+
+        if isinstance(policy, dict):
+            memory_capture_engine.EVENT_SIGNIFICANCE[event_type] = policy.get(
+                "base_score",
+                policy.get("significance", 0.4),
+            )
+    except Exception:
+        logger.debug("memory policy compatibility update skipped", exc_info=True)
+    return policy
+
+
+def get_memory_policy(event_type: str) -> Any | None:
+    load_plugins()
+    return _memory_policies.get(event_type)
+
+
+def get_memory_significance_rule(event_type: str) -> float | None:
+    policy = get_memory_policy(event_type)
+    if not isinstance(policy, dict):
+        return None
+    value = policy.get("base_score", policy.get("significance"))
+    return float(value) if value is not None else None
+
+
+def register_agent_tool(name: str, tool: Any) -> Any:
+    _agent_tools[name] = tool
+    return tool
+
+
+def get_agent_tool(name: str) -> Any | None:
+    return _agent_tools.get(name)
+
+
+def iter_agent_tools() -> Iterable[tuple[str, Any]]:
+    return tuple(_agent_tools.items())
+
+
+def register_agent_planner_context(run_type: str, handler: Handler) -> Handler:
+    _agent_planner_contexts[run_type] = handler
+    return handler
+
+
+def get_planner_context(run_type: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    handler = _agent_planner_contexts.get(run_type) or _agent_planner_contexts.get("default")
+    if handler is None:
+        return {}
+    value = handler(context or {})
+    return value if isinstance(value, dict) else {}
+
+
+def register_agent_run_tools(run_type: str, handler: Handler) -> Handler:
+    _agent_run_tools[run_type] = handler
+    return handler
+
+
+def get_tools_for_run(run_type: str, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    handler = _agent_run_tools.get(run_type) or _agent_run_tools.get("default")
+    if handler is None:
+        return []
+    value = handler(context or {})
+    return value if isinstance(value, list) else []
+
+
+def register_agent_event(event_name: str, handler: Handler) -> Handler:
+    _agent_event_emitters[event_name].append(handler)
+    return handler
+
+
+def emit_agent_event(event_name: str, context: dict[str, Any]) -> list[Any]:
+    results: list[Any] = []
+    for handler in tuple(_agent_event_emitters.get(event_name, ())):
+        results.append(handler(context))
+    return results
+
+
+def register_agent_ranking_strategy(handler: Handler) -> Handler:
+    global _agent_ranking_strategy
+    _agent_ranking_strategy = handler
+    return handler
+
+
+def get_agent_ranking_strategy() -> Handler | None:
+    load_plugins()
+    return _agent_ranking_strategy
+
+
+def register_trigger_evaluator(trigger_type: str, handler: Handler) -> Handler:
+    _trigger_evaluators[trigger_type] = handler
+    return handler
+
+
+def get_trigger_evaluator(trigger_type: str) -> Handler | None:
+    load_plugins()
+    return _trigger_evaluators.get(trigger_type) or _trigger_evaluators.get("default")
+
+
+def register_flow_strategy(flow_type: str, handler: Handler) -> Handler:
+    if not flow_type or not flow_type.strip():
+        raise ValueError("flow_type must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    _flow_strategies[flow_type] = handler
+    return handler
+
+
+def get_flow_strategy(flow_type: str) -> Handler | None:
+    load_plugins()
+    return _flow_strategies.get(flow_type) or _flow_strategies.get("default")
+
+
+def register_capability_definition(name: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    _capability_definitions[name] = dict(metadata)
+    return _capability_definitions[name]
+
+
+def get_capability_definition(name: str) -> dict[str, Any] | None:
+    return _capability_definitions.get(name)
+
+
+def get_capability_definitions() -> dict[str, dict[str, Any]]:
+    return {name: dict(metadata) for name, metadata in _capability_definitions.items()}
+
+
+def register_tool_capabilities(tool_name: str, capability_names: list[str]) -> list[str]:
+    capabilities = sorted({name for name in capability_names if isinstance(name, str)})
+    _tool_capabilities[tool_name] = capabilities
+    return capabilities
+
+
+def get_capabilities_for_tool(tool_name: str) -> list[str]:
+    return list(_tool_capabilities.get(tool_name, ()))
+
+
+def register_agent_capabilities(agent_id: str, capability_names: list[str]) -> list[str]:
+    capabilities = sorted({name for name in capability_names if isinstance(name, str)})
+    _agent_capabilities[agent_id] = capabilities
+    return capabilities
+
+
+def get_capabilities_for_agent(agent_id: str) -> list[str]:
+    return list(_agent_capabilities.get(agent_id, ()))
+
+
+def register_restricted_tool(tool_name: str) -> str:
+    _restricted_tools.add(tool_name)
+    return tool_name
+
+
+def get_restricted_tools() -> set[str]:
+    return set(_restricted_tools)
+
+
+def register_route_prefix(prefix: str, execution_unit_type: str) -> None:
+    _route_prefixes[prefix] = execution_unit_type
+
+
+def get_route_prefix(prefix: str) -> str | None:
+    return _route_prefixes.get(prefix)
+
+
+def register_symbol(name: str, value: Any) -> Any:
+    _symbols[name] = value
+    return value
+
+
+def get_symbol(name: str) -> Any | None:
+    return _symbols.get(name)
+
+
+def register_symbols(symbols: dict[str, Any]) -> None:
+    for name, value in symbols.items():
+        if not name.startswith("__"):
+            register_symbol(name, value)
+
+
+def load_plugins(manifest_path: str | Path | None = None) -> list[str]:
+    """Load plugin bootstrap modules listed in the root manifest.
+
+    The manifest keeps application module names outside AINDY source. Expected
+    shape: {"plugins": ["some.module", ...]}.
+    """
+
+    if manifest_path is None:
+        manifest_path = Path(__file__).resolve().parents[2] / "aindy_plugins.json"
+    path = Path(manifest_path)
+    if not path.exists():
+        logger.info("No plugin manifest found at %s", path)
+        return []
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    loaded: list[str] = []
+    for module_name in data.get("plugins", []):
+        if module_name in _loaded_plugins:
+            continue
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as exc:
+            logger.warning("Skipping plugin %s: %s", module_name, exc)
+            continue
+        bootstrap = getattr(module, "bootstrap", None)
+        if callable(bootstrap):
+            bootstrap()
+        _loaded_plugins.add(module_name)
+        loaded.append(module_name)
+    if loaded:
+        logger.info("Loaded platform plugins: %s", ", ".join(loaded))
+    return loaded

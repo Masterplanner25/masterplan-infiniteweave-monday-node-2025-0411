@@ -9,7 +9,7 @@ from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
 from AINDY.services.auth_service import get_current_user
-from AINDY.utils.user_ids import require_user_id
+from AINDY.platform_layer.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 

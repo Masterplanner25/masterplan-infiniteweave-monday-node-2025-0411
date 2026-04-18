@@ -9,22 +9,22 @@ Path structure
     /memory/{tenant_id}/{namespace}/{addr_type}/{node_id}
 
     tenant_id  — user ID (tenant isolation boundary)
-    namespace  — logical domain: "tasks", "insights", "decisions", "goals", …
-    addr_type  — sub-category: "pending", "completed", "architectural", …
+    namespace  — logical signal group: "entities", "executions", "relationships", "signals", …
+    addr_type  — sub-category: "updated", "completed", "linked", …
     node_id    — UUID of the memory node (generated on write)
 
 Query patterns
 --------------
-    /memory/user-123/tasks/pending/abc      → exact match (one node)
-    /memory/user-123/tasks/*               → all nodes one level under tasks
-    /memory/user-123/tasks/**              → recursive — all nodes under tasks
-    /memory/user-123/tasks/pending/*       → all nodes of type "pending"
+    /memory/user-123/entities/updated/abc      → exact match (one node)
+    /memory/user-123/entities/*               → all nodes one level under entities
+    /memory/user-123/entities/**              → recursive — all nodes under entities
+    /memory/user-123/executions/completed/*       → all nodes of type "completed"
 
 Hybrid query
 ------------
     path + query + tags + causal_depth can all be combined:
     {
-        "path":  "/memory/user-123/tasks/*",
+        "path":  "/memory/user-123/entities/*",
         "query": "failed with timeout",
         "tags":  ["error"],
         "limit": 10
@@ -246,8 +246,8 @@ def is_recursive(path: str) -> bool:
 def wildcard_prefix(path: str) -> str:
     """Return the prefix before the wildcard segment.
 
-    /memory/user/tasks/*  → /memory/user/tasks
-    /memory/user/tasks/** → /memory/user/tasks
+    /memory/user/entities/*  → /memory/user/entities
+    /memory/user/entities/** → /memory/user/entities
     """
     p = normalize_path(path)
     if p.endswith("/**"):
@@ -263,8 +263,8 @@ def path_from_write_payload(payload: dict, tenant_id: str) -> tuple[str, str, st
     """Extract or construct a full path from a write payload.
 
     The payload may supply:
-    1. A pre-built path: ``{"path": "/memory/user/tasks/pending"}``
-    2. Namespace + addr_type: ``{"namespace": "tasks", "addr_type": "pending"}``
+    1. A pre-built path: ``{"path": "/memory/user/entities/updated"}``
+    2. Namespace + addr_type: ``{"namespace": "entities", "addr_type": "updated"}``
     3. Neither (fall back to defaults: namespace="general", addr_type=node_type)
 
     Returns:
@@ -355,3 +355,4 @@ def enrich_node_with_path(node_dict: dict) -> dict:
     if not node_dict.get("path"):
         node_dict["path"] = derive_legacy_path(node_dict)
     return node_dict
+

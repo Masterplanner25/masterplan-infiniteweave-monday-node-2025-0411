@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 import logging
 
 from AINDY.core.execution_gate import to_envelope
@@ -145,19 +145,34 @@ class SuggestRequest(BaseModel):
     limit: Optional[int] = 3
 
 
-class NodusTaskRequest(BaseModel):
-    task_name: str
-    task_code: str  # The Nodus task block code
+class NodusOperationRequest(BaseModel):
+    operation_name: str | None = None
+    operation_code: str | None = None
+
+    # Temporary compatibility fields for existing clients.
+    task_name: str | None = None
+    task_code: str | None = None
     session_tags: Optional[list[str]] = []
     context: Optional[dict] = {}
     allowed_operations: Optional[list[str]] = None
     execution_id: Optional[str] = None
     capability_token: Optional[dict] = None
 
+    @model_validator(mode="after")
+    def _require_operation(self) -> "NodusOperationRequest":
+        if not (self.operation_name or self.task_name):
+            raise ValueError("Provide either 'operation_name' or 'task_name'")
+        if not (self.operation_code or self.task_code):
+            raise ValueError("Provide either 'operation_code' or 'task_code'")
+        return self
+
+
+NodusTaskRequest = NodusOperationRequest
+
 
 class ExecutionLoopRequest(BaseModel):
     workflow: str
-    # "arm_analysis" | "arm_generation" | "task" | "genesis" | "leadgen" | "nodus_task"
+    # Example workflow labels: "analysis" | "operation" | "nodus_operation"
     input: dict
     session_tags: Optional[list[str]] = []
     recall_before: Optional[bool] = True
@@ -326,8 +341,16 @@ async def create_link(
         dao = MemoryNodeDAO(db)
         source_node = dao.get_by_id(body.source_id, user_id=user_id)
         target_node = dao.get_by_id(body.target_id, user_id=user_id)
-        # Source node not found
-        # Target node not found
+        if not source_node:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "memory_node_not_found", "message": "Source node not found"},
+            )
+        if not target_node:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "memory_node_not_found", "message": "Target node not found"},
+            )
         try:
             from fastapi.encoders import jsonable_encoder
             link = dao.create_link(
@@ -335,6 +358,7 @@ async def create_link(
                 body.target_id,
                 body.link_type or "related",
                 body.weight or 0.5,
+                user_id=user_id,
             )
             data = jsonable_encoder(link) if not isinstance(link, dict) else link
             data.setdefault("execution_envelope", to_envelope(
@@ -560,15 +584,17 @@ async def get_suggestions(
     return await _execute_memory(request, "memory.suggest", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodus/execute")
 async def execute_nodus_task(
-    body: NodusTaskRequest,
+    body: NodusOperationRequest,
     request: Request = None,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    from AINDY.utils.user_ids import require_user_id
+    from AINDY.platform_layer.user_ids import require_user_id
     from AINDY.core.execution_dispatcher import async_heavy_execution_enabled
 
     user_id = str(require_user_id(current_user["sub"]))
+    resolved_operation_name = body.operation_name or body.task_name
+    resolved_operation_code = body.operation_code or body.task_code
 
     # ── Async path: submit as a tracked background job (202 Accepted) ─────────
     if request is not None and async_heavy_execution_enabled():
@@ -578,8 +604,10 @@ async def execute_nodus_task(
         log_id = submit_async_job(
             task_name="memory.nodus.execute",
             payload={
-                "task_name": body.task_name,
-                "task_code": body.task_code,
+                "operation_name": resolved_operation_name,
+                "operation_code": resolved_operation_code,
+                "task_name": resolved_operation_name,
+                "task_code": resolved_operation_code,
                 "user_id": user_id,
                 "session_tags": body.session_tags,
                 "allowed_operations": body.allowed_operations,
@@ -598,8 +626,8 @@ async def execute_nodus_task(
 
         try:
             result = execute_nodus_task_payload(
-                task_name=body.task_name,
-                task_code=body.task_code,
+                task_name=resolved_operation_name,
+                task_code=resolved_operation_code,
                 db=db,
                 user_id=user_id,
                 session_tags=body.session_tags,

@@ -119,7 +119,7 @@ Create `tutorial_02.py`:
 ```python
 import os
 import time
-from aindy import AINDYClient
+from AINDY.sdk.aindy_sdk import AINDYClient
 
 client = AINDYClient(
     base_url=os.environ.get("AINDY_BASE_URL", "http://localhost:8000"),
@@ -323,7 +323,7 @@ The trace shows exactly where the script paused and when it resumed — with the
 
 ```python
 import os, time
-from aindy import AINDYClient
+from AINDY.sdk.aindy_sdk import AINDYClient
 
 client = AINDYClient(
     base_url=os.environ.get("AINDY_BASE_URL", "http://localhost:8000"),

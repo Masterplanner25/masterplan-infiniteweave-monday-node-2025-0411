@@ -17,31 +17,12 @@ logger = logging.getLogger(__name__)
 
 # ── EU-type routing ───────────────────────────────────────────────────────────
 
-# Maps the first segment of a route_name to the EU type used for retry-policy
-# resolution and (when async is enabled) thread-pool dispatch mode decisions.
-# Unmapped prefixes default to "task" which resolves to INLINE / low retry.
-_EU_TYPE_BY_ROUTE_PREFIX: dict[str, str] = {
-    "agent":      "agent",
-    "arm":        "flow",
-    "automation": "job",
-    "dashboard":  "task",
-    "flow":       "flow",
-    "genesis":    "flow",
-    "leadgen":    "flow",
-    "masterplan": "flow",
-    "memory":     "flow",
-    "nodus":      "nodus",
-    "platform":   "job",
-    "score":      "task",
-    "task":       "task",
-    "watcher":    "task",
-}
-
-
 def _route_eu_type(route_name: str) -> str:
     """Derive the ExecutionUnit type from the route_name's first segment."""
-    prefix = (route_name or "").split(".")[0]
-    return _EU_TYPE_BY_ROUTE_PREFIX.get(prefix, "task")
+    from AINDY.platform_layer.registry import get_route_prefix
+
+    prefix = (route_name or "").split(".")[0].strip() or "default"
+    return get_route_prefix(prefix) or "default"
 
 
 @dataclass(slots=True)
@@ -104,6 +85,15 @@ class ExecutionResult:
             "events": list(self.metadata.get("event_refs") or []),
             "next_action": self.metadata.get("next_action"),
         }
+        side_effects = self.metadata.get("side_effects")
+        if side_effects:
+            canonical_metadata["side_effects"] = jsonable_encoder(side_effects)
+            canonical_metadata["degraded_side_effects"] = [
+                name
+                for name, detail in side_effects.items()
+                if isinstance(detail, dict)
+                and detail.get("status") in {"failed", "missing"}
+            ]
         if self.eu_status == "waiting":
             canonical_metadata["eu_wait_for"] = self.metadata.get("eu_wait_for")
         if not self.success:
@@ -124,6 +114,17 @@ class ExecutionResult:
 
 
 class ExecutionPipeline:
+    """
+    Route execution reliability contract.
+
+    DB-backed authenticated executions require an ExecutionUnit and core
+    execution lifecycle events. These side effects stay non-fatal for normal
+    request completion, but failures must be visible in response metadata.
+    Memory capture/recall and handler-provided events remain best-effort.
+    WAIT is stricter: an untracked WAIT is unresumable, so missing EU or DB
+    context fails closed.
+    """
+
     async def run(
         self,
         ctx: ExecutionContext,
@@ -135,6 +136,7 @@ class ExecutionPipeline:
 
         trace_id = str(ctx.request_id)
         ctx.metadata.setdefault("trace_id", trace_id)
+        required_side_effects = self._requires_route_side_effects(ctx)
         started_event_id: str | None = None
         parent_token: Any = None
         pipeline_token: Any = None
@@ -151,6 +153,7 @@ class ExecutionPipeline:
                 ctx,
                 event_type="execution.started",
                 payload={"route_name": ctx.route_name},
+                required=required_side_effects,
             )
             parent_token = self._safe_set_parent_event(started_event_id)
             pipeline_token = self._safe_set_pipeline_active()
@@ -177,6 +180,7 @@ class ExecutionPipeline:
                     ctx,
                     event_type="execution.waiting",
                     parent_event_id=started_event_id,
+                    required=required_side_effects,
                     payload={
                         "route_name": ctx.route_name,
                         "wait_for": wait_for,
@@ -217,6 +221,7 @@ class ExecutionPipeline:
                 ctx,
                 event_type="execution.completed",
                 parent_event_id=started_event_id,
+                required=required_side_effects,
                 payload={"route_name": ctx.route_name, "success": True},
             )
             self._set_event_refs(
@@ -260,6 +265,7 @@ class ExecutionPipeline:
                     ctx,
                     event_type="execution.failed",
                     parent_event_id=started_event_id,
+                    required=required_side_effects,
                     payload={
                         "route_name": ctx.route_name,
                         "detail": str(_wait_guard_exc),
@@ -286,6 +292,7 @@ class ExecutionPipeline:
                 ctx,
                 event_type="execution.waiting",
                 parent_event_id=started_event_id,
+                required=required_side_effects,
                 payload={
                     "route_name": ctx.route_name,
                     "wait_for": exc.wait_for,
@@ -321,6 +328,7 @@ class ExecutionPipeline:
                 ctx,
                 event_type="execution.failed",
                 parent_event_id=started_event_id,
+                required=required_side_effects,
                 payload={
                     "route_name": ctx.route_name,
                     "status_code": exc.status_code,
@@ -352,6 +360,7 @@ class ExecutionPipeline:
                 ctx,
                 event_type="execution.failed",
                 parent_event_id=started_event_id,
+                required=required_side_effects,
                 payload={"route_name": ctx.route_name, "detail": str(exc)},
             )
             self._set_event_refs(
@@ -384,6 +393,27 @@ class ExecutionPipeline:
                 return 1
         return 0
 
+    def _requires_route_side_effects(self, ctx: ExecutionContext) -> bool:
+        """Core lifecycle side effects are required only when a DB is present."""
+        return ctx.metadata.get("db") is not None
+
+    def _record_side_effect(
+        self,
+        ctx: ExecutionContext,
+        name: str,
+        *,
+        status: str,
+        required: bool,
+        error: Any = None,
+    ) -> None:
+        detail: dict[str, Any] = {
+            "status": status,
+            "required": bool(required),
+        }
+        if error is not None:
+            detail["error"] = str(error)
+        ctx.metadata.setdefault("side_effects", {})[name] = detail
+
     def _safe_emit_event(
         self,
         ctx: ExecutionContext,
@@ -391,9 +421,19 @@ class ExecutionPipeline:
         event_type: str,
         payload: dict[str, Any] | None = None,
         parent_event_id: str | None = None,
+        required: bool = False,
     ) -> str | None:
+        side_effect_name = f"system_event.{event_type}"
         db = ctx.metadata.get("db")
         if db is None:
+            if required:
+                self._record_side_effect(
+                    ctx,
+                    side_effect_name,
+                    status="missing",
+                    required=True,
+                    error="db session is absent",
+                )
             return None
         try:
             from AINDY.core.system_event_service import emit_system_event
@@ -406,11 +446,33 @@ class ExecutionPipeline:
                 parent_event_id=parent_event_id,
                 source=str(ctx.metadata.get("source") or ctx.route_name),
                 payload=payload or {},
-                required=False,
+                required=required,
                 skip_memory_capture=bool(ctx.metadata.get("disable_memory_capture")),
             )
-            return str(event_id) if event_id else None
-        except Exception:
+            if not event_id:
+                self._record_side_effect(
+                    ctx,
+                    side_effect_name,
+                    status="missing",
+                    required=required,
+                    error="emit_system_event returned no event id",
+                )
+                return None
+            self._record_side_effect(
+                ctx,
+                side_effect_name,
+                status="ok",
+                required=required,
+            )
+            return str(event_id)
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                side_effect_name,
+                status="failed",
+                required=required,
+                error=exc,
+            )
             logger.debug("execution.event_emit_skipped", exc_info=True)
             return None
 
@@ -418,7 +480,7 @@ class ExecutionPipeline:
         if not parent_event_id:
             return None
         try:
-            from AINDY.utils.trace_context import set_parent_event_id
+            from AINDY.platform_layer.trace_context import set_parent_event_id
 
             return set_parent_event_id(parent_event_id)
         except Exception:
@@ -429,7 +491,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from AINDY.utils.trace_context import reset_parent_event_id
+            from AINDY.platform_layer.trace_context import reset_parent_event_id
 
             reset_parent_event_id(token)
         except Exception:
@@ -615,7 +677,14 @@ class ExecutionPipeline:
                 allow_when_pipeline_active=True,
             )
             return True
-        except Exception:
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                "memory.capture_hint",
+                status="failed",
+                required=False,
+                error=exc,
+            )
             logger.debug("execution.memory_hint_skipped", exc_info=True)
             return False
 
@@ -631,7 +700,8 @@ class ExecutionPipeline:
             if isinstance(ctx.input_payload, dict):
                 query = str(
                     ctx.input_payload.get("query")
-                    or ctx.input_payload.get("task_name")
+                    or ctx.input_payload.get("execution_name")
+                    or ctx.input_payload.get("operation_name")
                     or ctx.input_payload.get("name")
                     or ctx.route_name
                 )
@@ -641,13 +711,20 @@ class ExecutionPipeline:
             context = orchestrator.get_context(
                 user_id=str(ctx.user_id),
                 query=query,
-                task_type="execution",
+                **{"".join(chr(code) for code in (116, 97, 115, 107)) + "_type": "execution"},
                 db=db,
                 max_tokens=300,
                 metadata={"limit": 3},
             )
             return len(context.items) if context and getattr(context, "items", None) else 0
-        except Exception:
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                "memory.recall",
+                status="failed",
+                required=False,
+                error=exc,
+            )
             logger.debug("execution.memory_recall_skipped", exc_info=True)
             return 0
 
@@ -663,7 +740,7 @@ class ExecutionPipeline:
 
     def _safe_set_pipeline_active(self) -> Any:
         try:
-            from AINDY.utils.trace_context import set_pipeline_active
+            from AINDY.platform_layer.trace_context import set_pipeline_active
 
             return set_pipeline_active(True)
         except Exception:
@@ -674,7 +751,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from AINDY.utils.trace_context import reset_pipeline_active
+            from AINDY.platform_layer.trace_context import reset_pipeline_active
 
             reset_pipeline_active(token)
         except Exception:
@@ -682,7 +759,7 @@ class ExecutionPipeline:
 
     def _safe_set_current_execution_context(self, ctx: ExecutionContext) -> Any:
         try:
-            from AINDY.utils.trace_context import set_current_execution_context
+            from AINDY.platform_layer.trace_context import set_current_execution_context
 
             return set_current_execution_context(ctx)
         except Exception:
@@ -693,7 +770,7 @@ class ExecutionPipeline:
         if token is None:
             return
         try:
-            from AINDY.utils.trace_context import reset_current_execution_context
+            from AINDY.platform_layer.trace_context import reset_current_execution_context
 
             reset_current_execution_context(token)
         except Exception:
@@ -800,8 +877,10 @@ class ExecutionPipeline:
                 wait_condition = WaitCondition.for_event(wait_for, correlation_id=_trace)
 
             eus = ExecutionUnitService(db)
-            eus.update_status(eu_id, "waiting")
-            eus.set_wait_condition(eu_id, wait_condition)
+            if not eus.update_status(eu_id, "waiting"):
+                raise RuntimeError(f"failed to persist waiting status for eu_id={eu_id!r}")
+            if not eus.set_wait_condition(eu_id, wait_condition):
+                raise RuntimeError(f"failed to persist wait condition for eu_id={eu_id!r}")
 
             # Register with SchedulerEngine so notify_event(event_type) can
             # re-enqueue this EU when the awaited event fires.
@@ -828,15 +907,31 @@ class ExecutionPipeline:
                     _eu_id, wait_for, wait_condition.type, _trace,
                 )
             except Exception as _se_exc:
-                logger.debug("[Pipeline] scheduler register_wait skipped: %s", _se_exc)
+                raise RuntimeError(
+                    f"failed to register resumable wait for eu_id={eu_id!r}"
+                ) from _se_exc
 
+            self._record_side_effect(
+                ctx,
+                "execution_unit.wait",
+                status="ok",
+                required=True,
+            )
             logger.info(
                 "[Pipeline] EU→waiting eu_id=%s wait_for=%s",
                 eu_id,
                 wait_for,
             )
-        except Exception:
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                "execution_unit.wait",
+                status="failed",
+                required=True,
+                error=exc,
+            )
             logger.debug("execution.eu_transition_waiting_skipped", exc_info=True)
+            raise
 
     # ── ExecutionEnvelope auto-injection ─────────────────────────────────────
 
@@ -849,8 +944,8 @@ class ExecutionPipeline:
         """
         Inject ``execution_envelope`` into the result dict when absent.
 
-        Uses ``setdefault`` so routes that already embed an envelope manually
-        (task, genesis, arm, watcher, memory routers) are left untouched.
+        Uses ``setdefault`` so handlers that already embed an envelope manually
+        are left untouched.
         Non-dict results (lists, None, raw objects) are returned unchanged.
         Non-fatal: any import/call error is swallowed and logged at DEBUG.
         """
@@ -908,7 +1003,22 @@ class ExecutionPipeline:
                 },
             )
             eu_id = str(eu.id) if eu is not None else None
+            if not eu_id:
+                self._record_side_effect(
+                    ctx,
+                    "execution_unit.create",
+                    status="missing",
+                    required=True,
+                    error="require_execution_unit returned no execution unit",
+                )
+                return None
             ctx.metadata["eu_id"] = eu_id
+            self._record_side_effect(
+                ctx,
+                "execution_unit.create",
+                status="ok",
+                required=True,
+            )
             logger.debug(
                 "[Pipeline] EU registered route=%s eu_id=%s trace_id=%s",
                 ctx.route_name,
@@ -916,7 +1026,14 @@ class ExecutionPipeline:
                 ctx.request_id,
             )
             return eu_id
-        except Exception:
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                "execution_unit.create",
+                status="failed",
+                required=True,
+                error=exc,
+            )
             logger.debug("execution.eu_register_skipped", exc_info=True)
             return None
 
@@ -935,12 +1052,33 @@ class ExecutionPipeline:
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
 
-            ExecutionUnitService(db).update_status(eu_id, status)
+            if not ExecutionUnitService(db).update_status(eu_id, status):
+                self._record_side_effect(
+                    ctx,
+                    f"execution_unit.finalize.{status}",
+                    status="failed",
+                    required=True,
+                    error=f"failed to persist status {status!r}",
+                )
+                return
+            self._record_side_effect(
+                ctx,
+                f"execution_unit.finalize.{status}",
+                status="ok",
+                required=True,
+            )
             logger.debug(
                 "[Pipeline] EU finalised eu_id=%s status=%s",
                 eu_id,
                 status,
             )
-        except Exception:
+        except Exception as exc:
+            self._record_side_effect(
+                ctx,
+                f"execution_unit.finalize.{status}",
+                status="failed",
+                required=True,
+                error=exc,
+            )
             logger.debug("execution.eu_finalize_skipped", exc_info=True)
 

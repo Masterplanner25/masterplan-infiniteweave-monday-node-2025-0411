@@ -1,0 +1,26 @@
+[run]
+omit =
+    */tests/*
+    */sdk/*
+    */routes/*
+    */memory/*
+    */watcher/*
+    */nodus/*
+    */worker/*
+    */venv/*
+    */.venv/*
+    */site-packages/*
+    alembic/*
+    */migrations/*
+    validate_memory_loop.py
+    Single File Engine.py
+    Nodus_Runner.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    except ImportError

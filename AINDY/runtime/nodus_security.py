@@ -93,9 +93,9 @@ def normalize_allowed_operations(value: Optional[list[str]]) -> list[str]:
 def validate_nodus_source(task_code: str) -> None:
     source = str(task_code or "")
     if not source.strip():
-        raise NodusSecurityError("Task code is required.")
+        raise NodusSecurityError("Operation code is required.")
     if len(source) > MAX_TASK_CODE_LENGTH:
-        raise NodusSecurityError("Task code exceeds maximum allowed length.")
+        raise NodusSecurityError("Operation code exceeds maximum allowed length.")
     for pattern, message in RESTRICTED_PATTERNS:
         if pattern.search(source):
             raise NodusSecurityError(message)
@@ -107,7 +107,7 @@ def validate_requested_operation_usage(task_code: str, allowed_operations: list[
     for operation_name in ALLOWED_OPERATION_CAPABILITIES:
         if re.search(rf"\b{re.escape(operation_name)}\s*\(", source) and operation_name not in allowed:
             raise NodusSecurityError(
-                f"Operation '{operation_name}' is used by the task but not granted in allowed_operations."
+                f"Operation '{operation_name}' is used by the operation but not granted in allowed_operations."
             )
 
 

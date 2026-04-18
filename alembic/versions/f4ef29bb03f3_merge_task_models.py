@@ -7,7 +7,7 @@ Create Date: 2025-10-18 15:50:38.864478
 """
 from typing import Sequence, Union
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -101,10 +101,13 @@ def upgrade() -> None:
     # Tasks table migration — only apply if the tasks table already exists
     # (it was pre-created on existing DBs; on a fresh DB it will be created
     # with the correct schema by a later migration or create_all).
-    conn = op.get_bind()
-    tasks_exists = conn.execute(sa.text(
-        "SELECT to_regclass('public.tasks')"
-    )).scalar()
+    if context.is_offline_mode():
+        tasks_exists = None
+    else:
+        conn = op.get_bind()
+        tasks_exists = conn.execute(sa.text(
+            "SELECT to_regclass('public.tasks')"
+        )).scalar()
     if tasks_exists is not None:
         op.add_column('tasks', sa.Column('name', sa.String(), nullable=False))
         op.add_column('tasks', sa.Column('category', sa.String(), nullable=True))

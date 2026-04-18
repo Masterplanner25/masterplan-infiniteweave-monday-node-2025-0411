@@ -3,16 +3,16 @@ Nodus Memory Bridge
 
 Connects the Nodus language runtime to A.I.N.D.Y.'s
 Memory Bridge. Provides recall() and remember() as
-callable functions from within Nodus task blocks.
+callable functions from within Nodus execution blocks.
 
 Integration pattern:
-  Nodus task executes
+  Nodus execution runs
     → calls recall() / remember() via this bridge
     → bridge calls MemoryNodeDAO
     → results flow back into Nodus execution context
 
 This makes memory a first-class primitive in Nodus —
-tasks can retrieve and store knowledge as part of their
+executions can retrieve and store knowledge as part of their
 execution logic, not as an afterthought.
 """
 
@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 class NodusMemoryBridge:
     """
-    Bridge between Nodus task execution and A.I.N.D.Y.
+    Bridge between Nodus execution and A.I.N.D.Y.
     Memory Bridge.
 
     Instantiated once per Nodus session with a DB connection
     and user context. Provides the recall() and remember()
-    functions that Nodus tasks call.
+    functions that Nodus executions call.
     """
 
     def __init__(
@@ -76,7 +76,7 @@ class NodusMemoryBridge:
         limit: int = 3,
     ) -> list[dict]:
         """
-        Recall relevant memories from within a Nodus task.
+        Recall relevant memories from within a Nodus execution.
 
         Usage in Nodus:
           let context = recall(["authentication"])
@@ -111,7 +111,7 @@ class NodusMemoryBridge:
             context = orchestrator.get_context(
                 user_id=self.user_id,
                 query=query or "",
-                task_type="nodus_execution",
+                operation_type="nodus_execution",
                 db=self.db,
                 max_tokens=800,
                 metadata=metadata,
@@ -135,7 +135,7 @@ class NodusMemoryBridge:
         significance: float = 0.6,
     ) -> Optional[str]:
         """
-        Store a memory from within a Nodus task.
+        Store a memory from within a Nodus execution.
 
         Usage in Nodus:
           remember("implemented auth with JWT")
@@ -153,16 +153,16 @@ class NodusMemoryBridge:
         try:
             combined_tags = list(
                 set((tags or []) + self.session_tags +
-                    ["nodus", "task_execution"])
+                    ["nodus", "execution"])
             )
 
             node = queue_memory_capture(
                 db=self.db,
                 user_id=self.user_id,
                 agent_namespace=self.agent_namespace,
-                event_type="task_completed",
+                event_type="execution.completed",
                 content=content,
-                source="nodus_task",
+                source="nodus_execution",
                 tags=combined_tags,
                 node_type=node_type,
                 context={"significance": significance, "outcome": outcome},
@@ -255,7 +255,7 @@ class NodusMemoryBridge:
         limit: int = 3,
     ) -> list[dict]:
         """
-        Get suggestions from within a Nodus task.
+        Get suggestions from within a Nodus execution.
 
         Usage in Nodus:
           let hints = suggest("optimize this function")
@@ -292,7 +292,7 @@ class NodusMemoryBridge:
         """
         Record the outcome of using a recalled memory.
 
-        Usage in Nodus (after task completes):
+        Usage in Nodus (after execution completes):
           record_outcome(memory_id, "success")
 
         This closes the feedback loop — memories that
@@ -352,7 +352,7 @@ class NodusMemoryBridge:
             context = orchestrator.get_context(
                 user_id=self.user_id,
                 query=query or "",
-                task_type="nodus_execution",
+                operation_type="nodus_execution",
                 db=self.db,
                 max_tokens=max_tokens,
                 metadata=metadata,

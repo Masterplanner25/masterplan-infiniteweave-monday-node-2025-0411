@@ -6,8 +6,8 @@ from AINDY.core.execution_signal_helper import queue_system_event
 
 
 MESSAGE_TYPES = {
-    "task_request",
-    "task_result",
+    "operation_request",
+    "operation_result",
     "memory_share",
     "coordination_signal",
 }
@@ -44,27 +44,27 @@ def publish_message(
     )
 
 
-def publish_task_request(
+def publish_operation_request(
     *,
     db,
     sender_agent_id: str,
     recipient_agent_id: str,
-    task: dict[str, Any],
+    operation: dict[str, Any],
     user_id: str | None = None,
     trace_id: str | None = None,
 ) -> str | None:
     return publish_message(
         db=db,
-        message_type="task_request",
+        message_type="operation_request",
         sender_agent_id=sender_agent_id,
         recipient_agent_id=recipient_agent_id,
         user_id=user_id,
         trace_id=trace_id,
-        payload={"task": task},
+        payload={"operation": operation},
     )
 
 
-def publish_task_result(
+def publish_operation_result(
     *,
     db,
     sender_agent_id: str,
@@ -75,7 +75,7 @@ def publish_task_result(
 ) -> str | None:
     return publish_message(
         db=db,
-        message_type="task_result",
+        message_type="operation_result",
         sender_agent_id=sender_agent_id,
         recipient_agent_id=recipient_agent_id,
         user_id=user_id,

@@ -24,8 +24,8 @@ Job lifecycle
   ack()             → job succeeded; removed from in-flight
   fail()            → terminal failure; moved to Dead Letter Queue
 
-In-flight / visibility timeout (Task 1)
-----------------------------------------
+In-flight / visibility timeout
+------------------------------
 When a job is dequeued, the backend records ``{payload, dequeued_at}`` in an
 in-flight store.  If a worker crashes before calling ``ack()`` or ``fail()``,
 the job stays in the in-flight store indefinitely.
@@ -34,26 +34,26 @@ the job stays in the in-flight store indefinitely.
 any job whose ``dequeued_at`` is older than *timeout_seconds*.  Call it on worker
 startup and periodically to recover from crashes.
 
-Dead Letter Queue (Task 3)
---------------------------
+Dead Letter Queue
+-----------------
 ``fail()`` moves the job to a dead-letter store (``aindy:jobs:dead`` in Redis or
 an in-process list in InMemoryQueueBackend).  Jobs in the DLQ are never
 automatically retried; they must be inspected and replayed by an operator.
 
-Delayed enqueue / retry backoff (Task 4)
------------------------------------------
+Delayed enqueue / retry backoff
+--------------------------------
 ``enqueue_delayed(payload, delay_seconds)`` schedules a job for future execution:
   Redis   — ZADD to ``aindy:jobs:delayed`` with score = execute_at Unix timestamp.
             ``process_delayed_jobs()`` pops ready items and pushes to main queue.
   InMemory — ``threading.Timer`` fires the enqueue after the delay.
 
-Metrics (Task 6)
-----------------
+Metrics
+-------
 ``get_metrics()`` returns a dict with:
   queue_depth, in_flight_count, failed_jobs, delayed_jobs
 
-Idempotency key (Task 2)
--------------------------
+Idempotency key
+---------------
 ``QueueJobPayload.idempotency_key`` — defaults to ``job_id`` if not supplied.
 Passed through to the worker so handlers can use it for de-duplication logic.
 The primary dedup mechanism is still the DB-side atomic claim in worker_loop.
@@ -275,9 +275,10 @@ return #ready
     def enqueue(self, payload: QueueJobPayload) -> None:
         raw = payload.to_json()
         self._redis.lpush(self._queue_name, raw)
+        operation_name = getattr(payload, "operation_name", None) or payload.task_name
         logger.debug(
-            "[Queue:redis] enqueued job_id=%s task=%s idempotency_key=%s",
-            payload.job_id, payload.task_name, payload.idempotency_key,
+            "[Queue:redis] enqueued job_id=%s operation=%s idempotency_key=%s",
+            payload.job_id, operation_name, payload.idempotency_key,
         )
 
     def dequeue(self, timeout: int = 5) -> Optional[QueueJobPayload]:
@@ -458,8 +459,9 @@ class InMemoryQueueBackend(DistributedQueueBackend):
 
     def enqueue(self, payload: QueueJobPayload) -> None:
         self._q.put(payload)
+        operation_name = getattr(payload, "operation_name", None) or payload.task_name
         logger.debug(
-            "[Queue:mem] enqueued job_id=%s task=%s", payload.job_id, payload.task_name
+            "[Queue:mem] enqueued job_id=%s operation=%s", payload.job_id, operation_name
         )
 
     def dequeue(self, timeout: int = 5) -> Optional[QueueJobPayload]:
@@ -611,6 +613,14 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
                 "[Queue] Redis backend — url=%s queue=%s", redis_url, queue_name
             )
         else:
+            exec_mode = os.getenv("EXECUTION_MODE", "thread").lower()
+            if exec_mode == "distributed":
+                raise RuntimeError(
+                    "EXECUTION_MODE=distributed requires REDIS_URL to be set. "
+                    "Jobs would be silently lost on process restart with an "
+                    "in-memory queue. Either set REDIS_URL or switch to "
+                    "EXECUTION_MODE=thread for single-process execution."
+                )
             logger.warning(
                 "[Queue] REDIS_URL not set — using in-memory queue. "
                 "Multi-process distributed execution requires Redis."

@@ -189,6 +189,6 @@ IDLE                                   ▼
 
 `session_ended.focus_score` feeds directly into engagement scoring.
 `distraction_detected` events reduce TWR efficiency.
-`session_started` timestamps correlate with task `start_time` for true `time_on_task`.
+`session_started` timestamps correlate with operation `start_time` for true `time_on_operation`.
 
 See: `docs/roadmap/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md` §3.2 (Observation Layer).

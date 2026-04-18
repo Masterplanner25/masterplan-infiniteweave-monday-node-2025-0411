@@ -28,13 +28,15 @@ class MemoryOrchestrator:
         *,
         user_id: str,
         query: str,
-        task_type: str,
         db,
+        operation_type: str | None = None,
+        task_type: str | None = None,
         max_tokens: int = 1200,
         metadata: Optional[dict] = None,
     ) -> MemoryContext:
         try:
-            request = RecallRequest(query=query, user_id=user_id, task_type=task_type, metadata=metadata)
+            operation = operation_type or task_type or "generic"
+            request = RecallRequest(query=query, user_id=user_id, task_type=operation, metadata=metadata)
             expanded_query = self.query_expander.expand(request)
             strategy = self.strategy_selector.select(request)
             request.metadata["diversity_factor"] = strategy.diversity_factor
@@ -72,7 +74,7 @@ class MemoryOrchestrator:
             logger.info(
                 "[MemoryOrchestrator] query=%s task_type=%s candidates=%s returned=%s tokens=%s",
                 query,
-                task_type,
+                operation,
                 len(candidates),
                 len(trimmed),
                 context.total_tokens,

@@ -71,8 +71,8 @@ def record_from_agent_run(agent_run, *, result_summary: Any = None) -> dict[str,
     )
 
 
-def record_from_automation_log(log, *, workflow_type: str | None = None, actor: str = "async", source: str | None = None, result_summary: Any = None, execution_unit: dict[str, Any] | None = None) -> dict[str, Any]:
-    unit = execution_unit or ExecutionUnitService.view_from_automation_log(log)
+def record_from_job_log(log, *, workflow_type: str | None = None, actor: str = "async", source: str | None = None, result_summary: Any = None, execution_unit: dict[str, Any] | None = None) -> dict[str, Any]:
+    unit = execution_unit or ExecutionUnitService.view_from_job_log(log)
     return build_execution_record(
         run_id=str(getattr(log, "id", None) or ""),
         trace_id=getattr(log, "trace_id", None) or str(getattr(log, "id", None) or ""),

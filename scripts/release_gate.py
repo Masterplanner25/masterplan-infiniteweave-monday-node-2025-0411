@@ -154,7 +154,8 @@ def gate_no_shim_files() -> None:
         except OSError as exc:
             warn(f"Could not read {path}: {exc}")
             continue
-        if "MIGRATION SHIM" in content:
+        marker = "MIGRATION " + "SHIM"
+        if marker in content:
             shim_files.append(str(path))
     if shim_files:
         fail(f"Migration shims still present ({len(shim_files)} files):\n"

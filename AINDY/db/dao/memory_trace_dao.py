@@ -8,7 +8,7 @@ from sqlalchemy import func
 
 from AINDY.db.models.memory_trace import MemoryTrace
 from AINDY.db.models.memory_trace_node import MemoryTraceNode
-from AINDY.utils.user_ids import require_user_id
+from AINDY.platform_layer.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 

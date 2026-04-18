@@ -18,7 +18,7 @@ class AutonomyDecision(Base):
     priority = Column(Float, nullable=False, default=0.0)
     reason = Column(Text, nullable=False)
     trace_id = Column(String(128), nullable=True, index=True)
-    automation_log_id = Column(String, nullable=True, index=True)
+    job_log_id = Column(String, nullable=True, index=True)
     trigger_payload = Column(JSONB, nullable=True)
     context_summary = Column(JSONB, nullable=True)
     created_at = Column(

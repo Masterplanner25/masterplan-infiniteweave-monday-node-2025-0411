@@ -492,7 +492,7 @@ def _handle_event_emit(payload: dict, context: SyscallContext) -> dict:
     """sys.v1.event.emit — emit a SystemEvent on the A.I.N.D.Y. event bus.
 
     Payload keys:
-        event_type (str)  — required; e.g. "task.completed"
+        event_type (str)  — required; e.g. "operation.completed"
         payload    (dict) — optional; merged into the event payload
     """
     from AINDY.db.database import SessionLocal

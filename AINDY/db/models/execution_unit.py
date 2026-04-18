@@ -2,13 +2,13 @@
 ExecutionUnit — unified execution abstraction for A.I.N.D.Y.
 
 A single, queryable record for every execution event regardless of whether it
-originated as a Task, AgentRun, FlowRun, or scheduled Job.
+originated as an operation, AgentRun, FlowRun, or scheduled job.
 
 Design principles
 -----------------
 * Purely additive — no columns added to existing tables.
 * Soft source link: source_type + source_id (string, no FK constraint) so the
-  model works with both integer PKs (Task) and UUID PKs (AgentRun, FlowRun).
+  model works with both integer operation IDs and UUID PKs (AgentRun, FlowRun).
 * parent_id enables nesting: e.g. the FlowRun EU spawned by an AgentRun EU has
   parent_id = agent_eu.id.
 * memory_context_ids / output_memory_ids close the memory feedback loop —
@@ -33,7 +33,7 @@ Status machine
 
 Backward compatibility
 ----------------------
-All existing records (Task, AgentRun, FlowRun) will have no corresponding EU
+All existing records (operation, AgentRun, FlowRun) will have no corresponding EU
 until an integration hook creates one.  The mappers in ExecutionUnitService
 provide a view-only fallback that returns an EU-shaped dict from any existing
 record without hitting the DB.
@@ -55,7 +55,8 @@ class ExecutionUnit(Base):
 
     # ── Type and status ────────────────────────────────────────────────────────
     type = Column(String(16), nullable=False, index=True)
-    # "task" | "agent" | "flow" | "job"
+    # "operation" | "agent" | "flow" | "job"
+    # Existing rows may still use legacy operation labels for compatibility.
 
     status = Column(String(16), nullable=False, default="pending", index=True)
     # "pending" | "executing" | "waiting" | "resumed" | "completed" | "failed"
@@ -80,11 +81,12 @@ class ExecutionUnit(Base):
 
     # ── Source record link (soft, no FK — supports int PKs) ───────────────────
     source_type = Column(String(32), nullable=True)
-    # "task" | "agent_run" | "flow_run" | "job"
+    # "operation" | "agent_run" | "flow_run" | "job"
+    # Existing rows may still use legacy operation source labels.
 
     source_id = Column(String(128), nullable=True, index=True)
-    # str(task.id) | str(agent_run.id) | str(flow_run.id)
-    # String form chosen so integer-PK (Task) and UUID-PK (AgentRun) coexist.
+    # str(operation.id) | str(agent_run.id) | str(flow_run.id)
+    # String form chosen so integer-PK operations and UUID-PK AgentRuns coexist.
 
     # ── Execution links ────────────────────────────────────────────────────────
     flow_run_id = Column(String(128), nullable=True, index=True)
@@ -134,7 +136,7 @@ class ExecutionUnit(Base):
 
     # ── Extra ──────────────────────────────────────────────────────────────────
     extra = Column(JSONB, nullable=True)
-    # Per-type metadata: workflow_type, goal_preview, task_name, etc.
+    # Per-type metadata: workflow_type, objective_preview, operation_name, etc.
 
     # ── Timestamps ─────────────────────────────────────────────────────────────
     created_at = Column(
