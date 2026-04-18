@@ -16,8 +16,8 @@ from AINDY.runtime.nodus_security import (
     NodusSecurityError,
     authorize_nodus_execution,
 )
-from AINDY.utils.user_ids import parse_user_id
-from AINDY.utils.user_ids import require_user_id
+from AINDY.platform_layer.user_ids import parse_user_id
+from AINDY.platform_layer.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +517,7 @@ def execute_nodus_task_payload(
     logger=None,
 ) -> dict[str, Any]:
     normalized_user_id = str(require_user_id(user_id))
+    operation_name = task_name
     eu_id = execution_id or f"memory.nodus.{task_name}"
 
     # Gate: ensure a DB-backed ExecutionUnit exists BEFORE the VM starts so the
@@ -557,7 +558,7 @@ def execute_nodus_task_payload(
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
         from AINDY.runtime.memory import MemoryOrchestrator
         from AINDY.runtime.memory.memory_feedback import MemoryFeedbackEngine
-        from AINDY.bridge import create_memory_node
+        from AINDY.memory.bridge import create_memory_node
 
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)
         feedback_engine = MemoryFeedbackEngine()
@@ -565,7 +566,7 @@ def execute_nodus_task_payload(
         memory_context = orchestrator.get_context(
             user_id=normalized_user_id,
             query=task_name or "",
-            task_type="nodus_execution",
+            operation_type="nodus_execution",
             db=db,
             max_tokens=800,
             metadata={
@@ -624,7 +625,7 @@ def execute_nodus_task_payload(
         try:
             result_preview = result.get("output_state") or result.get("error") or result.get("status")
             create_memory_node(
-                content=f"Nodus task '{task_name}' executed: {str(result_preview)[:500]}",
+                content=f"Nodus operation '{operation_name}' executed: {str(result_preview)[:500]}",
                 source="nodus_task",
                 tags=(session_tags or []) + ["nodus", "task_execution"],
                 user_id=normalized_user_id,
@@ -633,7 +634,12 @@ def execute_nodus_task_payload(
             )
         except Exception as exc:
             if logger:
-                logger.warning("nodus_memory_capture_failed task=%s user=%s: %s", task_name, normalized_user_id, exc)
+                logger.warning(
+                    "nodus_memory_capture_failed operation=%s user=%s: %s",
+                    operation_name,
+                    normalized_user_id,
+                    exc,
+                )
 
         try:
             success_score = 1.0 if result.get("ok") else 0.0
@@ -645,8 +651,8 @@ def execute_nodus_task_payload(
         except Exception as exc:
             if logger:
                 logger.warning(
-                    "nodus_feedback_failed task=%s user=%s memory_ids=%s: %s",
-                    task_name,
+                    "nodus_feedback_failed operation=%s user=%s memory_ids=%s: %s",
+                    operation_name,
                     normalized_user_id,
                     memory_context.ids,
                     exc,
@@ -691,6 +697,6 @@ def execute_nodus_task_payload(
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail={"error": "nodus_execute_failed", "message": "Task execution failed", "details": str(exc)},
+            detail={"error": "nodus_execute_failed", "message": "Operation execution failed", "details": str(exc)},
         ) from exc
 

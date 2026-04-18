@@ -1,5 +1,5 @@
-"""
-ExecutionDispatcher — unified INLINE vs ASYNC dispatch decision.
+﻿"""
+ExecutionDispatcher â€” unified INLINE vs ASYNC dispatch decision.
 
 Purpose
 -------
@@ -16,7 +16,7 @@ Dispatch modes
 INLINE
     handler_fn() is called directly on the caller's thread.
     Returns a completed ``DispatchResult`` with a populated ``envelope``.
-    Suitable for lightweight, low-latency operations (e.g. task status
+    Suitable for lightweight, low-latency operations (e.g. operation status
     mutations, watcher signal writes) that must not be queued.
 
 ASYNC
@@ -24,24 +24,24 @@ ASYNC
     ``platform_layer.async_job_service``.  Returns a ``DispatchResult``
     with a ``future`` the caller can optionally poll; ``envelope`` is None
     until the future resolves.
-    Required for flow, agent, and Nodus execution — work that is too heavy
+    Required for flow, agent, and Nodus execution â€” work that is too heavy
     or too long-running to block a request thread.
 
 Decision logic (``_decide_mode``)
 ----------------------------------
 The mode is derived from ``ExecutionUnit.type`` and ``ExecutionUnit.extra``:
 
-    eu.type == "flow"   → ASYNC
-    eu.type == "agent"  → ASYNC
-    eu.type == "nodus"  → ASYNC
-    eu.type == "job"    → ASYNC  (async_job_service already manages these)
-    eu.type == "task"   → INLINE (fast domain mutation)
-    anything else       → INLINE (safe default for unknown types)
+    eu.type == "flow"   â†’ ASYNC
+    eu.type == "agent"  â†’ ASYNC
+    eu.type == "nodus"  â†’ ASYNC
+    eu.type == "job"    â†’ ASYNC  (async_job_service already manages these)
+    eu.type == "task"   â†’ INLINE (legacy operation label)
+    anything else       â†’ INLINE (safe default for unknown types)
 
 Overrides (checked first):
-    eu.extra["async_hint"] == True   → ASYNC regardless of type
-    eu.extra["async_hint"] == False  → INLINE regardless of type
-    eu.extra["priority"] == "high"   → promote to ASYNC even if type = task
+    eu.extra["async_hint"] == True   â†’ ASYNC regardless of type
+    eu.extra["async_hint"] == False  â†’ INLINE regardless of type
+    eu.extra["priority"] == "high"   â†’ promote to ASYNC even for legacy task labels
 
 Usage
 -----
@@ -49,7 +49,7 @@ Usage
 
     result = dispatch(eu, handler_fn=my_handler, context={"db": db})
     if result.mode is ExecutionMode.INLINE:
-        return result.envelope          # dict — ready immediately
+        return result.envelope          # dict â€” ready immediately
     else:
         # ASYNC: return a queued reference; the future runs in background
         return {"queued": True, "eu_id": str(eu.id)}
@@ -66,10 +66,12 @@ from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
 
+from AINDY.db.models.job_log import JobLog
+
 logger = logging.getLogger(__name__)
 
 
-# ── Env-flag gate ─────────────────────────────────────────────────────────────
+# â”€â”€ Env-flag gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def async_heavy_execution_enabled() -> bool:
     """
@@ -80,9 +82,9 @@ def async_heavy_execution_enabled() -> bool:
     ``async_job_service`` re-exports this symbol for backward compatibility.
 
     Rules (evaluated in order):
-      - ``TESTING=1``  / ``TEST_MODE=1``          → always False
-      - ``AINDY_ASYNC_HEAVY_EXECUTION=1``          → True
-      - default                                    → False (safe inline)
+      - ``TESTING=1``  / ``TEST_MODE=1``          â†’ always False
+      - ``AINDY_ASYNC_HEAVY_EXECUTION=1``          â†’ True
+      - default                                    â†’ False (safe inline)
     """
     if os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}:
         return False
@@ -108,7 +110,7 @@ class _JobDispatchStub:
     extra: dict[str, Any] = {"async_hint": True}
 
 
-#: Singleton stub — import this directly; do not instantiate.
+#: Singleton stub â€” import this directly; do not instantiate.
 JOB_DISPATCH_STUB = _JobDispatchStub()
 
 
@@ -124,11 +126,11 @@ class DispatchResult:
     envelope: Optional[dict[str, Any]] = None
     # Populated for ASYNC; None for INLINE.
     future: Optional[Future[Any]] = None
-    # Extra metadata the caller may want (eu_id, trace_id, …).
+    # Extra metadata the caller may want (eu_id, trace_id, â€¦).
     meta: dict[str, Any] = field(default_factory=dict)
 
 
-# ── Mode decision ─────────────────────────────────────────────────────────────
+# â”€â”€ Mode decision â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _decide_mode(execution_unit: Any) -> ExecutionMode:
     """
@@ -136,17 +138,17 @@ def _decide_mode(execution_unit: Any) -> ExecutionMode:
 
     Decision order
     --------------
-    1. ``async_hint=True``  in eu.extra  → **ASYNC** unconditionally.
+    1. ``async_hint=True``  in eu.extra  â†’ **ASYNC** unconditionally.
        Used by ``JOB_DISPATCH_STUB`` to bypass the env flag when the job
        system has already performed its own test-mode inline gate.
-    2. ``async_heavy_execution_enabled()`` returns False → **INLINE**.
+    2. ``async_heavy_execution_enabled()`` returns False â†’ **INLINE**.
        This is the single env-flag gate; previously scattered across every
        route that imported ``async_heavy_execution_enabled`` from
        ``async_job_service``.
-    3. ``async_hint=False`` in eu.extra  → **INLINE** explicitly.
-    4. ``eu.priority == "high"``          → **ASYNC** (never block a thread).
-    5. ``eu.type in _ASYNC_EU_TYPES``     → **ASYNC**.
-    6. Everything else                    → **INLINE** (safe default).
+    3. ``async_hint=False`` in eu.extra  â†’ **INLINE** explicitly.
+    4. ``eu.priority == "high"``          â†’ **ASYNC** (never block a thread).
+    5. ``eu.type in _ASYNC_EU_TYPES``     â†’ **ASYNC**.
+    6. Everything else                    â†’ **INLINE** (safe default).
 
     ``execution_unit`` is typed as ``Any`` to avoid a hard import of the ORM
     model, keeping this module import-safe even in test contexts where the DB
@@ -167,7 +169,7 @@ def _decide_mode(execution_unit: Any) -> ExecutionMode:
     if async_hint is True:
         return ExecutionMode.ASYNC
 
-    # Rule 2: global env flag — ONE place this is checked.
+    # Rule 2: global env flag â€” ONE place this is checked.
     if not async_heavy_execution_enabled():
         return ExecutionMode.INLINE
 
@@ -194,17 +196,17 @@ def _decide_mode(execution_unit: Any) -> ExecutionMode:
     if eu_type in _ASYNC_EU_TYPES:
         return ExecutionMode.ASYNC
 
-    # Rule 6: task and unknown types → inline (safe, fast).
+    # Rule 6: legacy task labels and unknown types run inline.
     return ExecutionMode.INLINE
 
 
-# ── Domain-job façade stubs ───────────────────────────────────────────────────
+# â”€â”€ Domain-job faÃ§ade stubs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _DomainJobStub:
     """
     Lightweight EU metadata carrier for domain-initiated job dispatches.
 
-    Not persisted to the database — it is a typed context object that makes
+    Not persisted to the database â€” it is a typed context object that makes
     dispatch_job / dispatch_autonomous_job readable and consistent with the
     rest of the dispatcher API.  The actual DB-backed ExecutionUnit is created
     inside ``submit_async_job()`` via ``ExecutionUnitService.create()``.
@@ -216,12 +218,13 @@ class _DomainJobStub:
 
     def __init__(self, *, task_name: str, source: str) -> None:
         self.extra: dict[str, Any] = {
+            "operation_name": task_name,
             "task_name": task_name,
             "source": source,
         }
 
 
-# ── Distributed enqueue helper ────────────────────────────────────────────────
+# â”€â”€ Distributed enqueue helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
     """
@@ -230,23 +233,23 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
 
     Called exclusively from ``dispatch()`` when ``EXECUTION_MODE=distributed``.
     The context dict supplied by callers (e.g. ``async_job_service``) carries
-    ``log_id`` and ``task_name`` — the two fields the worker needs to re-hydrate
+    ``log_id`` and operation identity fields the worker needs to re-hydrate
     the job from the database.
 
     Trace context is captured from the active ContextVars so the worker can
     restore the full trace chain after crossing the process boundary.
 
-    Retry backoff (Task 4)
+    Retry backoff
     ----------------------
     When ``context["retry"] == True``, the job is a retry.  An exponential
-    delay is computed from the AutomationLog's ``attempt_count`` and the job
+    delay is computed from the JobLog's ``attempt_count`` and the job
     is submitted via ``enqueue_delayed()`` rather than ``enqueue()``.
 
     Delay formula: ``min(base_ms * 2^(attempt-1), max_ms) / 1000`` seconds.
     Defaults: ``AINDY_RETRY_BACKOFF_BASE_MS=1000``, ``AINDY_RETRY_BACKOFF_MAX_MS=30000``.
     """
     from AINDY.core.distributed_queue import QueueJobPayload, get_queue
-    from AINDY.utils.trace_context import get_trace_id
+    from AINDY.platform_layer.trace_context import get_trace_id
 
     # Capture active trace IDs from ContextVars (set by the root syscall dispatch).
     try:
@@ -259,7 +262,8 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
         eu_id = str(getattr(execution_unit, "id", "") or "")
 
     job_id = str(context.get("log_id") or eu_id or _uuid_mod.uuid4())
-    task_name = str(context.get("task_name", ""))
+    operation_name = str(context.get("operation_name") or context.get("task_name", ""))
+    task_name = str(context.get("task_name") or operation_name)
     is_retry = bool(context.get("retry", False))
 
     payload = QueueJobPayload(
@@ -270,6 +274,7 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
             "trace_id": trace_id,
             "eu_id": eu_id,
             "user_id": str(getattr(execution_unit, "user_id", "") or ""),
+            "operation_name": operation_name,
         },
         retry_metadata={
             "attempt_count": int(context.get("attempt_count", 0)),
@@ -279,8 +284,8 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
     )
 
     logger.debug(
-        "[Dispatcher] enqueue job_id=%s task=%s trace_id=%s is_retry=%s",
-        job_id, task_name, trace_id, is_retry,
+        "[Dispatcher] enqueue job_id=%s operation=%s trace_id=%s is_retry=%s",
+        job_id, operation_name, trace_id, is_retry,
     )
 
     # Emit job_enqueued observability event (non-fatal; skipped in test mode
@@ -305,6 +310,7 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
                     source="distributed_dispatcher",
                     payload={
                         "job_id": job_id,
+                        "operation_name": operation_name,
                         "task_name": task_name,
                         "eu_id": eu_id,
                         "is_retry": is_retry,
@@ -319,7 +325,7 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
 
     q = get_queue()
 
-    # ── Task 4: Retry backoff — delayed re-enqueue ────────────────────────
+    # Retry backoff delayed re-enqueue.
     if is_retry:
         delay_s = _compute_retry_delay(job_id)
         if delay_s > 0:
@@ -336,7 +342,7 @@ def _compute_retry_delay(job_id: str) -> float:
     """
     Return the exponential backoff delay in seconds for a retry.
 
-    Reads the current ``attempt_count`` from the AutomationLog so the delay
+    Reads the current ``attempt_count`` from the JobLog so the delay
     scales with how many times the job has already failed.
 
     Formula: ``min(base_ms * 2^(attempt-1), max_ms) / 1000``
@@ -352,11 +358,10 @@ def _compute_retry_delay(job_id: str) -> float:
     attempt = 1  # default if DB read fails
     try:
         from AINDY.db.database import SessionLocal
-        from AINDY.db.models.automation_log import AutomationLog
 
         _db = SessionLocal()
         try:
-            log = _db.query(AutomationLog).filter(AutomationLog.id == job_id).first()
+            log = _db.query(JobLog).filter(JobLog.id == job_id).first()
             if log:
                 attempt = max(1, int(log.attempt_count or 1))
         finally:
@@ -368,7 +373,7 @@ def _compute_retry_delay(job_id: str) -> float:
     return delay_ms / 1000.0
 
 
-# ── Dispatcher ────────────────────────────────────────────────────────────────
+# â”€â”€ Dispatcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def dispatch(
     execution_unit: Any,
@@ -383,7 +388,7 @@ def dispatch(
     ----------
     execution_unit:
         An ORM ExecutionUnit (or any object with ``.type``, ``.priority``,
-        and ``.extra`` attributes).  Read-only — never mutated here.
+        and ``.extra`` attributes).  Read-only â€” never mutated here.
     handler_fn:
         Zero-argument callable that performs the actual work.  Build any
         closures you need before calling ``dispatch()``.
@@ -417,7 +422,7 @@ def dispatch(
             raise
         return DispatchResult(mode=mode, envelope=envelope, meta=meta)
 
-    # ASYNC — route to distributed queue OR thread pool based on EXECUTION_MODE.
+    # ASYNC â€” route to distributed queue OR thread pool based on EXECUTION_MODE.
     _exec_mode = os.getenv("EXECUTION_MODE", "thread").lower()
 
     if _exec_mode == "distributed":
@@ -441,7 +446,7 @@ def dispatch(
     return DispatchResult(mode=mode, future=future, meta=meta)
 
 
-# ── Domain-job public API ─────────────────────────────────────────────────────
+# â”€â”€ Domain-job public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def dispatch_job(
     *,
@@ -458,7 +463,7 @@ def dispatch_job(
 
     Domain code must call this instead of ``submit_async_job()`` directly.
     ``async_job_service`` is treated as an internal execution backend:
-    it handles AutomationLog persistence, DB-backed ExecutionUnit creation,
+    it handles JobLog persistence, DB-backed ExecutionUnit creation,
     test-mode inline fallback, and the final thread-pool submission via
     ``dispatch(JOB_DISPATCH_STUB, ...)``.
 
@@ -471,14 +476,15 @@ def dispatch_job(
     -------
     DispatchResult
         ``mode`` is always ASYNC (job-type work is never inline at the
-        domain layer).  The AutomationLog id is in ``result.meta["log_id"]``.
+        domain layer).  The JobLog id is in ``result.meta["log_id"]``.
     """
     from AINDY.platform_layer.async_job_service import submit_async_job as _submit
 
+    operation_name = task_name
     stub = _DomainJobStub(task_name=task_name, source=source)
     logger.debug(
-        "[Dispatcher] dispatch_job task=%s source=%s",
-        task_name,
+        "[Dispatcher] dispatch_job operation=%s source=%s",
+        operation_name,
         source,
     )
     log_id: str = _submit(
@@ -493,6 +499,7 @@ def dispatch_job(
         mode=ExecutionMode.ASYNC,
         meta={
             "log_id": log_id,
+            "operation_name": operation_name,
             "task_name": task_name,
             "source": source,
             "eu_type": stub.type,
@@ -530,10 +537,11 @@ def dispatch_autonomous_job(
     """
     from AINDY.platform_layer.async_job_service import submit_autonomous_async_job as _submit_auto
 
+    operation_name = task_name
     stub = _DomainJobStub(task_name=task_name, source=source)
     logger.debug(
-        "[Dispatcher] dispatch_autonomous_job task=%s source=%s trigger=%s",
-        task_name,
+        "[Dispatcher] dispatch_autonomous_job operation=%s source=%s trigger=%s",
+        operation_name,
         source,
         trigger_type,
     )
@@ -547,15 +555,18 @@ def dispatch_autonomous_job(
         max_attempts=max_attempts,
     )
     status = str(response.get("status") or "QUEUED").upper()
-    # IGNORED means autonomy evaluation chose not to execute — no thread submitted.
+    # IGNORED means autonomy evaluation chose not to execute â€” no thread submitted.
     mode = ExecutionMode.INLINE if status == "IGNORED" else ExecutionMode.ASYNC
     return DispatchResult(
         mode=mode,
         envelope=response,
         meta={
+            "operation_name": operation_name,
             "task_name": task_name,
             "source": source,
             "eu_type": stub.type,
             "status": status,
         },
     )
+
+

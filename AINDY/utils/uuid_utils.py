@@ -9,3 +9,9 @@ def normalize_uuid(value):
     if isinstance(value, UUID):
         return value
     return UUID(str(value))
+
+
+def ensure_uuid(value):
+    if isinstance(value, UUID):
+        return value
+    return UUID(str(value))

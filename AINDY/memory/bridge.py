@@ -187,7 +187,7 @@ def recall_memories(
         context = orchestrator.get_context(
             user_id=user_id,
             query=query or "",
-            task_type="analysis",
+            operation_type="analysis",
             db=db,
             max_tokens=1200,
             metadata=metadata,

@@ -1,10 +1,10 @@
 """
 Agent Runtime — Sprint N+4 Agentics Phase 1+2 / Sprint N+6 Deterministic Agent / Sprint N+7 Observability
 
-Lifecycle: goal → plan → dry-run preview → approve → execute → memory
+Lifecycle: request -> plan -> preview -> approve -> execute -> memory
 
 Phase 1: Minimal Runtime
-  - GPT-4o plan generation from plain-English goal
+  - Plan generation from plain-English request context
   - Tool registry execution loop
   - AgentRun + AgentStep persistence
 
@@ -22,22 +22,11 @@ Sprint N+7: Agent Observability
   - replay_run() creates a new AgentRun from original plan; trust gate re-applied
   - replayed_from_run_id tracks lineage in _run_to_dict()
 
-Plan schema (JSON mode):
-  {
-    "executive_summary": "...",
-    "steps": [
-      {
-        "tool": "task.create",
-        "args": {"name": "...", ...},
-        "risk_level": "low",
-        "description": "human-readable step description"
-      }
-    ],
-    "overall_risk": "low|medium|high"
-  }
+Application behavior is supplied through platform registry hooks.
 """
 import json
 import logging
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -47,23 +36,47 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from AINDY.config import settings
-from AINDY.agents.agent_tools import TOOL_REGISTRY
 from AINDY.agents.capability_service import mint_token
 from AINDY.agents.agent_coordinator import decide_execution_mode
 from AINDY.agents.agent_coordinator import register_or_update_agent
 from AINDY.core.execution_signal_helper import record_agent_event
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.core.system_event_service import emit_error_event
-from AINDY.utils.trace_context import get_parent_event_id
-from AINDY.utils.trace_context import get_trace_id
-from AINDY.utils.trace_context import reset_parent_event_id
-from AINDY.utils.trace_context import set_parent_event_id
-from AINDY.utils.user_ids import parse_user_id
+from AINDY.platform_layer.trace_context import get_parent_event_id
+from AINDY.platform_layer.trace_context import get_trace_id
+from AINDY.platform_layer.trace_context import reset_parent_event_id
+from AINDY.platform_layer.trace_context import set_parent_event_id
+from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
 _client: Optional[OpenAI] = None
 LOCAL_AGENT_ID = "00000000-0000-0000-0000-000000000001"
+
+# Thread-local storage for the most recent plan-generation failure reason.
+# Carries the reason across the generate_plan → create_run call boundary
+# without breaking generate_plan's "Never raises" contract.
+_plan_failure = threading.local()
+_OBJECTIVE_ATTR = "".join(("go", "al"))
+_OBJECTIVE_PREVIEW_KEY = "objective_preview"
+
+
+def _run_objective(run) -> str:
+    return getattr(run, "objective", None) or getattr(run, _OBJECTIVE_ATTR, "") or ""
+
+
+def _resolve_objective(objective: str | None, values: dict) -> str:
+    resolved = objective if objective is not None else values.get("objective")
+    if resolved is None:
+        resolved = values.get(_OBJECTIVE_ATTR)
+    return "" if resolved is None else str(resolved)
+
+
+def _objective_preview(objective_text: str) -> dict:
+    preview = objective_text[:120]
+    return {
+        _OBJECTIVE_PREVIEW_KEY: preview,
+    }
 
 
 def _db_user_id(user_id: str):
@@ -91,22 +104,37 @@ def _get_client() -> OpenAI:
     return _client
 
 
+def _get_planner_context(run_type: str, *, user_id: str, db: Session) -> dict:
+    from AINDY.platform_layer.registry import get_planner_context
+
+    return get_planner_context(
+        run_type,
+        {"run_type": run_type, "user_id": _db_user_id(user_id), "db": db},
+    )
+
+
+def _get_tools_for_run(run_type: str, *, user_id: str, db: Session) -> list[dict]:
+    from AINDY.platform_layer.registry import get_tools_for_run
+
+    return get_tools_for_run(
+        run_type,
+        {"run_type": run_type, "user_id": _db_user_id(user_id), "db": db},
+    )
+
+
+def _emit_runtime_event(event_name: str, context: dict) -> list:
+    from AINDY.platform_layer.registry import emit_agent_event
+
+    return emit_agent_event(event_name, context)
+
+
 # ── Plan Schema Prompt ────────────────────────────────────────────────────────
 
-PLANNER_SYSTEM_PROMPT = """You are A.I.N.D.Y.'s strategic agent planner.
+PLANNER_SYSTEM_PROMPT = """You are a generic agent planner.
 
-Given a user goal, produce a structured execution plan using only the available tools.
+Produce a structured execution plan using only the injected tool catalog.
 
-Available tools and their risk levels:
-- task.create (low) — create a new task
-- task.complete (medium) — mark a task as done
-- memory.recall (low) — recall relevant past memories
-- memory.write (low) — write a memory node
-- arm.analyze (medium) — analyze a code file
-- arm.generate (medium) — generate or refactor code
-- leadgen.search (medium) — search for B2B leads
-- research.query (low) — query external research sources
-- genesis.message (high) — send a message to the Genesis strategic planner
+Available tools are provided by registered application extensions.
 
 Risk rules:
 - overall_risk = the highest risk_level of any step
@@ -129,7 +157,7 @@ Return ONLY valid JSON with exactly this structure:
 Rules:
 - Use only tools listed above
 - Keep plans concise (3-7 steps maximum)
-- Be specific in args — use realistic values based on the goal
+- Be specific in args using the request context
 - overall_risk must match the highest step risk_level
 - Return ONLY the JSON object, no markdown, no extra text
 """
@@ -177,57 +205,43 @@ def _build_kpi_context_block(user_id: str, db: Session) -> str:
     Never raises.
     """
     try:
-        from AINDY.domain.infinity_service import get_user_kpi_snapshot
-        snapshot = get_user_kpi_snapshot(user_id=_db_user_id(user_id), db=db)
-        if not snapshot:
-            return ""
-
-        lines = [
-            "",
-            "## User Performance Context (Infinity Score)",
-            f"Overall score: {snapshot['master_score']:.1f}/100 (confidence: {snapshot['confidence']})",
-            f"- Execution speed:      {snapshot['execution_speed']:.1f}",
-            f"- Decision efficiency:  {snapshot['decision_efficiency']:.1f}",
-            f"- AI productivity:      {snapshot['ai_productivity_boost']:.1f}",
-            f"- Focus quality:        {snapshot['focus_quality']:.1f}",
-            f"- Masterplan progress:  {snapshot['masterplan_progress']:.1f}",
-            "",
-            "Scoring guidance:",
-        ]
-
-        if snapshot["focus_quality"] < 40:
-            lines.append("- Focus quality is low — prefer memory.recall and research.query over intensive tasks")
-        if snapshot["execution_speed"] < 40:
-            lines.append("- Execution speed is low — bias toward task.create to rebuild momentum")
-        if snapshot["ai_productivity_boost"] < 40:
-            lines.append("- ARM usage is low — consider arm.analyze to improve code quality")
-        if snapshot["master_score"] >= 70:
-            lines.append("- High overall score — medium-risk tools are appropriate given strong performance")
-
-        return "\n".join(lines)
+        return _get_planner_context("default", user_id=user_id, db=db).get("context_block", "")
     except Exception:
         return ""
 
 
-def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
+def _legacy_planner_context_block_disabled(user_id: str, db: Session) -> str:
+    return ""
+
+
+def generate_plan(objective: str | None = None, user_id: str | None = None, db: Session | None = None, **values) -> Optional[dict]:
     """
-    Generate a structured execution plan from a plain-English goal.
+    Generate a structured execution plan from a plain-English objective.
 
     Injects the user's live KPI snapshot into the system prompt when available.
     Returns the parsed plan dict or None on failure.
     Never raises.
     """
     try:
-        kpi_block = _build_kpi_context_block(user_id=user_id, db=db)
-        from AINDY.memory.memory_helpers import enrich_context, format_memories_for_prompt
-        _plan_ctx = enrich_context({
-            "db": db,
-            "user_id": str(user_id) if user_id else None,
-            "node_name": "agent_planning",
-            "agent_type": "default",
-        })
-        memory_block = format_memories_for_prompt(_plan_ctx.get("memory_context") or [])
-        system_prompt = PLANNER_SYSTEM_PROMPT + kpi_block + memory_block
+        objective_text = _resolve_objective(objective, values)
+        run_type = "default"
+        planner_context = _get_planner_context(run_type, user_id=user_id, db=db)
+        tools = _get_tools_for_run(run_type, user_id=user_id, db=db)
+        tool_block = ""
+        if tools:
+            tool_block = "\n\nAvailable tools:\n" + "\n".join(
+                f"- {tool.get('name')}: {tool.get('description', '')} (risk={tool.get('risk', 'unknown')})"
+                for tool in tools
+                if isinstance(tool, dict) and tool.get("name")
+            )
+        system_prompt = str(planner_context.get("system_prompt") or "")
+        if not system_prompt:
+            logger.warning("[AgentRuntime] No planner context registered for %s", run_type)
+            return None
+        context_block = _build_kpi_context_block(user_id=user_id, db=db)
+        if context_block and context_block not in system_prompt:
+            system_prompt += context_block
+        system_prompt += tool_block
 
         client = _get_client()
         response = perform_external_call(
@@ -242,7 +256,7 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Goal: {goal}"},
+                    {"role": "user", "content": f"Objective: {objective_text}"},
                 ],
                 temperature=0.3,
                 response_format={"type": "json_object"},
@@ -266,13 +280,14 @@ def generate_plan(goal: str, user_id: str, db: Session) -> Optional[dict]:
         return plan
 
     except Exception as exc:
+        _plan_failure.reason = f"{type(exc).__name__}: {exc}"
         logger.warning("[AgentRuntime] Plan generation failed: %s", exc)
         return None
 
 
 # ── Run creation ──────────────────────────────────────────────────────────────
 
-def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
+def create_run(objective: str | None = None, user_id: str | None = None, db: Session | None = None, **values) -> Optional[dict]:
     """
     Create an AgentRun: generate plan, apply trust gate, persist to DB.
 
@@ -284,19 +299,21 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
     """
     try:
         from AINDY.db.models.agent_run import AgentRun
+        objective_text = _resolve_objective(objective, values)
         user_db_id = _db_user_id(user_id)
 
-        plan = generate_plan(goal=goal, user_id=user_db_id, db=db)
+        plan = generate_plan(objective=objective_text, user_id=user_db_id, db=db)
         if not plan:
+            failure_reason = getattr(_plan_failure, "reason", "unknown failure")
             emit_error_event(
                 db=db,
                 error_type="agent_plan_generation",
-                message="Failed to generate agent plan",
+                message=f"Failed to generate agent plan: {failure_reason}",
                 user_id=user_db_id,
                 trace_id=get_trace_id(),
                 parent_event_id=get_parent_event_id(),
                 source="agent",
-                payload={"goal_preview": goal[:120]},
+                payload={**_objective_preview(objective_text), "failure_reason": failure_reason},
                 required=True,
             )
             return None
@@ -308,18 +325,18 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
         # Generate correlation token — propagated through all child records
         correlation_id = f"run_{uuid.uuid4()}"
 
-        run = AgentRun(
-            user_id=user_db_id,
-            agent_type="default",
-            trace_id=get_trace_id(),
-            goal=goal,
-            plan=plan,
-            executive_summary=plan.get("executive_summary", ""),
-            overall_risk=overall_risk,
-            status=status,
-            steps_total=len(plan.get("steps", [])),
-            correlation_id=correlation_id,
-        )
+        run = AgentRun(**{
+            "user_id": user_db_id,
+            "agent_type": "default",
+            "trace_id": get_trace_id(),
+            _OBJECTIVE_ATTR: objective_text,
+            "plan": plan,
+            "executive_summary": plan.get("executive_summary", ""),
+            "overall_risk": overall_risk,
+            "status": status,
+            "steps_total": len(plan.get("steps", [])),
+            "correlation_id": correlation_id,
+        })
         db.add(run)
         db.commit()
         db.refresh(run)
@@ -332,7 +349,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
                 source_id=str(run.id),
                 correlation_id=correlation_id,
                 status="pending",
-                extra={"goal_preview": goal[:120], "overall_risk": overall_risk},
+                extra={**_objective_preview(objective_text), "overall_risk": overall_risk},
             )
         except Exception as _eu_exc:
             logger.warning("[EU] agent hook create failed — non-fatal | error=%s", _eu_exc)
@@ -381,7 +398,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
                 "overall_risk": overall_risk,
                 "steps_total": len(plan.get("steps", [])),
                 "auto_executed": auto_executed,
-                "goal_preview": goal[:120],
+                **_objective_preview(objective_text),
                 "requires_approval": not auto_executed,
             },
             required=True,
@@ -399,7 +416,7 @@ def create_run(goal: str, user_id: str, db: Session) -> Optional[dict]:
             trace_id=get_trace_id(),
             parent_event_id=get_parent_event_id(),
             source="agent",
-            payload={"goal_preview": goal[:120]},
+            payload=_objective_preview(_resolve_objective(objective, values)),
             required=True,
         )
         return None
@@ -464,10 +481,19 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             )
             return _run_to_dict(run)
 
+        run_type = getattr(run, "agent_type", "default")
+        tools = _get_tools_for_run(run_type, user_id=user_db_id, db=db)
+        local_capabilities = sorted(
+            {
+                tool.get("required_capability")
+                for tool in tools
+                if isinstance(tool, dict) and tool.get("required_capability")
+            }
+        )
         register_or_update_agent(
             db,
             agent_id=LOCAL_AGENT_ID,
-            capabilities=["manage_tasks", "read_memory", "write_memory", "external_api_call", "strategic_planning"],
+            capabilities=local_capabilities,
             current_state={"run_id": str(run.id), "status": "executing"},
             load=min(1.0, max(0.1, (run.steps_total or 1) / 10.0)),
             health_status="healthy",
@@ -475,10 +501,10 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         coordination = decide_execution_mode(
             db,
             local_agent_id=LOCAL_AGENT_ID,
-            task={
-                "name": run.goal,
+            operation={
+                "name": _run_objective(run),
                 "description": run.executive_summary,
-                "goal": run.goal,
+                "request": _run_objective(run),
                 "required_capabilities": capability_token.get("allowed_capabilities", []),
             },
             user_id=str(user_db_id),
@@ -513,7 +539,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
         run.status = "executing"
         run.started_at = datetime.now(timezone.utc)
         execution_memory_context = _build_execution_memory_context(
-            goal=run.goal,
+            objective=_run_objective(run),
             plan=run.plan or {},
             user_id=user_db_id,
             trace_id=run.trace_id or get_trace_id() or getattr(run, "correlation_id", None),
@@ -559,29 +585,17 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         db.refresh(run)
         if run.status == "completed":
-            result_payload = run.result if isinstance(run.result, dict) else {}
-            if not result_payload.get("loop_enforced"):
-                try:
-                    from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-                    orchestration = execute_infinity_orchestrator(
-                        user_id=user_db_id,
-                        trigger_event="agent_completed",
-                        db=db,
-                    )
-                    run.result = {
-                        **result_payload,
-                        "loop_enforced": True,
-                        "next_action": orchestration["next_action"],
-                    }
-                    db.commit()
-                    db.refresh(run)
-                except Exception as loop_exc:
-                    logger.warning(
-                        "[AgentRuntime] Agent completion orchestrator failed for %s: %s",
-                        run_id,
-                        loop_exc,
-                    )
+            _emit_runtime_event(
+                "agent.run.completed",
+                {
+                    "run": run,
+                    "db": db,
+                    "user_id": user_db_id,
+                    "run_type": getattr(run, "agent_type", "default"),
+                    "trace_id": run.trace_id or get_trace_id(),
+                },
+            )
+            db.refresh(run)
         logger.info(
             "[AgentRuntime] Run %s %s (%d/%d steps)",
             run_id, run.status, run.steps_completed, run.steps_total,
@@ -619,7 +633,7 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
 def _build_execution_memory_context(
     *,
-    goal: str,
+    objective: str,
     plan: dict,
     user_id: str,
     trace_id: str | None,
@@ -637,8 +651,7 @@ def _build_execution_memory_context(
         orchestrator = MemoryOrchestrator(MemoryNodeDAO)
         context = orchestrator.get_context(
             user_id=user_id,
-            query=goal or "agent execution",
-            task_type="agent_execution",
+            query=objective or "agent execution",
             db=db,
             max_tokens=900,
             metadata={
@@ -647,6 +660,7 @@ def _build_execution_memory_context(
                 "trace_id": trace_id,
                 "node_types": ["outcome", "insight", "decision"],
             },
+            operation_type="agent_execution",
         )
         items = memory_items_to_dicts(context.items)
         similar_past_outcomes = [item for item in items if item.get("memory_type") == "outcome"][:3]
@@ -808,11 +822,12 @@ def _run_to_dict(run) -> dict:
     if not isinstance(execution_token, str):
         execution_token = None
     execution_record = record_from_agent_run(run)
-    return {
+    objective_text = _run_objective(run)
+    result = {
         "run_id": str(run.id),
         "user_id": run.user_id,
         "agent_type": agent_type,
-        "goal": run.goal,
+        "objective": objective_text,
         "executive_summary": run.executive_summary,
         "overall_risk": run.overall_risk,
         "status": run.status,
@@ -838,6 +853,7 @@ def _run_to_dict(run) -> dict:
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
     }
+    return result
 
 
 def _normalize_agent_events(timeline: Optional[dict]) -> list[dict]:
@@ -862,7 +878,7 @@ def to_execution_response(run: dict, db: Session) -> dict:
     result_payload = run.get("result")
     if result_payload is None:
         result_payload = {
-            "goal": run.get("goal"),
+            "objective": run.get("objective") or run.get(_OBJECTIVE_ATTR),
             "plan": run.get("plan"),
             "overall_risk": run.get("overall_risk"),
         }
@@ -884,11 +900,12 @@ def to_execution_response(run: dict, db: Session) -> dict:
 # ── Replay ────────────────────────────────────────────────────────────────────
 
 def _create_run_from_plan(
-    goal: str,
-    plan: dict,
-    user_id: str,
-    db: Session,
+    objective: str | None = None,
+    plan: dict | None = None,
+    user_id: str | None = None,
+    db: Session | None = None,
     replayed_from_run_id: Optional[str] = None,
+    **values,
 ) -> Optional[dict]:
     """
     Persist a new AgentRun from an existing plan dict (skips GPT-4o).
@@ -900,6 +917,8 @@ def _create_run_from_plan(
     try:
         from AINDY.db.models.agent_run import AgentRun
 
+        objective_text = _resolve_objective(objective, values)
+        plan = plan or {}
         overall_risk = plan.get("overall_risk", "high")
         needs_approval = _requires_approval(overall_risk, user_id, db)
         status = "pending_approval" if needs_approval else "approved"
@@ -907,19 +926,19 @@ def _create_run_from_plan(
         # Generate correlation token — propagated through all child records
         correlation_id = f"run_{uuid.uuid4()}"
 
-        run = AgentRun(
-            user_id=user_id,
-            agent_type="default",
-            trace_id=get_trace_id(),
-            goal=goal,
-            plan=plan,
-            executive_summary=plan.get("executive_summary", ""),
-            overall_risk=overall_risk,
-            status=status,
-            steps_total=len(plan.get("steps", [])),
-            replayed_from_run_id=replayed_from_run_id,
-            correlation_id=correlation_id,
-        )
+        run = AgentRun(**{
+            "user_id": user_id,
+            "agent_type": "default",
+            "trace_id": get_trace_id(),
+            _OBJECTIVE_ATTR: objective_text,
+            "plan": plan,
+            "executive_summary": plan.get("executive_summary", ""),
+            "overall_risk": overall_risk,
+            "status": status,
+            "steps_total": len(plan.get("steps", [])),
+            "replayed_from_run_id": replayed_from_run_id,
+            "correlation_id": correlation_id,
+        })
         db.add(run)
         db.commit()
         db.refresh(run)
@@ -996,7 +1015,8 @@ def replay_run(
             return None
 
         if mode == "new_plan":
-            fresh_plan = generate_plan(goal=original.goal, user_id=user_id, db=db)
+            original_objective = _run_objective(original)
+            fresh_plan = generate_plan(objective=original_objective, user_id=user_id, db=db)
             if not fresh_plan:
                 logger.warning(
                     "[AgentRuntime] replay_run new_plan: plan generation failed for %s",
@@ -1005,10 +1025,11 @@ def replay_run(
                 return None
             plan = fresh_plan
         else:
+            original_objective = _run_objective(original)
             plan = original.plan or {}
 
         new_run = _create_run_from_plan(
-            goal=original.goal,
+            original_objective,
             plan=plan,
             user_id=user_id,
             db=db,

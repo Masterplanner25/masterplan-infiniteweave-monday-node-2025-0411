@@ -21,6 +21,18 @@ EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
 _DEFAULT_PERFORM_EXTERNAL_CALL = perform_external_call
 
+
+class EmbeddingFailedError(RuntimeError):
+    """
+    Raised by generate_embedding() when the OpenAI API call fails after all
+    retry attempts.  Callers in the async-job path (embedding_jobs.py) let
+    this propagate so that process_embedding_job() can set
+    embedding_status='failed' on the node.  Query-path callers
+    (generate_query_embedding) catch this and return a zero vector so that
+    similarity searches degrade gracefully rather than crashing.
+    """
+
+
 _client: Optional[OpenAI] = None
 _client_lock = threading.Lock()
 
@@ -36,8 +48,15 @@ def get_client() -> OpenAI:
 
 def generate_embedding(text: str) -> list:
     """
-    Generate 1536-dim embedding for text.
-    Returns zero vector on failure — never crashes.
+    Generate a 1536-dim embedding for *text*.
+
+    Returns a zero vector immediately when *text* is empty — that is an
+    intentional no-op, not a failure.
+
+    Raises EmbeddingFailedError when the OpenAI API call fails after all
+    retry attempts, so callers (e.g. process_embedding_job) receive the
+    actual error and can set an inspectable embedding_status='failed' on
+    the memory node.
     """
     if not text or not text.strip():
         return [0.0] * EMBEDDING_DIMENSIONS
@@ -50,6 +69,7 @@ def generate_embedding(text: str) -> list:
 
     text = text[:32000]
     client = get_client()
+    last_exc: Exception | None = None
 
     for attempt in range(3):
         try:
@@ -68,19 +88,31 @@ def generate_embedding(text: str) -> list:
             assert len(embedding) == EMBEDDING_DIMENSIONS
             return embedding
         except Exception as e:
-            if attempt == 2:
-                logging.warning(
-                    f"Embedding failed after 3 attempts: {e}. "
-                    f"Saving node without embedding."
-                )
-                return [0.0] * EMBEDDING_DIMENSIONS
-            time.sleep(2 ** attempt)
+            last_exc = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)
 
-    return [0.0] * EMBEDDING_DIMENSIONS
+    # All 3 attempts failed — raise a typed error so callers can mark the
+    # node as failed rather than silently storing a zero vector.
+    raise EmbeddingFailedError(
+        f"Embedding generation failed after 3 attempts: {last_exc}"
+    ) from last_exc
 
 
 def generate_query_embedding(query: str) -> list:
-    return generate_embedding(query)
+    """
+    Generate an embedding for a similarity query.
+
+    Degrades gracefully: returns a zero vector when the API is unavailable
+    so that search callers get empty results rather than a 500 error.
+    """
+    try:
+        return generate_embedding(query)
+    except EmbeddingFailedError as exc:
+        logging.warning(
+            "Query embedding failed — returning zero vector for graceful degradation: %s", exc
+        )
+        return [0.0] * EMBEDDING_DIMENSIONS
 
 
 def cosine_similarity_python(a: list, b: list) -> float:
@@ -102,8 +134,8 @@ def cosine_similarity(a: list, b: list) -> float:
     """
     try:
         _debug_path = os.path.join(
-            os.path.dirname(__file__), "..",
-            "bridge", "memory_bridge_rs", "target", "debug"
+            os.path.dirname(__file__),
+            "native", "memory_bridge_rs", "target", "debug"
         )
         _debug_path = os.path.abspath(_debug_path)
         if _debug_path not in sys.path:

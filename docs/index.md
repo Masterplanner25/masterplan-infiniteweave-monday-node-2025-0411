@@ -20,7 +20,7 @@
 ## What can I do with A.I.N.D.Y.?
 
 ```python
-from aindy import AINDYClient
+from AINDY.sdk.aindy_sdk import AINDYClient
 
 client = AINDYClient("http://localhost:8000", api_key="aindy_...")
 

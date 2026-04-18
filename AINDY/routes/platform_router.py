@@ -960,7 +960,7 @@ def run_nodus_script(
 
     **Named script execution** (`script_name` field — must be uploaded first):
     ```json
-    { "script_name": "my_processor", "input": {"goal": "Q2 growth"} }
+    { "script_name": "my_processor", "input": {"objective": "Q2 growth"} }
     ```
 
     **Response**
@@ -1414,7 +1414,7 @@ def create_nodus_schedule(
     ```
 
     **Leader election:** Only the A.I.N.D.Y. instance holding the
-    background task DB lease executes scheduled jobs.  All other instances
+    background execution DB lease executes scheduled jobs.  All other instances
     skip the tick silently.
     """
     user_id = str(current_user["sub"])
@@ -1700,9 +1700,9 @@ def list_memory_path(
     """List memory nodes at a MAS path.
 
     **path** examples:
-    - ``/memory/user-123/tasks/*``  — one level under tasks
-    - ``/memory/user-123/tasks/**`` — all descendants of tasks
-    - ``/memory/user-123/tasks/pending/abc`` — exact node
+    - ``/memory/user-123/entities/*``  — one level under entities
+    - ``/memory/user-123/entities/**`` — all descendants of entities
+    - ``/memory/user-123/entities/pending/abc`` — exact node
 
     Optionally filter by **query** (keyword) and **tags** (comma-separated).
     """

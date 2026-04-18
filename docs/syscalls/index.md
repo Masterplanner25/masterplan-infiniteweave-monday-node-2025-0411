@@ -357,7 +357,7 @@ All v1 payload keys remain valid. The `filters` field is additive.
 When a syscall fails, `result["status"] == "error"` and `result["error"]` contains the message. Via the SDK, failures surface as typed exceptions:
 
 ```python
-from aindy import PermissionDeniedError, ResourceLimitError, ValidationError
+from AINDY.sdk.aindy_sdk import PermissionDeniedError, ResourceLimitError, ValidationError
 
 try:
     client.memory.read("/memory/other_user/**")

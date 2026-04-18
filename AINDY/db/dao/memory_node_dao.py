@@ -17,8 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from AINDY.memory.memory_persistence import MemoryNodeModel, MemoryLinkModel
-from AINDY.utils.trace_context import get_current_trace_id
-from AINDY.utils.user_ids import parse_user_id, require_user_id
+from AINDY.platform_layer.trace_context import get_current_trace_id
+from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
 
 logger = logging.getLogger(__name__)
 VALID_MEMORY_TYPES = {"decision", "outcome", "failure", "insight"}
@@ -1305,18 +1305,30 @@ class MemoryNodeDAO:
     # ------------------------------------------------------------------
 
     def create_link(
-        self, source_id: str, target_id: str, link_type: str = "related", weight: float = 0.5
+        self,
+        source_id: str,
+        target_id: str,
+        link_type: str = "related",
+        weight: float = 0.5,
+        user_id: str | None = None,
     ) -> dict:
-        """Create a directed link between two existing nodes."""
+        """Create a directed link between two existing nodes.
+
+        When ``user_id`` is provided, both endpoints must belong to that user.
+        This prevents a caller from linking one of their nodes to another
+        tenant's node by guessing its UUID.
+        """
         sid = uuid.UUID(str(source_id))
         tid = uuid.UUID(str(target_id))
         if sid == tid:
             raise ValueError("source_id and target_id cannot be the same")
-        count = (
-            self.db.query(MemoryNodeModel.id)
-            .filter(MemoryNodeModel.id.in_([sid, tid]))
-            .count()
-        )
+        owner_user_id = parse_user_id(user_id)
+        if user_id not in (None, "") and owner_user_id is None:
+            raise ValueError("invalid user_id")
+        query = self.db.query(MemoryNodeModel.id).filter(MemoryNodeModel.id.in_([sid, tid]))
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+        count = query.count()
         if count != 2:
             raise ValueError("source and/or target node does not exist")
         link = MemoryLinkModel(source_node_id=sid, target_node_id=tid, link_type=link_type, weight=weight)

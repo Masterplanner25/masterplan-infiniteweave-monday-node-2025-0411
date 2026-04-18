@@ -1,126 +1,24 @@
+"""Generic router boundary guard.
+
+The platform router guard enforces structural rules that keep routers from
+reaching directly into app/service implementation modules. App-specific route
+policy belongs in app-owned guards registered through the platform registry.
 """
-router_guard.py — Startup AST validator for the HARD EXECUTION BOUNDARY.
 
-Scans every file in routes/ at startup and raises RouterBoundaryViolation
-if any router contains a top-level import of a forbidden service module
-or a forbidden legacy execution identifier.
-
-Design:
-  - Explicit forbidden module list (services that must NEVER be imported
-    directly into a router — business logic must go through run_flow()).
-  - Explicit forbidden name list (legacy wrappers / DAO classes that the
-    boundary refactor removed from all converted routers).
-  - Does NOT blanket-ban all services.* imports — auth helpers, rate
-    limiters, observability, and coordinator infrastructure are allowed.
-
-Usage:
-    from AINDY.core.router_guard import validate_router_boundary
-    validate_router_boundary()   # call once at application startup
-"""
 from __future__ import annotations
 
 import ast
 import logging
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
+
+from AINDY.platform_layer.registry import get_route_guard
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-# Service modules that routers must NOT import — business logic lives here
-# and must be accessed exclusively via run_flow().
-_FORBIDDEN_MODULES: frozenset[str] = frozenset(
-    [
-        "agents.agent_runtime",
-        "services.arm_service",
-        "services.analytics_service",
-        "runtime.flow_engine_intent",
-        "services.genesis_service",
-        "domain.goal_service",
-        "domain.leadgen_service",
-        "memory.memory_helpers",
-        "services.memory_service",
-        "runtime.nodus_adapter",
-        "runtime.nodus_execution_service",
-        "services.score_service",
-        "domain.task_services",
-        "services.watcher_service",
-    ]
-)
-
-# DB model sub-packages that routers must not import (queries belong in nodes)
-_FORBIDDEN_MODULE_PREFIXES: tuple[str, ...] = (
-    "db.models.arm_models",
-    "db.models.score_models",
-    "db.models.task_model",
-    "db.models.lead_model",
-    "db.models.watcher_signal",
-    "db.models.flow_run",
-)
-
-# Specific names whose presence in a top-level router import indicates a
-# boundary violation regardless of which module they came from.
-# NOTE: Only names removed during the execution-boundary refactor are listed
-# here. Routers that pre-date the refactor and still use core.execution_service
-# directly are tracked separately and will be migrated in a future sprint.
-_FORBIDDEN_NAMES: frozenset[str] = frozenset(
-    [
-        # Legacy intent dispatcher — replaced by run_flow()
-        "execute_intent",
-        # DAO classes that must stay inside nodes
-        "MemoryNodeDAO",
-        # ARM service classes
-        "ARMMetricsService",
-        "DeepSeekCodeAnalyzer",
-        "ConfigManager",
-        "ARMConfigSuggestionEngine",
-        # Task / lead service functions
-        "handle_recurrence",
-        "persist_search_result",
-        "search_leads",
-        # Goal service functions
-        "get_active_goals",
-        "get_goal_states",
-        "detect_goal_drift",
-        # Agent runtime
-        "NodusAgentAdapter",
-        # Nodus execution
-        "execute_nodus_task_payload",
-    ]
-)
-
-
-# Router files that have not yet been migrated to the execution boundary.
-# Remove entries from this set as each router is converted. Once this set
-# is empty the full boundary is enforced across the entire route layer.
-_PENDING_MIGRATION: frozenset[str] = frozenset(
-    [
-        # Converted in next sprint:
-        "legacy_surface_router.py",   # uses many legacy engine services
-        "main_router.py",             # uses analytics.calculations
-        "network_bridge_router.py",   # uses analytics.calculation_services
-        "seo_routes.py",              # uses domain.seo + analytics.calculation_services
-        "identity_router.py",         # uses domain.identity_service
-        "coordination_router.py",     # uses agents.agent_coordinator
-        "system_state_router.py",     # uses platform_layer.system_state_service
-        "social_router.py",           # uses domain.social_performance_service
-        "rippletrace_router.py",      # uses domain.rippletrace_service
-        "authorship_router.py",       # uses domain.authorship_services
-        "bridge_router.py",           # uses MemoryNodeDAO directly
-        "memory_trace_router.py",     # uses MemoryNodeDAO directly
-    ]
-)
-
-
-# ---------------------------------------------------------------------------
-# Violation type
-# ---------------------------------------------------------------------------
 
 class RouterBoundaryViolation(Exception):
-    """Raised when a router imports a forbidden service at module scope."""
+    """Raised when a router violates the generic routing boundary."""
 
 
 class _Violation(NamedTuple):
@@ -130,21 +28,19 @@ class _Violation(NamedTuple):
     names: list[str]
 
 
-# ---------------------------------------------------------------------------
-# AST analysis
-# ---------------------------------------------------------------------------
+def _normalise_module(module: str) -> str:
+    return module.removeprefix("AINDY.")
+
 
 def _is_forbidden_module(module: str) -> bool:
-    if module in _FORBIDDEN_MODULES:
+    normalised = _normalise_module(module)
+    parts = tuple(part for part in normalised.split(".") if part)
+
+    if len(parts) >= 3 and parts[0] == "apps" and parts[2] == "services":
         return True
-    for prefix in _FORBIDDEN_MODULE_PREFIXES:
-        if module == prefix or module.startswith(prefix + "."):
-            return True
+    if len(parts) >= 3 and parts[0] == "apps" and parts[2] == "models":
+        return True
     return False
-
-
-def _check_forbidden_names(names: list[str]) -> list[str]:
-    return [n for n in names if n in _FORBIDDEN_NAMES]
 
 
 def _scan_file(path: Path) -> list[_Violation]:
@@ -156,82 +52,70 @@ def _scan_file(path: Path) -> list[_Violation]:
         logger.warning("router_guard: could not parse %s: %s", path, exc)
         return violations
 
-    # Only examine top-level statements (direct children of the module body).
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if _is_forbidden_module(alias.name):
-                    violations.append(
-                        _Violation(str(path), node.lineno, alias.name, [alias.name])
-                    )
+                    violations.append(_Violation(str(path), node.lineno, alias.name, [alias.name]))
 
         elif isinstance(node, ast.ImportFrom):
             module = node.module or ""
-            imported_names = [alias.name for alias in node.names]
-
             if _is_forbidden_module(module):
                 violations.append(
-                    _Violation(str(path), node.lineno, module, imported_names)
-                )
-                continue
-
-            bad_names = _check_forbidden_names(imported_names)
-            if bad_names:
-                violations.append(
-                    _Violation(str(path), node.lineno, module, bad_names)
+                    _Violation(
+                        str(path),
+                        node.lineno,
+                        module,
+                        [alias.name for alias in node.names],
+                    )
                 )
 
     return violations
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+def _route_prefix_from_path(path: Path) -> str:
+    stem = path.stem
+    if stem.endswith("_router"):
+        stem = stem[: -len("_router")]
+    return stem.replace("_", ".")
+
+
+def guard_request(request: Any, route_prefix: str, user_context: dict[str, Any] | None = None) -> Any:
+    """Delegate request-specific route policy to an app-registered guard."""
+    guard_fn = get_route_guard(route_prefix)
+    if guard_fn is None:
+        return True
+    return guard_fn(request=request, route_prefix=route_prefix, user_context=user_context or {})
+
 
 def validate_router_boundary(routes_dir: Path | None = None) -> None:
-    """
-    Scan all *.py files in routes_dir for boundary violations.
-
-    Raises RouterBoundaryViolation listing every offending import if any
-    violations are found. Logs a summary at INFO level on success.
-
-    Args:
-        routes_dir: Path to the routes package directory. Defaults to the
-                    sibling ``routes/`` directory relative to this file.
-    """
+    """Scan router files for generic boundary violations."""
     if routes_dir is None:
         routes_dir = Path(__file__).parent.parent / "routes"
 
     if not routes_dir.is_dir():
-        logger.warning("router_guard: routes directory not found at %s — skipping", routes_dir)
+        logger.warning("router_guard: routes directory not found at %s - skipping", routes_dir)
         return
 
-    router_files = sorted(f for f in routes_dir.glob("*.py") if not f.name.startswith("_"))
-    pending = [f for f in router_files if f.name in _PENDING_MIGRATION]
-    if pending:
-        logger.info(
-            "router_guard: %d router(s) pending boundary migration: %s",
-            len(pending),
-            ", ".join(f.name for f in pending),
-        )
+    router_files = sorted(path for path in routes_dir.glob("*.py") if not path.name.startswith("_"))
     all_violations: list[_Violation] = []
     for py_file in router_files:
-        if py_file.name in _PENDING_MIGRATION:
-            continue
+        guard_fn = get_route_guard(_route_prefix_from_path(py_file))
+        if guard_fn is not None:
+            guard_fn(request=None, route_prefix=_route_prefix_from_path(py_file), user_context={})
         all_violations.extend(_scan_file(py_file))
 
     if not all_violations:
         logger.info(
-            "router_guard: PASS — %d router files respect the execution boundary",
+            "router_guard: PASS - %d router files respect the generic routing boundary",
             len(router_files),
         )
         return
 
-    lines = ["RouterBoundaryViolation: routers with forbidden direct service imports:"]
-    for v in all_violations:
-        rel = Path(v.file).name
-        lines.append(f"  {rel}:{v.lineno}  module={v.module!r}  names={v.names}")
-    message = "\n".join(lines)
-    raise RouterBoundaryViolation(message)
-
-
+    lines = ["RouterBoundaryViolation: routers with forbidden direct implementation imports:"]
+    for violation in all_violations:
+        rel = Path(violation.file).name
+        lines.append(
+            f"  {rel}:{violation.lineno}  module={violation.module!r}  names={violation.names}"
+        )
+    raise RouterBoundaryViolation("\n".join(lines))

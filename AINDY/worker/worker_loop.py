@@ -1,34 +1,34 @@
-"""
-WorkerLoop — hardened distributed async job executor.
+﻿"""
+WorkerLoop â€” hardened distributed async job executor.
 
 Runs as a separate OS process (python -m worker.worker_loop) or as a
 supervised thread inside the main process.  Pulls jobs from the
 DistributedQueue, restores trace context, enforces DB claim safety, and
 delegates all execution logic to the same ``_execute_job`` path used by the
-thread-pool backend — zero divergence in execution semantics.
+thread-pool backend â€” zero divergence in execution semantics.
 
 Reliability features
 ---------------------
-Visibility timeout recovery (Task 1)
+Visibility timeout recovery
     On startup and every WORKER_STALE_CHECK_INTERVAL_SECONDS (default 60),
     the worker calls ``queue.requeue_stale_jobs(WORKER_VISIBILITY_TIMEOUT_SECONDS)``
     to recover jobs whose workers crashed before calling ack/fail.
 
-Idempotency key (Task 2)
+Idempotency key
     ``job.idempotency_key`` (defaults to ``job_id``) is threaded into the
     execution context so handlers can use it for application-level de-dup.
     The primary guard is the DB-side atomic claim below.
 
-Dead Letter Queue (Task 3)
+Dead Letter Queue
     Handled in the queue backend: ``fail()`` automatically moves the payload to
     ``aindy:jobs:dead``.  The worker calls ``q.fail()`` on terminal exceptions.
 
-Retry backoff (Task 4)
+Retry backoff
     Applied in ``execution_dispatcher._enqueue_distributed`` on the re-enqueue
     path: when ``context["retry"] == True``, an exponential delay is computed
     and ``queue.enqueue_delayed()`` is called instead of ``queue.enqueue()``.
 
-Concurrency guard (Task 5)
+Concurrency guard
     ``WORKER_MAX_CONCURRENT_JOBS`` (default 0 = unlimited) limits how many
     jobs a single process executes simultaneously across all of its threads.
     A semaphore is acquired after dequeue but before the DB claim; if the
@@ -38,14 +38,14 @@ Key invariants preserved
 ------------------------
 - ``trace_id`` and ``eu_id`` are restored from the queued context before every
   dispatch, ensuring end-to-end trace continuity across the process boundary.
-- ``ExecutionUnit`` lifecycle (pending → executing → completed/failed) is
+- ``ExecutionUnit`` lifecycle (pending â†’ executing â†’ completed/failed) is
   driven by ``_execute_job_inline`` exactly as in the thread-pool path.
 - ``RetryPolicy`` is honoured: ``_execute_job_inline`` re-enqueues through
   ``ExecutionDispatcher`` when ``attempt_count < max_attempts``.
 - Scheduler WAIT/RESUME is unaffected: the SchedulerEngine callback runs
   inside the same ``_execute_job_inline`` path.
 - Inline execution (EXECUTION_MODE=thread or TESTING) is completely
-  unchanged — this module is never loaded in those paths.
+  unchanged â€” this module is never loaded in those paths.
 
 Usage
 -----
@@ -75,6 +75,8 @@ import threading
 import time
 from typing import TYPE_CHECKING, Optional
 
+from AINDY.db.models.job_log import JobLog
+
 if TYPE_CHECKING:
     from AINDY.core.distributed_queue import DistributedQueueBackend, QueueJobPayload
 
@@ -84,7 +86,7 @@ logger = logging.getLogger(__name__)
 _STOP = threading.Event()
 
 # ---------------------------------------------------------------------------
-# Concurrency guard (Task 5)
+# Concurrency guard
 # ---------------------------------------------------------------------------
 
 _CONCURRENCY_SEM: Optional[threading.Semaphore] = None
@@ -96,7 +98,7 @@ def _get_semaphore() -> Optional[threading.Semaphore]:
     Return the process-level concurrency semaphore, or None if unlimited.
 
     The semaphore is sized by ``WORKER_MAX_CONCURRENT_JOBS``.  A value of 0
-    (the default) means unlimited — no semaphore is created.
+    (the default) means unlimited â€” no semaphore is created.
 
     The singleton is built lazily on first call and reused for the lifetime
     of the process.  Call ``reset_worker_state()`` in tests to clear it.
@@ -130,7 +132,7 @@ def reset_worker_state() -> None:
 # ---------------------------------------------------------------------------
 
 def _handle_signal(signum: int, _frame) -> None:  # type: ignore[type-arg]
-    logger.info("[Worker] signal %s received — initiating graceful shutdown", signum)
+    logger.info("[Worker] signal %s received â€” initiating graceful shutdown", signum)
     _STOP.set()
 
 
@@ -149,7 +151,7 @@ def _restore_trace_context(context: dict) -> tuple:
     ``async_job_service``) and the ``kernel.syscall_dispatcher`` ContextVars
     (used by nested syscall chains) so the full trace is continuous.
     """
-    from AINDY.utils.trace_context import set_trace_id
+    from AINDY.platform_layer.trace_context import set_trace_id
 
     trace_id: str = context.get("trace_id") or ""
     eu_id: str = context.get("eu_id") or ""
@@ -172,7 +174,7 @@ def _reset_trace_context(tokens: tuple) -> None:
     tok_trace, tok_syscall_trace, tok_eu = tokens
 
     try:
-        from AINDY.utils.trace_context import reset_trace_id
+        from AINDY.platform_layer.trace_context import reset_trace_id
         if tok_trace is not None:
             reset_trace_id(tok_trace)
     except Exception:
@@ -194,7 +196,7 @@ def _reset_trace_context(tokens: tuple) -> None:
 
 def _try_claim_job(log_id: str) -> bool:
     """
-    Atomically claim an AutomationLog by setting ``status → running`` only
+    Atomically claim an JobLog by setting ``status â†’ running`` only
     when the current status is ``pending``.
 
     Returns ``True`` if this worker successfully claimed the job, ``False`` if
@@ -207,20 +209,19 @@ def _try_claim_job(log_id: str) -> bool:
     from datetime import datetime, timezone
 
     from AINDY.db.database import SessionLocal
-    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     try:
         updated = (
-            db.query(AutomationLog)
+            db.query(JobLog)
             .filter(
-                AutomationLog.id == log_id,
-                AutomationLog.status == "pending",
+                JobLog.id == log_id,
+                JobLog.status == "pending",
             )
             .update(
                 {
-                    AutomationLog.status: "running",
-                    AutomationLog.started_at: datetime.now(timezone.utc),
+                    JobLog.status: "running",
+                    JobLog.started_at: datetime.now(timezone.utc),
                 },
                 synchronize_session=False,
             )
@@ -240,20 +241,19 @@ def _try_claim_job(log_id: str) -> bool:
 
 def _fetch_job_data(log_id: str) -> Optional[tuple[str, dict]]:
     """
-    Return ``(task_name, payload)`` from the AutomationLog.
+    Return ``(operation_name, job_payload)`` from the JobLog.
 
-    The full payload lives in the DB record — the queue payload deliberately
+    The full payload lives in the DB record â€” the queue payload deliberately
     omits it to avoid large blobs crossing the wire.  Returns ``None`` when
     the record is missing (job was cancelled or already completed).
     """
     from AINDY.db.database import SessionLocal
-    from AINDY.db.models.automation_log import AutomationLog
 
     db = SessionLocal()
     try:
         log = (
-            db.query(AutomationLog)
-            .filter(AutomationLog.id == log_id)
+            db.query(JobLog)
+            .filter(JobLog.id == log_id)
             .first()
         )
         if log is None:
@@ -273,7 +273,8 @@ def _emit_worker_event(
     trace_id: str,
     eu_id: str,
     job_id: str,
-    task_name: str,
+    operation_name: str,
+    task_name: str | None = None,
     extra: Optional[dict] = None,
 ) -> None:
     """Fire-and-forget system event.  Never raises; failures are debug-logged."""
@@ -292,7 +293,8 @@ def _emit_worker_event(
                 source="distributed_worker",
                 payload={
                     "job_id": job_id,
-                    "task_name": task_name,
+                    "operation_name": operation_name,
+                    "task_name": task_name or operation_name,
                     "eu_id": eu_id,
                     **(extra or {}),
                 },
@@ -322,11 +324,11 @@ def process_one_job(
     Processing order
     ----------------
     1. Dequeue (blocking, up to 5 s timeout).
-    2. Acquire concurrency semaphore — re-enqueue and return False if at capacity.
+    2. Acquire concurrency semaphore â€” re-enqueue and return False if at capacity.
     3. Restore trace ContextVars from job.context.
     4. Emit ``job_started`` event.
-    5. Atomic DB claim — skip (ack + return) if already claimed.
-    6. Fetch (task_name, payload) from AutomationLog.
+    5. Atomic DB claim â€” skip (ack + return) if already claimed.
+    6. Fetch operation name and job payload from JobLog.
     7. Execute via ``_execute_job`` (same path as thread-pool backend).
     8. Ack + emit ``job_completed``.
     9. On exception: emit ``job_failed``, call ``q.fail()``.
@@ -339,7 +341,7 @@ def process_one_job(
     if job is None:
         return False  # Normal idle timeout.
 
-    # ── Task 5: Concurrency guard — before any DB or execution work ────────
+    # Concurrency guard before any DB or execution work.
     sem = _get_semaphore()
     if sem is not None:
         # Try to acquire a slot, polling so we can respect _STOP.
@@ -349,10 +351,10 @@ def process_one_job(
             if acquired:
                 break
             if _STOP.is_set():
-                # Shutting down — put job back and exit.
+                # Shutting down â€” put job back and exit.
                 q.enqueue(job)
                 logger.debug(
-                    "[Worker] shutdown while waiting for slot — requeued job_id=%s",
+                    "[Worker] shutdown while waiting for slot â€” requeued job_id=%s",
                     job.job_id,
                 )
                 return False
@@ -361,12 +363,18 @@ def process_one_job(
     trace_id = job.context.get("trace_id") or job.job_id
     eu_id = job.context.get("eu_id") or ""
 
-    logger.info(
-        "[Worker] job_started job_id=%s task=%s trace_id=%s idempotency_key=%s",
-        job.job_id, job.task_name, trace_id, job.idempotency_key,
+    operation_name = (
+        getattr(job, "operation_name", None)
+        or job.context.get("operation_name")
+        or getattr(job, "task_name", "")
     )
 
-    # ── Task 2: Thread idempotency_key into context for downstream handlers ─
+    logger.info(
+        "[Worker] job_started job_id=%s operation=%s trace_id=%s idempotency_key=%s",
+        job.job_id, operation_name, trace_id, job.idempotency_key,
+    )
+
+    # Thread idempotency_key into context for downstream handlers.
     enriched_context = {**job.context, "idempotency_key": job.idempotency_key}
 
     # Restore trace context before any DB or handler calls.
@@ -378,15 +386,16 @@ def process_one_job(
             trace_id=trace_id,
             eu_id=eu_id,
             job_id=job.job_id,
-            task_name=job.task_name,
+            operation_name=operation_name,
+            task_name=getattr(job, "task_name", None),
             extra={"idempotency_key": job.idempotency_key},
         )
 
-        # DB claim safety — skip if already claimed by another worker.
+        # DB claim safety â€” skip if already claimed by another worker.
         # This is the critical guard after a visibility-timeout re-enqueue.
         if not _try_claim_job(job.job_id):
             logger.warning(
-                "[Worker] job_id=%s already claimed or missing — skipping",
+                "[Worker] job_id=%s already claimed or missing â€” skipping",
                 job.job_id,
             )
             q.ack(job.job_id)
@@ -395,10 +404,11 @@ def process_one_job(
         # Fetch payload from DB (omitted from the queue payload to keep it lean).
         job_data = _fetch_job_data(job.job_id)
         if job_data is None:
-            logger.warning("[Worker] AutomationLog not found job_id=%s", job.job_id)
+            logger.warning("[Worker] JobLog not found job_id=%s", job.job_id)
             q.ack(job.job_id)
             return True
         task_name, payload = job_data
+        operation_name = str((payload or {}).get("operation_name") or task_name)
 
         # Execute via the same path as the thread-pool backend.
         # _execute_job_inline drives: EU status, retry logic, events, DB commit.
@@ -408,23 +418,24 @@ def process_one_job(
 
         q.ack(job.job_id)
         logger.info(
-            "[Worker] job_completed job_id=%s task=%s trace_id=%s",
-            job.job_id, job.task_name, trace_id,
+            "[Worker] job_completed job_id=%s operation=%s trace_id=%s",
+            job.job_id, operation_name, trace_id,
         )
         _emit_worker_event(
             "job_completed",
             trace_id=trace_id,
             eu_id=eu_id,
             job_id=job.job_id,
-            task_name=job.task_name,
+            operation_name=operation_name,
+            task_name=task_name,
         )
 
     except Exception as exc:
         # _execute_job_inline handles retry internally; an exception escaping
         # here is unexpected (belt-and-suspenders).  Send to DLQ.
         logger.error(
-            "[Worker] job_failed job_id=%s task=%s error=%s",
-            job.job_id, job.task_name, exc,
+            "[Worker] job_failed job_id=%s operation=%s error=%s",
+            job.job_id, operation_name, exc,
             exc_info=True,
         )
         _emit_worker_event(
@@ -432,10 +443,11 @@ def process_one_job(
             trace_id=trace_id,
             eu_id=eu_id,
             job_id=job.job_id,
-            task_name=job.task_name,
+            operation_name=operation_name,
+            task_name=getattr(job, "task_name", None),
             extra={"error": str(exc)},
         )
-        # Task 3: fail() moves the payload to the Dead Letter Queue.
+        # fail() moves the payload to the Dead Letter Queue.
         q.fail(job.job_id, str(exc))
 
     finally:
@@ -448,7 +460,7 @@ def process_one_job(
 
 
 # ---------------------------------------------------------------------------
-# Stale-job recovery background thread (Task 1)
+# Stale-job recovery background thread
 # ---------------------------------------------------------------------------
 
 def _run_stale_recovery(
@@ -490,7 +502,7 @@ def _single_thread_loop(
         try:
             process_one_job(queue_backend)
         except Exception as exc:
-            # Unexpected loop-level error — log and keep running.
+            # Unexpected loop-level error â€” log and keep running.
             logger.error("[Worker] loop error: %s", exc, exc_info=True)
             time.sleep(1)
 
@@ -525,11 +537,11 @@ def run_worker_loop(
     check_interval = int(os.getenv("WORKER_STALE_CHECK_INTERVAL_SECS", "60"))
 
     logger.info(
-        "[Worker] starting — concurrency=%d visibility_timeout=%ds check_interval=%ds",
+        "[Worker] starting â€” concurrency=%d visibility_timeout=%ds check_interval=%ds",
         concurrency, visibility_timeout, check_interval,
     )
 
-    # ── Task 1: Startup stale recovery + periodic background thread ────────
+    # Startup stale recovery plus periodic background thread.
     stale_thread = threading.Thread(
         target=_run_stale_recovery,
         kwargs={
@@ -542,7 +554,7 @@ def run_worker_loop(
     )
     stale_thread.start()
 
-    # ── Dequeue worker threads ─────────────────────────────────────────────
+    # â”€â”€ Dequeue worker threads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if concurrency <= 1:
         _single_thread_loop(q)
     else:
@@ -580,3 +592,5 @@ if __name__ == "__main__":
 
     _concurrency = int(os.getenv("WORKER_CONCURRENCY", "1"))
     run_worker_loop(concurrency=_concurrency)
+
+

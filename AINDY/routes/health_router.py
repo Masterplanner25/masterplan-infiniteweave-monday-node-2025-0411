@@ -53,7 +53,7 @@ def _compute_liveness() -> dict:
         nonlocal db_status
         _db = SessionLocal()
         try:
-            from AINDY.domain.health_service import check_db_connectivity
+            from AINDY.platform_layer.health_service import check_db_connectivity
             check_db_connectivity(_db)
             db_status = "ok"
         except Exception as exc:
@@ -153,7 +153,7 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
     try:
-        from AINDY.domain.health_service import check_db_ready
+        from AINDY.platform_layer.health_service import check_db_ready
         check_db_ready(db)
         components["database"] = "ready"
     except Exception as exc:

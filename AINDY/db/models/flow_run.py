@@ -12,7 +12,6 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -37,11 +36,7 @@ class FlowRun(Base):
     waiting_for = Column(String, nullable=True)
     trace_id = Column(String, nullable=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
-    automation_log_id = Column(
-        String,
-        ForeignKey("automation_logs.id"),
-        nullable=True,
-    )
+    job_log_id = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
@@ -85,16 +80,3 @@ class EventOutcome(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class Strategy(Base):
-    __tablename__ = "strategies"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    intent_type = Column(String, nullable=False, index=True)
-    flow = Column(JSON, nullable=False)
-    score = Column(Float, nullable=False, default=1.0)
-    usage_count = Column(Integer, default=0)
-    success_count = Column(Integer, default=0)
-    failure_count = Column(Integer, default=0)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now())

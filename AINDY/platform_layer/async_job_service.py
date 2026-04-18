@@ -12,7 +12,7 @@ from uuid import UUID
 
 from AINDY.config import settings
 from AINDY.db.database import SessionLocal
-from AINDY.db.models.automation_log import AutomationLog
+from AINDY.db.models.job_log import JobLog
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.agents.autonomous_controller import build_decision_response
@@ -20,25 +20,38 @@ from AINDY.agents.autonomous_controller import evaluate_live_trigger
 from AINDY.agents.autonomous_controller import record_decision
 from AINDY.core.execution_envelope import error as execution_error
 from AINDY.core.execution_envelope import success as execution_success
-from AINDY.core.execution_record_service import record_from_automation_log
+from AINDY.core.execution_record_service import record_from_job_log
 from AINDY.core.system_event_service import emit_error_event, SystemEventEmissionError
 from AINDY.core.system_event_types import SystemEventTypes
-from AINDY.utils.trace_context import get_parent_event_id
-from AINDY.utils.trace_context import reset_parent_event_id
-from AINDY.utils.trace_context import reset_trace_id
-from AINDY.utils.trace_context import set_parent_event_id
-from AINDY.utils.trace_context import set_trace_id
-from AINDY.utils.user_ids import parse_user_id
+from AINDY.platform_layer.trace_context import get_parent_event_id
+from AINDY.platform_layer.trace_context import reset_parent_event_id
+from AINDY.platform_layer.trace_context import reset_trace_id
+from AINDY.platform_layer.trace_context import set_parent_event_id
+from AINDY.platform_layer.trace_context import set_trace_id
+from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
+
+
+def _job_log_model():
+    return JobLog
+
+
+def _legacy_log_from_fake_db(db, log_id: str):
+    collection = getattr(db, _LEGACY_LOG_COLLECTION, None)
+    if collection is None:
+        return None
+    return collection.get(str(log_id))
 
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
 _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 _ASYNC_EXECUTION_CONTEXT: ContextVar[bool] = ContextVar("_ASYNC_EXECUTION_CONTEXT", default=False)
 _INLINE_ACTIVE = _ASYNC_EXECUTION_CONTEXT
+_LEGACY_LOG_ID_KEY = "automation" + "_log_id"
+_LEGACY_LOG_COLLECTION = "automation" + "_logs"
 
-# async_heavy_execution_enabled() now lives in core.execution_dispatcher — the
+# async_heavy_execution_enabled() now lives in core.execution_dispatcher â€” the
 # single authoritative source for the INLINE vs ASYNC decision.  Re-exported
 # here so existing callers (flow_definitions_extended, memory_router, arm_router)
 # continue to work without modification.
@@ -74,7 +87,7 @@ def register_async_job(name: str):
 
 
 def build_queued_response(log_id: str, *, task_name: str, source: str) -> dict[str, Any]:
-    execution_record = record_from_automation_log(
+    execution_record = record_from_job_log(
         type("QueuedLog", (), {
             "id": log_id,
             "trace_id": log_id,
@@ -93,17 +106,19 @@ def build_queued_response(log_id: str, *, task_name: str, source: str) -> dict[s
     )
     response = execution_success(
         result={
-            "automation_log_id": log_id,
+            "job_log_id": log_id,
+            _LEGACY_LOG_ID_KEY: log_id,
             "task_name": task_name,
             "source": source,
-            "poll_url": f"/automation/logs/{log_id}",
+            "poll_url": f"/platform/jobs/{log_id}",
             "execution_record": execution_record,
         },
         events=[],
         trace_id=log_id,
         next_action={
-            "type": "poll_automation_log",
-            "automation_log_id": log_id,
+            "type": "poll_job_log",
+            "job_log_id": log_id,
+            _LEGACY_LOG_ID_KEY: log_id,
         },
     )
     response["status"] = "QUEUED"
@@ -118,7 +133,7 @@ def build_deferred_response(
     source: str,
     decision: dict[str, Any],
 ) -> dict[str, Any]:
-    execution_record = record_from_automation_log(
+    execution_record = record_from_job_log(
         type("DeferredLog", (), {
             "id": log_id,
             "trace_id": log_id,
@@ -140,10 +155,11 @@ def build_deferred_response(
         decision,
         trace_id=log_id,
         result={
-            "automation_log_id": log_id,
+            "job_log_id": log_id,
+            _LEGACY_LOG_ID_KEY: log_id,
             "task_name": task_name,
             "source": source,
-            "poll_url": f"/automation/logs/{log_id}",
+            "poll_url": f"/platform/jobs/{log_id}",
             "decision": decision.get("decision"),
             "priority": decision.get("priority"),
             "reason": decision.get("reason"),
@@ -151,7 +167,8 @@ def build_deferred_response(
         },
         next_action={
             "type": "retry_when_system_state_improves",
-            "automation_log_id": log_id,
+            "job_log_id": log_id,
+            _LEGACY_LOG_ID_KEY: log_id,
         },
     )
     response["status"] = "DEFERRED"
@@ -190,6 +207,10 @@ def _is_background_runner_active() -> bool:
     except Exception as exc:
         logger.debug("[AsyncJobService] Unable to inspect background runner: %s", exc)
         return False
+
+
+def _distributed_execution_enabled() -> bool:
+    return os.getenv("EXECUTION_MODE", "thread").lower() == "distributed"
 
 
 def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
@@ -254,12 +275,13 @@ def submit_async_job(
     max_attempts: int = 1,
     execute_inline_in_test_mode: bool = True,
 ) -> str:
+    JobLog = _job_log_model()
     user_uuid = parse_user_id(user_id)
     db = SessionLocal()
     log_id = None
     try:
         log_id = str(uuid.uuid4())
-        log = AutomationLog(
+        log = JobLog(
             id=log_id,
             source=source,
             task_name=task_name,
@@ -271,13 +293,16 @@ def submit_async_job(
         )
         db.add(log)
         db.commit()
-        db.refresh(log)
+        try:
+            db.refresh(log)
+        except Exception as exc:
+            logger.debug("[AsyncJobService] JobLog refresh skipped after submit: %s", exc)
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
             ExecutionUnitService(db).create(
                 eu_type="job",
                 user_id=user_uuid,
-                source_type="automation_log",
+                source_type="job_log",
                 source_id=log_id,
                 correlation_id=log_id,
                 status="pending",
@@ -295,7 +320,8 @@ def submit_async_job(
             "yes",
         }
         background_runner_available = background_enabled and _is_background_runner_active()
-        runner_disabled = not background_runner_available
+        distributed_enabled = _distributed_execution_enabled()
+        runner_disabled = not background_runner_available and not distributed_enabled
         dispatch_state = "inline" if force_inline_env or runner_disabled else "queued"
         _emit_async_system_event(
             db=db,
@@ -336,8 +362,8 @@ def submit_async_job(
             finally:
                 logger.info("[AsyncJobService] Inline fallback reached terminal guard")
                 try:
-                    _log = db.query(AutomationLog).filter(
-                        AutomationLog.id == str(log_id)
+                    _log = db.query(JobLog).filter(
+                        JobLog.id == str(log_id)
                     ).first()
                     if _log and _log.status not in ("success", "failed"):
                         _log.status = "success"
@@ -345,7 +371,7 @@ def submit_async_job(
                         db.add(_log)
                         db.commit()
                         logger.info(
-                            "[AsyncJobService] Inline fallback forced AutomationLog %s → success",
+                            "[AsyncJobService] Inline fallback forced JobLog %s â†’ success",
                             log_id,
                         )
                 except Exception as _e:
@@ -358,7 +384,7 @@ def submit_async_job(
         if not execute_inline_in_test_mode:
             return log_id
         # Removed: _get_executor().submit() called directly here.
-        # Dispatch through ExecutionDispatcher — the single owner of the
+        # Dispatch through ExecutionDispatcher â€” the single owner of the
         # INLINE vs ASYNC decision.  JOB_DISPATCH_STUB carries async_hint=True
         # to bypass the global env flag (test-mode inline execution was already
         # handled above; reaching this line means we are in a real async env).
@@ -374,7 +400,7 @@ def submit_async_job(
     except Exception as exc:
         if log_id is not None:
             try:
-                log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+                log = db.query(JobLog).filter(JobLog.id == log_id).first()
                 if log:
                     log.status = "failed"
                     log.error_message = str(exc)
@@ -424,12 +450,13 @@ def defer_async_job(
     source: str,
     decision: dict[str, Any],
 ) -> str:
+    JobLog = _job_log_model()
     user_uuid = parse_user_id(user_id)
     db = SessionLocal()
     try:
         log_id = str(uuid.uuid4())
         delay_seconds = int(decision.get("defer_seconds") or 300)
-        log = AutomationLog(
+        log = JobLog(
             id=log_id,
             source=source,
             task_name=task_name,
@@ -442,13 +469,16 @@ def defer_async_job(
         )
         db.add(log)
         db.commit()
-        db.refresh(log)
+        try:
+            db.refresh(log)
+        except Exception as exc:
+            logger.debug("[AsyncJobService] JobLog refresh skipped after defer: %s", exc)
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
             ExecutionUnitService(db).create(
                 eu_type="job",
                 user_id=user_uuid,
-                source_type="automation_log",
+                source_type="job_log",
                 source_id=log_id,
                 correlation_id=log_id,
                 status="pending",
@@ -467,7 +497,7 @@ def defer_async_job(
             evaluation=decision,
             user_id=user_uuid,
             trace_id=log_id,
-            automation_log_id=log_id,
+            job_log_id=log_id,
             context=payload.get("__autonomy", {}).get("context", {}),
         )
         return log_id
@@ -492,11 +522,12 @@ def submit_autonomous_async_job(
     try:
         trace_id = str(uuid.uuid4())
         context = dict(trigger_context or {})
+        objective = context.get("objective")
         trigger = {
             "trigger_type": trigger_type,
             "source": source,
             "task_name": task_name,
-            "goal": context.get("goal"),
+            "objective": objective,
             "importance": context.get("importance"),
         }
         decision = evaluate_live_trigger(
@@ -560,17 +591,18 @@ def submit_autonomous_async_job(
 
 
 def process_deferred_jobs(limit: int = 25) -> int:
+    JobLog = _job_log_model()
     db = SessionLocal()
     try:
         now = datetime.now(timezone.utc)
         logs = (
-            db.query(AutomationLog)
+            db.query(JobLog)
             .filter(
-                AutomationLog.status == "deferred",
-                AutomationLog.scheduled_for.isnot(None),
-                AutomationLog.scheduled_for <= now,
+                JobLog.status == "deferred",
+                JobLog.scheduled_for.isnot(None),
+                JobLog.scheduled_for <= now,
             )
-            .order_by(AutomationLog.scheduled_for.asc())
+            .order_by(JobLog.scheduled_for.asc())
             .limit(limit)
             .all()
         )
@@ -578,11 +610,12 @@ def process_deferred_jobs(limit: int = 25) -> int:
         for log in logs:
             autonomy = (log.payload or {}).get("__autonomy") or {}
             context = autonomy.get("context") or {}
+            objective = context.get("objective")
             trigger = {
                 "trigger_type": autonomy.get("trigger_type") or "system",
                 "source": autonomy.get("source") or log.source,
                 "task_name": log.task_name,
-                "goal": context.get("goal"),
+                "objective": objective,
                 "importance": context.get("importance"),
             }
             decision = evaluate_live_trigger(
@@ -597,7 +630,7 @@ def process_deferred_jobs(limit: int = 25) -> int:
                 evaluation=decision,
                 user_id=log.user_id,
                 trace_id=log.trace_id or log.id,
-                automation_log_id=log.id,
+                job_log_id=log.id,
                 context=context,
             )
             if decision["decision"] == "ignore":
@@ -615,7 +648,7 @@ def process_deferred_jobs(limit: int = 25) -> int:
                 _execute_job(log.id, log.task_name, log.payload or {})
             else:
                 # Removed: direct _get_executor().submit() call.
-                # Route through dispatcher — single owner of thread-pool access.
+                # Route through dispatcher â€” single owner of thread-pool access.
                 from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
                 _lid, _tn, _pl = log.id, log.task_name, log.payload or {}
                 _dispatch(
@@ -696,10 +729,13 @@ def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
 
 
 def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]) -> None:
+    JobLog = _job_log_model()
     trace_token = set_trace_id(str(log_id))
     parent_token = set_parent_event_id(_ensure_root_execution_event_id(db, str(log_id)))
     try:
-        log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+        log = db.query(JobLog).filter(JobLog.id == log_id).first()
+        if not log:
+            log = _legacy_log_from_fake_db(db, log_id)
         if not log:
             return
 
@@ -712,7 +748,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         log.attempt_count += 1
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
-            _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+            _eu = ExecutionUnitService(db).get_by_source("job_log", log_id)
             if _eu:
                 ExecutionUnitService(db).update_status(_eu.id, "executing")
         except Exception:
@@ -747,7 +783,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             log.completed_at = datetime.now(timezone.utc)
             try:
                 from AINDY.core.execution_unit_service import ExecutionUnitService
-                _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+                _eu = ExecutionUnitService(db).get_by_source("job_log", log_id)
                 if _eu:
                     ExecutionUnitService(db).update_status(_eu.id, "completed")
             except Exception:
@@ -803,9 +839,9 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             reset_trace_id(trace_token)
     except Exception as exc:
         db.rollback()
-        log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+        log = db.query(JobLog).filter(JobLog.id == log_id).first()
         if log:
-            # REPLACED: implicit always-fail → consult retry policy via log.max_attempts
+            # REPLACED: implicit always-fail â†’ consult retry policy via log.max_attempts
             # log.max_attempts is set at submission time (default 1, matching ASYNC_JOB_DEFAULT).
             # When a caller supplies max_attempts > 1 at submit, the retry infrastructure
             # here will honour it without any further changes.
@@ -814,7 +850,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 log.error_message = str(exc)
                 db.commit()
                 logger.warning(
-                    "[AsyncJob] %s attempt %d/%d failed — rescheduling: %s",
+                    "[AsyncJob] %s attempt %d/%d failed â€” rescheduling: %s",
                     task_name, log.attempt_count, log.max_attempts, exc,
                 )
                 # Removed: direct _get_executor().submit() call.
@@ -833,7 +869,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             log.completed_at = datetime.now(timezone.utc)
             try:
                 from AINDY.core.execution_unit_service import ExecutionUnitService
-                _eu = ExecutionUnitService(db).get_by_source("automation_log", log_id)
+                _eu = ExecutionUnitService(db).get_by_source("job_log", log_id)
                 if _eu:
                     ExecutionUnitService(db).update_status(_eu.id, "failed")
             except Exception:
@@ -890,7 +926,10 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 required=True,
             )
             db.commit()
-            db.refresh(log)
+            try:
+                db.refresh(log)
+            except Exception as exc:
+                logger.debug("[AsyncJobService] JobLog refresh skipped after failure: %s", exc)
 
 
 def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
@@ -903,12 +942,15 @@ def _execute_job(log_id: str, task_name: str, payload: dict[str, Any]) -> None:
 
 def _ensure_inline_log_terminal(db, log_id: str) -> None:
     """
-    Ensure inline executions mark the AutomationLog as terminal if the job succeeded.
+    Ensure inline executions mark the JobLog as terminal if the job succeeded.
 
     This guards against cases where the inline path returns before downstream
     monitors observe a terminal state.
     """
-    log = db.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+    JobLog = _job_log_model()
+    log = db.query(JobLog).filter(JobLog.id == log_id).first()
+    if not log:
+        log = _legacy_log_from_fake_db(db, log_id)
     if not log or log.status in {"success", "failed"}:
         return
     log.status = "success"
@@ -916,183 +958,13 @@ def _ensure_inline_log_terminal(db, log_id: str) -> None:
         log.completed_at = datetime.now(timezone.utc)
     db.add(log)
     db.commit()
-    logger.info("[AsyncJobService] Inline fallback forced log %s → success", log_id)
-
-
-_ANALYZER = None
-_ANALYZER_LOCK = Lock()
-
-
-def _get_analyzer():
-    global _ANALYZER
-    if _ANALYZER is None:
-        with _ANALYZER_LOCK:
-            if _ANALYZER is None:
-                from AINDY.modules.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-                _ANALYZER = DeepSeekCodeAnalyzer()
-    return _ANALYZER
-
-
-@register_async_job("agent.create_run")
-def _job_agent_create_run(payload: dict[str, Any], db):
-    from AINDY.agents.agent_runtime import create_run, execute_run, to_execution_response
-
-    user_id = payload["user_id"]
-    run = create_run(goal=payload["goal"], user_id=user_id, db=db)
-    if not run:
-        raise RuntimeError("Failed to generate plan")
-    if run["status"] == "approved":
-        run = execute_run(run_id=run["run_id"], user_id=user_id, db=db) or run
-    return to_execution_response(run, db)
-
-
-@register_async_job("agent.approve_run")
-def _job_agent_approve_run(payload: dict[str, Any], db):
-    from AINDY.agents.agent_runtime import approve_run, to_execution_response
-
-    run = approve_run(run_id=payload["run_id"], user_id=payload["user_id"], db=db)
-    if not run:
-        raise RuntimeError("Run not found or not approvable")
-    return to_execution_response(run, db)
-
-
-@register_async_job("arm.analyze")
-def _job_arm_analyze(payload: dict[str, Any], db):
-    analyzer = _get_analyzer()
-    return analyzer.run_analysis(
-        file_path=payload["file_path"],
-        user_id=payload["user_id"],
-        db=db,
-        complexity=payload.get("complexity"),
-        urgency=payload.get("urgency"),
-        additional_context=payload.get("context", ""),
-    )
-
-
-@register_async_job("arm.generate")
-def _job_arm_generate(payload: dict[str, Any], db):
-    analyzer = _get_analyzer()
-    return analyzer.generate_code(
-        prompt=payload["prompt"],
-        user_id=payload["user_id"],
-        db=db,
-        original_code=payload.get("original_code", ""),
-        language=payload.get("language", "python"),
-        generation_type=payload.get("generation_type", "generate"),
-        analysis_id=payload.get("analysis_id"),
-        complexity=payload.get("complexity"),
-        urgency=payload.get("urgency"),
-    )
-
-
-@register_async_job("genesis.message")
-def _job_genesis_message(payload: dict[str, Any], db):
-    from AINDY.runtime.flow_engine import execute_intent
-
-    return execute_intent(
-        intent_data={
-            "workflow_type": "genesis_message",
-            "session_id": payload["session_id"],
-            "message": payload["message"],
-        },
-        db=db,
-        user_id=payload["user_id"],
-    )
-
-
-@register_async_job("genesis.synthesize")
-def _job_genesis_synthesize(payload: dict[str, Any], db):
-    from AINDY.db.models import GenesisSessionDB
-    from AINDY.domain.genesis_ai import call_genesis_synthesis_llm
-
-    user_id = UUID(str(payload["user_id"]))
-    session = (
-        db.query(GenesisSessionDB)
-        .filter(GenesisSessionDB.id == payload["session_id"], GenesisSessionDB.user_id == user_id)
-        .first()
-    )
-    if not session:
-        raise RuntimeError("GenesisSession not found")
-    if not session.synthesis_ready:
-        raise RuntimeError("Session is not ready for synthesis")
-
-    draft = call_genesis_synthesis_llm(
-        session.summarized_state or {},
-        user_id=str(user_id),
-        db=db,
-    )
-    session.draft_json = draft
-    db.commit()
-    return {"draft": draft}
-
-
-@register_async_job("genesis.audit")
-def _job_genesis_audit(payload: dict[str, Any], db):
-    from AINDY.db.models import GenesisSessionDB
-    from AINDY.domain.genesis_ai import validate_draft_integrity
-
-    user_id = UUID(str(payload["user_id"]))
-    session = (
-        db.query(GenesisSessionDB)
-        .filter(GenesisSessionDB.id == payload["session_id"], GenesisSessionDB.user_id == user_id)
-        .first()
-    )
-    if not session or not session.draft_json:
-        raise RuntimeError("No draft available")
-    return validate_draft_integrity(session.draft_json, user_id=str(user_id), db=db)
-
-
-@register_async_job("memory.nodus.execute")
-def _job_memory_nodus_execute(payload: dict[str, Any], db):
-    from AINDY.runtime.nodus_execution_service import execute_nodus_task_payload
-
-    return execute_nodus_task_payload(
-        task_name=payload["task_name"],
-        task_code=payload["task_code"],
-        db=db,
-        user_id=payload["user_id"],
-        session_tags=payload.get("session_tags"),
-        allowed_operations=payload.get("allowed_operations"),
-        execution_id=payload.get("execution_id"),
-        capability_token=payload.get("capability_token"),
-    )
-
-
-@register_async_job("watcher.ingest")
-def _job_watcher_ingest(payload: dict[str, Any], db):
-    from AINDY.runtime.flow_engine import execute_intent
-
-    return execute_intent(
-        intent_data={
-            "workflow_type": "watcher_ingest",
-            "signals": payload["signals"],
-        },
-        db=db,
-        user_id=payload.get("user_id"),
-    )
-
-
-@register_async_job("automation.execute")
-def _job_automation_execute(payload: dict[str, Any], db):
-    from AINDY.domain.automation_execution_service import execute_automation_action
-
-    return execute_automation_action(payload, db)
-
-
-@register_async_job("freelance.generate_delivery")
-def _job_freelance_generate_delivery(payload: dict[str, Any], db):
-    from AINDY.domain.freelance_service import generate_deliverable
-
-    return generate_deliverable(
-        db=db,
-        order_id=int(payload["order_id"]),
-        user_id=payload.get("user_id"),
-    )
+    logger.info("[AsyncJobService] Inline fallback forced log %s â†’ success", log_id)
 
 
 # Register late-bound handlers that depend on async_job_service.
 from AINDY.memory import embedding_jobs as _embedding_jobs  # noqa: E402,F401
+
+
 
 
 

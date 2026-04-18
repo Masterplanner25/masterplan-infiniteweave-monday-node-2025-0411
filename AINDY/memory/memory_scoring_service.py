@@ -41,7 +41,7 @@ def get_relevant_memories(context: dict[str, Any], db, limit: int = 8) -> list[d
         return []
 
     trigger_event = str(context.get("trigger_event") or "").lower()
-    goal_terms = set(_extract_terms(context))
+    context_terms = set(_extract_terms(context))
 
     rows = (
         db.query(MemoryNodeModel)
@@ -65,8 +65,8 @@ def get_relevant_memories(context: dict[str, Any], db, limit: int = 8) -> list[d
             event_type = str((node.get("extra") or {}).get("event_type") or "").lower()
             if trigger_event in event_type or trigger_event.replace("_", ".") in event_type:
                 relevance_boost += 0.2
-        if goal_terms and node_terms:
-            overlap = len(goal_terms & node_terms)
+        if context_terms and node_terms:
+            overlap = len(context_terms & node_terms)
             if overlap:
                 relevance_boost += min(0.2, overlap * 0.05)
 
@@ -135,7 +135,8 @@ def _extract_terms(context: dict[str, Any]) -> list[str]:
     terms: list[str] = []
     for value in (
         context.get("trigger_event"),
-        context.get("goal"),
+        context.get("objective"),
+        context.get("intent"),
         context.get("current_state"),
     ):
         if isinstance(value, str):

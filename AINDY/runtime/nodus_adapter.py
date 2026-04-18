@@ -21,8 +21,8 @@ Retry policy (per step, enforced inside agent_execute_step)
   low / medium risk  → retry up to MAX_STEP_RETRIES (3) times, then FAILURE
   high risk          → FAILURE immediately on first tool error (no retry)
 
-High-risk no-retry rule prevents tools like genesis.message from being
-silently replayed if they partially succeed.
+High-risk no-retry rule prevents restricted tools from being silently replayed
+if they partially succeed.
 
 nodus.execute node (bottom of this file)
 ========================================
@@ -49,13 +49,14 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_signal_helper import queue_system_event, record_agent_event
 emit_system_event = queue_system_event
 from AINDY.agents.capability_service import check_execution_capability, check_tool_capability
-from AINDY.agents.agent_tools import execute_tool
+from AINDY.agents.tool_registry import execute_tool
 from AINDY.runtime.flow_engine import PersistentFlowRunner, register_node
 from AINDY.runtime.nodus_execution_service import build_nodus_execution_summary
 from AINDY.runtime.nodus_execution_service import execute_nodus_runtime
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.core.system_event_types import SystemEventTypes
-from AINDY.utils.user_ids import parse_user_id
+from AINDY.platform_layer.registry import emit_event as emit_registry_event
+from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 from AINDY.core.observability_events import emit_observability_event
@@ -403,17 +404,24 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
 
     result_payload = {"steps": step_results}
     if agent_run and state.get("user_id"):
-        from AINDY.domain.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-        orchestration = execute_infinity_orchestrator(
-            user_id=state["user_id"],
-            trigger_event="agent_completed",
-            db=db,
+        hook_results = emit_registry_event(
+            SystemEventTypes.EXECUTION_COMPLETED,
+            {
+                "db": db,
+                "user_id": state["user_id"],
+                "trigger_event": "agent_completed",
+                "source": "agent",
+                "steps": step_results,
+            },
+        )
+        orchestration = next(
+            (result for result in hook_results if isinstance(result, dict)),
+            {"next_action": None},
         )
         result_payload = {
             "steps": step_results,
-            "loop_enforced": True,
-            "next_action": orchestration["next_action"],
+            "loop_enforced": bool(hook_results),
+            "next_action": orchestration.get("next_action"),
         }
 
     if agent_run:
@@ -561,7 +569,7 @@ def nodus_execute_node(state: dict, context: dict) -> dict:
     * memory_context is pre-populated by execute_node() via enrich_context()
       BEFORE this function runs; it is passed through to the VM as-is.
     * Nodus emit() calls are queued as SystemEvents (source="nodus") using the
-      flow's trace_id so they appear in the same RippleTrace chain.
+      flow's trace_id so they appear in the same trace chain.
     * Nodus remember() calls are flushed as memory captures after the script
       exits (non-fatal — a single bad write does not abort the node).
     * RETRY status lets the flow engine's attempt counter and max_retries gate

@@ -118,9 +118,9 @@ def format_memories_for_prompt(memories: list, max_items: int = 3, max_chars: in
     Example output
     --------------
         ## Relevant Past Context
-        - Completed task 'ARM analysis' in 320ms with high success rate.
-        - Lead search for 'SaaS startups' returned 12 results; top fit_score 0.92.
-        - Goal drift detected on 'Revenue' goal after agent run 7e3a...
+        - entity.updated completed in 320ms with high confidence.
+        - execution.completed recorded 12 related signals.
+        - interaction.recorded changed after run 7e3a...
     """
     if not memories:
         return ""

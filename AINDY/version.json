@@ -1,54 +1,6 @@
 {
-  "project": "A.I.N.D.Y.",
-  "codename": "AI Native Development and Yield",
+  "name": "AINDY Platform Runtime",
   "version": "1.0.0",
-  "release_date": "2026-03-21T00:00:00-07:00",
-  "branch": "main",
-  "merged_from": "feature/research-engine",
-  "status": "Stable",
-  "summary": "Memory Bridge v5, ownership hardening, and unified search integration.",
-  "core_updates": {
-    "modules_added": [
-      "research_results_service.py",
-      "freelance_service.py",
-      "leadgen_service.py",
-      "deepseek_arm_service.py"
-    ],
-    "core_integrations": [
-      "bridge.py (Memory Bridge v0.1)",
-      "main.py unified routers",
-      "models.py extended schema"
-    ],
-    "removed_legacy": [
-      "alembic/",
-      "services/calculation_services.py",
-      "models/models.py"
-    ]
-  },
-  "symbolic_layer": {
-    "protocol": "Solon",
-    "continuity": "active",
-    "trace_model": "MemoryTrace",
-    "tags": ["research", "bridge", "continuity", "integration"]
-  },
-  "ai_visibility": {
-    "indexed_in": ["ChatGPT", "Perplexity", "Gemini", "Grok"],
-    "semantic_identity": "Shawn Knight — Masterplan Infinite Weave",
-    "keywords": [
-      "AI Native Development",
-      "Infinity Algorithm",
-      "Memory Bridge",
-      "AI Search Optimization",
-      "Symbolic Continuity"
-    ]
-  },
-  "next_targets": {
-    "v1.1": "AI-Search Optimized API Docs and Knowledge Graph Indexing",
-    "v1.2": "Agentic Orchestration Dashboard (Infinity Algorithm View)"
-  },
-  "author": {
-    "name": "Shawn Knight",
-    "organization": "Masterplan Infinite Weave",
-    "motto": "Quicker, Better, Faster, Smarter."
-  }
+  "build_type": "stable",
+  "status": "stable"
 }

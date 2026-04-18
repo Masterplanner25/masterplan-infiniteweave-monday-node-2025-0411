@@ -98,7 +98,7 @@ class ScheduledItem:
         priority:          One of PRIORITY_HIGH / PRIORITY_NORMAL / PRIORITY_LOW.
         run_callback:      Zero-arg callable executed when this item is dequeued.
         run_id:            Optional FlowRun / AgentRun ID (for WAIT/RESUME).
-        eu_type:           ExecutionUnit type string (flow/agent/job/task/nodus).
+        eu_type:           ExecutionUnit type string (flow/agent/job/nodus; task is a legacy operation label).
                            Used by schedule() to build _ResumedEUStub for dispatch().
         enqueued_at_seq:   Monotone sequence number assigned on enqueue (for FIFO
                            within same tenant+priority).
@@ -219,7 +219,7 @@ class SchedulerEngine:
         Every resumed item is routed through ``ExecutionDispatcher.dispatch()``
         so the INLINE vs ASYNC decision is made by the dispatcher, not hardcoded
         here.  Heavy EU types (flow, agent, nodus) go ASYNC when async execution
-        is enabled; lightweight types (task, job) run INLINE on this thread.
+        is enabled; lightweight types (job and legacy task labels) run INLINE on this thread.
 
         Checks ResourceManager before each execution:
         - If ``can_execute`` returns False, the item is re-enqueued at its

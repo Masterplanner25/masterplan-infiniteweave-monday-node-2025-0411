@@ -6,7 +6,7 @@ from pymongo.errors import PyMongoError
 from AINDY.config import settings
 
 # Configuration
-MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_social_layer")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_default")
 logger = logging.getLogger(__name__)
 
 _client = None
@@ -52,11 +52,23 @@ def get_mongo_client():
 def get_mongo_db():
     """
     FastAPI Dependency to yield the specific database object.
-    Use this in your routes: 
-    def my_route(db = Depends(get_mongo_db)): ...
+    Use this in your routes:
+        def my_route(db = Depends(get_mongo_db)): ...
+
+    Raises HTTP 503 (not RuntimeError) when Mongo is unavailable or skipped,
+    so the error surfaces as a structured API response rather than a 500
+    traceback, and routes that do not depend on Mongo are not affected.
     """
+    from fastapi import HTTPException
     client = get_mongo_client()
     if client:
         yield client[MONGO_DB_NAME]
         return
-    raise RuntimeError("Mongo connection failed. Could not access configured database.")
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            "MongoDB is not available. "
+            "Set MONGO_URL and ensure the server is reachable, "
+            "or set SKIP_MONGO_PING=true only in non-production environments."
+        ),
+    )

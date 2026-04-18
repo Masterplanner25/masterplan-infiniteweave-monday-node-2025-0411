@@ -34,7 +34,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,8 @@ _webhook_lock = threading.Lock()
 
 # subscription_id â†’ metadata dict
 _SUBSCRIPTIONS: dict[str, dict[str, Any]] = {}
+
+_INTERNAL_HANDLERS: dict[str, list[Callable[[dict[str, Any]], Any]]] = {}
 
 # Bounded pool â€” prevents thread explosion under bursts of events
 _executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="aindy-webhook")
@@ -76,6 +78,71 @@ def _matches(pattern: str, event_type: str) -> bool:
         prefix = pattern[:-1]   # "execution." from "execution.*"
         return event_type.startswith(prefix)
     return pattern == event_type
+
+
+# ---------------------------------------------------------------------------
+# Internal event handlers
+# ---------------------------------------------------------------------------
+
+def register_event_handler(
+    event_type: str,
+    handler: Callable[[dict[str, Any]], Any],
+) -> None:
+    """Register an in-process handler for a SystemEvent type or wildcard."""
+    if not event_type or not event_type.strip():
+        raise ValueError("event_type must be a non-empty string")
+    if not callable(handler):
+        raise ValueError("handler must be callable")
+    with _webhook_lock:
+        handlers = _INTERNAL_HANDLERS.setdefault(event_type, [])
+        if handler not in handlers:
+            handlers.append(handler)
+
+
+def dispatch_internal_event_handlers(
+    *,
+    db: Session | None,
+    event_type: str,
+    event_id: str,
+    payload: dict[str, Any],
+    user_id: str | None,
+    trace_id: str | None,
+    source: str | None,
+) -> int:
+    """Dispatch a SystemEvent to registered in-process handlers."""
+    with _webhook_lock:
+        handlers = [
+            handler
+            for pattern, pattern_handlers in _INTERNAL_HANDLERS.items()
+            if _matches(pattern, event_type)
+            for handler in pattern_handlers
+        ]
+
+    if not handlers:
+        return 0
+
+    event = {
+        "event_id": event_id,
+        "event_type": event_type,
+        "payload": payload or {},
+        "user_id": user_id,
+        "trace_id": trace_id,
+        "source": source,
+        "db": db,
+    }
+    dispatched = 0
+    for handler in handlers:
+        try:
+            handler(event)
+            dispatched += 1
+        except Exception as exc:
+            logger.warning(
+                "internal event handler failed: event=%s handler=%s error=%s",
+                event_type,
+                getattr(handler, "__name__", repr(handler)),
+                exc,
+            )
+    return dispatched
 
 
 # ---------------------------------------------------------------------------

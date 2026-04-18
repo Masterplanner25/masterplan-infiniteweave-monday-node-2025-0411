@@ -14,10 +14,10 @@ from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from AINDY.services.auth_service import create_access_token, register_user, authenticate_user
-from AINDY.domain.signup_initialization_service import initialize_signup_state
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 emit_system_event = queue_system_event
+initialize_signup_state = None
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
@@ -37,7 +37,6 @@ def register(
             username=body.username,
             db=db,
         )
-        initialize_signup_state(db=db, user=user)
         emit_system_event(
             db=db,
             event_type="auth.register.completed",

@@ -2,8 +2,7 @@
 Capability service for scoped agent execution.
 
 Responsibilities:
-  - define the canonical capability catalogue
-  - map tool calls to required capabilities
+  - load app-registered capability definitions
   - persist capability catalogue / mappings best-effort
   - mint per-run execution tokens with allowed capabilities
   - validate tokens and enforce capability checks fail-closed
@@ -16,41 +15,13 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from AINDY.agents.agent_tools import TOOL_REGISTRY
-from AINDY.utils.user_ids import parse_user_id, require_user_id
+from AINDY.agents.tool_registry import TOOL_REGISTRY
+from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
 
 logger = logging.getLogger(__name__)
 
 TOKEN_TTL_HOURS = 24
-DISALLOWED_AUTO_GRANT_TOOLS = {"genesis.message"}
 DEFAULT_AGENT_TYPE = "default"
-
-CAPABILITY_DEFINITIONS = {
-    "execute_flow": {
-        "description": "Start and continue a scoped workflow execution.",
-        "risk_level": "low",
-    },
-    "read_memory": {
-        "description": "Read memory and recall prior context.",
-        "risk_level": "low",
-    },
-    "write_memory": {
-        "description": "Create or update durable memory.",
-        "risk_level": "low",
-    },
-    "manage_tasks": {
-        "description": "Create or update task state.",
-        "risk_level": "low",
-    },
-    "external_api_call": {
-        "description": "Call an external LLM or web-backed integration.",
-        "risk_level": "medium",
-    },
-    "strategic_planning": {
-        "description": "Modify long-lived planning or genesis state.",
-        "risk_level": "high",
-    },
-}
 
 RISK_POLICY = {
     "low": "auto_allowed",
@@ -64,15 +35,83 @@ def _utcnow() -> datetime:
 
 
 def _normalize_tool_list(value: Any) -> list[str]:
+    _ensure_capabilities_loaded()
     if not isinstance(value, list):
         return []
     return sorted({item for item in value if isinstance(item, str) and item in TOOL_REGISTRY})
 
 
 def _normalize_capability_list(value: Any) -> list[str]:
+    definitions = _get_capability_definitions()
     if not isinstance(value, list):
         return []
-    return sorted({item for item in value if isinstance(item, str) and item in CAPABILITY_DEFINITIONS})
+    return sorted({item for item in value if isinstance(item, str) and item in definitions})
+
+
+def _ensure_capabilities_loaded() -> None:
+    try:
+        from AINDY.platform_layer.registry import load_plugins
+
+        load_plugins()
+    except Exception as exc:
+        logger.debug("capability plugin load skipped: %s", exc)
+
+
+def _get_capability_definitions() -> dict[str, dict[str, Any]]:
+    _ensure_capabilities_loaded()
+    try:
+        from AINDY.platform_layer.registry import get_capability_definitions
+
+        return get_capability_definitions()
+    except Exception as exc:
+        logger.warning("[CapabilityService] capability definition lookup failed: %s", exc)
+        return {}
+
+
+def _get_capabilities_for_tool(tool_name: str) -> list[str]:
+    _ensure_capabilities_loaded()
+    try:
+        from AINDY.platform_layer.registry import get_capabilities_for_tool
+
+        definitions = _get_capability_definitions()
+        return [
+            capability
+            for capability in get_capabilities_for_tool(tool_name)
+            if capability in definitions
+        ]
+    except Exception as exc:
+        logger.warning("[CapabilityService] tool capability lookup failed: %s", exc)
+        return []
+
+
+def _get_capabilities_for_agent(agent_type: str) -> list[str]:
+    _ensure_capabilities_loaded()
+    try:
+        from AINDY.platform_layer.registry import get_capabilities_for_agent
+
+        definitions = _get_capability_definitions()
+        capabilities = get_capabilities_for_agent(agent_type)
+        if not capabilities and agent_type != DEFAULT_AGENT_TYPE:
+            capabilities = get_capabilities_for_agent(DEFAULT_AGENT_TYPE)
+        return [
+            capability
+            for capability in capabilities
+            if capability in definitions
+        ]
+    except Exception as exc:
+        logger.warning("[CapabilityService] agent capability lookup failed: %s", exc)
+        return []
+
+
+def _get_restricted_tools() -> set[str]:
+    _ensure_capabilities_loaded()
+    try:
+        from AINDY.platform_layer.registry import get_restricted_tools
+
+        return get_restricted_tools()
+    except Exception as exc:
+        logger.warning("[CapabilityService] restricted tool lookup failed: %s", exc)
+        return set()
 
 
 def get_policy_for_risk(risk_level: str) -> str:
@@ -80,20 +119,20 @@ def get_policy_for_risk(risk_level: str) -> str:
 
 
 def get_tool_required_capability(tool_name: str) -> Optional[str]:
-    entry = TOOL_REGISTRY.get(tool_name) or {}
-    capability = entry.get("required_capability")
-    if isinstance(capability, str) and capability in CAPABILITY_DEFINITIONS:
-        return capability
-    return None
+    capabilities = _get_capabilities_for_tool(tool_name)
+    return capabilities[0] if capabilities else None
 
 
-def get_plan_required_capabilities(plan: Optional[dict]) -> list[str]:
-    capabilities = {"execute_flow"}
+def get_plan_required_capabilities(plan: Optional[dict], agent_type: str = DEFAULT_AGENT_TYPE) -> list[str]:
+    capabilities = set(_get_capabilities_for_agent(agent_type))
     for step in (plan or {}).get("steps", []):
         tool_name = step.get("tool")
-        capability = get_tool_required_capability(tool_name)
-        if capability:
-            capabilities.add(capability)
+        if not isinstance(tool_name, str):
+            continue
+        tool_capabilities = _get_capabilities_for_tool(tool_name)
+        if not tool_capabilities:
+            return []
+        capabilities.update(tool_capabilities)
     return sorted(capabilities)
 
 
@@ -141,12 +180,13 @@ def sync_capability_catalog(db) -> None:
     try:
         from AINDY.db.models.capability import Capability
 
+        definitions = _get_capability_definitions()
         existing = {
             row.name: row
             for row in db.query(Capability).all()
         }
         changed = False
-        for name, meta in CAPABILITY_DEFINITIONS.items():
+        for name, meta in definitions.items():
             row = existing.get(name)
             if row is None:
                 db.add(
@@ -243,19 +283,20 @@ def get_auto_grantable_tools(user_id: str, db) -> list[str]:
         if not trust:
             return []
 
+        restricted_tools = _get_restricted_tools()
         explicit = _normalize_tool_list(getattr(trust, "allowed_auto_grant_tools", None))
         if explicit:
             return [
                 tool_name
                 for tool_name in explicit
-                if tool_name not in DISALLOWED_AUTO_GRANT_TOOLS
+                if tool_name not in restricted_tools
                 and get_policy_for_risk(TOOL_REGISTRY.get(tool_name, {}).get("risk")) == "auto_allowed"
             ]
 
         allowed = []
         for tool_name, meta in TOOL_REGISTRY.items():
             risk = meta.get("risk")
-            if tool_name in DISALLOWED_AUTO_GRANT_TOOLS:
+            if tool_name in restricted_tools:
                 continue
             if risk == "low" and getattr(trust, "auto_execute_low", False):
                 allowed.append(tool_name)
@@ -331,7 +372,9 @@ def mint_token(
         if not granted_tools and step_count > 0:
             return None
 
-        allowed_capabilities = get_plan_required_capabilities(plan)
+        allowed_capabilities = get_plan_required_capabilities(plan, agent_type=agent_type)
+        if not allowed_capabilities:
+            return None
         if approval_mode == "auto":
             tool_risks = [TOOL_REGISTRY[t]["risk"] for t in granted_tools]
             if any(get_policy_for_risk(risk) != "auto_allowed" for risk in tool_risks):
@@ -395,6 +438,7 @@ def validate_token(token: Optional[dict], run_id: str, user_id: str) -> dict:
         issued_at = token.get("issued_at")
         expires_at = token.get("expires_at")
         approval_mode = token.get("approval_mode")
+        agent_type = str(token.get("agent_type") or DEFAULT_AGENT_TYPE)
         granted_tools = _normalize_tool_list(token.get("granted_tools"))
         allowed_capabilities = _normalize_capability_list(token.get("allowed_capabilities"))
         token_hash = token.get("token_hash")
@@ -439,6 +483,7 @@ def validate_token(token: Optional[dict], run_id: str, user_id: str) -> dict:
             "granted_tools": granted_tools,
             "allowed_capabilities": allowed_capabilities,
             "execution_token": execution_token,
+            "agent_type": agent_type,
         }
     except Exception as exc:
         logger.warning("[CapabilityService] validate_token failed: %s", exc)
@@ -513,19 +558,30 @@ def check_tool_capability(
                 "allowed_capabilities": validation["allowed_capabilities"],
             }
 
-        required_capability = get_tool_required_capability(tool_name)
-        if required_capability and required_capability not in validation["allowed_capabilities"]:
-            return {
-                "ok": False,
-                "error": f"capability '{required_capability}' not granted by execution token",
-                "granted_tools": validation["granted_tools"],
-                "allowed_capabilities": validation["allowed_capabilities"],
-            }
+        required_capabilities = _get_capabilities_for_tool(tool_name)
+        for required_capability in required_capabilities:
+            if required_capability not in validation["allowed_capabilities"]:
+                return {
+                    "ok": False,
+                    "error": f"capability '{required_capability}' not granted by execution token",
+                    "granted_tools": validation["granted_tools"],
+                    "allowed_capabilities": validation["allowed_capabilities"],
+                }
 
-        if "execute_flow" not in validation["allowed_capabilities"]:
+        agent_capabilities = _get_capabilities_for_agent(validation.get("agent_type") or DEFAULT_AGENT_TYPE)
+        for required_capability in agent_capabilities:
+            if required_capability not in validation["allowed_capabilities"]:
+                return {
+                    "ok": False,
+                    "error": f"capability '{required_capability}' not granted by execution token",
+                    "granted_tools": validation["granted_tools"],
+                    "allowed_capabilities": validation["allowed_capabilities"],
+                }
+
+        if not required_capabilities and tool_name in TOOL_REGISTRY:
             return {
                 "ok": False,
-                "error": "capability 'execute_flow' not granted by execution token",
+                "error": f"tool '{tool_name}' has no registered capability mapping",
                 "granted_tools": validation["granted_tools"],
                 "allowed_capabilities": validation["allowed_capabilities"],
             }

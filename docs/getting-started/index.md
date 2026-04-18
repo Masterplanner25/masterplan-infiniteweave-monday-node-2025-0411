@@ -52,7 +52,7 @@ pip install -e path/to/sdk   # or copy the sdk/aindy/ package
 ### 4. Write memory, run a flow, read it back
 
 ```python
-from aindy import AINDYClient
+from AINDY.sdk.aindy_sdk import AINDYClient
 
 client = AINDYClient(
     base_url="http://localhost:8000",

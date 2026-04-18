@@ -2,7 +2,7 @@
 ExecutionUnitService — create, update, and query ExecutionUnit records.
 
 All DB-touching methods are non-fatal: exceptions are caught and logged so
-that EU failures never break the surrounding Task / AgentRun / FlowRun operation.
+that EU failures never break the surrounding operation.
 
 Status machine
 --------------
@@ -312,33 +312,19 @@ class ExecutionUnitService:
     # ── View-only mappers (no DB required) ────────────────────────────────────
 
     @staticmethod
-    def view_from_task(task) -> dict:
-        """Return an EU-shaped dict from a Task ORM object without touching the DB."""
-        return {
-            "id": None,
-            "type": "task",
-            "status": _map_task_status(getattr(task, "status", "pending")),
-            "user_id": str(task.user_id) if getattr(task, "user_id", None) else None,
-            "source_type": "task",
-            "source_id": str(task.id),
-            "parent_id": None,
-            "flow_run_id": None,
-            "correlation_id": None,
-            "memory_context_ids": [],
-            "output_memory_ids": [],
-            "extra": {
-                "task_name": getattr(task, "name", None),
-                "category": getattr(task, "category", None),
-                "priority": getattr(task, "priority", None),
-            },
-            "created_at": _iso(getattr(task, "created_at", None)),
-            "updated_at": _iso(getattr(task, "updated_at", None)),
-            "completed_at": _iso(getattr(task, "completed_at", None)),
-        }
+    def view_from_entity(entity_type: str, entity) -> dict:
+        """Return an EU-shaped dict using an app-registered entity adapter."""
+        from AINDY.platform_layer.registry import get_execution_adapter
+
+        adapter = get_execution_adapter(entity_type)
+        if adapter is None:
+            raise ValueError(f"No execution adapter registered for {entity_type!r}")
+        return adapter(entity)
 
     @staticmethod
     def view_from_agent_run(agent_run) -> dict:
         """Return an EU-shaped dict from an AgentRun ORM object without touching the DB."""
+        objective = getattr(agent_run, "objective", None)
         return {
             "id": None,
             "type": "agent",
@@ -352,7 +338,7 @@ class ExecutionUnitService:
             "memory_context_ids": [],
             "output_memory_ids": [],
             "extra": {
-                "goal": getattr(agent_run, "goal", None),
+                "objective": objective,
                 "trace_id": str(agent_run.trace_id) if getattr(agent_run, "trace_id", None) else None,
             },
             "created_at": _iso(getattr(agent_run, "created_at", None)),
@@ -385,23 +371,26 @@ class ExecutionUnitService:
         }
 
     @staticmethod
-    def view_from_automation_log(log) -> dict:
-        """Return an EU-shaped dict from an AutomationLog ORM object without touching the DB."""
+    def view_from_job_log(log) -> dict:
+        """Return an EU-shaped dict from a JobLog ORM object without touching the DB."""
         return {
             "id": None,
             "type": "job",
             "status": _map_job_status(getattr(log, "status", "pending")),
             "user_id": str(log.user_id) if getattr(log, "user_id", None) else None,
-            "source_type": "automation_log",
+            "source_type": "job_log",
             "source_id": str(log.id),
             "parent_id": None,
             "flow_run_id": None,
-            "correlation_id": str(getattr(log, "trace_id", None) or getattr(log, "id", None) or ""),
+            "correlation_id": str(log.trace_id) if getattr(log, "trace_id", None) else str(log.id),
             "memory_context_ids": [],
             "output_memory_ids": [],
             "extra": {
                 "task_name": getattr(log, "task_name", None),
+                "job_name": getattr(log, "job_name", None),
                 "source": getattr(log, "source", None),
+                "attempt_count": getattr(log, "attempt_count", None),
+                "max_attempts": getattr(log, "max_attempts", None),
             },
             "created_at": _iso(getattr(log, "created_at", None)),
             "updated_at": _iso(getattr(log, "updated_at", None)),
@@ -450,15 +439,6 @@ def _iso(dt) -> Optional[str]:
     if hasattr(dt, "isoformat"):
         return dt.isoformat()
     return str(dt)
-
-
-def _map_task_status(status: str) -> str:
-    return {
-        "pending": "pending",
-        "in_progress": "executing",
-        "paused": "waiting",
-        "completed": "completed",
-    }.get(status, "pending")
 
 
 def _map_agent_status(status: str) -> str:

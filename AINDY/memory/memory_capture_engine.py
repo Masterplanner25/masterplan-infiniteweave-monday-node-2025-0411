@@ -23,32 +23,40 @@ from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
 emit_system_event = queue_system_event
 from AINDY.core.observability_events import emit_observability_event
-from AINDY.domain.rippletrace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
+from AINDY.platform_layer.event_trace_service import calculate_depth, detect_root_event, get_downstream_effects, link_event_to_memory
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.core.system_event_types import SystemEventTypes
-from AINDY.utils.trace_context import get_current_trace_id
+from AINDY.platform_layer.registry import get_memory_policy, get_memory_significance_rule
+from AINDY.platform_layer.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
 
-# Significance thresholds
-MIN_SIGNIFICANCE_SCORE = 0.3  # below this: don't store
-HIGH_SIGNIFICANCE_SCORE = 0.7  # above this: store immediately
+class _EventSignificanceView(dict):
+    """Compatibility view populated by app-registered memory policies."""
 
-# Event types and their base significance scores
-EVENT_SIGNIFICANCE = {
-    "arm_analysis_complete": 0.7,  # always significant
-    "arm_generation_complete": 0.6,
-    "task_completed": 0.5,
-    "task_failed": 0.8,  # failures are very valuable
-    "genesis_message": 0.3,  # only if signals strong
-    "genesis_synthesized": 0.9,  # major milestone
-    "masterplan_locked": 1.0,  # always store
-    "masterplan_activated": 1.0,
-    "leadgen_search": 0.4,
-    "error_encountered": 0.8,  # errors = learning
-    "insight_detected": 0.7,
-    "flow_completion": 0.5,  # Phase D: flow execution patterns
-}
+    def _ensure_loaded(self) -> None:
+        from AINDY.platform_layer.registry import load_plugins
+
+        load_plugins()
+
+    def __contains__(self, key: object) -> bool:
+        self._ensure_loaded()
+        return super().__contains__(key)
+
+    def __getitem__(self, key: str) -> float:
+        self._ensure_loaded()
+        return super().__getitem__(key)
+
+    def get(self, key: str, default: float | None = None) -> float | None:
+        self._ensure_loaded()
+        return super().get(key, default)
+
+    def items(self):
+        self._ensure_loaded()
+        return super().items()
+
+
+EVENT_SIGNIFICANCE: dict[str, float] = _EventSignificanceView()
 
 AUTO_MEMORY_EVENT_TYPES = {
     SystemEventTypes.EXECUTION_COMPLETED,
@@ -68,10 +76,10 @@ def calculate_impact_score(db, event_id: str) -> float:
     event_uuid = uuid.UUID(str(event_id))
     event = db.query(SystemEvent).filter(SystemEvent.id == event_uuid).first()
     downstream = get_downstream_effects(db, event_uuid)
-    ripple_depth = calculate_depth(db, event_uuid)
+    trace_depth = calculate_depth(db, event_uuid)
     event_type = getattr(event, "type", "") if event else ""
     failure_bonus = 1.5 if "failed" in str(event_type).lower() or event_type == "capability.denied" else 0.5
-    return round(len(downstream) + (ripple_depth * 0.75) + failure_bonus, 4)
+    return round(len(downstream) + (trace_depth * 0.75) + failure_bonus, 4)
 
 
 class MemoryCaptureEngine:
@@ -107,7 +115,7 @@ class MemoryCaptureEngine:
 
         Returns the created MemoryNode dict or None if not stored.
 
-        event_type: one of EVENT_SIGNIFICANCE keys
+        event_type: signal type used to look up a registered memory policy
         content: the memory content to store
         source: where this memory came from
         tags: semantic tags
@@ -121,7 +129,7 @@ class MemoryCaptureEngine:
             )
             return None
         try:
-            from AINDY.utils.trace_context import is_pipeline_active
+            from AINDY.platform_layer.trace_context import is_pipeline_active
 
             if is_pipeline_active() and not allow_when_pipeline_active:
                 return None
@@ -145,7 +153,9 @@ class MemoryCaptureEngine:
                 context=context or {},
             )
 
-            if not force and score < MIN_SIGNIFICANCE_SCORE:
+            policy = get_memory_policy(event_type) or {}
+            min_significance = float(policy.get("min_significance", 0.0)) if isinstance(policy, dict) else 0.0
+            if not force and score < min_significance:
                 logger.debug(
                     "Event %s below significance threshold (%.2f) — not stored",
                     event_type,
@@ -215,7 +225,9 @@ class MemoryCaptureEngine:
                     )
                     if db_node:
                         db_node.source_agent = namespace
-                        db_node.is_shared = namespace in {"genesis", "arm"}
+                        capture_rule = get_memory_policy(event_type) or {}
+                        shared_namespaces = set(capture_rule.get("shared_namespaces") or ())
+                        db_node.is_shared = bool(capture_rule.get("is_shared")) or namespace in shared_namespaces
                         self.db.add(db_node)
                         self.db.commit()
                         self.db.refresh(db_node)
@@ -329,6 +341,9 @@ class MemoryCaptureEngine:
         }
 
     def _classify_memory_type(self, event_type: str) -> str:
+        capture_rule = get_memory_policy(event_type) or {}
+        if capture_rule.get("memory_type"):
+            return str(capture_rule["memory_type"])
         normalized = str(event_type or "").lower()
         if normalized in {
             "capability.denied",
@@ -341,7 +356,7 @@ class MemoryCaptureEngine:
             return "failure"
         if normalized == SystemEventTypes.EXECUTION_COMPLETED or "completed" in normalized:
             return "outcome"
-        if "decision" in normalized or "masterplan" in normalized:
+        if "decision" in normalized:
             return "decision"
         return "insight"
 
@@ -359,8 +374,10 @@ class MemoryCaptureEngine:
         - Outcome quality (high scores boost significance)
         - Novelty (new information scores higher)
         """
-        # Base score from event type
-        base = EVENT_SIGNIFICANCE.get(event_type, 0.4)
+        capture_rule = get_memory_policy(event_type) or {}
+        base = get_memory_significance_rule(event_type)
+        if base is None:
+            base = float(capture_rule.get("default_significance", 0.4)) if isinstance(capture_rule, dict) else 0.4
 
         # Modifier 1: content richness
         content_score = min(1.0, len(content) / 500)
@@ -430,20 +447,15 @@ class MemoryCaptureEngine:
         """
         Auto-classify node type from event type and content.
         """
-        type_map = {
-            "masterplan_locked": "decision",
-            "masterplan_activated": "decision",
-            "genesis_synthesized": "decision",
-            "arm_analysis_complete": "insight",
-            "insight_detected": "insight",
-            "task_completed": "outcome",
-            "task_failed": "outcome",
-            "arm_generation_complete": "outcome",
-            "leadgen_search": "outcome",
-            "error_encountered": "insight",
-            "genesis_message": "insight",
-        }
-        return type_map.get(event_type, "insight")
+        capture_rule = get_memory_policy(event_type) or {}
+        if capture_rule.get("node_type"):
+            return str(capture_rule["node_type"])
+        normalized = str(event_type or "").lower()
+        if "failed" in normalized or "completed" in normalized:
+            return "outcome"
+        if "decision" in normalized:
+            return "decision"
+        return "insight"
 
     def _enrich_tags(
         self,
@@ -456,21 +468,8 @@ class MemoryCaptureEngine:
         """
         enriched = list(tags)
 
-        # Add event source tag
-        source_tags = {
-            "arm_analysis_complete": ["arm", "analysis"],
-            "arm_generation_complete": ["arm", "codegen"],
-            "task_completed": ["task", "completion"],
-            "task_failed": ["task", "failure"],
-            "genesis_message": ["genesis", "conversation"],
-            "genesis_synthesized": ["genesis", "synthesis"],
-            "masterplan_locked": ["genesis", "masterplan"],
-            "masterplan_activated": ["genesis", "activation"],
-            "leadgen_search": ["leadgen", "search"],
-            "error_encountered": ["error", "learning"],
-        }
-
-        auto_tags = source_tags.get(event_type, [])
+        capture_rule = get_memory_policy(event_type) or {}
+        auto_tags = capture_rule.get("tags") or []
         for tag in auto_tags:
             if tag not in enriched:
                 enriched.append(tag)

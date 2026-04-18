@@ -4,7 +4,7 @@ import time
 from typing import Any, Callable
 
 from AINDY.core.system_event_service import emit_error_event, emit_system_event
-from AINDY.utils.trace_context import get_current_trace_id
+from AINDY.platform_layer.trace_context import get_current_trace_id
 
 
 def external_metadata(

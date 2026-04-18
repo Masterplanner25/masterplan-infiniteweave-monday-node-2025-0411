@@ -1,7 +1,7 @@
 """
 Agent Run models — Sprint N+4 Agentics Phase 1+2 / Sprint N+6 Deterministic Agent / Sprint N+7 Observability
 
-AgentRun: persists one goal→plan→approve→execute lifecycle.
+AgentRun: persists one objective→plan→approve→execute lifecycle.
 AgentStep: each tool call within a run (append-only audit log).
 AgentTrustSettings: per-user opt-in autonomy flags.
 """
@@ -45,7 +45,7 @@ class AgentRun(Base):
     correlation_id = Column(String(72), nullable=True, index=True)
     trace_id = Column(String(128), nullable=True, index=True)
 
-    # Goal and plan
+    # Objective and plan. ``goal`` is the legacy storage column name.
     goal = Column(Text, nullable=False)
     plan = Column(JSONB, nullable=True)          # Full GPT-4o plan JSON
     executive_summary = Column(Text, nullable=True)
@@ -81,6 +81,14 @@ class AgentRun(Base):
         Index("ix_agent_runs_user_status", "user_id", "status"),
         Index("ix_agent_runs_created_at", "created_at"),
     )
+
+    @property
+    def objective(self):
+        return self.goal
+
+    @objective.setter
+    def objective(self, value):
+        self.goal = value
 
 
 class AgentStep(Base):
@@ -122,8 +130,8 @@ class AgentTrustSettings(Base):
 
     Preferred policy:
     allowed_auto_grant_tools — explicit list of low/medium tools that may be
-    auto-granted on auto-approved runs. High-risk tools such as genesis.message
-    are structurally excluded.
+    auto-granted on auto-approved runs. App-registered restricted tools are
+    structurally excluded.
 
     High risk ALWAYS requires approval regardless of these flags.
     """

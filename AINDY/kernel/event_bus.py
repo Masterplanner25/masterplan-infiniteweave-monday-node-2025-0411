@@ -48,7 +48,7 @@ Usage
 -----
     # Publisher (automatic — called inside notify_event())
     from AINDY.kernel.event_bus import get_event_bus
-    get_event_bus().publish("task.completed", correlation_id="chain-abc")
+    get_event_bus().publish("operation.completed", correlation_id="chain-abc")
 
     # Subscriber (called once at startup on every instance)
     get_event_bus().start_subscriber()
@@ -144,7 +144,7 @@ class EventBus:
         local scan completes.  Never raises — returns ``False`` on any error.
 
         Args:
-            event_type:     The event name (e.g. ``"task.completed"``).
+            event_type:     The event name (e.g. ``"operation.completed"``).
             correlation_id: Optional correlation chain ID forwarded to
                             remote ``notify_event()`` calls.
 
@@ -380,7 +380,7 @@ def publish_event(
     on the current instance are resumed normally.
 
     Args:
-        event_type:     The event name (e.g. ``"task.completed"``).
+        event_type:     The event name (e.g. ``"operation.completed"``).
         correlation_id: Optional correlation chain ID forwarded to all
                         remote ``notify_event()`` calls.
 

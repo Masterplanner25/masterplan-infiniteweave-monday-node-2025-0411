@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
-from AINDY.core.execution_envelope import success as legacy_success
+from AINDY.platform_layer.registry import get_response_adapter
 
 
 def _legacy_error_response(canonical: dict[str, Any], *, status_code: int) -> JSONResponse:
@@ -28,15 +28,19 @@ def _trace_headers(canonical: dict[str, Any]) -> dict[str, str]:
 
 
 def adapt_response(route_name: str, canonical: dict[str, Any], *, status_code: int = 200) -> Response:
+    route_prefix = route_name.split(".", 1)[0]
+    underscore_prefix = route_name.split("_", 1)[0]
+    exact_adapter = get_response_adapter(route_name)
+
+    if exact_adapter is not None:
+        return exact_adapter(
+            route_name=route_name,
+            canonical=canonical,
+            status_code=status_code,
+            trace_headers=_trace_headers(canonical),
+        )
+
     if canonical.get("status") == "error":
-        if route_name == "memory.execute.complete":
-            error_status = canonical.get("metadata", {}).get("status_code") or status_code
-            detail = canonical.get("metadata", {}).get("error", "Execution failed")
-            return JSONResponse(
-                status_code=int(error_status),
-                content={"error": "http_error", "details": jsonable_encoder(detail)},
-                headers=_trace_headers(canonical),
-            )
         return _legacy_error_response(canonical, status_code=status_code)
 
     payload = canonical.get("data")
@@ -46,62 +50,16 @@ def adapt_response(route_name: str, canonical: dict[str, Any], *, status_code: i
             payload.headers.setdefault("X-Trace-ID", trace_id)
         return payload
 
-    if route_name.startswith("memory.") and not route_name.startswith((
-        "memory.execute",
-        "memory.nodus.execute",
-    )):
-        return JSONResponse(
+    adapter = (
+        get_response_adapter(route_prefix)
+        or get_response_adapter(underscore_prefix)
+    )
+    if adapter is not None:
+        return adapter(
+            route_name=route_name,
+            canonical=canonical,
             status_code=status_code,
-            content=jsonable_encoder(payload),
-            headers=_trace_headers(canonical),
-        )
-
-    if route_name == "memory.execute" and isinstance(payload, dict):
-        merged = dict(payload)
-        merged["status"] = canonical.get("status")
-        merged["trace_id"] = canonical.get("trace_id")
-        merged["data"] = payload
-        metadata = canonical.get("metadata", {})
-        if metadata.get("events") is not None:
-            merged["events"] = metadata.get("events")
-        if metadata.get("next_action") is not None:
-            merged["next_action"] = metadata.get("next_action")
-        return JSONResponse(
-            status_code=status_code,
-            content=jsonable_encoder(merged),
-            headers=_trace_headers(canonical),
-        )
-
-    if route_name.startswith((
-        "auth.", "analytics.", "arm.", "automation.", "main.",
-        "authorship.", "bridge.", "db.",
-        "flow.", "health.", "leadgen.", "masterplan.", "network_bridge.",
-        "observability.", "rippletrace.", "score.", "seo.",
-        "legacy_surface.", "watcher.",
-    )) or route_name.startswith("scores"):
-        return JSONResponse(
-            status_code=status_code,
-            content=jsonable_encoder(payload),
-            headers=_trace_headers(canonical),
-        )
-
-    if route_name.startswith(("social.", "autonomy.", "system.", "coordination.")):
-        if isinstance(payload, dict) and "status" in payload and "trace_id" in payload:
-            return JSONResponse(
-                status_code=status_code,
-                content=jsonable_encoder(payload),
-                headers=_trace_headers(canonical),
-            )
-        body = legacy_success(
-            payload,
-            canonical.get("metadata", {}).get("events") or [],
-            str(canonical.get("trace_id") or ""),
-            next_action=canonical.get("metadata", {}).get("next_action"),
-        )
-        return JSONResponse(
-            status_code=status_code,
-            content=jsonable_encoder(body),
-            headers=_trace_headers(canonical),
+            trace_headers=_trace_headers(canonical),
         )
 
     return JSONResponse(

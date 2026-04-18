@@ -10,8 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from pgvector.sqlalchemy import Vector
 from AINDY.utils import prepare_input_text
-from AINDY.utils.trace_context import get_current_trace_id
-from AINDY.utils.user_ids import parse_user_id
+from AINDY.platform_layer.trace_context import get_current_trace_id
+from AINDY.platform_layer.user_ids import parse_user_id
 
 # import your project's Base (must exist)
 from AINDY.db.database import Base

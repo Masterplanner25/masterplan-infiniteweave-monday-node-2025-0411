@@ -1,4 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+from AINDY.db.models.job_log import JobLog
 
 import logging
 import os
@@ -8,12 +10,12 @@ from typing import Any, Optional
 
 from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
-from AINDY.domain.rippletrace_service import link_events
+from AINDY.platform_layer.event_trace_service import link_events
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.platform_layer.async_execution_context import is_async_execution_active
-from AINDY.utils.trace_context import get_parent_event_id
-from AINDY.utils.trace_context import get_trace_id
-from AINDY.utils.trace_context import is_pipeline_active
+from AINDY.platform_layer.trace_context import get_parent_event_id
+from AINDY.platform_layer.trace_context import get_trace_id
+from AINDY.platform_layer.trace_context import is_pipeline_active
 from AINDY.config import settings
 from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -105,7 +107,7 @@ def _persist_system_event(
     db.flush()
     event_id = event.id
     if normalized_parent_event_id:
-        relationship_type = "caused_by"
+        relationship_type = "related_to"
         if source == "async":
             relationship_type = "async_child"
         elif source == "agent":
@@ -351,17 +353,16 @@ def _detect_behavioral_feedback_signals(
             )
 
     try:
-        from AINDY.db.models.automation_log import AutomationLog
 
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
         stale_logs = (
-            db.query(AutomationLog)
+            db.query(JobLog)
             .filter(
-                AutomationLog.status.in_(["pending", "running", "deferred"]),
-                AutomationLog.created_at <= stale_cutoff,
-                AutomationLog.completed_at.is_(None),
+                JobLog.status.in_(["pending", "running", "deferred"]),
+                JobLog.created_at <= stale_cutoff,
+                JobLog.completed_at.is_(None),
             )
-            .order_by(AutomationLog.created_at.asc())
+            .order_by(JobLog.created_at.asc())
             .limit(3)
             .all()
         )
@@ -410,7 +411,7 @@ def _notify_scheduler_of_event(
 
     Extracts ``correlation_id`` from the event payload (preferred) or falls back
     to the event's ``trace_id`` which propagates through the correlation chain.
-    Non-fatal — any exception is swallowed and logged at DEBUG level.
+    Non-fatal â€” any exception is swallowed and logged at DEBUG level.
     """
     try:
         from AINDY.kernel.event_bus import publish_event
@@ -481,6 +482,25 @@ def emit_system_event(
             user_id,
         )
         try:
+            from AINDY.platform_layer.event_service import dispatch_internal_event_handlers
+
+            dispatch_internal_event_handlers(
+                db=db,
+                event_type=event_type,
+                event_id=str(event_id) if event_id else "",
+                payload=payload or {},
+                user_id=str(user_id) if user_id else None,
+                trace_id=effective_trace_id,
+                source=source,
+            )
+        except Exception as handler_exc:
+            logger.warning(
+                "[SystemEvent] internal handler dispatch skipped for %s id=%s: %s",
+                event_type,
+                event_id,
+                handler_exc,
+            )
+        try:
             _detect_behavioral_feedback_signals(
                 db=db,
                 event_id=event_id,
@@ -514,7 +534,7 @@ def emit_system_event(
                 event_id,
                 capture_exc,
             )
-        # ── Webhook fan-out ───────────────────────────────────────────────
+        # â”€â”€ Webhook fan-out â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # Fire-and-forget: runs in background thread pool, never blocks here.
         try:
             from AINDY.platform_layer.event_service import dispatch_webhooks_async
@@ -531,15 +551,15 @@ def emit_system_event(
                 "[SystemEvent] webhook dispatch skipped for %s id=%s: %s",
                 event_type, event_id, wh_exc,
             )
-        # ── Scheduler wake-up ─────────────────────────────────────────────
+        # â”€â”€ Scheduler wake-up â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         # Non-fatal: wakes any ExecutionUnit waiting for this event_type.
-        # Runs synchronously but never raises — zero impact on emission path.
+        # Runs synchronously but never raises â€” zero impact on emission path.
         _notify_scheduler_of_event(
             event_type,
             trace_id=effective_trace_id,
             payload=payload,
         )
-        # ─────────────────────────────────────────────────────────────────
+        # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         return event_id
     except Exception as exc:
         try:
@@ -599,6 +619,8 @@ def emit_error_event(
         payload=error_payload,
         required=required,
     )
+
+
 
 
 

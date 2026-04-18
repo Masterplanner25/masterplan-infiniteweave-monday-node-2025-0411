@@ -97,10 +97,10 @@ def get_observability_dashboard(
 
 
 # ------------------------------
-# RIPPLETRACE
+# EXECUTION GRAPH
 # ------------------------------
-@router.get("/rippletrace/{trace_id}")
-def get_rippletrace_graph(
+@router.get("/execution_graph/{trace_id}")
+def get_execution_graph(
     request: Request,
     trace_id: str,
     db: Session = Depends(get_db),
@@ -108,7 +108,7 @@ def get_rippletrace_graph(
 ):
     user_id = str(current_user["sub"])
     def handler(ctx):
-        return _run_flow_observability("observability_rippletrace", {"trace_id": trace_id}, db, user_id)
-    return _execute_observability(request, "observability_rippletrace", handler, db=db, user_id=user_id,
+        return _run_flow_observability("observability_execution_graph", {"trace_id": trace_id}, db, user_id)
+    return _execute_observability(request, "observability_execution_graph", handler, db=db, user_id=user_id,
                                   input_payload={"trace_id": trace_id})
 

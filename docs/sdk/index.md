@@ -17,7 +17,7 @@ Or drop the `aindy/` package directly into your project — it's pure stdlib.
 ## Connect
 
 ```python
-from aindy import AINDYClient
+from AINDY.sdk.aindy_sdk import AINDYClient
 
 client = AINDYClient(
     base_url="http://localhost:8000",
@@ -170,7 +170,7 @@ for action, spec in registry["syscalls"]["v1"].items():
 Every error from the server maps to a typed exception.
 
 ```python
-from aindy import (
+from AINDY.sdk.aindy_sdk import (
     AINDYClient,
     AuthenticationError,    # 401 — invalid or expired key
     PermissionDeniedError,  # 403 — missing capability scope
@@ -205,7 +205,7 @@ All exceptions expose `.status_code`, `.message`, and `.response` (raw server bo
 ## Complete example
 
 ```python
-from aindy import AINDYClient, AINDYError
+from AINDY.sdk.aindy_sdk import AINDYClient, AINDYError
 
 client = AINDYClient("http://localhost:8000", api_key="aindy_...")
 

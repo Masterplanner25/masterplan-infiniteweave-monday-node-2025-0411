@@ -73,7 +73,6 @@ class Settings(BaseSettings):
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = False
     SKIP_MONGO_PING: bool = False
-    ENABLE_DOMAIN_APPS: bool = False
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
