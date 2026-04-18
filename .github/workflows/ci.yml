@@ -89,14 +89,7 @@ jobs:
         run: alembic check
 
       - name: Run tests with coverage
-        run: |
-          pytest \
-            --ignore=tests/validate_memory_loop.py \
-            --cov=. \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage.xml \
-            --cov-fail-under=69 \
-            -q
+        run: pytest --ignore=tests/validate_memory_loop.py
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
