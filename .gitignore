@@ -1,24 +1,104 @@
-﻿node_modules/
-venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-.ruff_cache/
-.coverage
-coverage.xml
-dist/
-build/
-target/
-AINDY/memory/native/memory_bridge_rs/target/
-code_analysis.db
+# ============================================================
+# A.I.N.D.Y. — Production .gitignore
+# ============================================================
+
+# ── OS / System ─────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Editor / IDE ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.codex/
+
+# ── Environment / Secrets (CRITICAL) ────────────────────────
 .env
 .env.*
 !.env.example
-AINDY/.env
-AINDY/.env.*
+*.key
+*.pem
+*.crt
+secrets/
+.credentials/
+
+# ── Python — Bytecode & Caches ──────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+
+# ── Python — Coverage & Reports ─────────────────────────────
+.coverage
+coverage.xml
+htmlcov/
+junit.xml
+
+# ── Python — Virtual Environments ───────────────────────────
+.venv/
+venv/
 AINDY/venv/
-AINDY/logs/
+env/
+ENV/
+
+# ── Database / Local State ───────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+pgdata/
+docker-data/
+
+# ── Node / Frontend (React + Vite) ──────────────────────────
+node_modules/
+dist/
+build/
+dist-ssr/
+.vite/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Logs ─────────────────────────────────────────────────────
 logs/
-.codex/
+*.log
+AINDY/logs/
+
+# ── Nodus Runtime / CLI ──────────────────────────────────────
+*.ndc
+*.nd.trace
+*.nd.profile
+nodus_cache/
+nodus_tmp/
+.nodus/
+
+# ── A.I.N.D.Y. Execution / Runtime Artifacts ────────────────
+tmp/
+runtime_cache/
+execution_artifacts/
+
+# ── Build Outputs ────────────────────────────────────────────
+target/
+AINDY/memory/native/memory_bridge_rs/target/
+
+# ── Docker ───────────────────────────────────────────────────
+*.pid
+*.sock
+
+# ── Misc Scratch Files ───────────────────────────────────────
+Pasted text.txt
