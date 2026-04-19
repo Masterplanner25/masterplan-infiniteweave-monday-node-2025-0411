@@ -78,14 +78,52 @@ import logging
 import os
 import queue
 import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+import tenacity
+
 logger = logging.getLogger(__name__)
 
 QUEUE_NAME_DEFAULT = "aindy:jobs"
+
+
+def _log_redis_retry_attempt(retry_state: tenacity.RetryCallState) -> None:
+    """Emit a structured warning before sleeping for the next retry."""
+    if retry_state.outcome is None:
+        return
+
+    exc = retry_state.outcome.exception()
+    if exc is None:
+        return
+
+    logger.warning(
+        "RedisQueueBackend: retry attempt=%s exception=%s",
+        retry_state.attempt_number,
+        exc,
+    )
+
+
+def _redis_retry():
+    """Retry transient Redis failures with bounded exponential backoff."""
+    import redis  # type: ignore[import]
+
+    return tenacity.retry(
+        retry=tenacity.retry_if_exception_type(
+            (
+                redis.ConnectionError,
+                redis.TimeoutError,
+                redis.BusyLoadingError,
+            )
+        ),
+        wait=tenacity.wait_exponential(multiplier=2, min=0.1, max=2.0),
+        stop=tenacity.stop_after_attempt(3),
+        before_sleep=_log_redis_retry_attempt,
+        reraise=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +219,10 @@ class DistributedQueueBackend(ABC):
     def fail(self, job_id: str, error: str = "") -> None:
         """Mark a job as terminally failed; move to Dead Letter Queue."""
 
+    @abstractmethod
+    def get_dlq_depth(self) -> int:
+        """Return the number of dead-lettered jobs."""
+
     # ── Optional extensions ────────────────────────────────────────────────
 
     def enqueue_delayed(self, payload: QueueJobPayload, delay_seconds: float) -> None:
@@ -221,6 +263,7 @@ class DistributedQueueBackend(ABC):
             "in_flight_count": 0,
             "failed_jobs": 0,
             "delayed_jobs": 0,
+            "dlq_depth": 0,
         }
 
 
@@ -255,7 +298,13 @@ end
 return #ready
 """
 
-    def __init__(self, url: str, queue_name: str = QUEUE_NAME_DEFAULT) -> None:
+    def __init__(
+        self,
+        url: str,
+        queue_name: str = QUEUE_NAME_DEFAULT,
+        circuit_breaker_threshold: int = 5,
+        circuit_breaker_open_seconds: float = 30.0,
+    ) -> None:
         try:
             import redis  # type: ignore[import]
         except ImportError as exc:
@@ -269,12 +318,71 @@ return #ready
         self._delayed_key = f"{queue_name}:delayed"
         self._dlq_key = f"{queue_name}:dead"
         self._process_delayed = self._redis.register_script(self._PROCESS_DELAYED_LUA)
+        self._redis_exceptions = (
+            redis.ConnectionError,
+            redis.TimeoutError,
+            redis.BusyLoadingError,
+        )
+        self._failure_count = 0
+        self._open_until = 0.0
+        self._circuit_breaker_threshold = circuit_breaker_threshold
+        self._circuit_breaker_open_seconds = circuit_breaker_open_seconds
+
+    def _check_circuit_breaker(self) -> None:
+        import redis  # type: ignore[import]
+
+        if time.monotonic() < self._open_until:
+            raise redis.ConnectionError("Circuit breaker open")
+
+    def _record_success(self) -> None:
+        if self._failure_count or self._open_until:
+            logger.info(
+                "RedisQueueBackend: circuit breaker CLOSED (connection restored)"
+            )
+        self._failure_count = 0
+        self._open_until = 0.0
+
+    def _record_failure(self, exc: Exception) -> None:
+        if not isinstance(exc, self._redis_exceptions):
+            return
+
+        self._failure_count += 1
+        if self._failure_count >= self._circuit_breaker_threshold:
+            self._open_until = time.monotonic() + self._circuit_breaker_open_seconds
+            logger.error(
+                "RedisQueueBackend: circuit breaker OPEN for %.1fs after %d failures",
+                self._circuit_breaker_open_seconds,
+                self._failure_count,
+            )
+
+    def _run_redis_operation(self, operation_name: str, fn):
+        @_redis_retry()
+        def _call():
+            return fn()
+
+        try:
+            result = _call()
+        except self._redis_exceptions as exc:
+            self._record_failure(exc)
+            logger.warning(
+                "RedisQueueBackend: operation=%s failed error=%s",
+                operation_name,
+                exc,
+            )
+            raise
+
+        self._record_success()
+        return result
 
     # ── Core operations ────────────────────────────────────────────────────
 
     def enqueue(self, payload: QueueJobPayload) -> None:
+        self._check_circuit_breaker()
         raw = payload.to_json()
-        self._redis.lpush(self._queue_name, raw)
+        self._run_redis_operation(
+            "enqueue",
+            lambda: self._redis.lpush(self._queue_name, raw),
+        )
         operation_name = getattr(payload, "operation_name", None) or payload.task_name
         logger.debug(
             "[Queue:redis] enqueued job_id=%s operation=%s idempotency_key=%s",
@@ -282,7 +390,11 @@ return #ready
         )
 
     def dequeue(self, timeout: int = 5) -> Optional[QueueJobPayload]:
-        result = self._redis.brpop(self._queue_name, timeout=timeout)
+        self._check_circuit_breaker()
+        result = self._run_redis_operation(
+            "dequeue",
+            lambda: self._redis.brpop(self._queue_name, timeout=timeout),
+        )
         if result is None:
             return None
         _, raw = result
@@ -296,12 +408,18 @@ return #ready
             "payload": raw,
             "dequeued_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._redis.hset(self._inflight_key, job.job_id, inflight_entry)
+        self._run_redis_operation(
+            "dequeue_inflight_hset",
+            lambda: self._redis.hset(self._inflight_key, job.job_id, inflight_entry),
+        )
         return job
 
     def ack(self, job_id: str) -> None:
         """Remove from in-flight — job completed successfully."""
-        self._redis.hdel(self._inflight_key, job_id)
+        self._run_redis_operation(
+            "ack",
+            lambda: self._redis.hdel(self._inflight_key, job_id),
+        )
         logger.debug("[Queue:redis] ack job_id=%s", job_id)
 
     def fail(self, job_id: str, error: str = "") -> None:
@@ -311,8 +429,14 @@ return #ready
         The DLQ entry preserves the original payload so it can be inspected
         and replayed by an operator.
         """
-        inflight_raw = self._redis.hget(self._inflight_key, job_id)
-        self._redis.hdel(self._inflight_key, job_id)
+        inflight_raw = self._run_redis_operation(
+            "fail_hget",
+            lambda: self._redis.hget(self._inflight_key, job_id),
+        )
+        self._run_redis_operation(
+            "fail_hdel",
+            lambda: self._redis.hdel(self._inflight_key, job_id),
+        )
 
         # Build DLQ record.
         try:
@@ -325,7 +449,10 @@ return #ready
             "error": error,
             "failed_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._redis.lpush(self._dlq_key, dlq_entry)
+        self._run_redis_operation(
+            "fail_lpush_dlq",
+            lambda: self._redis.lpush(self._dlq_key, dlq_entry),
+        )
         logger.warning(
             "[Queue:redis] fail→DLQ job_id=%s error=%s", job_id, error
         )
@@ -342,7 +469,10 @@ return #ready
         """
         raw = payload.to_json()
         execute_at = datetime.now(timezone.utc).timestamp() + delay_seconds
-        self._redis.zadd(self._delayed_key, {raw: execute_at})
+        self._run_redis_operation(
+            "enqueue_delayed",
+            lambda: self._redis.zadd(self._delayed_key, {raw: execute_at}),
+        )
         logger.debug(
             "[Queue:redis] delayed enqueue job_id=%s delay=%.1fs",
             payload.job_id, delay_seconds,
@@ -357,9 +487,12 @@ return #ready
         Returns the number of jobs promoted.
         """
         now_ts = datetime.now(timezone.utc).timestamp()
-        count = self._process_delayed(
-            keys=[self._delayed_key, self._queue_name],
-            args=[str(now_ts)],
+        count = self._run_redis_operation(
+            "process_delayed_jobs",
+            lambda: self._process_delayed(
+                keys=[self._delayed_key, self._queue_name],
+                args=[str(now_ts)],
+            ),
         )
         if count:
             logger.info("[Queue:redis] promoted %d delayed jobs", count)
@@ -378,7 +511,10 @@ return #ready
         Returns the number of jobs re-enqueued.
         """
         now = datetime.now(timezone.utc)
-        entries = self._redis.hgetall(self._inflight_key)
+        entries = self._run_redis_operation(
+            "requeue_stale_jobs_hgetall",
+            lambda: self._redis.hgetall(self._inflight_key),
+        )
         requeued = 0
         for job_id, entry_raw in entries.items():
             try:
@@ -388,10 +524,18 @@ return #ready
                 if age_seconds <= timeout_seconds:
                     continue
                 # Attempt to claim the re-enqueue: delete from inflight first.
-                removed = self._redis.hdel(self._inflight_key, job_id)
+                removed = self._run_redis_operation(
+                    "requeue_stale_jobs_hdel",
+                    lambda job_id=job_id: self._redis.hdel(self._inflight_key, job_id),
+                )
                 if not removed:
                     continue  # Another worker got there first.
-                self._redis.lpush(self._queue_name, entry["payload"])
+                self._run_redis_operation(
+                    "requeue_stale_jobs_lpush",
+                    lambda payload=entry["payload"]: self._redis.lpush(
+                        self._queue_name, payload
+                    ),
+                )
                 requeued += 1
                 logger.info(
                     "[Queue:redis] requeued stale job_id=%s age=%.0fs",
@@ -419,9 +563,17 @@ return #ready
         return {
             "queue_depth": self._redis.llen(self._queue_name),
             "in_flight_count": self._redis.hlen(self._inflight_key),
-            "failed_jobs": self._redis.llen(self._dlq_key),
+            "failed_jobs": self.get_dlq_depth(),
             "delayed_jobs": self._redis.zcard(self._delayed_key),
+            "dlq_depth": self.get_dlq_depth(),
         }
+
+    def get_dlq_depth(self) -> int:
+        return int(self._redis.llen(self._dlq_key))
+
+    def peek_dead_letters(self, n: int) -> list[dict]:
+        entries = self._redis.lrange(self._dlq_key, 0, max(0, n) - 1)
+        return [json.loads(entry) for entry in entries]
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +696,7 @@ class InMemoryQueueBackend(DistributedQueueBackend):
             "in_flight_count": inflight,
             "failed_jobs": dlq,
             "delayed_jobs": 0,  # Timers are fire-and-forget; no persistent count.
+            "dlq_depth": self.get_dlq_depth(),
         }
 
     # ── Test helpers ──────────────────────────────────────────────────────
@@ -556,6 +709,10 @@ class InMemoryQueueBackend(DistributedQueueBackend):
         """Return a copy of the DLQ (for test assertions)."""
         with self._dlq_lock:
             return list(self._dlq)
+
+    def get_dlq_depth(self) -> int:
+        with self._dlq_lock:
+            return len(self._dlq)
 
     def get_inflight_ids(self) -> list[str]:
         """Return current in-flight job IDs (for test assertions)."""
