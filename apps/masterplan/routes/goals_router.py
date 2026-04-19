@@ -1,15 +1,61 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.core.execution_service import ExecutionContext, run_execution
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 
 router = APIRouter(prefix="/goals", tags=["Goals"])
+
+
+def _unwrap_execution_response(response):
+    if isinstance(response, dict):
+        payload = response.get("data")
+        if (
+            response.get("status") == "SUCCESS"
+            and isinstance(payload, dict)
+            and "trace_id" in response
+        ):
+            return payload
+        return response
+
+    if isinstance(response, JSONResponse):
+        payload = json.loads(response.body.decode("utf-8"))
+        if (
+            isinstance(payload, dict)
+            and payload.get("status") == "SUCCESS"
+            and isinstance(payload.get("data"), dict)
+            and "trace_id" in payload
+        ):
+            return JSONResponse(
+                status_code=response.status_code,
+                content=payload["data"],
+                headers=dict(response.headers),
+            )
+    return response
+
+
+def _run_goal_execution(
+    context: ExecutionContext,
+    fn,
+    *,
+    success_status_code: int = 200,
+):
+    return _unwrap_execution_response(
+        run_execution(
+            context,
+            fn,
+            success_status_code=success_status_code,
+        )
+    )
 
 
 def _execute_goals(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None, success_status_code: int = 200):
@@ -56,6 +102,29 @@ class GoalCreateRequest(BaseModel):
     success_metric: dict = Field(default_factory=dict)
 
 
+def _do_create_goal(db: Session, body: GoalCreateRequest, user_id: str):
+    from AINDY.runtime.flow_engine import run_flow
+
+    result = run_flow(
+        "goal_create",
+        {
+            "name": body.name,
+            "description": body.description,
+            "goal_type": body.goal_type,
+            "priority": body.priority,
+            "status": body.status,
+            "success_metric": body.success_metric,
+        },
+        db=db,
+        user_id=user_id,
+    )
+    if result.get("status") == "error":
+        raise RuntimeError(
+            (result.get("data") or {}).get("message", "Goal create flow failed")
+        )
+    return result.get("data")
+
+
 @router.get("")
 @limiter.limit("60/minute")
 def list_goals(
@@ -82,35 +151,15 @@ def create_goal_route(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-
-    def handler(_ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow(
-            "goal_create",
-            {
-                "name": body.name,
-                "description": body.description,
-                "goal_type": body.goal_type,
-                "priority": body.priority,
-                "status": body.status,
-                "success_metric": body.success_metric,
-            },
+    return _run_goal_execution(
+        ExecutionContext(
             db=db,
             user_id=user_id,
-        )
-        if result.get("status") == "error":
-            raise RuntimeError(
-                (result.get("data") or {}).get("message", "Goal create flow failed")
-            )
-        return result.get("data")
-
-    return _execute_goals(
-        request,
-        "goals.create",
-        handler,
-        db=db,
-        user_id=user_id,
-        input_payload={"goal_name": body.name},
+            source="goals_router",
+            operation="goals.create",
+            start_payload=body.model_dump(),
+        ),
+        lambda: _do_create_goal(db, body, user_id),
         success_status_code=status.HTTP_201_CREATED,
     )
 

@@ -3,6 +3,7 @@ import threading
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from AINDY.config import settings
@@ -172,12 +173,10 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
         ) from exc
 
     cache_backend = settings.AINDY_CACHE_BACKEND.lower()
-    if cache_backend == "redis":
+    if cache_backend == "redis" and settings.REDIS_URL:
         try:
             import redis
 
-            if not settings.REDIS_URL:
-                raise RuntimeError("REDIS_URL is required for redis readiness checks")
             redis.from_url(settings.REDIS_URL).ping()
             components["redis"] = "ready"
         except Exception as exc:
@@ -193,6 +192,8 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
                     },
                 },
             ) from exc
+    elif cache_backend == "redis":
+        components["cache"] = "memory:fallback_no_redis_url"
     else:
         components["cache"] = f"{cache_backend}:not_required"
 

@@ -10,7 +10,7 @@ Example::
         {"nodes": memory_nodes, "mode": "deep"},
     )
     if result["status"] == "success":
-        print(result["data"]["output"])
+        output = result["data"]["output"]
 """
 from __future__ import annotations
 

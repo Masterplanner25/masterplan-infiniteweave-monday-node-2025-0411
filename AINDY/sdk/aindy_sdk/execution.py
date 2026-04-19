@@ -7,8 +7,8 @@ completed execution unit (AgentRun, flow run, Nodus execution).
 Example::
 
     run = client.execution.get("run-abc123")
-    print(run["data"]["status"])          # "success" | "running" | "failed"
-    print(run["data"]["syscall_count"])   # number of syscalls dispatched
+    status = run["data"]["status"]          # "success" | "running" | "failed"
+    syscall_count = run["data"]["syscall_count"]   # number of syscalls dispatched
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ class ExecutionAPI:
 
             info = client.execution.get("run-abc123")
             if info["data"]["status"] == "waiting":
-                print("Execution is paused waiting for a signal")
+                waiting_message = "Execution is paused waiting for a signal"
         """
         return self._sys.call(
             "sys.v1.execution.get",

@@ -1,6 +1,7 @@
 # Usage:
-#   docker compose up                  # quickstart: postgres + api
-#   docker compose --profile full up   # full stack: all services
+#   docker compose up                  # quickstart: postgres + api (single instance, in-memory cache)
+#   REDIS_URL=redis://redis:6379/0 docker compose --profile full up
+#                                     # full stack / multi-instance: shared Redis cache
 #   docker compose --profile social up # adds MongoDB for social features
 
 services:
@@ -12,13 +13,17 @@ services:
       - AINDY/.env
     command: sh -c "alembic -c alembic.ini upgrade head && uvicorn AINDY.main:app --host 0.0.0.0 --port 8000"
     environment:
+      # Quickstart intentionally leaves REDIS_URL unset so the api falls back to
+      # single-process in-memory cache. For multi-instance deployments, set
+      # REDIS_URL to a shared Redis and keep AINDY_CACHE_BACKEND=redis.
       SKIP_MONGO_PING: ${SKIP_MONGO_PING:-true}
       AINDY_SKIP_MONGO_PING: ${AINDY_SKIP_MONGO_PING:-true}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-memory}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
+      REDIS_URL: ${REDIS_URL:-}
+      AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
       EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
       AINDY_ENABLE_BACKGROUND_TASKS: "false"
       AINDY_ENABLE_LEGACY_SURFACE: "false"
@@ -28,6 +33,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+        required: false
     ports:
       - "8000:8000"
 
@@ -43,6 +51,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
       EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
@@ -88,6 +97,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme_in_production}
     profiles: ["full"]
     ports:
       - "6379:6379"

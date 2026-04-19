@@ -1,28 +1,29 @@
 """
-Retry Policy — central definition of retry semantics for all execution types.
+Retry Policy - central definition of retry semantics for all execution types.
 
 This module defines how many attempts each execution type makes and under what
-conditions.  It does NOT change any existing retry execution logic — callers
-(flow_engine, nodus_adapter, async_job_service, nodus_schedule_service) still
-own their own retry loops.  This file is the single source of truth for what
-those defaults *should* be, and the resolver can be adopted incrementally as
-each caller migrates.
+conditions. It also centralizes the shared backoff calculation so retry delays
+stay consistent across execution paths.
 
 Current system defaults (preserved exactly):
-  Flow nodes    → max_attempts=3  (global POLICY["max_retries"] in flow_engine.py)
-  Agent low/med → max_attempts=3  (MAX_STEP_RETRIES in nodus_adapter.py)
-  Agent high    → max_attempts=1  (immediate fail; no retry)
-  AsyncJob      → max_attempts=1  (default in async_job_service.py)
-  Nodus sched.  → max_attempts=3  (NodusScheduledJob.max_retries default)
-
-Backoff: the current system has no sleep between retries anywhere.
-  backoff_ms=0 here reflects that reality.  When a caller introduces backoff
-  it should update its policy entry here first so the intent stays central.
+  Flow nodes    -> max_attempts=3  (global POLICY["max_retries"] in flow_engine.py)
+  Agent low/med -> max_attempts=3  (MAX_STEP_RETRIES in nodus_adapter.py)
+  Agent high    -> max_attempts=1  (immediate fail; no retry)
+  AsyncJob      -> max_attempts=1  (default in async_job_service.py)
+  Nodus sched.  -> max_attempts=3  (NodusScheduledJob.max_retries default)
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Optional
+import asyncio
+import random
+import time
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Optional, TypeVar
+
+
+_T = TypeVar("_T")
+_MAX_BACKOFF_SECONDS = 10.0
+_MAX_JITTER_MS = 50
 
 
 # ---------------------------------------------------------------------------
@@ -37,27 +38,25 @@ class RetryPolicy:
     """Total attempts allowed (1 = no retry)."""
 
     backoff_ms: int = 0
-    """Fixed delay between attempts in milliseconds.
-    0 means no sleep (current system behavior everywhere)."""
+    """Base delay between attempts in milliseconds."""
 
     exponential_backoff: bool = False
-    """If True, multiply backoff_ms by 2^(attempt-1) between retries.
-    False preserves current flat-retry behavior."""
+    """If True, multiply backoff_ms by 2^attempt between retries."""
 
     high_risk_immediate_fail: bool = False
     """If True, any failure on the first attempt is terminal regardless of
-    max_attempts.  Matches nodus_adapter high-risk no-retry rule."""
+    max_attempts. Matches nodus_adapter high-risk no-retry rule."""
 
 
 # ---------------------------------------------------------------------------
 # Well-known policies (named constants for documentation and future adoption)
 # ---------------------------------------------------------------------------
 
-# Mirrors flow_engine.POLICY["max_retries"] = 3, no backoff
-FLOW_NODE_DEFAULT = RetryPolicy(max_attempts=3, backoff_ms=0, exponential_backoff=False)
+# Mirrors flow_engine.POLICY["max_retries"] = 3 with exponential backoff
+FLOW_NODE_DEFAULT = RetryPolicy(max_attempts=3, backoff_ms=200, exponential_backoff=True)
 
 # Mirrors nodus_adapter.MAX_STEP_RETRIES = 3 for low/medium risk
-AGENT_LOW_MEDIUM = RetryPolicy(max_attempts=3, backoff_ms=0, exponential_backoff=False)
+AGENT_LOW_MEDIUM = RetryPolicy(max_attempts=3, backoff_ms=200, exponential_backoff=True)
 
 # Mirrors nodus_adapter high-risk rule: 1 attempt, immediate fail on error
 AGENT_HIGH_RISK = RetryPolicy(
@@ -68,12 +67,12 @@ AGENT_HIGH_RISK = RetryPolicy(
 )
 
 # Mirrors async_job_service default max_attempts=1
-ASYNC_JOB_DEFAULT = RetryPolicy(max_attempts=1, backoff_ms=0, exponential_backoff=False)
+ASYNC_JOB_DEFAULT = RetryPolicy(max_attempts=1, backoff_ms=500, exponential_backoff=True)
 
 # Mirrors NodusScheduledJob.max_retries default = 3 via nodus_schedule_service
-NODUS_SCHEDULED_DEFAULT = RetryPolicy(max_attempts=3, backoff_ms=0, exponential_backoff=False)
+NODUS_SCHEDULED_DEFAULT = RetryPolicy(max_attempts=3, backoff_ms=300, exponential_backoff=True)
 
-# Used when a node explicitly opts out of retry (e.g. task_orchestrate RETRY→FAILURE)
+# Used when a node explicitly opts out of retry (e.g. task_orchestrate RETRY->FAILURE)
 NO_RETRY = RetryPolicy(max_attempts=1, backoff_ms=0, exponential_backoff=False)
 
 
@@ -124,11 +123,11 @@ def resolve_retry_policy(
 
     node_max_retries:
         Per-node override from node config (e.g. a flow node that declares
-        its own ``max_retries`` value).  When present this overrides the
-        flow default.  Has no effect for non-flow types.
+        its own ``max_retries`` value). When present this overrides the
+        flow default. Has no effect for non-flow types.
 
     job_max_retries:
-        Per-job override from ``NodusScheduledJob.max_retries``.  Only
+        Per-job override from ``NodusScheduledJob.max_retries``. Only
         meaningful when execution_type == ``"nodus"``.
 
     Returns
@@ -165,8 +164,39 @@ def resolve_retry_policy(
             )
         return NODUS_SCHEDULED_DEFAULT
 
-    # Unknown type → safest default: no retry
+    # Unknown type -> safest default: no retry
     return NO_RETRY
+
+
+# ---------------------------------------------------------------------------
+# Retry execution helpers
+# ---------------------------------------------------------------------------
+
+def _retry_delay_seconds(policy: RetryPolicy, attempt_number: int) -> float:
+    """
+    Return the delay before the next retry attempt.
+
+    ``attempt_number`` is 1-based for retries only: after the first failed
+    attempt pass ``1``, so the first execution attempt is never delayed.
+    """
+    if attempt_number <= 0 or policy.backoff_ms <= 0:
+        return 0.0
+
+    multiplier = 2 ** attempt_number if policy.exponential_backoff else 1
+    delay_ms = (policy.backoff_ms * multiplier) + random.randint(0, _MAX_JITTER_MS)
+    return min(delay_ms / 1000.0, _MAX_BACKOFF_SECONDS)
+
+
+def _sleep_before_retry(policy: RetryPolicy, attempt_number: int) -> None:
+    delay_seconds = _retry_delay_seconds(policy, attempt_number)
+    if delay_seconds > 0:
+        time.sleep(delay_seconds)
+
+
+async def _sleep_before_retry_async(policy: RetryPolicy, attempt_number: int) -> None:
+    delay_seconds = _retry_delay_seconds(policy, attempt_number)
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
 
 
 # ---------------------------------------------------------------------------
@@ -178,10 +208,54 @@ def is_retryable_error(error: Optional[str]) -> bool:
     Return False when an error string signals a non-retryable failure.
 
     Callers can use this to short-circuit retry loops even when the policy
-    allows more attempts.  Current system does not use this — it is here as
+    allows more attempts. Current system does not use this - it is here as
     the central place to add the check when callers adopt it.
     """
     if not error:
         return True
     lower = error.lower()
     return not any(substr in lower for substr in _NON_RETRYABLE_SUBSTRINGS)
+
+
+def execute_with_retry(
+    operation: Callable[[], _T],
+    *,
+    policy: RetryPolicy,
+    retryable_error_checker: Callable[[Optional[str]], bool] = is_retryable_error,
+) -> _T:
+    """Run a synchronous operation under the supplied retry policy."""
+    for attempt_index in range(policy.max_attempts):
+        try:
+            return operation()
+        except Exception as exc:
+            if policy.high_risk_immediate_fail or attempt_index + 1 >= policy.max_attempts:
+                raise
+
+            if not retryable_error_checker(str(exc)):
+                raise
+
+            _sleep_before_retry(policy, attempt_index + 1)
+
+    raise RuntimeError("retry loop exhausted unexpectedly")
+
+
+async def _execute_with_retry(
+    operation: Callable[[], Awaitable[_T]],
+    *,
+    policy: RetryPolicy,
+    retryable_error_checker: Callable[[Optional[str]], bool] = is_retryable_error,
+) -> _T:
+    """Run an async operation under the supplied retry policy."""
+    for attempt_index in range(policy.max_attempts):
+        try:
+            return await operation()
+        except Exception as exc:
+            if policy.high_risk_immediate_fail or attempt_index + 1 >= policy.max_attempts:
+                raise
+
+            if not retryable_error_checker(str(exc)):
+                raise
+
+            await _sleep_before_retry_async(policy, attempt_index + 1)
+
+    raise RuntimeError("retry loop exhausted unexpectedly")

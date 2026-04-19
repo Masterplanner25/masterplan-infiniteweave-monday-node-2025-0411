@@ -15,7 +15,7 @@ Example::
         ''',
         input={"context": "weekly review"},
     )
-    print(result["output_state"])
+    output_state = result["output_state"]
 
     # Upload and run a named script
     client.nodus.upload_script("weekly_review", script_source)

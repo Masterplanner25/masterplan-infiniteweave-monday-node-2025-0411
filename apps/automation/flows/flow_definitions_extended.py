@@ -92,7 +92,16 @@ def arm_logs_node(state, context):
 def arm_config_get_node(state, context):
     try:
         from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
-        return {"status": "SUCCESS", "output_patch": {"arm_config_get_result": ConfigManager().get_all()}}
+        try:
+            manager = ConfigManager(db=context.get("db"))
+        except TypeError:
+            manager = ConfigManager()
+        return {
+            "status": "SUCCESS",
+            "output_patch": {
+                "arm_config_get_result": manager.get_all()
+            },
+        }
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
 
@@ -101,7 +110,11 @@ def arm_config_get_node(state, context):
 def arm_config_update_node(state, context):
     try:
         from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
-        updated = ConfigManager().update(state.get("updates", {}))
+        try:
+            manager = ConfigManager(db=context.get("db"))
+        except TypeError:
+            manager = ConfigManager()
+        updated = manager.update(state.get("updates", {}))
         return {"status": "SUCCESS", "output_patch": {"arm_config_update_result": {"status": "updated", "config": updated}}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
@@ -129,7 +142,11 @@ def arm_config_suggest_node(state, context):
         user_id = context.get("user_id")
         window = state.get("window", 30)
         metrics = ARMMetricsService(db=db, user_id=user_id).get_all_metrics(window=window)
-        current_config = ConfigManager().get_all()
+        try:
+            manager = ConfigManager(db=db)
+        except TypeError:
+            manager = ConfigManager()
+        current_config = manager.get_all()
         suggestions = ARMConfigSuggestionEngine(current_config=current_config, metrics=metrics).generate_suggestions()
         suggestions["metrics_snapshot"] = {
             "decision_efficiency": metrics.get("decision_efficiency", {}).get("score", 0),

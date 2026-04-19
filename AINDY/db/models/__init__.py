@@ -12,6 +12,7 @@ from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
+from .arm_config import ArmConfig
 from .background_task_lease import BackgroundTaskLease
 from .flow_run import FlowRun, FlowHistory, EventOutcome
 from .agent_run import AgentRun, AgentStep, AgentTrustSettings
@@ -23,9 +24,12 @@ from .agent_registry import AgentRegistry
 from .execution_unit import ExecutionUnit
 from .event_edge import EventEdge
 from .job_log import JobLog
+from .nodus_scheduled_job import NodusScheduledJob
+from .nodus_trace_event import NodusTraceEvent
 from .api_key import PlatformAPIKey
 from .dynamic_flow import DynamicFlow
 from .dynamic_node import DynamicNode
+from .watcher_signal import WatcherSignal
 from .webhook_subscription import WebhookSubscription
 
 
@@ -38,6 +42,7 @@ __all__ = [
     "UserIdentity",
     "MemoryNodeHistory",
     "Agent",
+    "ArmConfig",
     "MemoryMetric",
     "MemoryTrace",
     "MemoryTraceNode",
@@ -57,8 +62,11 @@ __all__ = [
     "ExecutionUnit",
     "EventEdge",
     "JobLog",
+    "NodusScheduledJob",
+    "NodusTraceEvent",
     "PlatformAPIKey",
     "DynamicFlow",
     "DynamicNode",
+    "WatcherSignal",
     "WebhookSubscription",
 ]

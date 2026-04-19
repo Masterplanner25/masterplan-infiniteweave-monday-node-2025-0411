@@ -205,7 +205,11 @@ def _ensure_dev_api_key():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
-    cache_backend = os.getenv("AINDY_CACHE_BACKEND", "memory").lower()
+    # Cache backend selection:
+    # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
+    # "memory" - single-process only; two instances will have independent caches
+    # Falls back to memory if REDIS_URL is absent regardless of this setting.
+    cache_backend = settings.AINDY_CACHE_BACKEND.lower()
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         cache_backend = "memory"
     if cache_backend == "redis":
@@ -216,10 +220,18 @@ async def lifespan(app: FastAPI):
             logger.error("Redis cache backend unavailable: %s", exc)
             raise RuntimeError("Redis cache backend unavailable.") from exc
         if not settings.REDIS_URL:
-            raise RuntimeError("REDIS_URL is required for redis cache backend.")
-        redis = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
-        FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
-        logger.info("Cache backend initialized: redis")
+            # Single-instance quickstart runs without Redis; use in-memory cache
+            # instead of failing startup when REDIS_URL is intentionally absent.
+            logger.warning(
+                "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set; "
+                "falling back to in-memory cache for single-instance startup."
+            )
+            FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+            logger.info("Cache backend initialized: memory")
+        else:
+            redis = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
+            FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
+            logger.info("Cache backend initialized: redis")
     else:
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
         logger.info("Cache backend initialized: memory")
