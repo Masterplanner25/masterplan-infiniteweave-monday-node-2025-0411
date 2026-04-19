@@ -44,17 +44,27 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def reject_insecure_secret_key(cls, v: str) -> str:
-        is_test = os.getenv("ENV", "").lower() == "test" or os.getenv(
+        env_name = os.getenv("ENV", "").lower()
+        is_test = env_name == "test" or os.getenv(
             "TEST_MODE", "0"
         ).lower() in {"1", "true", "yes"}
+        is_dev = env_name in {"dev", "development"}
         if not is_test:
             _BAD = {"secret", "changeme", "your-secret-key", "REPLACE_THIS"}
             if v.startswith("REPLACE_THIS") or v in _BAD:
-                raise RuntimeError(
+                raise ValueError(
                     "SECRET_KEY is set to an insecure placeholder. "
                     "Generate a real key with: "
                     'python3 -c "import secrets; print(secrets.token_hex(32))"'
                 )
+        if v == "test-secret-key" and not (is_test or is_dev):
+            raise ValueError(
+                "SECRET_KEY must not use the known weak test value outside test/development."
+            )
+        if len(v) < 32 and not (is_test or is_dev):
+            raise ValueError(
+                "SECRET_KEY must be at least 32 characters outside test/development."
+            )
         return v
 
     VERSION: str = Field(default_factory=_read_version, exclude=True)
