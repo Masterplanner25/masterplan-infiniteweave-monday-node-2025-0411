@@ -6,7 +6,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
-from threading import Lock
+from threading import Lock, Semaphore
 from typing import Any, Callable
 from uuid import UUID
 
@@ -45,13 +45,15 @@ def _legacy_log_from_fake_db(db, log_id: str):
 
 _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
+_SUBMIT_SEMAPHORE: Semaphore | None = None
+_SEMAPHORE_LOCK = Lock()
 _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 _ASYNC_EXECUTION_CONTEXT: ContextVar[bool] = ContextVar("_ASYNC_EXECUTION_CONTEXT", default=False)
 _INLINE_ACTIVE = _ASYNC_EXECUTION_CONTEXT
 _LEGACY_LOG_ID_KEY = "automation" + "_log_id"
 _LEGACY_LOG_COLLECTION = "automation" + "_logs"
 
-# async_heavy_execution_enabled() now lives in core.execution_dispatcher â€” the
+# async_heavy_execution_enabled() now lives in core.execution_dispatcher -- the
 # single authoritative source for the INLINE vs ASYNC decision.  Re-exported
 # here so existing callers (flow_definitions_extended, memory_router, arm_router)
 # continue to work without modification.
@@ -77,6 +79,16 @@ def _get_executor() -> ThreadPoolExecutor:
                     thread_name_prefix="aindy-async-job",
                 )
     return _EXECUTOR
+
+
+def _get_semaphore() -> Semaphore:
+    global _SUBMIT_SEMAPHORE
+    if _SUBMIT_SEMAPHORE is None:
+        with _SEMAPHORE_LOCK:
+            if _SUBMIT_SEMAPHORE is None:
+                max_q = int(os.getenv("AINDY_ASYNC_QUEUE_MAXSIZE", "100"))
+                _SUBMIT_SEMAPHORE = Semaphore(max_q)
+    return _SUBMIT_SEMAPHORE
 
 
 def register_async_job(name: str):
@@ -371,7 +383,7 @@ def submit_async_job(
                         db.add(_log)
                         db.commit()
                         logger.info(
-                            "[AsyncJobService] Inline fallback forced JobLog %s â†’ success",
+                            "[AsyncJobService] Inline fallback forced JobLog %s â†' success",
                             log_id,
                         )
                 except Exception as _e:
@@ -383,19 +395,41 @@ def submit_async_job(
             return log_id
         if not execute_inline_in_test_mode:
             return log_id
-        # Removed: _get_executor().submit() called directly here.
-        # Dispatch through ExecutionDispatcher â€” the single owner of the
-        # INLINE vs ASYNC decision.  JOB_DISPATCH_STUB carries async_hint=True
-        # to bypass the global env flag (test-mode inline execution was already
-        # handled above; reaching this line means we are in a real async env).
-        from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
-        _dr = _dispatch(
-            JOB_DISPATCH_STUB,
-            handler_fn=lambda: _execute_job(log_id, task_name, payload),
-            context={"log_id": log_id, "task_name": task_name},
-        )
-        if _dr.future is not None and _dr.future.cancelled():
-            raise RuntimeError(f"Async job '{task_name}' was cancelled before execution")
+        sem = _get_semaphore()
+        if not sem.acquire(blocking=False):
+            log = db.query(JobLog).filter(JobLog.id == log_id).first()
+            if log:
+                log.status = "failed"
+                log.error_message = "Execution queue full -- retry later"
+                log.completed_at = datetime.now(timezone.utc)
+                db.commit()
+            raise RuntimeError(
+                f"Async job queue full (max={os.getenv('AINDY_ASYNC_QUEUE_MAXSIZE', 100)}). "
+                "Job rejected. Retry later or increase AINDY_ASYNC_QUEUE_MAXSIZE."
+            )
+
+        if _distributed_execution_enabled():
+            # Distributed path: enqueue to remote queue, then release semaphore immediately
+            # (the remote queue manages its own capacity).
+            try:
+                from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
+                _dr = _dispatch(
+                    JOB_DISPATCH_STUB,
+                    handler_fn=lambda: _execute_job(log_id, task_name, payload),
+                    context={"log_id": log_id, "task_name": task_name},
+                )
+                if _dr.future is not None and _dr.future.cancelled():
+                    raise RuntimeError(f"Async job '{task_name}' was cancelled before execution")
+            finally:
+                sem.release()
+        else:
+            def _submit_and_release():
+                try:
+                    _execute_job(log_id, task_name, payload)
+                finally:
+                    sem.release()
+
+            _get_executor().submit(_submit_and_release)
         return log_id
     except Exception as exc:
         if log_id is not None:
@@ -648,7 +682,7 @@ def process_deferred_jobs(limit: int = 25) -> int:
                 _execute_job(log.id, log.task_name, log.payload or {})
             else:
                 # Removed: direct _get_executor().submit() call.
-                # Route through dispatcher â€” single owner of thread-pool access.
+                # Route through dispatcher -- single owner of thread-pool access.
                 from AINDY.core.execution_dispatcher import JOB_DISPATCH_STUB, dispatch as _dispatch
                 _lid, _tn, _pl = log.id, log.task_name, log.payload or {}
                 _dispatch(
@@ -841,7 +875,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         db.rollback()
         log = db.query(JobLog).filter(JobLog.id == log_id).first()
         if log:
-            # REPLACED: implicit always-fail â†’ consult retry policy via log.max_attempts
+            # REPLACED: implicit always-fail â†' consult retry policy via log.max_attempts
             # log.max_attempts is set at submission time (default 1, matching ASYNC_JOB_DEFAULT).
             # When a caller supplies max_attempts > 1 at submit, the retry infrastructure
             # here will honour it without any further changes.
@@ -850,7 +884,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 log.error_message = str(exc)
                 db.commit()
                 logger.warning(
-                    "[AsyncJob] %s attempt %d/%d failed â€” rescheduling: %s",
+                    "[AsyncJob] %s attempt %d/%d failed -- rescheduling: %s",
                     task_name, log.attempt_count, log.max_attempts, exc,
                 )
                 # Removed: direct _get_executor().submit() call.
@@ -958,7 +992,7 @@ def _ensure_inline_log_terminal(db, log_id: str) -> None:
         log.completed_at = datetime.now(timezone.utc)
     db.add(log)
     db.commit()
-    logger.info("[AsyncJobService] Inline fallback forced log %s â†’ success", log_id)
+    logger.info("[AsyncJobService] Inline fallback forced log %s â†' success", log_id)
 
 
 # Register late-bound handlers that depend on async_job_service.

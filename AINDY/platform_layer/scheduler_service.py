@@ -24,9 +24,9 @@ from AINDY.db.models.job_log import JobLog
 from AINDY.platform_layer.registry import get_scheduled_jobs
 
 try:
-    from AINDY.apscheduler.schedulers.background import BackgroundScheduler
-    from AINDY.apscheduler.triggers.cron import CronTrigger
-    from AINDY.apscheduler.triggers.interval import IntervalTrigger
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
 except ImportError:  # pragma: no cover - optional dependency
     class _FallbackJob:
         def __init__(self, *, func, trigger, id, name, replace_existing):

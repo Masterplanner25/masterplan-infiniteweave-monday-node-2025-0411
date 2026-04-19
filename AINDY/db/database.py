@@ -24,25 +24,21 @@ DATABASE_URL = settings.DATABASE_URL
 Base = declarative_base()
 
 # Engine + Session Factory
-_engine_kwargs = {
-    "pool_pre_ping": True,
-}
+connect_args = {}
+pool_kwargs: dict = {}
 if DATABASE_URL.startswith("sqlite"):
-    _engine_kwargs.update(
-        {
-            "connect_args": {"check_same_thread": False},
-            "poolclass": StaticPool,
-        }
-    )
+    connect_args = {"check_same_thread": False}
+    pool_kwargs = {"poolclass": StaticPool}
 else:
-    _engine_kwargs.update(
-        {
-            "pool_size": 10,
-            "max_overflow": 20,
-        }
-    )
+    pool_kwargs = {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": True,
+    }
 
-engine = create_engine(DATABASE_URL, **_engine_kwargs)
+engine = create_engine(DATABASE_URL, connect_args=connect_args, **pool_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = logging.getLogger(__name__)
