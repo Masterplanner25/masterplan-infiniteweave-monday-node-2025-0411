@@ -19,9 +19,11 @@ from typing import Optional
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.db.dao import arm_config_dao
 from AINDY.db.database import get_db
 from AINDY.services.auth_service import get_current_user
 from AINDY.platform_layer.rate_limiter import limiter
+from apps.arm.services.deepseek.config_manager_deepseek import DEFAULT_CONFIG, _UPDATABLE_KEYS
 
 
 router = APIRouter(
@@ -51,6 +53,15 @@ class GenerateRequest(BaseModel):
 
 class ConfigUpdateRequest(BaseModel):
     updates: dict
+
+
+def _arm_config_to_dict(config) -> dict:
+    if config is None:
+        return DEFAULT_CONFIG.copy()
+    return {
+        key: getattr(config, key)
+        for key in DEFAULT_CONFIG.keys()
+    }
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -194,27 +205,22 @@ async def get_arm_logs(
 @limiter.limit("60/minute")
 async def get_config(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Read current ARM configuration."""
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("arm_config_get", {}, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise RuntimeError("ARM config get flow failed")
-        data = result.get("data") or {}
-        if not isinstance(data, dict):
-            data = {"result": data}
+        data = _arm_config_to_dict(arm_config_dao.get_config(db))
         data.setdefault("execution_envelope", to_envelope(
-            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
-            status=str(result.get("status") or "UNKNOWN").upper(),
-            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+            eu_id=None, trace_id=None,
+            status="SUCCESS",
+            output=None, error=None, duration_ms=None, attempt_count=None,
         ))
         return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.config.get", handler=handler,
-        user_id=str(current_user["sub"]),
+        user_id=str(current_user["sub"]), metadata={"db": db},
     )
 
 
@@ -223,27 +229,30 @@ async def get_config(
 async def update_config(
     request: Request,
     body: ConfigUpdateRequest,
+    db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     """Update ARM configuration parameters."""
     def handler(ctx):
-        from AINDY.runtime.flow_engine import run_flow
-        result = run_flow("arm_config_update", {"updates": body.updates}, user_id=str(current_user["sub"]))
-        if result.get("status") == "error":
-            raise RuntimeError("ARM config update flow failed")
-        data = result.get("data") or {}
-        if not isinstance(data, dict):
-            data = {"result": data}
+        current = _arm_config_to_dict(arm_config_dao.get_config(db))
+        filtered = {k: v for k, v in body.updates.items() if k in _UPDATABLE_KEYS}
+        if filtered:
+            current.update(filtered)
+            updated = arm_config_dao.upsert_config(db, **current)
+            config_payload = _arm_config_to_dict(updated)
+        else:
+            config_payload = current
+        data = {"status": "updated", "config": config_payload}
         data.setdefault("execution_envelope", to_envelope(
-            eu_id=result.get("run_id"), trace_id=result.get("trace_id"),
-            status=str(result.get("status") or "UNKNOWN").upper(),
-            output=None, error=result.get("error"), duration_ms=None, attempt_count=None,
+            eu_id=None, trace_id=None,
+            status="SUCCESS",
+            output=None, error=None, duration_ms=None, attempt_count=None,
         ))
         return data
 
     return await execute_with_pipeline(
         request=request, route_name="arm.config.update", handler=handler,
-        user_id=str(current_user["sub"]), input_payload=body.model_dump(),
+        user_id=str(current_user["sub"]), metadata={"db": db}, input_payload=body.model_dump(),
     )
 
 

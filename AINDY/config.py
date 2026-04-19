@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     # --- Optional runtime options ---
     LOG_LEVEL: str = "INFO"
     REDIS_URL: str | None = None
-    AINDY_CACHE_BACKEND: str = "memory"
+    AINDY_CACHE_BACKEND: str = "redis"
 
     # --- Database connection pool ---
     DB_POOL_SIZE: int = 10

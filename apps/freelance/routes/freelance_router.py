@@ -1,8 +1,12 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.core.execution_service import ExecutionContext, run_execution
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.freelance.schemas.freelance import (
@@ -13,6 +17,48 @@ from apps.freelance.schemas.freelance import (
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depends(get_current_user)])
+
+
+def _unwrap_execution_response(response):
+    if isinstance(response, dict):
+        payload = response.get("data")
+        if (
+            response.get("status") == "SUCCESS"
+            and isinstance(payload, dict)
+            and "trace_id" in response
+        ):
+            return payload
+        return response
+
+    if isinstance(response, JSONResponse):
+        payload = json.loads(response.body.decode("utf-8"))
+        if (
+            isinstance(payload, dict)
+            and payload.get("status") == "SUCCESS"
+            and isinstance(payload.get("data"), dict)
+            and "trace_id" in payload
+        ):
+            return JSONResponse(
+                status_code=response.status_code,
+                content=payload["data"],
+                headers=dict(response.headers),
+            )
+    return response
+
+
+def _run_freelance_execution(
+    context: ExecutionContext,
+    fn,
+    *,
+    success_status_code: int = 200,
+):
+    return _unwrap_execution_response(
+        run_execution(
+            context,
+            fn,
+            success_status_code=success_status_code,
+        )
+    )
 
 
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str, *, return_full: bool = False):
@@ -65,6 +111,52 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
     return data
 
 
+def _do_create_freelance_order(db: Session, order: FreelanceOrderCreate, user_id: str):
+    result = _run_flow_freelance("freelance_order_create", {"order": order.model_dump()}, db, user_id)
+    return result.get("data") if isinstance(result, dict) and "data" in result else result
+
+
+def _do_deliver_order(db: Session, order_id: int, ai_output: str | None, user_id: str):
+    result = _run_flow_freelance(
+        "freelance_order_deliver",
+        {"order_id": order_id, "ai_output": ai_output},
+        db,
+        user_id,
+    )
+    return result.get("data") if isinstance(result, dict) and "data" in result else result
+
+
+def _do_update_delivery_configuration(
+    db: Session,
+    order_id: int,
+    body: FreelanceDeliveryConfigUpdate,
+    user_id: str,
+):
+    return _run_flow_freelance(
+        "freelance_delivery_update",
+        {
+            "order_id": order_id,
+            "delivery_type": body.delivery_type,
+            "delivery_config": body.delivery_config,
+        },
+        db,
+        user_id,
+    )
+
+
+def _do_collect_feedback(db: Session, feedback: FeedbackCreate, user_id: str):
+    result = _run_flow_freelance("freelance_feedback_collect", {"feedback": feedback.model_dump()}, db, user_id)
+    return result.get("data") if isinstance(result, dict) and "data" in result else result
+
+
+def _do_update_metrics(db: Session, user_id: str):
+    return _run_flow_freelance("freelance_metrics_update", {}, db, user_id)
+
+
+def _do_generate_delivery(db: Session, order_id: int, user_id: str):
+    return _run_flow_freelance("freelance_delivery_generate", {"order_id": order_id}, db, user_id)
+
+
 @router.post("/order", status_code=201)
 @limiter.limit("30/minute")
 def create_freelance_order(
@@ -74,12 +166,17 @@ def create_freelance_order(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        result = _run_flow_freelance("freelance_order_create", {"order": order.model_dump()}, db, user_id)
-        return result.get("data") if isinstance(result, dict) and "data" in result else result
-    return _execute_freelance(request, "freelance.order.create", handler, db=db, user_id=user_id,
-                              input_payload={"service_type": order.service_type, "client_name": order.client_name},
-                              success_status_code=201)
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.order.create",
+            start_payload=order.model_dump(),
+        ),
+        lambda: _do_create_freelance_order(db, order, user_id),
+        success_status_code=201,
+    )
 
 
 @router.post("/deliver/{order_id}")
@@ -92,11 +189,16 @@ def deliver_order(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        result = _run_flow_freelance("freelance_order_deliver", {"order_id": order_id, "ai_output": ai_output}, db, user_id)
-        return result.get("data") if isinstance(result, dict) and "data" in result else result
-    return _execute_freelance(request, "freelance.order.deliver", handler, db=db, user_id=user_id,
-                              input_payload={"order_id": order_id})
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.order.deliver",
+            start_payload={"order_id": order_id, "ai_output": ai_output},
+        ),
+        lambda: _do_deliver_order(db, order_id, ai_output, user_id),
+    )
 
 
 @router.put("/delivery/{order_id}")
@@ -109,14 +211,20 @@ def update_delivery_configuration(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        return _run_flow_freelance(
-            "freelance_delivery_update",
-            {"order_id": order_id, "delivery_type": body.delivery_type, "delivery_config": body.delivery_config},
-            db, user_id,
-        )
-    return _execute_freelance(request, "freelance.delivery.update", handler, db=db, user_id=user_id,
-                              input_payload={"order_id": order_id, "delivery_type": body.delivery_type})
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.delivery.update",
+            start_payload={
+                "order_id": order_id,
+                "delivery_type": body.delivery_type,
+                "delivery_config": body.delivery_config,
+            },
+        ),
+        lambda: _do_update_delivery_configuration(db, order_id, body, user_id),
+    )
 
 
 @router.post("/feedback")
@@ -128,11 +236,16 @@ def collect_feedback(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        result = _run_flow_freelance("freelance_feedback_collect", {"feedback": feedback.model_dump()}, db, user_id)
-        return result.get("data") if isinstance(result, dict) and "data" in result else result
-    return _execute_freelance(request, "freelance.feedback.collect", handler, db=db, user_id=user_id,
-                              input_payload={"order_id": feedback.order_id})
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.feedback.collect",
+            start_payload=feedback.model_dump(),
+        ),
+        lambda: _do_collect_feedback(db, feedback, user_id),
+    )
 
 
 @router.get("/orders")
@@ -187,9 +300,16 @@ def update_metrics(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        return _run_flow_freelance("freelance_metrics_update", {}, db, user_id)
-    return _execute_freelance(request, "freelance.metrics.update", handler, db=db, user_id=user_id)
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.metrics.update",
+            start_payload={},
+        ),
+        lambda: _do_update_metrics(db, user_id),
+    )
 
 
 @router.post("/generate/{order_id}")
@@ -201,8 +321,14 @@ def generate_delivery(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    def handler(_ctx):
-        return _run_flow_freelance("freelance_delivery_generate", {"order_id": order_id}, db, user_id)
-    return _execute_freelance(request, "freelance.delivery.generate", handler, db=db, user_id=user_id,
-                              input_payload={"order_id": order_id})
+    return _run_freelance_execution(
+        ExecutionContext(
+            db=db,
+            user_id=user_id,
+            source="freelance",
+            operation="freelance.delivery.generate",
+            start_payload={"order_id": order_id},
+        ),
+        lambda: _do_generate_delivery(db, order_id, user_id),
+    )
 

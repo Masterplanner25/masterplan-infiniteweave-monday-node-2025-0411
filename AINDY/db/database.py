@@ -5,7 +5,7 @@ database sessions for FastAPI routes and background tasks.
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -94,10 +94,10 @@ def test_connection():
     """Manual diagnostic helper."""
     try:
         with engine.connect() as conn:
-            result = conn.execute("SELECT now();")
-            print("✅ Database connected at:", list(result)[0][0])
+            result = conn.execute(text("SELECT now();"))
+            logger.info("✅ Database connected at: %s", list(result)[0][0])
     except Exception as e:
-        print("❌ Database connection failed:", e)
+        logger.exception("❌ Database connection failed: %s", e)
 
 
 

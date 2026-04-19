@@ -1,5 +1,5 @@
 """
-A.I.N.D.Y. SDK — quickstart example.
+A.I.N.D.Y. SDK quickstart example.
 
 Run against a local server:
 
@@ -16,40 +16,40 @@ Run against a local server:
     # 3. Run this example
     API_KEY=aindy_... python sdk/examples/quickstart.py
 """
+import logging
 import os
 
 from AINDY.sdk.aindy_sdk import AINDYClient, AINDYError
 
+logger = logging.getLogger(__name__)
+
 BASE_URL = os.environ.get("AINDY_BASE_URL", "http://localhost:8000")
-API_KEY  = os.environ.get("AINDY_API_KEY", "aindy_replace_me")
+API_KEY = os.environ.get("AINDY_API_KEY", "aindy_replace_me")
 
 client = AINDYClient(base_url=BASE_URL, api_key=API_KEY)
 
-# ── Step 1: Read memory nodes ────────────────────────────────────────────────
-print("=== Reading memory ===")
+logger.info("=== Reading memory ===")
 try:
     result = client.memory.read("/memory/shawn/entities/**", limit=5)
     nodes = result["data"]["nodes"]
-    print(f"  Found {len(nodes)} nodes (syscall took {result['duration_ms']}ms)")
-    for n in nodes[:3]:
-        print(f"  • {n.get('content', '')[:60]}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+    logger.info("  Found %s nodes (syscall took %sms)", len(nodes), result["duration_ms"])
+    for node in nodes[:3]:
+        logger.info("  • %s", node.get("content", "")[:60])
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
     nodes = []
 
-# ── Step 2: Run a flow ───────────────────────────────────────────────────────
-print("\n=== Running flow ===")
+logger.info("\n=== Running flow ===")
 try:
     analysis = client.flow.run("analyze_entities", {"data": nodes})
-    print(f"  Flow status: {analysis['status']}")
+    logger.info("  Flow status: %s", analysis["status"])
     if analysis["status"] == "success":
-        print(f"  Output keys: {list(analysis['data'].keys())}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+        logger.info("  Output keys: %s", list(analysis["data"].keys()))
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
     analysis = {"status": "error", "data": {}}
 
-# ── Step 3: Write an insight ─────────────────────────────────────────────────
-print("\n=== Writing memory ===")
+logger.info("\n=== Writing memory ===")
 try:
     write_result = client.memory.write(
         "/memory/shawn/insights/outcome",
@@ -57,26 +57,27 @@ try:
         tags=["sdk-demo", "quickstart"],
         node_type="insight",
     )
-    print(f"  Write status: {write_result['status']}")
+    logger.info("  Write status: %s", write_result["status"])
     if write_result["status"] == "success":
         node_id = write_result["data"].get("node", {}).get("id", "?")
-        print(f"  Node ID: {node_id}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+        logger.info("  Node ID: %s", node_id)
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
 
-# ── Step 4: Emit an event ────────────────────────────────────────────────────
-print("\n=== Emitting event ===")
+logger.info("\n=== Emitting event ===")
 try:
-    ev = client.events.emit("quickstart.completed", {
-        "node_count": len(nodes),
-        "flow_status": analysis["status"],
-    })
-    print(f"  Event status: {ev['status']}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+    event_result = client.events.emit(
+        "quickstart.completed",
+        {
+            "node_count": len(nodes),
+            "flow_status": analysis["status"],
+        },
+    )
+    logger.info("  Event status: %s", event_result["status"])
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
 
-# ── Step 5: Run a Nodus script inline ───────────────────────────────────────
-print("\n=== Running Nodus script ===")
+logger.info("\n=== Running Nodus script ===")
 try:
     nodus_result = client.nodus.run_script(
         script="""
@@ -86,23 +87,22 @@ emit("sdk.hello", {text: msg})
 """,
         input={},
     )
-    print(f"  Nodus status: {nodus_result['nodus_status']}")
-    print(f"  Output state: {nodus_result.get('output_state', {})}")
-    print(f"  Events emitted: {nodus_result.get('events_emitted', 0)}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+    logger.info("  Nodus status: %s", nodus_result["nodus_status"])
+    logger.info("  Output state: %s", nodus_result.get("output_state", {}))
+    logger.info("  Events emitted: %s", nodus_result.get("events_emitted", 0))
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
 
-# ── Step 6: Inspect syscall registry ────────────────────────────────────────
-print("\n=== Syscall registry ===")
+logger.info("\n=== Syscall registry ===")
 try:
     registry = client.syscalls.list(version="v1")
-    print(f"  Available versions: {registry['versions']}")
-    print(f"  Total syscalls: {registry['total_count']}")
+    logger.info("  Available versions: %s", registry["versions"])
+    logger.info("  Total syscalls: %s", registry["total_count"])
     for action in sorted(registry["syscalls"].get("v1", {}).keys()):
         spec = registry["syscalls"]["v1"][action]
         deprecated = " [DEPRECATED]" if spec.get("deprecated") else ""
-        print(f"  • sys.v1.{action}{deprecated}")
-except AINDYError as e:
-    print(f"  [error] {e}")
+        logger.info("  • sys.v1.%s%s", action, deprecated)
+except AINDYError as exc:
+    logger.warning("  [error] %s", exc)
 
-print("\nDone.")
+logger.info("\nDone.")

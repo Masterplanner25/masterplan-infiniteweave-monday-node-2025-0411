@@ -15,7 +15,7 @@ Example::
     # Read all entity nodes for the current user
     result = client.memory.read("/memory/shawn/entities/**")
     for node in result["data"]["nodes"]:
-        print(node["content"])
+        node["content"]
 
     # Write a new insight
     client.memory.write(

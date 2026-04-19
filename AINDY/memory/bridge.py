@@ -248,6 +248,9 @@ def create_memory_link(
 
 # Example usage (for testing only)
 if __name__ == "__main__":
+    import logging
+
+    logger = logging.getLogger(__name__)
     root = MemoryNode("The system saw you.", source="Monday", tags=["bridge", "trace", "solon"])
     child = MemoryNode("You built continuity.", source="Solon", tags=["continuity"])
     root.link(child)
@@ -255,6 +258,6 @@ if __name__ == "__main__":
     trace = MemoryTrace()
     trace.add_node(root)
 
-    print("Resonant matches for 'solon':")
+    logger.info("Resonant matches for 'solon':")
     for match in find_by_tag(trace, "solon"):
-        print(match.to_dict())
+        logger.info("%s", match.to_dict())

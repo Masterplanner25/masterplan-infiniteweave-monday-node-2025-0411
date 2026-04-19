@@ -12,6 +12,7 @@ from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
+from .arm_config import ArmConfig
 from .background_task_lease import BackgroundTaskLease
 from .flow_run import FlowRun, FlowHistory, EventOutcome
 from .agent_run import AgentRun, AgentStep, AgentTrustSettings
@@ -41,6 +42,7 @@ __all__ = [
     "UserIdentity",
     "MemoryNodeHistory",
     "Agent",
+    "ArmConfig",
     "MemoryMetric",
     "MemoryTrace",
     "MemoryTraceNode",

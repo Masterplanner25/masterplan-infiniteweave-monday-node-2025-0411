@@ -2,10 +2,9 @@
 ARM Configuration Manager
 
 Manages DeepSeek/ARM configuration parameters.
-Reads from deepseek_config.json at startup.
-Supports runtime updates via PUT /arm/config.
-
-Phase 2 will add self-tuning via Infinity Algorithm feedback loop.
+Uses a DB-backed singleton row by default so config updates are visible
+across instances immediately. When ``config_path`` is passed explicitly,
+the legacy file-backed behavior is preserved for tests.
 """
 import json
 import logging
@@ -44,23 +43,29 @@ class ConfigManager:
     """
     Loads, reads, and persists ARM configuration.
 
-    Config is stored as a JSON file (deepseek_config.json).
+    Default runtime storage is a DB-backed singleton row.
+    Passing ``config_path`` preserves the legacy JSON file mode used by tests.
     Runtime values override defaults.
     Only keys present in DEFAULT_CONFIG are accepted for updates.
     """
 
-    def __init__(self, config_path: str = None):
-        if config_path is None:
+    def __init__(self, config_path: str = None, db=None):
+        self.db = db
+        self._use_file = config_path is not None
+        if self._use_file:
+            self.config_path = Path(config_path)
+        else:
+            self.config_path = None
+        if self._use_file and self.config_path is None:
             repo_root = Path(__file__).resolve().parents[4]
-            config_path = repo_root / "AINDY" / "deepseek_config.json"
-        self.config_path = Path(config_path)
+            self.config_path = repo_root / "AINDY" / "deepseek_config.json"
         self._config = self._load()
 
     # ── I/O ─────────────────────────────────────────────────────────────────
 
     def _load(self) -> dict:
-        """Load config from JSON, merging with defaults for any missing keys."""
-        if self.config_path.exists():
+        """Load config from the active storage backend, merging with defaults."""
+        if self._use_file and self.config_path and self.config_path.exists():
             try:
                 with open(self.config_path, encoding="utf-8") as f:
                     loaded = json.load(f)
@@ -68,22 +73,74 @@ class ConfigManager:
                 return {**DEFAULT_CONFIG, **loaded}
             except Exception as exc:
                 logger.warning("[ARMConfig] Config load failed for %s: %s", self.config_path, exc)
+        elif not self._use_file:
+            try:
+                loaded = self._load_from_db()
+                if loaded:
+                    return {**DEFAULT_CONFIG, **loaded}
+            except Exception as exc:
+                logger.warning("[ARMConfig] DB config load failed: %s", exc)
         return DEFAULT_CONFIG.copy()
 
     def _persist(self) -> None:
-        """Write current config state to JSON file."""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self._config, f, indent=2)
+        """Write current config state to the active storage backend."""
+        if self._use_file and self.config_path is not None:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(self._config, f, indent=2)
+            return
+        self._persist_to_db(self._config)
+
+    def _load_from_db(self) -> dict:
+        from AINDY.db.dao.arm_config_dao import get_config
+
+        if self.db is not None:
+            config = get_config(self.db)
+            return self._model_to_dict(config) if config else {}
+
+        from AINDY.db.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            config = get_config(db)
+            return self._model_to_dict(config) if config else {}
+        finally:
+            db.close()
+
+    def _persist_to_db(self, config: dict) -> None:
+        from AINDY.db.dao.arm_config_dao import upsert_config
+
+        if self.db is not None:
+            upsert_config(self.db, **config)
+            return
+
+        from AINDY.db.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            upsert_config(db, **config)
+        finally:
+            db.close()
+
+    @staticmethod
+    def _model_to_dict(config) -> dict:
+        if config is None:
+            return {}
+        return {
+            key: getattr(config, key)
+            for key in DEFAULT_CONFIG.keys()
+        }
 
     # ── Accessors ────────────────────────────────────────────────────────────
 
     def get(self, key: str, default: Any = None) -> Any:
         """Read a single config value."""
+        self._config = self._load()
         return self._config.get(key, default)
 
     def get_all(self) -> dict:
         """Return a copy of the full config (used by GET /arm/config)."""
+        self._config = self._load()
         return self._config.copy()
 
     # ── Mutations ────────────────────────────────────────────────────────────
@@ -100,7 +157,9 @@ class ConfigManager:
         self-tuning feedback loop.
         """
         filtered = {k: v for k, v in updates.items() if k in _UPDATABLE_KEYS}
-        self._config.update(filtered)
+        current = self._load()
+        current.update(filtered)
+        self._config = current
         self._persist()
         return self._config.copy()
 

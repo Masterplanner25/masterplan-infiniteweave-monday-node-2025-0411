@@ -101,10 +101,21 @@ class DeepSeekCodeAnalyzer:
 
     def __init__(self, config_path: str = None):
         self.config_manager = ConfigManager(config_path)
-        self.config = self.config_manager.get_all()
-        self.validator = SecurityValidator(self.config)
-        self.file_processor = FileProcessor(self.config)
+        self.config = {}
+        self.validator = SecurityValidator({})
+        self.file_processor = FileProcessor({})
+        self._refresh_runtime_config()
         self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+    def _refresh_runtime_config(self, db: Session | None = None) -> None:
+        self.config_manager.db = db
+        self.config = self.config_manager.get_all()
+        validator = getattr(self, "validator", None)
+        file_processor = getattr(self, "file_processor", None)
+        if isinstance(validator, SecurityValidator):
+            self.validator = SecurityValidator(self.config)
+        if isinstance(file_processor, FileProcessor):
+            self.file_processor = FileProcessor(self.config)
 
     # ── Internal OpenAI call ─────────────────────────────────────────────────
 
@@ -186,6 +197,7 @@ class DeepSeekCodeAnalyzer:
         5. Persist to analysis_results table
         6. Return enriched result dict
         """
+        self._refresh_runtime_config(db)
         start_time = time.time()
         session_id = uuid.uuid4()
         task_priority = self.config_manager.calculate_task_priority(
@@ -422,6 +434,7 @@ class DeepSeekCodeAnalyzer:
         4. Persist to code_generations table
         5. Return structured result
         """
+        self._refresh_runtime_config(db)
         start_time = time.time()
         session_id = uuid.uuid4()
         task_priority = self.config_manager.calculate_task_priority(

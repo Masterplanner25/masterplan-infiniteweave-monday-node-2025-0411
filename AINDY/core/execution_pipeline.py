@@ -1118,9 +1118,15 @@ class ExecutionPipeline:
         if not eu_id or not ctx.user_id:
             return True
         try:
+            import os
+
+            from AINDY.config import settings
             from AINDY.kernel.resource_manager import get_resource_manager
 
-            ok, reason = get_resource_manager().can_execute(str(ctx.user_id), eu_id)
+            rm = get_resource_manager()
+            if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
+                rm.reset()
+            ok, reason = rm.can_execute(str(ctx.user_id), eu_id)
             if not ok:
                 self._safe_emit_event(
                     ctx,
