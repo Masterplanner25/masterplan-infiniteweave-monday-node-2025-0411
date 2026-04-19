@@ -393,11 +393,15 @@ return #ready
         self._check_circuit_breaker()
         result = self._run_redis_operation(
             "dequeue",
-            lambda: self._redis.brpop(self._queue_name, timeout=timeout),
+            # Redis treats BRPOP timeout=0 as "block forever", so use RPOP for
+            # an immediate, non-blocking dequeue when callers request timeout=0.
+            (lambda: self._redis.rpop(self._queue_name))
+            if timeout == 0
+            else (lambda: self._redis.brpop(self._queue_name, timeout=timeout)),
         )
         if result is None:
             return None
-        _, raw = result
+        raw = result if timeout == 0 else result[1]
         try:
             job = QueueJobPayload.from_json(raw)
         except Exception as exc:
