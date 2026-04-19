@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
@@ -8,6 +9,11 @@ from AINDY.db.database import get_db
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
+
+
+class DrainDlqRequest(BaseModel):
+    max_items: int = Field(default=10, ge=1, le=100)
+    requeue: bool = False
 
 
 def _run_flow_observability(flow_name: str, payload: dict, db: Session, user_id: str):
@@ -111,4 +117,72 @@ def get_execution_graph(
         return _run_flow_observability("observability_execution_graph", {"trace_id": trace_id}, db, user_id)
     return _execute_observability(request, "observability_execution_graph", handler, db=db, user_id=user_id,
                                   input_payload={"trace_id": trace_id})
+
+
+@router.get("/queue/metrics")
+def get_queue_metrics(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.core.distributed_queue import get_queue
+    from AINDY.worker.worker_loop import get_failure_rate_stats
+
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        metrics = dict(get_queue().get_metrics())
+        metrics.update(get_failure_rate_stats())
+        return metrics
+
+    return _execute_observability(
+        request,
+        "observability_queue_metrics",
+        handler,
+        db=db,
+        user_id=user_id,
+    )
+
+
+@router.post("/queue/dlq/drain")
+def drain_queue_dlq(
+    request: Request,
+    body: DrainDlqRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.worker.worker_loop import drain_dead_letters
+
+    user_id = str(current_user["sub"])
+    logger_payload = {
+        "user_id": user_id,
+        "max_items": body.max_items,
+        "requeue": body.requeue,
+    }
+
+    def handler(ctx):
+        return drain_dead_letters(
+            db=db,
+            max_items=body.max_items,
+            requeue=body.requeue,
+        )
+
+    result = _execute_observability(
+        request,
+        "observability_queue_dlq_drain",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload=body.model_dump(),
+    )
+    import logging
+    logging.getLogger(__name__).info(
+        "[Observability] queue_drain_dlq user_id=%s max_items=%s requeue=%s inspected=%s requeued=%s",
+        logger_payload["user_id"],
+        logger_payload["max_items"],
+        logger_payload["requeue"],
+        result.get("inspected"),
+        result.get("requeued"),
+    )
+    return result
 

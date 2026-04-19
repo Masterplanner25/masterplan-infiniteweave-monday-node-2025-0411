@@ -21,6 +21,8 @@ import json
 import os
 import sqlite3
 import subprocess
+from typing import Iterator
+from uuid import uuid4
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,17 @@ sqlite3.register_adapter(list, lambda v: json.dumps(v))
 # ── 2. PostgreSQL session fixture ─────────────────────────────────────────────
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip Redis-marked tests unless REDIS_URL is available."""
+    if os.environ.get("REDIS_URL"):
+        return
+
+    skip_redis = pytest.mark.skip(reason="requires REDIS_URL to be set")
+    for item in items:
+        if "redis" in item.keywords:
+            item.add_marker(skip_redis)
 
 
 @pytest.fixture(scope="session")
@@ -92,3 +105,24 @@ def pg_db_session():
     transaction.rollback()
     connection.close()
     engine.dispose()
+
+
+@pytest.fixture
+def redis_backend() -> Iterator:
+    """Provide an isolated Redis queue namespace for each test."""
+    redis_url = os.environ["REDIS_URL"]
+
+    from AINDY.core.distributed_queue import RedisQueueBackend
+
+    queue_name = f"aindy:test:{uuid4().hex}"
+    backend = RedisQueueBackend(url=redis_url, queue_name=queue_name)
+
+    try:
+        yield backend
+    finally:
+        backend._redis.delete(  # type: ignore[attr-defined]
+            backend._queue_name,
+            backend._inflight_key,
+            backend._delayed_key,
+            backend._dlq_key,
+        )

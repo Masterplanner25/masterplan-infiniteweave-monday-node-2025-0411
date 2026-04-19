@@ -73,6 +73,7 @@ import os
 import signal
 import threading
 import time
+from collections import deque
 from typing import TYPE_CHECKING, Optional
 
 from AINDY.db.models.job_log import JobLog
@@ -91,6 +92,8 @@ _STOP = threading.Event()
 
 _CONCURRENCY_SEM: Optional[threading.Semaphore] = None
 _CONCURRENCY_SEM_LOCK = threading.Lock()
+_failure_window: deque[float] = deque()
+_FAILURE_WINDOW_SECONDS = 300
 
 
 def _get_semaphore() -> Optional[threading.Semaphore]:
@@ -123,6 +126,7 @@ def reset_worker_state() -> None:
     """
     global _CONCURRENCY_SEM
     _STOP.clear()
+    _failure_window.clear()
     with _CONCURRENCY_SEM_LOCK:
         _CONCURRENCY_SEM = None
 
@@ -307,6 +311,158 @@ def _emit_worker_event(
         logger.debug("[Worker] event emit skipped event_type=%s: %s", event_type, exc)
 
 
+def _prune_failure_window(now: float) -> None:
+    cutoff = now - _FAILURE_WINDOW_SECONDS
+    while _failure_window and _failure_window[0] < cutoff:
+        _failure_window.popleft()
+
+
+def get_failure_rate_stats() -> dict:
+    now = time.monotonic()
+    _prune_failure_window(now)
+    threshold = int(os.getenv("DLQ_ALERT_THRESHOLD", "10"))
+    return {
+        "failures_in_window": len(_failure_window),
+        "window_seconds": _FAILURE_WINDOW_SECONDS,
+        "threshold": threshold,
+    }
+
+
+def _record_job_failure_alert(*, job_id: str, operation_name: str, error: str) -> dict:
+    now = time.monotonic()
+    _failure_window.append(now)
+    _prune_failure_window(now)
+
+    stats = get_failure_rate_stats()
+    if stats["failures_in_window"] >= stats["threshold"]:
+        logger.error(
+            "ALERT: %d job failures in the last %ds — DLQ may be growing",
+            stats["failures_in_window"],
+            stats["window_seconds"],
+        )
+        try:
+            from AINDY.db.database import SessionLocal
+            from AINDY.platform_layer.async_job_service import _emit_async_system_event
+
+            db = SessionLocal()
+            try:
+                _emit_async_system_event(
+                    db=db,
+                    event_type="queue.failure_rate_alert",
+                    trace_id=job_id,
+                    source="distributed_worker",
+                    payload={
+                        "job_id": job_id,
+                        "operation_name": operation_name,
+                        "error": error,
+                        **stats,
+                    },
+                )
+                db.commit()
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.debug("[Worker] queue.failure_rate_alert emit skipped: %s", exc)
+    return stats
+
+
+def drain_dead_letters(
+    *,
+    db,
+    max_items: int = 50,
+    requeue: bool = False,
+) -> dict:
+    """
+    Inspect or requeue items from the queue dead-letter store.
+
+    Returns {"inspected": N, "requeued": N, "errors": [...]}.
+    """
+    from AINDY.core.distributed_queue import QueueJobPayload, RedisQueueBackend, get_queue
+    from AINDY.platform_layer.async_job_service import _emit_async_system_event
+
+    q = get_queue()
+    limit = max(0, min(max_items, 100))
+    inspected = 0
+    requeued_count = 0
+    errors: list[str] = []
+
+    if limit == 0:
+        return {"inspected": 0, "requeued": 0, "errors": []}
+
+    dead_letters: list[dict]
+    if hasattr(q, "get_dead_letters"):
+        all_letters = q.get_dead_letters()  # type: ignore[attr-defined]
+        dead_letters = list(all_letters[:limit])
+        if requeue and hasattr(q, "_dlq") and hasattr(q, "_dlq_lock"):
+            with q._dlq_lock:  # type: ignore[attr-defined]
+                q._dlq = q._dlq[limit:]  # type: ignore[attr-defined]
+    elif isinstance(q, RedisQueueBackend):
+        dead_letters = q.peek_dead_letters(limit)
+        if requeue and dead_letters:
+            q._run_redis_operation(  # type: ignore[attr-defined]
+                "drain_dead_letters_ltrim",
+                lambda: q._redis.ltrim(q._dlq_key, limit, -1),  # type: ignore[attr-defined]
+            )
+    else:
+        dead_letters = []
+
+    for entry in dead_letters:
+        inspected += 1
+        payload = entry.get("payload")
+        payload_raw = entry.get("payload_raw")
+        reason = entry.get("error") or entry.get("reason") or ""
+        task_name = entry.get("task_name") or "unknown"
+        if payload is not None and hasattr(payload, "task_name"):
+            task_name = payload.task_name
+        elif payload_raw:
+            try:
+                task_name = QueueJobPayload.from_json(payload_raw).task_name
+            except Exception:
+                pass
+
+        logger.error(
+            "[Worker] dlq job_id=%s task_name=%s reason=%s",
+            entry.get("job_id"),
+            task_name,
+            reason,
+        )
+
+        if not requeue:
+            continue
+
+        try:
+            if payload is not None and hasattr(payload, "to_json"):
+                job_payload = payload
+            elif payload_raw:
+                job_payload = QueueJobPayload.from_json(payload_raw)
+            else:
+                errors.append(f"job_id={entry.get('job_id')} missing payload")
+                continue
+            q.enqueue(job_payload)
+            requeued_count += 1
+        except Exception as exc:
+            errors.append(f"job_id={entry.get('job_id')} requeue_failed={exc}")
+
+    _emit_async_system_event(
+        db=db,
+        event_type="dlq.drained",
+        trace_id="dlq-drain",
+        source="distributed_worker",
+        payload={
+            "inspected": inspected,
+            "requeued": requeued_count,
+            "requeue": requeue,
+            "errors": errors,
+        },
+    )
+    try:
+        db.commit()
+    except Exception:
+        pass
+
+    return {"inspected": inspected, "requeued": requeued_count, "errors": errors}
+
+
 # ---------------------------------------------------------------------------
 # Core job processing
 # ---------------------------------------------------------------------------
@@ -449,6 +605,11 @@ def process_one_job(
         )
         # fail() moves the payload to the Dead Letter Queue.
         q.fail(job.job_id, str(exc))
+        _record_job_failure_alert(
+            job_id=job.job_id,
+            operation_name=operation_name,
+            error=str(exc),
+        )
 
     finally:
         # Always reset trace context and release concurrency slot.

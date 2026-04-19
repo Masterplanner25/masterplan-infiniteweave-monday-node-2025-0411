@@ -49,6 +49,16 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Redis key schema
+# ----------------
+# Tenant concurrency counter: aindy:rm:tenant:{tenant_id}:active
+# Per-EU cpu_ms accumulator:  aindy:rm:eu:{eu_id}:cpu_ms
+# Per-EU syscall counter:     aindy:rm:eu:{eu_id}:syscalls
+# Per-EU memory high-water:   aindy:rm:eu:{eu_id}:memory_bytes
+#
+# Per-EU keys are given a 3600-second TTL as a cleanup safety net.
+# Tenant concurrency keys are given an 86400-second TTL as a cleanup safety net.
+
 # ── Quota constants ───────────────────────────────────────────────────────────
 
 def _int_env(key: str, default: int) -> int:
@@ -64,6 +74,8 @@ MAX_SYSCALLS_PER_EXECUTION: int = _int_env("AINDY_QUOTA_MAX_SYSCALLS", 100)
 MAX_CONCURRENT_PER_TENANT: int = _int_env("AINDY_QUOTA_MAX_CONCURRENT", 5)
 
 RESOURCE_LIMIT_EXCEEDED = "RESOURCE_LIMIT_EXCEEDED"
+EU_KEY_TTL_SECONDS = 3600
+TENANT_KEY_TTL_SECONDS = 86400
 
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
@@ -98,6 +110,143 @@ class UsageSnapshot:
         }
 
 
+class RedisResourceBackend:
+    """Redis-backed resource quota state shared across processes."""
+
+    _DECR_FLOOR_LUA = """
+local value = redis.call('DECR', KEYS[1])
+if value < 0 then
+    redis.call('SET', KEYS[1], 0)
+    value = 0
+end
+redis.call('EXPIRE', KEYS[1], ARGV[1])
+return value
+"""
+
+    _SET_IF_GREATER_LUA = """
+local current = redis.call('GET', KEYS[1])
+if (not current) or (tonumber(ARGV[1]) > tonumber(current)) then
+    redis.call('SET', KEYS[1], ARGV[1])
+end
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return 1
+"""
+
+    def __init__(self, redis_url: str) -> None:
+        import redis  # type: ignore[import]
+
+        self._redis = redis.from_url(
+            redis_url,
+            decode_responses=True,
+            socket_timeout=5,
+        )
+        self._decr_floor = self._redis.register_script(self._DECR_FLOOR_LUA)
+        self._set_if_greater = self._redis.register_script(self._SET_IF_GREATER_LUA)
+
+    def _tenant_key(self, tenant_id: str) -> str:
+        return f"aindy:rm:tenant:{tenant_id}:active"
+
+    def _cpu_key(self, eu_id: str) -> str:
+        return f"aindy:rm:eu:{eu_id}:cpu_ms"
+
+    def _syscalls_key(self, eu_id: str) -> str:
+        return f"aindy:rm:eu:{eu_id}:syscalls"
+
+    def _memory_key(self, eu_id: str) -> str:
+        return f"aindy:rm:eu:{eu_id}:memory_bytes"
+
+    def increment_tenant_active(self, tenant_id: str) -> int:
+        key = self._tenant_key(tenant_id)
+        value = int(self._redis.incr(key))
+        self._redis.expire(key, TENANT_KEY_TTL_SECONDS)
+        return value
+
+    def decrement_tenant_active(self, tenant_id: str) -> int:
+        key = self._tenant_key(tenant_id)
+        value = self._decr_floor(keys=[key], args=[str(TENANT_KEY_TTL_SECONDS)])
+        return int(value)
+
+    def get_tenant_active(self, tenant_id: str) -> int:
+        value = self._redis.get(self._tenant_key(tenant_id))
+        return int(value) if value is not None else 0
+
+    def add_cpu_ms(self, eu_id: str, ms: int) -> int:
+        key = self._cpu_key(eu_id)
+        value = int(self._redis.incrby(key, ms))
+        self._redis.expire(key, EU_KEY_TTL_SECONDS)
+        return value
+
+    def get_cpu_ms(self, eu_id: str) -> int:
+        value = self._redis.get(self._cpu_key(eu_id))
+        return int(value) if value is not None else 0
+
+    def increment_syscalls(self, eu_id: str) -> int:
+        key = self._syscalls_key(eu_id)
+        value = int(self._redis.incr(key))
+        self._redis.expire(key, EU_KEY_TTL_SECONDS)
+        return value
+
+    def get_syscalls(self, eu_id: str) -> int:
+        value = self._redis.get(self._syscalls_key(eu_id))
+        return int(value) if value is not None else 0
+
+    def set_memory_if_greater(self, eu_id: str, bytes_used: int) -> None:
+        self._set_if_greater(
+            keys=[self._memory_key(eu_id)],
+            args=[str(bytes_used), str(EU_KEY_TTL_SECONDS)],
+        )
+
+    def delete_eu(self, eu_id: str) -> None:
+        self._redis.delete(
+            self._cpu_key(eu_id),
+            self._syscalls_key(eu_id),
+            self._memory_key(eu_id),
+        )
+
+    def reset_all(self) -> None:
+        cursor = 0
+        while True:
+            cursor, keys = self._redis.scan(cursor=cursor, match="aindy:rm:*", count=100)
+            if keys:
+                self._redis.delete(*keys)
+            if int(cursor) == 0:
+                break
+
+
+_RESOURCE_BACKEND: RedisResourceBackend | None = None
+_RESOURCE_BACKEND_LOCK = threading.Lock()
+_RESOURCE_BACKEND_INITIALIZED = False
+
+
+def _get_backend() -> RedisResourceBackend | None:
+    """Return a cached Redis resource backend when enabled."""
+    global _RESOURCE_BACKEND
+    global _RESOURCE_BACKEND_INITIALIZED
+
+    if _RESOURCE_BACKEND_INITIALIZED:
+        return _RESOURCE_BACKEND
+
+    with _RESOURCE_BACKEND_LOCK:
+        if _RESOURCE_BACKEND_INITIALIZED:
+            return _RESOURCE_BACKEND
+
+        redis_url = os.getenv("REDIS_URL")
+        test_mode = os.getenv("TEST_MODE", "0").lower() in {"1", "true", "yes"}
+        if redis_url and not test_mode:
+            try:
+                _RESOURCE_BACKEND = RedisResourceBackend(redis_url)
+            except Exception as exc:
+                logger.warning(
+                    "[ResourceManager] redis backend unavailable error=%s",
+                    exc,
+                )
+                _RESOURCE_BACKEND = None
+        else:
+            _RESOURCE_BACKEND = None
+        _RESOURCE_BACKEND_INITIALIZED = True
+        return _RESOURCE_BACKEND
+
+
 # ── ResourceManager ───────────────────────────────────────────────────────────
 
 class ResourceManager:
@@ -120,12 +269,169 @@ class ResourceManager:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
+        self._backend = _get_backend()
         # eu_id → UsageSnapshot
         self._usage: dict[str, UsageSnapshot] = {}
         # tenant_id → active execution count
         self._tenant_active: dict[str, int] = {}
         # eu_id → tenant_id (for cleanup on mark_completed with unknown eu_id)
         self._eu_tenant: dict[str, str] = {}
+
+    def _backend_get_tenant_active(self, tenant_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.get_tenant_active(tenant_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis get_tenant_active failed tenant=%s error=%s",
+                    tenant_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_increment_tenant_active(self, tenant_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.increment_tenant_active(tenant_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis increment_tenant_active failed tenant=%s error=%s",
+                    tenant_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_decrement_tenant_active(self, tenant_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.decrement_tenant_active(tenant_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis decrement_tenant_active failed tenant=%s error=%s",
+                    tenant_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_add_cpu_ms(self, eu_id: str, ms: int) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.add_cpu_ms(eu_id, ms)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis add_cpu_ms failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_get_cpu_ms(self, eu_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.get_cpu_ms(eu_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis get_cpu_ms failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_increment_syscalls(self, eu_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.increment_syscalls(eu_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis increment_syscalls failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_get_syscalls(self, eu_id: str) -> int | None:
+        if self._backend is None:
+            return None
+        try:
+            return self._backend.get_syscalls(eu_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis get_syscalls failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return None
+            raise
+
+    def _backend_set_memory_if_greater(self, eu_id: str, bytes_used: int) -> None:
+        if self._backend is None:
+            return
+        try:
+            self._backend.set_memory_if_greater(eu_id, bytes_used)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis set_memory_if_greater failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return
+            raise
+
+    def _backend_delete_eu(self, eu_id: str) -> None:
+        if self._backend is None:
+            return
+        try:
+            self._backend.delete_eu(eu_id)
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning(
+                    "[ResourceManager] redis delete_eu failed eu=%s error=%s",
+                    eu_id,
+                    exc,
+                )
+                return
+            raise
+
+    def _backend_reset_all(self) -> None:
+        if self._backend is None:
+            return
+        try:
+            self._backend.reset_all()
+        except Exception as exc:
+            import redis  # type: ignore[import]
+            if isinstance(exc, redis.RedisError):
+                logger.warning("[ResourceManager] redis reset_all failed error=%s", exc)
+                return
+            raise
 
     # ── Pre-execution checks ──────────────────────────────────────────────────
 
@@ -147,8 +453,13 @@ class ResourceManager:
             (True, None) if execution is allowed.
             (False, reason_str) if a quota is exceeded.
         """
+        backend_active = self._backend_get_tenant_active(str(tenant_id))
         with self._lock:
-            active = self._tenant_active.get(str(tenant_id), 0)
+            active = (
+                backend_active
+                if backend_active is not None
+                else self._tenant_active.get(str(tenant_id), 0)
+            )
             if active >= MAX_CONCURRENT_PER_TENANT:
                 reason = (
                     f"{RESOURCE_LIMIT_EXCEEDED}: tenant {tenant_id!r} has "
@@ -178,18 +489,42 @@ class ResourceManager:
             if snap is None:
                 return True, None
 
-            if snap.cpu_time_ms > MAX_CPU_TIME_MS:
+            tenant_active = self._backend_get_tenant_active(snap.tenant_id)
+            cpu_time_ms = self._backend_get_cpu_ms(str(eu_id))
+            syscall_count = self._backend_get_syscalls(str(eu_id))
+
+            active = (
+                tenant_active
+                if tenant_active is not None
+                else self._tenant_active.get(snap.tenant_id, 0)
+            )
+            if active >= MAX_CONCURRENT_PER_TENANT:
+                reason = (
+                    f"{RESOURCE_LIMIT_EXCEEDED}: tenant {snap.tenant_id!r} has "
+                    f"{active} active executions (max {MAX_CONCURRENT_PER_TENANT})"
+                )
+                logger.warning("[ResourceManager] %s eu=%s", reason, eu_id)
+                return False, reason
+
+            snap_cpu_time_ms = (
+                cpu_time_ms if cpu_time_ms is not None else snap.cpu_time_ms
+            )
+            snap_syscall_count = (
+                syscall_count if syscall_count is not None else snap.syscall_count
+            )
+
+            if snap_cpu_time_ms > MAX_CPU_TIME_MS:
                 reason = (
                     f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"cpu_time_ms limit ({snap.cpu_time_ms} > {MAX_CPU_TIME_MS})"
+                    f"cpu_time_ms limit ({snap_cpu_time_ms} > {MAX_CPU_TIME_MS})"
                 )
                 logger.warning("[ResourceManager] %s", reason)
                 return False, reason
 
-            if snap.syscall_count > MAX_SYSCALLS_PER_EXECUTION:
+            if snap_syscall_count > MAX_SYSCALLS_PER_EXECUTION:
                 reason = (
                     f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"syscall_count limit ({snap.syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
+                    f"syscall_count limit ({snap_syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
                 )
                 logger.warning("[ResourceManager] %s", reason)
                 return False, reason
@@ -208,6 +543,7 @@ class ResourceManager:
             eu_id:     Optional ExecutionUnit ID.
         """
         tid = str(tenant_id)
+        self._backend_increment_tenant_active(tid)
         with self._lock:
             self._tenant_active[tid] = self._tenant_active.get(tid, 0) + 1
             if eu_id:
@@ -245,6 +581,10 @@ class ResourceManager:
         """
         tid = str(tenant_id)
         capacity_freed = False
+        backend_current = self._backend_get_tenant_active(tid)
+        backend_new_active = self._backend_decrement_tenant_active(tid)
+        if eu_id:
+            self._backend_delete_eu(str(eu_id))
         with self._lock:
             current = self._tenant_active.get(tid, 0)
             new_active = max(0, current - 1)
@@ -253,9 +593,15 @@ class ResourceManager:
             # executions (>= MAX) and has now dropped below the limit.
             # Exactly one thread can observe this per completion because
             # each reads a different `current` value under the lock.
+            effective_current = (
+                backend_current if backend_current is not None else current
+            )
+            effective_new_active = (
+                backend_new_active if backend_new_active is not None else new_active
+            )
             capacity_freed = (
-                current >= MAX_CONCURRENT_PER_TENANT
-                and new_active < MAX_CONCURRENT_PER_TENANT
+                effective_current >= MAX_CONCURRENT_PER_TENANT
+                and effective_new_active < MAX_CONCURRENT_PER_TENANT
             )
 
         if capacity_freed:
@@ -266,7 +612,7 @@ class ResourceManager:
                 logger.info(
                     "[ResourceManager] capacity freed tenant=%s active=%d→%d "
                     "— published resource_available to all instances",
-                    tid, current, new_active,
+                    tid, effective_current, effective_new_active,
                 )
             except Exception as _exc:
                 logger.debug(
@@ -275,6 +621,36 @@ class ResourceManager:
                 )
 
     # ── Usage recording ───────────────────────────────────────────────────────
+
+    def record_cpu(self, eu_id: str, ms: int) -> None:
+        eid = str(eu_id)
+        delta = int(ms)
+        self._backend_add_cpu_ms(eid, delta)
+        with self._lock:
+            if eid not in self._usage:
+                self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
+            self._usage[eid].cpu_time_ms += delta
+
+    def record_memory(self, eu_id: str, bytes_used: int) -> None:
+        eid = str(eu_id)
+        value = int(bytes_used)
+        self._backend_set_memory_if_greater(eid, value)
+        with self._lock:
+            if eid not in self._usage:
+                self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
+            self._usage[eid].memory_bytes = max(self._usage[eid].memory_bytes, value)
+
+    def record_syscall(self, eu_id: str, count: int = 1) -> None:
+        eid = str(eu_id)
+        steps = max(0, int(count))
+        if steps == 0:
+            return
+        for _ in range(steps):
+            self._backend_increment_syscalls(eid)
+        with self._lock:
+            if eid not in self._usage:
+                self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
+            self._usage[eid].syscall_count += steps
 
     def record_usage(self, eu_id: str, usage: dict) -> None:
         """Accumulate resource usage for an ExecutionUnit.
@@ -287,17 +663,9 @@ class ResourceManager:
             usage:  Dict with keys: cpu_time_ms (int), memory_bytes (int),
                     syscall_count (int).  Missing keys are treated as 0.
         """
-        eid = str(eu_id)
-        with self._lock:
-            if eid not in self._usage:
-                # Anonymous usage tracking — no tenant association
-                self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
-            snap = self._usage[eid]
-            snap.cpu_time_ms += int(usage.get("cpu_time_ms", 0))
-            snap.memory_bytes = max(
-                snap.memory_bytes, int(usage.get("memory_bytes", 0))
-            )
-            snap.syscall_count += int(usage.get("syscall_count", 0))
+        self.record_cpu(eu_id, int(usage.get("cpu_time_ms", 0)))
+        self.record_memory(eu_id, int(usage.get("memory_bytes", 0)))
+        self.record_syscall(eu_id, int(usage.get("syscall_count", 0)))
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
@@ -314,6 +682,9 @@ class ResourceManager:
 
     def get_tenant_active(self, tenant_id: str) -> int:
         """Return the number of active executions for *tenant_id*."""
+        backend_active = self._backend_get_tenant_active(str(tenant_id))
+        if backend_active is not None:
+            return backend_active
         with self._lock:
             return self._tenant_active.get(str(tenant_id), 0)
 
@@ -323,11 +694,16 @@ class ResourceManager:
         Aggregates across all known UsageSnapshots for the tenant.
         """
         tid = str(tenant_id)
+        backend_active = self._backend_get_tenant_active(tid)
         with self._lock:
             snaps = [s for s in self._usage.values() if s.tenant_id == tid]
             return {
                 "tenant_id": tid,
-                "active_executions": self._tenant_active.get(tid, 0),
+                "active_executions": (
+                    backend_active
+                    if backend_active is not None
+                    else self._tenant_active.get(tid, 0)
+                ),
                 "execution_count": len(snaps),
                 "total_cpu_time_ms": sum(s.cpu_time_ms for s in snaps),
                 "peak_memory_bytes": max((s.memory_bytes for s in snaps), default=0),
@@ -345,6 +721,7 @@ class ResourceManager:
 
         Safe to call at any point after ``mark_completed()``.
         """
+        self._backend_delete_eu(str(eu_id))
         with self._lock:
             self._usage.pop(str(eu_id), None)
             self._eu_tenant.pop(str(eu_id), None)
@@ -354,6 +731,7 @@ class ResourceManager:
 
         For use in tests only. Never call in production.
         """
+        self._backend_reset_all()
         with self._lock:
             self._usage.clear()
             self._tenant_active.clear()

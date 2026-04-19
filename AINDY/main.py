@@ -242,6 +242,11 @@ async def lifespan(app: FastAPI):
                 "This is acceptable for local development but MUST be changed before production."
             )
 
+    if settings.is_prod and str(settings.OPENAI_API_KEY).startswith("sk-proj-"):
+        logger.warning(
+            "OPENAI_API_KEY uses an sk-proj- prefix in production; verify rotation after any potential exposure."
+        )
+
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if enforce_schema and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not (Config and ScriptDirectory and MigrationContext):

@@ -23,6 +23,9 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+/AINDY/.env
+/AINDY/.env.*
+!/AINDY/.env.example
 *.key
 *.pem
 *.crt

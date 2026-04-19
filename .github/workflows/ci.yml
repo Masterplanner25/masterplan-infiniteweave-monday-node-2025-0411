@@ -50,6 +50,15 @@ jobs:
           --health-retries 5
         ports:
           - 5433:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
 
     env:
       ENV: test
@@ -95,7 +104,9 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+          REDIS_URL: redis://localhost:6379/1
           ENV: test
+          TESTING: "false"
           SECRET_KEY: ci-secret-key-placeholder
           OPENAI_API_KEY: sk-test-placeholder
           DEEPSEEK_API_KEY: ds-test-placeholder
