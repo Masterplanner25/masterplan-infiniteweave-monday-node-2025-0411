@@ -8,13 +8,11 @@ Endpoints:
 Auth: API key (X-API-Key header) — Watcher is a headless background process.
 """
 
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -22,6 +20,7 @@ from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.services.auth_service import verify_api_key
+from AINDY.platform_layer.rate_limiter import limiter
 
 router = APIRouter(
     prefix="/watcher",
@@ -152,7 +151,9 @@ def _run_flow_watcher(flow_name: str, payload: dict, db: Session, user_id: str |
 # ---------------------------------------------------------------------------
 
 @router.post("/signals", status_code=201)
+@limiter.limit("30/minute")
 def receive_signals(
+    request: Request,
     batch: SignalBatch,
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
@@ -185,7 +186,9 @@ def receive_signals(
 
 
 @router.get("/signals")
+@limiter.limit("60/minute")
 def list_signals(
+    request: Request,
     session_id: Optional[str] = Query(default=None, description="Filter by session UUID"),
     signal_type: Optional[str] = Query(default=None, description="Filter by signal type"),
     user_id: Optional[str] = Query(default=None, description="Filter by user UUID"),

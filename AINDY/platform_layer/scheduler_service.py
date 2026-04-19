@@ -159,6 +159,14 @@ def stop() -> None:
 def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     """Register recurring platform jobs and app-registered scheduled jobs."""
     scheduler.add_job(
+        _scrape_scheduler_metrics,
+        trigger=IntervalTrigger(seconds=15),
+        id="scrape_scheduler_metrics",
+        name="Prometheus scheduler gauge scrape",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
         _cleanup_stale_logs,
         trigger=IntervalTrigger(hours=1),
         id="cleanup_stale_logs",
@@ -199,6 +207,19 @@ def _build_trigger(trigger_type: str, trigger_kwargs: dict) -> object:
     if trigger_type == "interval":
         return IntervalTrigger(**trigger_kwargs)
     raise ValueError(f"Unsupported scheduled job trigger: {trigger_type}")
+
+
+def _scrape_scheduler_metrics() -> None:
+    """Update Prometheus scheduler gauges from the live SchedulerEngine snapshot."""
+    try:
+        from AINDY.kernel.scheduler_engine import get_scheduler_engine
+        from AINDY.platform_layer.metrics import scheduler_queue_depth, scheduler_waiting_count
+        snapshot = get_scheduler_engine().get_metrics_snapshot()
+        for priority, depth in snapshot["queue_depth"].items():
+            scheduler_queue_depth.labels(priority=priority).set(depth)
+        scheduler_waiting_count.set(snapshot["waiting_count"])
+    except Exception as exc:
+        logger.warning("Scheduler metrics scrape failed (non-fatal): %s", exc)
 
 
 def _cleanup_stale_logs() -> None:

@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.app_runtime import ExecutionContext, run_execution
 from apps.freelance.schemas.freelance import (
     FeedbackCreate,
@@ -45,6 +44,7 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
 
 
 @router.post("/order", status_code=201)
+@limiter.limit("30/minute")
 def create_freelance_order(
     request: Request,
     order: FreelanceOrderCreate,
@@ -61,6 +61,7 @@ def create_freelance_order(
 
 
 @router.post("/deliver/{order_id}")
+@limiter.limit("30/minute")
 def deliver_order(
     request: Request,
     order_id: int,
@@ -77,6 +78,7 @@ def deliver_order(
 
 
 @router.put("/delivery/{order_id}")
+@limiter.limit("30/minute")
 def update_delivery_configuration(
     request: Request,
     order_id: int,
@@ -96,6 +98,7 @@ def update_delivery_configuration(
 
 
 @router.post("/feedback")
+@limiter.limit("30/minute")
 def collect_feedback(
     request: Request,
     feedback: FeedbackCreate,
@@ -111,6 +114,7 @@ def collect_feedback(
 
 
 @router.get("/orders")
+@limiter.limit("60/minute")
 def get_all_orders(
     request: Request,
     db: Session = Depends(get_db),
@@ -128,6 +132,7 @@ def get_all_orders(
 
 
 @router.get("/feedback")
+@limiter.limit("60/minute")
 def get_all_feedback(
     request: Request,
     db: Session = Depends(get_db),
@@ -140,6 +145,7 @@ def get_all_feedback(
 
 
 @router.get("/metrics/latest")
+@limiter.limit("60/minute")
 def get_latest_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -152,6 +158,7 @@ def get_latest_metrics(
 
 
 @router.post("/metrics/update")
+@limiter.limit("30/minute")
 def update_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -164,6 +171,7 @@ def update_metrics(
 
 
 @router.post("/generate/{order_id}")
+@limiter.limit("30/minute")
 def generate_delivery(
     request: Request,
     order_id: int,

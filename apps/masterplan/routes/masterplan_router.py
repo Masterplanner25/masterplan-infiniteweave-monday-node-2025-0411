@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
@@ -52,6 +53,7 @@ def _run_flow_masterplan(flow_name: str, payload: dict, db: Session, user_id: st
 # LOCK FROM GENESIS
 # ------------------------------
 @router.post("/lock")
+@limiter.limit("30/minute")
 async def lock_from_genesis(
     request: Request,
     payload: dict,
@@ -83,6 +85,7 @@ async def lock_from_genesis(
 # LOCK PLAN
 # ------------------------------
 @router.post("/{plan_id}/lock")
+@limiter.limit("30/minute")
 def lock_plan(
     request: Request,
     plan_id: int,
@@ -96,6 +99,7 @@ def lock_plan(
 # LIST
 # ------------------------------
 @router.get("/")
+@limiter.limit("60/minute")
 async def list_masterplans(
     request: Request,
     db: Session = Depends(get_db),
@@ -120,6 +124,7 @@ async def list_masterplans(
 # GET SINGLE
 # ------------------------------
 @router.get("/{plan_id}")
+@limiter.limit("60/minute")
 def get_masterplan(
     request: Request,
     plan_id: int,
@@ -140,6 +145,7 @@ class AnchorRequest(BaseModel):
 
 
 @router.put("/{plan_id}/anchor")
+@limiter.limit("30/minute")
 async def set_masterplan_anchor(
     request: Request,
     plan_id: int,
@@ -175,6 +181,7 @@ async def set_masterplan_anchor(
 # PROJECTION
 # ------------------------------
 @router.get("/{plan_id}/projection")
+@limiter.limit("60/minute")
 async def get_masterplan_projection(
     request: Request,
     plan_id: int,
@@ -201,6 +208,7 @@ async def get_masterplan_projection(
 # ACTIVATE
 # ------------------------------
 @router.post("/{plan_id}/activate")
+@limiter.limit("30/minute")
 def activate_masterplan(
     request: Request,
     plan_id: int,

@@ -8,6 +8,7 @@ import logging
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.runtime.nodus_security import NodusSecurityError
 from AINDY.services.auth_service import get_current_user
 
@@ -215,6 +216,7 @@ async def _execute_memory(
 # ------------------------------------------------------------------
 
 @router.post("/nodes", status_code=201)
+@limiter.limit("30/minute")
 async def create_node(
     request: Request,
     body: CreateNodeRequest,
@@ -258,6 +260,7 @@ async def create_node(
         success_status_code=201,
     )
 @router.get("/nodes/{node_id}")
+@limiter.limit("60/minute")
 async def get_node(
     request: Request,
     node_id: str,
@@ -269,6 +272,7 @@ async def get_node(
 
     return await _execute_memory(request, "memory.nodes.get", handler, db=db, current_user=current_user)
 @router.put("/nodes/{node_id}")
+@limiter.limit("30/minute")
 async def update_node(
     request: Request,
     node_id: str,
@@ -284,6 +288,7 @@ async def update_node(
 
     return await _execute_memory(request, "memory.nodes.update", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/nodes/{node_id}/history")
+@limiter.limit("60/minute")
 async def get_node_history(
     request: Request,
     node_id: str,
@@ -296,6 +301,7 @@ async def get_node_history(
 
     return await _execute_memory(request, "memory.nodes.history", handler, db=db, current_user=current_user)
 @router.get("/nodes/{node_id}/links")
+@limiter.limit("60/minute")
 async def get_linked_nodes(
     request: Request,
     node_id: str,
@@ -308,6 +314,7 @@ async def get_linked_nodes(
 
     return await _execute_memory(request, "memory.nodes.links", handler, db=db, current_user=current_user)
 @router.get("/nodes")
+@limiter.limit("60/minute")
 async def search_nodes_by_tags(
     request: Request,
     tags: str = "",
@@ -328,6 +335,7 @@ async def search_nodes_by_tags(
 
     return await _execute_memory(request, "memory.nodes.search_tags", handler, db=db, current_user=current_user)
 @router.post("/links", status_code=201)
+@limiter.limit("30/minute")
 async def create_link(
     request: Request,
     body: CreateLinkRequest,
@@ -374,6 +382,7 @@ async def create_link(
 
     return await _execute_memory(request, "memory.links.create", handler, db=db, current_user=current_user, input_payload=body.model_dump(), success_status_code=201)
 @router.get("/nodes/{node_id}/traverse")
+@limiter.limit("60/minute")
 async def traverse_from_node(
     request: Request,
     node_id: str,
@@ -391,6 +400,7 @@ async def traverse_from_node(
 
     return await _execute_memory(request, "memory.nodes.traverse", handler, db=db, current_user=current_user)
 @router.post("/nodes/expand")
+@limiter.limit("30/minute")
 async def expand_nodes(
     request: Request,
     body: ExpandRequest,
@@ -405,6 +415,7 @@ async def expand_nodes(
 
     return await _execute_memory(request, "memory.nodes.expand", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodes/search")
+@limiter.limit("30/minute")
 async def search_similar_nodes(
     request: Request,
     body: SimilaritySearchRequest,
@@ -436,6 +447,7 @@ async def search_similar_nodes(
 
     return await _execute_memory(request, "memory.nodes.search_similar", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall")
+@limiter.limit("30/minute")
 async def recall_memories(
     request: Request,
     body: RecallRequest,
@@ -479,6 +491,7 @@ async def recall_memories(
 
     return await _execute_memory(request, "memory.recall", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/recall/v3")
+@limiter.limit("30/minute")
 async def recall_v3(
     request: Request,
     body: RecallV3Request,
@@ -493,6 +506,7 @@ async def recall_v3(
 
     return await _execute_memory(request, "memory.recall.v3", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/federated/recall")
+@limiter.limit("30/minute")
 async def federated_recall(
     request: Request,
     body: FederatedRecallRequest,
@@ -507,6 +521,7 @@ async def federated_recall(
 
     return await _execute_memory(request, "memory.recall.federated", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/agents")
+@limiter.limit("60/minute")
 async def list_agents(
     request: Request,
     db: Session = Depends(get_db),
@@ -517,6 +532,7 @@ async def list_agents(
 
     return await _execute_memory(request, "memory.agents.list", handler, db=db, current_user=current_user)
 @router.post("/nodes/{node_id}/share")
+@limiter.limit("30/minute")
 async def share_memory_node(
     request: Request,
     node_id: str,
@@ -528,6 +544,7 @@ async def share_memory_node(
 
     return await _execute_memory(request, "memory.nodes.share", handler, db=db, current_user=current_user)
 @router.get("/agents/{namespace}/recall")
+@limiter.limit("30/minute")
 async def recall_from_agent_endpoint(
     request: Request,
     namespace: str,
@@ -541,6 +558,7 @@ async def recall_from_agent_endpoint(
 
     return await _execute_memory(request, "memory.agents.recall", handler, db=db, current_user=current_user)
 @router.post("/nodes/{node_id}/feedback")
+@limiter.limit("30/minute")
 async def record_node_feedback(
     request: Request,
     node_id: str,
@@ -553,6 +571,7 @@ async def record_node_feedback(
 
     return await _execute_memory(request, "memory.nodes.feedback", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.get("/nodes/{node_id}/performance")
+@limiter.limit("60/minute")
 async def get_node_performance(
     request: Request,
     node_id: str,
@@ -564,6 +583,7 @@ async def get_node_performance(
 
     return await _execute_memory(request, "memory.nodes.performance", handler, db=db, current_user=current_user)
 @router.post("/suggest")
+@limiter.limit("30/minute")
 async def get_suggestions(
     request: Request,
     body: SuggestRequest,
@@ -583,6 +603,7 @@ async def get_suggestions(
 
     return await _execute_memory(request, "memory.suggest", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/nodus/execute")
+@limiter.limit("30/minute")
 async def execute_nodus_task(
     body: NodusOperationRequest,
     request: Request = None,
@@ -660,6 +681,7 @@ async def execute_nodus_task(
 
     return await _execute_memory(request, "memory.nodus.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute")
+@limiter.limit("30/minute")
 async def execute_with_memory(
     request: Request,
     body: ExecutionLoopRequest,
@@ -675,6 +697,7 @@ async def execute_with_memory(
 
     return await _execute_memory(request, "memory.execute", handler, db=db, current_user=current_user, input_payload=body.model_dump())
 @router.post("/execute/complete")
+@limiter.limit("30/minute")
 async def complete_memory_loop(
     request: Request,
     body: ExecutionCompleteRequest,

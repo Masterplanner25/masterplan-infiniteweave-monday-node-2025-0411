@@ -12,6 +12,8 @@ from fastapi import APIRouter, Depends, Request
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from apps.authorship.services.authorship_services import reclaim_authorship
 from AINDY.services.auth_service import get_current_user
+from AINDY.platform_layer.rate_limiter import limiter
+
 
 router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depends(get_current_user)])
 
@@ -20,6 +22,7 @@ def _execute_authorship(request: Request, route_name: str, handler):
     return execute_with_pipeline_sync(request=request, route_name=route_name, handler=handler)
 
 @router.post("/reclaim")
+@limiter.limit("30/minute")
 def reclaim_authorship_endpoint(request: Request, content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):
     """
     Reclaim authorship for provided text.

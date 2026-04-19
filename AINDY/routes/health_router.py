@@ -11,6 +11,7 @@ from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal, engine, get_db
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.services.auth_service import verify_api_key
+from AINDY.platform_layer.rate_limiter import limiter
 
 router = APIRouter(tags=["Health"])
 logger = logging.getLogger(__name__)
@@ -96,6 +97,7 @@ def liveness() -> dict:
     summary="Check Liveness",
     description="Performs a liveness check with a shallow database probe. Returns the current service status and database reachability.",
 )
+@limiter.limit("120/minute")
 def liveness_http(request: Request, db: Session = Depends(get_db)) -> dict:
     payload = _compute_liveness()
     def handler(_ctx):
@@ -127,6 +129,7 @@ def liveness_legacy_alias() -> dict:
     summary="Check Legacy Liveness",
     description="Provides the legacy slash-suffixed liveness endpoint. Returns the basic health payload used by older callers.",
 )
+@limiter.limit("120/minute")
 def liveness_legacy_alias_http(request: Request) -> dict:
     payload = _liveness_payload()
     def handler(_ctx):
@@ -149,6 +152,7 @@ def liveness_legacy_alias_http(request: Request) -> dict:
     summary="Check Readiness",
     description="Runs readiness checks for required infrastructure such as the database and cache. Returns the readiness status and component results.",
 )
+@limiter.limit("120/minute")
 def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     components: dict[str, str] = {}
 
@@ -214,6 +218,7 @@ def readiness(request: Request, db: Session = Depends(get_db)) -> dict:
     summary="Get Health Details",
     description="Runs detailed health diagnostics for the API, database, and supporting components. Returns a component-by-component health report.",
 )
+@limiter.limit("120/minute")
 def health_details(request: Request, db: Session = Depends(get_db)) -> dict:
     status = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 
 from fastapi import APIRouter, Depends, Request
@@ -7,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
 from AINDY.services.auth_service import get_current_user
 from AINDY.platform_layer.user_ids import require_user_id
@@ -27,6 +26,7 @@ def _execute_memory_metrics(request: Request, route_name: str, handler, *, db: S
 
 
 @router.get("/metrics")
+@limiter.limit("60/minute")
 def get_memory_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -41,6 +41,7 @@ def get_memory_metrics(
 
 
 @router.get("/metrics/detail")
+@limiter.limit("60/minute")
 def get_memory_metrics_detail(
     request: Request,
     db: Session = Depends(get_db),
@@ -54,6 +55,7 @@ def get_memory_metrics_detail(
 
 
 @router.get("/metrics/dashboard")
+@limiter.limit("60/minute")
 def get_memory_metrics_dashboard(
     request: Request,
     db: Session = Depends(get_db),

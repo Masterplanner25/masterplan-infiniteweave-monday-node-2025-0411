@@ -16,6 +16,7 @@ from openai import OpenAI
 
 from AINDY.config import settings
 from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.platform_layer.openai_client import create_embedding
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
@@ -79,9 +80,11 @@ def generate_embedding(text: str) -> list:
                 model=EMBEDDING_MODEL,
                 method="openai.embeddings",
                 extra={"purpose": "embedding_generation"},
-                operation=lambda: client.embeddings.create(
+                operation=lambda: create_embedding(
+                    client,
+                    input=text,
                     model=EMBEDDING_MODEL,
-                    input=text
+                    timeout=settings.OPENAI_EMBEDDING_TIMEOUT_SECONDS,
                 ),
             )
             embedding = response.data[0].embedding

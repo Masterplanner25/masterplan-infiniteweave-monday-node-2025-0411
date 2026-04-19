@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["Health Dashboard"], dependencies=[Depends(get_current_user)])
@@ -33,6 +34,7 @@ def _execute_health_dashboard(request: Request, route_name: str, handler, *, db:
 
 
 @router.get("/health")
+@limiter.limit("60/minute")
 def get_health_logs(
     request: Request,
     limit: int = 20,

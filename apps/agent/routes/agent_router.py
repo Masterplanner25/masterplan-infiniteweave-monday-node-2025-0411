@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_service import ExecutionContext
 from AINDY.core.execution_service import run_execution
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -154,7 +155,9 @@ class TrustSettingsUpdate(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/run")
+@limiter.limit("5/minute")
 def create_agent_run(
+    request: Request,
     body: RunRequest,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -176,7 +179,9 @@ def create_agent_run(
 
 
 @router.get("/runs")
+@limiter.limit("60/minute")
 def list_agent_runs(
+    request: Request,
     status: Optional[str] = None,
     limit: int = 20,
     current_user=Depends(get_current_user),
@@ -194,7 +199,9 @@ def list_agent_runs(
 
 
 @router.get("/runs/{run_id}")
+@limiter.limit("60/minute")
 def get_agent_run(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -205,7 +212,9 @@ def get_agent_run(
 
 
 @router.post("/runs/{run_id}/approve")
+@limiter.limit("5/minute")
 def approve_agent_run(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -216,7 +225,9 @@ def approve_agent_run(
 
 
 @router.post("/runs/{run_id}/reject")
+@limiter.limit("5/minute")
 def reject_agent_run(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -227,7 +238,9 @@ def reject_agent_run(
 
 
 @router.post("/runs/{run_id}/recover")
+@limiter.limit("5/minute")
 def recover_agent_run(
+    request: Request,
     run_id: str,
     force: bool = False,
     current_user=Depends(get_current_user),
@@ -239,7 +252,9 @@ def recover_agent_run(
 
 
 @router.post("/runs/{run_id}/replay")
+@limiter.limit("5/minute")
 def replay_agent_run(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -250,7 +265,9 @@ def replay_agent_run(
 
 
 @router.get("/runs/{run_id}/steps")
+@limiter.limit("60/minute")
 def get_run_steps(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -261,7 +278,9 @@ def get_run_steps(
 
 
 @router.get("/runs/{run_id}/events")
+@limiter.limit("60/minute")
 def get_run_events(
+    request: Request,
     run_id: str,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -272,7 +291,9 @@ def get_run_events(
 
 
 @router.get("/tools")
+@limiter.limit("60/minute")
 def list_tools(
+    request: Request,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -282,7 +303,9 @@ def list_tools(
 
 
 @router.get("/trust")
+@limiter.limit("60/minute")
 def get_trust_settings(
+    request: Request,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -292,6 +315,7 @@ def get_trust_settings(
 
 
 @router.get("/suggestions")
+@limiter.limit("60/minute")
 def get_tool_suggestions(
     request: Request = None,
     current_user=Depends(get_current_user),
@@ -309,7 +333,9 @@ def get_tool_suggestions(
 
 
 @router.put("/trust")
+@limiter.limit("30/minute")
 def update_trust_settings(
+    request: Request,
     body: TrustSettingsUpdate,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),

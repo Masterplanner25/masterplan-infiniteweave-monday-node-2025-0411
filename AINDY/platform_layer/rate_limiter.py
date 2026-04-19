@@ -17,7 +17,10 @@ The limiter must also be attached to app.state in main.py:
     from AINDY.platform_layer.rate_limiter import limiter
     app.state.limiter = limiter
 """
+import os
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-limiter = Limiter(key_func=get_remote_address)
+_test_mode = os.environ.get("TEST_MODE", "false").lower() in ("1", "true", "yes")
+limiter = Limiter(key_func=get_remote_address, enabled=not _test_mode)

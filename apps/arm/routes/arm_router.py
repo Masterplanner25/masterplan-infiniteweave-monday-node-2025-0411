@@ -170,6 +170,7 @@ async def generate_code(
 
 
 @router.get("/logs")
+@limiter.limit("60/minute")
 async def get_arm_logs(
     request: Request,
     limit: int = 20,
@@ -190,6 +191,7 @@ async def get_arm_logs(
 
 
 @router.get("/config")
+@limiter.limit("60/minute")
 async def get_config(
     request: Request,
     current_user: dict = Depends(get_current_user),
@@ -217,6 +219,7 @@ async def get_config(
 
 
 @router.put("/config")
+@limiter.limit("30/minute")
 async def update_config(
     request: Request,
     body: ConfigUpdateRequest,
@@ -245,6 +248,7 @@ async def update_config(
 
 
 @router.get("/metrics")
+@limiter.limit("60/minute")
 async def get_arm_metrics(
     request: Request,
     window: int = 30,
@@ -274,6 +278,7 @@ async def get_arm_metrics(
 
 
 @router.get("/config/suggest")
+@limiter.limit("60/minute")
 async def get_config_suggestions(
     request: Request,
     window: int = 30,

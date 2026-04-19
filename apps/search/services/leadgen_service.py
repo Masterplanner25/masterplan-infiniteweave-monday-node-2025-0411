@@ -20,7 +20,8 @@ from apps.search.models.leadgen_model import LeadGenResult
 from AINDY.platform_layer.external_call_service import perform_external_call
 from apps.search.services.search_service import search_leads
 from AINDY.platform_layer.trace_context import is_pipeline_active
-from AINDY.platform_layer.openai_client import get_openai_client
+from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -172,12 +173,14 @@ Each score must be a number between 0 and 100.
             model="gpt-4o-mini",
             method="openai.chat",
             extra={"purpose": "lead_scoring", "company": lead_data["company"]},
-            operation=lambda: get_openai_client().chat.completions.create(
+            operation=lambda: chat_completion(
+                get_openai_client(),
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": system_prompt.strip()},
                     {"role": "user", "content": lead_summary},
                 ],
+                timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
             ),
         )
 

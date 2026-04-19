@@ -4,6 +4,7 @@ from fastapi import Depends, APIRouter, HTTPException, Request
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
 from apps.masterplan.schemas.masterplan import MasterPlanInput
@@ -96,6 +97,7 @@ def _legacy_twr_response(*, task: TaskInput, infinity_result: dict) -> dict:
     }
 
 @router.post("/calculate_twr")
+@limiter.limit("30/minute")
 @cache(expire=60)
 async def process_task(
     request: Request,
@@ -143,6 +145,7 @@ async def process_task(
     )
 
 @router.post("/calculate_effort")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_effort(
     request: Request,
@@ -165,6 +168,7 @@ async def process_effort(
     )
 
 @router.post("/calculate_productivity")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_productivity(
     request: Request,
@@ -187,6 +191,7 @@ async def process_productivity(
     )
 
 @router.post("/calculate_virality")
+@limiter.limit("30/minute")
 async def process_virality(
     request: Request,
     data: ViralityInput,
@@ -206,6 +211,7 @@ async def process_virality(
     return await _execute_main(request, "main.calculate_virality", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/calculate_engagement")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_engagement(
     request: Request,
@@ -221,6 +227,7 @@ async def process_engagement(
     return await _execute_main(request, "main.calculate_engagement", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/calculate_ai_efficiency")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_ai_efficiency(
     request: Request,
@@ -236,6 +243,7 @@ async def process_ai_efficiency(
     return await _execute_main(request, "main.calculate_ai_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/calculate_impact_score")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_impact_score(
     request: Request,
@@ -251,6 +259,7 @@ async def process_impact_score(
     return await _execute_main(request, "main.calculate_impact_score", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/income_efficiency")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_income_efficiency(
     request: Request,
@@ -266,6 +275,7 @@ async def process_income_efficiency(
     return await _execute_main(request, "main.income_efficiency", handler, db=db, current_user=current_user, input_payload=eff.model_dump())
 
 @router.post("/revenue_scaling")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_revenue_scaling(
     request: Request,
@@ -281,6 +291,7 @@ async def process_revenue_scaling(
     return await _execute_main(request, "main.revenue_scaling", handler, db=db, current_user=current_user, input_payload=rs.model_dump())
 
 @router.post("/execution_speed")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_execution_speed(
     request: Request,
@@ -296,6 +307,7 @@ async def process_execution_speed(
     return await _execute_main(request, "main.execution_speed", handler, db=db, current_user=current_user, input_payload=es.model_dump())
 
 @router.post("/attention_value")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_attention_value(
     request: Request,
@@ -311,6 +323,7 @@ async def process_attention_value(
     return await _execute_main(request, "main.attention_value", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/engagement_rate")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_engagement_rate(
     request: Request,
@@ -326,6 +339,7 @@ async def process_engagement_rate(
     return await _execute_main(request, "main.engagement_rate", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/business_growth")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_business_growth(
     request: Request,
@@ -341,6 +355,7 @@ async def process_business_growth(
     return await _execute_main(request, "main.business_growth", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/monetization_efficiency")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_monetization_efficiency(
     request: Request,
@@ -356,6 +371,7 @@ async def process_monetization_efficiency(
     return await _execute_main(request, "main.monetization_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/ai_productivity_boost")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_ai_productivity_boost(
     request: Request,
@@ -376,6 +392,7 @@ async def process_ai_productivity_boost(
     return await _execute_main(request, "main.ai_productivity_boost", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/lost_potential")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_lost_potential(
     request: Request,
@@ -391,6 +408,7 @@ async def process_lost_potential(
     return await _execute_main(request, "main.lost_potential", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/decision_efficiency")
+@limiter.limit("30/minute")
 @cache(expire=300)
 async def process_decision_efficiency(
     request: Request,
@@ -406,6 +424,7 @@ async def process_decision_efficiency(
     return await _execute_main(request, "main.decision_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
 
 @router.post("/batch_calculations")
+@limiter.limit("30/minute")
 async def process_batch_calculations(
     request: Request,
     batch_data: BatchInput,
@@ -422,6 +441,7 @@ async def process_batch_calculations(
 
 
 @router.get("/results")
+@limiter.limit("60/minute")
 async def get_results(
     request: Request,
     db: Session = Depends(get_db),
@@ -434,6 +454,7 @@ async def get_results(
     return await _execute_main(request, "main.results.list", handler, db=db, current_user=current_user)
 
 @router.get("/masterplans")
+@limiter.limit("60/minute")
 async def get_masterplans(
     request: Request,
     db: Session = Depends(get_db),
@@ -446,6 +467,7 @@ async def get_masterplans(
     return await _execute_main(request, "main.masterplans.list", handler, db=db, current_user=current_user)
 
 @router.post("/create_masterplan")
+@limiter.limit("30/minute")
 async def create_masterplan(
     request: Request,
     data: MasterPlanInput,

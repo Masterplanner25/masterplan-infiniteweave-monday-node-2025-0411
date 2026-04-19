@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_service import ExecutionContext
 from AINDY.core.execution_service import run_execution
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 
@@ -35,6 +36,7 @@ class GoalCreateRequest(BaseModel):
 
 
 @router.get("")
+@limiter.limit("60/minute")
 def list_goals(
     request: Request,
     db: Session = Depends(get_db),
@@ -51,6 +53,7 @@ def list_goals(
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 def create_goal_route(
     request: Request,
     body: GoalCreateRequest,
@@ -92,6 +95,7 @@ def create_goal_route(
 
 
 @router.get("/state")
+@limiter.limit("60/minute")
 def list_goal_state(
     request: Request,
     db: Session = Depends(get_db),

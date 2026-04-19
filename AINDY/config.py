@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
     OPENAI_API_KEY: str
     DEEPSEEK_API_KEY: str | None = None
+    OPENAI_CHAT_TIMEOUT_SECONDS: float = 30.0
+    OPENAI_EMBEDDING_TIMEOUT_SECONDS: float = 15.0
+    OPENAI_MAX_RETRIES: int = 3
 
     # --- Auth ---
     SECRET_KEY: str = "dev-secret-change-in-production"

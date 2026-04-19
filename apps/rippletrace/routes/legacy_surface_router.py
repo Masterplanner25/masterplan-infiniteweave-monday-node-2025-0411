@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import verify_api_key
 
 from apps.rippletrace.services.causal_engine import build_causal_graph, get_causal_chain
@@ -52,6 +53,7 @@ router = APIRouter(
 # ANALYZE
 # ------------------------------
 @router.get("/analyze_ripple/{drop_point_id}")
+@limiter.limit("60/minute")
 def analyze_ripple(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     def handler(ctx):
         metrics = analyze_drop_point(drop_point_id, db)
@@ -66,6 +68,7 @@ def analyze_ripple(request: Request, drop_point_id: str, db: Session = Depends(g
 # DASHBOARD
 # ------------------------------
 @router.get("/dashboard")
+@limiter.limit("60/minute")
 def proofboard_dashboard(request: Request, db: Session = Depends(get_db)):
     def handler(ctx):
         snapshot = get_dashboard_snapshot(db)
@@ -102,71 +105,85 @@ def wrap(request, name, fn):
 
 
 @router.get("/top_drop_points")
+@limiter.limit("60/minute")
 def top_drop_points(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "top_drop_points", lambda: {"top_drop_points": get_top_drop_points(db)})
 
 
 @router.get("/ripple_deltas/{drop_point_id}")
+@limiter.limit("60/minute")
 def ripple_deltas(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "ripple_deltas", lambda: compute_deltas(drop_point_id, db))
 
 
 @router.get("/emerging_drops")
+@limiter.limit("60/minute")
 def emerging_drops_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "emerging_drops", lambda: {"emerging_drops": emerging_drops(db)})
 
 
 @router.get("/predict/{drop_point_id}")
+@limiter.limit("60/minute")
 def predict_drop_point_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "predict", lambda: predict_drop_point(drop_point_id, db))
 
 
 @router.get("/prediction_summary")
+@limiter.limit("60/minute")
 def prediction_summary_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "prediction_summary", lambda: prediction_summary(db))
 
 
 @router.get("/recommend/{drop_point_id}")
+@limiter.limit("60/minute")
 def recommend_drop_point(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "recommend", lambda: recommend_for_drop_point(drop_point_id, db))
 
 
 @router.get("/recommendations_summary")
+@limiter.limit("60/minute")
 def recommendations_summary_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "recommendations_summary", lambda: recommendations_summary(db))
 
 
 @router.get("/influence_graph")
+@limiter.limit("60/minute")
 def influence_graph_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "influence_graph", lambda: build_influence_graph(db))
 
 
 @router.get("/influence_chain/{drop_point_id}")
+@limiter.limit("60/minute")
 def influence_chain_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "influence_chain", lambda: influence_chain(drop_point_id, db))
 
 
 @router.get("/causal_graph")
+@limiter.limit("60/minute")
 def causal_graph_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "causal_graph", lambda: build_causal_graph(db))
 
 
 @router.get("/causal_chain/{drop_point_id}")
+@limiter.limit("60/minute")
 def causal_chain_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "causal_chain", lambda: get_causal_chain(drop_point_id, db))
 
 
 @router.get("/narrative/{drop_point_id}")
+@limiter.limit("60/minute")
 def narrative_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "narrative", lambda: generate_narrative(drop_point_id, db))
 
 
 @router.get("/narrative_summary")
+@limiter.limit("60/minute")
 def narrative_summary_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "narrative_summary", lambda: {"stories": narrative_summary(db)})
 
 
 @router.get("/strategies")
+@limiter.limit("60/minute")
 def strategies_view(request: Request, db: Session = Depends(get_db)):
     def fn():
         build_strategies(db)
@@ -175,6 +192,7 @@ def strategies_view(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/strategy/{strategy_id}")
+@limiter.limit("60/minute")
 def strategy_view(request: Request, strategy_id: str, db: Session = Depends(get_db)):
     def fn():
         strategy = get_strategy(strategy_id, db)
@@ -185,21 +203,25 @@ def strategy_view(request: Request, strategy_id: str, db: Session = Depends(get_
 
 
 @router.get("/strategy_match/{drop_point_id}")
+@limiter.limit("60/minute")
 def strategy_match_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "strategy_match", lambda: {"matches": match_strategies(drop_point_id, db)})
 
 
 @router.post("/build_playbook/{strategy_id}")
+@limiter.limit("30/minute")
 def build_playbook_view(request: Request, strategy_id: str, db: Session = Depends(get_db)):
     return wrap(request, "build_playbook", lambda: build_playbook(strategy_id, db))
 
 
 @router.get("/playbooks")
+@limiter.limit("60/minute")
 def playbooks_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "playbooks", lambda: {"playbooks": list_playbooks(db)})
 
 
 @router.get("/playbook/{playbook_id}")
+@limiter.limit("60/minute")
 def playbook_view(request: Request, playbook_id: str, db: Session = Depends(get_db)):
     def fn():
         playbook = get_playbook(playbook_id, db)
@@ -210,31 +232,37 @@ def playbook_view(request: Request, playbook_id: str, db: Session = Depends(get_
 
 
 @router.get("/playbook_match/{drop_point_id}")
+@limiter.limit("60/minute")
 def playbook_match_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "playbook_match", lambda: {"matches": match_playbooks(drop_point_id, db)})
 
 
 @router.get("/generate_content/{playbook_id}")
+@limiter.limit("60/minute")
 def generate_content_view(request: Request, playbook_id: str, db: Session = Depends(get_db)):
     return wrap(request, "generate_content", lambda: generate_content(playbook_id, db))
 
 
 @router.post("/generate_content_for_drop/{drop_point_id}")
+@limiter.limit("30/minute")
 def generate_content_for_drop_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     return wrap(request, "generate_content_for_drop", lambda: generate_content_for_drop(drop_point_id, db))
 
 
 @router.get("/generate_variations/{playbook_id}")
+@limiter.limit("60/minute")
 def generate_variations_view(request: Request, playbook_id: str, db: Session = Depends(get_db)):
     return wrap(request, "generate_variations", lambda: generate_variations(playbook_id, db))
 
 
 @router.get("/learning_stats")
+@limiter.limit("60/minute")
 def learning_stats_view(request: Request, db: Session = Depends(get_db)):
     return wrap(request, "learning_stats", lambda: learning_stats(db))
 
 
 @router.post("/evaluate/{drop_point_id}")
+@limiter.limit("30/minute")
 def evaluate_drop_point(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
     def fn():
         result = evaluate_outcome(drop_point_id, db)

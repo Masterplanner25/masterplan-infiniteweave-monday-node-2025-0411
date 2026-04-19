@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,7 @@ class AutomationTriggerRequest(BaseModel):
 
 
 @router.get("/logs")
+@limiter.limit("60/minute")
 async def get_automation_logs(
     request: Request,
     status: Optional[str] = None,
@@ -100,6 +102,7 @@ async def get_automation_logs(
 
 
 @router.get("/logs/{log_id}")
+@limiter.limit("60/minute")
 async def get_automation_log(
     request: Request,
     log_id: str,
@@ -114,6 +117,7 @@ async def get_automation_log(
 
 
 @router.post("/logs/{log_id}/replay")
+@limiter.limit("30/minute")
 async def replay_automation_log(
     request: Request,
     log_id: str,
@@ -159,6 +163,7 @@ async def replay_automation_log(
 
 
 @router.get("/scheduler/status")
+@limiter.limit("60/minute")
 def get_scheduler_status(
     request: Request,
     db: Session = Depends(get_db),
@@ -184,6 +189,7 @@ def get_scheduler_status(
 
 
 @router.post("/tasks/{task_id}/trigger")
+@limiter.limit("30/minute")
 async def trigger_task_automation(
     request: Request,
     task_id: int,

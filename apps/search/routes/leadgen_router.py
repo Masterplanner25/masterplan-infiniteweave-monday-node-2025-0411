@@ -6,8 +6,6 @@ Purpose: Exposes API routes to trigger A.I.N.D.Y.'s autonomous
 lead discovery and scoring engine.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 
@@ -103,6 +101,7 @@ def generate_b2b_leads(
 
 
 @router.get("/search")
+@limiter.limit("60/minute")
 def preview_lead_search(
     request: Request,
     query: str = Query(..., description="Search intent or keyword for AI lead discovery"),
@@ -117,6 +116,7 @@ def preview_lead_search(
 
 
 @router.get("/")
+@limiter.limit("60/minute")
 def list_all_leads(
     request: Request,
     db: Session = Depends(get_db),

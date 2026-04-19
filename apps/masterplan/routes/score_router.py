@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 
@@ -37,6 +38,7 @@ def _latest_adjustment_payload(user_id: str, db: Session):
 # GET SCORE
 # ------------------------------
 @router.get("/me")
+@limiter.limit("60/minute")
 async def get_my_score(
     request: Request,
     db: Session = Depends(get_db),
@@ -63,6 +65,7 @@ async def get_my_score(
 # RECALCULATE
 # ------------------------------
 @router.post("/me/recalculate")
+@limiter.limit("30/minute")
 async def recalculate_my_score(
     request: Request,
     db: Session = Depends(get_db),
@@ -87,6 +90,7 @@ async def recalculate_my_score(
 # HISTORY
 # ------------------------------
 @router.get("/me/history")
+@limiter.limit("60/minute")
 async def get_score_history(
     request: Request,
     limit: int = 30,
@@ -107,6 +111,7 @@ async def get_score_history(
 # FEEDBACK
 # ------------------------------
 @router.post("/feedback")
+@limiter.limit("30/minute")
 async def record_score_feedback(
     request: Request,
     body: FeedbackRequest,
@@ -135,6 +140,7 @@ async def record_score_feedback(
 
 
 @router.get("/feedback")
+@limiter.limit("60/minute")
 async def get_score_feedback(
     request: Request,
     limit: int = 50,

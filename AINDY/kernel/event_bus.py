@@ -74,6 +74,7 @@ ENABLED: bool = os.getenv("AINDY_EVENT_BUS_ENABLED", "true").lower() not in {
 
 _RECONNECT_BASE_DELAY: float = 1.0    # seconds before first reconnect attempt
 _RECONNECT_MAX_DELAY: float = 30.0   # cap for exponential back-off
+_MAX_BUFFER_SIZE: int = 1000         # max events to buffer before rehydration
 
 
 def _get_instance_id() -> str:
@@ -121,6 +122,9 @@ class EventBus:
         self._stop_event = threading.Event()
         self._consecutive_failures: int = 0
         self._max_failures: int = 3      # disable after 3 consecutive failures
+        # Pre-rehydration buffer: events received before _waiting is populated
+        self._pre_rehydration_buffer: list[tuple[str, str | None]] = []
+        self._buffer_lock = threading.Lock()
 
     # ── Publisher ─────────────────────────────────────────────────────────────
 
@@ -318,7 +322,23 @@ class EventBus:
         # ── Local notify (broadcast=False prevents re-publication) ─────────
         try:
             from AINDY.kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
-            get_scheduler_engine().notify_event(
+            engine = get_scheduler_engine()
+            if not engine.is_rehydrated():
+                # Buffer event until _waiting dict is fully populated
+                with self._buffer_lock:
+                    if len(self._pre_rehydration_buffer) < _MAX_BUFFER_SIZE:
+                        self._pre_rehydration_buffer.append((event_type, correlation_id))
+                        logger.debug(
+                            "[EventBus] buffered pre-rehydration event=%r (buffer=%d)",
+                            event_type, len(self._pre_rehydration_buffer),
+                        )
+                    else:
+                        logger.warning(
+                            "[EventBus] pre-rehydration buffer full (%d); dropping event=%r",
+                            _MAX_BUFFER_SIZE, event_type,
+                        )
+                return
+            engine.notify_event(
                 event_type,
                 correlation_id=correlation_id,
                 broadcast=False,  # already broadcasting — suppress re-publish
@@ -328,6 +348,44 @@ class EventBus:
                 "[EventBus] local notify_event failed for event=%r (non-fatal): %s",
                 event_type, exc,
             )
+
+
+    def drain_buffered_events(self) -> int:
+        """
+        Dispatch all events buffered before rehydration completed.
+
+        Called once by startup after ``mark_rehydration_complete()``.  Safe to
+        call multiple times — second call finds an empty buffer and returns 0.
+
+        Returns:
+            Number of events drained and dispatched.
+        """
+        with self._buffer_lock:
+            pending = self._pre_rehydration_buffer[:]
+            self._pre_rehydration_buffer.clear()
+
+        if not pending:
+            return 0
+
+        logger.info("[EventBus] draining %d buffered pre-rehydration event(s)", len(pending))
+        from AINDY.kernel.scheduler_engine import get_scheduler_engine  # noqa: PLC0415
+        engine = get_scheduler_engine()
+        dispatched = 0
+        for event_type, correlation_id in pending:
+            try:
+                engine.notify_event(
+                    event_type,
+                    correlation_id=correlation_id,
+                    broadcast=False,
+                )
+                dispatched += 1
+            except Exception as exc:
+                logger.warning(
+                    "[EventBus] drain: notify_event failed for event=%r (non-fatal): %s",
+                    event_type, exc,
+                )
+        logger.info("[EventBus] drained %d/%d buffered event(s)", dispatched, len(pending))
+        return dispatched
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

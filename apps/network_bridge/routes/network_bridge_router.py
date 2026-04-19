@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from datetime import datetime
 import uuid
 from apps.analytics.services.calculation_services import save_calculation
@@ -44,6 +45,7 @@ class NetworkUser(BaseModel):
 # ROUTES
 # ---------------------------------------------------------------------------
 @router.post("/connect")
+@limiter.limit("30/minute")
 async def connect_external_author(
     request: Request,
     handshake: NetworkHandshake,
@@ -66,6 +68,7 @@ async def connect_external_author(
     return _execute_network_bridge(request, "network_bridge.connect", handler, db=db)
 
 @router.post("/user_event")
+@limiter.limit("30/minute")
 def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(get_db)):
     """
     Called from the Node server whenever a new user joins or updates their profile.
@@ -86,6 +89,7 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
 
 
 @router.get("/authors")
+@limiter.limit("60/minute")
 def list_authors(
     request: Request,
     platform: str | None = None,

@@ -11,6 +11,7 @@ from typing import Optional
 
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 from apps.identity.services.identity_boot_service import boot_identity_context
 from apps.identity.services.identity_service import IdentityService
@@ -37,6 +38,7 @@ class UpdateIdentityRequest(BaseModel):
 
 
 @router.get("/boot")
+@limiter.limit("60/minute")
 async def boot_identity(
     request: Request,
     current_user=Depends(get_current_user),
@@ -78,6 +80,7 @@ async def boot_identity(
 
 
 @router.get("/")
+@limiter.limit("60/minute")
 async def get_identity(
     request: Request,
     db: Session = Depends(get_db),
@@ -102,6 +105,7 @@ async def get_identity(
 
 
 @router.put("/")
+@limiter.limit("30/minute")
 async def update_identity(
     request: Request,
     body: UpdateIdentityRequest,
@@ -128,6 +132,7 @@ async def update_identity(
 
 
 @router.get("/evolution")
+@limiter.limit("60/minute")
 async def get_identity_evolution(
     request: Request,
     db: Session = Depends(get_db),
@@ -152,6 +157,7 @@ async def get_identity_evolution(
 
 
 @router.get("/context")
+@limiter.limit("60/minute")
 async def get_identity_context(
     request: Request,
     db: Session = Depends(get_db),

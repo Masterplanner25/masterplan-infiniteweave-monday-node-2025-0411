@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/observability", tags=["Observability"])
@@ -45,6 +46,7 @@ def _execute_observability(request: Request, route_name: str, handler, *, db: Se
 # SCHEDULER STATUS
 # ------------------------------
 @router.get("/scheduler/status")
+@limiter.limit("60/minute")
 def get_scheduler_status(
     request: Request,
     db: Session = Depends(get_db),
@@ -60,6 +62,7 @@ def get_scheduler_status(
 # REQUEST METRICS
 # ------------------------------
 @router.get("/requests")
+@limiter.limit("60/minute")
 def get_request_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -82,6 +85,7 @@ def get_request_metrics(
 # DASHBOARD
 # ------------------------------
 @router.get("/dashboard")
+@limiter.limit("60/minute")
 def get_observability_dashboard(
     request: Request,
     db: Session = Depends(get_db),
@@ -106,6 +110,7 @@ def get_observability_dashboard(
 # EXECUTION GRAPH
 # ------------------------------
 @router.get("/execution_graph/{trace_id}")
+@limiter.limit("60/minute")
 def get_execution_graph(
     request: Request,
     trace_id: str,
@@ -120,6 +125,7 @@ def get_execution_graph(
 
 
 @router.get("/queue/metrics")
+@limiter.limit("60/minute")
 def get_queue_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -145,6 +151,7 @@ def get_queue_metrics(
 
 
 @router.post("/queue/dlq/drain")
+@limiter.limit("30/minute")
 def drain_queue_dlq(
     request: Request,
     body: DrainDlqRequest,

@@ -22,6 +22,7 @@ import uuid
 from AINDY.core.execution_signal_helper import queue_memory_capture
 # ARM memory capture is routed through a MemoryCaptureEngine-backed helper.
 from openai import OpenAI
+from AINDY.platform_layer.openai_client import chat_completion
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
@@ -138,15 +139,17 @@ class DeepSeekCodeAnalyzer:
                     model=model,
                     method="openai.chat",
                     extra={"purpose": "arm_openai_call", "attempt": attempt + 1},
-                    operation=lambda: self.client.chat.completions.create(
+                    operation=lambda: chat_completion(
+                        self.client,
                         model=model,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        response_format={"type": "json_object"},
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format={"type": "json_object"},
+                        timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
                     ),
                 )
                 content = response.choices[0].message.content

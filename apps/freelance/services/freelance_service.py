@@ -30,7 +30,8 @@ from AINDY.platform_layer.app_runtime import (
 from apps.freelance.events import FreelanceEventTypes as SystemEventTypes
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.platform_layer.trace_context import is_pipeline_active
-from AINDY.platform_layer.openai_client import get_openai_client
+from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.config import settings
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 from apps.tasks.services.task_service import queue_task_automation
 
@@ -113,7 +114,8 @@ def generate_deliverable(db: Session, order_id: int, user_id: str | None = None)
         model="gpt-4o-mini",
         method="openai.chat",
         extra={"purpose": "freelance_delivery_generation", "order_id": order.id},
-        operation=lambda: get_openai_client().chat.completions.create(
+        operation=lambda: chat_completion(
+            get_openai_client(),
             model="gpt-4o-mini",
             messages=[
                 {
@@ -126,6 +128,7 @@ def generate_deliverable(db: Session, order_id: int, user_id: str | None = None)
                 {"role": "user", "content": prompt},
             ],
             temperature=0.4,
+            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
         ),
     )
     ai_output = (response.choices[0].message.content or "").strip()
