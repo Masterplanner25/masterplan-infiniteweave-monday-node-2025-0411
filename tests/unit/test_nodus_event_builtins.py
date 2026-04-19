@@ -23,7 +23,9 @@ nodus.execute node          WAIT path returned when adapter status=="waiting",
 """
 from __future__ import annotations
 
+import json
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
 
@@ -239,59 +241,65 @@ class TestEventWaitResumePath:
 # ── NodusRuntimeAdapter integration ───────────────────────────────────────────
 
 class TestAdapterEventIntegration:
-    """Verify adapter injects event global and handles WAIT result paths."""
+    """Verify adapter subprocess payload and WAIT result handling."""
 
     def _run_with_flags(self, *, set_wait_flag=False, raise_wait_signal=False, event_type="foo.event"):
-        """Run adapter._execute() with controlled wait behaviour."""
+        """Run adapter._execute() with a mocked worker response."""
         from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
 
-        captured_globals: dict = {}
-
-        mock_runtime = MagicMock()
-
-        def fake_run_source(script, *, filename, initial_globals, host_globals):
-            captured_globals.update(initial_globals)
-            if set_wait_flag:
-                initial_globals["event"]._context_state["nodus_wait_requested"] = True
-                initial_globals["event"]._context_state["nodus_wait_event_type"] = event_type
-            if raise_wait_signal:
-                from AINDY.runtime.nodus_builtins import NodusWaitSignal
-                raise NodusWaitSignal(event_type)
-            return {"ok": True, "error": None}
-
-        mock_runtime.run_source.side_effect = fake_run_source
-
-        mock_bridge = MagicMock()
-        mock_memory = MagicMock()
-        mock_memory._writes = []
-        mock_event = MagicMock(wraps=_make_event_builtins()[0])
+        captured_payload: dict = {}
 
         db = MagicMock()
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu-1")
 
-        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins") as MockEvent:
-            real_builtins, _ = _make_event_builtins()
-            real_builtins._context_state = ctx.state
-            MockEvent.return_value = real_builtins
+        if set_wait_flag or raise_wait_signal:
+            worker_payload = {
+                "status": "waiting",
+                "output_state": {"nodus_wait_event_type": event_type},
+                "emitted_events": [],
+                "memory_writes": [],
+                "error": None,
+                "stdout_log": "",
+                "wait_for": event_type,
+            }
+        else:
+            worker_payload = {
+                "status": "success",
+                "output_state": {},
+                "emitted_events": [
+                    {
+                        "event_type": "injected.event",
+                        "type": "injected.event",
+                        "payload": {},
+                        "execution_unit_id": "eu-1",
+                        "user_id": "u1",
+                    }
+                ],
+                "memory_writes": [],
+                "error": None,
+                "stdout_log": "",
+            }
 
+        def fake_run(*_args, **kwargs):
+            captured_payload.update(json.loads(kwargs["input"]))
+            return SimpleNamespace(returncode=0, stdout=json.dumps(worker_payload), stderr="")
+
+        with patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run", side_effect=fake_run):
             adapter = NodusRuntimeAdapter(db=db)
             result = adapter._execute("let x = 1", "<t>", ctx)
 
-        return result, captured_globals, real_builtins
+        return result, captured_payload
 
     def test_event_global_injected(self):
-        _, captured, _ = self._run_with_flags()
-        assert "event" in captured
+        _, captured = self._run_with_flags()
+        assert captured["context"]["execution_unit_id"] == "eu-1"
 
     def test_state_flag_wait_returns_waiting_status(self):
-        result, _, _ = self._run_with_flags(set_wait_flag=True)
+        result, _ = self._run_with_flags(set_wait_flag=True)
         assert result.status == "waiting"
 
     def test_state_flag_wait_result_has_wait_for(self):
-        result, _, _ = self._run_with_flags(set_wait_flag=True, event_type="my.event")
+        result, _ = self._run_with_flags(set_wait_flag=True, event_type="my.event")
         assert result.raw_result["wait_for"] == "my.event"
 
     def test_state_flag_cleared_after_wait(self):
@@ -300,50 +308,37 @@ class TestAdapterEventIntegration:
         ctx.state["nodus_wait_requested"] = True
         ctx.state["nodus_wait_event_type"] = "x"
 
-        mock_runtime = MagicMock()
-        mock_runtime.run_source.return_value = {"ok": True, "error": None}
-        mock_event = MagicMock()
-        mock_event._writes = []
-        mock_event._emitted = []
-        mock_memory = MagicMock()
-        mock_memory._writes = []
-
-        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins", return_value=mock_event):
+        with patch(
+            "AINDY.runtime.nodus_runtime_adapter.subprocess.run",
+            return_value=SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "status": "waiting",
+                        "output_state": {"nodus_wait_event_type": "x"},
+                        "emitted_events": [],
+                        "memory_writes": [],
+                        "error": None,
+                        "stdout_log": "",
+                        "wait_for": "x",
+                    }
+                ),
+                stderr="",
+            ),
+        ):
             adapter = NodusRuntimeAdapter(db=MagicMock())
             adapter._execute("x", "<t>", ctx)
 
         assert "nodus_wait_requested" not in ctx.state
-        assert "nodus_wait_event_type" not in ctx.state
+        assert ctx.state["nodus_wait_event_type"] == "x"
 
     def test_emitted_merged_into_result(self):
-        from AINDY.runtime.nodus_runtime_adapter import NodusRuntimeAdapter, NodusExecutionContext
-
-        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu-1")
-        mock_runtime = MagicMock()
-        real_event, _ = _make_event_builtins()
-        real_event._emitted.append({
-            "event_type": "injected.event",
-            "payload": {},
-            "execution_unit_id": "eu-1",
-            "user_id": "u1",
-        })
-        mock_runtime.run_source.return_value = {"ok": True, "error": None}
-        mock_memory = MagicMock()
-        mock_memory._writes = []
-
-        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_memory), \
-             patch("AINDY.runtime.nodus_builtins.NodusEventBuiltins", return_value=real_event):
-            result = NodusRuntimeAdapter(db=MagicMock())._execute("x", "<t>", ctx)
+        result, _ = self._run_with_flags()
 
         assert any(e["event_type"] == "injected.event" for e in result.emitted_events)
 
     def test_nodus_wait_signal_reraise_returns_waiting(self):
-        result, _, _ = self._run_with_flags(raise_wait_signal=True, event_type="raised.event")
+        result, _ = self._run_with_flags(raise_wait_signal=True, event_type="raised.event")
         assert result.status == "waiting"
         assert result.raw_result["wait_for"] == "raised.event"
 

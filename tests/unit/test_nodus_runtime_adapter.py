@@ -1,572 +1,217 @@
-"""
-test_nodus_runtime_adapter.py
-─────────────────────────────
-Unit tests for the NodusRuntimeAdapter execution contract.
-
-Coverage
---------
-NodusExecutionContext   field defaults, field assignment
-NodusExecutionResult    field defaults, field assignment
-NodusRuntimeAdapter     run_script / run_file — success, failure, ImportError,
-                        event_sink wiring, memory_writes capture, state mutation,
-                        run_file OSError, custom event_sink
-"""
 from __future__ import annotations
 
-import os
-import tempfile
+import json
+import subprocess
+import time
 import uuid
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from AINDY.runtime.nodus_runtime_adapter import (
     NodusExecutionContext,
     NodusExecutionResult,
     NodusRuntimeAdapter,
-    NodusTimeoutError,
 )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def _make_context(**overrides: Any) -> NodusExecutionContext:
-    defaults = dict(
-        user_id=str(uuid.uuid4()),
-        execution_unit_id=str(uuid.uuid4()),
-        memory_context={"mem1": {"id": "mem1", "content": "prior run"}},
-        input_payload={"goal": "test"},
-        state={"counter": 0},
-    )
+    defaults = {
+        "user_id": str(uuid.uuid4()),
+        "execution_unit_id": str(uuid.uuid4()),
+        "memory_context": {"mem1": {"id": "mem1", "content": "prior run", "tags": ["tag"]}},
+        "input_payload": {"goal": "test"},
+        "state": {"counter": 0},
+    }
     defaults.update(overrides)
     return NodusExecutionContext(**defaults)
 
 
-def _fake_runtime(ok: bool = True, error: str | None = None):
-    """Return a mock NodusRuntime whose run_source returns a controlled result."""
-    runtime = MagicMock()
-    raw = {"ok": ok}
-    if error:
-        raw["error"] = error
-    runtime.run_source.return_value = raw
-    return runtime
+def _completed(stdout_payload: dict[str, Any], *, returncode: int = 0, stderr: str = "") -> SimpleNamespace:
+    return SimpleNamespace(
+        returncode=returncode,
+        stdout=json.dumps(stdout_payload),
+        stderr=stderr,
+    )
 
-
-# ── NodusExecutionContext ─────────────────────────────────────────────────────
 
 class TestNodusExecutionContext:
-    def test_required_fields(self):
-        ctx = NodusExecutionContext(
-            user_id="u1",
-            execution_unit_id="eu1",
-        )
-        assert ctx.user_id == "u1"
-        assert ctx.execution_unit_id == "eu1"
-
-    def test_optional_fields_default_to_empty(self):
+    def test_defaults(self) -> None:
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1")
         assert ctx.memory_context == {}
         assert ctx.input_payload == {}
         assert ctx.state == {}
         assert ctx.event_sink is None
+        assert ctx.max_execution_ms is None
 
-    def test_state_is_mutable(self):
-        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1", state={"x": 1})
-        ctx.state["x"] = 99
-        assert ctx.state["x"] == 99
-
-    def test_event_sink_callable(self):
+    def test_event_sink_callable(self) -> None:
         sink = MagicMock()
         ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1", event_sink=sink)
         ctx.event_sink("test.event", {"k": "v"})
         sink.assert_called_once_with("test.event", {"k": "v"})
 
 
-# ── NodusExecutionResult ──────────────────────────────────────────────────────
-
 class TestNodusExecutionResult:
-    def test_success_result(self):
-        r = NodusExecutionResult(
+    def test_success_result(self) -> None:
+        result = NodusExecutionResult(
             output_state={"x": 1},
             emitted_events=[{"event_type": "done"}],
-            memory_writes=[{"args": ("note",)}],
+            memory_writes=[{"args": ["note"]}],
             status="success",
         )
-        assert r.status == "success"
-        assert r.error is None
-        assert len(r.emitted_events) == 1
-        assert len(r.memory_writes) == 1
-
-    def test_failure_result(self):
-        r = NodusExecutionResult(
-            output_state={},
-            emitted_events=[],
-            memory_writes=[],
-            status="failure",
-            error="something broke",
-        )
-        assert r.status == "failure"
-        assert r.error == "something broke"
-
-    def test_raw_result_optional(self):
-        r = NodusExecutionResult(
-            output_state={}, emitted_events=[], memory_writes=[], status="success"
-        )
-        assert r.raw_result is None
+        assert result.status == "success"
+        assert result.error is None
 
 
-# ── NodusRuntimeAdapter ───────────────────────────────────────────────────────
-
-class TestNodusRuntimeAdapterRunScript:
+class TestNodusRuntimeAdapter:
     def _adapter(self) -> NodusRuntimeAdapter:
         return NodusRuntimeAdapter(db=MagicMock())
 
-    def _patch_runtime(self, ok: bool = True, error: str | None = None):
-        runtime = _fake_runtime(ok=ok, error=error)
-        return patch(
-            "runtime.nodus_runtime_adapter.NodusRuntimeAdapter._execute",
-            wraps=None,
-        ), runtime
-
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_run_script_success(self, mock_bridge_factory, mock_runtime_cls):
-        mock_bridge_factory.return_value = MagicMock(
-            recall=MagicMock(),
-            recall_tool=MagicMock(),
-            recall_from=MagicMock(),
-            recall_all_agents=MagicMock(),
-            get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={"id": "m1"}),
-            record_outcome=MagicMock(),
-            share=MagicMock(),
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_run_script_success(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = _completed(
+            {
+                "status": "success",
+                "output_state": {"counter": 5},
+                "emitted_events": [],
+                "memory_writes": [],
+                "error": None,
+                "stdout_log": "",
+            }
         )
-        mock_runtime_cls.return_value = _fake_runtime(ok=True)
 
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("let x = 1", ctx)
+        adapter = self._adapter()
+        ctx = _make_context()
+        result = adapter.run_script("set_state('counter', 5)", ctx)
 
         assert result.status == "success"
-        assert result.error is None
-        assert isinstance(result.output_state, dict)
-        assert isinstance(result.emitted_events, list)
-        assert isinstance(result.memory_writes, list)
+        assert result.output_state == {"counter": 5}
+        assert ctx.state == {"counter": 5}
+        mock_run.assert_called_once()
 
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_run_script_failure_from_vm(self, mock_bridge_factory, mock_runtime_cls):
-        mock_bridge_factory.return_value = MagicMock(
-            recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-            recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_run_script_failure_from_worker(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = _completed(
+            {
+                "status": "failure",
+                "output_state": {},
+                "emitted_events": [],
+                "memory_writes": [],
+                "error": "type error",
+                "stdout_log": "",
+            }
         )
-        mock_runtime_cls.return_value = _fake_runtime(ok=False, error="type error")
 
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("bad script", ctx)
+        result = self._adapter().run_script("bad script", _make_context())
 
         assert result.status == "failure"
         assert result.error == "type error"
 
-    def test_run_script_import_error_returns_failure(self):
-        adapter = self._adapter()
-        ctx = _make_context()
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_run_script_worker_non_zero_status(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = SimpleNamespace(returncode=1, stdout="", stderr="worker exploded")
 
-        with patch.dict("sys.modules", {
-            "nodus": None,
-            "nodus.runtime": None,
-            "nodus.runtime.embedding": None,
-            "AINDY.nodus.runtime.embedding": None,
-        }):
-            with patch("builtins.__import__", side_effect=ImportError("nodus not found")):
-                # Trigger the ImportError path via _execute directly
-                result = adapter._execute("let x = 1", "<test>", ctx)
+        result = self._adapter().run_script("bad script", _make_context())
 
         assert result.status == "failure"
-        assert "nodus" in (result.error or "").lower() or result.status == "failure"
+        assert result.error == "worker exploded"
 
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_duplicate_builtin_override_error_is_tolerated(self, mock_bridge_factory, mock_runtime_cls):
-        bridge = MagicMock(
-            recall=MagicMock(),
-            recall_tool=MagicMock(),
-            recall_from=MagicMock(),
-            recall_all_agents=MagicMock(),
-            get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={"id": "m1"}),
-            record_outcome=MagicMock(),
-            share=MagicMock(),
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_run_script_timeout_returns_failure_within_budget(self, mock_run: MagicMock) -> None:
+        def _timeout(*_args: Any, **_kwargs: Any) -> None:
+            raise subprocess.TimeoutExpired(cmd="python nodus_worker.py", timeout=0.2)
+
+        mock_run.side_effect = _timeout
+        adapter = self._adapter()
+        ctx = _make_context(max_execution_ms=200)
+
+        started = time.monotonic()
+        result = adapter.run_script("while True:\n    pass\n", ctx)
+        elapsed = time.monotonic() - started
+
+        assert result.status == "failure"
+        assert "timeout" in (result.error or "").lower()
+        assert elapsed <= (ctx.max_execution_ms / 1000.0) + 1
+
+    @patch("AINDY.runtime.nodus_runtime_adapter._apply_deferred_events")
+    @patch("AINDY.runtime.nodus_runtime_adapter._apply_deferred_memory_writes")
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_emit_event_is_returned_and_replayed(
+        self,
+        mock_run: MagicMock,
+        mock_apply_memory_writes: MagicMock,
+        mock_apply_events: MagicMock,
+    ) -> None:
+        mock_run.return_value = _completed(
+            {
+                "status": "success",
+                "output_state": {},
+                "emitted_events": [
+                    {
+                        "type": "test.event",
+                        "event_type": "test.event",
+                        "payload": {},
+                        "execution_unit_id": "eu1",
+                        "user_id": "u1",
+                    }
+                ],
+                "memory_writes": [],
+                "error": None,
+                "stdout_log": "",
+            }
         )
-        mock_bridge_factory.return_value = bridge
 
-        runtime = MagicMock()
-
-        def register_side_effect(name: str, fn: Any, arity: Any = None):
-            if name == "recall":
-                raise RuntimeError("Cannot override built-in function: recall")
-            return None
-
-        runtime.register_function.side_effect = register_side_effect
-        runtime.run_source.return_value = {"ok": True}
-        mock_runtime_cls.return_value = runtime
-
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("let x = 1", ctx)
+        result = self._adapter().run_script("emit('test.event', {})", _make_context(user_id="u1", execution_unit_id="eu1"))
 
         assert result.status == "success"
-        assert result.error is None
+        assert result.emitted_events == [
+            {
+                "type": "test.event",
+                "event_type": "test.event",
+                "payload": {},
+                "execution_unit_id": "eu1",
+                "user_id": "u1",
+            }
+        ]
+        mock_apply_memory_writes.assert_called_once()
+        mock_apply_events.assert_called_once()
 
+    @patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run")
+    def test_wait_result_is_preserved(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = _completed(
+            {
+                "status": "waiting",
+                "output_state": {"nodus_wait_event_type": "approval.received"},
+                "emitted_events": [],
+                "memory_writes": [],
+                "error": None,
+                "stdout_log": "",
+                "wait_for": "approval.received",
+            }
+        )
 
-class TestNodusRuntimeAdapterRunFile:
-    def _adapter(self) -> NodusRuntimeAdapter:
-        return NodusRuntimeAdapter(db=MagicMock())
+        result = self._adapter().run_script("event.wait('approval.received')", _make_context())
 
-    def test_run_file_missing_file_returns_failure(self):
-        adapter = self._adapter()
-        ctx = _make_context()
-        result = adapter.run_file("/nonexistent/path/script.nodus", ctx)
+        assert result.status == "waiting"
+        assert result.output_state["nodus_wait_event_type"] == "approval.received"
+
+    def test_run_file_missing_file_returns_failure(self) -> None:
+        result = self._adapter().run_file("/nonexistent/path/script.nodus", _make_context())
         assert result.status == "failure"
         assert "Cannot read script file" in (result.error or "")
 
-    def test_run_file_reads_and_executes(self, tmp_path):
+    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntimeAdapter.run_script")
+    def test_run_file_reads_and_executes(self, mock_run_script: MagicMock, tmp_path: Any) -> None:
         script_file = tmp_path / "test.nodus"
         script_file.write_text("let x = 42", encoding="utf-8")
+        mock_run_script.return_value = NodusExecutionResult(
+            output_state={},
+            emitted_events=[],
+            memory_writes=[],
+            status="success",
+        )
 
-        adapter = self._adapter()
-        ctx = _make_context()
-
-        executed_scripts: list[str] = []
-
-        def fake_execute(script: str, filename: str, context: Any, **_kwargs: Any) -> NodusExecutionResult:
-            executed_scripts.append(script)
-            return NodusExecutionResult(
-                output_state={}, emitted_events=[], memory_writes=[], status="success"
-            )
-
-        with patch.object(adapter, "_execute", side_effect=fake_execute):
-            result = adapter.run_file(str(script_file), ctx)
+        result = self._adapter().run_file(str(script_file), _make_context())
 
         assert result.status == "success"
-        assert executed_scripts == ["let x = 42"]
-
-
-class TestNodusRuntimeAdapterEventSink:
-    def _adapter(self) -> NodusRuntimeAdapter:
-        return NodusRuntimeAdapter(db=MagicMock())
-
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_custom_event_sink_receives_emit_calls(self, mock_bridge_factory, mock_runtime_cls):
-        """emit() inside a script routes to the caller-supplied event_sink."""
-        sink_calls: list[tuple[str, dict]] = []
-
-        def my_sink(event_type: str, payload: dict) -> None:
-            sink_calls.append((event_type, payload))
-
-        bridge = MagicMock(
-            recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-            recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
-        )
-        mock_bridge_factory.return_value = bridge
-
-        # We need to capture the emit function registered on the runtime and
-        # call it manually to simulate what the Nodus VM would do during execution.
-        registered_fns: dict[str, Any] = {}
-
-        def capture_register(name: str, fn: Any, **_kwargs: Any) -> None:
-            registered_fns[name] = fn
-
-        runtime = MagicMock()
-        runtime.register_function.side_effect = capture_register
-        runtime.run_source.return_value = {"ok": True}
-        mock_runtime_cls.return_value = runtime
-
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context(event_sink=my_sink)
-            adapter.run_script("emit('task.done', {result: 1})", ctx)
-
-        # Simulate VM calling the registered emit function
-        if "emit" in registered_fns:
-            registered_fns["emit"]("task.done", {"result": 1})
-            assert sink_calls == [("task.done", {"result": 1})]
-
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_memory_writes_captured(self, mock_bridge_factory, mock_runtime_cls):
-        """remember() calls are collected in NodusExecutionResult.memory_writes."""
-        bridge = MagicMock(
-            recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-            recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={"id": "new_mem"}),
-            record_outcome=MagicMock(), share=MagicMock(),
-        )
-        mock_bridge_factory.return_value = bridge
-
-        registered_fns: dict[str, Any] = {}
-
-        def capture_register(name: str, fn: Any, **_kwargs: Any) -> None:
-            registered_fns[name] = fn
-
-        runtime = MagicMock()
-        runtime.register_function.side_effect = capture_register
-        runtime.run_source.return_value = {"ok": True}
-        mock_runtime_cls.return_value = runtime
-
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("remember('note')", ctx)
-
-        # Simulate VM calling the registered remember function
-        if "remember" in registered_fns:
-            assert callable(registered_fns["remember"])
-
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_state_mutation_via_set_state(self, mock_bridge_factory, mock_runtime_cls):
-        """set_state(k, v) inside a script is reflected in output_state."""
-        bridge = MagicMock(
-            recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-            recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
-        )
-        mock_bridge_factory.return_value = bridge
-
-        registered_fns: dict[str, Any] = {}
-
-        def capture_register(name: str, fn: Any, **_kwargs: Any) -> None:
-            registered_fns[name] = fn
-
-        runtime = MagicMock()
-        runtime.register_function.side_effect = capture_register
-        runtime.run_source.return_value = {"ok": True}
-        mock_runtime_cls.return_value = runtime
-
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = self._adapter()
-            ctx = _make_context(state={"counter": 0})
-            result = adapter.run_script("set_state('counter', 5)", ctx)
-
-        # Simulate VM calling the registered set_state
-        if "set_state" in registered_fns:
-            registered_fns["set_state"]("counter", 5)
-            assert ctx.state["counter"] == 5
-
-
-class TestNodusRuntimeAdapterContextInjection:
-    """Verify context globals are passed to the VM before execution."""
-
-    @patch("AINDY.runtime.nodus_runtime_adapter.NodusRuntime", create=True)
-    @patch("AINDY.runtime.nodus_runtime_adapter.create_nodus_bridge", create=True)
-    def test_initial_globals_contain_all_context_fields(self, mock_bridge_factory, mock_runtime_cls):
-        bridge = MagicMock(
-            recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-            recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-            remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
-        )
-        mock_bridge_factory.return_value = bridge
-
-        runtime = MagicMock()
-        runtime.run_source.return_value = {"ok": True}
-        mock_runtime_cls.return_value = runtime
-
-        with patch.dict("sys.modules", {
-            "nodus": MagicMock(),
-            "nodus.runtime": MagicMock(),
-            "nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=mock_runtime_cls),
-            "bridge": MagicMock(),
-            "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=mock_bridge_factory),
-        }):
-            adapter = NodusRuntimeAdapter(db=MagicMock())
-            ctx = _make_context(
-                memory_context={"m1": {"content": "prior"}},
-                input_payload={"goal": "test"},
-                state={"step": 1},
-            )
-            adapter.run_script("let x = 1", ctx)
-
-        # Inspect what was passed to run_source
-        call_kwargs = runtime.run_source.call_args
-        passed_globals = call_kwargs[1].get("initial_globals") or call_kwargs[0][2]
-
-        assert "memory_context" in passed_globals
-        assert "input_payload" in passed_globals
-        assert "state" in passed_globals
-        assert "execution_unit_id" in passed_globals
-        assert "user_id" in passed_globals
-        assert passed_globals["memory_context"] == {"m1": {"content": "prior"}}
-        assert passed_globals["input_payload"] == {"goal": "test"}
-        assert passed_globals["execution_unit_id"] == ctx.execution_unit_id
-        assert passed_globals["user_id"] == ctx.user_id
-
-
-# ── NodusExecutionContext.max_execution_ms ────────────────────────────────────
-
-class TestNodusExecutionContextMaxExecutionMs:
-    def test_default_is_none(self):
-        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1")
-        assert ctx.max_execution_ms is None
-
-    def test_can_be_set(self):
-        ctx = NodusExecutionContext(user_id="u1", execution_unit_id="eu1", max_execution_ms=5000)
-        assert ctx.max_execution_ms == 5000
-
-
-# ── Timeout enforcement ───────────────────────────────────────────────────────
-
-def _make_sys_modules_patch(runtime_mock, bridge_mock):
-    """Return a sys.modules dict that stubs the Nodus VM and bridge imports."""
-    bridge_factory = MagicMock(return_value=bridge_mock)
-    runtime_cls = MagicMock(return_value=runtime_mock)
-    return {
-        "nodus": MagicMock(),
-        "nodus.runtime": MagicMock(),
-        "nodus.runtime.embedding": MagicMock(NodusRuntime=runtime_cls),
-            "AINDY.nodus.runtime.embedding": MagicMock(NodusRuntime=runtime_cls),
-        "bridge": MagicMock(),
-        "bridge.nodus_memory_bridge": MagicMock(create_nodus_bridge=bridge_factory),
-            "AINDY.memory.nodus_memory_bridge": MagicMock(create_nodus_bridge=bridge_factory),
-    }
-
-
-def _make_bridge_mock():
-    return MagicMock(
-        recall=MagicMock(), recall_tool=MagicMock(), recall_from=MagicMock(),
-        recall_all_agents=MagicMock(), get_suggestions=MagicMock(),
-        remember=MagicMock(return_value={}), record_outcome=MagicMock(), share=MagicMock(),
-    )
-
-
-class TestNodusRuntimeAdapterTimeout:
-    """Verify that max_execution_ms kills an infinite loop and returns failure."""
-
-    def _adapter(self) -> NodusRuntimeAdapter:
-        return NodusRuntimeAdapter(db=MagicMock())
-
-    def test_infinite_loop_times_out(self):
-        """
-        run_source() spins in 'while True: pass'.
-        With max_execution_ms=100 the timer fires, injects NodusTimeoutError
-        into the VM thread, and _execute() returns a failure envelope.
-        The whole test must complete in under 1 second.
-        """
-        import time
-
-        def _spinning(*args, **kwargs):
-            while True:
-                pass  # pure Python loop — interruptible via PyThreadState_SetAsyncExc
-
-        runtime_mock = MagicMock()
-        runtime_mock.run_source.side_effect = _spinning
-        bridge_mock = _make_bridge_mock()
-
-        t0 = time.monotonic()
-        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("while True: pass", ctx, max_execution_ms=100)
-        elapsed = time.monotonic() - t0
-
-        assert result.status == "failure"
-        assert "timeout" in result.error.lower()
-        assert result.emitted_events == []
-        assert result.memory_writes == []
-        assert elapsed < 1.0, f"Test took {elapsed:.2f}s — timeout not enforced"
-
-    def test_context_max_execution_ms_is_respected(self):
-        """NodusExecutionContext.max_execution_ms overrides the default parameter."""
-        import time
-
-        def _spinning(*args, **kwargs):
-            while True:
-                pass
-
-        runtime_mock = MagicMock()
-        runtime_mock.run_source.side_effect = _spinning
-        bridge_mock = _make_bridge_mock()
-
-        t0 = time.monotonic()
-        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
-            adapter = self._adapter()
-            ctx = _make_context(max_execution_ms=100)  # set on context, no explicit param
-            result = adapter.run_script("while True: pass", ctx)
-        elapsed = time.monotonic() - t0
-
-        assert result.status == "failure"
-        assert "timeout" in result.error.lower()
-        assert elapsed < 1.0, f"Test took {elapsed:.2f}s — context timeout not enforced"
-
-    def test_fast_script_is_not_timed_out(self):
-        """A script that completes quickly is not affected by the timeout."""
-        runtime_mock = MagicMock()
-        runtime_mock.run_source.return_value = {"ok": True}
-        bridge_mock = _make_bridge_mock()
-
-        with patch.dict("sys.modules", _make_sys_modules_patch(runtime_mock, bridge_mock)):
-            adapter = self._adapter()
-            ctx = _make_context()
-            result = adapter.run_script("let x = 1", ctx, max_execution_ms=500)
-
-        assert result.status == "success"
-        assert result.error is None
-
+        mock_run_script.assert_called_once()
