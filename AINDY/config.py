@@ -64,12 +64,19 @@ class Settings(BaseSettings):
     REDIS_URL: str | None = None
     AINDY_CACHE_BACKEND: str = "memory"
 
+    # --- Database connection pool ---
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30       # seconds to wait for a connection
+    DB_POOL_RECYCLE: int = 1800     # recycle connections older than 30 min
+
     # --- Execution transport ---
     # "thread"      — ThreadPoolExecutor (default; single-process only).
     # "distributed" — DistributedQueue via Redis (multi-process / multi-host).
     EXECUTION_MODE: str = "thread"
     AINDY_QUEUE_NAME: str = "aindy:jobs"
     AINDY_ASYNC_JOB_WORKERS: int = 4
+    AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = False
     SKIP_MONGO_PING: bool = False

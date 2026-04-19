@@ -91,6 +91,18 @@ jobs:
       - name: Run tests with coverage
         run: pytest --ignore=tests/validate_memory_loop.py
 
+      - name: Run integration tests (PostgreSQL)
+        working-directory: ${{ github.workspace }}
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+          ENV: test
+          SECRET_KEY: ci-secret-key-placeholder
+          OPENAI_API_KEY: sk-test-placeholder
+          DEEPSEEK_API_KEY: ds-test-placeholder
+          AINDY_API_KEY: ci-aindy-api-key
+          ALLOWED_ORIGINS: "http://localhost:3000"
+        run: pytest -c pytest.integration.ini
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

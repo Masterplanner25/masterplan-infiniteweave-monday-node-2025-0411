@@ -19,6 +19,8 @@ NodusRuntimeAdapter injection      memory global present in initial_globals,
 """
 from __future__ import annotations
 
+import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 import pytest
 
@@ -370,8 +372,8 @@ class TestSearch:
 
 class TestAdapterIntegration:
     """
-    Verify that NodusRuntimeAdapter._execute() injects the memory global and
-    merges memory.write() captures into NodusExecutionResult.memory_writes.
+    Verify that NodusRuntimeAdapter forwards memory context into the worker
+    payload and preserves deferred memory writes in the result.
 
     Uses the same no-DB mock pattern as test_nodus_runtime_adapter.py —
     NodusRuntime and NodusMemoryBridge are patched so no real VM or DB is needed.
@@ -379,8 +381,8 @@ class TestAdapterIntegration:
 
     def _run(self, memory_builtins_writes: list[dict] | None = None):
         """
-        Run NodusRuntimeAdapter._execute() with all external dependencies mocked.
-        Returns (result, captured_initial_globals).
+        Run NodusRuntimeAdapter._execute() with subprocess mocked.
+        Returns (result, captured_payload).
         """
         from AINDY.runtime.nodus_runtime_adapter import (
             NodusRuntimeAdapter,
@@ -388,21 +390,6 @@ class TestAdapterIntegration:
         )
 
         captured: dict = {}
-
-        mock_runtime = MagicMock()
-
-        def fake_run_source(script, *, filename, initial_globals, host_globals):
-            captured.update(initial_globals)
-            # Simulate memory.write() side-effect if requested
-            if memory_builtins_writes:
-                initial_globals["memory"]._writes.extend(memory_builtins_writes)
-            return {"ok": True, "error": None}
-
-        mock_runtime.run_source.side_effect = fake_run_source
-
-        mock_bridge = MagicMock()
-        mock_builtins = MagicMock()
-        mock_builtins._writes = list(memory_builtins_writes or [])
 
         db = MagicMock()
         ctx = NodusExecutionContext(
@@ -412,31 +399,43 @@ class TestAdapterIntegration:
             input_payload={"goal": "test"},
         )
 
-        # All three are lazy imports inside _execute() — patch at source module
-        with patch("AINDY.nodus.runtime.embedding.NodusRuntime", return_value=mock_runtime), \
-             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge", return_value=mock_bridge), \
-             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins", return_value=mock_builtins):
+        def fake_run(*_args, **kwargs):
+            captured.update(json.loads(kwargs["input"]))
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "status": "success",
+                        "output_state": {},
+                        "emitted_events": [],
+                        "memory_writes": list(memory_builtins_writes or []),
+                        "error": None,
+                        "stdout_log": "",
+                    }
+                ),
+                stderr="",
+            )
+        with patch("AINDY.runtime.nodus_runtime_adapter.subprocess.run", side_effect=fake_run):
             adapter = NodusRuntimeAdapter(db=db)
             result = adapter._execute("let x = 1", "<test>", ctx)
 
-        return result, captured, mock_builtins
+        return result, captured
 
     def test_memory_global_injected(self):
-        result, captured, mock_builtins = self._run()
-        assert "memory" in captured
-        assert captured["memory"] is mock_builtins
+        _, captured = self._run()
+        assert captured["memory_context"] == {"k": "v"}
 
     def test_memory_context_still_injected(self):
-        result, captured, _ = self._run()
+        result, captured = self._run()
         assert captured["memory_context"] == {"k": "v"}
 
     def test_input_payload_still_injected(self):
-        result, captured, _ = self._run()
+        result, captured = self._run()
         assert captured["input_payload"] == {"goal": "test"}
 
     def test_user_id_still_injected(self):
-        result, captured, _ = self._run()
-        assert captured["user_id"] == "u-test"
+        result, captured = self._run()
+        assert captured["context"]["user_id"] == "u-test"
 
     def test_memory_writes_merged_into_result(self):
         write_record = {
@@ -446,14 +445,14 @@ class TestAdapterIntegration:
             "node_type": "execution",
             "result": {"id": "n99"},
         }
-        result, _, _ = self._run(memory_builtins_writes=[write_record])
+        result, _ = self._run(memory_builtins_writes=[write_record])
         assert any(
             w.get("content") == "Written from script"
             for w in result.memory_writes
         )
 
     def test_no_memory_writes_gives_empty_list(self):
-        result, _, _ = self._run(memory_builtins_writes=[])
+        result, _ = self._run(memory_builtins_writes=[])
         assert result.memory_writes == []
 
     def test_builtins_constructed_with_correct_user_id(self):
@@ -464,16 +463,29 @@ class TestAdapterIntegration:
         db = MagicMock()
         ctx = NodusExecutionContext(user_id="specific-user", execution_unit_id="eu-1")
 
-        with patch("AINDY.nodus.runtime.embedding.NodusRuntime") as MockRuntime, \
-             patch("AINDY.memory.nodus_memory_bridge.create_nodus_bridge"), \
-             patch("AINDY.runtime.nodus_builtins.NodusMemoryBuiltins") as MockBuiltins:
-            MockRuntime.return_value.run_source.return_value = {"ok": True, "error": None}
-            mock_instance = MagicMock()
-            mock_instance._writes = []
-            MockBuiltins.return_value = mock_instance
-
+        captured: dict = {}
+        with patch(
+            "AINDY.runtime.nodus_runtime_adapter.subprocess.run",
+            side_effect=lambda *_args, **kwargs: (
+                captured.update(json.loads(kwargs["input"])) or
+                SimpleNamespace(
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "status": "success",
+                            "output_state": {},
+                            "emitted_events": [],
+                            "memory_writes": [],
+                            "error": None,
+                            "stdout_log": "",
+                        }
+                    ),
+                    stderr="",
+                )
+            ),
+        ):
             adapter = NodusRuntimeAdapter(db=db)
             adapter._execute("let x = 1", "<t>", ctx)
 
-            MockBuiltins.assert_called_once_with(db=db, user_id="specific-user")
+            assert captured["context"]["user_id"] == "specific-user"
 

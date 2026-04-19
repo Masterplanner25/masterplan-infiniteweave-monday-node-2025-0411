@@ -278,6 +278,11 @@ async def lifespan(app: FastAPI):
     is_leader = enable_background and all(result is not False for result in startup_results)
     if is_leader:
         scheduler_service.start()
+        _sched = scheduler_service.get_scheduler()
+        if not getattr(_sched, "running", False):
+            raise RuntimeError(
+                "APScheduler failed to start. Check apscheduler installation."
+            )
 
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers

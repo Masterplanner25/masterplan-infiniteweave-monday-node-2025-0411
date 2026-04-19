@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -89,28 +90,36 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
         fake_get_context,
     )
 
-    fake_runtime = FakeRuntime()
-
-    import types
-    import sys
-
-    embedding_module = types.ModuleType("nodus.runtime.embedding")
-    embedding_module.NodusRuntime = lambda: fake_runtime
-
-    runtime_module = types.ModuleType("nodus.runtime")
-    runtime_module.embedding = embedding_module
-
-    nodus_module = types.ModuleType("nodus")
-    nodus_module.runtime = runtime_module
-
-    monkeypatch.setitem(sys.modules, "nodus", nodus_module)
-    monkeypatch.setitem(sys.modules, "nodus.runtime", runtime_module)
-    monkeypatch.setitem(sys.modules, "nodus.runtime.embedding", embedding_module)
-    monkeypatch.setitem(sys.modules, "AINDY.nodus.runtime.embedding", embedding_module)
-
     monkeypatch.setattr(
         "AINDY.memory.bridge.create_memory_node",
         lambda *args, **kwargs: None,
+    )
+
+    captured: dict[str, object] = {}
+
+    def fake_subprocess_run(args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        payload = json.loads(kwargs["input"])
+        captured["payload"] = payload
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "status": "success",
+                    "output_state": {},
+                    "emitted_events": [],
+                    "memory_writes": [],
+                    "error": None,
+                    "stdout_log": "",
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "AINDY.runtime.nodus_runtime_adapter.subprocess.run",
+        fake_subprocess_run,
     )
 
     body = NodusTaskRequest(
@@ -126,10 +135,9 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
     )
 
     assert result["status"] == "executed"
-    assert "recall_tool" in fake_runtime.registered
-    assert "remember" not in fake_runtime.registered
-    assert fake_runtime.run_kwargs["initial_globals"]["memory_context"]
-    assert fake_runtime.run_kwargs["host_globals"]["allowed_operations"] == [
+    assert captured["args"][0].endswith("python.exe") or "python" in captured["args"][0].lower()
+    assert captured["payload"]["memory_context"]
+    assert captured["payload"]["allowed_operations"] == [
         "recall",
         "recall_all",
         "recall_from",
