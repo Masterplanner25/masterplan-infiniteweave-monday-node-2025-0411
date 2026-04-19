@@ -23,4 +23,4 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 _test_mode = os.environ.get("TEST_MODE", "false").lower() in ("1", "true", "yes")
-limiter = Limiter(key_func=get_remote_address, enabled=not _test_mode)
+limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"], enabled=not _test_mode)

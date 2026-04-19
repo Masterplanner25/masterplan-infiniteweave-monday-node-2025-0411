@@ -72,6 +72,23 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("OPENAI_API_KEY")
+    @classmethod
+    def reject_placeholder_openai_api_key(cls, v: str) -> str:
+        env_name = os.getenv("ENV", "").lower()
+        is_test = env_name == "test" or os.getenv(
+            "TEST_MODE", "0"
+        ).lower() in {"1", "true", "yes"} or os.getenv(
+            "TESTING", "0"
+        ).lower() in {"1", "true", "yes"}
+        if is_test:
+            return v
+        normalized = (v or "").strip()
+        bad_values = {"your-key-here", "sk-placeholder", "changeme", "replace_me"}
+        if not normalized or normalized.lower() in bad_values:
+            raise ValueError("OPENAI_API_KEY is not set or is a placeholder")
+        return v
+
     @field_validator("ENFORCE_EXECUTION_CONTRACT")
     @classmethod
     def default_contract_enforcement_for_tests(cls, v: bool) -> bool:

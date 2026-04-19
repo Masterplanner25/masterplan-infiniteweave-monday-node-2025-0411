@@ -17,6 +17,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-memory}
       EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
@@ -43,6 +44,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       AINDY_SERVICE_KEY: ${AINDY_SERVICE_KEY:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
       EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
@@ -88,6 +90,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme_in_production}
     profiles: ["full"]
     ports:
       - "6379:6379"
