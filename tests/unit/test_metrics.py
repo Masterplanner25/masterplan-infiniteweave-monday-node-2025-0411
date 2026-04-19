@@ -2,19 +2,19 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from prometheus_client import CollectorRegistry, Counter, Histogram
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 
 from AINDY.core.execution_pipeline import ExecutionContext, ExecutionPipeline
+from AINDY.kernel.circuit_breaker import CircuitBreaker
 
-
-# ── Isolated registry helpers ─────────────────────────────────────────────────
 
 def _make_isolated_metrics():
-    """Return fresh Counter and Histogram on an isolated registry."""
+    """Return fresh pipeline metrics on an isolated registry."""
     reg = CollectorRegistry(auto_describe=True)
     total = Counter(
         "aindy_execution_total",
@@ -29,7 +29,34 @@ def _make_isolated_metrics():
         buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
         registry=reg,
     )
-    return total, duration, reg
+    active = Gauge(
+        "aindy_active_executions_total",
+        "Total active executions across all tenants (in-memory counter)",
+        registry=reg,
+    )
+    return total, duration, active, reg
+
+
+def _make_isolated_openai_metrics():
+    """Return fresh OpenAI metrics on an isolated registry."""
+    reg = CollectorRegistry(auto_describe=True)
+    retries = Counter(
+        "aindy_openai_retries_total",
+        "Total OpenAI call retries",
+        ["call_type"],
+        registry=reg,
+    )
+    errors = Counter(
+        "aindy_openai_errors_total",
+        "Total OpenAI call failures after all retries exhausted",
+        ["call_type"],
+        registry=reg,
+    )
+    return retries, errors, reg
+
+
+def _fresh_openai_breaker() -> CircuitBreaker:
+    return CircuitBreaker("openai-test", failure_threshold=3, recovery_timeout_secs=60)
 
 
 def _sample_value(registry, sample_name: str, labels: dict) -> float:
@@ -44,7 +71,7 @@ def _sample_value(registry, sample_name: str, labels: dict) -> float:
 
 
 def _pipeline_mocks(pipeline):
-    """Return a list of patches that stub out all DB/EU side effects."""
+    """Return a list of patches that stub out DB/EU side effects."""
     return [
         patch.object(pipeline, "_safe_emit_event", return_value=None),
         patch.object(pipeline, "_safe_set_parent_event", return_value=None),
@@ -67,65 +94,90 @@ def _run_pipeline(pipeline, ctx, handler):
     return asyncio.run(pipeline.run(ctx, handler))
 
 
-# ── Pipeline counter tests ────────────────────────────────────────────────────
+def _apply_patches(patches):
+    """Context manager that activates a list of patch objects."""
+    stack = ExitStack()
+    for p in patches:
+        stack.enter_context(p)
+    return stack
+
 
 def test_execution_total_increments_on_success():
-    """Successful handler increments status='success' counter by 1."""
-    total, duration, reg = _make_isolated_metrics()
+    """Successful handler increments success counter and clears active gauge."""
+    total, duration, active, reg = _make_isolated_metrics()
     pipeline = ExecutionPipeline()
     ctx = ExecutionContext(request_id="r1", route_name="test.route")
+
+    async def _handler(_ctx):
+        assert _sample_value(reg, "aindy_active_executions_total", {}) == 1.0
+        return {"data": "ok"}
 
     patches = _pipeline_mocks(pipeline) + [
         patch("AINDY.core.execution_pipeline.execution_total", total),
         patch("AINDY.core.execution_pipeline.execution_duration_seconds", duration),
+        patch("AINDY.core.execution_pipeline.aindy_active_executions_total", active),
         patch("AINDY.core.execution_pipeline._METRICS_AVAILABLE", True),
     ]
     with _apply_patches(patches):
-        result = _run_pipeline(pipeline, ctx, lambda c: {"data": "ok"})
+        result = _run_pipeline(pipeline, ctx, _handler)
 
     assert result.success is True
-    # prometheus_client strips _total from the metric name; sample is named aindy_execution_total
-    val = _sample_value(reg, "aindy_execution_total", {"route": "test.route", "status": "success"})
+    assert _sample_value(reg, "aindy_active_executions_total", {}) == 0.0
+    val = _sample_value(
+        reg,
+        "aindy_execution_total",
+        {"route": "test.route", "status": "success"},
+    )
     assert val == 1.0
 
 
-def test_execution_total_increments_on_failure():
-    """Handler that raises increments status='failed' counter by 1."""
-    total, duration, reg = _make_isolated_metrics()
+def test_active_executions_decrements_on_exception():
+    """Active execution gauge decrements even when the handler raises."""
+    total, duration, active, reg = _make_isolated_metrics()
     pipeline = ExecutionPipeline()
     ctx = ExecutionContext(request_id="r2", route_name="test.route")
 
-    def _failing_handler(_ctx):
+    async def _failing_handler(_ctx):
+        assert _sample_value(reg, "aindy_active_executions_total", {}) == 1.0
         raise ValueError("boom")
 
     patches = _pipeline_mocks(pipeline) + [
         patch("AINDY.core.execution_pipeline.execution_total", total),
         patch("AINDY.core.execution_pipeline.execution_duration_seconds", duration),
+        patch("AINDY.core.execution_pipeline.aindy_active_executions_total", active),
         patch("AINDY.core.execution_pipeline._METRICS_AVAILABLE", True),
     ]
     with _apply_patches(patches):
         result = _run_pipeline(pipeline, ctx, _failing_handler)
 
     assert result.success is False
-    val = _sample_value(reg, "aindy_execution_total", {"route": "test.route", "status": "failed"})
+    assert _sample_value(reg, "aindy_active_executions_total", {}) == 0.0
+    val = _sample_value(
+        reg,
+        "aindy_execution_total",
+        {"route": "test.route", "status": "failed"},
+    )
     assert val == 1.0
 
 
 def test_execution_duration_observed():
-    """Successful handler produces at least one histogram observation."""
-    total, duration, reg = _make_isolated_metrics()
+    """Successful handler records a histogram observation."""
+    total, duration, active, reg = _make_isolated_metrics()
     pipeline = ExecutionPipeline()
     ctx = ExecutionContext(request_id="r3", route_name="test.route")
+    duration_child = duration.labels(route="test.route")
 
     patches = _pipeline_mocks(pipeline) + [
         patch("AINDY.core.execution_pipeline.execution_total", total),
         patch("AINDY.core.execution_pipeline.execution_duration_seconds", duration),
+        patch("AINDY.core.execution_pipeline.aindy_active_executions_total", active),
         patch("AINDY.core.execution_pipeline._METRICS_AVAILABLE", True),
     ]
-    with _apply_patches(patches):
-        asyncio.run(pipeline.run(ctx, lambda c: {"data": "ok"}))
+    with patch.object(duration_child, "observe", wraps=duration_child.observe) as observe_spy:
+        with _apply_patches(patches):
+            asyncio.run(pipeline.run(ctx, lambda c: {"data": "ok"}))
 
-    # Histogram count sample tells us how many observations were made
+    observe_spy.assert_called_once()
     count = _sample_value(
         reg,
         "aindy_execution_duration_seconds_count",
@@ -134,14 +186,41 @@ def test_execution_duration_observed():
     assert count >= 1.0
 
 
-# ── /metrics endpoint tests ───────────────────────────────────────────────────
+def test_openai_errors_increment_on_terminal_failure():
+    """Terminal OpenAI failures increment the error counter."""
+    _, errors, reg = _make_isolated_openai_metrics()
+
+    class _AlwaysFailChat:
+        def create(self, **_kwargs):
+            raise RuntimeError("chat failed")
+
+    class _FakeClient:
+        def __init__(self):
+            self.chat = type("_ChatNamespace", (), {"completions": _AlwaysFailChat()})()
+
+    from AINDY.platform_layer import openai_client
+
+    with pytest.raises(RuntimeError, match="chat failed"):
+        with _apply_patches([
+            patch("AINDY.platform_layer.openai_client.openai_errors_total", errors),
+            patch("AINDY.platform_layer.openai_client.get_openai_circuit_breaker", return_value=_fresh_openai_breaker()),
+            patch("AINDY.platform_layer.openai_client._METRICS_AVAILABLE", True),
+        ]):
+            openai_client.chat_completion(
+                _FakeClient(),
+                model="gpt-test",
+                messages=[{"role": "user", "content": "ping"}],
+            )
+
+    val = _sample_value(reg, "aindy_openai_errors_total", {"call_type": "chat"})
+    assert val == 1.0
+
 
 def test_metrics_endpoint_accessible():
     """GET /metrics returns 200 and body contains aindy_execution_total."""
     from AINDY.main import app
 
     client = TestClient(app, raise_server_exceptions=False)
-    # TestClient connects from 127.0.0.1 — passes the loopback IP check
     response = client.get("/metrics")
     assert response.status_code == 200
     assert b"aindy_execution_total" in response.content
@@ -161,16 +240,3 @@ def test_metrics_endpoint_blocked_without_auth():
         assert response.status_code == 403
     finally:
         _main_module._AINDY_SERVICE_KEY = original_key
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-from contextlib import ExitStack
-
-
-def _apply_patches(patches):
-    """Context manager that activates a list of patch objects."""
-    stack = ExitStack()
-    for p in patches:
-        stack.enter_context(p)
-    return stack

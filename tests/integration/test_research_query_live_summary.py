@@ -29,8 +29,8 @@ def test_research_query_uses_ai_analyze(monkeypatch):
             self.summary = summary
             self.source = source
             self.data = data
-            from datetime import datetime
-            self.created_at = datetime.utcnow()
+            from datetime import datetime, timezone
+            self.created_at = datetime.now(timezone.utc)
 
     def _fake_create(db, result, user_id=None, data=None, source=None):
         return _Result(result.query, result.summary, source=source, data=data)

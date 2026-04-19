@@ -555,14 +555,14 @@ class TestSocialFeedRanking:
         fn = getattr(mod, "_compute_infinity_ranked_score")
 
         from apps.social.models.social_models import SocialPost
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         post = SocialPost(
             author_id="user1",
             author_username="tester",
             content="test",
             trust_tier_required="observer",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         for author_score in [0.0, 50.0, 100.0]:
@@ -575,14 +575,14 @@ class TestSocialFeedRanking:
         fn = getattr(mod, "_compute_infinity_ranked_score")
 
         from apps.social.models.social_models import SocialPost
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         post = SocialPost(
             author_id="user1",
             author_username="tester",
             content="test",
             trust_tier_required="observer",
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         low = fn(post, 10.0)

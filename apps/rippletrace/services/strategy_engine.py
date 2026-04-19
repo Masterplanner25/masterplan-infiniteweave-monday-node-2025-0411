@@ -1,7 +1,7 @@
 import json
 import uuid
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -119,7 +119,8 @@ def build_strategies(db: Session) -> List[Dict]:
                 conditions=json.dumps(conditions),
                 success_rate=success_rate,
                 usage_count=1,
-                created_at=datetime.utcnow(),
+                # StrategyDB.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+                created_at=datetime.now(timezone.utc),
             )
         db.add(strategy)
         created.append(
@@ -159,7 +160,8 @@ def build_strategies(db: Session) -> List[Dict]:
                 conditions=json.dumps(conditions),
                 success_rate=success_rate,
                 usage_count=1,
-                created_at=datetime.utcnow(),
+                # StrategyDB.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+                created_at=datetime.now(timezone.utc),
             )
         db.add(strategy)
         created.append(

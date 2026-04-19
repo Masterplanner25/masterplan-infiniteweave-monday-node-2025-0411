@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import HTTPException, Request
+from fastapi.responses import Response
 
 from AINDY.config import settings
 
@@ -30,12 +31,14 @@ def require_execution_context(request: Request) -> None:
         return
 
 
-def validate_execution_contract(request: Request) -> None:
+def validate_execution_contract(request: Request, response: Response | None = None) -> None:
     if is_execution_exempt_path(request.url.path):
         return
     if not getattr(request.state, "execution_contract_required", False):
         return
     if hasattr(request.state, "execution_context"):
+        return
+    if response is not None and int(getattr(response, "status_code", 200)) >= 400:
         return
     message = "ExecutionContract violation: route bypassed execution pipeline"
     if settings.ENFORCE_EXECUTION_CONTRACT:

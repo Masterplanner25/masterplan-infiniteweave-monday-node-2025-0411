@@ -31,7 +31,7 @@ class MemoryNodeDAO:
         self.db = db
 
     @staticmethod
-    def _utcnow() -> datetime:
+    def _now_utc() -> datetime:
         return datetime.now(timezone.utc)
 
     @staticmethod
@@ -547,7 +547,7 @@ class MemoryNodeDAO:
                     node_dict["semantic_score"] = 0.0
                     candidates.append(node_dict)
 
-        now = self._utcnow()
+        now = self._now_utc()
         scored = []
 
         for c in candidates:
@@ -1012,7 +1012,7 @@ class MemoryNodeDAO:
         if not node:
             return None
 
-        now = self._utcnow()
+        now = self._now_utc()
         node.usage_count = (node.usage_count or 0) + 1
         node.last_used_at = now
         node.last_outcome = outcome

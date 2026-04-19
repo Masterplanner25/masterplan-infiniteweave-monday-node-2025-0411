@@ -5,9 +5,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.platform_layer.app_runtime import ExecutionContext, run_execution
 from apps.search.schemas.research_results_schema import ResearchResultCreate
 from apps.search.services.search_service import build_learning_context, unified_query
 from apps.search.services import research_results_service
@@ -35,17 +36,38 @@ def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str)
 
 def _execute_research(request: Request, route_name: str, handler, *, db: Session, user_id: str,
                       input_payload=None, success_status_code: int = 200):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="research",
-            operation=route_name,
-            start_payload=input_payload or {},
-        ),
-        lambda: handler(None),
+    result = execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload or {},
+        metadata={"db": db, "source": "research"},
         success_status_code=success_status_code,
+        return_result=True,
     )
+    if not result.success:
+        detail = result.metadata.get("detail") or result.error or "Execution failed"
+        raise HTTPException(
+            status_code=int(result.metadata.get("status_code", 500)),
+            detail=detail,
+        )
+    data = result.data
+    if isinstance(data, dict):
+        data = dict(data)
+        data.setdefault(
+            "execution_envelope",
+            to_envelope(
+                eu_id=result.metadata.get("eu_id"),
+                trace_id=result.metadata.get("trace_id"),
+                status="SUCCESS",
+                output=None,
+                error=None,
+                duration_ms=None,
+                attempt_count=1,
+            ),
+        )
+    return data
 
 
 @router.post("/")

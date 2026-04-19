@@ -14,9 +14,11 @@ from openai import OpenAI
 from tenacity import (
     retry,
     retry_if_exception,
+    retry_if_not_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+from AINDY.kernel.circuit_breaker import CircuitOpenError, get_openai_circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,8 @@ _RETRYABLE = (
 
 def _is_retryable(exc: BaseException) -> bool:
     """Return True for transient errors worth retrying."""
+    if isinstance(exc, CircuitOpenError):
+        return False
     type_name = type(exc).__name__
     if type_name in {"APIConnectionError", "APITimeoutError", "RateLimitError"}:
         return True
@@ -60,13 +64,40 @@ def _on_retry_embedding(retry_state) -> None:
     logger.warning("[OpenAI] embedding retry attempt %d", retry_state.attempt_number)
 
 
+def _record_openai_terminal_error(call_type: str) -> None:
+    if _METRICS_AVAILABLE:
+        try:
+            openai_errors_total.labels(call_type=call_type).inc()
+        except Exception:
+            pass
+
+
 @retry(
-    retry=retry_if_exception(_is_retryable),
+    retry=retry_if_not_exception_type(CircuitOpenError) & retry_if_exception(_is_retryable),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
     before_sleep=_on_retry_chat,
     reraise=True,
 )
+def _chat_completion_with_retry(
+    client,
+    *,
+    model: str,
+    messages: list[dict],
+    timeout: float = 30.0,
+    **kwargs: Any,
+) -> Any:
+    """Call chat completions with retry and timeout."""
+    cb = get_openai_circuit_breaker()
+    return cb.call(
+        client.chat.completions.create,
+        model=model,
+        messages=messages,
+        timeout=timeout,
+        **kwargs,
+    )
+
+
 def chat_completion(
     client,
     *,
@@ -76,21 +107,45 @@ def chat_completion(
     **kwargs: Any,
 ) -> Any:
     """Call chat completions with retry and timeout."""
-    return client.chat.completions.create(
-        model=model,
-        messages=messages,
-        timeout=timeout,
-        **kwargs,
-    )
+    try:
+        return _chat_completion_with_retry(
+            client,
+            model=model,
+            messages=messages,
+            timeout=timeout,
+            **kwargs,
+        )
+    except Exception:
+        _record_openai_terminal_error("chat")
+        raise
 
 
 @retry(
-    retry=retry_if_exception(_is_retryable),
+    retry=retry_if_not_exception_type(CircuitOpenError) & retry_if_exception(_is_retryable),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=10),
     before_sleep=_on_retry_embedding,
     reraise=True,
 )
+def _create_embedding_with_retry(
+    client,
+    *,
+    input: str | list[str],
+    model: str = "text-embedding-3-small",
+    timeout: float = 15.0,
+    **kwargs: Any,
+) -> Any:
+    """Call embeddings with retry and timeout."""
+    cb = get_openai_circuit_breaker()
+    return cb.call(
+        client.embeddings.create,
+        input=input,
+        model=model,
+        timeout=timeout,
+        **kwargs,
+    )
+
+
 def create_embedding(
     client,
     *,
@@ -100,12 +155,17 @@ def create_embedding(
     **kwargs: Any,
 ) -> Any:
     """Call embeddings with retry and timeout."""
-    return client.embeddings.create(
-        input=input,
-        model=model,
-        timeout=timeout,
-        **kwargs,
-    )
+    try:
+        return _create_embedding_with_retry(
+            client,
+            input=input,
+            model=model,
+            timeout=timeout,
+            **kwargs,
+        )
+    except Exception:
+        _record_openai_terminal_error("embedding")
+        raise
 
 
 def get_openai_client() -> OpenAI:

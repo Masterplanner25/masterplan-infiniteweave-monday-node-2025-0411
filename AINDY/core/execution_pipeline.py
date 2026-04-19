@@ -15,7 +15,11 @@ from fastapi.responses import Response
 logger = logging.getLogger(__name__)
 
 try:
-    from AINDY.platform_layer.metrics import execution_total, execution_duration_seconds
+    from AINDY.platform_layer.metrics import (
+        active_executions_total as aindy_active_executions_total,
+        execution_duration_seconds,
+        execution_total,
+    )
     _METRICS_AVAILABLE = True
 except Exception:  # pragma: no cover
     _METRICS_AVAILABLE = False
@@ -154,6 +158,11 @@ class ExecutionPipeline:
             extra={"route": ctx.route_name, "trace_id": trace_id},
         )
         logger.info("pipeline.entry", extra={"route": ctx.route_name})
+        if _METRICS_AVAILABLE:
+            try:
+                aindy_active_executions_total.inc()
+            except Exception:
+                pass
 
         try:
             started_event_id = self._safe_emit_event(
@@ -425,6 +434,11 @@ class ExecutionPipeline:
                 metadata={**ctx.metadata, "status_code": 500, "detail": str(exc)},
             )
         finally:
+            if _METRICS_AVAILABLE:
+                try:
+                    aindy_active_executions_total.dec()
+                except Exception:
+                    pass
             if _rm_started:
                 self._safe_rm_mark_completed(ctx)
             self._safe_reset_current_execution_context(execution_ctx_token)

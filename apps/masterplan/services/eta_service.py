@@ -29,7 +29,7 @@ CONFIDENCE_MEDIUM_MIN_TASKS = 2
 def _compute_velocity(db: Session, user_id: str) -> float:
     """Return tasks/day completed in the last VELOCITY_WINDOW_DAYS days."""
     owner_user_id = require_user_id(user_id)
-    cutoff = datetime.utcnow() - timedelta(days=VELOCITY_WINDOW_DAYS)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
     count = (
         db.query(Task)
         .filter(
@@ -81,7 +81,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
     if not plan:
         raise ValueError(f"MasterPlan {masterplan_id} not found for user {user_id}")
 
-    cutoff = datetime.utcnow() - timedelta(days=VELOCITY_WINDOW_DAYS)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
     tasks_in_window = (
         db.query(Task)
         .filter(
@@ -102,7 +102,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
 
     if velocity > 0 and remaining >= 0:
         days_needed = remaining / velocity
-        projected = (datetime.utcnow() + timedelta(days=days_needed)).date()
+        projected = (datetime.now(timezone.utc) + timedelta(days=days_needed)).date()
 
         if plan.anchor_date:
             anchor = plan.anchor_date.date() if hasattr(plan.anchor_date, "date") else plan.anchor_date

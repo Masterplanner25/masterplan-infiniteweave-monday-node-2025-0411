@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -25,7 +25,8 @@ def get_learning_thresholds(db: Session) -> LearningThresholdDB:
         narrative_trend=DEFAULT_NARRATIVE_TREND,
         early_velocity_rate=DEFAULT_EARLY_VELOCITY_RATE,
         early_narrative_ceiling=DEFAULT_EARLY_NARRATIVE_CEILING,
-        last_updated=datetime.utcnow(),
+        # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
+        last_updated=datetime.now(timezone.utc),
     )
     db.add(record)
     db.commit()
@@ -44,7 +45,8 @@ def record_prediction(
         id=str(uuid.uuid4()),
         drop_point_id=drop_point_id,
         prediction=prediction,
-        predicted_at=datetime.utcnow(),
+        # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
+        predicted_at=datetime.now(timezone.utc),
         velocity_at_prediction=velocity_at_prediction,
         narrative_at_prediction=narrative_at_prediction,
     )
@@ -89,7 +91,8 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
         actual = "stable"
 
     record.actual_outcome = actual
-    record.evaluated_at = datetime.utcnow()
+    # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
+    record.evaluated_at = datetime.now(timezone.utc)
     record.was_correct = record.prediction == actual
     db.commit()
     db.refresh(record)
@@ -135,7 +138,8 @@ def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
         threshold.velocity_trend = max(0.05, threshold.velocity_trend - 0.05)
         threshold.narrative_trend = max(0.5, threshold.narrative_trend - 0.5)
 
-    threshold.last_updated = datetime.utcnow()
+    # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
+    threshold.last_updated = datetime.now(timezone.utc)
     db.commit()
     db.refresh(threshold)
     return {

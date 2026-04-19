@@ -37,7 +37,7 @@ def test_observability_requests_returns_real_db_summary(
             path="/health",
             status_code=200,
             duration_ms=12.5,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
     )
     db_session.add(
@@ -49,7 +49,7 @@ def test_observability_requests_returns_real_db_summary(
             path="/memory/execute",
             status_code=500,
             duration_ms=48.0,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
     )
     db_session.commit()
@@ -90,7 +90,7 @@ def test_observability_dashboard_returns_real_db_sections(
             path="/apps/agent/tools",
             status_code=200,
             duration_ms=20.0,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
     )
     db_session.add(
@@ -118,7 +118,7 @@ def test_observability_dashboard_returns_real_db_sections(
             components={"database": "connected"},
             api_endpoints={"health": {"status": "ok"}},
             avg_latency_ms=11.5,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
         )
     )
     db_session.add(

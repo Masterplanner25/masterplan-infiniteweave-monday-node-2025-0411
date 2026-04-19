@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from apps.analytics.models import CalculationResult
 
@@ -61,7 +62,8 @@ def save_calculation(
             metric_name=metric_name,
             result_value=value,
             user_id=user_id,
-            created_at=datetime.utcnow(),
+            # CalculationResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+            created_at=datetime.now(timezone.utc),
         )
         db.add(result)
         db.commit()

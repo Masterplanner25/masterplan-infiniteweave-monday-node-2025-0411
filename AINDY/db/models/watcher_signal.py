@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from AINDY.db.database import Base
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -37,7 +37,7 @@ class WatcherSignal(Base):
 
     # Timing
     signal_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
-    received_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    received_at = Column(DateTime(timezone=True), default=_now_utc, nullable=False)
 
     # Optional numeric fields (populated for session_ended)
     duration_seconds = Column(Float, nullable=True)

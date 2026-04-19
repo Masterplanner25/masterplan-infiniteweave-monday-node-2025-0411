@@ -89,6 +89,13 @@ subprocess.run = _compat_subprocess_run
 
 
 def pytest_runtest_setup(item):
+    try:
+        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+
+        get_openai_circuit_breaker().reset()
+    except Exception:
+        pass
+
     nodeid = item.nodeid.replace("\\", "/")
     if "test_services_directory_clean" in nodeid:
         _remove_service_compat_files()

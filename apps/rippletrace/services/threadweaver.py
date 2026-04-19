@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from math import log
 from typing import List, Optional
 import uuid
@@ -93,7 +93,7 @@ def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
     snapshot = ScoreSnapshotDB(
         id=str(uuid.uuid4()),
         drop_point_id=drop_point_id,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         narrative_score=narrative_score,
         velocity_score=velocity_score,
         spread_score=spread_score,

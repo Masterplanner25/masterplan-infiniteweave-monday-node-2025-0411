@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -60,7 +60,7 @@ class MemoryIngestService:
             "origin_kind": origin_kind,
             "origin_title": title,
             "origin_date": date_label,
-            "ingested_at": datetime.utcnow().isoformat(),
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
         }
 
         tags = self._build_tags(origin_kind, path.stem)

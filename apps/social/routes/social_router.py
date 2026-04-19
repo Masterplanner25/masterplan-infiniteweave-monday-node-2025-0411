@@ -36,7 +36,7 @@ TRUST_TIER_WEIGHTS = {
 }
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -129,7 +129,7 @@ def _compute_infinity_ranked_score(
     author_master_score: float,
 ) -> float:
     try:
-        age_hours = (_utcnow() - _ensure_aware_utc(post.created_at)).total_seconds() / 3600
+        age_hours = (_now_utc() - _ensure_aware_utc(post.created_at)).total_seconds() / 3600
         recency_score = math.exp(-age_hours / 24)
     except Exception:
         recency_score = 0.5
@@ -174,7 +174,7 @@ def upsert_profile(
 
         if existing:
             update_data = profile_data.dict(exclude={"id", "joined_at"})
-            update_data["updated_at"] = _utcnow()
+            update_data["updated_at"] = _now_utc()
             update_data["user_id"] = user_id
             profiles.update_one(
                 {"username": profile_data.username, "user_id": user_id},

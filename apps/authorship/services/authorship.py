@@ -14,7 +14,7 @@ Collaborative Adaptation:
 
 import re
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 # --- Heuristic patterns to detect latent AI signatures ---
 FINGERPRINT_HEURISTICS = [
@@ -95,7 +95,7 @@ def add_signature(
     """
     clean = text.encode("utf-8")
     hash_digest = hashlib.sha256(clean).hexdigest()
-    timestamp = datetime.utcnow().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
 
     signature = SIGNATURE_BLOCK.format(
         originator=originator,

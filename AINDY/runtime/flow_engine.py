@@ -40,10 +40,11 @@ import logging
 import sys
 import time
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
+from AINDY.config import settings
 from AINDY.core.execution_envelope import error as execution_error
 from AINDY.core.execution_envelope import success as execution_success
 from AINDY.core.execution_signal_helper import queue_memory_capture, queue_system_event
@@ -61,6 +62,12 @@ from AINDY.utils.uuid_utils import normalize_uuid
 from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
+
+
+def _default_wait_deadline() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(
+        minutes=settings.FLOW_WAIT_TIMEOUT_MINUTES
+    )
 
 if __name__ == "AINDY.runtime.flow_engine":
     _flow_engine_module = sys.modules[__name__]
@@ -637,7 +644,14 @@ class PersistentFlowRunner:
             claimed = (
                 self.db.query(FlowRun)
                 .filter(FlowRun.id == db_run_id, FlowRun.status == "waiting")
-                .update({"status": "executing"}, synchronize_session=False)
+                .update(
+                    {
+                        "status": "executing",
+                        "waiting_for": None,
+                        "wait_deadline": None,
+                    },
+                    synchronize_session=False,
+                )
             )
             try:
                 self.db.commit()
@@ -706,7 +720,10 @@ class PersistentFlowRunner:
 
         def _fail_execution(error_message: str, *, failed_node: str, parent_event_id: str | None = None) -> dict:
             run.status = "failed"
+            run.waiting_for = None
+            run.wait_deadline = None
             run.error_message = error_message
+            run.error_detail = None
             run.completed_at = datetime.now(timezone.utc)
             self.db.commit()
             try:
@@ -813,6 +830,7 @@ class PersistentFlowRunner:
                         # Pause run — re-queue via SchedulerEngine
                         run.status = "waiting"
                         run.waiting_for = "resource_available"
+                        run.wait_deadline = _default_wait_deadline()
                         run.current_node = current_node
                         run.state = _json_safe(state)
                         self.db.commit()
@@ -984,6 +1002,7 @@ class PersistentFlowRunner:
                         )
                     run.status = "waiting"
                     run.waiting_for = wait_for
+                    run.wait_deadline = _default_wait_deadline()
                     run.state = _json_safe(state)
                     run.current_node = current_node
                     self.db.commit()
@@ -1051,6 +1070,7 @@ class PersistentFlowRunner:
                                         type(run).state: _json_safe(state),
                                         type(run).current_node: current_node,
                                         type(run).waiting_for: None,
+                                        type(run).wait_deadline: None,
                                         type(run).job_log_id: handoff["job_log_id"] or run.job_log_id,
                                     },
                                     synchronize_session=False,
@@ -1087,6 +1107,8 @@ class PersistentFlowRunner:
                         self._capture_flow_completion(run, state)
                         run.status = "success"
                         run.state = _json_safe(state)
+                        run.waiting_for = None
+                        run.wait_deadline = None
                         run.completed_at = datetime.now(timezone.utc)
                         self.db.commit()
                         try:

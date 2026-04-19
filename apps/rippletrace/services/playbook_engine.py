@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -62,7 +62,8 @@ def build_playbook(strategy_id: str, db: Session) -> dict:
         playbook.steps = json.dumps(steps)
         playbook.template = template
         playbook.success_rate = strategy.success_rate or 0.0
-        playbook.created_at = datetime.utcnow()
+        # PlaybookDB.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+        playbook.created_at = datetime.now(timezone.utc)
     else:
         playbook = PlaybookDB(
             id=str(uuid.uuid4()),
@@ -71,7 +72,8 @@ def build_playbook(strategy_id: str, db: Session) -> dict:
             steps=json.dumps(steps),
             template=template,
             success_rate=strategy.success_rate or 0.0,
-            created_at=datetime.utcnow(),
+            # PlaybookDB.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+            created_at=datetime.now(timezone.utc),
         )
         db.add(playbook)
     db.commit()

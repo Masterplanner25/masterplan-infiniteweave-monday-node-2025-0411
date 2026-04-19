@@ -7,7 +7,7 @@ Splits large files into token-safe chunks to stay within OpenAI context limits.
 import uuid
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class FileProcessor:
@@ -97,7 +97,7 @@ class FileProcessor:
             "session_id": session_id,
             "file_path": file_path,
             "operation": operation,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "execution_seconds": round(elapsed, 3),
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,

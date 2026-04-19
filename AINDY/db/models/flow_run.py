@@ -7,6 +7,8 @@ WAIT states persist until the event arrives.
 Failed runs can be inspected and retried.
 """
 import uuid
+from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import (
     Boolean,
@@ -19,6 +21,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from AINDY.db.database import Base
@@ -34,9 +37,14 @@ class FlowRun(Base):
     current_node = Column(String, nullable=True)
     status = Column(String, nullable=False, default="running")
     waiting_for = Column(String, nullable=True)
+    wait_deadline: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     trace_id = Column(String, nullable=True, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
     job_log_id = Column(String, nullable=True)
+    error_detail = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(

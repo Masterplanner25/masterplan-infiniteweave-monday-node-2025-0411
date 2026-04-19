@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
@@ -105,7 +105,7 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
     if delta_info.get("signal_spike"):
         timeline.append(
             {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "event": "Spike detected",
                 "details": "Narrative score spiked in latest window",
             }

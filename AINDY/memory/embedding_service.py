@@ -15,6 +15,7 @@ import threading
 from openai import OpenAI
 
 from AINDY.config import settings
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.platform_layer.openai_client import create_embedding
 
@@ -90,6 +91,10 @@ def generate_embedding(text: str) -> list:
             embedding = response.data[0].embedding
             assert len(embedding) == EMBEDDING_DIMENSIONS
             return embedding
+        except CircuitOpenError as e:
+            raise EmbeddingFailedError(
+                f"Embedding generation failed fast because the OpenAI circuit is open: {e}"
+            ) from e
         except Exception as e:
             last_exc = e
             if attempt < 2:

@@ -1,6 +1,6 @@
 # /services/rippletrace_services.py
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import uuid
 from sqlalchemy.orm import Session
@@ -17,7 +17,8 @@ def add_drop_point(db: Session, dp, user_id: str = None):
         title=dp.title,
         platform=dp.platform,
         url=dp.url,
-        date_dropped=dp.date_dropped or datetime.utcnow(),
+        # Rippletrace drop/ping timestamps are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+        date_dropped=dp.date_dropped or datetime.now(timezone.utc),
         core_themes=",".join(dp.core_themes),
         tagged_entities=",".join(dp.tagged_entities),
         intent=dp.intent,
@@ -39,7 +40,8 @@ def add_ping(db: Session, pg, user_id: str = None):
         drop_point_id=pg.drop_point_id,
         ping_type=pg.ping_type,
         source_platform=pg.source_platform,
-        date_detected=pg.date_detected or datetime.utcnow(),
+        # Rippletrace drop/ping timestamps are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+        date_detected=pg.date_detected or datetime.now(timezone.utc),
         connection_summary=pg.connection_summary,
         external_url=pg.external_url,
         reaction_notes=pg.reaction_notes,
@@ -93,7 +95,8 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
             title="Bridge System DropPoint",
             platform=event.get("source_platform", "AINDY"),
             url=None,
-            date_dropped=datetime.utcnow(),
+            # Rippletrace drop/ping timestamps are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+            date_dropped=datetime.now(timezone.utc),
             core_themes="auto",
             tagged_entities="system",
             intent="auto-generated",
@@ -107,11 +110,12 @@ def log_ripple_event(db: Session, event: dict, user_id: str = None):
     user_uuid = uuid.UUID(str(user_id)) if user_id else None
     connection_type = classify_connection_type(event.get("summary", ""))
     new_pg = PingDB(
-        id=event.get("id") or f"ripple-{datetime.utcnow().timestamp()}",
+        id=event.get("id") or f"ripple-{datetime.now(timezone.utc).timestamp()}",
         drop_point_id=drop_id,
         ping_type=event.get("ping_type", "symbolic"),
         source_platform=event.get("source_platform", "AINDY"),
-        date_detected=datetime.utcnow(),
+        # Rippletrace drop/ping timestamps are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+        date_detected=datetime.now(timezone.utc),
         connection_summary=event.get("summary", ""),
         external_url=event.get("url", ""),
         reaction_notes=event.get("notes", ""),

@@ -51,7 +51,7 @@ class TestStartBackgroundTasksReturnValue:
             owner_id="other-instance",
             acquired_at=None,
             heartbeat_at=None,
-            expires_at=datetime.utcnow() + timedelta(seconds=60),
+            expires_at=(datetime.now(timezone.utc) + timedelta(seconds=60)).replace(tzinfo=None),
         )
 
         class _Query:
@@ -67,6 +67,9 @@ class TestStartBackgroundTasksReturnValue:
         class _DB:
             def query(self, model):
                 return _Query()
+
+            def commit(self):
+                return None
 
             def rollback(self):
                 return None

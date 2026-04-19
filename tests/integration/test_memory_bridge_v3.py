@@ -6,7 +6,7 @@ and the v3 recall API.
 """
 import pytest
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TestMemoryNodeHistory:
@@ -169,7 +169,7 @@ class TestDFSTraversal:
         node_a.node_type = "insight"
         node_a.source = "test"
         node_a.user_id = "user-123"
-        node_a.created_at = datetime.utcnow()
+        node_a.created_at = datetime.now(timezone.utc)
 
         node_b_id = str(_uuid.uuid4())
         node_b = MagicMock()
@@ -179,7 +179,7 @@ class TestDFSTraversal:
         node_b.node_type = "outcome"
         node_b.source = "test"
         node_b.user_id = "user-123"
-        node_b.created_at = datetime.utcnow()
+        node_b.created_at = datetime.now(timezone.utc)
 
         link_a_to_b = MagicMock(spec=MemoryLinkModel)
         link_a_to_b.source_node_id = node_a_id
