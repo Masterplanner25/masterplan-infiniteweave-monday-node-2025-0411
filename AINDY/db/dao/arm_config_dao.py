@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from AINDY.db.models.arm_config import ArmConfig
+from apps.arm.models import ArmConfig
 
 
 def get_config(db: Session) -> ArmConfig | None:

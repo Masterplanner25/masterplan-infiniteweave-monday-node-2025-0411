@@ -15,7 +15,7 @@ app.post("/api/users", async (req, res) => {
 
   try {
     // Send the event to A.I.N.D.Y. with service API key
-    const response = await axios.post(`${AINDY_BASE_URL}/network_bridge/connect`, {
+    const response = await axios.post(`${AINDY_BASE_URL}/apps/network_bridge/connect`, {
       author_name: user.name,           // ✅ expected by FastAPI
       platform: "InfiniteNetwork",      // ✅ expected by FastAPI
       connection_type: "BridgeHandshake",
@@ -43,7 +43,7 @@ app.post("/api/users", async (req, res) => {
 
 app.get("/api/users", (req, res) => {
   const platform = req.query.platform || "InfiniteNetwork";
-  axios.get(`${AINDY_BASE_URL}/network_bridge/authors`, {
+  axios.get(`${AINDY_BASE_URL}/apps/network_bridge/authors`, {
     params: { platform },
     headers: {
       "Content-Type": "application/json",

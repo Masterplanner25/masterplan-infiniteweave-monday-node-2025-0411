@@ -52,6 +52,58 @@ logger = logging.getLogger(__name__)
 _TIME_SENTINEL = "__time_wait__"
 
 
+def ensure_waiting_flow_run_row(
+    db: "Session",
+    *,
+    run_id: str,
+    event_type: str,
+    correlation_id: str | None,
+    timeout_at,
+    eu_id: str | None,
+    priority: str,
+) -> None:
+    """Best-effort seed of waiting_flow_runs for startup durability."""
+    try:
+        import os
+
+        from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+
+        existing = (
+            db.query(WaitingFlowRun)
+            .filter(WaitingFlowRun.run_id == str(run_id))
+            .first()
+        )
+        if existing is None:
+            db.add(
+                WaitingFlowRun(
+                    run_id=str(run_id),
+                    event_type=event_type,
+                    correlation_id=correlation_id,
+                    timeout_at=timeout_at,
+                    eu_id=eu_id,
+                    priority=priority or "normal",
+                    instance_id=os.getenv("HOSTNAME", "local"),
+                )
+            )
+        else:
+            existing.event_type = event_type
+            existing.correlation_id = correlation_id
+            existing.timeout_at = timeout_at
+            existing.eu_id = eu_id
+            existing.priority = priority or "normal"
+        db.flush()
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.warning(
+            "[rehydrate] waiting_flow_runs seed failed for run=%s (non-fatal): %s",
+            run_id,
+            exc,
+        )
+
+
 def rehydrate_waiting_eus(db: "Session") -> int:
     """Re-register all waiting EUs with the SchedulerEngine.
 
@@ -213,6 +265,15 @@ def rehydrate_waiting_eus(db: "Session") -> int:
                 trace_id=None,          # trace_id not persisted on EU; omit
                 eu_type=eu_type,
                 wait_condition=wc,
+            )
+            ensure_waiting_flow_run_row(
+                db,
+                run_id=eu_id,
+                event_type=wait_for_event,
+                correlation_id=correlation_id,
+                timeout_at=None,
+                eu_id=eu_id,
+                priority=priority,
             )
             rehydrated += 1
             logger.info(

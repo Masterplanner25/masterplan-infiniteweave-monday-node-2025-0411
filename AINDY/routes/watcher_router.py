@@ -19,8 +19,13 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
-from AINDY.services.auth_service import verify_api_key
 from AINDY.platform_layer.rate_limiter import limiter
+from AINDY.services.auth_service import verify_api_key
+from AINDY.watcher.constants import (
+    _VALID_ACTIVITY_TYPES,
+    _VALID_SIGNAL_TYPES,
+    _parse_timestamp,
+)
 
 router = APIRouter(
     prefix="/watcher",
@@ -66,37 +71,6 @@ class WatcherIngestResponse(BaseModel):
     accepted: int
     session_ended_count: int
     orchestration: Optional[Dict[str, Any]] = None
-
-
-_VALID_SIGNAL_TYPES = frozenset(
-    [
-        "session_started",
-        "session_ended",
-        "distraction_detected",
-        "focus_achieved",
-        "context_switch",
-        "heartbeat",
-    ]
-)
-
-_VALID_ACTIVITY_TYPES = frozenset(
-    ["work", "communication", "distraction", "idle", "unknown"]
-)
-
-
-# ---------------------------------------------------------------------------
-# Helpers (validation only — no DB access)
-# ---------------------------------------------------------------------------
-
-def _parse_timestamp(ts_str: str) -> datetime:
-    """Parse ISO 8601 UTC timestamp. Raises ValueError on failure."""
-    try:
-        dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except Exception as exc:
-        raise ValueError(f"Invalid timestamp: {ts_str!r}") from exc
 
 
 def _validate_signal(sig: SignalPayload, idx: int) -> None:

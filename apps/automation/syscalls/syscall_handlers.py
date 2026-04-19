@@ -633,7 +633,7 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
 
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.watcher_signal import WatcherSignal
-    from AINDY.routes.watcher_router import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
+    from AINDY.watcher.constants import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
 
     signals: list = payload.get("signals") or []
     if not isinstance(signals, list) or not signals:
