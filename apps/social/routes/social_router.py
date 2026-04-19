@@ -3,12 +3,13 @@ import math
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from pymongo.database import Database
 from sqlalchemy.orm import Session
 
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.db.mongo_setup import get_mongo_db
 from AINDY.platform_layer.app_runtime import execute_with_pipeline_sync
 from AINDY.services.auth_service import get_current_user
@@ -144,7 +145,9 @@ def _compute_infinity_ranked_score(
 
 
 @router.post("/profile")
+@limiter.limit("30/minute")
 def upsert_profile(
+    request: Request,
     profile_data: SocialProfile,
     db: Database = Depends(get_mongo_db),
     current_user: dict = Depends(get_current_user),
@@ -193,7 +196,8 @@ def upsert_profile(
 
 
 @router.get("/profile/{username}")
-def get_profile(username: str, db: Database = Depends(get_mongo_db)):
+@limiter.limit("60/minute")
+def get_profile(request: Request, username: str, db: Database = Depends(get_mongo_db)):
     def handler(ctx):
         profile = db["profiles"].find_one({"username": username})
         if not profile:
@@ -211,7 +215,9 @@ def get_profile(username: str, db: Database = Depends(get_mongo_db)):
 
 
 @router.post("/post")
+@limiter.limit("30/minute")
 def create_post(
+    request: Request,
     post: SocialPost,
     db: Database = Depends(get_mongo_db),
     sql_db: Session = Depends(get_db),
@@ -252,7 +258,9 @@ def create_post(
 
 
 @router.get("/feed")
+@limiter.limit("60/minute")
 def get_feed(
+    request: Request,
     limit: int = 20,
     trust_filter: Optional[str] = None,
     db: Database = Depends(get_mongo_db),
@@ -324,7 +332,9 @@ def get_feed(
 
 
 @router.post("/posts/{post_id}/interact")
+@limiter.limit("30/minute")
 def record_post_interaction(
+    request: Request,
     post_id: str,
     body: SocialInteractionRequest,
     db: Database = Depends(get_mongo_db),
@@ -386,7 +396,9 @@ def record_post_interaction(
 
 
 @router.get("/analytics")
+@limiter.limit("60/minute")
 def get_social_analytics(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(

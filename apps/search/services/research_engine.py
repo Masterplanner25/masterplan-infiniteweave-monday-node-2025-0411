@@ -1,5 +1,6 @@
 import requests
-from AINDY.platform_layer.openai_client import get_openai_client
+from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.config import settings
 from datetime import datetime
 from sqlalchemy.orm import Session
 from AINDY.db import models
@@ -26,9 +27,11 @@ def ai_analyze(content: str) -> str:
         model="gpt-4o",
         method="openai.chat",
         extra={"purpose": "research_ai_analyze"},
-        operation=lambda: get_openai_client().chat.completions.create(
+        operation=lambda: chat_completion(
+            get_openai_client(),
             model="gpt-4o",
-            messages=[{"role":"user","content":prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
         ),
     )
     return completion.choices[0].message.content

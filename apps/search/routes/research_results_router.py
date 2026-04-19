@@ -1,5 +1,4 @@
 # routes/research_results_router.py
-from __future__ import annotations
 
 import logging
 
@@ -7,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.app_runtime import ExecutionContext, run_execution
 from apps.search.schemas.research_results_schema import ResearchResultCreate
 from apps.search.services.search_service import build_learning_context, unified_query
@@ -49,6 +49,7 @@ def _execute_research(request: Request, route_name: str, handler, *, db: Session
 
 
 @router.post("/")
+@limiter.limit("30/minute")
 def create_result(
     request: Request,
     result: ResearchResultCreate,
@@ -64,6 +65,7 @@ def create_result(
 
 
 @router.get("/")
+@limiter.limit("60/minute")
 def list_results(
     request: Request,
     db: Session = Depends(get_db),
@@ -76,6 +78,7 @@ def list_results(
 
 
 @router.post("/query")
+@limiter.limit("30/minute")
 def run_research_query(
     request: ResearchResultCreate,
     http_request: Request = None,

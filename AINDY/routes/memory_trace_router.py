@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from typing import Optional
 
@@ -11,6 +9,7 @@ from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -42,6 +41,7 @@ class AppendTraceRequest(BaseModel):
 
 
 @router.post("/traces", status_code=201)
+@limiter.limit("30/minute")
 def create_trace(
     request: Request,
     body: CreateTraceRequest,
@@ -62,6 +62,7 @@ def create_trace(
 
 
 @router.get("/traces")
+@limiter.limit("60/minute")
 def list_traces(
     request: Request,
     limit: int = 50,
@@ -76,6 +77,7 @@ def list_traces(
 
 
 @router.get("/traces/{trace_id}")
+@limiter.limit("60/minute")
 def get_trace(
     request: Request,
     trace_id: str,
@@ -95,6 +97,7 @@ def get_trace(
 
 
 @router.get("/traces/{trace_id}/nodes")
+@limiter.limit("60/minute")
 def get_trace_nodes(
     request: Request,
     trace_id: str,
@@ -131,6 +134,7 @@ def get_trace_nodes(
 
 
 @router.post("/traces/{trace_id}/append", status_code=201)
+@limiter.limit("30/minute")
 def append_trace_node(
     request: Request,
     trace_id: str,

@@ -4,6 +4,8 @@ from sqlalchemy import inspect
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import engine
 from AINDY.services.auth_service import verify_api_key
+from AINDY.platform_layer.rate_limiter import limiter
+
 
 router = APIRouter(prefix="/db", tags=["Database Verification"], dependencies=[Depends(verify_api_key)])
 
@@ -12,6 +14,7 @@ def _execute_db_verify(request: Request, route_name: str, handler):
     return execute_with_pipeline_sync(request=request, route_name=route_name, handler=handler)
 
 @router.get("/verify")
+@limiter.limit("60/minute")
 def verify_database_schema(request: Request):
     """
     Returns a live inspection of database tables and column types.

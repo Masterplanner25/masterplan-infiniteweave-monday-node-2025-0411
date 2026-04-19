@@ -155,6 +155,24 @@ class SchedulerEngine:
         self._total_enqueued: int = 0
         self._total_dispatched: int = 0
         self._total_dropped: int = 0
+        # Rehydration barrier: set after _waiting is fully restored at startup
+        self._rehydration_complete = threading.Event()
+
+    def get_metrics_snapshot(self) -> dict:
+        """Return current queue depths and waiting count for Prometheus gauges."""
+        with self._lock:
+            return {
+                "queue_depth": {p: len(self._queues[p]) for p in PRIORITY_ORDER},
+                "waiting_count": len(self._waiting),
+            }
+
+    def mark_rehydration_complete(self) -> None:
+        """Signal that WAIT rehydration has finished; unblocks buffered events."""
+        self._rehydration_complete.set()
+
+    def is_rehydrated(self) -> bool:
+        """Return True if rehydration has completed."""
+        return self._rehydration_complete.is_set()
 
     # ── Enqueue ───────────────────────────────────────────────────────────────
 

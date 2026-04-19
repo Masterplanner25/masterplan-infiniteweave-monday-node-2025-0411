@@ -8,6 +8,7 @@ from uuid import UUID
 from AINDY.core.execution_helper import execute_with_pipeline
 
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 
 from apps.rippletrace.services import rippletrace_services
 from AINDY.services.auth_service import get_current_user
@@ -63,6 +64,7 @@ class RippleEvent(BaseModel):
 # === ROUTES ===
 
 @router.post("/drop_point")
+@limiter.limit("30/minute")
 async def create_drop_point(
     request: Request,
     dp: DropPoint,
@@ -78,6 +80,7 @@ async def create_drop_point(
 
 
 @router.post("/ping")
+@limiter.limit("30/minute")
 async def create_ping(
     request: Request,
     pg: Ping,
@@ -93,6 +96,7 @@ async def create_ping(
 
 
 @router.get("/ripples/{drop_point_id}")
+@limiter.limit("60/minute")
 async def get_ripples(
     request: Request,
     drop_point_id: str,
@@ -108,6 +112,7 @@ async def get_ripples(
 
 
 @router.get("/drop_points")
+@limiter.limit("60/minute")
 async def all_drop_points(
     request: Request,
     db: Session = Depends(get_db),
@@ -122,6 +127,7 @@ async def all_drop_points(
 
 
 @router.get("/pings")
+@limiter.limit("60/minute")
 async def all_pings(
     request: Request,
     db: Session = Depends(get_db),
@@ -136,6 +142,7 @@ async def all_pings(
 
 
 @router.get("/recent")
+@limiter.limit("60/minute")
 async def recent_ripples(
     request: Request,
     limit: int = 10,
@@ -151,6 +158,7 @@ async def recent_ripples(
 
 
 @router.post("/event")
+@limiter.limit("30/minute")
 async def log_ripple_event(
     request: Request,
     event: RippleEvent,
@@ -178,6 +186,7 @@ async def log_ripple_event(
 
 
 @router.get("/{trace_id}")
+@limiter.limit("60/minute")
 async def get_trace_graph(
     request: Request,
     trace_id: str,

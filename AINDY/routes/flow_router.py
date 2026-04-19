@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ async def _execute_flow(request: Request, route_name: str, handler, *, user_id: 
 
 
 @router.get("/runs")
+@limiter.limit("60/minute")
 async def list_flow_runs(
     request: Request,
     status: Optional[str] = None,
@@ -71,6 +73,7 @@ async def list_flow_runs(
 
 
 @router.get("/runs/{run_id}")
+@limiter.limit("60/minute")
 async def get_flow_run(
     request: Request,
     run_id: str,
@@ -89,6 +92,7 @@ async def get_flow_run(
 
 
 @router.get("/runs/{run_id}/history")
+@limiter.limit("60/minute")
 async def get_flow_run_history(
     request: Request,
     run_id: str,
@@ -112,6 +116,7 @@ class ResumeRequest(BaseModel):
 
 
 @router.post("/runs/{run_id}/resume")
+@limiter.limit("30/minute")
 async def resume_flow_run(
     request: Request,
     run_id: str,
@@ -165,6 +170,7 @@ async def resume_flow_run(
 
 
 @router.get("/registry")
+@limiter.limit("60/minute")
 async def get_flow_registry(
     request: Request,
     db: Session = Depends(get_db),

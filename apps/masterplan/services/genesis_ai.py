@@ -4,7 +4,8 @@ from AINDY.core.execution_signal_helper import queue_memory_capture
 # Genesis memory capture is routed through a MemoryCaptureEngine-backed helper.
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.core.system_event_service import emit_error_event
-from AINDY.platform_layer.openai_client import get_openai_client
+from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
+from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,8 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
         model=MODEL,
         method="openai.chat",
         extra={"purpose": "genesis_message"},
-        operation=lambda: get_openai_client().chat.completions.create(
+        operation=lambda: chat_completion(
+            get_openai_client(),
             model=MODEL,
             messages=[
                 {"role": "system", "content": system_content},
@@ -145,6 +147,7 @@ Return only valid JSON.
                 }
             ],
             temperature=0.4,
+            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
         ),
     )
 
@@ -271,7 +274,8 @@ def call_genesis_synthesis_llm(
         model="gpt-4o",
         method="openai.chat",
         extra={"purpose": "genesis_synthesis"},
-        operation=lambda: get_openai_client().chat.completions.create(
+        operation=lambda: chat_completion(
+            get_openai_client(),
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -288,6 +292,7 @@ Return only valid JSON.
             ],
             temperature=0.3,
             response_format={"type": "json_object"},
+            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
         ),
     )
 
@@ -366,7 +371,8 @@ def validate_draft_integrity(draft: dict, user_id: str = None, db=None) -> dict:
                 model="gpt-4o",
                 method="openai.chat",
                 extra={"purpose": "genesis_draft_audit", "attempt": attempt + 1},
-                operation=lambda: get_openai_client().chat.completions.create(
+                operation=lambda: chat_completion(
+                    get_openai_client(),
                     model="gpt-4o",
                     messages=[
                         {"role": "system", "content": AUDIT_SYSTEM_PROMPT},
@@ -383,6 +389,7 @@ Return only valid JSON.
                     ],
                     temperature=0.2,
                     response_format={"type": "json_object"},
+                    timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
                 ),
             )
             content = response.choices[0].message.content

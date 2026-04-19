@@ -97,7 +97,9 @@ def _execute_genesis(route_name: str, handler, *, db: Session, user_id: str, inp
     summary="Create Genesis Session",
     description="Creates a new Genesis session for the authenticated user. Returns the created session payload and identifiers.",
 )
+@limiter.limit("30/minute")
 def create_genesis_session(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -189,7 +191,9 @@ def genesis_message(
     summary="Get Genesis Session",
     description="Looks up a Genesis session by the session ID path parameter. Returns the stored session payload for that user.",
 )
+@limiter.limit("60/minute")
 def get_genesis_session(
+    request: Request,
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -203,7 +207,9 @@ def get_genesis_session(
     summary="Get Genesis Draft",
     description="Fetches the persisted draft for the session ID path parameter. Returns the current Genesis draft payload for that session.",
 )
+@limiter.limit("60/minute")
 def get_genesis_draft(
+    request: Request,
     session_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -326,7 +332,9 @@ def audit_genesis_draft(
     summary="Lock Masterplan Draft",
     description="Locks a Genesis draft into a masterplan using the posted session ID and draft payload. Returns the lock result for the created masterplan state.",
 )
+@limiter.limit("30/minute")
 def lock_masterplan(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -421,7 +429,9 @@ def lock_masterplan(
     summary="Activate Masterplan",
     description="Activates the masterplan identified by the plan ID path parameter. Returns the activation result for that plan.",
 )
+@limiter.limit("30/minute")
 def activate_masterplan(
+    request: Request,
     plan_id: int,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),

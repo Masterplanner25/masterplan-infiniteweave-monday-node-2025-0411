@@ -422,7 +422,7 @@ class TestUploadNodusScriptEndpoint:
                 mock_dir.mkdir = MagicMock()
                 mock_path.write_text = MagicMock()
 
-                return upload_nodus_script(body=body, current_user=current_user)
+                return upload_nodus_script(request=MagicMock(), body=body, current_user=current_user)
         finally:
             m._NODUS_SCRIPT_REGISTRY.clear()
             m._NODUS_SCRIPT_REGISTRY.update(original)
@@ -449,6 +449,7 @@ class TestUploadNodusScriptEndpoint:
 
                 from AINDY.routes.platform_router import NodusScriptUpload, upload_nodus_script
                 upload_nodus_script(
+                    request=MagicMock(),
                     body=NodusScriptUpload(name="stored-script", content="let y = 2"),
                     current_user={"sub": str(uuid.uuid4())},
                 )
@@ -484,6 +485,7 @@ class TestUploadNodusScriptEndpoint:
             with pytest.raises(HTTPException) as exc_info:
                 from AINDY.routes.platform_router import NodusScriptUpload, upload_nodus_script
                 upload_nodus_script(
+                    request=MagicMock(),
                     body=NodusScriptUpload(name="bad", content="eval(x)"),
                     current_user={"sub": str(uuid.uuid4())},
                 )
@@ -504,7 +506,7 @@ class TestListNodusScriptsEndpoint:
         try:
             with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = False  # skip disk scan
-                return list_nodus_scripts(current_user={"sub": str(uuid.uuid4())})
+                return list_nodus_scripts(request=MagicMock(), current_user={"sub": str(uuid.uuid4())})
         finally:
             m._NODUS_SCRIPT_REGISTRY.clear()
             m._NODUS_SCRIPT_REGISTRY.update(original)
@@ -573,7 +575,7 @@ class TestListNodusScriptsEndpoint:
                 mock_dir.glob.return_value = [mock_path]
 
                 from AINDY.routes.platform_router import list_nodus_scripts
-                result = list_nodus_scripts(current_user={"sub": str(uuid.uuid4())})
+                result = list_nodus_scripts(request=MagicMock(), current_user={"sub": str(uuid.uuid4())})
 
             assert any(s["name"] == "disk-script" for s in result["scripts"])
             assert "disk-script" in m._NODUS_SCRIPT_REGISTRY

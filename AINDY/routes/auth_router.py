@@ -12,6 +12,7 @@ from AINDY.core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
 from AINDY.services.auth_service import create_access_token, register_user, authenticate_user
 
@@ -21,6 +22,7 @@ initialize_signup_state = None
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
+@limiter.limit("10/minute")
 def register(
     body: RegisterRequest,
     db: Session = Depends(get_db),
@@ -64,6 +66,7 @@ def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("10/minute")
 def login(
     body: LoginRequest,
     db: Session = Depends(get_db),

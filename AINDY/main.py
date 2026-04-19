@@ -385,6 +385,17 @@ async def lifespan(app: FastAPI):
         finally:
             _flow_rehydrate_db.close()
 
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        try:
+            from AINDY.kernel.scheduler_engine import get_scheduler_engine
+            from AINDY.kernel.event_bus import get_event_bus
+            get_scheduler_engine().mark_rehydration_complete()
+            get_event_bus().drain_buffered_events()
+        except Exception as _drain_exc:
+            logger.warning(
+                "[startup] Rehydration barrier drain failed (non-fatal): %s", _drain_exc
+            )
+
     run_startup_hooks(
         {
             "is_testing": settings.is_testing or bool(os.getenv("PYTEST_CURRENT_TEST")),
@@ -419,6 +430,41 @@ app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# ── Prometheus /metrics ───────────────────────────────────────────────────────
+import ipaddress as _ipaddress
+
+from prometheus_client import make_asgi_app as _make_metrics_asgi
+from AINDY.platform_layer.metrics import REGISTRY as _METRICS_REGISTRY
+
+_AINDY_SERVICE_KEY: str = os.getenv("AINDY_SERVICE_KEY", "")
+
+
+def _is_metrics_ip_allowed(host: str) -> bool:
+    try:
+        addr = _ipaddress.ip_address(host)
+        return addr.is_loopback or addr.is_private
+    except ValueError:
+        return False
+
+
+@app.middleware("http")
+async def _guard_metrics_endpoint(request: Request, call_next):
+    if request.url.path == "/metrics" or request.url.path.startswith("/metrics/"):
+        client_host = (request.client.host if request.client else "") or ""
+        if _is_metrics_ip_allowed(client_host):
+            return await call_next(request)
+        if _AINDY_SERVICE_KEY:
+            auth = request.headers.get("Authorization", "")
+            if auth == f"Bearer {_AINDY_SERVICE_KEY}":
+                return await call_next(request)
+            return JSONResponse({"error": "forbidden"}, status_code=403)
+        # No service key configured — allow (open dev mode)
+        return await call_next(request)
+    return await call_next(request)
+
+
+app.mount("/metrics", _make_metrics_asgi(registry=_METRICS_REGISTRY))
 
 # Root — health probes + auth (no prefix; stable k8s / RFC paths)
 for route in ROOT_ROUTERS:

@@ -6,6 +6,7 @@ from apps.search.schemas.seo import SEOInput, MetaInput
 from apps.analytics.services.calculation_services import save_calculation
 from AINDY.services.auth_service import get_current_user
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.services.search_service import (
     analyze_seo_content,
     generate_meta as generate_meta_result,
@@ -32,6 +33,7 @@ class LegacyContentInput(BaseModel):
 
 
 @router.post("/analyze")
+@limiter.limit("30/minute")
 def analyze_seo(
     request: Request,
     data: SEOInput,
@@ -55,6 +57,7 @@ def analyze_seo(
     return _execute_seo(request, "seo.analyze", handler, db=db)
 
 @router.post("/meta")
+@limiter.limit("30/minute")
 def generate_meta(request: Request, data: MetaInput):
     def handler(_ctx):
         return generate_meta_result(data.text, data.limit)
@@ -62,6 +65,7 @@ def generate_meta(request: Request, data: MetaInput):
 
 
 @router.post("/suggest")
+@limiter.limit("30/minute")
 def suggest_improvements(
     request: Request,
     data: SEOInput,
@@ -74,6 +78,7 @@ def suggest_improvements(
 
 
 @router.post("/analyze_seo/")
+@limiter.limit("30/minute")
 def analyze_seo_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
     def handler(_ctx):
         return analyze_seo_content(data.content, 10, db=db)
@@ -81,6 +86,7 @@ def analyze_seo_compat(request: Request, data: LegacyContentInput, db: Session =
 
 
 @router.post("/generate_meta/")
+@limiter.limit("30/minute")
 def generate_meta_compat(request: Request, data: LegacyContentInput):
     def handler(_ctx):
         return generate_meta_result(data.content, 160)
@@ -88,6 +94,7 @@ def generate_meta_compat(request: Request, data: LegacyContentInput):
 
 
 @router.post("/suggest_improvements/")
+@limiter.limit("30/minute")
 def suggest_improvements_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
     def handler(_ctx):
         return suggest_seo_improvements(data.content, db=db)

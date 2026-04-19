@@ -61,8 +61,6 @@ Stability contract
   — Registry CRUD (flows/nodes) calls runtime.flow_registry directly (infra ops).
   — Nodus scripts are sandboxed: no imports, eval, exec, filesystem or network access.
 """
-from __future__ import annotations
-
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +72,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(
@@ -412,7 +411,9 @@ def _validate_nodus_source(source: str, field: str = "script") -> None:
     description="Registers a dynamic flow from the posted flow definition. Returns the persisted flow metadata used by the platform registry.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def create_flow(
+    request: Request,
     body: FlowDefinition,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -452,7 +453,9 @@ def create_flow(
     description="Returns all dynamically registered platform flows. The response includes flow metadata currently available in the live registry.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_flows(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform flows."""
@@ -466,7 +469,9 @@ def list_flows(
     description="Looks up a dynamic flow by its name path parameter. Returns the stored flow definition for that registered flow.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_flow(
+    request: Request,
     name: str,
     current_user: dict = Depends(get_current_user),
 ):
@@ -484,6 +489,7 @@ def get_flow(
     description="Executes the named flow using the request state payload. Returns the full execution result for that flow run.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def run_flow_endpoint(
     request: Request,
     name: str,
@@ -523,7 +529,9 @@ def run_flow_endpoint(
     description="Removes the named dynamic flow from the platform registry. Returns no body when the flow is deleted successfully.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def delete_flow(
+    request: Request,
     name: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -555,7 +563,9 @@ def delete_flow(
     description="Registers a webhook or plugin node from the posted node definition. Returns the persisted node metadata for the new registry entry.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def register_node(
+    request: Request,
     body: NodeRegistration,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -601,7 +611,9 @@ def register_node(
     description="Returns all dynamically registered platform nodes. The response includes each node definition currently available in the live registry.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_nodes(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """List all dynamically registered platform nodes."""
@@ -615,7 +627,9 @@ def list_nodes(
     description="Looks up a dynamic node by its name path parameter. Returns the stored node metadata for that registry entry.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_node(
+    request: Request,
     name: str,
     current_user: dict = Depends(get_current_user),
 ):
@@ -634,7 +648,9 @@ def get_node(
     description="Removes the named dynamic node from the platform registry. Returns no body when the node is deleted successfully.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def delete_node(
+    request: Request,
     name: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -665,7 +681,9 @@ def delete_node(
     description="Creates a webhook subscription from the posted event type and callback URL. Returns the stored subscription metadata for the new webhook.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def create_webhook(
+    request: Request,
     body: WebhookSubscription,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -722,7 +740,9 @@ def create_webhook(
     description="Returns all active webhook subscriptions owned by the caller. The response includes subscription metadata and delivery settings.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_webhook_subscriptions(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """List all webhook subscriptions for the current user."""
@@ -737,7 +757,9 @@ def list_webhook_subscriptions(
     description="Looks up a webhook subscription by its subscription ID path parameter. Returns the stored metadata for that subscription.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_webhook_subscription(
+    request: Request,
     subscription_id: str,
     current_user: dict = Depends(get_current_user),
 ):
@@ -759,7 +781,9 @@ def get_webhook_subscription(
     description="Cancels the webhook subscription identified by the path parameter. Returns no body when the subscription is deleted successfully.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def delete_webhook_subscription(
+    request: Request,
     subscription_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -805,7 +829,9 @@ class APIKeyCreate(BaseModel):
     description="Creates a scoped platform API key from the posted name, scopes, and optional expiry. Returns key metadata plus the plaintext key exactly once.",
     response_model=None,
 )
+@limiter.limit("10/minute")
 def create_key(
+    request: Request,
     body: APIKeyCreate,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -871,7 +897,9 @@ def create_key(
     description="Returns all platform API keys owned by the caller. The response includes key metadata, scopes, and usage details without the plaintext key.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_keys(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -887,7 +915,9 @@ def list_keys(
     description="Looks up a platform API key by its key ID path parameter. Returns the stored metadata for that key without the plaintext value.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_key(
+    request: Request,
     key_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -908,7 +938,9 @@ def get_key(
     description="Revokes the platform API key identified by the path parameter. Returns no body when the key is deleted successfully.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def revoke_key(
+    request: Request,
     key_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -936,6 +968,7 @@ def revoke_key(
     description="Executes either inline Nodus source or an uploaded script name with the posted input payload. Returns the Nodus execution result and output state.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def run_nodus_script(
     request: Request,
     body: NodusRunRequest,
@@ -1056,7 +1089,9 @@ def run_nodus_script(
     description="Stores a named Nodus script from the posted script content. Returns the registered script metadata for future executions.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def upload_nodus_script(
+    request: Request,
     body: NodusScriptUpload,
     current_user: dict = Depends(get_current_user),
 ):
@@ -1138,7 +1173,9 @@ def upload_nodus_script(
     description="Returns the uploaded Nodus scripts currently available to the platform. The response includes script metadata without the full source body.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_nodus_scripts(
+    request: Request,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -1211,6 +1248,7 @@ def list_nodus_scripts(
     description="Compiles the posted Nodus flow source and can optionally run or register it. Returns the compiled flow details or execution result for that request.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def compile_and_run_nodus_flow(
     request: Request,
     body: NodusFlowRequest,
@@ -1360,7 +1398,9 @@ def compile_and_run_nodus_flow(
     description="Creates a scheduled Nodus job from the posted script source or script name and cron settings. Returns the persisted schedule metadata for the new job.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def create_nodus_schedule(
+    request: Request,
     body: NodusScheduleRequest,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -1472,7 +1512,9 @@ def create_nodus_schedule(
     description="Returns all active scheduled Nodus jobs owned by the caller. The response includes job metadata and recent run details.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_nodus_schedules(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -1515,7 +1557,9 @@ def list_nodus_schedules(
     description="Cancels the scheduled Nodus job identified by the path parameter. Returns no body when the job is deleted successfully.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def delete_nodus_schedule(
+    request: Request,
     job_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -1550,7 +1594,9 @@ def delete_nodus_schedule(
     description="Returns host-function trace events for the provided trace ID path parameter. The response includes ordered trace steps and a summary for that execution.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_nodus_trace(
+    request: Request,
     trace_id: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
@@ -1624,7 +1670,9 @@ def get_nodus_trace(
     description="Returns resource usage and quota data for the tenant ID in the path. The response includes execution counts, scheduler stats, and quota limits.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def get_tenant_usage(
+    request: Request,
     tenant_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -1689,7 +1737,9 @@ def get_tenant_usage(
     description="Queries memory nodes under the provided MAS path with optional query and tags filters. Returns matching nodes, the count, and the normalized path.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_memory_path(
+    request: Request,
     path: str,
     limit: int = 50,
     query: Optional[str] = None,
@@ -1734,7 +1784,9 @@ def list_memory_path(
     description="Builds a hierarchical memory tree under the provided MAS path. Returns the tree structure, node count, and normalized path.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def memory_tree(
+    request: Request,
     path: str,
     limit: int = 200,
     current_user: dict = Depends(get_current_user),
@@ -1767,7 +1819,9 @@ def memory_tree(
     description="Follows the causal chain for the exact memory path passed in the query string. Returns the traced chain, its depth, and the normalized path.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def memory_trace(
+    request: Request,
     path: str,
     depth: int = 5,
     current_user: dict = Depends(get_current_user),
@@ -1800,7 +1854,9 @@ def memory_trace(
     description="Returns syscall registry metadata, optionally filtered by the version query parameter. The response includes versions, syscall specs, and a total count.",
     response_model=None,
 )
+@limiter.limit("60/minute")
 def list_syscalls(
+    request: Request,
     version: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
@@ -1894,7 +1950,9 @@ class SyscallDispatchRequest(BaseModel):
     description="Executes the posted syscall name with its payload through the platform dispatcher. Returns the standard syscall execution envelope for that call.",
     response_model=None,
 )
+@limiter.limit("30/minute")
 def dispatch_syscall(
+    request: Request,
     body: SyscallDispatchRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),

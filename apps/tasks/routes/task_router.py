@@ -8,6 +8,7 @@ from AINDY.core.execution_service import ExecutionContext
 from AINDY.core.execution_service import run_execution
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from apps.tasks.schemas.task_schemas import TaskCreate, TaskAction
 from AINDY.services.auth_service import get_current_user
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
@@ -65,6 +66,7 @@ def _serialize_task(task) -> dict:
     }
 
 @router.post("/create")
+@limiter.limit("30/minute")
 def create_task(
     request: Request,
     task: TaskCreate,
@@ -130,6 +132,7 @@ def create_task(
     return response
 
 @router.post("/start")
+@limiter.limit("30/minute")
 def start_task(
     request: Request,
     task: TaskAction,
@@ -155,6 +158,7 @@ def start_task(
     return _execute_tasks(request, "tasks.start", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.post("/pause")
+@limiter.limit("30/minute")
 def pause_task(
     request: Request,
     task: TaskAction,
@@ -180,6 +184,7 @@ def pause_task(
     return _execute_tasks(request, "tasks.pause", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.post("/complete")
+@limiter.limit("30/minute")
 def complete_task(
     request: Request,
     task: TaskAction,
@@ -205,6 +210,7 @@ def complete_task(
     return _execute_tasks(request, "tasks.complete", handler, db=db, user_id=user_id, input_payload={"task_name": task.name})
 
 @router.get("/list")
+@limiter.limit("60/minute")
 def list_tasks(
     request: Request,
     db: Session = Depends(get_db),
@@ -224,6 +230,7 @@ def list_tasks(
     return _execute_tasks(request, "tasks.list", handler, db=db, user_id=user_id)
 
 @router.post("/recurrence/check")
+@limiter.limit("30/minute")
 def trigger_recurrence(
     request: Request,
     db: Session = Depends(get_db),

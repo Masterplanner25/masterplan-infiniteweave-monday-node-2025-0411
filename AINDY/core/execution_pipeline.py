@@ -14,6 +14,12 @@ from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
 
+try:
+    from AINDY.platform_layer.metrics import execution_total, execution_duration_seconds
+    _METRICS_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _METRICS_AVAILABLE = False
+
 
 # ── EU-type routing ───────────────────────────────────────────────────────────
 
@@ -141,6 +147,7 @@ class ExecutionPipeline:
         parent_token: Any = None
         pipeline_token: Any = None
         execution_ctx_token: Any = None
+        _rm_started = False  # True after mark_started; cleared after record_and_complete
 
         logger.info(
             "execution.entry=PIPELINE",
@@ -159,6 +166,19 @@ class ExecutionPipeline:
             pipeline_token = self._safe_set_pipeline_active()
             execution_ctx_token = self._safe_set_current_execution_context(ctx)
             self._safe_require_eu(ctx)
+            quota_ok = self._safe_check_quota(ctx, started_event_id)
+            if not quota_ok:
+                return ExecutionResult(
+                    success=False,
+                    error="Tenant concurrency limit exceeded",
+                    metadata={
+                        **ctx.metadata,
+                        "status_code": 429,
+                        "detail": "Too many concurrent executions for this tenant.",
+                    },
+                )
+            self._safe_rm_mark_started(ctx)
+            _rm_started = True
             _handler_start = time.monotonic()
             result = handler(ctx)
             if inspect.isawaitable(result):
@@ -199,6 +219,11 @@ class ExecutionPipeline:
                     "execution.waiting",
                     extra={"route": ctx.route_name, "wait_for": wait_for},
                 )
+                if _METRICS_AVAILABLE:
+                    try:
+                        execution_total.labels(route=ctx.route_name, status="waiting").inc()
+                    except Exception:
+                        pass
                 return ExecutionResult(
                     success=True,
                     eu_status="waiting",
@@ -215,6 +240,14 @@ class ExecutionPipeline:
             )
 
             _duration_ms = round((time.monotonic() - _handler_start) * 1000, 2)
+            self._safe_rm_record_and_complete(ctx, _duration_ms)
+            _rm_started = False
+            if _METRICS_AVAILABLE:
+                try:
+                    execution_duration_seconds.labels(route=ctx.route_name).observe(_duration_ms / 1000)
+                    execution_total.labels(route=ctx.route_name, status="success").inc()
+                except Exception:
+                    pass
             result = self._inject_execution_envelope(ctx, result, _duration_ms)
 
             completed_event_id = self._safe_emit_event(
@@ -312,6 +345,11 @@ class ExecutionPipeline:
                 "execution.waiting (raised)",
                 extra={"route": ctx.route_name, "wait_for": exc.wait_for},
             )
+            if _METRICS_AVAILABLE:
+                try:
+                    execution_total.labels(route=ctx.route_name, status="waiting").inc()
+                except Exception:
+                    pass
             return ExecutionResult(
                 success=True,
                 eu_status="waiting",
@@ -346,6 +384,11 @@ class ExecutionPipeline:
                 "execution.completed",
                 extra={"route": ctx.route_name, "success": False},
             )
+            if _METRICS_AVAILABLE:
+                try:
+                    execution_total.labels(route=ctx.route_name, status="failed").inc()
+                except Exception:
+                    pass
             return ExecutionResult(
                 success=False,
                 error=str(exc.detail),
@@ -371,12 +414,19 @@ class ExecutionPipeline:
             )
             self._safe_finalize_eu(ctx, "failed")
             logger.exception("execution.failed", extra={"route": ctx.route_name})
+            if _METRICS_AVAILABLE:
+                try:
+                    execution_total.labels(route=ctx.route_name, status="failed").inc()
+                except Exception:
+                    pass
             return ExecutionResult(
                 success=False,
                 error=str(exc),
                 metadata={**ctx.metadata, "status_code": 500, "detail": str(exc)},
             )
         finally:
+            if _rm_started:
+                self._safe_rm_mark_completed(ctx)
             self._safe_reset_current_execution_context(execution_ctx_token)
             self._safe_reset_pipeline_active(pipeline_token)
             self._safe_reset_parent_event(parent_token)
@@ -1036,6 +1086,90 @@ class ExecutionPipeline:
             )
             logger.debug("execution.eu_register_skipped", exc_info=True)
             return None
+
+    # ── ResourceManager quota integration ────────────────────────────────────
+
+    def _safe_check_quota(
+        self,
+        ctx: ExecutionContext,
+        started_event_id: str | None = None,
+    ) -> bool:
+        """Return True if the tenant may proceed; False if quota is exceeded.
+
+        No-op (returns True) when eu_id or user_id is absent.
+        Fails open (returns True) when the ResourceManager raises.
+        Never propagates exceptions to the caller.
+        """
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id or not ctx.user_id:
+            return True
+        try:
+            from AINDY.kernel.resource_manager import get_resource_manager
+
+            ok, reason = get_resource_manager().can_execute(str(ctx.user_id), eu_id)
+            if not ok:
+                self._safe_emit_event(
+                    ctx,
+                    event_type="execution.failed",
+                    parent_event_id=started_event_id,
+                    payload={
+                        "route_name": ctx.route_name,
+                        "detail": reason or "quota_exceeded",
+                    },
+                )
+                self._safe_finalize_eu(ctx, "failed")
+                self._record_side_effect(
+                    ctx,
+                    "quota_check",
+                    status="quota_exceeded",
+                    required=False,
+                    error=reason,
+                )
+                return False
+            return True
+        except Exception:
+            logger.warning("execution.quota_check_failed (fail open)", exc_info=True)
+            return True
+
+    def _safe_rm_mark_started(self, ctx: ExecutionContext) -> None:
+        """Call rm.mark_started; non-fatal."""
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id or not ctx.user_id:
+            return
+        try:
+            from AINDY.kernel.resource_manager import get_resource_manager
+
+            get_resource_manager().mark_started(str(ctx.user_id), eu_id)
+        except Exception:
+            logger.warning("execution.rm_mark_started_failed (non-fatal)", exc_info=True)
+
+    def _safe_rm_mark_completed(self, ctx: ExecutionContext) -> None:
+        """Call rm.mark_completed; non-fatal."""
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id or not ctx.user_id:
+            return
+        try:
+            from AINDY.kernel.resource_manager import get_resource_manager
+
+            get_resource_manager().mark_completed(str(ctx.user_id), eu_id)
+        except Exception:
+            logger.warning("execution.rm_mark_completed_failed (non-fatal)", exc_info=True)
+
+    def _safe_rm_record_and_complete(
+        self, ctx: ExecutionContext, duration_ms: float
+    ) -> None:
+        """Record cpu_time_ms usage then mark_completed; non-fatal."""
+        eu_id = ctx.metadata.get("eu_id")
+        if not eu_id or not ctx.user_id:
+            return
+        try:
+            from AINDY.kernel.resource_manager import get_resource_manager
+
+            rm = get_resource_manager()
+            rm.record_usage(eu_id, {"cpu_time_ms": int(duration_ms)})
+            rm.mark_completed(str(ctx.user_id), eu_id)
+        except Exception:
+            logger.warning("execution.rm_record_and_complete_failed (non-fatal)", exc_info=True)
 
     def _safe_finalize_eu(self, ctx: ExecutionContext, status: str) -> None:
         """

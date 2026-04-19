@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from apps.analytics.schemas.analytics import LinkedInRawInput
 from AINDY.services.auth_service import get_current_user
 
@@ -16,6 +17,7 @@ def _analytics_http_error(data):
 
 
 @router.post("/linkedin/manual")
+@limiter.limit("30/minute")
 async def ingest_linkedin_manual(
     request: Request,
     data: LinkedInRawInput,
@@ -54,6 +56,7 @@ async def ingest_linkedin_manual(
 
 
 @router.get("/masterplan/{masterplan_id}")
+@limiter.limit("60/minute")
 async def get_masterplan_analytics(
     request: Request,
     masterplan_id: int,
@@ -90,6 +93,7 @@ async def get_masterplan_analytics(
 
 
 @router.get("/masterplan/{masterplan_id}/summary")
+@limiter.limit("60/minute")
 async def get_masterplan_summary(
     request: Request,
     masterplan_id: int,

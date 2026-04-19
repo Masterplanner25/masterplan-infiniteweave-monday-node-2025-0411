@@ -1,5 +1,4 @@
 # /routes/bridge_router.py
-from __future__ import annotations
 
 import time
 import logging
@@ -14,6 +13,7 @@ from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.core.execution_signal_helper import queue_memory_capture
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from AINDY.db.database import get_db
+from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.config import settings
 from AINDY.services.auth_service import get_current_user, verify_api_key
 
@@ -81,6 +81,7 @@ router = APIRouter(prefix="/bridge", tags=["Bridge"])
 # CREATE NODE
 # --------------------------------------------------------------------------
 @router.post("/nodes", response_model=NodeResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_node(
     request: Request,
     payload: NodeCreateRequest,
@@ -145,6 +146,7 @@ async def create_node(
 # SEARCH NODES
 # --------------------------------------------------------------------------
 @router.get("/nodes", response_model=NodeSearchResponse)
+@limiter.limit("60/minute")
 async def search_nodes(
     request: Request,
     tag: Optional[List[str]] = None,
@@ -184,6 +186,7 @@ async def search_nodes(
 # CREATE LINK
 # --------------------------------------------------------------------------
 @router.post("/link", response_model=LinkResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
 async def create_link(
     request: Request,
     payload: LinkCreateRequest,
@@ -267,6 +270,7 @@ def _parse_event_timestamp(raw_timestamp: Optional[str]) -> Optional[datetime]:
 
 
 @router.post("/user_event")
+@limiter.limit("30/minute")
 async def bridge_user_event(
     request: Request,
     event: UserEvent,

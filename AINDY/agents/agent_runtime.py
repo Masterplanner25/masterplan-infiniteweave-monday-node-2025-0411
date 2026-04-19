@@ -35,6 +35,8 @@ from typing import Optional
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
+from AINDY.platform_layer.openai_client import chat_completion
+
 from AINDY.config import settings
 from AINDY.agents.capability_service import mint_token
 from AINDY.agents.agent_coordinator import decide_execution_mode
@@ -252,7 +254,8 @@ def generate_plan(objective: str | None = None, user_id: str | None = None, db: 
             model="gpt-4o",
             method="openai.chat",
             extra={"purpose": "agent_plan_generation"},
-            operation=lambda: client.chat.completions.create(
+            operation=lambda: chat_completion(
+                client,
                 model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -260,6 +263,7 @@ def generate_plan(objective: str | None = None, user_id: str | None = None, db: 
                 ],
                 temperature=0.3,
                 response_format={"type": "json_object"},
+                timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
             ),
         )
         content = response.choices[0].message.content
