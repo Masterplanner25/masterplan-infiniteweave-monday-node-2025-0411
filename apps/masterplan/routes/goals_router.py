@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from AINDY.core.execution_service import ExecutionContext
-from AINDY.core.execution_service import run_execution
+from AINDY.core.execution_gate import to_envelope
+from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
@@ -13,17 +13,38 @@ router = APIRouter(prefix="/goals", tags=["Goals"])
 
 
 def _execute_goals(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None, success_status_code: int = 200):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="goals_router",
-            operation=route_name,
-            start_payload=input_payload or {},
-        ),
-        lambda: handler(None),
+    result = execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload or {},
+        metadata={"db": db, "source": "goals_router"},
         success_status_code=success_status_code,
+        return_result=True,
     )
+    if not result.success:
+        detail = result.metadata.get("detail") or result.error or "Execution failed"
+        raise HTTPException(
+            status_code=int(result.metadata.get("status_code", 500)),
+            detail=detail,
+        )
+    data = result.data
+    if isinstance(data, dict):
+        data = dict(data)
+        data.setdefault(
+            "execution_envelope",
+            to_envelope(
+                eu_id=result.metadata.get("eu_id"),
+                trace_id=result.metadata.get("trace_id"),
+                status="SUCCESS",
+                output=None,
+                error=None,
+                duration_ms=None,
+                attempt_count=1,
+            ),
+        )
+    return data
 
 
 class GoalCreateRequest(BaseModel):

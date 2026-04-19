@@ -23,6 +23,7 @@ from AINDY.core.execution_signal_helper import queue_memory_capture
 # ARM memory capture is routed through a MemoryCaptureEngine-backed helper.
 from openai import OpenAI
 from AINDY.platform_layer.openai_client import chat_completion
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 
 logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
@@ -155,6 +156,8 @@ class DeepSeekCodeAnalyzer:
                 content = response.choices[0].message.content
                 usage = response.usage
                 return content, usage.prompt_tokens, usage.completion_tokens
+            except CircuitOpenError:
+                raise
             except Exception as exc:
                 last_exc = exc
                 if attempt < retry_limit - 1:

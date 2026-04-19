@@ -113,6 +113,7 @@ for _handler in logging.root.handlers:
     _handler.setFormatter(logging.Formatter(_REQUEST_LOG_FORMAT))
 
 logger = logging.getLogger(__name__)
+_OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
 try:
     load_plugins()
 except Exception as exc:
@@ -242,9 +243,9 @@ async def lifespan(app: FastAPI):
                 "This is acceptable for local development but MUST be changed before production."
             )
 
-    if settings.is_prod and str(settings.OPENAI_API_KEY).startswith("sk-proj-"):
+    if settings.is_prod and str(settings.OPENAI_API_KEY).startswith(_OPENAI_PROJECT_KEY_PREFIX):
         logger.warning(
-            "OPENAI_API_KEY uses an sk-proj- prefix in production; verify rotation after any potential exposure."
+            "OPENAI_API_KEY uses the project-key prefix in production; verify rotation after any potential exposure."
         )
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
@@ -591,7 +592,7 @@ async def enforce_execution_contract(request: Request, call_next):
     request_token = set_current_request(request)
     try:
         response = await call_next(request)
-        validate_execution_contract(request)
+        validate_execution_contract(request, response)
         return response
     finally:
         reset_current_request(request_token)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from apps.authorship.models import AuthorDB
@@ -44,8 +44,8 @@ def test_dashboard_overview_returns_real_db_snapshot(
             name="Primary Author",
             platform="x",
             notes="visible",
-            joined_at=datetime.utcnow(),
-            last_seen=datetime.utcnow(),
+            joined_at=datetime.now(timezone.utc),
+            last_seen=datetime.now(timezone.utc),
             user_id=test_user.id,
         )
     )
@@ -55,8 +55,8 @@ def test_dashboard_overview_returns_real_db_snapshot(
             name="Hidden Author",
             platform="x",
             notes="other tenant",
-            joined_at=datetime.utcnow(),
-            last_seen=datetime.utcnow(),
+            joined_at=datetime.now(timezone.utc),
+            last_seen=datetime.now(timezone.utc),
             user_id=other_user_id,
         )
     )
@@ -65,7 +65,7 @@ def test_dashboard_overview_returns_real_db_snapshot(
             id="drop-1",
             title="Visible Drop",
             platform="x",
-            date_dropped=datetime.utcnow(),
+            date_dropped=datetime.now(timezone.utc),
             user_id=test_user.id,
         )
     )
@@ -74,7 +74,7 @@ def test_dashboard_overview_returns_real_db_snapshot(
             id="drop-2",
             title="Hidden Drop",
             platform="x",
-            date_dropped=datetime.utcnow(),
+            date_dropped=datetime.now(timezone.utc),
             user_id=other_user_id,
         )
     )
@@ -84,7 +84,7 @@ def test_dashboard_overview_returns_real_db_snapshot(
             drop_point_id="drop-1",
             ping_type="mention",
             source_platform="x",
-            date_detected=datetime.utcnow(),
+            date_detected=datetime.now(timezone.utc),
             connection_summary="visible ripple",
             user_id=test_user.id,
             strength=1.0,
@@ -97,7 +97,7 @@ def test_dashboard_overview_returns_real_db_snapshot(
             drop_point_id="drop-2",
             ping_type="reply",
             source_platform="x",
-            date_detected=datetime.utcnow(),
+            date_detected=datetime.now(timezone.utc),
             connection_summary="other ripple",
             user_id=other_user_id,
             strength=1.0,

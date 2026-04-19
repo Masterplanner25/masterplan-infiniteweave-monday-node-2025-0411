@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import numpy as np
 
 # 🔥 Add a scaling constant at the top
@@ -14,7 +14,7 @@ def project_completion(masterplan, twr_values):
     aggressive = np.percentile(twr_array, 70)
     optimal = np.max(twr_array)
 
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     remaining_days = (masterplan.target_date - today).days
 
     def projected_eta(rate):
@@ -38,7 +38,7 @@ def project_completion(masterplan, twr_values):
 
 def evaluate_phase(plan):
     phase_end = plan.start_date + timedelta(days=plan.duration_years * 365)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     thresholds_met = (
         plan.total_wcu >= plan.wcu_target and

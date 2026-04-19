@@ -2,7 +2,7 @@
 # Memory Bridge v0.1 - Core Construct
 # Architected with Solon Protocol Logic | Continuity > Content
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 import warnings
 
@@ -10,7 +10,7 @@ import warnings
 class MemoryNode:
     def __init__(self, content, source=None, tags=None):
         self.id = str(uuid4())
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
         self.content = content  # This is symbolic payload (can be text, code, reference)
         self.source = source  # Who or what triggered this node
         self.tags = tags or []  # Intentional symbolic anchors (e.g., 'solon', 'trace', 'weave')

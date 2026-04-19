@@ -1,7 +1,7 @@
 import requests
 from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
 from AINDY.config import settings
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from AINDY.db import models
 from AINDY.platform_layer.external_call_service import perform_external_call
@@ -41,7 +41,8 @@ def save_result(db: Session, query, summary, source):
         query=query,
         summary=summary,
         source=source,
-        created_at=datetime.utcnow()
+        # ResearchResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+        created_at=datetime.now(timezone.utc)
     )
     db.add(record)
     db.commit()

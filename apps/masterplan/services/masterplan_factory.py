@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from AINDY.core.execution_signal_helper import queue_memory_capture
 from sqlalchemy.orm import Session
@@ -45,7 +45,8 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
 
     # Timeline
     horizon = draft_to_use.get("time_horizon_years", 5)
-    start_date = datetime.utcnow()
+    # MasterPlan.start_date/target_date are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+    start_date = datetime.now(timezone.utc)
     target_date = start_date + timedelta(days=int(horizon * 365))
 
     # Posture

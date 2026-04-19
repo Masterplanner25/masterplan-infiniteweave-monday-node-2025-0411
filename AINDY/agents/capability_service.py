@@ -30,7 +30,7 @@ RISK_POLICY = {
 }
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -388,7 +388,7 @@ def mint_token(
         )
 
         execution_token = str(uuid.uuid4())
-        issued_at = _utcnow()
+        issued_at = _now_utc()
         expires_at = issued_at + timedelta(hours=TOKEN_TTL_HOURS)
         issued_at_s = issued_at.isoformat()
         expires_at_s = expires_at.isoformat()
@@ -461,7 +461,7 @@ def validate_token(token: Optional[dict], run_id: str, user_id: str) -> dict:
 
         if expires_at_dt.tzinfo is None:
             expires_at_dt = expires_at_dt.replace(tzinfo=timezone.utc)
-        if expires_at_dt <= _utcnow():
+        if expires_at_dt <= _now_utc():
             return {"ok": False, "error": "capability token expired", "granted_tools": [], "allowed_capabilities": []}
 
         expected_hash = _token_hash(

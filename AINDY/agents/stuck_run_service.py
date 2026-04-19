@@ -36,6 +36,13 @@ from AINDY.core.observability_events import emit_observability_event
 _RECOVERY_ERROR_MSG = "Stuck run recovery: process terminated before completion"
 
 
+def _recovery_error_detail(*, detected_at: datetime) -> dict[str, str]:
+    return {
+        "reason": "stuck_run_recovered",
+        "detected_at": detected_at.isoformat(),
+    }
+
+
 def _default_threshold_minutes() -> int:
     try:
         return int(os.getenv("AINDY_STUCK_RUN_THRESHOLD_MINUTES", "10"))
@@ -54,10 +61,14 @@ def _recover_agent_run(flow_run, db: Session) -> None:
     """
     from AINDY.db.models.agent_run import AgentRun, AgentStep
 
+    recovered_at = datetime.now(timezone.utc)
     # Mark the FlowRun terminal
     flow_run.status = "failed"
+    flow_run.waiting_for = None
+    flow_run.wait_deadline = None
     flow_run.error_message = _RECOVERY_ERROR_MSG
-    flow_run.completed_at = datetime.now(timezone.utc)
+    flow_run.error_detail = _recovery_error_detail(detected_at=recovered_at)
+    flow_run.completed_at = recovered_at
 
     # Find the linked AgentRun
     agent_run = (
@@ -95,7 +106,7 @@ def _recover_agent_run(flow_run, db: Session) -> None:
     ]
 
     agent_run.status = "failed"
-    agent_run.completed_at = datetime.now(timezone.utc)
+    agent_run.completed_at = recovered_at
     agent_run.error_message = _RECOVERY_ERROR_MSG
     agent_run.result = {"steps": step_results}
 
@@ -111,9 +122,13 @@ def _recover_agent_run(flow_run, db: Session) -> None:
 
 def _recover_generic_run(flow_run, db: Session) -> None:
     """Mark a non-agent FlowRun as failed — log only, no linked model."""
+    recovered_at = datetime.now(timezone.utc)
     flow_run.status = "failed"
+    flow_run.waiting_for = None
+    flow_run.wait_deadline = None
     flow_run.error_message = _RECOVERY_ERROR_MSG
-    flow_run.completed_at = datetime.now(timezone.utc)
+    flow_run.error_detail = _recovery_error_detail(detected_at=recovered_at)
+    flow_run.completed_at = recovered_at
     logger.warning(
         "[StuckRunService] Recovered generic FlowRun %s (type=%s)",
         flow_run.id,
@@ -188,9 +203,13 @@ def recover_stuck_agent_run(
                 .first()
             )
             if flow_run and flow_run.status == "running":
+                recovered_at = datetime.now(timezone.utc)
                 flow_run.status = "failed"
+                flow_run.waiting_for = None
+                flow_run.wait_deadline = None
                 flow_run.error_message = _RECOVERY_ERROR_MSG
-                flow_run.completed_at = datetime.now(timezone.utc)
+                flow_run.error_detail = _recovery_error_detail(detected_at=recovered_at)
+                flow_run.completed_at = recovered_at
 
         # Reconstruct result from committed AgentStep rows
         completed_steps = (

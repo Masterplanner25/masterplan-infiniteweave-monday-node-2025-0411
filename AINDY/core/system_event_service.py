@@ -296,7 +296,7 @@ def _detect_behavioral_feedback_signals(
 
             avg_latency = (
                 db.query(func.avg(RequestMetric.duration_ms))
-                .filter(RequestMetric.created_at >= datetime.utcnow() - timedelta(minutes=30))
+                .filter(RequestMetric.created_at >= datetime.now(timezone.utc) - timedelta(minutes=30))
                 .scalar()
             )
             if avg_latency:

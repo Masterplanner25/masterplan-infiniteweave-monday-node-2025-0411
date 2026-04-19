@@ -6,7 +6,7 @@ Provides:
 - API key validation (service-to-service auth)
 - Password hashing utilities
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Optional, TYPE_CHECKING
 
@@ -55,7 +55,7 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + (
+    expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})

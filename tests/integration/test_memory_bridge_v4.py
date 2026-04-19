@@ -5,7 +5,7 @@ Tests outcome feedback, resonance v2, and suggestion engine.
 """
 import pytest
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TestFeedbackColumns:
@@ -240,7 +240,7 @@ class TestSuggestionEngine:
             "usage_count": 10,
             "failure_count": 1,
             "tags": [],
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
 
         low_performer = {
@@ -253,7 +253,7 @@ class TestSuggestionEngine:
             "usage_count": 5,
             "failure_count": 4,
             "tags": [],
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
 
         mocker.patch(
@@ -289,7 +289,7 @@ class TestSuggestionEngine:
             "usage_count": 10,
             "failure_count": 4,  # notable failures
             "tags": [],
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.now(timezone.utc).isoformat()
         }
 
         mocker.patch(

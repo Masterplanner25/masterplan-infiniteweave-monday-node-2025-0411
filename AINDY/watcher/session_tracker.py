@@ -28,7 +28,7 @@ from typing import List, Optional
 from AINDY.watcher.classifier import ActivityType, ClassificationResult
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -83,7 +83,7 @@ class SessionTracker:
         self._state: SessionState = SessionState.IDLE
         self._session_id: str = ""
         self._session_start: Optional[datetime] = None
-        self._state_since: datetime = _utcnow()    # when current state was entered
+        self._state_since: datetime = _now_utc()    # when current state was entered
         self._focused_seconds: float = 0.0         # accumulated focus time in session
         self._total_seconds: float = 0.0           # total session time
         self._last_heartbeat: Optional[datetime] = None
@@ -113,7 +113,7 @@ class SessionTracker:
             Override current time (for testing). Uses UTC now if omitted.
         """
         if now is None:
-            now = _utcnow()
+            now = _now_utc()
 
         events: List[SessionEvent] = []
         elapsed_in_state = (now - self._state_since).total_seconds()

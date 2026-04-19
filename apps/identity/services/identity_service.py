@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -126,7 +126,7 @@ class IdentityService:
 
         identity = self.get_or_create()
         changes = []
-        now = _utcnow()
+        now = _now_utc()
 
         def record_change(dimension, old, new, trigger="explicit"):
             if old != new and new is not None:
@@ -230,7 +230,7 @@ class IdentityService:
         try:
             identity = self.get_or_create()
             changes = []
-            now = _utcnow()
+            now = _now_utc()
 
             def maybe_add_to_list(
                 field_name: str, current_list: list, value: str

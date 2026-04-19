@@ -12,7 +12,7 @@ import json
 import re
 
 from apps.search.services.search_scoring import score_lead_result
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from AINDY.memory.bridge import create_memory_node
 from AINDY.platform_layer.app_runtime import queue_memory_capture
@@ -242,7 +242,8 @@ def create_lead_results(db: Session, query: str, user_id: str = None):
             data_quality_score=score["data_quality_score"],
             overall_score=score["overall_score"],
             reasoning=score["reasoning"],
-            created_at=datetime.utcnow()
+            # LeadGenResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+            created_at=datetime.now(timezone.utc)
         )
 
         db.add(db_entry)

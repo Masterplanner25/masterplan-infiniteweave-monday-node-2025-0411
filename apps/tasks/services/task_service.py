@@ -21,7 +21,7 @@ from apps.tasks.events import TaskEventTypes as SystemEventTypes
 logger = logging.getLogger(__name__)
 
 
-def _utcnow() -> datetime:
+def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
@@ -264,7 +264,7 @@ def _get_instance_id() -> str:
 def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
     log = log or logger
     instance_id = _get_instance_id()
-    now = _utcnow()
+    now = _now_utc()
     expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
     db = SessionLocal()
     try:
@@ -312,7 +312,7 @@ def _acquire_background_lease(log: logging.Logger | None = None) -> bool:
 def _refresh_background_lease(log: logging.Logger | None = None) -> bool:
     log = log or logger
     instance_id = _BACKGROUND_OWNER_ID or _get_instance_id()
-    now = _utcnow()
+    now = _now_utc()
     expires_at = now + timedelta(seconds=_BACKGROUND_LEASE_TTL_SECONDS)
     db = SessionLocal()
     try:
@@ -348,7 +348,7 @@ def _release_background_lease(log: logging.Logger | None = None) -> None:
             .first()
         )
         if lease and lease.owner_id == instance_id:
-            current_time = _utcnow()
+            current_time = _now_utc()
             lease.expires_at = current_time
             lease.heartbeat_at = current_time
             db.commit()
@@ -705,7 +705,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
                 "$set": {
                     "metrics_snapshot.infinity_score": master_score,
                     "metrics_snapshot.execution_speed_score": execution_speed_score,
-                    "updated_at": datetime.utcnow(),
+                    "updated_at": datetime.now(timezone.utc),
                 },
             },
         )

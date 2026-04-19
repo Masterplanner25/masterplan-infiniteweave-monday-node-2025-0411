@@ -1158,7 +1158,7 @@ def genesis_lock_node(state, context):
 def genesis_activate_node(state, context):
     try:
         import uuid
-        from datetime import datetime
+        from datetime import datetime, timezone
         from AINDY.core.execution_signal_helper import queue_memory_capture
         from apps.masterplan.models import MasterPlan
         db = context.get("db")
@@ -1170,7 +1170,7 @@ def genesis_activate_node(state, context):
         db.query(MasterPlan).filter(MasterPlan.user_id == user_id).update({"is_active": False})
         plan.is_active = True
         plan.status = "active"
-        plan.activated_at = datetime.utcnow()
+        plan.activated_at = datetime.now(timezone.utc)
         db.commit()
         try:
             queue_memory_capture(
@@ -2395,7 +2395,7 @@ def masterplan_lock_from_genesis_node(state, context):
 @register_node("masterplan_lock_node")
 def masterplan_lock_node(state, context):
     try:
-        from datetime import datetime
+        from datetime import datetime, timezone
         from apps.masterplan.models import MasterPlan
         from apps.masterplan.services.masterplan_execution_service import sync_masterplan_tasks
         db = context.get("db")
@@ -2407,7 +2407,7 @@ def masterplan_lock_node(state, context):
         if plan.status == "locked":
             return {"status": "FAILURE", "error": "HTTP_400:Plan is already locked"}
         plan.status = "locked"
-        plan.locked_at = datetime.utcnow()
+        plan.locked_at = datetime.now(timezone.utc)
         db.commit()
         task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id)
         return {"status": "SUCCESS", "output_patch": {"masterplan_lock_result": {
@@ -2464,7 +2464,7 @@ def masterplan_get_node(state, context):
 @register_node("masterplan_anchor_node")
 def masterplan_anchor_node(state, context):
     try:
-        from datetime import datetime
+        from datetime import datetime, timezone
         from apps.masterplan.models import MasterPlan
         db = context.get("db")
         user_id = str(context.get("user_id"))
@@ -2519,7 +2519,7 @@ def masterplan_projection_node(state, context):
 @register_node("masterplan_activate_node")
 def masterplan_activate_node(state, context):
     try:
-        from datetime import datetime
+        from datetime import datetime, timezone
         from apps.masterplan.models import MasterPlan
         from apps.masterplan.services.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
         db = context.get("db")
@@ -2531,7 +2531,7 @@ def masterplan_activate_node(state, context):
         db.query(MasterPlan).filter(MasterPlan.user_id == user_id).update({"is_active": False})
         plan.is_active = True
         plan.status = "active"
-        plan.activated_at = datetime.utcnow()
+        plan.activated_at = datetime.now(timezone.utc)
         db.commit()
         task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id)
         execution_status = get_masterplan_execution_status(db=db, masterplan_id=plan.id, user_id=user_id)
@@ -2581,7 +2581,7 @@ def observability_scheduler_status_node(state, context):
 def observability_requests_node(state, context):
     try:
         import uuid as _uuid
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
         from sqlalchemy import func
         from AINDY.db.models.request_metric import RequestMetric
         db = context.get("db")
@@ -2589,7 +2589,7 @@ def observability_requests_node(state, context):
         limit = state.get("limit", 50)
         error_limit = state.get("error_limit", 25)
         window_hours = state.get("window_hours", 24)
-        window_start = datetime.utcnow() - timedelta(hours=window_hours)
+        window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         base = db.query(RequestMetric).filter(RequestMetric.user_id == user_id)
         total = base.count()
         window_total = base.filter(RequestMetric.created_at >= window_start).count()
@@ -2642,7 +2642,7 @@ def observability_dashboard_node(state, context):
         event_limit = state.get("event_limit", 60)
         agent_limit = state.get("agent_limit", 30)
         health_limit = state.get("health_limit", 20)
-        request_window_start = datetime.utcnow() - timedelta(hours=window_hours)
+        request_window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         event_window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
         req_q = db.query(RequestMetric).filter(RequestMetric.user_id == user_id)
         avg_latency = db.query(func.avg(RequestMetric.duration_ms)).filter(
@@ -2832,7 +2832,7 @@ def observability_rippletrace_node(state, context):
 def dashboard_overview_node(state, context):
     try:
         import uuid
-        from datetime import datetime
+        from datetime import datetime, timezone
         from apps.authorship.models import AuthorDB
         from apps.rippletrace.models import PingDB
 
@@ -2877,7 +2877,7 @@ def dashboard_overview_node(state, context):
         result = {
             "status": "ok",
             "overview": {
-                "system_timestamp": datetime.utcnow().isoformat(),
+                "system_timestamp": datetime.now(timezone.utc).isoformat(),
                 "author_count": len(author_list),
                 "recent_authors": author_list,
                 "recent_ripples": ripple_list,

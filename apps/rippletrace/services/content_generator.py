@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from sqlalchemy.orm import Session
@@ -77,7 +77,7 @@ def generate_content(playbook_id: str, db: Session) -> Dict:
         "cta": _build_cta(),
         "platform_format": _platform_format(platform),
     }
-    return {"playbook_id": playbook_id, "content": content, "generated_at": datetime.utcnow().isoformat()}
+    return {"playbook_id": playbook_id, "content": content, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 
 def generate_content_for_drop(drop_point_id: str, db: Session) -> Dict:
@@ -105,5 +105,5 @@ def generate_variations(playbook_id: str, db: Session, count: int = 3) -> Dict:
             "platform_format": base["content"]["platform_format"],
         }
         variations.append(variation)
-    return {"playbook_id": playbook_id, "variations": variations, "generated_at": datetime.utcnow().isoformat()}
+    return {"playbook_id": playbook_id, "variations": variations, "generated_at": datetime.now(timezone.utc).isoformat()}
 

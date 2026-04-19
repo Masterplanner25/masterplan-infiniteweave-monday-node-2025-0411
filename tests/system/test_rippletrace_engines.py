@@ -1,6 +1,6 @@
 import json
 import importlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -111,7 +111,7 @@ def make_snapshot(drop_point_id, *, timestamp, narrative, velocity, spread=0.0):
 
 
 def test_construct_delta_payload_detects_spike_and_momentum():
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     previous = make_snapshot(
         "dp1", timestamp=now - timedelta(minutes=20), narrative=5.0, velocity=1.0, spread=0.5
     )
@@ -129,7 +129,7 @@ def test_compute_deltas_handles_missing_snapshots():
     db = FakeSession({"ScoreSnapshotDB": []})
     payload = delta_engine.compute_deltas("dp-missing", db)
     assert payload["status"] == "no_snapshots"
-    db_one = FakeSession({"ScoreSnapshotDB": [make_snapshot("dp1", timestamp=datetime.utcnow(), narrative=1, velocity=1, spread=0)]})
+    db_one = FakeSession({"ScoreSnapshotDB": [make_snapshot("dp1", timestamp=datetime.now(timezone.utc), narrative=1, velocity=1, spread=0)]})
     payload = delta_engine.compute_deltas("dp1", db_one)
     assert payload["status"] == "insufficient_data"
 
@@ -171,7 +171,7 @@ def _setup_prediction(
 
 
 def test_predict_drop_point_likely_to_spike(monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     snapshots = [
         make_snapshot("dp1", timestamp=now, narrative=30.0, velocity=5.0),
         make_snapshot("dp1", timestamp=now - timedelta(minutes=10), narrative=20.0, velocity=3.0),
@@ -188,7 +188,7 @@ def test_predict_drop_point_likely_to_spike(monkeypatch):
 
 
 def test_predict_drop_point_emerging_signal(monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     snapshots = [
         make_snapshot("dp2", timestamp=now, narrative=12.0, velocity=2.0),
         make_snapshot("dp2", timestamp=now - timedelta(minutes=10), narrative=11.0, velocity=2.0),
@@ -205,7 +205,7 @@ def test_predict_drop_point_emerging_signal(monkeypatch):
 
 
 def test_predict_drop_point_plateauing(monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     snapshots = [
         make_snapshot("dp3", timestamp=now, narrative=25.0, velocity=1.0),
         make_snapshot("dp3", timestamp=now - timedelta(minutes=10), narrative=25.5, velocity=2.0),
@@ -223,7 +223,7 @@ def test_predict_drop_point_plateauing(monkeypatch):
 
 
 def test_predict_drop_point_declining(monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     snapshots = [
         make_snapshot("dp4", timestamp=now, narrative=40.0, velocity=1.0),
         make_snapshot("dp4", timestamp=now - timedelta(minutes=10), narrative=42.0, velocity=1.5),
@@ -260,7 +260,7 @@ def test_recommendation_actions(monkeypatch, prediction, action):
         lambda *_: ScoreSnapshotDB(
             id="snap-latest",
             drop_point_id="dp",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             narrative_score=10.0,
             velocity_score=1.0,
             spread_score=0.5,
@@ -277,7 +277,7 @@ def test_recommendation_actions(monkeypatch, prediction, action):
 
 
 def test_causal_graph_respects_temporal_order(monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     drop_a = DropPointDB(
         id="a",
         date_dropped=now - timedelta(days=2),
@@ -313,7 +313,7 @@ def test_causal_graph_respects_temporal_order(monkeypatch):
 
 
 def test_strategy_build_synthesizes_patterns():
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     drops = [
         DropPointDB(
             id="dp1",
@@ -381,7 +381,7 @@ def test_list_playbooks_returns_serialized():
         steps=json.dumps(["step1"]),
         template="tmpl",
         success_rate=0.5,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db = FakeSession({"PlaybookDB": [playbook]})
     listed = playbook_engine.list_playbooks(db)
@@ -404,7 +404,7 @@ def test_content_generator_returns_structured_content():
         steps=json.dumps(["step1", "step2"]),
         template="tmpl",
         success_rate=0.8,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db = FakeSession({"PlaybookDB": [playbook], "StrategyDB": [strategy]})
     result = content_generator.generate_content("play-1", db)
@@ -429,7 +429,7 @@ def test_learning_engine_records_and_evaluates(monkeypatch):
         id="lr-1",
         drop_point_id="dp",
         prediction="likely_to_spike",
-        predicted_at=datetime.utcnow() - timedelta(minutes=5),
+        predicted_at=datetime.now(timezone.utc) - timedelta(minutes=5),
         velocity_at_prediction=1.0,
         narrative_at_prediction=2.0,
     )
@@ -437,7 +437,7 @@ def test_learning_engine_records_and_evaluates(monkeypatch):
         {
             "LearningRecordDB": [record],
             "ScoreSnapshotDB": [
-                make_snapshot("dp", timestamp=datetime.utcnow(), narrative=10.0, velocity=0.5)
+                make_snapshot("dp", timestamp=datetime.now(timezone.utc), narrative=10.0, velocity=0.5)
             ],
         }
     )
@@ -453,7 +453,7 @@ def test_learning_engine_adjust_thresholds(monkeypatch):
             drop_point_id="dp",
             prediction="likely_to_spike" if idx == 0 else "emerging_signal",
             actual_outcome="declined" if idx == 0 else "spiked",
-            predicted_at=datetime.utcnow() - timedelta(minutes=idx + 1),
+            predicted_at=datetime.now(timezone.utc) - timedelta(minutes=idx + 1),
             was_correct=False if idx == 0 else True,
             velocity_at_prediction=1.0,
             narrative_at_prediction=1.0,

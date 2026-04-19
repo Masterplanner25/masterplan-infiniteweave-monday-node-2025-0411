@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     OPENAI_CHAT_TIMEOUT_SECONDS: float = 30.0
     OPENAI_EMBEDDING_TIMEOUT_SECONDS: float = 15.0
     OPENAI_MAX_RETRIES: int = 3
+    FLOW_WAIT_TIMEOUT_MINUTES: int = 30
+    STUCK_RUN_THRESHOLD_MINUTES: int = 15
 
     # --- Auth ---
     SECRET_KEY: str = "dev-secret-change-in-production"
@@ -70,6 +72,21 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("ENFORCE_EXECUTION_CONTRACT")
+    @classmethod
+    def default_contract_enforcement_for_tests(cls, v: bool) -> bool:
+        if "ENFORCE_EXECUTION_CONTRACT" in os.environ:
+            return bool(v)
+        env_name = os.getenv("ENV", "").lower()
+        is_test = env_name == "test" or os.getenv(
+            "TEST_MODE", "0"
+        ).lower() in {"1", "true", "yes"} or os.getenv(
+            "TESTING", "0"
+        ).lower() in {"1", "true", "yes"}
+        if is_test:
+            return False
+        return bool(v)
+
     VERSION: str = Field(default_factory=_read_version, exclude=True)
 
     # --- Optional runtime options ---
@@ -91,7 +108,7 @@ class Settings(BaseSettings):
     AINDY_ASYNC_JOB_WORKERS: int = 4
     AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection
     USE_NATIVE_SCORER: bool = True
-    ENFORCE_EXECUTION_CONTRACT: bool = False
+    ENFORCE_EXECUTION_CONTRACT: bool = True
     SKIP_MONGO_PING: bool = False
 
     # --- Environment loading config ---

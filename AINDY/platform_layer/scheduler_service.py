@@ -182,6 +182,26 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         replace_existing=True,
     )
 
+    scheduler.add_job(
+        _expire_timed_out_waits,
+        trigger=IntervalTrigger(minutes=5),
+        id="expire_timed_out_waits",
+        name="Expire timed-out flow waits",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
+        _recover_stuck_flow_runs,
+        trigger=IntervalTrigger(minutes=5),
+        id="recover_stuck_flow_runs",
+        name="Recover stuck flow runs",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
     for job in get_scheduled_jobs():
         scheduler.add_job(
             job["handler"],
@@ -262,6 +282,24 @@ def _process_deferred_async_jobs() -> None:
             logger.info("Deferred async jobs resumed: %d", resumed)
     except Exception as exc:
         logger.warning("Deferred async job processing failed: %s", exc)
+
+
+def _expire_timed_out_waits() -> None:
+    try:
+        from AINDY.platform_layer.recovery_jobs import run_expire_timed_out_waits_job
+
+        run_expire_timed_out_waits_job()
+    except Exception as exc:
+        logger.warning("Timed-out WAIT recovery dispatch failed: %s", exc)
+
+
+def _recover_stuck_flow_runs() -> None:
+    try:
+        from AINDY.platform_layer.recovery_jobs import run_recover_stuck_runs_job
+
+        run_recover_stuck_runs_job()
+    except Exception as exc:
+        logger.warning("Periodic stuck-run recovery dispatch failed: %s", exc)
 
 
 def run_task_now(

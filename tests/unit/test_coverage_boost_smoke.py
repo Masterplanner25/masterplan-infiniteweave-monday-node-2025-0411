@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -138,7 +138,7 @@ def test_masterplan_execution_service_sync_skip_and_status():
         status="failed",
         task_name="Task 1",
         error_message="broken",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         payload={"masterplan_id": 7, "task_id": 1},
     )
 
@@ -244,11 +244,11 @@ def test_masterplan_execution_service_helper_paths(monkeypatch):
 def test_projection_service_smoke():
     from apps.masterplan.services.projection_service import evaluate_phase, project_completion
 
-    masterplan = SimpleNamespace(target_date=datetime.utcnow() + timedelta(days=30))
+    masterplan = SimpleNamespace(target_date=datetime.now(timezone.utc) + timedelta(days=30))
     projection = project_completion(masterplan, [50, 100, 150])
 
     plan = SimpleNamespace(
-        start_date=datetime.utcnow() - timedelta(days=30),
+        start_date=datetime.now(timezone.utc) - timedelta(days=30),
         duration_years=1,
         total_wcu=10,
         wcu_target=5,

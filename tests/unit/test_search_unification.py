@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime
+from datetime import datetime, timezone
 
 from starlette.requests import Request
 
@@ -66,7 +66,7 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
             self.summary = summary
             self.source = source
             self.data = data
-            self.created_at = datetime.utcnow()
+            self.created_at = datetime.now(timezone.utc)
 
     def _fake_create(db, result, user_id=None, data=None, source=None):
         captured["user_id"] = user_id

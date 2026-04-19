@@ -148,8 +148,8 @@ class TestDualDAOConsolidation:
         fake_node.is_shared = False
         fake_node.user_id = "user-1"
         fake_node.extra = {}
-        fake_node.created_at = datetime.utcnow()
-        fake_node.updated_at = datetime.utcnow()
+        fake_node.created_at = datetime.now(timezone.utc)
+        fake_node.updated_at = datetime.now(timezone.utc)
         mock_db.query.return_value.filter.return_value.first.return_value = fake_node
         dao = MemoryNodeDAO(mock_db)
         result = dao.load_memory_node("00000000-0000-0000-0000-000000000001")
@@ -208,8 +208,8 @@ class TestMemoryNodeChildrenPersistence:
         parent_node.is_shared = False
         parent_node.user_id = "u1"
         parent_node.extra = {"children": [str(child_id)]}
-        parent_node.created_at = datetime.utcnow()
-        parent_node.updated_at = datetime.utcnow()
+        parent_node.created_at = datetime.now(timezone.utc)
+        parent_node.updated_at = datetime.now(timezone.utc)
 
         mock_db.add.return_value = None
         mock_db.commit.return_value = None
@@ -247,7 +247,7 @@ class TestMemoryNodeChildrenPersistence:
                     mock_instance.is_shared = None
                     mock_instance.user_id = "u1"
                     mock_instance.extra = {}
-                    mock_instance.created_at = datetime.utcnow()
+                    mock_instance.created_at = datetime.now(timezone.utc)
                     mock_instance.updated_at = None
                     MockModel.return_value = mock_instance
 
@@ -283,7 +283,7 @@ class TestMemoryNodeChildrenPersistence:
             mock_instance.is_shared = None
             mock_instance.user_id = "u1"
             mock_instance.extra = {}
-            mock_instance.created_at = datetime.utcnow()
+            mock_instance.created_at = datetime.now(timezone.utc)
             mock_instance.updated_at = None
             MockModel.return_value = mock_instance
 
@@ -516,7 +516,7 @@ class TestETAService:
         from apps.masterplan.models import MasterPlan
         from apps.tasks.models import Task
 
-        anchor = datetime.utcnow() + timedelta(days=365)
+        anchor = datetime.now(timezone.utc) + timedelta(days=365)
         mock_db = MagicMock()
         plan = self._make_plan(anchor_date=anchor)
 

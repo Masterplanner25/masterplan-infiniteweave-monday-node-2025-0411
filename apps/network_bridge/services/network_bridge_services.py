@@ -1,6 +1,6 @@
 # /services/network_bridge_services.py
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from apps.authorship.models import AuthorDB
 import uuid
 
@@ -13,18 +13,20 @@ def register_author(db: Session, name: str, platform: str, notes: str | None = N
         normalized_user_id = uuid.UUID(str(user_id))
     existing = db.query(AuthorDB).filter_by(name=name, platform=platform, user_id=normalized_user_id).first()
     if existing:
-        existing.last_seen = datetime.utcnow()
+        # AuthorDB joined_at/last_seen are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+        existing.last_seen = datetime.now(timezone.utc)
         db.commit()
         db.refresh(existing)
         return existing
 
     author = AuthorDB(
-        id=f"author-{datetime.utcnow().timestamp()}",
+        id=f"author-{datetime.now(timezone.utc).timestamp()}",
         name=name,
         platform=platform,
         notes=notes,
-        joined_at=datetime.utcnow(),
-        last_seen=datetime.utcnow(),
+        # AuthorDB joined_at/last_seen are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
+        joined_at=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc),
         user_id=normalized_user_id,
     )
     db.add(author)
@@ -71,7 +73,7 @@ def connect_external_author(
         "status": "connected",
         "author_id": author.id,
         "platform": platform,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
