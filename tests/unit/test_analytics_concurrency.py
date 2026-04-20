@@ -57,14 +57,18 @@ def test_duplicate_trigger_is_suppressed_for_same_user(tmp_path, monkeypatch):
     user_id = _seed_user(session_factory)
 
     import apps.analytics.services.infinity_orchestrator as orchestrator_module
+    import apps.identity.services.identity_boot_service as identity_boot_service
+    import apps.masterplan.services.goal_service as goal_service
+    import apps.social.services.social_performance_service as social_performance_service
+    import apps.tasks.services.task_service as task_service
 
-    monkeypatch.setattr(orchestrator_module, "get_recent_memory", lambda *args, **kwargs: [])
-    monkeypatch.setattr(orchestrator_module, "get_user_metrics", lambda *args, **kwargs: {})
+    monkeypatch.setattr(identity_boot_service, "get_recent_memory", lambda *args, **kwargs: [])
+    monkeypatch.setattr(identity_boot_service, "get_user_metrics", lambda *args, **kwargs: {})
     monkeypatch.setattr(orchestrator_module, "get_relevant_memories", lambda *args, **kwargs: [])
     monkeypatch.setattr(orchestrator_module, "compute_current_state", lambda *args, **kwargs: {})
-    monkeypatch.setattr(orchestrator_module, "rank_goals", lambda *args, **kwargs: [])
-    monkeypatch.setattr(orchestrator_module, "get_task_graph_context", lambda *args, **kwargs: {})
-    monkeypatch.setattr(orchestrator_module, "get_social_performance_signals", lambda *args, **kwargs: [])
+    monkeypatch.setattr(goal_service, "rank_goals", lambda *args, **kwargs: [])
+    monkeypatch.setattr(task_service, "get_task_graph_context", lambda *args, **kwargs: {})
+    monkeypatch.setattr(social_performance_service, "get_social_performance_signals", lambda *args, **kwargs: [])
     monkeypatch.setattr(orchestrator_module, "emit_system_event", lambda **kwargs: None)
     monkeypatch.setattr(orchestrator_module, "evaluate_pending_adjustment", lambda **kwargs: None)
     monkeypatch.setattr(

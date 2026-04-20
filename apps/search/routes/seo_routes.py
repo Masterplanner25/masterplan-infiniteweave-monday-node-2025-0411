@@ -3,7 +3,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from apps.search.schemas.seo import SEOInput, MetaInput
-from apps.analytics.services.calculation_services import save_calculation
 from AINDY.services.auth_service import get_current_user
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -40,6 +39,8 @@ def analyze_seo(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    from apps.analytics.services.calculation_services import save_calculation
+
     results = analyze_seo_content(data.text, data.top_n, db=db, user_id=str(current_user["sub"]))
 
     # Save key SEO metrics

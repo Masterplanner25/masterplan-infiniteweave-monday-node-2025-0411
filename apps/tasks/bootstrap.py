@@ -114,11 +114,13 @@ def _register_jobs() -> None:
     register_job("scheduler.recurrence", _scheduler_check_task_recurrence)
     register_job("scheduler.lease_heartbeat", lambda: task_services._heartbeat_lease_job())
     register_job("tasks.background.is_leader", _is_background_leader)
+    register_job("resume_watchdog.scan", _job_resume_watchdog)
 
 
 def _register_scheduled_jobs() -> None:
     from AINDY.platform_layer.registry import register_scheduled_job
     from apps.tasks.services import task_service as task_services
+    from AINDY.config import settings
 
     register_scheduled_job(
         "task_reminder_check",
@@ -147,6 +149,13 @@ def _register_scheduled_jobs() -> None:
         name="WAIT recovery poll",
         trigger="interval",
         trigger_kwargs={"seconds": 60},
+    )
+    register_scheduled_job(
+        "resume_watchdog",
+        _job_resume_watchdog,
+        name="Flow resume watchdog (Redis failure recovery)",
+        trigger="interval",
+        trigger_kwargs={"minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES},
     )
 
 
@@ -291,6 +300,26 @@ def _job_wait_recovery_poll() -> None:
     finally:
         if db is not None:
             db.close()
+
+
+def _job_resume_watchdog() -> None:
+    from AINDY.db.database import SessionLocal
+    from AINDY.core.resume_watchdog import scan_and_resume_stranded_flows
+
+    db = None
+    try:
+        db = SessionLocal()
+        count = scan_and_resume_stranded_flows(db)
+        if count:
+            logger.info("[resume_watchdog] Resumed %d stranded flow(s)", count)
+    except Exception as exc:
+        logger.warning("[resume_watchdog] Job failed: %s", exc)
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 
 def _scheduler_check_reminders() -> None:

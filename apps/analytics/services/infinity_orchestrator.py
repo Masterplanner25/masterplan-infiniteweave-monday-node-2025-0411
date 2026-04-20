@@ -11,15 +11,11 @@ import logging
 
 from AINDY.core.execution_signal_helper import queue_system_event
 emit_system_event = queue_system_event
-from apps.identity.services.identity_boot_service import get_recent_memory, get_user_metrics
-from apps.masterplan.services.goal_service import rank_goals
 from apps.analytics.services.concurrency import acquire_execution_lease, make_execution_owner_id, transaction_scope
 from apps.analytics.services.infinity_loop import evaluate_pending_adjustment, get_latest_adjustment, run_loop, serialize_adjustment
 from apps.analytics.services.infinity_service import calculate_infinity_score, get_user_kpi_snapshot, orchestrator_score_context
 from AINDY.memory.memory_scoring_service import get_relevant_memories
-from apps.social.services.social_performance_service import get_social_performance_signals
 from AINDY.platform_layer.system_state_service import compute_current_state
-from apps.tasks.services.task_service import get_task_graph_context
 from AINDY.platform_layer.trace_context import get_current_trace_id
 
 logger = logging.getLogger(__name__)
@@ -28,6 +24,11 @@ _ANALYTICS_EXECUTION_LEASE_TTL_SECONDS = 5
 
 
 def execute(user_id: str, trigger_event: str, db):
+    from apps.identity.services.identity_boot_service import get_recent_memory, get_user_metrics
+    from apps.masterplan.services.goal_service import rank_goals
+    from apps.social.services.social_performance_service import get_social_performance_signals
+    from apps.tasks.services.task_service import get_task_graph_context
+
     trace_id = get_current_trace_id() or f"loop:{trigger_event}"
     execution_owner_id = make_execution_owner_id()
     lease_name = f"analytics.infinity:{user_id}:{trigger_event}"

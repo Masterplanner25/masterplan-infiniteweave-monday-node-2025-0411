@@ -180,3 +180,16 @@ system_health_tier = Gauge(
     "Current system health tier: 0=healthy, 1=degraded, 2=critical",
     registry=REGISTRY,
 )
+
+deferred_boundary_violations_total = Gauge(
+    "aindy_deferred_boundary_violations_total",
+    "Number of deferred cross-domain imports detected in router files "
+    "(function-body imports crossing app domain boundaries)",
+    registry=REGISTRY,
+)
+
+resume_watchdog_resumes_total = Counter(
+    "aindy_resume_watchdog_resumes_total",
+    "Number of flows resumed by the watchdog due to missed Redis events",
+    registry=REGISTRY,
+)

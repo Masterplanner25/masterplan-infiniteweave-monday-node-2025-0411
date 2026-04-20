@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     OPENAI_RETRY_BACKOFF_BASE_SECONDS: float = 1.0
     FLOW_WAIT_TIMEOUT_MINUTES: int = 30
     STUCK_RUN_THRESHOLD_MINUTES: int = 15
+    AINDY_WATCHDOG_INTERVAL_MINUTES: int = 2
 
     # --- Auth ---
     SECRET_KEY: str = "dev-secret-change-in-production"
