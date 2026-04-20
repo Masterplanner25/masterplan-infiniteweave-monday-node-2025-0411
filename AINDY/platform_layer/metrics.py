@@ -64,3 +64,87 @@ openai_errors_total = Counter(
     ["call_type"],
     registry=REGISTRY,
 )
+
+embedding_generation_total = Counter(
+    "aindy_embedding_generation_total",
+    "Total embedding generation requests by outcome",
+    ["outcome"],  # success | failure
+    registry=REGISTRY,
+)
+
+embedding_generation_retries_total = Counter(
+    "aindy_embedding_generation_retries_total",
+    "Total embedding generation retries before a terminal outcome",
+    registry=REGISTRY,
+)
+
+embedding_generation_latency_seconds = Histogram(
+    "aindy_embedding_generation_latency_seconds",
+    "Embedding generation latency in seconds",
+    buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
+    registry=REGISTRY,
+)
+
+mongo_health_status = Gauge(
+    "aindy_mongo_health_status",
+    "MongoDB connectivity status reported by startup health checks",
+    registry=REGISTRY,
+)
+
+# Queue
+
+async_queue_depth = Gauge(
+    "aindy_async_queue_depth",
+    "Pending async jobs currently queued",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_in_flight = Gauge(
+    "aindy_async_queue_in_flight",
+    "Async jobs currently being processed",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_delayed = Gauge(
+    "aindy_async_queue_delayed",
+    "Async jobs currently delayed before enqueue",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_dlq_depth = Gauge(
+    "aindy_async_queue_dlq_depth",
+    "Async jobs currently in the dead-letter queue",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_capacity = Gauge(
+    "aindy_async_queue_capacity",
+    "Configured async queue capacity",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_enqueue_total = Counter(
+    "aindy_async_queue_enqueue_total",
+    "Total async job enqueue attempts by outcome",
+    ["backend", "outcome"],
+    registry=REGISTRY,
+)
+
+async_queue_dequeue_total = Counter(
+    "aindy_async_queue_dequeue_total",
+    "Total async job dequeues",
+    ["backend"],
+    registry=REGISTRY,
+)
+
+async_queue_failure_total = Counter(
+    "aindy_async_queue_failure_total",
+    "Total async job queue failures by stage",
+    ["backend", "stage"],
+    registry=REGISTRY,
+)

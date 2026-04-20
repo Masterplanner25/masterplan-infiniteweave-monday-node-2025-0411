@@ -29,7 +29,10 @@ from AINDY.platform_layer.registry import (
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.db.database import SessionLocal
-from AINDY.db.mongo_setup import init_mongo
+from AINDY.db.mongo_setup import ensure_mongo_ready
+
+# Backward compatibility for tests that monkeypatch main.init_mongo directly.
+init_mongo = ensure_mongo_ready
 from AINDY.core.execution_guard import require_execution_context, validate_execution_contract
 from AINDY.routes import (
     APP_ROUTERS,
@@ -39,6 +42,7 @@ from AINDY.routes import (
     platform_router,
 )
 from AINDY.config import settings
+from AINDY.core.distributed_queue import QueueSaturatedError, validate_queue_backend
 from AINDY.db.models.request_metric import RequestMetric
 from AINDY.platform_layer.trace_context import (
     _trace_id_ctx,
@@ -236,7 +240,7 @@ async def lifespan(app: FastAPI):
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
         logger.info("Cache backend initialized: memory")
 
-    init_mongo()
+    ensure_mongo_ready(required=settings.MONGO_REQUIRED)
 
     if settings.ENV == "dev":
         _ensure_dev_api_key()
@@ -259,6 +263,9 @@ async def lifespan(app: FastAPI):
         logger.warning(
             "OPENAI_API_KEY uses the project-key prefix in production; verify rotation after any potential exposure."
         )
+
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        validate_queue_backend()
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if enforce_schema and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
@@ -537,6 +544,18 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": "http_error",
             "message": message,
             "details": detail if not isinstance(detail, str) else None,
+        },
+    )
+
+
+@app.exception_handler(QueueSaturatedError)
+async def queue_saturated_exception_handler(request: Request, exc: QueueSaturatedError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers={"Retry-After": str(exc.retry_after_seconds)},
+        content={
+            "error": "queue_saturated",
+            "message": str(exc),
         },
     )
 

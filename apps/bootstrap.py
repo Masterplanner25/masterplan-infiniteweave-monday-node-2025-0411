@@ -503,7 +503,12 @@ def _job_wait_recovery_poll() -> None:
                 db.delete(row)
                 continue
 
-            if row.timeout_at and row.timeout_at < now:
+            if (
+                row.timeout_at
+                and row.timeout_at < now
+                and row.event_type == "__time_wait__"
+                and row.max_wait_seconds is None
+            ):
                 scheduler.notify_event(
                     row.event_type,
                     correlation_id=row.correlation_id,

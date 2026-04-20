@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING
 # "core.wait_rehydration.<name>".
 from AINDY.core.wait_condition import WaitCondition, WAIT_TYPE_TIME
 from AINDY.kernel.scheduler_engine import get_scheduler_engine
+from AINDY.db.database import utcnow
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -63,6 +64,16 @@ def ensure_waiting_flow_run_row(
     priority: str,
 ) -> None:
     """Best-effort seed of waiting_flow_runs for startup durability."""
+    waited_since = utcnow()
+    max_wait_seconds = None
+    if timeout_at is not None:
+        try:
+            max_wait_seconds = max(
+                0,
+                int((timeout_at - waited_since).total_seconds()),
+            )
+        except Exception:
+            max_wait_seconds = None
     try:
         import os
 
@@ -79,6 +90,8 @@ def ensure_waiting_flow_run_row(
                     run_id=str(run_id),
                     event_type=event_type,
                     correlation_id=correlation_id,
+                    waited_since=waited_since,
+                    max_wait_seconds=max_wait_seconds,
                     timeout_at=timeout_at,
                     eu_id=eu_id,
                     priority=priority or "normal",
@@ -91,6 +104,9 @@ def ensure_waiting_flow_run_row(
             existing.timeout_at = timeout_at
             existing.eu_id = eu_id
             existing.priority = priority or "normal"
+            if existing.waited_since is None:
+                existing.waited_since = waited_since
+            existing.max_wait_seconds = max_wait_seconds
         db.flush()
     except Exception as exc:
         try:

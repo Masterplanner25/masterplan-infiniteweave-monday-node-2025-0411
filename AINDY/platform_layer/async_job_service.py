@@ -18,6 +18,7 @@ from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.agents.autonomous_controller import build_decision_response
 from AINDY.agents.autonomous_controller import evaluate_live_trigger
 from AINDY.agents.autonomous_controller import record_decision
+from AINDY.core.distributed_queue import QueueSaturatedError
 from AINDY.core.execution_envelope import error as execution_error
 from AINDY.core.execution_envelope import success as execution_success
 from AINDY.core.execution_record_service import record_from_job_log
@@ -225,6 +226,91 @@ def _distributed_execution_enabled() -> bool:
     return os.getenv("EXECUTION_MODE", "thread").lower() == "distributed"
 
 
+def _queue_capacity_limit() -> int:
+    return max(1, _safe_int_env("MAX_QUEUE_SIZE", _safe_int_env("AINDY_ASYNC_QUEUE_MAXSIZE", 100)))
+
+
+def _queue_saturation_threshold() -> int:
+    configured = _safe_int_env("AINDY_QUEUE_SATURATION_THRESHOLD", _queue_capacity_limit())
+    return max(1, min(configured, _queue_capacity_limit()))
+
+
+def _active_job_statuses() -> tuple[str, ...]:
+    return ("pending", "running", "deferred")
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is not None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+    candidate = getattr(settings, name, default)
+    if not isinstance(candidate, (int, str)):
+        return default
+    try:
+        return int(candidate)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_count(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _enforce_job_admission_limits(db, *, user_uuid, task_name: str) -> None:
+    active_statuses = _active_job_statuses()
+    global_cap = _safe_int_env("AINDY_ASYNC_MAX_CONCURRENT_GLOBAL", 0)
+    per_user_cap = _safe_int_env("AINDY_ASYNC_MAX_CONCURRENT_PER_USER", 0)
+
+    if global_cap > 0:
+        active_global = _safe_count((
+            db.query(JobLog)
+            .filter(JobLog.status.in_(active_statuses))
+            .count()
+        ))
+        if active_global >= global_cap:
+            raise QueueSaturatedError(
+                f"Global async job admission cap reached ({global_cap}). Retry later.",
+                status_code=503,
+            )
+
+    if per_user_cap > 0 and user_uuid is not None:
+        active_for_user = _safe_count((
+            db.query(JobLog)
+            .filter(JobLog.user_id == user_uuid, JobLog.status.in_(active_statuses))
+            .count()
+        ))
+        if active_for_user >= per_user_cap:
+            raise QueueSaturatedError(
+                f"User async job admission cap reached ({per_user_cap}). Retry later.",
+                status_code=429,
+            )
+
+
+def _enforce_distributed_queue_backpressure(*, task_name: str) -> None:
+    if not _distributed_execution_enabled():
+        return
+
+    from AINDY.core.distributed_queue import get_queue
+
+    metrics = get_queue().get_metrics()
+    total_pending = int(metrics.get("total_pending_jobs", metrics.get("queue_depth", 0)))
+    threshold = int(metrics.get("saturation_threshold", _queue_saturation_threshold()))
+    if total_pending >= threshold:
+        raise QueueSaturatedError(
+            (
+                f"Async queue saturation threshold reached for {task_name} "
+                f"({total_pending}/{_queue_capacity_limit()}). Retry later."
+            ),
+            status_code=503,
+        )
+
+
 def _emit_async_system_event(*, db, event_type: str, user_id=None, trace_id: str | None = None, parent_event_id=None, source: str | None = None, payload: dict[str, Any] | None = None):
     from AINDY.core.system_event_service import emit_system_event
 
@@ -292,6 +378,25 @@ def submit_async_job(
     db = SessionLocal()
     log_id = None
     try:
+        env_name = os.getenv("ENV", "").lower()
+        pytest_env = os.getenv("PYTEST_CURRENT_TEST")
+        force_inline_env = settings.is_testing or env_name == "test" or bool(pytest_env)
+        background_enabled = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        background_runner_available = background_enabled and _is_background_runner_active()
+        distributed_enabled = _distributed_execution_enabled()
+        runner_disabled = not background_runner_available and not distributed_enabled
+        inline_enabled = force_inline_env or runner_disabled
+        if execute_inline_in_test_mode and _session_dialect_name(db) == "sqlite":
+            inline_enabled = True
+
+        if not inline_enabled:
+            _enforce_job_admission_limits(db, user_uuid=user_uuid, task_name=task_name)
+            _enforce_distributed_queue_backpressure(task_name=task_name)
+
         log_id = str(uuid.uuid4())
         log = JobLog(
             id=log_id,
@@ -323,17 +428,6 @@ def submit_async_job(
             db.commit()
         except Exception:
             db.rollback()
-        env_name = os.getenv("ENV", "").lower()
-        pytest_env = os.getenv("PYTEST_CURRENT_TEST")
-        force_inline_env = settings.is_testing or env_name == "test" or bool(pytest_env)
-        background_enabled = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        background_runner_available = background_enabled and _is_background_runner_active()
-        distributed_enabled = _distributed_execution_enabled()
-        runner_disabled = not background_runner_available and not distributed_enabled
         dispatch_state = "inline" if force_inline_env or runner_disabled else "queued"
         _emit_async_system_event(
             db=db,
@@ -350,9 +444,6 @@ def submit_async_job(
                 "dispatch_state": dispatch_state,
             },
         )
-        inline_enabled = force_inline_env or runner_disabled
-        if execute_inline_in_test_mode and _session_dialect_name(db) == "sqlite":
-            inline_enabled = True
         if inline_enabled:
             reasons = []
             if force_inline_env:
@@ -403,9 +494,12 @@ def submit_async_job(
                 log.error_message = "Execution queue full -- retry later"
                 log.completed_at = datetime.now(timezone.utc)
                 db.commit()
-            raise RuntimeError(
-                f"Async job queue full (max={os.getenv('AINDY_ASYNC_QUEUE_MAXSIZE', 100)}). "
-                "Job rejected. Retry later or increase AINDY_ASYNC_QUEUE_MAXSIZE."
+            raise QueueSaturatedError(
+                (
+                    f"Async job queue full (max={_queue_capacity_limit()}). "
+                    "Job rejected. Retry later or increase MAX_QUEUE_SIZE."
+                ),
+                status_code=503,
             )
 
         if _distributed_execution_enabled():

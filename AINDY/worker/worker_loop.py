@@ -691,8 +691,8 @@ def run_worker_loop(
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
-    from AINDY.core.distributed_queue import get_queue
-    q = queue_backend or get_queue()
+    from AINDY.core.distributed_queue import get_queue, validate_queue_backend
+    q = queue_backend or validate_queue_backend()
 
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECS", "300"))
     check_interval = int(os.getenv("WORKER_STALE_CHECK_INTERVAL_SECS", "60"))

@@ -92,7 +92,7 @@ class ConfigManager:
         self._persist_to_db(self._config)
 
     def _load_from_db(self) -> dict:
-        from AINDY.db.dao.arm_config_dao import get_config
+        from apps.arm.dao.arm_config_dao import get_config
 
         if self.db is not None:
             config = get_config(self.db)
@@ -108,7 +108,7 @@ class ConfigManager:
             db.close()
 
     def _persist_to_db(self, config: dict) -> None:
-        from AINDY.db.dao.arm_config_dao import upsert_config
+        from apps.arm.dao.arm_config_dao import upsert_config
 
         if self.db is not None:
             upsert_config(self.db, **config)

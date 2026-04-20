@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import case
+from sqlalchemy import select
 from apps.tasks.services.task_service import get_next_ready_task
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,7 @@ from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.platform_layer.trace_context import get_current_trace_id
 from AINDY.platform_layer.user_ids import parse_user_id
+from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
 
 THRASH_GUARD_MINUTES = 60
 TASK_REPRIORITIZATION_LIMIT = 5
@@ -168,48 +170,59 @@ def evaluate_pending_adjustment(
         owner_user_id = _normalize_user_id(user_id)
         if owner_user_id is None:
             return None
-        adjustment = (
-            db.query(LoopAdjustment)
-            .filter(
-                LoopAdjustment.user_id == owner_user_id,
-                LoopAdjustment.evaluated_at.is_(None),
-            )
-            .order_by(LoopAdjustment.created_at.desc())
-            .first()
-        )
-        if not adjustment:
-            return None
+        with transaction_scope(db):
+            if supports_managed_transactions(db):
+                adjustment = db.execute(
+                    select(LoopAdjustment)
+                    .where(
+                        LoopAdjustment.user_id == owner_user_id,
+                        LoopAdjustment.evaluated_at.is_(None),
+                    )
+                    .order_by(LoopAdjustment.created_at.desc())
+                    .with_for_update()
+                ).scalars().first()
+            else:
+                adjustment = (
+                    db.query(LoopAdjustment)
+                    .filter(
+                        LoopAdjustment.user_id == owner_user_id,
+                        LoopAdjustment.evaluated_at.is_(None),
+                    )
+                    .order_by(LoopAdjustment.created_at.desc())
+                    .first()
+                )
+            if not adjustment:
+                return None
 
-        actual_outcome = _derive_actual_outcome(trigger_event)
-        expected_outcome = adjustment.expected_outcome or _derive_expected_outcome(adjustment.decision_type)
-        expected_score = float(adjustment.expected_score or 50.0)
-        actual_score_value = float(actual_score if actual_score is not None else adjustment.score_snapshot.get("master_score", 50.0))
-        score_delta = round(actual_score_value - expected_score, 2)
-        deviation_score = int(round(abs(score_delta)))
-        outcome_match = 1.0 if actual_outcome == expected_outcome else 0.5
-        score_accuracy = max(0.0, 1.0 - min(1.0, abs(score_delta) / 25.0))
-        prediction_accuracy = int(round(((outcome_match * 0.4) + (score_accuracy * 0.6)) * 100))
+            actual_outcome = _derive_actual_outcome(trigger_event)
+            expected_outcome = adjustment.expected_outcome or _derive_expected_outcome(adjustment.decision_type)
+            expected_score = float(adjustment.expected_score or 50.0)
+            actual_score_value = float(actual_score if actual_score is not None else adjustment.score_snapshot.get("master_score", 50.0))
+            score_delta = round(actual_score_value - expected_score, 2)
+            deviation_score = int(round(abs(score_delta)))
+            outcome_match = 1.0 if actual_outcome == expected_outcome else 0.5
+            score_accuracy = max(0.0, 1.0 - min(1.0, abs(score_delta) / 25.0))
+            prediction_accuracy = int(round(((outcome_match * 0.4) + (score_accuracy * 0.6)) * 100))
 
-        adjustment.actual_outcome = actual_outcome
-        adjustment.actual_score = int(round(actual_score_value))
-        adjustment.deviation_score = deviation_score
-        adjustment.prediction_accuracy = prediction_accuracy
-        adjustment.evaluated_at = datetime.now(timezone.utc)
+            adjustment.actual_outcome = actual_outcome
+            adjustment.actual_score = int(round(actual_score_value))
+            adjustment.deviation_score = deviation_score
+            adjustment.prediction_accuracy = prediction_accuracy
+            adjustment.evaluated_at = datetime.now(timezone.utc)
 
-        payload = dict(adjustment.adjustment_payload or {})
-        payload["expected_vs_actual"] = {
-            "expected_outcome": expected_outcome,
-            "actual_outcome": actual_outcome,
-            "expected_score": expected_score,
-            "actual_score": actual_score_value,
-            "score_delta": score_delta,
-            "deviation_score": deviation_score,
-            "prediction_accuracy": prediction_accuracy,
-        }
-        adjustment.adjustment_payload = payload
-        db.add(adjustment)
-        db.commit()
-        db.refresh(adjustment)
+            payload = dict(adjustment.adjustment_payload or {})
+            payload["expected_vs_actual"] = {
+                "expected_outcome": expected_outcome,
+                "actual_outcome": actual_outcome,
+                "expected_score": expected_score,
+                "actual_score": actual_score_value,
+                "score_delta": score_delta,
+                "deviation_score": deviation_score,
+                "prediction_accuracy": prediction_accuracy,
+            }
+            adjustment.adjustment_payload = payload
+            db.add(adjustment)
+            db.flush()
         return {
             "adjustment_id": str(adjustment.id),
             "prediction_accuracy": prediction_accuracy,
@@ -740,20 +753,22 @@ def _reprioritize_tasks(user_id: str, db) -> dict:
     if not tasks:
         return {"reason": "no_incomplete_tasks", "task_ids": []}
 
-    affected = []
-    for task in tasks:
-        previous_priority = task.priority
-        task.priority = "high"
-        affected.append(
-            {
-                "task_id": task.id,
-                "name": task.name,
-                "previous_priority": previous_priority,
-                "new_priority": task.priority,
-            }
-        )
-    db.commit()
-    return {"task_ids": [item["task_id"] for item in affected], "tasks": affected}
+    with transaction_scope(db):
+        affected = []
+        for task in tasks:
+            previous_priority = task.priority
+            task.priority = "high"
+            affected.append(
+                {
+                    "task_id": task.id,
+                    "name": task.name,
+                    "previous_priority": previous_priority,
+                    "new_priority": task.priority,
+                }
+            )
+            db.add(task)
+        db.flush()
+        return {"task_ids": [item["task_id"] for item in affected], "tasks": affected}
 
 
 def run_loop(
@@ -767,116 +782,125 @@ def run_loop(
     from apps.automation.models import LoopAdjustment
 
     try:
-        normalized_trigger = _normalize_trigger_event(trigger_event)
-        persisted_user_id = _normalize_user_id(user_id)
-        owner_user_id = persisted_user_id or user_id
-        if score_snapshot is None:
-            from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+        with transaction_scope(db):
+            normalized_trigger = _normalize_trigger_event(trigger_event)
+            persisted_user_id = _normalize_user_id(user_id)
+            owner_user_id = persisted_user_id or user_id
+            if score_snapshot is None:
+                from apps.analytics.services.infinity_service import get_user_kpi_snapshot
 
-            score_snapshot = get_user_kpi_snapshot(user_id=owner_user_id, db=db)
-        feedback_context = feedback_context or _get_recent_feedback_context(user_id=owner_user_id, db=db)
-        memory_signals = list((loop_context or {}).get("memory_signals") or [])
-        system_state = dict((loop_context or {}).get("system_state") or {})
-        goals = list((loop_context or {}).get("goals") or [])
-        social_signals = list((loop_context or {}).get("social_signals") or [])
-        decision_type, payload = _decide(
-            score_snapshot,
-            feedback_context=feedback_context,
-            memory_signals=memory_signals,
-            system_state=system_state,
-            goals=goals,
-            social_signals=social_signals,
-        )
-        decision_type, payload = _apply_strategy_accuracy_weighting(
-            user_id=owner_user_id,
-            decision_type=decision_type,
-            payload=payload,
-            db=db,
-        )
-        now = datetime.now(timezone.utc)
+                score_snapshot = get_user_kpi_snapshot(user_id=owner_user_id, db=db)
+            feedback_context = feedback_context or _get_recent_feedback_context(user_id=owner_user_id, db=db)
+            memory_signals = list((loop_context or {}).get("memory_signals") or [])
+            system_state = dict((loop_context or {}).get("system_state") or {})
+            goals = list((loop_context or {}).get("goals") or [])
+            social_signals = list((loop_context or {}).get("social_signals") or [])
+            decision_type, payload = _decide(
+                score_snapshot,
+                feedback_context=feedback_context,
+                memory_signals=memory_signals,
+                system_state=system_state,
+                goals=goals,
+                social_signals=social_signals,
+            )
+            decision_type, payload = _apply_strategy_accuracy_weighting(
+                user_id=owner_user_id,
+                decision_type=decision_type,
+                payload=payload,
+                db=db,
+            )
+            now = datetime.now(timezone.utc)
 
-        last_adjustment = get_latest_adjustment(user_id=owner_user_id, db=db)
-        if (
-            last_adjustment
-            and last_adjustment.decision_type == decision_type
-            and last_adjustment.applied_at
-        ):
-            applied_at = last_adjustment.applied_at
-            if applied_at.tzinfo is None:
-                applied_at = applied_at.replace(tzinfo=timezone.utc)
-            if now - applied_at < timedelta(minutes=THRASH_GUARD_MINUTES):
-                return last_adjustment
-
-        if decision_type == "reprioritize_tasks":
-            reprioritized = _reprioritize_tasks(user_id=owner_user_id, db=db)
-            if reprioritized.get("task_ids"):
-                payload.update(reprioritized)
-                payload["next_action"] = {
-                    "type": "reprioritize_tasks",
-                    "title": "Continue after reprioritizing the current task queue",
-                    "task_ids": reprioritized["task_ids"],
-                }
+            if supports_managed_transactions(db):
+                last_adjustment = db.execute(
+                    select(LoopAdjustment)
+                    .where(LoopAdjustment.user_id == persisted_user_id)
+                    .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
+                    .with_for_update()
+                ).scalars().first()
             else:
-                decision_type = "create_new_task"
-                payload = {
-                    "reason": reprioritized.get("reason", "no_incomplete_tasks"),
-                    "suggested_goal": "Create one concrete next task to rebuild momentum",
-                    "next_action": {
-                        "type": "create_new_task",
-                        "title": "Create one concrete next task",
+                last_adjustment = get_latest_adjustment(user_id=owner_user_id, db=db)
+            if (
+                last_adjustment
+                and last_adjustment.decision_type == decision_type
+                and last_adjustment.applied_at
+            ):
+                applied_at = last_adjustment.applied_at
+                if applied_at.tzinfo is None:
+                    applied_at = applied_at.replace(tzinfo=timezone.utc)
+                if now - applied_at < timedelta(minutes=THRASH_GUARD_MINUTES):
+                    return last_adjustment
+
+            if decision_type == "reprioritize_tasks":
+                reprioritized = _reprioritize_tasks(user_id=owner_user_id, db=db)
+                if reprioritized.get("task_ids"):
+                    payload.update(reprioritized)
+                    payload["next_action"] = {
+                        "type": "reprioritize_tasks",
+                        "title": "Continue after reprioritizing the current task queue",
+                        "task_ids": reprioritized["task_ids"],
+                    }
+                else:
+                    decision_type = "create_new_task"
+                    payload = {
+                        "reason": reprioritized.get("reason", "no_incomplete_tasks"),
                         "suggested_goal": "Create one concrete next task to rebuild momentum",
-                    },
-                }
-        elif decision_type == "continue_highest_priority_task":
-            top_task = _get_top_incomplete_task(user_id=owner_user_id, db=db)
-            if top_task:
-                payload["task"] = top_task
-                payload["next_action"] = {
-                    "type": "continue_highest_priority_task",
-                    "title": f"Continue task: {top_task['name']}",
-                    "task_id": top_task["task_id"],
-                    "task_name": top_task["name"],
-                }
-            else:
-                decision_type = "create_new_task"
-                payload = {
-                    "reason": "no_incomplete_tasks",
-                    "suggested_goal": "Create the next highest-value task for today",
-                    "next_action": {
-                        "type": "create_new_task",
-                        "title": "Create the next highest-value task",
+                        "next_action": {
+                            "type": "create_new_task",
+                            "title": "Create one concrete next task",
+                            "suggested_goal": "Create one concrete next task to rebuild momentum",
+                        },
+                    }
+            elif decision_type == "continue_highest_priority_task":
+                top_task = _get_top_incomplete_task(user_id=owner_user_id, db=db)
+                if top_task:
+                    payload["task"] = top_task
+                    payload["next_action"] = {
+                        "type": "continue_highest_priority_task",
+                        "title": f"Continue task: {top_task['name']}",
+                        "task_id": top_task["task_id"],
+                        "task_name": top_task["name"],
+                    }
+                else:
+                    decision_type = "create_new_task"
+                    payload = {
+                        "reason": "no_incomplete_tasks",
                         "suggested_goal": "Create the next highest-value task for today",
+                        "next_action": {
+                            "type": "create_new_task",
+                            "title": "Create the next highest-value task",
+                            "suggested_goal": "Create the next highest-value task for today",
+                        },
+                    }
+
+            if not payload.get("next_action"):
+                raise RuntimeError("Infinity loop invariant violated: next_action is required")
+
+            expected_outcome, expected_score = _build_expectation(decision_type, score_snapshot)
+
+            adjustment = LoopAdjustment(
+                user_id=persisted_user_id,
+                trace_id=get_current_trace_id(),
+                trigger_event=normalized_trigger,
+                score_snapshot=score_snapshot,
+                decision_type=decision_type,
+                expected_outcome=expected_outcome,
+                expected_score=expected_score,
+                adjustment_payload={
+                    **payload,
+                    "feedback_context": feedback_context,
+                    "loop_context": loop_context or {},
+                    "expected_vs_actual": {
+                        "expected_outcome": expected_outcome,
+                        "expected_score": expected_score,
                     },
-                }
-
-        if not payload.get("next_action"):
-            raise RuntimeError("Infinity loop invariant violated: next_action is required")
-
-        expected_outcome, expected_score = _build_expectation(decision_type, score_snapshot)
-
-        adjustment = LoopAdjustment(
-            user_id=persisted_user_id,
-            trace_id=get_current_trace_id(),
-            trigger_event=normalized_trigger,
-            score_snapshot=score_snapshot,
-            decision_type=decision_type,
-            expected_outcome=expected_outcome,
-            expected_score=expected_score,
-            adjustment_payload={
-                **payload,
-                "feedback_context": feedback_context,
-                "loop_context": loop_context or {},
-                "expected_vs_actual": {
-                    "expected_outcome": expected_outcome,
-                    "expected_score": expected_score,
                 },
-            },
-            applied_at=now,
-        )
-        db.add(adjustment)
-        db.commit()
-        db.refresh(adjustment)
-        return adjustment
+                applied_at=now,
+            )
+            db.add(adjustment)
+            db.flush()
+            db.refresh(adjustment)
+            return adjustment
     except Exception as exc:
         logger.warning("[InfinityLoop] run_loop failed for %s: %s", user_id, exc)
         try:

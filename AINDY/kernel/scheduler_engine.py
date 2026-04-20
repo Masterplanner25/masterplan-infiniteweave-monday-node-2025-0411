@@ -681,8 +681,11 @@ class SchedulerEngine:
         db = None
         try:
             db = SessionLocal()
+            from AINDY.db.database import utcnow
             wait_condition = entry.get("wait_condition") or {}
             timeout_at = None
+            waited_since = utcnow()
+            max_wait_seconds = None
             raw_trigger = wait_condition.get("trigger_at")
             if raw_trigger is not None:
                 try:
@@ -704,6 +707,14 @@ class SchedulerEngine:
                     .first()
                 )
                 timeout_at = getattr(flow_run, "wait_deadline", None) if flow_run else None
+            if timeout_at is not None:
+                try:
+                    max_wait_seconds = max(
+                        0,
+                        int((timeout_at - waited_since).total_seconds()),
+                    )
+                except Exception:
+                    max_wait_seconds = None
 
             event_type = (
                 wait_condition.get("event_name")
@@ -715,6 +726,8 @@ class SchedulerEngine:
                     run_id=str(run_id),
                     event_type=str(event_type),
                     correlation_id=entry.get("correlation_id"),
+                    waited_since=waited_since,
+                    max_wait_seconds=max_wait_seconds,
                     timeout_at=timeout_at,
                     eu_id=entry.get("eu_id"),
                     priority=entry.get("priority") or PRIORITY_NORMAL,

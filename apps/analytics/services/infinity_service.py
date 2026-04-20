@@ -48,10 +48,18 @@ from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from AINDY.platform_layer.user_ids import parse_user_id
 
+from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
+
 logger = logging.getLogger(__name__)
+_SCORE_WRITE_RETRY_LIMIT = 5
+
+
+class _ConcurrentScoreWrite(RuntimeError):
+    """Raised when a version-checked score write loses a concurrent update race."""
 
 _ORCHESTRATOR_ACTIVE: ContextVar[bool] = ContextVar(
     "infinity_orchestrator_active",
@@ -483,91 +491,136 @@ def calculate_infinity_score(
         _ensure_orchestrated()
         from apps.analytics.models import UserScore, ScoreHistory
         user_db_id = _db_user_id(user_id)
+        for attempt in range(_SCORE_WRITE_RETRY_LIMIT):
+            try:
+                with transaction_scope(db):
+                    now = datetime.now(timezone.utc)
+                    if supports_managed_transactions(db):
+                        existing = db.execute(
+                            select(UserScore)
+                            .where(UserScore.user_id == user_db_id)
+                            .with_for_update()
+                        ).scalar_one_or_none()
+                    else:
+                        existing = (
+                            db.query(UserScore)
+                            .filter(UserScore.user_id == user_db_id)
+                            .first()
+                        )
 
-        now = datetime.now(timezone.utc)
+                    if existing is None:
+                        existing = UserScore(
+                            user_id=user_db_id,
+                            master_score=0.0,
+                            execution_speed_score=0.0,
+                            decision_efficiency_score=0.0,
+                            ai_productivity_boost_score=0.0,
+                            focus_quality_score=0.0,
+                            masterplan_progress_score=0.0,
+                            confidence="baseline",
+                            data_points_used=0,
+                            trigger_event="baseline",
+                            calculated_at=now,
+                            updated_at=now,
+                            lock_version=1,
+                        )
+                        db.add(existing)
+                        db.flush()
 
-        # Calculate all 5 KPIs
-        exec_speed, dp1 = calculate_execution_speed(user_id, db)
-        decision_eff, dp2 = calculate_decision_efficiency(user_id, db)
-        ai_boost, dp3 = calculate_ai_productivity_boost(user_id, db)
-        focus_qual, dp4 = calculate_focus_quality(user_id, db)
-        plan_progress, dp5 = calculate_masterplan_progress(user_id, db)
+                    previous_master = float(existing.master_score or 0.0)
+                    previous_version = int(existing.lock_version or 0)
 
-        total_data_points = dp1 + dp2 + dp3 + dp4 + dp5
+                    exec_speed, dp1 = calculate_execution_speed(user_id, db)
+                    decision_eff, dp2 = calculate_decision_efficiency(user_id, db)
+                    ai_boost, dp3 = calculate_ai_productivity_boost(user_id, db)
+                    focus_qual, dp4 = calculate_focus_quality(user_id, db)
+                    plan_progress, dp5 = calculate_masterplan_progress(user_id, db)
+                    total_data_points = dp1 + dp2 + dp3 + dp4 + dp5
 
-        # Master score (weighted average)
-        master = round(
-            exec_speed   * KPI_WEIGHTS["execution_speed"] +
-            decision_eff * KPI_WEIGHTS["decision_efficiency"] +
-            ai_boost     * KPI_WEIGHTS["ai_productivity_boost"] +
-            focus_qual   * KPI_WEIGHTS["focus_quality"] +
-            plan_progress * KPI_WEIGHTS["masterplan_progress"],
-            2
-        )
+                    master = round(
+                        exec_speed * KPI_WEIGHTS["execution_speed"] +
+                        decision_eff * KPI_WEIGHTS["decision_efficiency"] +
+                        ai_boost * KPI_WEIGHTS["ai_productivity_boost"] +
+                        focus_qual * KPI_WEIGHTS["focus_quality"] +
+                        plan_progress * KPI_WEIGHTS["masterplan_progress"],
+                        2,
+                    )
 
-        # Confidence based on data density
-        if total_data_points >= 50:
-            confidence = "high"
-        elif total_data_points >= 10:
-            confidence = "medium"
-        else:
-            confidence = "low"
+                    if total_data_points >= 50:
+                        confidence = "high"
+                    elif total_data_points >= 10:
+                        confidence = "medium"
+                    else:
+                        confidence = "low"
 
-        # Upsert user_scores
-        existing = db.query(UserScore).filter(
-            UserScore.user_id == user_db_id
-        ).first()
+                    score_delta = master - previous_master
+                    next_version = previous_version + 1
 
-        previous_master = existing.master_score if existing else 0.0
-        score_delta = master - previous_master
+                    if supports_managed_transactions(db):
+                        updated = (
+                            db.query(UserScore)
+                            .filter(
+                                UserScore.id == existing.id,
+                                UserScore.lock_version == previous_version,
+                            )
+                            .update(
+                                {
+                                    UserScore.master_score: master,
+                                    UserScore.execution_speed_score: exec_speed,
+                                    UserScore.decision_efficiency_score: decision_eff,
+                                    UserScore.ai_productivity_boost_score: ai_boost,
+                                    UserScore.focus_quality_score: focus_qual,
+                                    UserScore.masterplan_progress_score: plan_progress,
+                                    UserScore.data_points_used: total_data_points,
+                                    UserScore.confidence: confidence,
+                                    UserScore.trigger_event: trigger_event,
+                                    UserScore.calculated_at: now,
+                                    UserScore.updated_at: now,
+                                    UserScore.lock_version: next_version,
+                                },
+                                synchronize_session=False,
+                            )
+                        )
+                        if updated != 1:
+                            raise _ConcurrentScoreWrite(f"Lost score update race for user {user_id}")
+                    else:
+                        existing.master_score = master
+                        existing.execution_speed_score = exec_speed
+                        existing.decision_efficiency_score = decision_eff
+                        existing.ai_productivity_boost_score = ai_boost
+                        existing.focus_quality_score = focus_qual
+                        existing.masterplan_progress_score = plan_progress
+                        existing.data_points_used = total_data_points
+                        existing.confidence = confidence
+                        existing.trigger_event = trigger_event
+                        existing.calculated_at = now
+                        existing.updated_at = now
+                        existing.lock_version = next_version
+                        db.add(existing)
 
-        if existing:
-            existing.master_score = master
-            existing.execution_speed_score = exec_speed
-            existing.decision_efficiency_score = decision_eff
-            existing.ai_productivity_boost_score = ai_boost
-            existing.focus_quality_score = focus_qual
-            existing.masterplan_progress_score = plan_progress
-            existing.data_points_used = total_data_points
-            existing.confidence = confidence
-            existing.trigger_event = trigger_event
-            existing.calculated_at = now
-            existing.updated_at = now
-            db.add(existing)
-        else:
-            new_score = UserScore(
-                user_id=user_db_id,
-                master_score=master,
-                execution_speed_score=exec_speed,
-                decision_efficiency_score=decision_eff,
-                ai_productivity_boost_score=ai_boost,
-                focus_quality_score=focus_qual,
-                masterplan_progress_score=plan_progress,
-                data_points_used=total_data_points,
-                confidence=confidence,
-                trigger_event=trigger_event,
-                calculated_at=now,
-            )
-            db.add(new_score)
-
-        # Append to score_history
-        history_entry = ScoreHistory(
-            user_id=user_db_id,
-            master_score=master,
-            execution_speed_score=exec_speed,
-            decision_efficiency_score=decision_eff,
-            ai_productivity_boost_score=ai_boost,
-            focus_quality_score=focus_qual,
-            masterplan_progress_score=plan_progress,
-            trigger_event=trigger_event,
-            score_delta=round(score_delta, 2),
-            calculated_at=now,
-        )
-        db.add(history_entry)
-        db.commit()
+                    history_entry = ScoreHistory(
+                        user_id=user_db_id,
+                        master_score=master,
+                        execution_speed_score=exec_speed,
+                        decision_efficiency_score=decision_eff,
+                        ai_productivity_boost_score=ai_boost,
+                        focus_quality_score=focus_qual,
+                        masterplan_progress_score=plan_progress,
+                        trigger_event=trigger_event,
+                        score_delta=round(score_delta, 2),
+                        calculated_at=now,
+                    )
+                    db.add(history_entry)
+                    db.flush()
+                break
+            except _ConcurrentScoreWrite:
+                db.rollback()
+                if attempt == _SCORE_WRITE_RETRY_LIMIT - 1:
+                    raise
+                continue
 
         logger.info(
-            "Infinity score for %s: %.1f (Δ%+.1f, trigger=%s)",
+            "Infinity score for %s: %.1f (delta %+.1f, trigger=%s)",
             user_id, master, score_delta, trigger_event
         )
 
@@ -587,6 +640,7 @@ def calculate_infinity_score(
                 "data_points_used": total_data_points,
                 "trigger_event": trigger_event,
                 "score_delta": round(score_delta, 2),
+                "lock_version": int(existing.lock_version or 0),
                 "calculated_at": now.isoformat(),
             },
         }

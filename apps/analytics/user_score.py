@@ -50,6 +50,7 @@ class UserScore(Base):
     data_points_used = Column(Integer, default=0)
     confidence = Column(String, nullable=True)
     trigger_event = Column(String, nullable=True)
+    lock_version = Column(Integer, nullable=False, default=1, server_default="1")
 
     calculated_at = Column(DateTime(timezone=True), server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())

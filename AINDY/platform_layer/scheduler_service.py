@@ -193,6 +193,16 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     )
 
     scheduler.add_job(
+        _expire_timed_out_wait_flows,
+        trigger=IntervalTrigger(seconds=60),
+        id="expire_timed_out_wait_flows",
+        name="Expire timed-out WaitingFlowRun waits",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
         _recover_stuck_flow_runs,
         trigger=IntervalTrigger(minutes=5),
         id="recover_stuck_flow_runs",
@@ -291,6 +301,15 @@ def _expire_timed_out_waits() -> None:
         run_expire_timed_out_waits_job()
     except Exception as exc:
         logger.warning("Timed-out WAIT recovery dispatch failed: %s", exc)
+
+
+def _expire_timed_out_wait_flows() -> None:
+    try:
+        from AINDY.platform_layer.recovery_jobs import run_expire_timed_out_wait_flows_job
+
+        run_expire_timed_out_wait_flows_job()
+    except Exception as exc:
+        logger.warning("Timed-out WaitingFlowRun recovery dispatch failed: %s", exc)
 
 
 def _recover_stuck_flow_runs() -> None:

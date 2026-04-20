@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     OPENAI_CHAT_TIMEOUT_SECONDS: float = 30.0
     OPENAI_EMBEDDING_TIMEOUT_SECONDS: float = 15.0
     OPENAI_MAX_RETRIES: int = 3
+    OPENAI_RETRY_BACKOFF_BASE_SECONDS: float = 1.0
     FLOW_WAIT_TIMEOUT_MINUTES: int = 30
     STUCK_RUN_THRESHOLD_MINUTES: int = 15
 
@@ -124,9 +125,26 @@ class Settings(BaseSettings):
     AINDY_QUEUE_NAME: str = "aindy:jobs"
     AINDY_ASYNC_JOB_WORKERS: int = 4
     AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection
+    MAX_QUEUE_SIZE: int = Field(
+        default_factory=lambda: int(
+            os.getenv("MAX_QUEUE_SIZE", os.getenv("AINDY_ASYNC_QUEUE_MAXSIZE", "100"))
+        )
+    )
+    AINDY_QUEUE_SATURATION_THRESHOLD: int = Field(
+        default_factory=lambda: int(
+            os.getenv(
+                "AINDY_QUEUE_SATURATION_THRESHOLD",
+                os.getenv("MAX_QUEUE_SIZE", os.getenv("AINDY_ASYNC_QUEUE_MAXSIZE", "100")),
+            )
+        )
+    )
+    AINDY_ASYNC_MAX_CONCURRENT_GLOBAL: int = 0
+    AINDY_ASYNC_MAX_CONCURRENT_PER_USER: int = 0
     USE_NATIVE_SCORER: bool = True
     ENFORCE_EXECUTION_CONTRACT: bool = True
     SKIP_MONGO_PING: bool = False
+    MONGO_REQUIRED: bool = False
+    MONGO_HEALTH_TIMEOUT_MS: int = 5000
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
@@ -155,11 +173,14 @@ class Settings(BaseSettings):
     @field_validator("MONGO_URL")
     @classmethod
     def ensure_mongo_url(cls, v: str) -> str:
-        if not v or not v.strip():
-            if os.getenv("AINDY_SKIP_MONGO_PING", "0").lower() in {"1","true","yes"}:
+        normalized = (v or "").strip()
+        skip_ping = os.getenv("AINDY_SKIP_MONGO_PING", "0").lower() in {"1", "true", "yes"}
+        mongo_required = os.getenv("MONGO_REQUIRED", "0").lower() in {"1", "true", "yes"}
+        if not normalized:
+            if skip_ping or not mongo_required:
                 return ""
-            raise ValueError("MONGO_URL is required for runtime")
-        return v.strip()
+            raise ValueError("MONGO_URL is required when MONGO_REQUIRED=true")
+        return normalized
 
     # --- Helper properties ---
     @property

@@ -17,11 +17,17 @@ from openai import OpenAI
 from AINDY.config import settings
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.platform_layer.metrics import (
+    embedding_generation_latency_seconds,
+    embedding_generation_retries_total,
+    embedding_generation_total,
+)
 from AINDY.platform_layer.openai_client import create_embedding
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
 _DEFAULT_PERFORM_EXTERNAL_CALL = perform_external_call
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingFailedError(RuntimeError):
@@ -72,8 +78,11 @@ def generate_embedding(text: str) -> list:
     text = text[:32000]
     client = get_client()
     last_exc: Exception | None = None
+    started_at = time.perf_counter()
+    max_attempts = max(1, int(settings.OPENAI_MAX_RETRIES or 1))
+    backoff_base = max(0.0, float(settings.OPENAI_RETRY_BACKOFF_BASE_SECONDS or 0.0))
 
-    for attempt in range(3):
+    for attempt in range(max_attempts):
         try:
             response = perform_external_call(
                 service_name="openai",
@@ -90,20 +99,41 @@ def generate_embedding(text: str) -> list:
             )
             embedding = response.data[0].embedding
             assert len(embedding) == EMBEDDING_DIMENSIONS
+            if attempt:
+                embedding_generation_retries_total.inc(attempt)
+            embedding_generation_total.labels(outcome="success").inc()
+            embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
             return embedding
         except CircuitOpenError as e:
+            embedding_generation_total.labels(outcome="failure").inc()
+            embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
             raise EmbeddingFailedError(
                 f"Embedding generation failed fast because the OpenAI circuit is open: {e}"
             ) from e
         except Exception as e:
             last_exc = e
-            if attempt < 2:
-                time.sleep(2 ** attempt)
+            logger.warning(
+                "[EmbeddingService] embedding attempt %s/%s failed: %s",
+                attempt + 1,
+                max_attempts,
+                e,
+            )
+            if attempt < max_attempts - 1:
+                time.sleep(backoff_base * (2 ** attempt))
 
     # All 3 attempts failed — raise a typed error so callers can mark the
     # node as failed rather than silently storing a zero vector.
+    if max_attempts > 1:
+        embedding_generation_retries_total.inc(max_attempts - 1)
+    embedding_generation_total.labels(outcome="failure").inc()
+    embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
+    logger.error(
+        "[EmbeddingService] embedding generation failed after %s attempts: %s",
+        max_attempts,
+        last_exc,
+    )
     raise EmbeddingFailedError(
-        f"Embedding generation failed after 3 attempts: {last_exc}"
+        f"Embedding generation failed after {max_attempts} attempts: {last_exc}"
     ) from last_exc
 
 
