@@ -860,6 +860,10 @@ def _run_to_dict(run) -> dict:
     return result
 
 
+# Public API — callers outside this module must use this name.
+run_to_dict = _run_to_dict
+
+
 def _normalize_agent_events(timeline: Optional[dict]) -> list[dict]:
     if not timeline or not isinstance(timeline.get("events"), list):
         return []

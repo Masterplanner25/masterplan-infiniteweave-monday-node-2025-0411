@@ -34,7 +34,7 @@ def test_flow_execution_response_includes_execution_record():
 
 
 def test_run_to_dict_includes_execution_record():
-    from AINDY.agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import run_to_dict
 
     run = SimpleNamespace(
         id=uuid4(),
@@ -61,9 +61,20 @@ def test_run_to_dict_includes_execution_record():
         completed_at=None,
     )
 
-    payload = _run_to_dict(run)
+    payload = run_to_dict(run)
 
     assert payload["execution_record"]["run_id"] == str(run.id)
     assert payload["execution_record"]["trace_id"] == "trace-agent-1"
     assert payload["execution_record"]["execution_unit_id"] == "flow-1"
     assert payload["execution_record"]["source"] == "agent"
+
+
+def test_run_to_dict_public_api_exists():
+    from AINDY.agents.agent_runtime import run_to_dict
+    assert callable(run_to_dict)
+
+
+def test_run_to_dict_public_is_same_as_private():
+    from AINDY.agents import agent_runtime
+    assert hasattr(agent_runtime, "run_to_dict")
+    assert agent_runtime.run_to_dict is agent_runtime._run_to_dict

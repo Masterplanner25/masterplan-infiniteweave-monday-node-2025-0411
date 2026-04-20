@@ -3,7 +3,29 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
+
+# Stub prometheus_client before any domain modules import it.
+if "prometheus_client" not in sys.modules:
+    _pm = types.ModuleType("prometheus_client")
+
+    class _Metric:
+        def __init__(self, *a, **kw): pass
+        def labels(self, **kw): return self
+        def inc(self, *a): pass
+        def observe(self, *a): pass
+        def set(self, *a): pass
+
+    for _cls_name in ("Counter", "Histogram", "Gauge", "Summary", "Info", "Enum", "CollectorRegistry"):
+        setattr(_pm, _cls_name, type(_cls_name, (_Metric,), {}))
+
+    def _make_asgi_app(*a, **kw):
+        async def _app(scope, receive, send): pass
+        return _app
+
+    _pm.make_asgi_app = _make_asgi_app
+    sys.modules["prometheus_client"] = _pm
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("MONGO_URL", "")

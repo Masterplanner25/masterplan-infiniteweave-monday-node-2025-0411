@@ -34,9 +34,9 @@ logger = logging.getLogger(__name__)
 
 
 def _run_to_response(run) -> dict:
-    from AINDY.agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import run_to_dict
 
-    return _run_to_dict(run)
+    return run_to_dict(run)
 
 
 def _current_user_id(current_user):

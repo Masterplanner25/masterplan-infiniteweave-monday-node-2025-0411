@@ -27,10 +27,10 @@ async def ingest_linkedin_manual(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
         from runtime.flow_engine import run_flow
 
-        assert_masterplan_owned(db, data.masterplan_id, user_id)
+        assert_masterplan_owned_via_syscall(data.masterplan_id, user_id, db)
 
         result = run_flow(
             "analytics_linkedin_ingest",
@@ -69,10 +69,10 @@ async def get_masterplan_analytics(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
         from runtime.flow_engine import run_flow
 
-        assert_masterplan_owned(db, masterplan_id, user_id)
+        assert_masterplan_owned_via_syscall(masterplan_id, user_id, db)
 
         result = run_flow(
             "analytics_masterplan_get",
@@ -104,10 +104,10 @@ async def get_masterplan_summary(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.masterplan.services.masterplan_service import assert_masterplan_owned
+        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
         from runtime.flow_engine import run_flow
 
-        assert_masterplan_owned(db, masterplan_id, user_id)
+        assert_masterplan_owned_via_syscall(masterplan_id, user_id, db)
 
         result = run_flow(
             "analytics_masterplan_summary",

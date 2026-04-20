@@ -68,7 +68,7 @@ def agent_run_create_node(state, context):
 def agent_runs_list_node(state, context):
     try:
         from AINDY.db.models.agent_run import AgentRun
-        from AINDY.agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
@@ -81,7 +81,7 @@ def agent_runs_list_node(state, context):
         runs = query.order_by(AgentRun.created_at.desc()).limit(limit).all()
         rows = []
         for run in runs:
-            row = _run_to_dict(run)
+            row = run_to_dict(run)
             row["goal"] = row.get("objective")
             rows.append(row)
         return {"status": "SUCCESS", "output_patch": {"agent_runs_list_result": rows}}
@@ -92,7 +92,7 @@ def agent_runs_list_node(state, context):
 def agent_run_get_node(state, context):
     try:
         from AINDY.db.models.agent_run import AgentRun
-        from AINDY.agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
@@ -106,7 +106,7 @@ def agent_run_get_node(state, context):
             return {"status": "FAILURE", "error": "HTTP_404:Run not found"}
         if run.user_id != user_id:
             return {"status": "FAILURE", "error": "HTTP_403:Not authorized"}
-        row = _run_to_dict(run)
+        row = run_to_dict(run)
         row["goal"] = row.get("objective")
         return {"status": "SUCCESS", "output_patch": {"agent_run_get_result": row}}
     except Exception as e:

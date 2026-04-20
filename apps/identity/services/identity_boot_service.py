@@ -89,7 +89,7 @@ def get_recent_agent_runs(
     *,
     limit: int = _BOOT_RUN_LIMIT,
 ) -> list[dict[str, Any]]:
-    from AINDY.agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import run_to_dict
 
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     rows = (
@@ -101,7 +101,7 @@ def get_recent_agent_runs(
     )
     result = []
     for row in rows:
-        item = _run_to_dict(row)
+        item = run_to_dict(row)
         item["goal"] = item.get("objective")
         result.append(item)
     return result
