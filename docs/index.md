@@ -13,6 +13,7 @@
 | [Syscall Reference](syscalls/index.md) | Every v1 syscall with examples |
 | [Nodus](nodus/index.md) | The control language |
 | [SDK](sdk/index.md) | Python SDK for external integrations |
+| [Watcher](watcher/index.md) | OS-level attention monitoring agent |
 | [Tutorials](tutorials/index.md) | Three end-to-end walkthroughs |
 
 ---

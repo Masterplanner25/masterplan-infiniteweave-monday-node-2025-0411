@@ -252,6 +252,40 @@ client = AINDYClient(
 
 ---
 
+## Response envelope
+
+All syscall-backed methods return the standard envelope:
+
+```json
+{
+    "status":            "success",
+    "data":              {},
+    "version":           "v1",
+    "warning":           null,
+    "trace_id":          "run-abc123",
+    "execution_unit_id": "run-abc123",
+    "syscall":           "sys.v1.memory.read",
+    "duration_ms":       12,
+    "error":             null
+}
+```
+
+`nodus.run_script()` returns a different shape — see the Nodus section above.
+
+---
+
+## Server-side requirement
+
+The SDK requires the `POST /platform/syscall` endpoint. After pulling a fresh
+backend update run:
+
+```bash
+alembic upgrade head
+# then restart the server
+```
+
+---
+
 ## Sub-API quick reference
 
 | Sub-API | Methods |

@@ -2,7 +2,10 @@
 
 OS-level attention monitoring agent for the A.I.N.D.Y. system.
 
-The Watcher is a standalone Python process that runs alongside your work session. It monitors active window focus, tracks session state, detects distractions, and sends structured signals to the A.I.N.D.Y. API — closing the observation gap in the Infinity Algorithm Support System.
+The Watcher is a standalone Python process that runs alongside your work
+session. It monitors active window focus, tracks session state, detects
+distractions, and sends structured signals to the A.I.N.D.Y. API — closing
+the observation gap in the Infinity Algorithm Support System.
 
 ---
 
@@ -29,6 +32,8 @@ The Watcher is a standalone Python process that runs alongside your work session
 └─────────────────────────────────────────────────────────┘
 ```
 
+Source: `AINDY/watcher/`
+
 ---
 
 ## Files
@@ -49,7 +54,7 @@ The Watcher is a standalone Python process that runs alongside your work session
 ### 1. Install dependencies
 
 ```bash
-pip install -r watcher/requirements_watcher.txt
+pip install -r AINDY/watcher/requirements_watcher.txt
 ```
 
 **Platform-specific (optional, improves window title detection):**
@@ -58,8 +63,6 @@ pip install -r watcher/requirements_watcher.txt
 - Windows: uses `ctypes` (stdlib) — no additional install needed
 
 ### 2. Configure environment
-
-Set environment variables in your shell or deployment environment:
 
 ```env
 AINDY_API_KEY=your-api-key-here
@@ -70,24 +73,24 @@ AINDY_WATCHER_DRY_RUN=false
 ### 3. Run
 
 ```bash
-# From the AINDY/ directory:
-python -m watcher.watcher
+# From the repo root:
+python -m AINDY.watcher.watcher
 
 # Dry run (logs signals, no HTTP)
-python -m watcher.watcher --dry-run
+python -m AINDY.watcher.watcher --dry-run
 
 # Custom polling interval
-python -m watcher.watcher --poll-interval 10
+python -m AINDY.watcher.watcher --poll-interval 10
 
 # Debug logging
-python -m watcher.watcher --log-level DEBUG
+python -m AINDY.watcher.watcher --log-level DEBUG
 ```
 
 ---
 
-## Signal Types
+## Signal types
 
-| Signal | Triggered When |
+| Signal | Triggered when |
 |--------|----------------|
 | `session_started` | 30s of confirmed work activity detected |
 | `session_ended` | Session closes (idle or distraction > timeout) |
@@ -98,7 +101,7 @@ python -m watcher.watcher --log-level DEBUG
 
 ---
 
-## Configuration Reference
+## Configuration reference
 
 | Environment Variable | Default | Description |
 |---|---|---|
@@ -116,7 +119,7 @@ python -m watcher.watcher --log-level DEBUG
 
 ---
 
-## API Endpoints
+## API endpoints
 
 Both endpoints require `X-API-Key` header.
 
@@ -140,9 +143,7 @@ Receive a batch of signals from the Watcher process.
 }
 ```
 
-Response: `{"accepted": 1, "session_ended_count": 0}`
-
-Actual response shape:
+Response:
 
 ```json
 {
@@ -164,7 +165,7 @@ Parameters: `session_id`, `signal_type`, `user_id`, `limit` (1–500, default 50
 
 ---
 
-## Session State Machine
+## Session state machine
 
 ```
 IDLE
@@ -185,12 +186,13 @@ IDLE                                   ▼
 
 ---
 
-## Infinity Algorithm Integration
+## Infinity Algorithm integration
 
-`session_ended.focus_score` feeds directly into engagement scoring.
-`distraction_detected` events reduce TWR efficiency.
-`session_started` timestamps correlate with operation `start_time` for true `time_on_operation`.
+Watcher signals feed directly into the Infinity Algorithm scoring pipeline:
 
-See: [docs/apps/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md](../../docs/apps/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md) §3.2 (Observation Layer).
+- `session_ended.focus_score` feeds into engagement scoring
+- `distraction_detected` events reduce TWR (time-weighted return) efficiency
+- `session_started` timestamps correlate with operation `start_time` for true `time_on_operation`
 
-Full reference documentation: [docs/watcher/index.md](../../docs/watcher/index.md).
+See [INFINITY_ALGORITHM_SUPPORT_SYSTEM.md](../apps/INFINITY_ALGORITHM_SUPPORT_SYSTEM.md)
+§3.2 (Observation Layer) for how these signals are weighted.
