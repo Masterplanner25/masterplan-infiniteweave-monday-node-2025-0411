@@ -1,6 +1,6 @@
 import os
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Index, Integer, String
 from sqlalchemy.sql import func
 
 from AINDY.db.database import Base, utcnow
@@ -8,10 +8,13 @@ from AINDY.db.database import Base, utcnow
 
 class WaitingFlowRun(Base):
     __tablename__ = "waiting_flow_runs"
+    __table_args__ = (
+        Index("ix_waiting_flow_runs_correlation", "correlation_id"),
+    )
 
     run_id = Column(String(64), primary_key=True)
     event_type = Column(String(128), nullable=False, index=True)
-    correlation_id = Column(String(128), nullable=True, index=True)
+    correlation_id = Column(String(128), nullable=True)
     registered_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     waited_since = Column(
         DateTime(timezone=True),
