@@ -8,7 +8,6 @@ from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from datetime import datetime
 import uuid
-from apps.analytics.services.calculation_services import save_calculation
 from AINDY.services.auth_service import verify_api_key
 
 from apps.network_bridge.services import network_bridge_services
@@ -75,6 +74,8 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
     Logs the event into A.I.N.D.Y.'s metrics system (calculation_results table).
     """
     def handler(_ctx):
+        from apps.analytics.services.calculation_services import save_calculation
+
         metric_name = f"UserEvent::{event.platform}"
         result = save_calculation(db, metric_name, 1.0)
         logger.info("Bridge user event: %s via %s", event.name, event.platform)

@@ -4,10 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import case
 from sqlalchemy import select
-from apps.tasks.services.task_service import get_next_ready_task
-
 logger = logging.getLogger(__name__)
-from apps.masterplan.services.goal_service import calculate_goal_alignment
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.platform_layer.trace_context import get_current_trace_id
@@ -273,6 +270,8 @@ def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
 
 
 def _get_top_incomplete_task(user_id: str, db) -> dict | None:
+    from apps.tasks.services.task_service import get_next_ready_task
+
     try:
         next_ready = get_next_ready_task(db=db, user_id=user_id)
         if next_ready:
@@ -485,6 +484,8 @@ def _apply_goal_weighting(
     payload: dict,
     goals: list[dict] | None = None,
 ) -> tuple[str, dict]:
+    from apps.masterplan.services.goal_service import calculate_goal_alignment
+
     ranked_goals = goals or []
     if not ranked_goals:
         adjusted_payload = {**payload, "goal_summary": {"goal_count": 0, "goal_alignment": 0.0}}
