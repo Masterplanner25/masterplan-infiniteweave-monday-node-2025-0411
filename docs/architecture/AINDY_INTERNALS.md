@@ -1,6 +1,9 @@
-# A.I.N.D.Y.
+# A.I.N.D.Y. Internals
 
-Core backend for the Masterplan Infinite Weave project.
+Developer reference for the AINDY/ directory — structure, runtime notes, and
+Nodus host function inventory. For the public-facing platform description see
+the root [README.md](../../README.md). For architecture decisions see
+[docs/architecture/SYSTEM_SPEC.md](SYSTEM_SPEC.md).
 
 ## Overview
 
@@ -84,10 +87,10 @@ AINDY/
 - Trace ID = `context.execution_unit_id`; query via `GET /platform/nodus/trace/{trace_id}`.
 - Platform API keys (scoped capabilities) gate all `/platform/*` endpoints; managed via `POST/GET/DELETE /platform/keys`.
 - Dynamic registry (flows/nodes/webhooks) is persisted to DB and restored on startup by `platform_loader.py`.
-- All cross-boundary calls from Nodus scripts route through `SyscallDispatcher` — the single gated interface for memory, flow, and event operations. See `docs/architecture/SYSCALL_SYSTEM.md`.
+- All cross-boundary calls from Nodus scripts route through `SyscallDispatcher` — the single gated interface for memory, flow, and event operations. See [docs/runtime/SYSCALL_SYSTEM.md](../runtime/SYSCALL_SYSTEM.md).
 - Syscalls are versioned (`sys.v1.*`, `sys.v2.*`); every call declares an ABI contract (input/output schema, deprecation status). Introspect via `GET /platform/syscalls`.
-- Memory nodes are path-addressable via the Memory Address Space (MAS): `/memory/{tenant}/{namespace}/{addr_type}/{node_id}`. MAS endpoints: `GET /platform/memory`, `GET /platform/memory/tree`, `GET /platform/memory/trace`. See `docs/architecture/MEMORY_ADDRESS_SPACE.md`.
-- The OS Isolation Layer enforces tenant isolation and resource quotas on every syscall dispatch. See `docs/architecture/OS_ISOLATION_LAYER.md`.
+- Memory nodes are path-addressable via the Memory Address Space (MAS): `/memory/{tenant}/{namespace}/{addr_type}/{node_id}`. MAS endpoints: `GET /platform/memory`, `GET /platform/memory/tree`, `GET /platform/memory/trace`. See [docs/runtime/MEMORY_ADDRESS_SPACE.md](../runtime/MEMORY_ADDRESS_SPACE.md).
+- The OS Isolation Layer enforces tenant isolation and resource quotas on every syscall dispatch. See [docs/runtime/OS_ISOLATION_LAYER.md](../runtime/OS_ISOLATION_LAYER.md).
 
 ## Development
 
@@ -108,12 +111,18 @@ cd client && npm run dev
 ## Documentation
 
 Key current docs:
-- `docs/architecture/SYSTEM_SPEC.md`
-- `docs/architecture/RUNTIME_BEHAVIOR.md`
-- `docs/architecture/EXECUTION_CONTRACT.md`
-- `docs/architecture/EXECUTION_AUDIT.md`
-- `docs/architecture/SYSCALL_SYSTEM.md`        ← syscall layer, ABI versioning, handler contract
-- `docs/architecture/MEMORY_ADDRESS_SPACE.md`  ← MAS path structure, DAO methods, wildcard patterns
-- `docs/architecture/OS_ISOLATION_LAYER.md`    ← tenant isolation, quota enforcement, WAIT/RESUME
-- `docs/interfaces/API_CONTRACTS.md`
-- `docs/engineering/DEPLOYMENT_MODEL.md`
+
+| Doc | Path |
+|---|---|
+| System Spec | [docs/architecture/SYSTEM_SPEC.md](SYSTEM_SPEC.md) |
+| Plugin Registry Pattern | [docs/architecture/PLUGIN_REGISTRY_PATTERN.md](PLUGIN_REGISTRY_PATTERN.md) |
+| Cross-Domain Coupling | [docs/architecture/CROSS_DOMAIN_COUPLING.md](CROSS_DOMAIN_COUPLING.md) |
+| Runtime Behavior | [docs/runtime/RUNTIME_BEHAVIOR.md](../runtime/RUNTIME_BEHAVIOR.md) |
+| Execution Contract | [docs/runtime/EXECUTION_CONTRACT.md](../runtime/EXECUTION_CONTRACT.md) |
+| Execution Audit | [docs/runtime/EXECUTION_AUDIT.md](../runtime/EXECUTION_AUDIT.md) |
+| Syscall System | [docs/runtime/SYSCALL_SYSTEM.md](../runtime/SYSCALL_SYSTEM.md) |
+| Memory Address Space | [docs/runtime/MEMORY_ADDRESS_SPACE.md](../runtime/MEMORY_ADDRESS_SPACE.md) |
+| OS Isolation Layer | [docs/runtime/OS_ISOLATION_LAYER.md](../runtime/OS_ISOLATION_LAYER.md) |
+| Agent Runtime | [docs/runtime/AGENT_RUNTIME.md](../runtime/AGENT_RUNTIME.md) |
+| API Contracts | [docs/platform/interfaces/API_CONTRACTS.md](../platform/interfaces/API_CONTRACTS.md) |
+| Deployment Model | [docs/deployment/DEPLOYMENT_MODEL.md](../deployment/DEPLOYMENT_MODEL.md) |

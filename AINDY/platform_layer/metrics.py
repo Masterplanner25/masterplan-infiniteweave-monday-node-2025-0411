@@ -148,3 +148,35 @@ async_queue_failure_total = Counter(
     ["backend", "stage"],
     registry=REGISTRY,
 )
+
+request_metric_drops_total = Counter(
+    "aindy_request_metric_drops_total",
+    "Number of RequestMetric rows dropped due to queue saturation",
+    registry=REGISTRY,
+)
+
+startup_recovery_failure_total = Counter(
+    "aindy_startup_recovery_failure_total",
+    "Number of startup recovery scan failures",
+    ["recovery_type"],
+    registry=REGISTRY,
+)
+
+startup_recovery_runs_recovered_total = Counter(
+    "aindy_startup_recovery_runs_recovered_total",
+    "Number of stuck runs recovered at startup",
+    ["recovery_type"],
+    registry=REGISTRY,
+)
+
+wait_recovery_poll_failure_total = Counter(
+    "aindy_wait_recovery_poll_failure_total",
+    "Number of wait recovery poll failures (background job)",
+    registry=REGISTRY,
+)
+
+system_health_tier = Gauge(
+    "aindy_system_health_tier",
+    "Current system health tier: 0=healthy, 1=degraded, 2=critical",
+    registry=REGISTRY,
+)

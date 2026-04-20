@@ -16,14 +16,24 @@ Key project directories:
 
 ```
 docs/
-  architecture/   System architecture and specifications
-  engineering/    Deployment and testing documentation
-  governance/     System invariants and operational policies
-  interfaces/     API and component contracts
-  roadmap/        Evolution plan and technical debt
+  architecture/        System architecture, plugin registry, coupling rules
+  runtime/             Execution contract, syscall system, OS isolation, memory, agent runtime
+  apps/                Domain app documentation (ARM, Infinity Algorithm, social, search, etc.)
+  platform/
+    engineering/       Testing strategy, tech debt, scalability audit
+    governance/        Invariants, error handling policy, changelog, release notes
+    interfaces/        API and component contracts
+  deployment/          Docker setup, migration policy, deployment model
+  watcher/             Watcher agent setup and signal reference
+  sdk/                 Python SDK reference
+  nodus/               Nodus scripting language reference
+  syscalls/            Syscall reference
+  getting-started/     Quickstart guide
+  tutorials/           End-to-end walkthroughs
 
 AINDY/            Core system implementation
-client/           Client interface components
+apps/             Domain app modules
+client/           React frontend
 tests/            Test suite
 ```
 
@@ -37,7 +47,7 @@ This project uses a simple branching model.
 
 ```
 main        Stable production-ready code
-dev         Active development branch
+develop     Active development branch
 feature/*   Feature development
 fix/*       Bug fixes
 ```
@@ -45,8 +55,8 @@ fix/*       Bug fixes
 Guidelines:
 
 * `main` should always remain stable.
-* All development work should branch from `dev`.
-* Pull requests should target `dev` unless they are critical fixes.
+* All development work should branch from `develop`.
+* Pull requests should target `develop` unless they are critical fixes.
 
 Example:
 
@@ -173,9 +183,10 @@ docs/
 Examples:
 
 ```
-docs/interfaces/API_CONTRACTS.md
-docs/governance/INVARIANTS.md
+docs/platform/interfaces/API_CONTRACTS.md
+docs/platform/governance/INVARIANTS.md
 docs/architecture/SYSTEM_SPEC.md
+docs/runtime/EXECUTION_CONTRACT.md
 ```
 
 ---
@@ -185,7 +196,7 @@ docs/architecture/SYSTEM_SPEC.md
 Error handling should follow the policies defined in:
 
 ```
-docs/governance/ERROR_HANDLING_POLICY.md
+docs/platform/governance/ERROR_HANDLING_POLICY.md
 ```
 
 Avoid introducing inconsistent exception behavior.
@@ -197,7 +208,7 @@ Avoid introducing inconsistent exception behavior.
 The core assumptions of the system are defined in:
 
 ```
-docs/governance/INVARIANTS.md
+docs/platform/governance/INVARIANTS.md
 ```
 
 Contributors should not introduce changes that violate these invariants without updating the documentation.

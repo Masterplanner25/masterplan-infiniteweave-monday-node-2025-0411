@@ -626,11 +626,11 @@ class TestSchedulerETAJob:
     def test_daily_eta_job_registered_in_system_jobs(self):
         """_register_system_jobs must add the daily_eta_recalculation job."""
         from AINDY.apscheduler.schedulers.background import BackgroundScheduler
-        import apps.bootstrap
+        from apps.masterplan import bootstrap as masterplan_bootstrap
         scheduler = BackgroundScheduler()
         from AINDY.platform_layer.scheduler_service import _register_system_jobs
 
-        apps.bootstrap.bootstrap()
+        masterplan_bootstrap.register()
         _register_system_jobs(scheduler)
 
         job_ids = [j.id for j in scheduler.get_jobs()]
@@ -638,16 +638,17 @@ class TestSchedulerETAJob:
 
     def test_eta_job_callable_exists(self):
         """_recalculate_all_etas_job must be importable."""
-        import apps.bootstrap
-        assert callable(apps.bootstrap._scheduler_recalculate_all_etas)
+        from apps.masterplan import bootstrap as masterplan_bootstrap
+
+        assert callable(masterplan_bootstrap._scheduler_recalculate_all_etas)
 
     def test_eta_job_handles_db_error_gracefully(self):
         """_recalculate_all_etas_job must not raise even if DB is unavailable."""
-        import apps.bootstrap
+        from apps.masterplan import bootstrap as masterplan_bootstrap
         # SessionLocal is a local import inside the job — patch at the db.database level
         with patch("AINDY.db.database.SessionLocal", side_effect=RuntimeError("no DB")):
             # Should not raise
-            apps.bootstrap._scheduler_recalculate_all_etas()
+            masterplan_bootstrap._scheduler_recalculate_all_etas()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

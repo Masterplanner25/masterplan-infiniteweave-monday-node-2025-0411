@@ -4,28 +4,47 @@ import os
 import subprocess
 import sys
 import types
+import importlib
 from pathlib import Path
 
-# Stub prometheus_client before any domain modules import it.
+# Prefer the real prometheus_client when it is installed because tests
+# inspect registry samples and hit the mounted /metrics ASGI app.
 if "prometheus_client" not in sys.modules:
-    _pm = types.ModuleType("prometheus_client")
+    try:
+        importlib.import_module("prometheus_client")
+    except ModuleNotFoundError:
+        _pm = types.ModuleType("prometheus_client")
 
-    class _Metric:
-        def __init__(self, *a, **kw): pass
-        def labels(self, **kw): return self
-        def inc(self, *a): pass
-        def observe(self, *a): pass
-        def set(self, *a): pass
+        class _Metric:
+            def __init__(self, *a, **kw): pass
+            def labels(self, **kw): return self
+            def inc(self, *a): pass
+            def observe(self, *a): pass
+            def set(self, *a): pass
 
-    for _cls_name in ("Counter", "Histogram", "Gauge", "Summary", "Info", "Enum", "CollectorRegistry"):
-        setattr(_pm, _cls_name, type(_cls_name, (_Metric,), {}))
+        for _cls_name in ("Counter", "Histogram", "Gauge", "Summary", "Info", "Enum", "CollectorRegistry"):
+            setattr(_pm, _cls_name, type(_cls_name, (_Metric,), {}))
 
-    def _make_asgi_app(*a, **kw):
-        async def _app(scope, receive, send): pass
-        return _app
+        def _make_asgi_app(*a, **kw):
+            async def _app(scope, receive, send):
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [(b"content-type", b"text/plain; version=0.0.4")],
+                    }
+                )
+                await send(
+                    {
+                        "type": "http.response.body",
+                        "body": b"",
+                        "more_body": False,
+                    }
+                )
+            return _app
 
-    _pm.make_asgi_app = _make_asgi_app
-    sys.modules["prometheus_client"] = _pm
+        _pm.make_asgi_app = _make_asgi_app
+        sys.modules["prometheus_client"] = _pm
 
 os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.setdefault("MONGO_URL", "")

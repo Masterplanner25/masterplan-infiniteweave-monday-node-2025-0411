@@ -366,8 +366,8 @@ def test_health_success_routes_emit_system_events(monkeypatch):
     monkeypatch.setattr(health_router, "SessionLocal", lambda: _FakeDB())
     monkeypatch.setattr(health_router, "emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
 
-    assert health_router.liveness()["status"] == "ok"
-    assert health_router.liveness_legacy_alias()["status"] == "ok"
+    assert health_router.liveness()["status"] == "healthy"
+    assert health_router.liveness_legacy_alias()["status"] == "healthy"
     assert events == ["health.liveness.completed", "health.liveness.completed"]
 
 

@@ -75,3 +75,90 @@ def emit_error_event(
         payload=payload,
         source=source,
     )
+
+
+def emit_recovery_failure(
+    recovery_type: str,
+    exc: Exception,
+    db,
+    *,
+    logger,
+) -> None:
+    """Emit best-effort monitoring signals for startup/background recovery failures."""
+    try:
+        from AINDY.platform_layer.metrics import startup_recovery_failure_total
+
+        startup_recovery_failure_total.labels(recovery_type=recovery_type).inc()
+    except Exception:
+        pass
+
+    event_payload = {
+        "recovery_type": recovery_type,
+        "error": str(exc),
+        "error_class": type(exc).__name__,
+    }
+
+    target_db = db
+    owns_db = False
+    if target_db is None:
+        try:
+            from AINDY.db.database import SessionLocal
+
+            target_db = SessionLocal()
+            owns_db = True
+        except Exception as inner:
+            logger.warning(
+                "[recovery] Could not open SystemEvent session for %s failure: %s",
+                recovery_type,
+                inner,
+            )
+            target_db = None
+
+    if target_db is not None:
+        try:
+            try:
+                target_db.rollback()
+            except Exception:
+                pass
+
+            from AINDY.core.system_event_service import emit_error_event as persist_error_event
+            from AINDY.core.system_event_types import SystemEventTypes
+
+            persist_error_event(
+                db=target_db,
+                error_type=getattr(
+                    SystemEventTypes,
+                    "STARTUP_RECOVERY_FAILED",
+                    "startup.recovery.failed",
+                ),
+                message=f"Startup recovery failed [{recovery_type}]: {exc}",
+                payload=event_payload,
+                source="startup_recovery",
+                required=False,
+            )
+            target_db.commit()
+        except Exception as inner:
+            logger.warning(
+                "[recovery] Could not emit SystemEvent for %s failure: %s",
+                recovery_type,
+                inner,
+            )
+            try:
+                target_db.rollback()
+            except Exception:
+                pass
+        finally:
+            if owns_db:
+                try:
+                    target_db.close()
+                except Exception:
+                    pass
+
+    logger.error(
+        "[startup] Recovery scan FAILED [%s]: %s - stuck runs may exist. "
+        "Check the SystemEvent table for recovery_type='%s'.",
+        recovery_type,
+        exc,
+        recovery_type,
+        exc_info=True,
+    )

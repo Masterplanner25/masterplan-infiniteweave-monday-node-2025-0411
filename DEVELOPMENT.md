@@ -139,14 +139,6 @@ Run the test suite using:
 pytest
 ```
 
-Example tests in the repository include:
-
-```
-test_calculations.py
-test_import.py
-test_routes.py
-```
-
 Tests should pass before submitting any pull request.
 
 ---
@@ -210,8 +202,8 @@ Relevant documents include:
 
 ```
 docs/architecture/SYSTEM_SPEC.md
-docs/governance/INVARIANTS.md
-docs/interfaces/API_CONTRACTS.md
+docs/platform/governance/INVARIANTS.md
+docs/platform/interfaces/API_CONTRACTS.md
 ```
 
 ---
@@ -229,8 +221,9 @@ docs/
 Examples:
 
 * architecture changes → `docs/architecture/`
-* API changes → `docs/interfaces/`
-* runtime rules → `docs/governance/`
+* runtime behavior → `docs/runtime/`
+* API changes → `docs/platform/interfaces/`
+* governance rules → `docs/platform/governance/`
 
 ---
 

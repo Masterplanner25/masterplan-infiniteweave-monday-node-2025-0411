@@ -77,11 +77,12 @@ def pg_db_session():
             ...
     """
     db_url = os.environ.get("DATABASE_URL", "")
-    assert db_url.startswith("postgresql"), (
-        f"Integration tests require a PostgreSQL DATABASE_URL. "
-        f"Got: {db_url!r}. "
-        "Pass DATABASE_URL=postgresql://... when invoking pytest -c pytest.integration.ini."
-    )
+    if not db_url.startswith("postgresql"):
+        pytest.skip(
+            "Integration tests require a PostgreSQL DATABASE_URL. "
+            f"Got: {db_url!r}. "
+            "Pass DATABASE_URL=postgresql://... when invoking pytest -c pytest.integration.ini."
+        )
 
     # Run alembic migrations once before any test in the session.
     result = subprocess.run(
@@ -132,7 +133,8 @@ def redis_backend() -> Iterator:
 @pytest.fixture(scope="session")
 def mongo_client() -> Iterator[MongoClient]:
     mongo_url = os.environ.get("MONGO_URL", "")
-    assert mongo_url, "Integration tests require MONGO_URL to be set"
+    if not mongo_url:
+        pytest.skip("Integration tests require MONGO_URL to be set")
 
     client = MongoClient(
         mongo_url,
