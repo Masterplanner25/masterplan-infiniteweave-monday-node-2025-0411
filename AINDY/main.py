@@ -26,7 +26,6 @@ from AINDY.platform_layer.registry import (
     load_plugins,
     run_startup_hooks,
 )
-from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.db.database import SessionLocal
 from AINDY.db.mongo_setup import ensure_mongo_ready
@@ -43,7 +42,8 @@ from AINDY.routes import (
 )
 from AINDY.config import settings
 from AINDY.core.distributed_queue import QueueSaturatedError, validate_queue_backend
-from AINDY.db.models.request_metric import RequestMetric
+from AINDY.core.observability_events import emit_recovery_failure
+from AINDY.platform_layer.health_service import check_redis_available
 from AINDY.platform_layer.trace_context import (
     _trace_id_ctx,
     reset_current_request,
@@ -206,9 +206,49 @@ def _ensure_dev_api_key():
         logger.warning(f"Dev API key bootstrap skipped (non-fatal): {e}")
 
 
+def _check_redis_available() -> bool:
+    return check_redis_available(use_cache=False)
+
+
+def _enforce_redis_startup_guard() -> None:
+    if settings.is_testing:
+        return
+    if not (settings.is_prod or settings.AINDY_REQUIRE_REDIS):
+        return
+    if not settings.REDIS_URL:
+        raise RuntimeError(
+            "REDIS_URL is required in production. "
+            "Set REDIS_URL in your environment or set "
+            "AINDY_REQUIRE_REDIS=false to allow single-instance mode."
+        )
+    if not _check_redis_available():
+        raise RuntimeError(
+            "Redis is configured but not reachable at startup. "
+            "Verify REDIS_URL and Redis availability before starting."
+        )
+    logger.info("[startup] Redis connectivity verified.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
+    # SECRET_KEY guard — reject insecure placeholder in production
+    _placeholder = "dev-secret-change-in-production"
+    if settings.SECRET_KEY == _placeholder:
+        if settings.is_prod:
+            raise RuntimeError(
+                "SECRET_KEY is using the insecure default placeholder. "
+                "Set a strong SECRET_KEY in your .env before running in production."
+            )
+        else:
+            logger.warning(
+                "SECRET_KEY is using the insecure default placeholder. "
+                "This is acceptable for local development but MUST be changed before production."
+            )
+
+    # Redis production guard
+    _enforce_redis_startup_guard()
+
     # Cache backend selection:
     # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
     # "memory" - single-process only; two instances will have independent caches
@@ -224,8 +264,11 @@ async def lifespan(app: FastAPI):
             logger.error("Redis cache backend unavailable: %s", exc)
             raise RuntimeError("Redis cache backend unavailable.") from exc
         if not settings.REDIS_URL:
-            # Single-instance quickstart runs without Redis; use in-memory cache
-            # instead of failing startup when REDIS_URL is intentionally absent.
+            if settings.is_prod or settings.AINDY_REQUIRE_REDIS:
+                raise RuntimeError(
+                    "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set. "
+                    "This is not allowed in production. Set REDIS_URL."
+                )
             logger.warning(
                 "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set; "
                 "falling back to in-memory cache for single-instance startup."
@@ -244,20 +287,6 @@ async def lifespan(app: FastAPI):
 
     if settings.ENV == "dev":
         _ensure_dev_api_key()
-
-    # SECRET_KEY guard — reject insecure placeholder in production
-    _placeholder = "dev-secret-change-in-production"
-    if settings.SECRET_KEY == _placeholder:
-        if settings.is_prod:
-            raise RuntimeError(
-                "SECRET_KEY is using the insecure default placeholder. "
-                "Set a strong SECRET_KEY in your .env before running in production."
-            )
-        else:
-            logger.warning(
-                "SECRET_KEY is using the insecure default placeholder. "
-                "This is acceptable for local development but MUST be changed before production."
-            )
 
     if settings.is_prod and str(settings.OPENAI_API_KEY).startswith(_OPENAI_PROJECT_KEY_PREFIX):
         logger.warning(
@@ -309,6 +338,11 @@ async def lifespan(app: FastAPI):
                 "APScheduler failed to start. Check apscheduler installation."
             )
 
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        from AINDY.core.request_metric_writer import get_writer as get_metric_writer
+
+        get_metric_writer().start()
+
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
@@ -349,9 +383,19 @@ async def lifespan(app: FastAPI):
         from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
         _scan_db = SessionLocal()
         try:
-            scan_and_recover_stuck_runs(_scan_db)
+            _recovered = scan_and_recover_stuck_runs(_scan_db)
+            if _recovered:
+                logger.info("[startup] Stuck-run scan recovered %d run(s)", _recovered)
+                try:
+                    from AINDY.platform_layer.metrics import startup_recovery_runs_recovered_total
+
+                    startup_recovery_runs_recovered_total.labels(
+                        recovery_type="stuck_runs"
+                    ).inc(_recovered)
+                except Exception:
+                    pass
         except Exception as _scan_exc:
-            logger.warning("Stuck-run startup scan failed (non-fatal): %s", _scan_exc)
+            emit_recovery_failure("stuck_runs", _scan_exc, _scan_db, logger=logger)
         finally:
             _scan_db.close()
 
@@ -380,7 +424,7 @@ async def lifespan(app: FastAPI):
             if _n_rehydrated:
                 logger.info("[startup] WAIT rehydration registered %d EU(s)", _n_rehydrated)
         except Exception as _rehydrate_exc:
-            logger.warning("[startup] WAIT rehydration failed (non-fatal): %s", _rehydrate_exc)
+            emit_recovery_failure("wait_eus", _rehydrate_exc, _rehydrate_db, logger=logger)
         finally:
             _rehydrate_db.close()
 
@@ -399,8 +443,8 @@ async def lifespan(app: FastAPI):
                     "[startup] FlowRun rehydration registered %d run(s)", _n_flow_rehydrated
                 )
         except Exception as _flow_rehydrate_exc:
-            logger.warning(
-                "[startup] FlowRun rehydration failed (non-fatal): %s", _flow_rehydrate_exc
+            emit_recovery_failure(
+                "flow_runs", _flow_rehydrate_exc, _flow_rehydrate_db, logger=logger
             )
         finally:
             _flow_rehydrate_db.close()
@@ -412,9 +456,7 @@ async def lifespan(app: FastAPI):
             get_scheduler_engine().mark_rehydration_complete()
             get_event_bus().drain_buffered_events()
         except Exception as _drain_exc:
-            logger.warning(
-                "[startup] Rehydration barrier drain failed (non-fatal): %s", _drain_exc
-            )
+            emit_recovery_failure("event_drain", _drain_exc, None, logger=logger)
 
     run_startup_hooks(
         {
@@ -436,6 +478,12 @@ async def lifespan(app: FastAPI):
     # --- Shutdown ---
     emit_event("system.shutdown", {"log": logger, "source": "main"})
     scheduler_service.stop()
+    try:
+        from AINDY.core.request_metric_writer import get_writer as get_metric_writer
+
+        get_metric_writer().stop(timeout=10.0)
+    except Exception as exc:
+        logger.warning("Request metric writer shutdown failed: %s", exc)
     try:
         from AINDY.platform_layer.async_job_service import shutdown_async_jobs
 
@@ -654,11 +702,11 @@ async def log_requests(request, call_next):
         }
         logger.info(json.dumps(log_payload, ensure_ascii=False))
 
-        db = None
-        try:
-            db = SessionLocal()
-            db.add(
-                RequestMetric(
+        if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+            from AINDY.core.request_metric_writer import PendingMetric, get_writer
+
+            get_writer().enqueue(
+                PendingMetric(
                     request_id=trace_id,
                     trace_id=trace_id,
                     user_id=user_id,
@@ -668,21 +716,6 @@ async def log_requests(request, call_next):
                     duration_ms=duration_ms,
                 )
             )
-            db.commit()
-        except Exception as exc:
-            logger.warning("Failed to record request metric: %s", exc)
-        finally:
-            if db is not None:
-                try:
-                    db.close()
-                except Exception as exc:
-                    emit_observability_event(
-                        logger,
-                        event="request_metric_session_close_failed",
-                        trace_id=trace_id,
-                        request_id=trace_id,
-                        error=str(exc),
-                    )
         return response
     finally:
         reset_current_trace_id(trace_token)

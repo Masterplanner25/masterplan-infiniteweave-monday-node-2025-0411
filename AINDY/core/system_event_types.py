@@ -2,6 +2,9 @@ from __future__ import annotations
 
 
 class SystemEventTypes:
+    STARTUP_RECOVERY_FAILED = "startup.recovery.failed"
+    STARTUP_RECOVERY_COMPLETED = "startup.recovery.completed"
+
     EXECUTION_STARTED = "execution.started"
     EXECUTION_COMPLETED = "execution.completed"
     EXECUTION_FAILED = "execution.failed"

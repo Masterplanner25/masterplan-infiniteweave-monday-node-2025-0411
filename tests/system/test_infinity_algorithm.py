@@ -516,13 +516,13 @@ class TestEventTriggers:
 
     def test_daily_score_job_registered(self):
         """Daily Infinity score job is registered by the app scheduler wiring."""
-        import apps.bootstrap
+        from apps.analytics import bootstrap as analytics_bootstrap
         from AINDY.platform_layer.registry import get_scheduled_jobs
 
-        apps.bootstrap.bootstrap()
+        analytics_bootstrap.register()
         jobs = {job["id"]: job for job in get_scheduled_jobs()}
         assert "daily_infinity_score_recalculation" in jobs
-        assert jobs["daily_infinity_score_recalculation"]["handler"] is apps.bootstrap._scheduler_recalculate_all_scores
+        assert jobs["daily_infinity_score_recalculation"]["handler"] is analytics_bootstrap._scheduler_recalculate_all_scores
 
     def test_task_completion_trigger_is_fire_and_forget(self):
         """Task completion orchestration is wrapped so side effects remain non-fatal."""
@@ -532,9 +532,10 @@ class TestEventTriggers:
         assert "except" in src, "orchestrate_task_completion missing exception handler"
 
     def test_recalculate_all_scores_function_exists(self):
-        """_scheduler_recalculate_all_scores is defined in app bootstrap."""
-        import apps.bootstrap
-        assert hasattr(apps.bootstrap, "_scheduler_recalculate_all_scores")
+        """_scheduler_recalculate_all_scores is defined in the analytics bootstrap."""
+        from apps.analytics import bootstrap as analytics_bootstrap
+
+        assert hasattr(analytics_bootstrap, "_scheduler_recalculate_all_scores")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

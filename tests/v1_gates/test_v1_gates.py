@@ -325,14 +325,13 @@ def test_cross_tenant_memory_blocked():
 def test_health_endpoint_structure(client):
     """
     V1-VAL-007 | Task: V1-STAB-004
-    GET /health must return HTTP 200 with {status, db, version} fields.
-    version must match version.json.
+    GET /health must return a tiered status response with a dependency map.
     """
     response = client.get("/health")
 
-    assert response.status_code == 200, (
-        f"Expected /health to return 200, got {response.status_code}. "
-        "V1-STAB-004: health endpoint must always return 200 (degraded is still 200)."
+    assert response.status_code in (200, 503), (
+        f"Expected /health to return 200 or 503, got {response.status_code}. "
+        "Tiered health must return 503 when critical dependencies are unavailable."
     )
 
     try:
@@ -341,16 +340,12 @@ def test_health_endpoint_structure(client):
         pytest.fail("/health did not return valid JSON")
 
     assert "status" in body, "Health response missing 'status' field"
-    assert "db" in body, (
-        "Health response missing 'db' field. "
-        "V1-STAB-004: health endpoint must include a DB connectivity check."
+    assert "dependencies" in body, (
+        "Health response missing 'dependencies' field. "
+        "Tiered health must include per-dependency status."
     )
-    assert "version" in body, (
-        "Health response missing 'version' field. "
-        "V1-STAB-005: version must be included in health response."
-    )
-    assert body["status"] in ("ok", "degraded"), (
-        f"status must be 'ok' or 'degraded', got {body['status']!r}"
+    assert body["status"] in ("healthy", "degraded", "critical"), (
+        f"status must be 'healthy', 'degraded', or 'critical', got {body['status']!r}"
     )
 
 
@@ -383,10 +378,10 @@ def test_all_syscalls_have_stable_field():
 def test_services_directory_clean():
     """
     V1-VAL-009 | Task: V1-REFACT-011
-    After the structural refactor, services/ must contain only auth_service.py.
+    After the structural refactor, AINDY/services/ must contain only auth_service.py.
     This test will fail until the entire import migration is complete.
     """
-    services_dir = Path(__file__).parent.parent.parent / "services"
+    services_dir = Path(__file__).parent.parent.parent / "AINDY" / "services"
 
     assert services_dir.exists(), "AINDY/services/ directory does not exist"
 

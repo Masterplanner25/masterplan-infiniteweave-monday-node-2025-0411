@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from AINDY.db.models.agent_run import AgentTrustSettings
-from apps.automation.models import AutomationLog
 from AINDY.db.models.background_task_lease import BackgroundTaskLease
+from AINDY.db.models.job_log import JobLog
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.db.models.user_identity import UserIdentity
 from AINDY.platform_layer.async_job_service import _JOB_REGISTRY, submit_async_job
@@ -26,7 +26,7 @@ VALID_PLAN = {
 }
 
 
-def _wait_for_log(db_or_factory, log_id: str, timeout_s: float = 5.0) -> AutomationLog:
+def _wait_for_log(db_or_factory, log_id: str, timeout_s: float = 5.0) -> JobLog:
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         if callable(db_or_factory):
@@ -37,7 +37,7 @@ def _wait_for_log(db_or_factory, log_id: str, timeout_s: float = 5.0) -> Automat
             should_close = False
         try:
             db_session.expire_all()
-            log = db_session.query(AutomationLog).filter(AutomationLog.id == log_id).first()
+            log = db_session.query(JobLog).filter(JobLog.id == log_id).first()
         finally:
             if should_close:
                 db_session.close()

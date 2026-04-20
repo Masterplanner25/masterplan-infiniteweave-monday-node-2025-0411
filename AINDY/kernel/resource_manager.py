@@ -44,8 +44,11 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Optional
+
+from AINDY.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +141,8 @@ return 1
         self._redis = redis.from_url(
             redis_url,
             decode_responses=True,
-            socket_timeout=5,
+            socket_connect_timeout=1,
+            socket_timeout=1,
         )
         self._decr_floor = self._redis.register_script(self._DECR_FLOOR_LUA)
         self._set_if_greater = self._redis.register_script(self._SET_IF_GREATER_LUA)
@@ -270,12 +274,67 @@ class ResourceManager:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._backend = _get_backend()
+        self.MAX_CONCURRENT_PER_TENANT = MAX_CONCURRENT_PER_TENANT
+        self._redis_client = None
+        self._redis_check_lock = threading.Lock()
+        self._redis_last_check: float = 0.0
+        self._redis_mode_logged: bool | None = None
+        self._REDIS_CHECK_INTERVAL = 30.0
         # eu_id → UsageSnapshot
         self._usage: dict[str, UsageSnapshot] = {}
         # tenant_id → active execution count
-        self._tenant_active: dict[str, int] = {}
+        self._active_counts: dict[str, int] = {}
+        self._tenant_active = self._active_counts
         # eu_id → tenant_id (for cleanup on mark_completed with unknown eu_id)
         self._eu_tenant: dict[str, str] = {}
+
+    def _get_redis(self):
+        now = time.monotonic()
+        if (now - self._redis_last_check) <= self._REDIS_CHECK_INTERVAL:
+            return self._redis_client
+
+        with self._redis_check_lock:
+            now = time.monotonic()
+            if (now - self._redis_last_check) <= self._REDIS_CHECK_INTERVAL:
+                return self._redis_client
+
+            self._redis_last_check = now
+            redis_url = settings.REDIS_URL or os.getenv("REDIS_URL")
+            if not redis_url:
+                self._redis_client = None
+                self._redis_mode_logged = None
+                return None
+
+            try:
+                import redis as _redis_lib
+
+                client = _redis_lib.from_url(
+                    redis_url,
+                    decode_responses=True,
+                    socket_connect_timeout=1,
+                    socket_timeout=1,
+                )
+                client.ping()
+                self._redis_client = client
+                if self._redis_mode_logged is False:
+                    logger.warning("[resource_manager] Redis reconnected; using shared quota counters")
+                self._redis_mode_logged = True
+            except Exception as exc:
+                if self._redis_mode_logged is not False:
+                    logger.warning("[resource_manager] Redis unavailable: %s", exc)
+                self._redis_client = None
+                self._redis_mode_logged = False
+            return self._redis_client
+
+    def _drop_redis_client(self, message: str, exc: Exception) -> None:
+        logger.warning(message, exc)
+        with self._redis_check_lock:
+            self._redis_client = None
+            self._redis_last_check = time.monotonic()
+            self._redis_mode_logged = False
+
+    def is_redis_mode(self) -> bool:
+        return self._get_redis() is not None
 
     def _backend_get_tenant_active(self, tenant_id: str) -> int | None:
         if self._backend is None:
@@ -453,20 +512,30 @@ class ResourceManager:
             (True, None) if execution is allowed.
             (False, reason_str) if a quota is exceeded.
         """
-        backend_active = self._backend_get_tenant_active(str(tenant_id))
-        with self._lock:
-            active = (
-                backend_active
-                if backend_active is not None
-                else self._tenant_active.get(str(tenant_id), 0)
-            )
-            if active >= MAX_CONCURRENT_PER_TENANT:
-                reason = (
-                    f"{RESOURCE_LIMIT_EXCEEDED}: tenant {tenant_id!r} has "
-                    f"{active} active executions (max {MAX_CONCURRENT_PER_TENANT})"
+        tid = str(tenant_id)
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            key = f"aindy:rm:tenant:{tid}:active"
+            try:
+                active = int(redis_client.get(key) or 0)
+            except Exception as exc:
+                self._drop_redis_client(
+                    "[resource_manager] Redis get failed, using local: %s",
+                    exc,
                 )
-                logger.warning("[ResourceManager] %s eu=%s", reason, eu_id)
-                return False, reason
+                with self._lock:
+                    active = self._active_counts.get(tid, 0)
+        else:
+            with self._lock:
+                active = self._active_counts.get(tid, 0)
+
+        if active >= self.MAX_CONCURRENT_PER_TENANT:
+            reason = (
+                f"{RESOURCE_LIMIT_EXCEEDED}: tenant {tenant_id!r} at "
+                f"concurrent limit ({active}/{self.MAX_CONCURRENT_PER_TENANT})"
+            )
+            logger.warning("[ResourceManager] %s eu=%s", reason, eu_id)
+            return False, reason
         return True, None
 
     def check_quota(self, eu_id: str) -> tuple[bool, str | None]:
@@ -489,22 +558,17 @@ class ResourceManager:
             if snap is None:
                 return True, None
 
-            tenant_active = self._backend_get_tenant_active(snap.tenant_id)
-            cpu_time_ms = self._backend_get_cpu_ms(str(eu_id))
-            syscall_count = self._backend_get_syscalls(str(eu_id))
+        can_run, concurrency_reason = self.can_execute(snap.tenant_id, eu_id)
+        if not can_run:
+            return False, concurrency_reason
 
-            active = (
-                tenant_active
-                if tenant_active is not None
-                else self._tenant_active.get(snap.tenant_id, 0)
-            )
-            if active >= MAX_CONCURRENT_PER_TENANT:
-                reason = (
-                    f"{RESOURCE_LIMIT_EXCEEDED}: tenant {snap.tenant_id!r} has "
-                    f"{active} active executions (max {MAX_CONCURRENT_PER_TENANT})"
-                )
-                logger.warning("[ResourceManager] %s eu=%s", reason, eu_id)
-                return False, reason
+        cpu_time_ms = self._backend_get_cpu_ms(str(eu_id))
+        syscall_count = self._backend_get_syscalls(str(eu_id))
+
+        with self._lock:
+            snap = self._usage.get(str(eu_id))
+            if snap is None:
+                return True, None
 
             snap_cpu_time_ms = (
                 cpu_time_ms if cpu_time_ms is not None else snap.cpu_time_ms
@@ -543,9 +607,26 @@ class ResourceManager:
             eu_id:     Optional ExecutionUnit ID.
         """
         tid = str(tenant_id)
-        self._backend_increment_tenant_active(tid)
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            key = f"aindy:rm:tenant:{tid}:active"
+            try:
+                pipe = redis_client.pipeline()
+                pipe.incr(key)
+                pipe.expire(key, TENANT_KEY_TTL_SECONDS)
+                pipe.execute()
+            except Exception as exc:
+                self._drop_redis_client(
+                    "[resource_manager] Redis incr failed, using local: %s",
+                    exc,
+                )
+                with self._lock:
+                    self._active_counts[tid] = self._active_counts.get(tid, 0) + 1
+        else:
+            with self._lock:
+                self._active_counts[tid] = self._active_counts.get(tid, 0) + 1
+
         with self._lock:
-            self._tenant_active[tid] = self._tenant_active.get(tid, 0) + 1
             if eu_id:
                 eid = str(eu_id)
                 if eid not in self._usage:
@@ -581,27 +662,42 @@ class ResourceManager:
         """
         tid = str(tenant_id)
         capacity_freed = False
-        backend_current = self._backend_get_tenant_active(tid)
-        backend_new_active = self._backend_decrement_tenant_active(tid)
+        effective_current = 0
+        effective_new_active = 0
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            key = f"aindy:rm:tenant:{tid}:active"
+            try:
+                effective_current = int(redis_client.get(key) or 0)
+                if effective_current > 0:
+                    effective_new_active = int(redis_client.decr(key))
+                else:
+                    effective_new_active = 0
+            except Exception as exc:
+                self._drop_redis_client(
+                    "[resource_manager] Redis decr failed, using local: %s",
+                    exc,
+                )
+                with self._lock:
+                    count = self._active_counts.get(tid, 0)
+                    effective_current = count
+                    if count > 0:
+                        self._active_counts[tid] = count - 1
+                    effective_new_active = self._active_counts.get(tid, 0)
+        else:
+            with self._lock:
+                count = self._active_counts.get(tid, 0)
+                effective_current = count
+                if count > 0:
+                    self._active_counts[tid] = count - 1
+                effective_new_active = self._active_counts.get(tid, 0)
+
         if eu_id:
             self._backend_delete_eu(str(eu_id))
         with self._lock:
-            current = self._tenant_active.get(tid, 0)
-            new_active = max(0, current - 1)
-            self._tenant_active[tid] = new_active
-            # Transition guard: fire only when the count was blocking new
-            # executions (>= MAX) and has now dropped below the limit.
-            # Exactly one thread can observe this per completion because
-            # each reads a different `current` value under the lock.
-            effective_current = (
-                backend_current if backend_current is not None else current
-            )
-            effective_new_active = (
-                backend_new_active if backend_new_active is not None else new_active
-            )
             capacity_freed = (
-                effective_current >= MAX_CONCURRENT_PER_TENANT
-                and effective_new_active < MAX_CONCURRENT_PER_TENANT
+                effective_current >= self.MAX_CONCURRENT_PER_TENANT
+                and effective_new_active < self.MAX_CONCURRENT_PER_TENANT
             )
 
         if capacity_freed:
@@ -682,11 +778,19 @@ class ResourceManager:
 
     def get_tenant_active(self, tenant_id: str) -> int:
         """Return the number of active executions for *tenant_id*."""
-        backend_active = self._backend_get_tenant_active(str(tenant_id))
-        if backend_active is not None:
-            return backend_active
+        tid = str(tenant_id)
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            key = f"aindy:rm:tenant:{tid}:active"
+            try:
+                return int(redis_client.get(key) or 0)
+            except Exception as exc:
+                self._drop_redis_client(
+                    "[resource_manager] Redis get failed, using local: %s",
+                    exc,
+                )
         with self._lock:
-            return self._tenant_active.get(str(tenant_id), 0)
+            return self._active_counts.get(tid, 0)
 
     def get_tenant_summary(self, tenant_id: str) -> dict:
         """Return a summary of resource usage for all EUs belonging to *tenant_id*.
@@ -694,16 +798,12 @@ class ResourceManager:
         Aggregates across all known UsageSnapshots for the tenant.
         """
         tid = str(tenant_id)
-        backend_active = self._backend_get_tenant_active(tid)
+        active_executions = self.get_tenant_active(tid)
         with self._lock:
             snaps = [s for s in self._usage.values() if s.tenant_id == tid]
             return {
                 "tenant_id": tid,
-                "active_executions": (
-                    backend_active
-                    if backend_active is not None
-                    else self._tenant_active.get(tid, 0)
-                ),
+                "active_executions": active_executions,
                 "execution_count": len(snaps),
                 "total_cpu_time_ms": sum(s.cpu_time_ms for s in snaps),
                 "peak_memory_bytes": max((s.memory_bytes for s in snaps), default=0),
@@ -734,7 +834,7 @@ class ResourceManager:
         self._backend_reset_all()
         with self._lock:
             self._usage.clear()
-            self._tenant_active.clear()
+            self._active_counts.clear()
             self._eu_tenant.clear()
 
 

@@ -106,8 +106,45 @@ GitHub: @Masterplanner25
 
 
 [![CI](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml/badge.svg)](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml)
- Recursive memory node for A.I.N.D.Y. MVP + SEO tool. Activated on canonical breakthrough.  This is the symbolic memory bridge for the Infinite Weave (Monday).” 
+
+---
+
+## Platform
+
+A.I.N.D.Y. is a FastAPI-based platform backend for versioned syscalls, Nodus
+execution, memory retrieval and persistence, flow orchestration, agent runs, and
+execution observability.
+
+The release-facing entrypoints are the public health routes, the auth routes,
+and the `/platform/*` surface. The platform surface exposes:
+
+- platform API key management
+- syscall discovery and dispatch
+- dynamic flow and node registration
+- Nodus script execution, trace lookup, and scheduling
+- tenant usage and memory address space queries
+- OS-level attention monitoring via the [Watcher](docs/watcher/index.md)
+
+## Documentation
+
+| | |
+|---|---|
+| [Getting Started](docs/getting-started/index.md) | Up and running in 5 minutes |
+| [Syscall System](docs/runtime/SYSCALL_SYSTEM.md) | Versioned syscall layer, ABI contracts |
+| [System Spec](docs/architecture/SYSTEM_SPEC.md) | Top-level system specification |
+| [Runtime Behavior](docs/runtime/RUNTIME_BEHAVIOR.md) | Scheduler, event bus, execution modes |
+| [Execution Contract](docs/runtime/EXECUTION_CONTRACT.md) | What the flow engine guarantees |
+| [OS Isolation Layer](docs/runtime/OS_ISOLATION_LAYER.md) | Tenant isolation and quota enforcement |
+| [Plugin Registry Pattern](docs/architecture/PLUGIN_REGISTRY_PATTERN.md) | How apps integrate with the runtime |
+| [API Contracts](docs/platform/interfaces/API_CONTRACTS.md) | Endpoint and component contracts |
+| [Testing Strategy](docs/platform/engineering/TESTING_STRATEGY.md) | Test suite structure and coverage targets |
+| [AINDY Internals](docs/architecture/AINDY_INTERNALS.md) | Directory structure and runtime notes |
+| [Full Docs](docs/index.md) | Complete documentation index |
+
+---
+
 ### Legacy Note
+
 Earlier experimental builds (Memory Bridge v1, RippleTrace MVP, initial A.I.N.D.Y. prototypes)
 are preserved in the `/legacy` folder for historical and educational purposes.
 Current development continues under `/AINDY` (backend) and `/MemoryBridge` (symbolic layer).

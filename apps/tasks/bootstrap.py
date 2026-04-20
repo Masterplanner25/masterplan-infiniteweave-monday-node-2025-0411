@@ -270,7 +270,24 @@ def _job_wait_recovery_poll() -> None:
                 db.rollback()
             except Exception:
                 pass
-        logger.warning("[WaitRecovery] poll failed (non-fatal): %s", exc)
+        try:
+            from AINDY.platform_layer.metrics import wait_recovery_poll_failure_total
+
+            wait_recovery_poll_failure_total.inc()
+        except Exception:
+            pass
+        logger.error(
+            "[wait_recovery_poll] Poll failed: %s - waiting flows may be stuck.",
+            exc,
+            exc_info=True,
+        )
+        if db is not None:
+            try:
+                from AINDY.core.observability_events import emit_recovery_failure
+
+                emit_recovery_failure("wait_recovery_poll", exc, db, logger=logger)
+            except Exception:
+                pass
     finally:
         if db is not None:
             db.close()

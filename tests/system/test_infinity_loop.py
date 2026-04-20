@@ -591,7 +591,7 @@ class TestScoreRouterLoopSurface:
 class TestLoopTriggerWiring:
 
     def test_scheduler_calls_orchestrator(self):
-        src = pathlib.Path("apps/bootstrap.py").read_text(encoding="utf-8")
+        src = pathlib.Path("apps/analytics/bootstrap.py").read_text(encoding="utf-8")
         assert "infinity_orchestrator" in src
 
     def test_watcher_calls_orchestrator(self):
@@ -613,7 +613,7 @@ class TestLoopTriggerWiring:
 
     def test_nodus_adapter_calls_orchestrator(self):
         src = pathlib.Path("AINDY/runtime/nodus_adapter.py").read_text(encoding="utf-8")
-        bootstrap_src = pathlib.Path("apps/bootstrap.py").read_text(encoding="utf-8")
+        bootstrap_src = pathlib.Path("apps/analytics/bootstrap.py").read_text(encoding="utf-8")
         assert "emit_registry_event" in src
         assert "infinity_orchestrator" in bootstrap_src
 
