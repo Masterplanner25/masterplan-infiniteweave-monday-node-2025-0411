@@ -737,7 +737,7 @@ class TestReplayRunTrustGateReapplied:
 
 class TestRunToDictReplayedFromRunId:
     def test_includes_replayed_from_run_id_when_set(self):
-        from AINDY.agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -758,11 +758,11 @@ class TestRunToDictReplayedFromRunId:
         run.started_at = None
         run.completed_at = None
 
-        d = _run_to_dict(run)
+        d = run_to_dict(run)
         assert d["replayed_from_run_id"] == ORIGIN_RUN_ID
 
     def test_replayed_from_run_id_none_when_not_set(self):
-        from agents.agent_runtime import _run_to_dict
+        from AINDY.agents.agent_runtime import run_to_dict
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -783,7 +783,7 @@ class TestRunToDictReplayedFromRunId:
         run.started_at = None
         run.completed_at = None
 
-        d = _run_to_dict(run)
+        d = run_to_dict(run)
         assert d["replayed_from_run_id"] is None
 
 

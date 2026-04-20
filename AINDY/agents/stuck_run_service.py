@@ -163,7 +163,7 @@ def recover_stuck_agent_run(
     """
     from AINDY.db.models.agent_run import AgentRun, AgentStep
     from AINDY.db.models.flow_run import FlowRun
-    from AINDY.agents.agent_runtime import _run_to_dict
+    from AINDY.agents.agent_runtime import run_to_dict
 
     threshold_minutes = _default_threshold_minutes()
 
@@ -251,7 +251,7 @@ def recover_stuck_agent_run(
             payload={"recovered_at": run.completed_at.isoformat() if run.completed_at else None},
         )
 
-        return {"ok": True, "run": _run_to_dict(run)}
+        return {"ok": True, "run": run_to_dict(run)}
 
     except Exception as exc:
         logger.error(

@@ -410,6 +410,7 @@ def submit_async_job(
         )
         db.add(log)
         db.commit()
+        _emit_job_log_written(log_id)
         try:
             db.refresh(log)
         except Exception as exc:
@@ -473,6 +474,7 @@ def submit_async_job(
                         _log.completed_at = _log.completed_at or datetime.now(timezone.utc)
                         db.add(_log)
                         db.commit()
+                        _emit_job_log_written(log_id)
                         logger.info(
                             "[AsyncJobService] Inline fallback forced JobLog %s â†' success",
                             log_id,
@@ -494,6 +496,7 @@ def submit_async_job(
                 log.error_message = "Execution queue full -- retry later"
                 log.completed_at = datetime.now(timezone.utc)
                 db.commit()
+                _emit_job_log_written(log_id)
             raise QueueSaturatedError(
                 (
                     f"Async job queue full (max={_queue_capacity_limit()}). "
@@ -597,6 +600,7 @@ def defer_async_job(
         )
         db.add(log)
         db.commit()
+        _emit_job_log_written(log_id)
         try:
             db.refresh(log)
         except Exception as exc:
@@ -856,6 +860,14 @@ def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
     return str(created_id) if created_id else None
 
 
+def _emit_job_log_written(log_id: str) -> None:
+    try:
+        from AINDY.platform_layer.registry import emit_event
+        emit_event("job_log.written", {"job_log_id": str(log_id), "source": "async_job_service"})
+    except Exception as exc:
+        logger.debug("[AsyncJobService] emit_event job_log.written failed for %s: %s", log_id, exc)
+
+
 def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]) -> None:
     JobLog = _job_log_model()
     trace_token = set_trace_id(str(log_id))
@@ -962,6 +974,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
             if inline_error is None:
                 db.add(log)
                 db.commit()
+                _emit_job_log_written(log_id)
                 db.refresh(log)
             reset_parent_event_id(job_parent_token)
             reset_trace_id(trace_token)
@@ -1054,6 +1067,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 required=True,
             )
             db.commit()
+            _emit_job_log_written(log_id)
             try:
                 db.refresh(log)
             except Exception as exc:

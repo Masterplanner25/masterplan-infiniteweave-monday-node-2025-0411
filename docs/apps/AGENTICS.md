@@ -1,11 +1,12 @@
 # AGENTICS
 
-This document reconciles the Agentics roadmap against the code currently in the
-repository. It distinguishes between:
+This document covers the Agentics app-domain feature: gap analysis, completion
+roadmap (Phases A–E), Nodus integration plan, and relationship to other
+roadmaps.
 
-- the implemented A.I.N.D.Y. agent layer
-- the intended long-term A.I.N.D.Y. + Nodus architecture
-- the remaining work required to finish Agentics
+For the runtime execution contract — public API, capability enforcement,
+per-step retry, recovery/replay, and state machine — see
+[docs/runtime/AGENT_RUNTIME.md](../runtime/AGENT_RUNTIME.md).
 
 Date basis: current workspace state.
 
