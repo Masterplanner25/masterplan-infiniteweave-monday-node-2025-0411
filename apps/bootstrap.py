@@ -467,6 +467,74 @@ def _register_scheduled_jobs() -> None:
         trigger="interval",
         trigger_kwargs={"seconds": 60},
     )
+    register_scheduled_job(
+        "wait_recovery_poll",
+        _job_wait_recovery_poll,
+        name="WAIT recovery poll",
+        trigger="interval",
+        trigger_kwargs={"seconds": 60},
+    )
+
+
+def _job_wait_recovery_poll() -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from AINDY.config import settings
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.models.flow_run import FlowRun
+    from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+    from AINDY.kernel.scheduler_engine import get_scheduler_engine
+
+    db = None
+    try:
+        db = SessionLocal()
+        now = datetime.now(timezone.utc)
+        stale_cutoff = now - timedelta(minutes=settings.STUCK_RUN_THRESHOLD_MINUTES)
+        rows = db.query(WaitingFlowRun).all()
+        scheduler = get_scheduler_engine()
+
+        for row in rows:
+            flow_run = (
+                db.query(FlowRun)
+                .filter(FlowRun.id == row.run_id)
+                .first()
+            )
+            if flow_run is not None and flow_run.status not in ("waiting", "running"):
+                db.delete(row)
+                continue
+
+            if (
+                row.timeout_at
+                and row.timeout_at < now
+                and row.event_type == "__time_wait__"
+                and row.max_wait_seconds is None
+            ):
+                scheduler.notify_event(
+                    row.event_type,
+                    correlation_id=row.correlation_id,
+                )
+                continue
+
+            if row.registered_at and row.registered_at < stale_cutoff:
+                logger.warning(
+                    "[WaitRecovery] unresolved waiting row run=%s event=%s age_minutes=%d instance=%s",
+                    row.run_id,
+                    row.event_type,
+                    int((now - row.registered_at).total_seconds() // 60),
+                    row.instance_id,
+                )
+
+        db.commit()
+    except Exception as exc:
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        logger.warning("[WaitRecovery] poll failed (non-fatal): %s", exc)
+    finally:
+        if db is not None:
+            db.close()
 
 
 def _register_agent_runtime_extensions() -> None:

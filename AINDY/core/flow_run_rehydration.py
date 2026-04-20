@@ -61,6 +61,7 @@ from typing import TYPE_CHECKING
 # Module-level imports keep these patchable in tests via
 # "core.flow_run_rehydration.<name>".
 from AINDY.core.wait_condition import WaitCondition, _parse_utc_datetime
+from AINDY.core.wait_rehydration import ensure_waiting_flow_run_row
 from AINDY.kernel.scheduler_engine import get_scheduler_engine
 
 if TYPE_CHECKING:
@@ -359,6 +360,15 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
                 trace_id=run.trace_id,
                 eu_type="flow",
                 wait_condition=wait_condition,
+            )
+            ensure_waiting_flow_run_row(
+                db,
+                run_id=run_id,
+                event_type=wait_for_event or "__time_wait__",
+                correlation_id=correlation_id,
+                timeout_at=getattr(run, "wait_deadline", None),
+                eu_id=eu_id or None,
+                priority=priority,
             )
             rehydrated += 1
             logger.info(

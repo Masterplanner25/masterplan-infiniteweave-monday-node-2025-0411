@@ -29,32 +29,6 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 os.environ["PATH"] = ROOT + os.pathsep + os.environ.get("PATH", "")
 
-REPO_ROOT = Path(ROOT)
-_SERVICES_DIR = Path(ROOT) / "services"
-_SERVICE_COMPAT_SOURCES = {
-    "genesis_ai.py": REPO_ROOT / "apps" / "masterplan" / "services" / "genesis_ai.py",
-    "masterplan_factory.py": REPO_ROOT / "apps" / "masterplan" / "services" / "masterplan_factory.py",
-    "scheduler_service.py": REPO_ROOT / "AINDY" / "platform_layer" / "scheduler_service.py",
-    "task_services.py": REPO_ROOT / "apps" / "tasks" / "services" / "task_service.py",
-    "nodus_adapter.py": REPO_ROOT / "AINDY" / "runtime" / "nodus_adapter.py",
-    "agent_runtime.py": REPO_ROOT / "apps" / "agent" / "agents" / "runtime_extensions.py",
-}
-
-
-def _remove_service_compat_files() -> None:
-    for name in _SERVICE_COMPAT_SOURCES:
-        path = _SERVICES_DIR / name
-        if path.exists():
-            path.unlink()
-
-
-def _ensure_service_compat_files() -> None:
-    _SERVICES_DIR.mkdir(exist_ok=True)
-    for name, source in _SERVICE_COMPAT_SOURCES.items():
-        target = _SERVICES_DIR / name
-        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-
-
 _original_subprocess_run = subprocess.run
 
 
@@ -95,21 +69,4 @@ def pytest_runtest_setup(item):
         get_openai_circuit_breaker().reset()
     except Exception:
         pass
-
-    nodeid = item.nodeid.replace("\\", "/")
-    if "test_services_directory_clean" in nodeid:
-        _remove_service_compat_files()
-        return
-
-    needs_service_compat = any(
-        fragment in nodeid
-        for fragment in (
-            "tests/integration/test_genesis_flow.py",
-            "tests/system/test_infinity_loop.py",
-        )
-    )
-    if needs_service_compat:
-        _ensure_service_compat_files()
-    else:
-        _remove_service_compat_files()
 

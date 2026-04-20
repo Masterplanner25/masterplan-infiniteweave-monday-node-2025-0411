@@ -10,12 +10,20 @@ from AINDY.core.distributed_queue import QueueJobPayload, RedisQueueBackend
 
 def _make_backend(**kwargs) -> RedisQueueBackend:
     client = MagicMock()
-    client.register_script.return_value = MagicMock(return_value=0)
+    registered_scripts: list[MagicMock] = []
+
+    def _register_script(_source):
+        script = MagicMock(return_value=0)
+        registered_scripts.append(script)
+        return script
+
+    client.register_script.side_effect = _register_script
 
     with patch("redis.from_url", return_value=client):
         backend = RedisQueueBackend("redis://example", **kwargs)
 
     backend._redis = client
+    backend._registered_scripts = registered_scripts  # type: ignore[attr-defined]
     return backend
 
 
@@ -23,7 +31,7 @@ def test_retries_on_connection_error():
     backend = _make_backend()
     job = QueueJobPayload(job_id="job-1", task_name="ping")
 
-    backend._redis.lpush.side_effect = [
+    backend._enqueue_with_capacity.side_effect = [
         redis.ConnectionError("down-1"),
         redis.ConnectionError("down-2"),
         1,
@@ -31,7 +39,7 @@ def test_retries_on_connection_error():
 
     backend.enqueue(job)
 
-    assert backend._redis.lpush.call_count == 3
+    assert backend._enqueue_with_capacity.call_count == 3
     assert backend._failure_count == 0
     assert backend._open_until == 0.0
 
@@ -43,25 +51,25 @@ def test_circuit_breaker_opens_after_threshold():
     )
     job = QueueJobPayload(job_id="job-1", task_name="ping")
 
-    backend._redis.lpush.side_effect = redis.ConnectionError("down")
+    backend._enqueue_with_capacity.side_effect = redis.ConnectionError("down")
 
     with pytest.raises(redis.ConnectionError):
         backend.enqueue(job)
 
-    assert backend._redis.lpush.call_count == 3
+    assert backend._enqueue_with_capacity.call_count == 3
     assert backend._failure_count == 1
 
     with pytest.raises(redis.ConnectionError):
         backend.enqueue(job)
 
-    assert backend._redis.lpush.call_count == 6
+    assert backend._enqueue_with_capacity.call_count == 6
     assert backend._failure_count == 2
     assert backend._open_until > 0.0
 
     with pytest.raises(redis.ConnectionError, match="Circuit breaker open"):
         backend.enqueue(job)
 
-    assert backend._redis.lpush.call_count == 6
+    assert backend._enqueue_with_capacity.call_count == 6
 
 
 def test_circuit_breaker_resets_on_success():
@@ -71,7 +79,7 @@ def test_circuit_breaker_resets_on_success():
     )
     job = QueueJobPayload(job_id="job-1", task_name="ping")
 
-    backend._redis.lpush.side_effect = redis.ConnectionError("down")
+    backend._enqueue_with_capacity.side_effect = redis.ConnectionError("down")
 
     with pytest.raises(redis.ConnectionError):
         backend.enqueue(job)
@@ -80,8 +88,8 @@ def test_circuit_breaker_resets_on_success():
     assert backend._open_until > 0.0
 
     backend._open_until = 0.0
-    backend._redis.lpush.side_effect = None
-    backend._redis.lpush.return_value = 1
+    backend._enqueue_with_capacity.side_effect = None
+    backend._enqueue_with_capacity.return_value = 1
 
     backend.enqueue(job)
 

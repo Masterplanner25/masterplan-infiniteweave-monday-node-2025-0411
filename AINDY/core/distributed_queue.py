@@ -86,9 +86,36 @@ from typing import Optional
 
 import tenacity
 
+from AINDY.config import settings
+from AINDY.platform_layer.metrics import (
+    async_queue_capacity,
+    async_queue_delayed,
+    async_queue_dequeue_total,
+    async_queue_depth,
+    async_queue_dlq_depth,
+    async_queue_enqueue_total,
+    async_queue_failure_total,
+    async_queue_in_flight,
+)
+
 logger = logging.getLogger(__name__)
 
 QUEUE_NAME_DEFAULT = "aindy:jobs"
+
+
+class QueueSaturatedError(RuntimeError):
+    """Raised when the async queue rejects work due to saturation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int = 503,
+        retry_after_seconds: int = 5,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after_seconds = retry_after_seconds
 
 
 def _log_redis_retry_attempt(retry_state: tenacity.RetryCallState) -> None:
@@ -264,7 +291,54 @@ class DistributedQueueBackend(ABC):
             "failed_jobs": 0,
             "delayed_jobs": 0,
             "dlq_depth": 0,
+            "max_queue_size": _queue_capacity_limit(),
+            "total_pending_jobs": 0,
+            "saturation_threshold": _saturation_threshold(),
         }
+
+    def assert_ready(self) -> None:
+        """Validate backend readiness. Default is a no-op."""
+
+    @property
+    def backend_name(self) -> str:
+        return self.__class__.__name__.replace("QueueBackend", "").lower()
+
+
+def _queue_capacity_limit() -> int:
+    return max(1, _safe_int_env("MAX_QUEUE_SIZE", _safe_int_env("AINDY_ASYNC_QUEUE_MAXSIZE", 100)))
+
+
+def _saturation_threshold() -> int:
+    configured = _safe_int_env("AINDY_QUEUE_SATURATION_THRESHOLD", _queue_capacity_limit())
+    return max(1, min(configured, _queue_capacity_limit()))
+
+
+def _safe_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is not None:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return default
+    candidate = getattr(settings, name, default)
+    if not isinstance(candidate, (int, str)):
+        return default
+    try:
+        return int(candidate)
+    except (TypeError, ValueError):
+        return default
+
+
+def _refresh_queue_metrics(backend_name: str, snapshot: dict) -> None:
+    async_queue_depth.labels(backend=backend_name).set(snapshot.get("queue_depth", 0))
+    async_queue_in_flight.labels(backend=backend_name).set(snapshot.get("in_flight_count", 0))
+    async_queue_delayed.labels(backend=backend_name).set(snapshot.get("delayed_jobs", 0))
+    async_queue_dlq_depth.labels(
+        backend=backend_name
+    ).set(snapshot.get("dlq_depth", snapshot.get("failed_jobs", 0)))
+    async_queue_capacity.labels(backend=backend_name).set(
+        snapshot.get("max_queue_size", _queue_capacity_limit())
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -298,10 +372,27 @@ end
 return #ready
 """
 
+    _ENQUEUE_WITH_CAPACITY_LUA = """
+local total = redis.call('LLEN', KEYS[1]) + redis.call('ZCARD', KEYS[2])
+if total >= tonumber(ARGV[2]) then
+    return -1
+end
+return redis.call('LPUSH', KEYS[1], ARGV[1])
+"""
+
+    _ENQUEUE_DELAYED_WITH_CAPACITY_LUA = """
+local total = redis.call('LLEN', KEYS[1]) + redis.call('ZCARD', KEYS[2])
+if total >= tonumber(ARGV[3]) then
+    return -1
+end
+return redis.call('ZADD', KEYS[2], ARGV[2], ARGV[1])
+"""
+
     def __init__(
         self,
         url: str,
         queue_name: str = QUEUE_NAME_DEFAULT,
+        max_queue_size: int | None = None,
         circuit_breaker_threshold: int = 5,
         circuit_breaker_open_seconds: float = 30.0,
     ) -> None:
@@ -314,10 +405,15 @@ return #ready
             ) from exc
         self._redis = redis.from_url(url, decode_responses=True, socket_timeout=10)
         self._queue_name = queue_name
+        self._max_queue_size = max_queue_size or _queue_capacity_limit()
         self._inflight_key = f"{queue_name}:inflight"
         self._delayed_key = f"{queue_name}:delayed"
         self._dlq_key = f"{queue_name}:dead"
         self._process_delayed = self._redis.register_script(self._PROCESS_DELAYED_LUA)
+        self._enqueue_with_capacity = self._redis.register_script(self._ENQUEUE_WITH_CAPACITY_LUA)
+        self._enqueue_delayed_with_capacity = self._redis.register_script(
+            self._ENQUEUE_DELAYED_WITH_CAPACITY_LUA
+        )
         self._redis_exceptions = (
             redis.ConnectionError,
             redis.TimeoutError,
@@ -374,20 +470,34 @@ return #ready
         self._record_success()
         return result
 
+    def assert_ready(self) -> None:
+        self._check_circuit_breaker()
+        self._run_redis_operation("ping", lambda: self._redis.ping())
+
     # ── Core operations ────────────────────────────────────────────────────
 
     def enqueue(self, payload: QueueJobPayload) -> None:
         self._check_circuit_breaker()
         raw = payload.to_json()
-        self._run_redis_operation(
+        result = self._run_redis_operation(
             "enqueue",
-            lambda: self._redis.lpush(self._queue_name, raw),
+            lambda: self._enqueue_with_capacity(
+                keys=[self._queue_name, self._delayed_key],
+                args=[raw, str(self._max_queue_size)],
+            ),
         )
+        if int(result) == -1:
+            async_queue_enqueue_total.labels(backend=self.backend_name, outcome="rejected").inc()
+            raise QueueSaturatedError(
+                f"Async queue is saturated (capacity={self._max_queue_size}). Retry later."
+            )
+        async_queue_enqueue_total.labels(backend=self.backend_name, outcome="accepted").inc()
         operation_name = getattr(payload, "operation_name", None) or payload.task_name
         logger.debug(
             "[Queue:redis] enqueued job_id=%s operation=%s idempotency_key=%s",
             payload.job_id, operation_name, payload.idempotency_key,
         )
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     def dequeue(self, timeout: int = 5) -> Optional[QueueJobPayload]:
         self._check_circuit_breaker()
@@ -416,6 +526,8 @@ return #ready
             "dequeue_inflight_hset",
             lambda: self._redis.hset(self._inflight_key, job.job_id, inflight_entry),
         )
+        async_queue_dequeue_total.labels(backend=self.backend_name).inc()
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         return job
 
     def ack(self, job_id: str) -> None:
@@ -425,6 +537,7 @@ return #ready
             lambda: self._redis.hdel(self._inflight_key, job_id),
         )
         logger.debug("[Queue:redis] ack job_id=%s", job_id)
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     def fail(self, job_id: str, error: str = "") -> None:
         """
@@ -457,6 +570,8 @@ return #ready
             "fail_lpush_dlq",
             lambda: self._redis.lpush(self._dlq_key, dlq_entry),
         )
+        async_queue_failure_total.labels(backend=self.backend_name, stage="job").inc()
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         logger.warning(
             "[Queue:redis] fail→DLQ job_id=%s error=%s", job_id, error
         )
@@ -473,14 +588,24 @@ return #ready
         """
         raw = payload.to_json()
         execute_at = datetime.now(timezone.utc).timestamp() + delay_seconds
-        self._run_redis_operation(
+        result = self._run_redis_operation(
             "enqueue_delayed",
-            lambda: self._redis.zadd(self._delayed_key, {raw: execute_at}),
+            lambda: self._enqueue_delayed_with_capacity(
+                keys=[self._queue_name, self._delayed_key],
+                args=[raw, str(execute_at), str(self._max_queue_size)],
+            ),
         )
+        if int(result) == -1:
+            async_queue_enqueue_total.labels(backend=self.backend_name, outcome="rejected").inc()
+            raise QueueSaturatedError(
+                f"Async queue is saturated (capacity={self._max_queue_size}). Retry later."
+            )
+        async_queue_enqueue_total.labels(backend=self.backend_name, outcome="accepted").inc()
         logger.debug(
             "[Queue:redis] delayed enqueue job_id=%s delay=%.1fs",
             payload.job_id, delay_seconds,
         )
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     def process_delayed_jobs(self) -> int:
         """
@@ -500,6 +625,7 @@ return #ready
         )
         if count:
             logger.info("[Queue:redis] promoted %d delayed jobs", count)
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         return int(count)
 
     # ── Visibility timeout recovery ────────────────────────────────────────
@@ -549,6 +675,8 @@ return #ready
                 logger.warning(
                     "[Queue:redis] stale check failed job_id=%s: %s", job_id, exc
                 )
+                async_queue_failure_total.labels(backend=self.backend_name, stage="stale_recovery").inc()
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         return requeued
 
     # ── Metrics ───────────────────────────────────────────────────────────
@@ -564,12 +692,17 @@ return #ready
         failed_jobs    — jobs in the Dead Letter Queue
         delayed_jobs   — jobs waiting for their delay to elapse
         """
+        queue_depth = self._redis.llen(self._queue_name)
+        delayed_jobs = self._redis.zcard(self._delayed_key)
         return {
-            "queue_depth": self._redis.llen(self._queue_name),
+            "queue_depth": queue_depth,
             "in_flight_count": self._redis.hlen(self._inflight_key),
             "failed_jobs": self.get_dlq_depth(),
-            "delayed_jobs": self._redis.zcard(self._delayed_key),
+            "delayed_jobs": delayed_jobs,
             "dlq_depth": self.get_dlq_depth(),
+            "max_queue_size": self._max_queue_size,
+            "total_pending_jobs": queue_depth + delayed_jobs,
+            "saturation_threshold": _saturation_threshold(),
         }
 
     def get_dlq_depth(self) -> int:
@@ -598,8 +731,9 @@ class InMemoryQueueBackend(DistributedQueueBackend):
     NOT usable across OS processes — items live in this process's heap only.
     """
 
-    def __init__(self) -> None:
-        self._q: queue.Queue[QueueJobPayload] = queue.Queue()
+    def __init__(self, max_queue_size: int | None = None) -> None:
+        self._max_queue_size = max_queue_size or _queue_capacity_limit()
+        self._q: queue.Queue[QueueJobPayload] = queue.Queue(maxsize=self._max_queue_size)
 
         # In-flight: { job_id → (payload, dequeued_at_utc) }
         self._inflight: dict[str, tuple[QueueJobPayload, datetime]] = {}
@@ -612,13 +746,29 @@ class InMemoryQueueBackend(DistributedQueueBackend):
         # Active delayed timers (kept to prevent GC before firing)
         self._timers: list[threading.Timer] = []
         self._timers_lock = threading.Lock()
+        self._delayed_count = 0
+
+    def _pending_depth(self) -> int:
+        with self._timers_lock:
+            delayed = self._delayed_count
+        return self._q.qsize() + delayed
+
+    def _reject_if_full(self) -> None:
+        if self._pending_depth() >= self._max_queue_size:
+            async_queue_enqueue_total.labels(backend=self.backend_name, outcome="rejected").inc()
+            raise QueueSaturatedError(
+                f"Async queue is saturated (capacity={self._max_queue_size}). Retry later."
+            )
 
     def enqueue(self, payload: QueueJobPayload) -> None:
-        self._q.put(payload)
+        self._reject_if_full()
+        self._q.put_nowait(payload)
+        async_queue_enqueue_total.labels(backend=self.backend_name, outcome="accepted").inc()
         operation_name = getattr(payload, "operation_name", None) or payload.task_name
         logger.debug(
             "[Queue:mem] enqueued job_id=%s operation=%s", payload.job_id, operation_name
         )
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     def dequeue(self, timeout: int = 5) -> Optional[QueueJobPayload]:
         try:
@@ -627,6 +777,8 @@ class InMemoryQueueBackend(DistributedQueueBackend):
             return None
         with self._inflight_lock:
             self._inflight[job.job_id] = (job, datetime.now(timezone.utc))
+        async_queue_dequeue_total.labels(backend=self.backend_name).inc()
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         return job
 
     def ack(self, job_id: str) -> None:
@@ -634,6 +786,7 @@ class InMemoryQueueBackend(DistributedQueueBackend):
         with self._inflight_lock:
             self._inflight.pop(job_id, None)
         logger.debug("[Queue:mem] ack job_id=%s", job_id)
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     def fail(self, job_id: str, error: str = "") -> None:
         """Remove from in-flight and move to Dead Letter Queue."""
@@ -646,14 +799,24 @@ class InMemoryQueueBackend(DistributedQueueBackend):
                 "error": error,
                 "failed_at": datetime.now(timezone.utc).isoformat(),
             })
+        async_queue_failure_total.labels(backend=self.backend_name, stage="job").inc()
         logger.warning("[Queue:mem] fail→DLQ job_id=%s error=%s", job_id, error)
 
     # ── Delayed enqueue ────────────────────────────────────────────────────
 
     def enqueue_delayed(self, payload: QueueJobPayload, delay_seconds: float) -> None:
         """Schedule enqueue after *delay_seconds* using a daemon Timer."""
+        self._reject_if_full()
+        with self._timers_lock:
+            self._delayed_count += 1
+
         def _fire() -> None:
-            self._q.put(payload)
+            try:
+                self._q.put_nowait(payload)
+            finally:
+                with self._timers_lock:
+                    self._delayed_count = max(0, self._delayed_count - 1)
+                _refresh_queue_metrics(self.backend_name, self.get_metrics())
             logger.debug("[Queue:mem] delayed enqueue fired job_id=%s", payload.job_id)
 
         t = threading.Timer(delay_seconds, _fire)
@@ -667,6 +830,8 @@ class InMemoryQueueBackend(DistributedQueueBackend):
             "[Queue:mem] delayed enqueue job_id=%s delay=%.1fs",
             payload.job_id, delay_seconds,
         )
+        async_queue_enqueue_total.labels(backend=self.backend_name, outcome="accepted").inc()
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     # process_delayed_jobs is a no-op: Timer fires automatically.
 
@@ -686,6 +851,7 @@ class InMemoryQueueBackend(DistributedQueueBackend):
         for _, job in to_requeue:
             self._q.put(job)
             logger.info("[Queue:mem] requeued stale job_id=%s", job.job_id)
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
         return len(to_requeue)
 
     # ── Metrics ───────────────────────────────────────────────────────────
@@ -699,8 +865,11 @@ class InMemoryQueueBackend(DistributedQueueBackend):
             "queue_depth": self._q.qsize(),
             "in_flight_count": inflight,
             "failed_jobs": dlq,
-            "delayed_jobs": 0,  # Timers are fire-and-forget; no persistent count.
+            "delayed_jobs": self._delayed_count,
             "dlq_depth": self.get_dlq_depth(),
+            "max_queue_size": self._max_queue_size,
+            "total_pending_jobs": self._q.qsize() + self._delayed_count,
+            "saturation_threshold": _saturation_threshold(),
         }
 
     # ── Test helpers ──────────────────────────────────────────────────────
@@ -765,8 +934,13 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
             _QUEUE_INSTANCE = InMemoryQueueBackend()
             return _QUEUE_INSTANCE
 
-        redis_url = os.getenv("REDIS_URL")
+        redis_url = settings.REDIS_URL or os.getenv("REDIS_URL")
         queue_name = os.getenv("AINDY_QUEUE_NAME", QUEUE_NAME_DEFAULT)
+        if settings.is_prod and not redis_url:
+            raise RuntimeError(
+                "Production requires RedisQueueBackend for async job durability. "
+                "Set REDIS_URL before startup."
+            )
 
         if redis_url:
             _QUEUE_INSTANCE = RedisQueueBackend(url=redis_url, queue_name=queue_name)
@@ -788,6 +962,8 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
             )
             _QUEUE_INSTANCE = InMemoryQueueBackend()
 
+        _QUEUE_INSTANCE.assert_ready()
+        _refresh_queue_metrics(_QUEUE_INSTANCE.backend_name, _QUEUE_INSTANCE.get_metrics())
         return _QUEUE_INSTANCE
 
 
@@ -801,3 +977,11 @@ def reset_queue() -> None:
     global _QUEUE_INSTANCE
     with _QUEUE_LOCK:
         _QUEUE_INSTANCE = None
+
+
+def validate_queue_backend() -> DistributedQueueBackend:
+    """Fail fast when the configured queue backend is unavailable."""
+    backend = get_queue()
+    backend.assert_ready()
+    _refresh_queue_metrics(backend.backend_name, backend.get_metrics())
+    return backend

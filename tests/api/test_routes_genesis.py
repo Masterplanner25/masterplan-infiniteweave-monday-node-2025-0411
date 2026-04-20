@@ -133,11 +133,11 @@ class TestGenesisSynthesizeEndpoint:
         # Check that it IS now imported (fix verified)
         has_any_import = bool(
             re.search(
-                r"from\s+services\.genesis_ai\s+import\s*\([\s\S]*call_genesis_synthesis_llm",
+                r"from\s+apps\.masterplan\.services\.genesis_ai\s+import\s*\([\s\S]*call_genesis_synthesis_llm",
                 source,
             )
             or re.search(
-                r"from\s+services\.genesis_ai\s+import\s+[\s\S]*call_genesis_synthesis_llm",
+                r"from\s+apps\.masterplan\.services\.genesis_ai\s+import\s+[\s\S]*call_genesis_synthesis_llm",
                 source,
             )
         )
@@ -176,7 +176,7 @@ class TestGenesisLockEndpoint:
         # Check that it IS now imported (fix verified)
         imported = bool(
             re.search(
-                r"from\s+services\.masterplan_factory\s+import\s+create_masterplan_from_genesis",
+                r"from\s+apps\.masterplan\.services\.masterplan_factory\s+import\s+create_masterplan_from_genesis",
                 source,
             )
         )

@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from apps.analytics.models import CalculationResult
+from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +59,22 @@ def save_calculation(
     user_id: str = None,
 ):
     try:
-        result = CalculationResult(
-            metric_name=metric_name,
-            result_value=value,
-            user_id=uuid.UUID(str(user_id)) if user_id else None,
-            # CalculationResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(result)
-        db.commit()
-        db.refresh(result)
+        with transaction_scope(db):
+            result = CalculationResult(
+                metric_name=metric_name,
+                result_value=value,
+                user_id=uuid.UUID(str(user_id)) if user_id else None,
+                # CalculationResult.created_at is a legacy naive DateTime column; SQLAlchemy may strip tzinfo here.
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(result)
+            db.flush()
+            db.refresh(result)
         logger.info("Saved metric: %s (ID: %s)", metric_name, result.id)
         return result
     except Exception as e:
-        db.rollback()
+        if supports_managed_transactions(db):
+            db.rollback()
         logger.warning("save_calculation failed for %s: %s", metric_name, e)
         return None
 

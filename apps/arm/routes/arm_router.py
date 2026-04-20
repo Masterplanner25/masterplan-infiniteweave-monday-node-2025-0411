@@ -19,10 +19,10 @@ from typing import Optional
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
-from AINDY.db.dao import arm_config_dao
 from AINDY.db.database import get_db
 from AINDY.services.auth_service import get_current_user
 from AINDY.platform_layer.rate_limiter import limiter
+from apps.arm.dao import arm_config_dao
 from apps.arm.services.deepseek.config_manager_deepseek import DEFAULT_CONFIG, _UPDATABLE_KEYS
 
 

@@ -88,33 +88,50 @@ def guard_request(request: Any, route_prefix: str, user_context: dict[str, Any] 
     return guard_fn(request=request, route_prefix=route_prefix, user_context=user_context or {})
 
 
-def validate_router_boundary(routes_dir: Path | None = None) -> None:
-    """Scan router files for generic boundary violations."""
-    if routes_dir is None:
-        routes_dir = Path(__file__).parent.parent / "routes"
+def _candidate_scan_files(scan_dir: Path) -> list[Path]:
+    if not scan_dir.is_dir():
+        return []
+    return sorted(path for path in scan_dir.glob("*.py") if not path.name.startswith("_"))
 
-    if not routes_dir.is_dir():
-        logger.warning("router_guard: routes directory not found at %s - skipping", routes_dir)
+
+def validate_router_boundary(routes_dir: Path | None = None) -> None:
+    """Scan platform entrypoints for generic boundary violations."""
+    scan_dirs: list[Path] = []
+    if routes_dir is None:
+        scan_dirs.append(Path(__file__).parent.parent / "routes")
+    else:
+        scan_dirs.append(routes_dir)
+    scan_dirs.append(Path(__file__).parent.parent / "db" / "dao")
+
+    scan_files: list[Path] = []
+    for scan_dir in scan_dirs:
+        if not scan_dir.is_dir():
+            logger.warning("router_guard: scan directory not found at %s - skipping", scan_dir)
+            continue
+        scan_files.extend(_candidate_scan_files(scan_dir))
+
+    if not scan_files:
+        logger.warning("router_guard: no scan files found - skipping")
         return
 
-    router_files = sorted(path for path in routes_dir.glob("*.py") if not path.name.startswith("_"))
     all_violations: list[_Violation] = []
-    for py_file in router_files:
-        guard_fn = get_route_guard(_route_prefix_from_path(py_file))
-        if guard_fn is not None:
-            guard_fn(request=None, route_prefix=_route_prefix_from_path(py_file), user_context={})
+    for py_file in scan_files:
+        if py_file.parent.name == "routes":
+            guard_fn = get_route_guard(_route_prefix_from_path(py_file))
+            if guard_fn is not None:
+                guard_fn(request=None, route_prefix=_route_prefix_from_path(py_file), user_context={})
         all_violations.extend(_scan_file(py_file))
 
     if not all_violations:
         logger.info(
-            "router_guard: PASS - %d router files respect the generic routing boundary",
-            len(router_files),
+            "router_guard: PASS - %d files respect the generic routing boundary",
+            len(scan_files),
         )
         return
 
-    lines = ["RouterBoundaryViolation: routers with forbidden direct implementation imports:"]
+    lines = ["RouterBoundaryViolation: platform files with forbidden direct implementation imports:"]
     for violation in all_violations:
-        rel = Path(violation.file).name
+        rel = str(Path(violation.file))
         lines.append(
             f"  {rel}:{violation.lineno}  module={violation.module!r}  names={violation.names}"
         )

@@ -14,7 +14,7 @@ Current foundation:
 - shared SQLite-backed fixtures live under `tests/fixtures/`
 - `TEST_MODE=true` is the default pytest runtime
 - test env defaults are injected from `tests/conftest.py`
-- Mongo connectivity is disabled in tests (`SKIP_MONGO_PING=1`, blank `MONGO_URL`) to avoid external dependencies
+- The default unit/API test runtime disables Mongo connectivity (`SKIP_MONGO_PING=1`, blank `MONGO_URL`) to avoid external dependencies
 - API-key protected routes use `api_key_headers`
 - the legacy compatibility surface is enabled in tests and remains API-key protected
 - async heavy execution is disabled by default unless a test explicitly enables it
@@ -34,4 +34,5 @@ Optional Postgres-backed test stack:
 
 - From the repo root: `docker compose -f docker-compose.test.yml up -d`
 - point `DATABASE_URL` at `postgresql+psycopg2://postgres:postgres@localhost:5434/aindy_test`
+- point `MONGO_URL` at `mongodb://localhost:27017` and `MONGO_DB_NAME` at `aindy_test`
 - run `pytest`

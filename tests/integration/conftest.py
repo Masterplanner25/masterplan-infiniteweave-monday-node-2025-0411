@@ -26,6 +26,7 @@ from uuid import uuid4
 from pathlib import Path
 
 import pytest
+from pymongo import MongoClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -124,5 +125,33 @@ def redis_backend() -> Iterator:
             backend._queue_name,
             backend._inflight_key,
             backend._delayed_key,
-            backend._dlq_key,
+        backend._dlq_key,
         )
+
+
+@pytest.fixture(scope="session")
+def mongo_client() -> Iterator[MongoClient]:
+    mongo_url = os.environ.get("MONGO_URL", "")
+    assert mongo_url, "Integration tests require MONGO_URL to be set"
+
+    client = MongoClient(
+        mongo_url,
+        serverSelectionTimeoutMS=5000,
+        uuidRepresentation="standard",
+    )
+    client.admin.command("ping")
+    try:
+        yield client
+    finally:
+        client.close()
+
+
+@pytest.fixture
+def mongo_db(mongo_client: MongoClient):
+    db_name = os.environ.get("MONGO_DB_NAME", "aindy_test")
+    db = mongo_client[db_name]
+    db.client.drop_database(db_name)
+    try:
+        yield db
+    finally:
+        db.client.drop_database(db_name)

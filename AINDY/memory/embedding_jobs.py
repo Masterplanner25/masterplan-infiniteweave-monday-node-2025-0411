@@ -121,6 +121,11 @@ def process_embedding_job(payload: dict[str, Any], db):
         except Exception as exc:
             logger.warning("[EmbeddingJobs] embedding attempt %s failed for %s: %s", attempt, memory_node.id, exc)
             if attempt == len(EMBEDDING_RETRY_DELAYS):
+                logger.error(
+                    "[EmbeddingJobs] embedding permanently failed for %s after %s attempts",
+                    memory_node.id,
+                    attempt,
+                )
                 _set_embedding_status(db, memory_node, "failed")
                 queue_system_event(
                     db=db,

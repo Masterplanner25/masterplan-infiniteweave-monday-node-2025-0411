@@ -20,5 +20,15 @@ services:
     ports:
       - "6380:6379"
 
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   pg_test_data:

@@ -18,7 +18,6 @@ import AINDY.db.models.agent  # noqa: F401
 import AINDY.db.models.agent_event  # noqa: F401
 import AINDY.db.models.agent_registry  # noqa: F401
 import AINDY.db.models.agent_run  # noqa: F401
-import AINDY.db.models.arm_config  # noqa: F401
 import AINDY.db.models.api_key  # noqa: F401
 import AINDY.db.models.autonomy_decision  # noqa: F401
 import AINDY.db.models.background_task_lease  # noqa: F401
@@ -42,6 +41,7 @@ import AINDY.db.models.system_state_snapshot  # noqa: F401
 import AINDY.db.models.user  # noqa: F401
 import AINDY.db.models.user_identity  # noqa: F401
 import AINDY.db.models.watcher_signal  # noqa: F401
+import AINDY.db.models.waiting_flow_run  # noqa: F401
 import AINDY.db.models.webhook_subscription  # noqa: F401
 
 

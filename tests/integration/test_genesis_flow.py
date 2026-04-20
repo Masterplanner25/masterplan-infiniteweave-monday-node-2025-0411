@@ -36,12 +36,12 @@ def _read_source(relative_path: str) -> str:
         / "masterplan"
         / "services"
         / "masterplan_service.py",
-        "services/genesis_ai.py": Path(__file__).resolve().parents[2]
+        "apps/masterplan/services/genesis_ai.py": Path(__file__).resolve().parents[2]
         / "apps"
         / "masterplan"
         / "services"
         / "genesis_ai.py",
-        "services/masterplan_factory.py": Path(__file__).resolve().parents[2]
+        "apps/masterplan/services/masterplan_factory.py": Path(__file__).resolve().parents[2]
         / "apps"
         / "masterplan"
         / "services"
@@ -122,7 +122,7 @@ class TestValidateDraftIntegrity:
             )
 
     def test_validate_draft_integrity_calls_openai(self):
-        source = _read_source("services/genesis_ai.py")
+        source = _read_source("apps/masterplan/services/genesis_ai.py")
         func_start = source.index("def validate_draft_integrity(")
         func_body = source[func_start:]
         assert "chat.completions.create" in func_body, (
@@ -130,7 +130,7 @@ class TestValidateDraftIntegrity:
         )
 
     def test_validate_draft_integrity_uses_gpt4o(self):
-        source = _read_source("services/genesis_ai.py")
+        source = _read_source("apps/masterplan/services/genesis_ai.py")
         func_start = source.index("def validate_draft_integrity(")
         func_body = source[func_start:]
         assert "gpt-4o" in func_body, (
@@ -138,7 +138,7 @@ class TestValidateDraftIntegrity:
         )
 
     def test_validate_draft_integrity_has_retry_logic(self):
-        source = _read_source("services/genesis_ai.py")
+        source = _read_source("apps/masterplan/services/genesis_ai.py")
         func_start = source.index("def validate_draft_integrity(")
         func_body = source[func_start:]
         assert "retry" in func_body.lower() or "attempt" in func_body.lower(), (
@@ -189,7 +189,7 @@ class TestValidateDraftIntegrity:
 
     def test_validate_draft_integrity_uses_json_object_format(self):
         """Must use response_format json_object to ensure valid JSON output."""
-        source = _read_source("services/genesis_ai.py")
+        source = _read_source("apps/masterplan/services/genesis_ai.py")
         func_start = source.index("def validate_draft_integrity(")
         func_body = source[func_start:]
         assert "json_object" in func_body, (
@@ -242,10 +242,10 @@ class TestGenesisAuditRoute:
             "validate_draft_integrity not found in genesis_router.py"
         )
         assert re.search(
-            r"from\s+services\.genesis_ai\s+import\s*\([\s\S]*validate_draft_integrity",
+            r"from\s+apps\.masterplan\.services\.genesis_ai\s+import\s*\([\s\S]*validate_draft_integrity",
             source,
         ) or re.search(
-            r"from\s+services\.genesis_ai\s+import\s+[\s\S]*validate_draft_integrity",
+            r"from\s+apps\.masterplan\.services\.genesis_ai\s+import\s+[\s\S]*validate_draft_integrity",
             source,
         ), (
             "validate_draft_integrity not imported from apps.masterplan.services.genesis_ai in genesis_router.py"
@@ -330,14 +330,14 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_synthesis_ready_gate_in_source(self):
         """Source code must contain synthesis_ready check."""
-        source = _read_source("services/masterplan_factory.py")
+        source = _read_source("apps/masterplan/services/masterplan_factory.py")
         assert "synthesis_ready" in source, (
             "create_masterplan_from_genesis() should check synthesis_ready"
         )
 
     def test_factory_uses_session_draft_json_when_available(self):
         """Factory should prefer session.draft_json over caller-supplied draft."""
-        source = _read_source("services/masterplan_factory.py")
+        source = _read_source("apps/masterplan/services/masterplan_factory.py")
         assert "draft_json" in source, (
             "Factory should use session.draft_json"
         )
@@ -347,7 +347,7 @@ class TestMasterplanFactoryHardening:
 
     def test_factory_has_rollback_on_exception(self):
         """Factory must call db.rollback() on exception."""
-        source = _read_source("services/masterplan_factory.py")
+        source = _read_source("apps/masterplan/services/masterplan_factory.py")
         assert "db.rollback()" in source, (
             "Factory must call db.rollback() in exception handler"
         )

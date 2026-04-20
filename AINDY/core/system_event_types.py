@@ -10,6 +10,7 @@ class SystemEventTypes:
 
     FLOW_NODE_STARTED = "flow.node.started"
     FLOW_WAITING = "flow.waiting"
+    WAIT_TIMEOUT = "WAIT_TIMEOUT"
     FLOW_NODE_COMPLETED = "flow.node.completed"
     FLOW_NODE_FAILED = "flow.node.failed"
 

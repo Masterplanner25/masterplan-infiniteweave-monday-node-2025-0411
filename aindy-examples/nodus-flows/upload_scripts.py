@@ -30,6 +30,7 @@ SCRIPTS = [
     ("approval_flow.nodus",  "approval_flow"),
     ("daily_briefing.nodus", "daily_briefing"),
     ("task_processor.nodus", "task_processor"),
+    ("memory_task.nodus",    "memory_task"),
 ]
 
 # Pull scripts from sub-example directories too

@@ -18,8 +18,9 @@ Uploading Nodus scripts...
   ✓ approval_flow      (approval_flow.nodus)
   ✓ daily_briefing     (daily_briefing.nodus)
   ✓ task_processor     (task_processor.nodus)
+  ✓ memory_task        (memory_task.nodus)
 
-4 script(s) uploaded.
+5 script(s) uploaded.
 ```
 
 ## Scripts
@@ -30,6 +31,7 @@ Uploading Nodus scripts...
 | `approval_flow.nodus` | `approval_flow` | event-automation |
 | `daily_briefing.nodus` | `daily_briefing` | scheduled-agent |
 | `task_processor.nodus` | `task_processor` | general purpose |
+| `memory_task.nodus` | `memory_task` | memory integration demo |
 
 ## Use any script
 

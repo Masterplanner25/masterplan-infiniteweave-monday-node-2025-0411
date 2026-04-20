@@ -14,11 +14,22 @@ from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from apps.masterplan.models import MasterPlan
 from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
-from apps.analytics.services.calculation_services import calculate_twr, save_calculation
 from AINDY.core.observability_events import emit_observability_event
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_twr(*args, **kwargs):
+    from apps.analytics.services.calculation_services import calculate_twr as _calculate_twr
+
+    return _calculate_twr(*args, **kwargs)
+
+
+def save_calculation(*args, **kwargs):
+    from apps.analytics.services.calculation_services import save_calculation as _save_calculation
+
+    return _save_calculation(*args, **kwargs)
 
 
 def _now_utc() -> datetime:

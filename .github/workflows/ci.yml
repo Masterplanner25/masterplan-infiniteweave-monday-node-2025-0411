@@ -59,11 +59,21 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       ENV: test
       DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
       MONGO_URL: mongodb://localhost:27017
+      MONGO_DB_NAME: aindy_test
       OPENAI_API_KEY: sk-test-placeholder
       DEEPSEEK_API_KEY: ds-test-placeholder
       SECRET_KEY: ci-secret-key-placeholder
@@ -107,6 +117,10 @@ jobs:
           REDIS_URL: redis://localhost:6379/1
           ENV: test
           TESTING: "false"
+          AINDY_SKIP_MONGO_PING: "false"
+          SKIP_MONGO_PING: "false"
+          MONGO_URL: mongodb://localhost:27017
+          MONGO_DB_NAME: aindy_test
           SECRET_KEY: ci-secret-key-placeholder
           OPENAI_API_KEY: sk-test-placeholder
           DEEPSEEK_API_KEY: ds-test-placeholder

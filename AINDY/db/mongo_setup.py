@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from AINDY.config import settings
+from AINDY.platform_layer.metrics import mongo_health_status
 
 # Configuration
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "aindy_default")
@@ -12,32 +13,55 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
-def init_mongo() -> MongoClient:
-    """Initialize and verify the singleton MongoDB client eagerly."""
+def ensure_mongo_ready(*, required: bool | None = None) -> MongoClient | None:
+    """Initialize Mongo when available and enforce fail-fast only when required."""
     global _client
     if _client is not None:
+        mongo_health_status.set(1)
         return _client
 
+    mongo_required = settings.MONGO_REQUIRED if required is None else required
     mongo_url = settings.MONGO_URL
     if settings.SKIP_MONGO_PING:
         _client = None
-        logger.info("Skipping Mongo connection (SKIP_MONGO_PING enabled)")
+        mongo_health_status.set(0)
+        if mongo_required and not settings.is_testing:
+            raise RuntimeError(
+                "Mongo is required but SKIP_MONGO_PING is enabled. "
+                "Disable the skip flag or provide a reachable MONGO_URL."
+            )
+        logger.warning("Skipping Mongo connection (SKIP_MONGO_PING enabled)")
         return _client
 
     if not mongo_url:
-        raise RuntimeError("MONGO_URL is required for runtime")
+        _client = None
+        mongo_health_status.set(0)
+        if mongo_required:
+            raise RuntimeError("Mongo is required but MONGO_URL is not configured")
+        logger.warning("Mongo is not configured; continuing without Mongo-backed features")
+        return _client
 
     try:
-        client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+        client = MongoClient(mongo_url, serverSelectionTimeoutMS=settings.MONGO_HEALTH_TIMEOUT_MS)
         client.admin.command("ping")
         _client = client
+        mongo_health_status.set(1)
         logger.info("Mongo connected successfully")
         return _client
     except PyMongoError as exc:
         _client = None
-        raise RuntimeError(
-            "Mongo connection failed. Verify MONGO_URL and that the MongoDB server is reachable."
-        ) from exc
+        mongo_health_status.set(0)
+        if mongo_required:
+            raise RuntimeError(
+                "Mongo connection failed. Verify MONGO_URL and that the MongoDB server is reachable."
+            ) from exc
+        logger.warning("Mongo unavailable; continuing without Mongo-backed features: %s", exc)
+        return _client
+
+
+def init_mongo(*, required: bool | None = None) -> MongoClient | None:
+    """Backward-compatible startup entrypoint."""
+    return ensure_mongo_ready(required=required)
 
 def get_mongo_client():
     """

@@ -600,7 +600,7 @@ class TestLoopTriggerWiring:
         assert "receive_signals" in src
 
     def test_task_services_calls_orchestrator(self):
-        src = pathlib.Path("services/task_services.py").read_text(encoding="utf-8")
+        src = pathlib.Path("apps/tasks/services/task_service.py").read_text(encoding="utf-8")
         assert "infinity_orchestrator" in src
 
     def test_arm_analyzer_calls_orchestrator(self):
