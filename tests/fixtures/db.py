@@ -45,27 +45,31 @@ def _import_model_registry():
 
 @pytest.fixture(scope="session")
 def test_engine():
+    import os
     from sqlalchemy import create_engine
 
     _import_model_registry()
 
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if os.environ.get("AINDY_TEST_DB") == "postgres":
+        engine = create_engine(os.environ["DATABASE_URL"])
+    else:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
 
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragmas(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        try:
-            # The production database is PostgreSQL. SQLite is used here as a
-            # lightweight test harness, and several event-chain tables rely on
-            # self-referential / cross-session inserts that produce false FK
-            # failures under SQLite's reduced UUID/JSON semantics.
-            cursor.execute("PRAGMA foreign_keys=OFF")
-        finally:
-            cursor.close()
+        @event.listens_for(engine, "connect")
+        def _set_sqlite_pragmas(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                # The production database is PostgreSQL. SQLite is used here as a
+                # lightweight test harness, and several event-chain tables rely on
+                # self-referential / cross-session inserts that produce false FK
+                # failures under SQLite's reduced UUID/JSON semantics.
+                cursor.execute("PRAGMA foreign_keys=OFF")
+            finally:
+                cursor.close()
 
     from AINDY.db.database import Base
 

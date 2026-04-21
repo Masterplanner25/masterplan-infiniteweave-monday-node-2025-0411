@@ -4,6 +4,8 @@ import threading
 import time
 import uuid
 
+import pytest
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -52,6 +54,7 @@ def _seed_user(session_factory) -> str:
     return str(user_id)
 
 
+@pytest.mark.postgres
 def test_duplicate_trigger_is_suppressed_for_same_user(tmp_path, monkeypatch):
     engine, session_factory = _build_session_factory(tmp_path)
     user_id = _seed_user(session_factory)

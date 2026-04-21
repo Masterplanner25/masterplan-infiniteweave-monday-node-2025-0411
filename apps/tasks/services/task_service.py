@@ -823,12 +823,15 @@ def execute_task_completion(db: Session, name: str, user_id: str | uuid.UUID | N
 # ----------------------------
 
 
-def _check_reminders_once(log: logging.Logger | None = None):
+def _check_reminders_once(log: logging.Logger | None = None, *, user_id=None):
     log = log or logger
     db = SessionLocal()
     try:
         now = datetime.now()
-        tasks = db.query(Task).all()
+        q = db.query(Task)
+        if user_id is not None:
+            q = q.filter(Task.user_id == user_id)
+        tasks = q.all()
         for t in tasks:
             if getattr(t, "reminder_time", None):
                 if now >= t.reminder_time and t.status != "completed":
@@ -841,11 +844,14 @@ def _check_reminders_once(log: logging.Logger | None = None):
         db.close()
 
 
-def _handle_recurrence_once(log: logging.Logger | None = None):
+def _handle_recurrence_once(log: logging.Logger | None = None, *, user_id=None):
     log = log or logger
     db = SessionLocal()
     try:
-        tasks = db.query(Task).filter(Task.status == "completed").all()
+        q = db.query(Task).filter(Task.status == "completed")
+        if user_id is not None:
+            q = q.filter(Task.user_id == user_id)
+        tasks = q.all()
         _ = tasks
     except Exception as e:
         log.warning("[Recurrence Error] %s", e)

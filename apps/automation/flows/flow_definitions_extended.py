@@ -5,13 +5,13 @@ Coordinator only. Bootstrap continues importing this module, while the actual
 domain-specific node and flow registrations live in per-domain modules.
 """
 
-from apps.automation.flows.arm_flows import *  # noqa: F401,F403
-from apps.automation.flows.arm_flows import register as register_arm
-from apps.automation.flows.analytics_flows import *  # noqa: F401,F403
-from apps.automation.flows.analytics_flows import register as register_analytics
+from apps.arm.flows.arm_flows import *  # noqa: F401,F403
+from apps.arm.flows.arm_flows import register as register_arm
+from apps.analytics.flows.analytics_flows import *  # noqa: F401,F403
+from apps.analytics.flows.analytics_flows import register as register_analytics
 from apps.automation.flows import _flow_registration as _flow_registration
-from apps.automation.flows.agent_flows import *  # noqa: F401,F403
-from apps.automation.flows import agent_flows as _agent_flows
+from apps.agent.flows.agent_flows import *  # noqa: F401,F403
+from apps.agent.flows import agent_flows as _agent_flows
 from apps.automation.flows.memory_flows import *  # noqa: F401,F403
 from apps.automation.flows import memory_flows as _memory_flows
 from apps.automation.flows.flow_engine_flows import *  # noqa: F401,F403
@@ -26,14 +26,14 @@ from apps.automation.flows.dashboard_autonomy_flows import *  # noqa: F401,F403
 from apps.automation.flows import dashboard_autonomy_flows as _dashboard_autonomy_flows
 from apps.automation.flows import automation_flows as _automation_flows
 from apps.automation.flows.automation_flows import register as register_automation
-from apps.automation.flows.freelance_flows import *  # noqa: F401,F403
-from apps.automation.flows.freelance_flows import register as register_freelance
-from apps.automation.flows.masterplan_flows import *  # noqa: F401,F403
-from apps.automation.flows.masterplan_flows import register as register_masterplan
-from apps.automation.flows.search_flows import *  # noqa: F401,F403
-from apps.automation.flows.search_flows import register as register_search
-from apps.automation.flows.tasks_flows import *  # noqa: F401,F403
-from apps.automation.flows.tasks_flows import register as register_tasks
+from apps.freelance.flows.freelance_flows import *  # noqa: F401,F403
+from apps.freelance.flows.freelance_flows import register as register_freelance
+from apps.masterplan.flows.masterplan_flows import *  # noqa: F401,F403
+from apps.masterplan.flows.masterplan_flows import register as register_masterplan
+from apps.search.flows.search_flows import *  # noqa: F401,F403
+from apps.search.flows.search_flows import register as register_search
+from apps.tasks.flows.tasks_flows import *  # noqa: F401,F403
+from apps.tasks.flows.tasks_flows import register as register_tasks
 
 
 def register_all() -> None:

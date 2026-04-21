@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 import uuid
 
+import pytest
+
 from AINDY.db.models.agent_event import AgentEvent
 from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.agent_run import AgentTrustSettings
@@ -83,6 +85,7 @@ def _make_run(db_session, user_id, *, status: str = "approved", plan: dict | Non
     return run
 
 
+@pytest.mark.postgres
 def test_every_execution_emits_events(client, db_session, test_user, auth_headers, monkeypatch):
     from AINDY.platform_layer.async_job_service import shutdown_async_jobs
 

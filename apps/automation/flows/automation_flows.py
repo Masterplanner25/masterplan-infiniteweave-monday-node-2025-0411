@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from AINDY.runtime.flow_engine import FLOW_REGISTRY  # noqa: F401
 
+from apps.agent.flows import agent_flows
 from apps.automation.flows import (
-    agent_flows,
     automation_system_flows,
     dashboard_autonomy_flows,
     flow_engine_flows,
