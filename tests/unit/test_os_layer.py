@@ -17,7 +17,16 @@ from __future__ import annotations
 
 import threading
 import time
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch, call
+
+
+@contextmanager
+def _production_quota():
+    """Disable the test-mode bypass so quota enforcement tests exercise real limits."""
+    with patch("AINDY.kernel.resource_manager.settings") as mock_s:
+        mock_s.is_testing = False
+        yield mock_s
 
 import pytest
 
@@ -130,10 +139,10 @@ class TestResourceManagerQuota:
 
     def test_can_execute_blocks_at_max_concurrent(self):
         rm = self._rm()
-        # Fill up slots
         for i in range(MAX_CONCURRENT_PER_TENANT):
             rm.mark_started("tenant-1", f"eu-{i}")
-        ok, reason = rm.can_execute("tenant-1", "eu-new")
+        with _production_quota():
+            ok, reason = rm.can_execute("tenant-1", "eu-new")
         assert ok is False
         assert RESOURCE_LIMIT_EXCEEDED in reason
 
@@ -157,7 +166,8 @@ class TestResourceManagerQuota:
         rm = self._rm()
         rm.mark_started("tenant-1", "eu-2")
         rm.record_usage("eu-2", {"cpu_time_ms": MAX_CPU_TIME_MS + 1})
-        ok, reason = rm.check_quota("eu-2")
+        with _production_quota():
+            ok, reason = rm.check_quota("eu-2")
         assert ok is False
         assert RESOURCE_LIMIT_EXCEEDED in reason
         assert "cpu_time_ms" in reason
@@ -166,7 +176,8 @@ class TestResourceManagerQuota:
         rm = self._rm()
         rm.mark_started("tenant-1", "eu-3")
         rm.record_usage("eu-3", {"syscall_count": MAX_SYSCALLS_PER_EXECUTION + 1})
-        ok, reason = rm.check_quota("eu-3")
+        with _production_quota():
+            ok, reason = rm.check_quota("eu-3")
         assert ok is False
         assert RESOURCE_LIMIT_EXCEEDED in reason
         assert "syscall_count" in reason
@@ -786,10 +797,9 @@ class TestSyscallDispatcherOsLayer:
         rm = ResourceManager()
         ctx = self._ctx(caps=["test.cap"])
         rm.mark_started("user-1", "eu-test")
-        # Exhaust syscall quota
         rm.record_usage("eu-test", {"syscall_count": MAX_SYSCALLS_PER_EXECUTION + 1})
 
-        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=rm):
+        with _production_quota(), patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=rm):
             result = dispatcher.dispatch("sys.v1.test.heavy", {}, ctx)
 
         assert result["status"] == "error"
@@ -866,19 +876,17 @@ class TestSchedulerResourceIntegration:
         """When resource limit is hit, item stays in queue."""
         se = SchedulerEngine()
         rm = ResourceManager()
-        # Fill up concurrency
         for i in range(MAX_CONCURRENT_PER_TENANT):
             rm.mark_started("t1", f"eu-{i}")
 
         calls = []
         se.enqueue(_item("eu-blocked", tenant_id="t1", callback=lambda: calls.append("ran")))
 
-        with patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
+        with _production_quota(), patch("AINDY.kernel.scheduler_engine.get_resource_manager", return_value=rm):
             dispatched = se.schedule()
 
         assert dispatched == 0
         assert len(calls) == 0
-        # Item should remain in queue (re-enqueued at front)
         assert se.queue_depth()[PRIORITY_NORMAL] == 1
 
     def test_schedule_runs_when_slot_freed(self):

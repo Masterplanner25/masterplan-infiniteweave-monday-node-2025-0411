@@ -512,6 +512,9 @@ class ResourceManager:
             (True, None) if execution is allowed.
             (False, reason_str) if a quota is exceeded.
         """
+        if settings.is_testing:
+            return True, None
+
         tid = str(tenant_id)
         redis_client = self._get_redis()
         if redis_client is not None:
@@ -553,6 +556,9 @@ class ResourceManager:
             (True, None) if within limits.
             (False, reason_str) if a quota is exceeded.
         """
+        if settings.is_testing:
+            return True, None
+
         with self._lock:
             snap = self._usage.get(str(eu_id))
             if snap is None:

@@ -7,6 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from AINDY.core.execution_pipeline import ExecutionContext, ExecutionPipeline
+from AINDY.kernel.resource_manager import (
+    MAX_CONCURRENT_PER_TENANT,
+    RESOURCE_LIMIT_EXCEEDED,
+    ResourceManager,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,3 +120,26 @@ def test_mark_completed_called_on_handler_exception():
 
     assert result.success is False
     rm.mark_completed.assert_called_once_with("user-1", "eu-1")
+
+
+def test_production_quota_returns_429_at_concurrent_limit():
+    """In non-test mode, can_execute returns False and pipeline returns 429 at limit.
+
+    This verifies the production safeguard remains intact — test mode bypass does
+    not affect the ResourceManager's enforcement logic itself.
+    """
+    rm = ResourceManager()
+    tenant_id = "prod-tenant-verification"
+
+    # Fill active count to the per-tenant limit.
+    for i in range(MAX_CONCURRENT_PER_TENANT):
+        rm.mark_started(tenant_id, eu_id=f"eu-prod-{i}")
+
+    # Patch settings.is_testing to False so the production code path is exercised.
+    with patch("AINDY.kernel.resource_manager.settings") as mock_settings:
+        mock_settings.is_testing = False
+        ok, reason = rm.can_execute(tenant_id, "eu-prod-overflow")
+
+    assert ok is False, "Expected quota enforcement to block execution at the limit"
+    assert RESOURCE_LIMIT_EXCEEDED in reason
+    assert str(MAX_CONCURRENT_PER_TENANT) in reason

@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from AINDY.kernel.resource_manager import RedisResourceBackend, ResourceManager
+
+
+@contextmanager
+def _production_quota():
+    """Disable the test-mode bypass so quota enforcement tests exercise real limits."""
+    with patch("AINDY.kernel.resource_manager.settings") as mock_s:
+        mock_s.is_testing = False
+        yield mock_s
 
 
 class _Pipeline:
@@ -77,7 +86,8 @@ class TestResourceManagerRedisMode:
         for i in range(5):
             rm.mark_started("tenant-1", f"eu-{i}")
 
-        ok, reason = rm.can_execute("tenant-1", "eu-new")
+        with _production_quota():
+            ok, reason = rm.can_execute("tenant-1", "eu-new")
 
         assert ok is False
         assert reason is not None
