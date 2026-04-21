@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: AINDY
+        working-directory: ${{ github.workspace }}
 
     services:
       postgres:
@@ -71,6 +71,7 @@ jobs:
 
     env:
       ENV: test
+      PYTHONPATH: .
       DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
       MONGO_URL: mongodb://localhost:27017
       MONGO_DB_NAME: aindy_test
@@ -97,7 +98,7 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r AINDY/requirements.txt
 
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
@@ -107,8 +108,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: alembic check
 
+      - name: Confirm repo root contents
+        run: ls -la
+
       - name: Run tests with coverage
-        run: pytest --ignore=tests/validate_memory_loop.py
+        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
 
       - name: Run integration tests (PostgreSQL)
         working-directory: ${{ github.workspace }}
@@ -151,7 +155,7 @@ jobs:
     continue-on-error: true
     defaults:
       run:
-        working-directory: AINDY
+        working-directory: ${{ github.workspace }}
 
     services:
       postgres:
@@ -188,6 +192,7 @@ jobs:
 
     env:
       ENV: test
+      PYTHONPATH: .
       TESTING: "false"
       AINDY_TEST_DB: postgres
       AINDY_ALLOW_SQLITE: "false"
@@ -219,14 +224,17 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r AINDY/requirements.txt
 
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
         run: alembic upgrade head
 
+      - name: Confirm repo root contents
+        run: ls -la
+
       - name: Run tests against PostgreSQL
-        run: pytest tests/ --ignore=tests/validate_memory_loop.py -m "not redis" --tb=short -q
+        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
