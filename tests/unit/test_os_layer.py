@@ -543,6 +543,11 @@ class TestSchedulerFairness:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSchedulerWaitResume:
+    def _ready_scheduler(self):
+        se = SchedulerEngine()
+        se.mark_rehydration_complete()
+        return se
+
     def test_register_wait_records_run(self):
         se = SchedulerEngine()
         se.register_wait(
@@ -559,7 +564,7 @@ class TestSchedulerWaitResume:
         assert se.waiting_for("run-unknown") is None
 
     def test_notify_event_enqueues_correct_runs(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         resumed_calls = []
 
         se.register_wait(
@@ -584,7 +589,7 @@ class TestSchedulerWaitResume:
         assert se.waiting_for("run-2") == "score.recalculated"
 
     def test_notify_event_clears_wait_registry(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         se.register_wait(
             run_id="run-1",
             wait_for_event="myevent",
@@ -596,12 +601,12 @@ class TestSchedulerWaitResume:
         assert se.waiting_for("run-1") is None
 
     def test_notify_event_no_match_returns_zero(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         count = se.notify_event("event.that.never.happened")
         assert count == 0
 
     def test_resumed_item_priority_respected(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         se.register_wait(
             run_id="run-h",
             wait_for_event="myevent",
@@ -623,6 +628,11 @@ class TestSchedulerWaitResume:
 class TestSchedulerNotifyEvent:
     """notify_event() matches on wait_condition.event_name and correlation_id."""
 
+    def _ready_scheduler(self):
+        se = SchedulerEngine()
+        se.mark_rehydration_complete()
+        return se
+
     def _register(self, se, *, run_id, event_name, corr=None, priority=PRIORITY_NORMAL, eu_type="flow"):
         from AINDY.core.wait_condition import WaitCondition
         wc = WaitCondition.for_event(event_name, correlation_id=corr)
@@ -641,7 +651,7 @@ class TestSchedulerNotifyEvent:
         return calls
 
     def test_notify_event_resumes_matching_run(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         self._register(se, run_id="r1", event_name="task.completed")
         count = se.notify_event("task.completed")
         assert count == 1
@@ -649,14 +659,14 @@ class TestSchedulerNotifyEvent:
         assert se.waiting_for("r1") is None
 
     def test_notify_event_does_not_resume_different_event(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         self._register(se, run_id="r1", event_name="task.completed")
         count = se.notify_event("score.recalculated")
         assert count == 0
         assert se.waiting_for("r1") == "task.completed"
 
     def test_notify_event_resumes_multiple_matching_runs(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         self._register(se, run_id="r1", event_name="data.ready")
         self._register(se, run_id="r2", event_name="data.ready")
         self._register(se, run_id="r3", event_name="other.event")
@@ -665,7 +675,7 @@ class TestSchedulerNotifyEvent:
         assert se.waiting_for("r3") == "other.event"
 
     def test_notify_event_correlation_id_match(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         self._register(se, run_id="r1", event_name="job.done", corr="chain-abc")
         self._register(se, run_id="r2", event_name="job.done", corr="chain-xyz")
         # Only r1 matches — same correlation_id
@@ -675,21 +685,21 @@ class TestSchedulerNotifyEvent:
         assert se.waiting_for("r2") == "job.done"  # r2 still waiting
 
     def test_notify_event_unbound_wait_resumes_on_any_corr(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         # No correlation_id on the wait — should resume regardless
         self._register(se, run_id="r1", event_name="job.done", corr=None)
         count = se.notify_event("job.done", correlation_id="chain-abc")
         assert count == 1
 
     def test_notify_event_unbound_event_resumes_on_any_corr(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         # No correlation_id on the emitted event — should still resume bound waits
         self._register(se, run_id="r1", event_name="job.done", corr="chain-abc")
         count = se.notify_event("job.done", correlation_id=None)
         assert count == 1
 
     def test_notify_event_no_duplicate_resume(self):
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         self._register(se, run_id="r1", event_name="ev")
         first = se.notify_event("ev")
         second = se.notify_event("ev")
@@ -698,7 +708,7 @@ class TestSchedulerNotifyEvent:
 
     def test_notify_event_legacy_wait_for_fallback(self):
         """Entries registered without a wait_condition use wait_for as fallback."""
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         # Register without WaitCondition (legacy path)
         se.register_wait(
             run_id="legacy-r1",
@@ -712,7 +722,7 @@ class TestSchedulerNotifyEvent:
 
     def test_notify_event_external_type_resumes(self):
         from AINDY.core.wait_condition import WaitCondition
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         wc = WaitCondition.for_external("webhook.received")
         se.register_wait(
             run_id="ext-r1",
@@ -729,7 +739,7 @@ class TestSchedulerNotifyEvent:
         """Time-based waits are NOT resumed by notify_event (tick_time_waits handles them)."""
         from AINDY.core.wait_condition import WaitCondition
         import datetime
-        se = SchedulerEngine()
+        se = self._ready_scheduler()
         future = datetime.datetime(2099, 1, 1, tzinfo=datetime.timezone.utc)
         wc = WaitCondition.for_time(future)
         se.register_wait(
@@ -930,6 +940,7 @@ class TestSchedulerResourceIntegration:
 
     def test_wait_resume_full_cycle(self):
         se = SchedulerEngine()
+        se.mark_rehydration_complete()
         rm = ResourceManager()
         results = []
 

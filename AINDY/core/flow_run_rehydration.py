@@ -56,7 +56,7 @@ for future time-based WAIT nodes.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable
 
 # Module-level imports keep these patchable in tests via
 # "core.flow_run_rehydration.<name>".
@@ -112,7 +112,10 @@ def derive_wait_condition_from_flow(flow_run) -> "WaitCondition | None":
     return None
 
 
-def rehydrate_waiting_flow_runs(db: "Session") -> int:
+def rehydrate_waiting_flow_runs(
+    db: "Session",
+    run_ids: Iterable[str] | None = None,
+) -> int:
     """Re-register all waiting FlowRuns with the SchedulerEngine.
 
     Args:
@@ -128,12 +131,12 @@ def rehydrate_waiting_flow_runs(db: "Session") -> int:
     scheduler = get_scheduler_engine()
 
     # ── 1. Query all waiting FlowRuns ──────────────────────────────────────────
+    scoped_run_ids = {str(run_id) for run_id in (run_ids or []) if run_id}
     try:
-        waiting_runs = (
-            db.query(FlowRun)
-            .filter(FlowRun.status == "waiting")
-            .all()
-        )
+        waiting_query = db.query(FlowRun).filter(FlowRun.status == "waiting")
+        if scoped_run_ids:
+            waiting_query = waiting_query.filter(FlowRun.id.in_(scoped_run_ids))
+        waiting_runs = waiting_query.all()
     except Exception as exc:
         logger.warning(
             "[flow_rehydrate] Could not query waiting FlowRuns (non-fatal): %s", exc

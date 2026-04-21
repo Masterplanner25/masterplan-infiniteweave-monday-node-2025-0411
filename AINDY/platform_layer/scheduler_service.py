@@ -97,6 +97,7 @@ except ImportError:  # pragma: no cover - optional dependency
 logger = logging.getLogger(__name__)
 
 APScheduler_AVAILABLE = True
+_STALE_WAIT_CLEANUP_COUNTER = 0
 
 # Global scheduler instance â€” initialized once on startup
 _scheduler: Optional[BackgroundScheduler] = None
@@ -158,6 +159,16 @@ def stop() -> None:
 
 def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     """Register recurring platform jobs and app-registered scheduled jobs."""
+    scheduler.add_job(
+        _scheduler_heartbeat_tick,
+        trigger=IntervalTrigger(seconds=1),
+        id="scheduler_heartbeat_tick",
+        name="Scheduler heartbeat tick",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
     scheduler.add_job(
         _scrape_scheduler_metrics,
         trigger=IntervalTrigger(seconds=15),
@@ -250,6 +261,28 @@ def _scrape_scheduler_metrics() -> None:
         scheduler_waiting_count.set(snapshot["waiting_count"])
     except Exception as exc:
         logger.warning("Scheduler metrics scrape failed (non-fatal): %s", exc)
+
+
+def _should_run_stale_wait_cleanup() -> bool:
+    global _STALE_WAIT_CLEANUP_COUNTER
+    _STALE_WAIT_CLEANUP_COUNTER += 1
+    if _STALE_WAIT_CLEANUP_COUNTER >= 60:
+        _STALE_WAIT_CLEANUP_COUNTER = 0
+        return True
+    return False
+
+
+def _scheduler_heartbeat_tick() -> None:
+    """Drive scheduler dispatch and amortized stale-wait cleanup."""
+    try:
+        from AINDY.kernel.scheduler_engine import get_scheduler_engine
+
+        engine = get_scheduler_engine()
+        engine.schedule()
+        if _should_run_stale_wait_cleanup():
+            engine.cleanup_stale_waits()
+    except Exception as exc:
+        logger.warning("Scheduler heartbeat tick failed: %s", exc)
 
 
 def _cleanup_stale_logs() -> None:

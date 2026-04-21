@@ -53,6 +53,7 @@ def test_notify_scheduler_wakes_waiting_run(db_session, test_user):
     from AINDY.core.system_event_service import emit_system_event
 
     se = SchedulerEngine()
+    se.mark_rehydration_complete()
     wc = WaitCondition.for_event("task.completed")
     resumed_flag = []
 

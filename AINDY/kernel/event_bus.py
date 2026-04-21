@@ -408,6 +408,25 @@ def get_event_bus() -> EventBus:
     return _EVENT_BUS
 
 
+def get_redis_client():
+    """Return a Redis client for auxiliary wait-registry operations, or None."""
+    configured_url = os.getenv("AINDY_REDIS_URL")
+    if not ENABLED or not configured_url:
+        return None
+    try:
+        import redis as _redis  # noqa: PLC0415
+
+        return _redis.from_url(
+            configured_url,
+            decode_responses=True,
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
+    except Exception:
+        logger.debug("[EventBus] auxiliary Redis client unavailable", exc_info=True)
+        return None
+
+
 # ── Public API — single entry point for all event emission ───────────────────
 
 def publish_event(

@@ -257,6 +257,7 @@ class TestSchedulerNotifyEventBroadcast:
     def _make_scheduler(self):
         from AINDY.kernel.scheduler_engine import SchedulerEngine
         se = SchedulerEngine()
+        se.mark_rehydration_complete()
         return se
 
     def test_notify_event_publishes_to_bus_by_default(self):
@@ -287,6 +288,7 @@ class TestSchedulerNotifyEventBroadcast:
         from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
+        se.mark_rehydration_complete()
         cb = MagicMock()
         se.register_wait(
             run_id="run-1",
@@ -310,6 +312,7 @@ class TestSchedulerNotifyEventBroadcast:
         from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
+        se.mark_rehydration_complete()
         call_order: list[str] = []
 
         cb = MagicMock(side_effect=lambda: call_order.append("local_callback"))
@@ -339,6 +342,7 @@ class TestSchedulerNotifyEventBroadcast:
         from AINDY.core.wait_condition import WaitCondition
 
         se = SchedulerEngine()
+        se.mark_rehydration_complete()
         se.register_wait(
             run_id="run-3",
             wait_for_event="ping",
