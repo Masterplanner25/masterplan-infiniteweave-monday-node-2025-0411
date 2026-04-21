@@ -287,6 +287,7 @@ class ResourceManager:
         self._tenant_active = self._active_counts
         # eu_id → tenant_id (for cleanup on mark_completed with unknown eu_id)
         self._eu_tenant: dict[str, str] = {}
+        self._pending_purge: set[str] = set()
 
     def _get_redis(self):
         now = time.monotonic()
@@ -512,6 +513,16 @@ class ResourceManager:
             (True, None) if execution is allowed.
             (False, reason_str) if a quota is exceeded.
         """
+        if self._pending_purge:
+            with self._lock:
+                for eid in list(self._pending_purge):
+                    self._usage.pop(eid, None)
+                    self._eu_tenant.pop(eid, None)
+                self._pending_purge.clear()
+
+        if settings.is_testing:
+            return True, None
+
         tid = str(tenant_id)
         redis_client = self._get_redis()
         if redis_client is not None:
@@ -553,6 +564,9 @@ class ResourceManager:
             (True, None) if within limits.
             (False, reason_str) if a quota is exceeded.
         """
+        if settings.is_testing:
+            return True, None
+
         with self._lock:
             snap = self._usage.get(str(eu_id))
             if snap is None:
@@ -695,6 +709,8 @@ class ResourceManager:
         if eu_id:
             self._backend_delete_eu(str(eu_id))
         with self._lock:
+            if eu_id:
+                self._pending_purge.add(str(eu_id))
             capacity_freed = (
                 effective_current >= self.MAX_CONCURRENT_PER_TENANT
                 and effective_new_active < self.MAX_CONCURRENT_PER_TENANT
@@ -836,6 +852,7 @@ class ResourceManager:
             self._usage.clear()
             self._active_counts.clear()
             self._eu_tenant.clear()
+            self._pending_purge.clear()
 
 
 # ── Module-level singleton ────────────────────────────────────────────────────

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
-from apps.analytics.models import UserScore
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.platform_layer.user_ids import parse_user_id
 
@@ -108,6 +107,8 @@ def get_recent_agent_runs(
 
 
 def get_user_metrics(user_id: str | UUID, db: Session) -> dict[str, Any] | None:
+    from apps.analytics.models import UserScore
+
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     score = db.query(UserScore).filter(UserScore.user_id == normalized_user_id).first()
     if not score:

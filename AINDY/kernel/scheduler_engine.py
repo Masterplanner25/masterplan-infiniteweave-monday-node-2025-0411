@@ -48,6 +48,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -68,6 +69,19 @@ PRIORITY_ORDER = (PRIORITY_HIGH, PRIORITY_NORMAL, PRIORITY_LOW)
 MAX_PER_SCHEDULE_CYCLE = 10
 
 
+def _int_env(key: str, default: int) -> int:
+    try:
+        return int(os.getenv(key, default))
+    except (TypeError, ValueError):
+        return default
+
+
+_MAX_PRE_REHYDRATION_BUFFER = _int_env(
+    "AINDY_SCHEDULER_PRE_REHYDRATION_BUFFER",
+    1000,
+)
+
+
 def _get_session_factory():
     from AINDY.db.database import SessionLocal
 
@@ -76,6 +90,188 @@ def _get_session_factory():
 
 def _get_instance_id() -> str:
     return os.getenv("HOSTNAME", "local")
+
+
+def _emit_dispatch_failure(item: "ScheduledItem", exc: Exception) -> None:
+    """Log a structured dispatch failure for alerting. Non-fatal."""
+    try:
+        logger.critical(
+            "[Scheduler] DISPATCH_FAILURE run_id=%s eu=%s tenant=%s type=%s retries=%d exc=%r",
+            item.run_id,
+            item.execution_unit_id,
+            item.tenant_id,
+            item.eu_type,
+            item.retry_count,
+            str(exc),
+        )
+    except Exception:
+        pass
+
+
+def _load_wait_entry_from_db(run_id: str):
+    """Load WaitingFlowRun from DB. Returns None if not found."""
+    try:
+        from AINDY.db import SessionLocal
+        from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+
+        with SessionLocal() as db:
+            return (
+                db.query(WaitingFlowRun)
+                .filter(WaitingFlowRun.run_id == str(run_id))
+                .first()
+            )
+    except Exception:
+        logger.warning(
+            "_load_wait_entry_from_db failed for run_id=%s",
+            run_id,
+            exc_info=True,
+        )
+        return None
+
+
+def _cross_instance_resume(
+    engine: "SchedulerEngine",
+    event_type: str,
+    correlation_id: str | None,
+    skip_run_ids: set[str],
+) -> int:
+    """Resume flows registered on other instances via Redis wait specs."""
+    try:
+        from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
+        from AINDY.kernel.resume_spec import build_callback_from_spec
+        from AINDY.kernel.event_bus import get_redis_client
+
+        registry = RedisWaitRegistry(get_redis_client())
+        if registry._redis is None:
+            return 0
+
+        resumed = 0
+        all_specs = registry.get_all_specs()
+        for run_id, spec in all_specs.items():
+            if run_id in skip_run_ids:
+                continue
+
+            with engine._lock:
+                if run_id in engine._waiting:
+                    continue
+
+            wait_entry = _load_wait_entry_from_db(run_id)
+            if wait_entry is None:
+                continue
+            if getattr(wait_entry, "event_type", None) != event_type:
+                continue
+
+            wait_corr = getattr(wait_entry, "correlation_id", None)
+            if correlation_id and wait_corr != correlation_id:
+                continue
+
+            try:
+                callback = build_callback_from_spec(spec)
+            except Exception:
+                logger.warning(
+                    "Failed to build callback for run_id=%s",
+                    run_id,
+                    exc_info=True,
+                )
+                continue
+
+            if not registry.unregister_if_exists(run_id):
+                continue
+
+            engine._enqueue_resume(
+                run_id,
+                callback,
+                {
+                    "priority": getattr(wait_entry, "priority", PRIORITY_NORMAL) or PRIORITY_NORMAL,
+                    "tenant_id": getattr(spec, "tenant_id", None) or "system",
+                    "eu_id": getattr(wait_entry, "eu_id", None) or spec.eu_id,
+                    "correlation_id": wait_corr,
+                    "trace_id": None,
+                    "eu_type": getattr(spec, "eu_type", None) or "flow",
+                },
+            )
+            resumed += 1
+            logger.info(
+                "Cross-instance resume claimed run_id=%s on this instance",
+                run_id,
+            )
+
+        return resumed
+    except Exception:
+        logger.warning(
+            "_cross_instance_resume failed for event_type=%s",
+            event_type,
+            exc_info=True,
+        )
+        return 0
+
+
+def _cross_instance_tick(engine: "SchedulerEngine") -> int:
+    """Check Redis for due time-based waits registered on other instances."""
+    try:
+        from datetime import datetime, timezone
+
+        from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
+        from AINDY.kernel.resume_spec import build_callback_from_spec
+        from AINDY.kernel.event_bus import get_redis_client
+
+        registry = RedisWaitRegistry(get_redis_client())
+        if registry._redis is None:
+            return 0
+
+        now = datetime.now(timezone.utc)
+        fired = 0
+        all_specs = registry.get_all_specs()
+        for run_id, spec in all_specs.items():
+            with engine._lock:
+                if run_id in engine._waiting:
+                    continue
+
+            wait_entry = _load_wait_entry_from_db(run_id)
+            if wait_entry is None:
+                continue
+
+            timeout_at = getattr(wait_entry, "timeout_at", None)
+            if timeout_at is None:
+                continue
+            if getattr(timeout_at, "tzinfo", None) is None:
+                timeout_at = timeout_at.replace(tzinfo=timezone.utc)
+            if timeout_at > now:
+                continue
+
+            if not registry.unregister_if_exists(run_id):
+                continue
+
+            try:
+                callback = build_callback_from_spec(spec)
+            except Exception:
+                logger.warning(
+                    "[Scheduler] tick: build_callback failed run_id=%s",
+                    run_id,
+                    exc_info=True,
+                )
+                continue
+
+            engine._enqueue_resume(
+                run_id,
+                callback,
+                {
+                    "eu_id": getattr(wait_entry, "eu_id", None) or run_id,
+                    "tenant_id": getattr(wait_entry, "tenant_id", None)
+                    or getattr(spec, "tenant_id", None)
+                    or "system",
+                    "priority": getattr(wait_entry, "priority", None) or PRIORITY_NORMAL,
+                    "eu_type": getattr(spec, "eu_type", None) or "flow",
+                },
+            )
+            engine._delete_wait_backup(run_id)
+            logger.info("[Scheduler] cross-instance time-wait fired run_id=%s", run_id)
+            fired += 1
+
+        return fired
+    except Exception:
+        logger.warning("[Scheduler] cross-instance tick failed", exc_info=True)
+        return 0
 
 
 # ── Resumed EU stub ───────────────────────────────────────────────────────────
@@ -122,12 +318,16 @@ class ScheduledItem:
     run_id: Optional[str] = None
     eu_type: str = "flow"
     enqueued_at_seq: int = field(default=0, compare=False)
+    retry_count: int = field(default=0, compare=False)
+    max_retries: int = field(default=2, compare=False)
 
     def __post_init__(self) -> None:
         if self.priority not in PRIORITY_ORDER:
             raise ValueError(
                 f"Invalid priority {self.priority!r}; must be one of {PRIORITY_ORDER}"
             )
+        if self.max_retries == 2:
+            self.max_retries = _int_env("AINDY_SCHEDULER_MAX_DISPATCH_RETRIES", 2)
 
 
 # ── SchedulerEngine ───────────────────────────────────────────────────────────
@@ -166,8 +366,12 @@ class SchedulerEngine:
         self._total_enqueued: int = 0
         self._total_dispatched: int = 0
         self._total_dropped: int = 0
+        self._last_stale_wait_check_monotonic: float = 0.0
         # Rehydration barrier: set after _waiting is fully restored at startup
         self._rehydration_complete = threading.Event()
+        # Bounded startup buffer for events received before rehydration finishes.
+        # Default 1000 keeps normal startup bursts safe without unbounded growth.
+        self._pre_rehydration_buffer: list[tuple[str, str | None]] = []
 
     def get_metrics_snapshot(self) -> dict:
         """Return current queue depths and waiting count for Prometheus gauges."""
@@ -180,10 +384,138 @@ class SchedulerEngine:
     def mark_rehydration_complete(self) -> None:
         """Signal that WAIT rehydration has finished; unblocks buffered events."""
         self._rehydration_complete.set()
+        with self._lock:
+            buffered = list(self._pre_rehydration_buffer)
+            self._pre_rehydration_buffer.clear()
+
+        for event_type, correlation_id in buffered:
+            logger.info(
+                "[Scheduler] replaying buffered event post-rehydration: %s",
+                event_type,
+            )
+            try:
+                self.notify_event(
+                    event_type,
+                    correlation_id=correlation_id,
+                    broadcast=False,
+                )
+            except Exception:
+                logger.warning(
+                    "[Scheduler] buffered event replay failed event=%s corr=%s",
+                    event_type,
+                    correlation_id,
+                    exc_info=True,
+                )
 
     def is_rehydrated(self) -> bool:
         """Return True if rehydration has completed."""
         return self._rehydration_complete.is_set()
+
+    def _enqueue_resume(
+        self,
+        run_id: str,
+        callback: Callable[[], None],
+        entry: dict,
+    ) -> None:
+        item = ScheduledItem(
+            execution_unit_id=str(entry.get("eu_id") or ""),
+            tenant_id=str(entry.get("tenant_id") or "system"),
+            priority=entry.get("priority") or PRIORITY_NORMAL,
+            run_callback=callback,
+            run_id=run_id,
+            eu_type=entry.get("eu_type", "flow"),
+        )
+        self.enqueue(item)
+
+    def _unregister_redis_wait(self, run_id: str) -> None:
+        try:
+            from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
+            from AINDY.kernel.event_bus import get_redis_client
+
+            RedisWaitRegistry(get_redis_client()).unregister(str(run_id))
+        except Exception:
+            logger.debug(
+                "[Scheduler] Redis wait unregister skipped for run=%s",
+                run_id,
+                exc_info=True,
+            )
+
+    def _check_stale_waits(self) -> int:
+        """Throttle orphaned wait recovery to the watchdog interval."""
+        try:
+            from AINDY.config import settings
+        except Exception:
+            interval_seconds = 120.0
+        else:
+            interval_seconds = max(
+                0.0,
+                float(getattr(settings, "AINDY_WATCHDOG_INTERVAL_MINUTES", 2)) * 60.0,
+            )
+
+        now = time.monotonic()
+        if interval_seconds > 0 and (now - self._last_stale_wait_check_monotonic) < interval_seconds:
+            return 0
+
+        self._last_stale_wait_check_monotonic = now
+
+        db = None
+        try:
+            SessionLocal = _get_session_factory()
+            db = SessionLocal()
+            return self.recover_orphaned_waits(db)
+        except Exception as exc:
+            logger.debug("[Scheduler] orphaned-wait recovery skipped: %s", exc)
+            return 0
+        finally:
+            if db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
+
+    def recover_orphaned_waits(self, db) -> int:
+        """Re-register WaitingFlowRun rows missing from this instance's _waiting registry."""
+        try:
+            from AINDY.core.flow_run_rehydration import rehydrate_waiting_flow_runs
+            from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+        except Exception as exc:
+            logger.warning("[Scheduler] orphaned-wait recovery init failed: %s", exc)
+            return 0
+
+        with self._lock:
+            local_wait_ids = {str(run_id) for run_id in self._waiting.keys()}
+
+        try:
+            query = db.query(WaitingFlowRun)
+            if local_wait_ids:
+                query = query.filter(~WaitingFlowRun.run_id.in_(local_wait_ids))
+            orphan_rows = query.all()
+        except Exception as exc:
+            logger.warning("[Scheduler] orphaned-wait recovery query failed: %s", exc)
+            return 0
+
+        orphan_run_ids = {
+            str(row.run_id)
+            for row in orphan_rows
+            if getattr(row, "run_id", None)
+        }
+        if not orphan_run_ids:
+            logger.info("[Scheduler] orphaned-wait recovery found 0 missing wait(s)")
+            return 0
+
+        try:
+            recovered = rehydrate_waiting_flow_runs(db, run_ids=orphan_run_ids)
+        except TypeError:
+            recovered = rehydrate_waiting_flow_runs(db)
+        except Exception as exc:
+            logger.warning("[Scheduler] orphaned-wait recovery failed: %s", exc)
+            return 0
+
+        logger.info(
+            "[Scheduler] orphaned-wait recovery registered %d wait(s)",
+            recovered,
+        )
+        return recovered
 
     # ── Enqueue ───────────────────────────────────────────────────────────────
 
@@ -260,28 +592,50 @@ class SchedulerEngine:
         # Lazy import — avoids circular dependency (kernel → core) at module load.
         from AINDY.core.execution_dispatcher import dispatch as _dispatch
 
+        self._check_stale_waits()
+
         # Fire any time-based waits whose trigger_at has passed before
         # draining the queues, so they are available in this same cycle.
         self.tick_time_waits()
 
         rm = get_resource_manager()
         dispatched = 0
+        saturated_tenants: set[str] = set()
+        retry_items: list[ScheduledItem] = []
+        processed = 0
+        saturated_skips = 0
 
-        for _ in range(MAX_PER_SCHEDULE_CYCLE):
+        while processed < MAX_PER_SCHEDULE_CYCLE:
             item = self.dequeue_next()
             if item is None:
                 break
 
+            if item.tenant_id in saturated_tenants:
+                with self._lock:
+                    self._queues[item.priority].appendleft(item)
+                    self._total_dispatched -= 1
+                    queue_size = sum(len(q) for q in self._queues.values())
+                saturated_skips += 1
+                if saturated_skips >= queue_size:
+                    break
+                continue
+
+            saturated_skips = 0
+            processed += 1
             ok, reason = rm.can_execute(item.tenant_id, item.execution_unit_id)
             if not ok:
                 # Re-enqueue — resource unavailable; try next cycle
                 with self._lock:
                     self._queues[item.priority].appendleft(item)
                     self._total_dispatched -= 1  # undo dequeue count
+                saturated_tenants.add(item.tenant_id)
                 logger.debug(
-                    "[Scheduler] deferred eu=%s reason=%s", item.execution_unit_id, reason
+                    "[Scheduler] deferred eu=%s tenant=%s reason=%s",
+                    item.execution_unit_id,
+                    item.tenant_id,
+                    reason,
                 )
-                break  # stop trying; resource constrained
+                continue
 
             # Build a lightweight stub so dispatch() can make the INLINE/ASYNC
             # decision without a live DB query.
@@ -303,11 +657,30 @@ class SchedulerEngine:
                     item.execution_unit_id, item.eu_type, item.priority,
                 )
             except Exception as exc:
-                logger.error(
-                    "[Scheduler] dispatch failed eu=%s: %s", item.execution_unit_id, exc
-                )
-                with self._lock:
-                    self._total_dropped += 1
+                if item.retry_count < item.max_retries:
+                    item.retry_count += 1
+                    logger.warning(
+                        "[Scheduler] dispatch failed eu=%s (attempt %d/%d), re-enqueueing: %s",
+                        item.execution_unit_id,
+                        item.retry_count,
+                        item.max_retries + 1,
+                        exc,
+                    )
+                    item.priority = PRIORITY_LOW
+                    retry_items.append(item)
+                else:
+                    logger.error(
+                        "[Scheduler] dispatch PERMANENTLY failed eu=%s after %d attempts: %s",
+                        item.execution_unit_id,
+                        item.retry_count + 1,
+                        exc,
+                    )
+                    with self._lock:
+                        self._total_dropped += 1
+                    _emit_dispatch_failure(item, exc)
+
+        for item in retry_items:
+            self.enqueue(item)
 
         return dispatched
 
@@ -376,6 +749,21 @@ class SchedulerEngine:
                 "eu_type": eu_type,
                 "wait_condition": wc_dict,
             }
+        try:
+            from AINDY.kernel.resume_spec import RESUME_HANDLER_EU, ResumeSpec
+            from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
+            from AINDY.kernel.event_bus import get_redis_client
+
+            spec = ResumeSpec(
+                handler=RESUME_HANDLER_EU,
+                eu_id=str(eu_id),
+                tenant_id=str(tenant_id),
+                run_id=str(run_id),
+                eu_type=eu_type,
+            )
+            RedisWaitRegistry(get_redis_client()).register(str(run_id), spec)
+        except Exception:
+            logger.debug("[Scheduler] Redis wait registration skipped", exc_info=True)
         self._persist_wait_backup(str(run_id))
         logger.debug(
             "[Scheduler] registered wait run=%s event=%s eu=%s type=%s trace=%s cond_type=%s",
@@ -433,6 +821,23 @@ class SchedulerEngine:
         Returns:
             Number of runs re-enqueued locally.
         """
+        if not self._rehydration_complete.is_set():
+            with self._lock:
+                if len(self._pre_rehydration_buffer) >= _MAX_PRE_REHYDRATION_BUFFER:
+                    logger.error(
+                        "[Scheduler] pre-rehydration buffer full (%d); event %r dropped",
+                        _MAX_PRE_REHYDRATION_BUFFER,
+                        event_type,
+                    )
+                    return 0
+                self._pre_rehydration_buffer.append((event_type, correlation_id))
+            logger.debug(
+                "[Scheduler] buffered event pre-rehydration: %s corr=%s",
+                event_type,
+                correlation_id,
+            )
+            return 0
+
         to_resume: list[tuple[str, dict]] = []
 
         with self._lock:
@@ -469,22 +874,22 @@ class SchedulerEngine:
             # Delete under the same lock — prevents duplicate resume
             for run_id, _ in to_resume:
                 del self._waiting[run_id]
+                self._unregister_redis_wait(run_id)
 
         for run_id, entry in to_resume:
-            item = ScheduledItem(
-                execution_unit_id=entry["eu_id"],
-                tenant_id=entry["tenant_id"],
-                priority=entry["priority"],
-                run_callback=entry["callback"],
-                run_id=run_id,
-                eu_type=entry.get("eu_type", "flow"),
-            )
-            self.enqueue(item)
+            self._enqueue_resume(run_id, entry["callback"], entry)
             logger.info(
                 "[Scheduler] event-resumed run=%s event=%s type=%s priority=%s",
-                run_id, event_type, item.eu_type, entry["priority"],
+                run_id, event_type, entry.get("eu_type", "flow"), entry["priority"],
             )
             self._delete_wait_backup(run_id)
+
+        cross_resumed = _cross_instance_resume(
+            self,
+            event_type,
+            correlation_id,
+            skip_run_ids={run_id for run_id, _ in to_resume},
+        )
 
         # ── Distributed broadcast ─────────────────────────────────────────────
         # Publish to the Redis event bus so all other instances can wake flows
@@ -500,7 +905,7 @@ class SchedulerEngine:
                     "[Scheduler] event bus publish failed (non-fatal): %s", _bus_exc
                 )
 
-        return len(to_resume)
+        return len(to_resume) + cross_resumed
 
     def tick_time_waits(self) -> int:
         """Re-enqueue all time-based waits whose ``trigger_at`` has passed.
@@ -545,28 +950,83 @@ class SchedulerEngine:
 
             for run_id, _ in to_fire:
                 del self._waiting[run_id]
+                self._unregister_redis_wait(run_id)
 
         for run_id, entry in to_fire:
-            item = ScheduledItem(
-                execution_unit_id=entry["eu_id"],
-                tenant_id=entry["tenant_id"],
-                priority=entry["priority"],
-                run_callback=entry["callback"],
-                run_id=run_id,
-                eu_type=entry.get("eu_type", "flow"),
-            )
-            self.enqueue(item)
+            self._enqueue_resume(run_id, entry["callback"], entry)
             logger.info(
                 "[Scheduler] time-wait fired run=%s eu=%s priority=%s",
                 run_id, entry["eu_id"], entry["priority"],
             )
             self._delete_wait_backup(run_id)
 
-        return len(to_fire)
+        return len(to_fire) + _cross_instance_tick(self)
 
     def scan_expired_waits(self) -> int:
         """Compatibility alias for scanning ready time-based waits."""
         return self.tick_time_waits()
+
+    def cleanup_stale_waits(self) -> int:
+        """Remove waiting entries whose FlowRun/EU is no longer in waiting status."""
+        with self._lock:
+            run_ids = list(self._waiting.keys())
+
+        if not run_ids:
+            return 0
+
+        try:
+            import uuid
+
+            from AINDY.db.database import SessionLocal
+            from AINDY.db.models.execution_unit import ExecutionUnit
+            from AINDY.db.models.flow_run import FlowRun
+
+            eu_query_ids: list[uuid.UUID] = []
+            for run_id in run_ids:
+                try:
+                    eu_query_ids.append(uuid.UUID(str(run_id)))
+                except (TypeError, ValueError, AttributeError):
+                    continue
+
+            with SessionLocal() as db:
+                waiting_flow_ids = {
+                    str(flow_id)
+                    for (flow_id,) in (
+                        db.query(FlowRun.id)
+                        .filter(
+                            FlowRun.id.in_(run_ids),
+                            FlowRun.status == "waiting",
+                        )
+                        .all()
+                    )
+                }
+                waiting_eu_ids = set()
+                if eu_query_ids:
+                    waiting_eu_ids = {
+                        str(eu_id)
+                        for (eu_id,) in (
+                            db.query(ExecutionUnit.id)
+                            .filter(
+                                ExecutionUnit.id.in_(eu_query_ids),
+                                ExecutionUnit.status == "waiting",
+                            )
+                            .all()
+                        )
+                    }
+        except Exception:
+            logger.warning("[Scheduler] cleanup_stale_waits DB query failed", exc_info=True)
+            return 0
+
+        active_run_ids = waiting_flow_ids | waiting_eu_ids
+        stale = [run_id for run_id in run_ids if run_id not in active_run_ids]
+
+        for run_id in stale:
+            with self._lock:
+                self._waiting.pop(run_id, None)
+            self._delete_wait_backup(run_id)
+            logger.info("[Scheduler] evicted stale wait run_id=%s", run_id)
+
+        return len(stale)
 
     def peek_matching_run_ids(
         self,
@@ -650,6 +1110,7 @@ class SchedulerEngine:
     def reset(self) -> None:
         """Clear ALL state.  For use in tests only."""
         with self._lock:
+            cleared_run_ids = list(self._waiting.keys())
             for q in self._queues.values():
                 q.clear()
             self._waiting.clear()
@@ -658,6 +1119,11 @@ class SchedulerEngine:
             self._total_enqueued = 0
             self._total_dispatched = 0
             self._total_dropped = 0
+            self._last_stale_wait_check_monotonic = 0.0
+            self._pre_rehydration_buffer.clear()
+            self._rehydration_complete.clear()
+        for run_id in cleared_run_ids:
+            self._unregister_redis_wait(run_id)
 
     def _persist_wait_backup(self, run_id: str) -> None:
         try:

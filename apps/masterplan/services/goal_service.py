@@ -87,8 +87,11 @@ def rank_goals(
     return ranked
 
 
-def update_goal_progress(db, goal_id: str, result: dict[str, Any]) -> dict[str, Any] | None:
-    goal = db.query(Goal).filter(Goal.id == goal_id).first()
+def update_goal_progress(db, goal_id: str, result: dict[str, Any], *, user_id: str | None = None) -> dict[str, Any] | None:
+    q = db.query(Goal).filter(Goal.id == goal_id)
+    if user_id is not None:
+        q = q.filter(Goal.user_id == normalize_uuid(user_id))
+    goal = q.first()
     if not goal:
         return None
     state = _get_or_create_goal_state(db, goal.id)

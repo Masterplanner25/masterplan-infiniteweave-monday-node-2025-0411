@@ -818,6 +818,7 @@ class TestPhaseDAuto:
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.postgres
 class TestResumeSoftLock:
     """PersistentFlowRunner.resume() must claim 'waiting' runs atomically.
 

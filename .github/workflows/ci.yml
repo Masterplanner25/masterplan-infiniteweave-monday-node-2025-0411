@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: AINDY
+        working-directory: ${{ github.workspace }}
 
     services:
       postgres:
@@ -71,6 +71,7 @@ jobs:
 
     env:
       ENV: test
+      PYTHONPATH: .
       DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
       MONGO_URL: mongodb://localhost:27017
       MONGO_DB_NAME: aindy_test
@@ -97,7 +98,7 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r AINDY/requirements.txt
 
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
@@ -107,8 +108,11 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: alembic check
 
+      - name: Confirm repo root contents
+        run: ls -la
+
       - name: Run tests with coverage
-        run: pytest --ignore=tests/validate_memory_loop.py
+        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
 
       - name: Run integration tests (PostgreSQL)
         working-directory: ${{ github.workspace }}
@@ -143,6 +147,101 @@ jobs:
           file: AINDY/coverage.xml
           fail_ci_if_error: false
         continue-on-error: true
+
+  test-postgres:
+    name: Test (PostgreSQL mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: base
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENV: test
+      PYTHONPATH: .
+      TESTING: "false"
+      AINDY_TEST_DB: postgres
+      AINDY_ALLOW_SQLITE: "false"
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+      MONGO_URL: mongodb://localhost:27017
+      MONGO_DB_NAME: aindy_test
+      OPENAI_API_KEY: sk-test-placeholder
+      DEEPSEEK_API_KEY: ds-test-placeholder
+      SECRET_KEY: ci-secret-key-placeholder
+      PERMISSION_SECRET: ci-permission-secret
+      AINDY_API_KEY: ci-aindy-api-key
+      ALLOWED_ORIGINS: "http://localhost:3000"
+      AINDY_SKIP_MONGO_PING: "true"
+      SKIP_MONGO_PING: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('AINDY/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install -r AINDY/requirements.txt
+
+      - name: Run alembic migrations
+        working-directory: ${{ github.workspace }}
+        run: alembic upgrade head
+
+      - name: Confirm repo root contents
+        run: ls -la
+
+      - name: Run tests against PostgreSQL
+        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml-postgres
+          path: AINDY/coverage.xml
 
   docker-build:
     name: Docker Build

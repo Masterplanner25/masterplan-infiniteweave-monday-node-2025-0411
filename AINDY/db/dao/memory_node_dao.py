@@ -118,6 +118,30 @@ class MemoryNodeDAO:
         return requested.issubset(current)
 
     @staticmethod
+    def _embedding_is_usable(embedding: list | None) -> bool:
+        if not isinstance(embedding, list) or not embedding:
+            return False
+        return any(float(value or 0.0) != 0.0 for value in embedding)
+
+    def _embedded_query(self, *, user_id: str | None, node_type: str | None):
+        query = self.db.query(MemoryNodeModel)
+        owner_user_id = parse_user_id(user_id)
+        if owner_user_id:
+            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
+        else:
+            query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
+        if node_type:
+            query = query.filter(MemoryNodeModel.node_type == node_type)
+        return query
+
+    def _count_complete_embeddings(self, *, user_id: str | None, node_type: str | None) -> int:
+        query = self._embedded_query(user_id=user_id, node_type=node_type).filter(
+            MemoryNodeModel.embedding.isnot(None),
+            MemoryNodeModel.embedding_status == "complete",
+        )
+        return int(query.count())
+
+    @staticmethod
     def _normalize_memory_type(memory_type: str | None, node_type: str | None = None) -> str:
         candidate = str(memory_type or node_type or "insight").strip().lower()
         if candidate == "relationship":
@@ -337,76 +361,90 @@ class MemoryNodeDAO:
         Distance 0 = identical, 2 = opposite.
         Similarity = 1 - (distance / 2).
         """
-        from pgvector.sqlalchemy import Vector
-        from sqlalchemy import Float, cast
+        from AINDY.memory.embedding_service import cosine_similarity
 
-        distance_expr = cast(
-            MemoryNodeModel.embedding.op("<=>")(
-                cast(query_embedding, Vector(1536))
-            ),
-            Float,
+        if not self._embedding_is_usable(query_embedding):
+            logger.debug("[MemoryNodeDAO] semantic recall skipped: unusable query embedding")
+            return []
+
+        base_query = self._embedded_query(user_id=user_id, node_type=node_type)
+        rows_before_filter = int(base_query.count())
+        embedded_query = base_query.filter(
+            MemoryNodeModel.embedding.isnot(None),
+            MemoryNodeModel.embedding_status == "complete",
+        )
+        rows_after_filter = int(embedded_query.count())
+        logger.debug(
+            "[MemoryNodeDAO] semantic candidates before_filter=%s after_embedding_filter=%s user_id=%s node_type=%s",
+            rows_before_filter,
+            rows_after_filter,
+            user_id,
+            node_type,
         )
 
-        query = self.db.query(
-            MemoryNodeModel.id,
-            MemoryNodeModel.content,
-            MemoryNodeModel.tags,
-            MemoryNodeModel.node_type,
-            MemoryNodeModel.source,
-            MemoryNodeModel.source_agent,
-            MemoryNodeModel.is_shared,
-            MemoryNodeModel.user_id,
-            MemoryNodeModel.source_event_id,
-            MemoryNodeModel.root_event_id,
-            MemoryNodeModel.causal_depth,
-            MemoryNodeModel.impact_score,
-            MemoryNodeModel.memory_type,
-            MemoryNodeModel.extra,
-            MemoryNodeModel.created_at,
-            MemoryNodeModel.updated_at,
-            distance_expr.label("distance")
-        ).filter(
-            MemoryNodeModel.embedding.isnot(None)
+        if rows_after_filter == 0:
+            return []
+
+        try:
+            if self._is_postgres():
+                from pgvector.sqlalchemy import Vector
+                from sqlalchemy import Float, cast
+
+                distance_expr = cast(
+                    MemoryNodeModel.embedding.op("<=>")(
+                        cast(query_embedding, Vector(1536))
+                    ),
+                    Float,
+                )
+
+                results = (
+                    self.db.query(MemoryNodeModel, distance_expr.label("distance"))
+                    .filter(MemoryNodeModel.id.in_(embedded_query.with_entities(MemoryNodeModel.id)))
+                    .order_by(distance_expr.asc())
+                    .limit(limit)
+                    .all()
+                )
+
+                output = []
+                for node, distance in results:
+                    similarity = max(0.0, 1.0 - (float(distance) / 2.0))
+                    if similarity < min_similarity:
+                        continue
+                    node_dict = self._node_to_dict(node)
+                    node_dict["similarity"] = round(similarity, 4)
+                    node_dict["distance"] = round(float(distance), 4)
+                    output.append(node_dict)
+
+                logger.debug(
+                    "[MemoryNodeDAO] semantic similarities computed=%s scores=%s",
+                    len(output),
+                    [item["similarity"] for item in output[:5]],
+                )
+                return output
+        except Exception as exc:
+            logger.warning("[MemoryNodeDAO] pgvector similarity failed, using python fallback: %s", exc)
+
+        scored = []
+        embedded_rows = embedded_query.all()
+        for node in embedded_rows:
+            embedding = list(getattr(node, "embedding", None) or [])
+            if not self._embedding_is_usable(embedding):
+                continue
+            similarity = cosine_similarity(query_embedding, embedding)
+            if similarity < min_similarity:
+                continue
+            node_dict = self._node_to_dict(node)
+            node_dict["similarity"] = round(float(similarity), 4)
+            node_dict["distance"] = round(float(max(0.0, 1.0 - similarity)), 4)
+            scored.append(node_dict)
+
+        scored.sort(key=lambda item: item["similarity"], reverse=True)
+        output = scored[:limit]
+        logger.debug(
+            "[MemoryNodeDAO] semantic similarities computed=%s scores=%s",
+            len(output),
+            [item["similarity"] for item in output[:5]],
         )
-
-        owner_user_id = parse_user_id(user_id)
-        if owner_user_id:
-            query = query.filter(MemoryNodeModel.user_id == owner_user_id)
-        else:
-            query = query.filter(MemoryNodeModel.visibility.in_(["shared", "global"]))
-        if node_type:
-            query = query.filter(MemoryNodeModel.node_type == node_type)
-
-        results = query.order_by(distance_expr.asc()).limit(limit).all()
-
-        output = []
-        for row in results:
-            distance = row.distance
-            similarity = max(0.0, 1.0 - (distance / 2.0))
-            if similarity >= min_similarity:
-                node_dict = {
-                    "id": str(row.id),
-                    "content": row.content,
-                    "tags": row.tags,
-                    "node_type": row.node_type,
-                    "source": row.source,
-                    "source_agent": row.source_agent,
-                    "is_shared": row.is_shared,
-                    "visibility": row.visibility,
-                    "user_id": row.user_id,
-                    "source_event_id": str(row.source_event_id) if row.source_event_id else None,
-                    "root_event_id": str(row.root_event_id) if row.root_event_id else None,
-                    "causal_depth": row.causal_depth,
-                    "impact_score": row.impact_score,
-                    "memory_type": row.memory_type,
-                    "extra": row.extra,
-                    "created_at": row.created_at.isoformat() if row.created_at else None,
-                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-                }
-                node_dict["similarity"] = round(similarity, 4)
-                node_dict["distance"] = round(float(distance), 4)
-                output.append(node_dict)
-
         return output
 
     # ------------------------------------------------------------------
@@ -505,8 +543,19 @@ class MemoryNodeDAO:
 
         # Semantic path
         if query:
+            embedding_rows_available = self._count_complete_embeddings(
+                user_id=user_id,
+                node_type=node_type,
+            )
+            query_embedding = None
+            query_embedding_ready = False
             try:
                 query_embedding = generate_query_embedding(query)
+                query_embedding_ready = self._embedding_is_usable(query_embedding)
+            except Exception as exc:
+                logger.warning("[MemoryNodeDAO] query embedding generation failed, falling back: %s", exc)
+
+            if query_embedding_ready and embedding_rows_available:
                 similar = self.find_similar(
                     query_embedding=query_embedding,
                     limit=limit * 3,
@@ -516,10 +565,20 @@ class MemoryNodeDAO:
                 for item in similar:
                     item["semantic_score"] = item.get("similarity", 0.0)
                     candidates.append(item)
-            except Exception as exc:
-                logger.warning("[MemoryNodeDAO] semantic recall failed, falling back: %s", exc)
+            elif embedding_rows_available:
+                logger.warning(
+                    "[MemoryNodeDAO] semantic recall unavailable: embeddings_exist=%s query_embedding_ready=%s",
+                    embedding_rows_available,
+                    query_embedding_ready,
+                )
+            else:
+                logger.debug(
+                    "[MemoryNodeDAO] semantic recall unavailable: no complete embeddings user_id=%s node_type=%s",
+                    user_id,
+                    node_type,
+                )
 
-            if not candidates:
+            if not candidates and (embedding_rows_available == 0 or not query_embedding_ready):
                 text_matches = self._find_text_matches(
                     query=query,
                     limit=limit * 3,

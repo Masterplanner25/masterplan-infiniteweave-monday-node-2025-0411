@@ -111,3 +111,27 @@ def pytest_runtest_setup(item):
     except Exception:
         pass
 
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_resource_manager():
+    """Reset ResourceManager state before and after every test.
+
+    Prevents active-count leakage from one test contaminating the next.
+    The ResourceManager singleton is shared across the process; this fixture
+    ensures each test starts and ends with a clean slate.
+    """
+    try:
+        from AINDY.kernel.resource_manager import get_resource_manager
+        get_resource_manager().reset()
+    except Exception:
+        pass
+    yield
+    try:
+        from AINDY.kernel.resource_manager import get_resource_manager
+        get_resource_manager().reset()
+    except Exception:
+        pass
+
