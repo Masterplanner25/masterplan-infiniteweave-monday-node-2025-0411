@@ -1,7 +1,7 @@
 """
 Cross-domain guard helper: analytics → masterplan ownership check via syscall.
 
-Analytics routes must not import directly from apps.masterplan.services.
+Analytics routes must not depend directly on masterplan service modules.
 This module provides assert_masterplan_owned_via_syscall() as the
 compliant alternative, routing through the syscall dispatcher.
 """

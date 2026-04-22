@@ -6,6 +6,8 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_models()

@@ -6,6 +6,8 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_models()
@@ -56,22 +58,15 @@ def _register_events() -> None:
     from AINDY.platform_layer.registry import register_event_handler, register_event_type
     from AINDY.core.system_event_types import SystemEventTypes
 
+    register_event_type(SystemEventTypes.ANALYTICS_SCORE_UPDATED)
     register_event_type(SystemEventTypes.EXECUTION_COMPLETED)
+    register_event_type(SystemEventTypes.MASTERPLAN_GOAL_STATE_CHANGED)
     register_event_handler(SystemEventTypes.EXECUTION_COMPLETED, _handle_execution_completed)
+    register_event_handler(SystemEventTypes.MASTERPLAN_GOAL_STATE_CHANGED, _handle_goal_state_changed)
 
 
 def _handle_execution_completed(context: dict):
     db = context.get("db")
-    result = None
-    if db is not None and "execution_result" in context:
-        from apps.masterplan.services.goal_service import update_goals_from_execution
-        result = update_goals_from_execution(
-            db,
-            user_id=context.get("user_id"),
-            workflow_type=context.get("workflow_type"),
-            execution_result=context.get("execution_result"),
-            success=context.get("success", True),
-        )
     if db is not None and context.get("trigger_event") == "agent_completed" and context.get("user_id"):
         from apps.analytics.services.infinity_orchestrator import execute
         return execute(
@@ -79,7 +74,13 @@ def _handle_execution_completed(context: dict):
             trigger_event=context["trigger_event"],
             db=db,
         )
-    return result
+    return None
+
+
+def _handle_goal_state_changed(context: dict):
+    from apps.analytics.services.infinity_orchestrator import handle_goal_state_changed
+
+    return handle_goal_state_changed(context)
 
 
 def _register_jobs() -> None:
@@ -88,6 +89,7 @@ def _register_jobs() -> None:
     register_job("analytics.kpi_snapshot", _get_user_kpi_snapshot)
     register_job("analytics.infinity_execute", _execute_infinity_orchestrator)
     register_job("analytics.latest_adjustment", _get_latest_adjustment)
+    register_job("analytics.latest_adjustment_payload", _get_latest_adjustment_payload)
     register_job("scheduler.infinity_scores", _scheduler_recalculate_all_scores)
 
 
@@ -128,6 +130,17 @@ def _execute_infinity_orchestrator(*args, **kwargs):
 def _get_latest_adjustment(*args, **kwargs):
     from apps.analytics.services.infinity_loop import get_latest_adjustment
     return get_latest_adjustment(*args, **kwargs)
+
+
+def _get_latest_adjustment_payload(*args, **kwargs):
+    from apps.analytics.services.infinity_loop import get_latest_adjustment, serialize_adjustment
+
+    latest = get_latest_adjustment(*args, **kwargs)
+    if latest is None:
+        return None
+    payload = dict(serialize_adjustment(latest) or {})
+    payload.pop("id", None)
+    return payload
 
 
 def _scheduler_recalculate_all_scores() -> None:

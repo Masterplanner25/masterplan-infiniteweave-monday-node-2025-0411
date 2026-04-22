@@ -5,6 +5,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = [
+    "agent",
+    "analytics",
+    "arm",
+    "autonomy",
+    "dashboard",
+    "freelance",
+    "masterplan",
+    "rippletrace",
+    "search",
+    "tasks",
+]
+
 
 def register() -> None:
     _register_models()

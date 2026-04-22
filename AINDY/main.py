@@ -18,6 +18,7 @@ from sqlalchemy import create_engine
 from contextlib import asynccontextmanager
 
 from AINDY.platform_layer import scheduler_service
+from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.registry import (
     emit_event,
@@ -119,7 +120,14 @@ for _handler in logging.root.handlers:
 logger = logging.getLogger(__name__)
 _OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
 try:
+    from apps.bootstrap import discover_app_bootstraps
+
+    _resolved_boot_order = resolve_boot_order(discover_app_bootstraps())
+    if _resolved_boot_order:
+        logger.info("Boot order resolved: %s", " → ".join(_resolved_boot_order))
     load_plugins()
+except RuntimeError:
+    raise
 except Exception as exc:
     logger.warning("Plugin loading skipped: %s", exc)
 

@@ -1,6 +1,8 @@
 """Agent domain bootstrap."""
 from __future__ import annotations
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_router()

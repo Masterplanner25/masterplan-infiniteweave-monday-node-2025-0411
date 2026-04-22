@@ -1,13 +1,14 @@
 import uuid
+from datetime import datetime
 
 from fastapi import Depends, APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 from fastapi_cache.decorator import cache
-from apps.masterplan.schemas.masterplan import MasterPlanInput
 from apps.analytics.schemas.analytics_inputs import (
     TaskInput,
     EngagementInput,
@@ -49,6 +50,18 @@ from apps.analytics.services.calculation_services import (
 
 router = APIRouter(prefix="/compute", tags=["Compute"], dependencies=[Depends(get_current_user)])
 legacy_router = APIRouter(tags=["Compute"])
+
+
+class MasterPlanInput(BaseModel):
+    name: str
+    start_date: datetime
+    duration_years: int
+    wcu_target: float
+    revenue_target: float
+    books_required: int
+    platform_required: bool
+    studio_required: bool
+    playbooks_required: int
 
 
 async def _execute_main(

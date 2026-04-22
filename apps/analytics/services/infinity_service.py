@@ -50,6 +50,8 @@ from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.platform_layer.registry import emit_event, get_symbol
 from AINDY.platform_layer.user_ids import parse_user_id
 
 from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
@@ -397,8 +399,11 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.masterplan.models import MasterPlan
         from apps.tasks.models import Task
+
+        MasterPlan = get_symbol("MasterPlan")
+        if MasterPlan is None:
+            return 50.0, 0
 
         plan = db.query(MasterPlan).filter(
             MasterPlan.user_id == user_id,
@@ -622,6 +627,21 @@ def calculate_infinity_score(
         logger.info(
             "Infinity score for %s: %.1f (delta %+.1f, trigger=%s)",
             user_id, master, score_delta, trigger_event
+        )
+        emit_event(
+            SystemEventTypes.ANALYTICS_SCORE_UPDATED,
+            {
+                "user_id": str(user_id),
+                "score": float(master),
+                "kpi_breakdown": {
+                    "execution_speed": float(exec_speed),
+                    "decision_efficiency": float(decision_eff),
+                    "ai_productivity_boost": float(ai_boost),
+                    "focus_quality": float(focus_qual),
+                    "masterplan_progress": float(plan_progress),
+                },
+                "computed_at": now.isoformat(),
+            },
         )
 
         return {

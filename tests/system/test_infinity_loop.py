@@ -124,19 +124,20 @@ class TestInfinityLoopHelpers:
     def test_latest_adjustment_payload_helper_returns_none_without_adjustment(self):
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
 
-        with patch("apps.analytics.services.infinity_loop.get_latest_adjustment", return_value=None):
+        with patch("AINDY.platform_layer.registry.get_job", return_value=lambda user_id, db: None):
             assert _latest_adjustment_payload("u1", MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
 
-        with patch("apps.analytics.services.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
-             patch("apps.analytics.services.infinity_loop.serialize_adjustment", return_value={
-                 "id": "adj-1",
-                 "decision_type": "continue_highest_priority_task",
-                 "applied_at": "2026-01-01T00:00:00+00:00",
-                 "adjustment_payload": {"reason": "kpis_stable", "next_action": {"type": "continue_highest_priority_task"}},
-             }):
+        with patch(
+            "AINDY.platform_layer.registry.get_job",
+            return_value=lambda user_id, db: {
+                "decision_type": "continue_highest_priority_task",
+                "applied_at": "2026-01-01T00:00:00+00:00",
+                "adjustment_payload": {"reason": "kpis_stable", "next_action": {"type": "continue_highest_priority_task"}},
+            },
+        ):
             result = _latest_adjustment_payload("u1", MagicMock())
 
         assert result == {

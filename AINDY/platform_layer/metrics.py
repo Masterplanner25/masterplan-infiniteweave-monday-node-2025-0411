@@ -65,6 +65,20 @@ openai_errors_total = Counter(
     registry=REGISTRY,
 )
 
+deepseek_retries_total = Counter(
+    "aindy_deepseek_retries_total",
+    "Total DeepSeek call retries",
+    ["call_type"],
+    registry=REGISTRY,
+)
+
+deepseek_errors_total = Counter(
+    "aindy_deepseek_errors_total",
+    "Total DeepSeek call failures after all retries exhausted",
+    ["call_type"],
+    registry=REGISTRY,
+)
+
 embedding_generation_total = Counter(
     "aindy_embedding_generation_total",
     "Total embedding generation requests by outcome",
@@ -149,6 +163,18 @@ async_queue_failure_total = Counter(
     registry=REGISTRY,
 )
 
+queue_backend_mode = Gauge(
+    "aindy_queue_backend_mode",
+    "Active queue backend: 1=redis, 0=in_memory (degraded)",
+    registry=REGISTRY,
+)
+
+queue_backend_fallback_total = Counter(
+    "aindy_queue_backend_fallback_total",
+    "Number of times the queue fell back from Redis to in-memory",
+    registry=REGISTRY,
+)
+
 request_metric_drops_total = Counter(
     "aindy_request_metric_drops_total",
     "Number of RequestMetric rows dropped due to queue saturation",
@@ -191,5 +217,20 @@ deferred_boundary_violations_total = Gauge(
 resume_watchdog_resumes_total = Counter(
     "aindy_resume_watchdog_resumes_total",
     "Number of flows resumed by the watchdog due to missed Redis events",
+    registry=REGISTRY,
+)
+
+event_handler_timeouts_total = Counter(
+    "aindy_event_handler_timeouts_total",
+    "Number of event handler invocations that exceeded the timeout",
+    ["event_type"],
+    registry=REGISTRY,
+)
+
+event_handler_duration_seconds = Histogram(
+    "aindy_event_handler_duration_seconds",
+    "Wall-clock time per event handler invocation",
+    ["event_type", "handler_name", "result"],
+    buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
     registry=REGISTRY,
 )

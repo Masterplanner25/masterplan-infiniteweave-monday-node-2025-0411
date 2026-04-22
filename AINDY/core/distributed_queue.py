@@ -96,6 +96,8 @@ from AINDY.platform_layer.metrics import (
     async_queue_enqueue_total,
     async_queue_failure_total,
     async_queue_in_flight,
+    queue_backend_fallback_total,
+    queue_backend_mode,
 )
 
 logger = logging.getLogger(__name__)
@@ -303,6 +305,25 @@ class DistributedQueueBackend(ABC):
     def backend_name(self) -> str:
         return self.__class__.__name__.replace("QueueBackend", "").lower()
 
+    @property
+    def degraded(self) -> bool:
+        return False
+
+    @property
+    def redis_available(self) -> bool:
+        return self.backend_name == "redis"
+
+    @property
+    def fallback_reason(self) -> str | None:
+        return None
+
+    def health_snapshot(self) -> dict:
+        return {
+            "backend": "redis" if self.backend_name == "redis" else "memory",
+            "degraded": self.degraded,
+            "redis_available": self.redis_available,
+        }
+
 
 def _queue_capacity_limit() -> int:
     return max(1, _safe_int_env("MAX_QUEUE_SIZE", _safe_int_env("AINDY_ASYNC_QUEUE_MAXSIZE", 100)))
@@ -339,6 +360,70 @@ def _refresh_queue_metrics(backend_name: str, snapshot: dict) -> None:
     async_queue_capacity.labels(backend=backend_name).set(
         snapshot.get("max_queue_size", _queue_capacity_limit())
     )
+
+
+def _update_queue_backend_mode_metric(backend: DistributedQueueBackend) -> None:
+    queue_backend_mode.set(1 if backend.backend_name == "redis" else 0)
+
+
+def _emit_queue_backend_event(event_type: str, payload: dict) -> None:
+    try:
+        from AINDY.core.system_event_service import emit_system_event
+        from AINDY.db.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            emit_system_event(
+                db=db,
+                event_type=event_type,
+                source="distributed_queue",
+                payload=payload,
+            )
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(
+            "[DistributedQueue] Failed to emit backend state event %s: %s",
+            event_type,
+            exc,
+        )
+
+
+def _build_memory_backend(
+    *,
+    degraded: bool,
+    fallback_reason: str | None = None,
+) -> "InMemoryQueueBackend":
+    return InMemoryQueueBackend(
+        degraded=degraded,
+        fallback_reason=fallback_reason,
+    )
+
+
+def _fallback_to_memory_backend(exc: Exception) -> "InMemoryQueueBackend":
+    if getattr(settings, "AINDY_REQUIRE_REDIS", False):
+        raise RuntimeError(
+            f"AINDY_REQUIRE_REDIS=true but Redis is unavailable: {exc}. "
+            "Set AINDY_REQUIRE_REDIS=false to allow in-memory fallback."
+        ) from exc
+
+    queue_backend_fallback_total.inc()
+    logger.warning(
+        "[DistributedQueue] Redis unavailable (%s) — falling back to in-memory queue. "
+        "In multi-instance mode, jobs will NOT be shared across instances. "
+        "Set AINDY_REQUIRE_REDIS=true to prevent degraded-mode startup.",
+        exc,
+    )
+    backend = _build_memory_backend(degraded=True, fallback_reason=str(exc))
+    _emit_queue_backend_event(
+        "system.queue.backend_degraded",
+        {
+            "reason": str(exc),
+            "fallback_backend": "memory",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -731,8 +816,16 @@ class InMemoryQueueBackend(DistributedQueueBackend):
     NOT usable across OS processes — items live in this process's heap only.
     """
 
-    def __init__(self, max_queue_size: int | None = None) -> None:
+    def __init__(
+        self,
+        max_queue_size: int | None = None,
+        *,
+        degraded: bool = False,
+        fallback_reason: str | None = None,
+    ) -> None:
         self._max_queue_size = max_queue_size or _queue_capacity_limit()
+        self._degraded = degraded
+        self._fallback_reason = fallback_reason
         self._q: queue.Queue[QueueJobPayload] = queue.Queue(maxsize=self._max_queue_size)
 
         # In-flight: { job_id → (payload, dequeued_at_utc) }
@@ -747,6 +840,18 @@ class InMemoryQueueBackend(DistributedQueueBackend):
         self._timers: list[threading.Timer] = []
         self._timers_lock = threading.Lock()
         self._delayed_count = 0
+
+    @property
+    def degraded(self) -> bool:
+        return self._degraded
+
+    @property
+    def redis_available(self) -> bool:
+        return False
+
+    @property
+    def fallback_reason(self) -> str | None:
+        return self._fallback_reason
 
     def _pending_depth(self) -> int:
         with self._timers_lock:
@@ -917,7 +1022,9 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
     global _QUEUE_INSTANCE
 
     if force_memory:
-        return InMemoryQueueBackend()
+        backend = InMemoryQueueBackend()
+        _update_queue_backend_mode_metric(backend)
+        return backend
 
     if _QUEUE_INSTANCE is not None:
         return _QUEUE_INSTANCE
@@ -928,10 +1035,12 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
 
         if os.getenv("TESTING", "false").lower() in {"1", "true", "yes"}:
             _QUEUE_INSTANCE = InMemoryQueueBackend()
+            _update_queue_backend_mode_metric(_QUEUE_INSTANCE)
             return _QUEUE_INSTANCE
 
         if os.getenv("TEST_MODE", "false").lower() in {"1", "true", "yes"}:
             _QUEUE_INSTANCE = InMemoryQueueBackend()
+            _update_queue_backend_mode_metric(_QUEUE_INSTANCE)
             return _QUEUE_INSTANCE
 
         redis_url = settings.REDIS_URL or os.getenv("REDIS_URL")
@@ -943,10 +1052,16 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
             )
 
         if redis_url:
-            _QUEUE_INSTANCE = RedisQueueBackend(url=redis_url, queue_name=queue_name)
-            logger.info(
+            try:
+                candidate = RedisQueueBackend(url=redis_url, queue_name=queue_name)
+                candidate.assert_ready()
+                _QUEUE_INSTANCE = candidate
+                logger.info("[Queue] Redis backend - url=%s queue=%s", redis_url, queue_name)
+            except Exception as exc:
+                _QUEUE_INSTANCE = _fallback_to_memory_backend(exc)
+            if False:
                 "[Queue] Redis backend — url=%s queue=%s", redis_url, queue_name
-            )
+            # legacy log removed
         else:
             exec_mode = os.getenv("EXECUTION_MODE", "thread").lower()
             if exec_mode == "distributed":
@@ -962,8 +1077,10 @@ def get_queue(*, force_memory: bool = False) -> DistributedQueueBackend:
             )
             _QUEUE_INSTANCE = InMemoryQueueBackend()
 
-        _QUEUE_INSTANCE.assert_ready()
+        if _QUEUE_INSTANCE.backend_name == "redis":
+            _QUEUE_INSTANCE.assert_ready()
         _refresh_queue_metrics(_QUEUE_INSTANCE.backend_name, _QUEUE_INSTANCE.get_metrics())
+        _update_queue_backend_mode_metric(_QUEUE_INSTANCE)
         return _QUEUE_INSTANCE
 
 
@@ -982,6 +1099,50 @@ def reset_queue() -> None:
 def validate_queue_backend() -> DistributedQueueBackend:
     """Fail fast when the configured queue backend is unavailable."""
     backend = get_queue()
-    backend.assert_ready()
+    if backend.backend_name == "redis":
+        backend.assert_ready()
     _refresh_queue_metrics(backend.backend_name, backend.get_metrics())
+    _update_queue_backend_mode_metric(backend)
     return backend
+
+
+def get_queue_health_snapshot() -> dict:
+    backend = get_queue()
+    snapshot = backend.health_snapshot()
+    snapshot["reason"] = backend.fallback_reason
+    return snapshot
+
+
+def attempt_queue_backend_reconnect() -> bool:
+    global _QUEUE_INSTANCE
+
+    redis_url = settings.REDIS_URL or os.getenv("REDIS_URL")
+    if not redis_url:
+        return False
+
+    with _QUEUE_LOCK:
+        current = _QUEUE_INSTANCE
+        if current is None or current.backend_name == "redis" or not current.degraded:
+            return False
+
+        queue_name = os.getenv("AINDY_QUEUE_NAME", QUEUE_NAME_DEFAULT)
+        try:
+            candidate = RedisQueueBackend(url=redis_url, queue_name=queue_name)
+            candidate.assert_ready()
+        except Exception as exc:
+            logger.debug("[DistributedQueue] Redis reconnect attempt failed: %s", exc)
+            return False
+
+        _QUEUE_INSTANCE = candidate
+
+    _refresh_queue_metrics(candidate.backend_name, candidate.get_metrics())
+    _update_queue_backend_mode_metric(candidate)
+    logger.info("[DistributedQueue] Redis connection restored - queue backend switched to Redis.")
+    _emit_queue_backend_event(
+        "system.queue.backend_recovered",
+        {
+            "backend": "redis",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    return True

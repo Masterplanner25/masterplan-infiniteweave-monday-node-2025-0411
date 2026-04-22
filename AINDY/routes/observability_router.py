@@ -42,6 +42,34 @@ def _execute_observability(request: Request, route_name: str, handler, *, db: Se
     )
 
 
+@router.get("/llm/status")
+@limiter.limit("60/minute")
+def get_llm_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.kernel.circuit_breaker import get_deepseek_circuit_breaker, get_openai_circuit_breaker
+
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        openai_breaker = get_openai_circuit_breaker()
+        deepseek_breaker = get_deepseek_circuit_breaker()
+        return {
+            "openai": {
+                "state": openai_breaker.state.value,
+                "failure_count": openai_breaker.failure_count,
+            },
+            "deepseek": {
+                "state": deepseek_breaker.state.value,
+                "failure_count": deepseek_breaker.failure_count,
+            },
+        }
+
+    return _execute_observability(request, "observability_llm_status", handler, db=db, user_id=user_id)
+
+
 # ------------------------------
 # SCHEDULER STATUS
 # ------------------------------

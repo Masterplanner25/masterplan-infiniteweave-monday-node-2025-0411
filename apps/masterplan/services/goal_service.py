@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+import logging
 
+from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.platform_layer.registry import emit_event
 from apps.masterplan.models import GoalState
 from apps.masterplan.models import Goal
 from AINDY.utils.uuid_utils import normalize_uuid
+
+logger = logging.getLogger(__name__)
 
 
 def create_goal(
@@ -99,6 +104,7 @@ def update_goal_progress(db, goal_id: str, result: dict[str, Any], *, user_id: s
     progress_delta = float(result.get("progress_delta") or 0.0)
     success_delta = float(result.get("success_signal_delta") or 0.0)
     action = result.get("action")
+    previous_status = str(goal.status or "active")
 
     state.progress = round(max(0.0, min(1.0, float(state.progress or 0.0) + progress_delta)), 4)
     state.success_signal = round(max(-1.0, min(1.0, float(state.success_signal or 0.0) + success_delta)), 4)
@@ -113,6 +119,16 @@ def update_goal_progress(db, goal_id: str, result: dict[str, Any], *, user_id: s
     db.commit()
     db.refresh(state)
     db.refresh(goal)
+    if str(goal.status or previous_status) != previous_status:
+        emit_event(
+            SystemEventTypes.MASTERPLAN_GOAL_STATE_CHANGED,
+            {
+                "user_id": str(goal.user_id),
+                "goal_id": str(goal.id),
+                "status": str(goal.status),
+                "updated_at": goal.updated_at.isoformat() if goal.updated_at else datetime.now(timezone.utc).isoformat(),
+            },
+        )
     return _serialize_goal(goal, state)
 
 
@@ -200,6 +216,17 @@ def update_goals_from_execution(
 
 def get_goal_states(db, user_id: str | None) -> list[dict[str, Any]]:
     return rank_goals(db, user_id)
+
+
+def handle_score_updated(payload: dict) -> None:
+    user_id = payload.get("user_id")
+    if not user_id:
+        return
+    logger.debug(
+        "[Masterplan] observed analytics score update for user=%s score=%s",
+        user_id,
+        payload.get("score"),
+    )
 
 
 def distribute_goals(

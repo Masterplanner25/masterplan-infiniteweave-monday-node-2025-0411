@@ -9,6 +9,8 @@ logger = logging.getLogger(__name__)
 _ANALYZER = None
 _ANALYZER_LOCK = Lock()
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_models()

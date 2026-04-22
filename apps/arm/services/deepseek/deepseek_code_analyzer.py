@@ -18,11 +18,11 @@ import json
 import logging
 import time
 import uuid
+from typing import Any
 
 from AINDY.core.execution_signal_helper import queue_memory_capture
 # ARM memory capture is routed through a MemoryCaptureEngine-backed helper.
-from openai import OpenAI
-from AINDY.platform_layer.openai_client import chat_completion
+from AINDY.platform_layer.deepseek_client import chat_completion_deepseek, get_deepseek_client
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,8 @@ from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
 from apps.arm.models import AnalysisResult, CodeGeneration
 from AINDY.config import settings
 from AINDY.platform_layer.external_call_service import perform_external_call
+
+OpenAI = None
 
 
 # ── System prompts ────────────────────────────────────────────────────────────
@@ -105,7 +107,7 @@ class DeepSeekCodeAnalyzer:
         self.validator = SecurityValidator({})
         self.file_processor = FileProcessor({})
         self._refresh_runtime_config()
-        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        self.client = _build_deepseek_client()
 
     def _refresh_runtime_config(self, db: Session | None = None) -> None:
         self.config_manager.db = db
@@ -144,14 +146,14 @@ class DeepSeekCodeAnalyzer:
         for attempt in range(retry_limit):
             try:
                 response = perform_external_call(
-                    service_name="openai",
+                    service_name="deepseek",
                     db=db,
                     user_id=user_id,
                     endpoint="chat.completions.create",
                     model=model,
-                    method="openai.chat",
+                    method="deepseek.chat",
                     extra={"purpose": "arm_openai_call", "attempt": attempt + 1},
-                    operation=lambda: chat_completion(
+                    operation=lambda: chat_completion_deepseek(
                         self.client,
                         model=model,
                         messages=[
@@ -533,5 +535,14 @@ class DeepSeekCodeAnalyzer:
 
         except Exception:
             raise
+
+
+def _build_deepseek_client() -> Any:
+    if callable(OpenAI):
+        try:
+            return OpenAI(api_key=settings.DEEPSEEK_API_KEY)
+        except TypeError:
+            return OpenAI()
+    return get_deepseek_client()
 
 

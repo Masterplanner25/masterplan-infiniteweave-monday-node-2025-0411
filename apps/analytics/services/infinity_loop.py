@@ -7,6 +7,7 @@ from sqlalchemy import select
 logger = logging.getLogger(__name__)
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
+from AINDY.platform_layer.registry import get_job
 from AINDY.platform_layer.trace_context import get_current_trace_id
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
@@ -484,11 +485,13 @@ def _apply_goal_weighting(
     payload: dict,
     goals: list[dict] | None = None,
 ) -> tuple[str, dict]:
-    from apps.masterplan.services.goal_service import calculate_goal_alignment
-
     ranked_goals = goals or []
     if not ranked_goals:
         adjusted_payload = {**payload, "goal_summary": {"goal_count": 0, "goal_alignment": 0.0}}
+        return decision_type, adjusted_payload
+    calculate_goal_alignment = get_job("goals.calculate_alignment")
+    if not callable(calculate_goal_alignment):
+        adjusted_payload = {**payload, "goal_summary": {"goal_count": len(ranked_goals), "goal_alignment": 0.0}}
         return decision_type, adjusted_payload
 
     top_goal = ranked_goals[0]

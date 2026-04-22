@@ -14,6 +14,35 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from AINDY.platform_layer.registry_contracts import (
+    validate_agent_event,
+    validate_agent_planner_context,
+    validate_agent_ranking_strategy,
+    validate_agent_run_tools,
+    validate_agent_tool,
+    validate_capability_definition,
+    validate_capability_names,
+    validate_event_handler,
+    validate_execution_adapter,
+    validate_flow_plan,
+    validate_flow_registration,
+    validate_flow_result_registration,
+    validate_flow_strategy,
+    validate_job_handler,
+    validate_memory_policy,
+    validate_response_adapter,
+    validate_restricted_tool,
+    validate_route_guard,
+    validate_route_prefix,
+    validate_router,
+    validate_scheduled_job_entry,
+    validate_startup_hook,
+    validate_symbol,
+    validate_symbols,
+    validate_syscall_handler,
+    validate_trigger_evaluator,
+)
+
 logger = logging.getLogger(__name__)
 
 Handler = Callable[..., Any]
@@ -59,6 +88,7 @@ _loaded_plugins: set[str] = set()
 
 
 def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
+    validate_router(router)
     if legacy_root:
         _legacy_root_routers.append(router)
     elif root:
@@ -81,6 +111,7 @@ def get_legacy_root_routers() -> list[Any]:
 
 
 def register_syscall(name: str, handler: Handler) -> Handler:
+    validate_syscall_handler(name, handler)
     _syscalls[name] = handler
     return handler
 
@@ -94,6 +125,7 @@ def iter_syscalls() -> Iterable[tuple[str, Handler]]:
 
 
 def register_job(name: str, handler: Handler) -> Handler:
+    validate_job_handler(name, handler)
     _jobs[name] = handler
     return handler
 
@@ -107,6 +139,7 @@ def iter_jobs() -> Iterable[tuple[str, Handler]]:
 
 
 def register_flow(register_fn: Handler) -> Handler:
+    validate_flow_registration(getattr(register_fn, "__name__", "<anonymous>"), register_fn)
     _flows.append(register_fn)
     return register_fn
 
@@ -123,6 +156,12 @@ def register_flow_result(
     extractor: Handler | None = None,
     completion_event: str | None = None,
 ) -> None:
+    validate_flow_result_registration(
+        flow_name,
+        result_key=result_key,
+        extractor=extractor,
+        completion_event=completion_event,
+    )
     if result_key is not None:
         _flow_result_keys[flow_name] = result_key
     if extractor is not None:
@@ -144,6 +183,7 @@ def get_flow_completion_event(flow_name: str) -> str | None:
 
 
 def register_flow_plan(flow_name: str, plan: dict[str, Any]) -> None:
+    validate_flow_plan(flow_name, plan)
     _flow_plans[flow_name] = plan
 
 
@@ -152,6 +192,7 @@ def get_flow_plan(flow_name: str) -> dict[str, Any] | None:
 
 
 def register_event_handler(event_type: str, handler: Handler) -> Handler:
+    validate_event_handler(event_type, handler)
     register_event_type(event_type)
     _event_handlers[event_type].append(handler)
     return handler
@@ -192,10 +233,12 @@ def register_scheduled_job(
     trigger_kwargs: dict[str, Any] | None = None,
     replace_existing: bool = True,
 ) -> Handler:
-    if not job_id or not job_id.strip():
-        raise ValueError("job_id must be a non-empty string")
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_scheduled_job_entry(
+        job_id,
+        handler=handler,
+        trigger=trigger,
+        trigger_kwargs=trigger_kwargs,
+    )
     _scheduled_jobs[job_id] = {
         "id": job_id,
         "handler": handler,
@@ -213,10 +256,7 @@ def get_scheduled_jobs() -> tuple[dict[str, Any], ...]:
 
 
 def register_response_adapter(route_prefix: str, handler: Handler) -> Handler:
-    if not route_prefix or not route_prefix.strip():
-        raise ValueError("route_prefix must be a non-empty string")
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_response_adapter(route_prefix, handler)
     _response_adapters[route_prefix.rstrip(".")] = handler
     return handler
 
@@ -227,10 +267,7 @@ def get_response_adapter(route_prefix: str) -> Handler | None:
 
 
 def register_route_guard(route_prefix: str, handler: Handler) -> Handler:
-    if not route_prefix or not route_prefix.strip():
-        raise ValueError("route_prefix must be a non-empty string")
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_route_guard(route_prefix, handler)
     _route_guards[route_prefix.rstrip(".")] = handler
     return handler
 
@@ -241,10 +278,7 @@ def get_route_guard(route_prefix: str) -> Handler | None:
 
 
 def register_execution_adapter(entity_type: str, handler: Handler) -> Handler:
-    if not entity_type or not entity_type.strip():
-        raise ValueError("entity_type must be a non-empty string")
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_execution_adapter(entity_type, handler)
     _execution_adapters[entity_type.strip()] = handler
     return handler
 
@@ -255,8 +289,7 @@ def get_execution_adapter(entity_type: str) -> Handler | None:
 
 
 def register_startup_hook(handler: Handler) -> Handler:
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_startup_hook(handler)
     _startup_hooks.append(handler)
     return handler
 
@@ -284,6 +317,7 @@ def get_capture_rules() -> dict[str, Any]:
 
 
 def register_memory_policy(event_type: str, policy: Any) -> Any:
+    validate_memory_policy(event_type, policy)
     _memory_policies[event_type] = policy
     _capture_rules[event_type] = policy
     try:
@@ -313,6 +347,7 @@ def get_memory_significance_rule(event_type: str) -> float | None:
 
 
 def register_agent_tool(name: str, tool: Any) -> Any:
+    validate_agent_tool(name, tool)
     _agent_tools[name] = tool
     return tool
 
@@ -326,6 +361,7 @@ def iter_agent_tools() -> Iterable[tuple[str, Any]]:
 
 
 def register_agent_planner_context(run_type: str, handler: Handler) -> Handler:
+    validate_agent_planner_context(run_type, handler)
     _agent_planner_contexts[run_type] = handler
     return handler
 
@@ -339,6 +375,7 @@ def get_planner_context(run_type: str, context: dict[str, Any] | None = None) ->
 
 
 def register_agent_run_tools(run_type: str, handler: Handler) -> Handler:
+    validate_agent_run_tools(run_type, handler)
     _agent_run_tools[run_type] = handler
     return handler
 
@@ -352,6 +389,7 @@ def get_tools_for_run(run_type: str, context: dict[str, Any] | None = None) -> l
 
 
 def register_agent_event(event_name: str, handler: Handler) -> Handler:
+    validate_agent_event(event_name, handler)
     _agent_event_emitters[event_name].append(handler)
     return handler
 
@@ -364,6 +402,7 @@ def emit_agent_event(event_name: str, context: dict[str, Any]) -> list[Any]:
 
 
 def register_agent_ranking_strategy(handler: Handler) -> Handler:
+    validate_agent_ranking_strategy(handler)
     global _agent_ranking_strategy
     _agent_ranking_strategy = handler
     return handler
@@ -375,6 +414,7 @@ def get_agent_ranking_strategy() -> Handler | None:
 
 
 def register_trigger_evaluator(trigger_type: str, handler: Handler) -> Handler:
+    validate_trigger_evaluator(trigger_type, handler)
     _trigger_evaluators[trigger_type] = handler
     return handler
 
@@ -385,10 +425,7 @@ def get_trigger_evaluator(trigger_type: str) -> Handler | None:
 
 
 def register_flow_strategy(flow_type: str, handler: Handler) -> Handler:
-    if not flow_type or not flow_type.strip():
-        raise ValueError("flow_type must be a non-empty string")
-    if not callable(handler):
-        raise ValueError("handler must be callable")
+    validate_flow_strategy(flow_type, handler)
     _flow_strategies[flow_type] = handler
     return handler
 
@@ -399,6 +436,7 @@ def get_flow_strategy(flow_type: str) -> Handler | None:
 
 
 def register_capability_definition(name: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    validate_capability_definition(name, metadata)
     _capability_definitions[name] = dict(metadata)
     return _capability_definitions[name]
 
@@ -412,6 +450,7 @@ def get_capability_definitions() -> dict[str, dict[str, Any]]:
 
 
 def register_tool_capabilities(tool_name: str, capability_names: list[str]) -> list[str]:
+    validate_capability_names("Tool capabilities", tool_name, capability_names)
     capabilities = sorted({name for name in capability_names if isinstance(name, str)})
     _tool_capabilities[tool_name] = capabilities
     return capabilities
@@ -422,6 +461,7 @@ def get_capabilities_for_tool(tool_name: str) -> list[str]:
 
 
 def register_agent_capabilities(agent_id: str, capability_names: list[str]) -> list[str]:
+    validate_capability_names("Agent capabilities", agent_id, capability_names)
     capabilities = sorted({name for name in capability_names if isinstance(name, str)})
     _agent_capabilities[agent_id] = capabilities
     return capabilities
@@ -432,6 +472,7 @@ def get_capabilities_for_agent(agent_id: str) -> list[str]:
 
 
 def register_restricted_tool(tool_name: str) -> str:
+    validate_restricted_tool(tool_name)
     _restricted_tools.add(tool_name)
     return tool_name
 
@@ -441,6 +482,7 @@ def get_restricted_tools() -> set[str]:
 
 
 def register_route_prefix(prefix: str, execution_unit_type: str) -> None:
+    validate_route_prefix(prefix, execution_unit_type)
     _route_prefixes[prefix] = execution_unit_type
 
 
@@ -449,6 +491,7 @@ def get_route_prefix(prefix: str) -> str | None:
 
 
 def register_symbol(name: str, value: Any) -> Any:
+    validate_symbol(name)
     _symbols[name] = value
     return value
 
@@ -458,6 +501,7 @@ def get_symbol(name: str) -> Any | None:
 
 
 def register_symbols(symbols: dict[str, Any]) -> None:
+    validate_symbols(symbols)
     for name, value in symbols.items():
         if not name.startswith("__"):
             register_symbol(name, value)
