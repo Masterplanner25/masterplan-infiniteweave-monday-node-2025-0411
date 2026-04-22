@@ -275,5 +275,5 @@ class TestFlowConsoleAPIFunctions:
             assert fn in api_src, f"Missing API function: {fn}"
 
     def test_components_exist(self):
-        assert pathlib.Path("client/src/components/FlowEngineConsole.jsx").exists()
+        assert pathlib.Path("client/src/components/platform/FlowEngineConsole.jsx").exists()
 

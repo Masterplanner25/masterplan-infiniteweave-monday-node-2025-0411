@@ -580,25 +580,25 @@ class TestSuggestionsEndpoint:
 class TestAgentConsolePhase3UI:
 
     def test_agent_console_imports_get_agent_suggestions(self):
-        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        src = open("client/src/components/platform/AgentConsole.jsx", encoding="utf-8").read()
         assert "getAgentSuggestions" in src
 
     def test_suggestion_chips_component_exists(self):
-        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        src = open("client/src/components/platform/AgentConsole.jsx", encoding="utf-8").read()
         assert "SuggestionChips" in src
 
     def test_suggestions_state_initialized(self):
-        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        src = open("client/src/components/platform/AgentConsole.jsx", encoding="utf-8").read()
         assert "suggestions" in src
         assert "setSuggestions" in src
 
     def test_load_suggestions_called_on_mount(self):
-        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        src = open("client/src/components/platform/AgentConsole.jsx", encoding="utf-8").read()
         assert "loadSuggestions" in src
 
     def test_on_select_sets_goal(self):
         """Chip click handler should call setGoal with the suggested_goal."""
-        src = open("client/src/components/AgentConsole.jsx", encoding="utf-8").read()
+        src = open("client/src/components/platform/AgentConsole.jsx", encoding="utf-8").read()
         assert "setGoal" in src
         assert "onSelect" in src
 

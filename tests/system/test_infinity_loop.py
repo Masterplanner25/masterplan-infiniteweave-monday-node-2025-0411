@@ -710,26 +710,26 @@ class TestFrontendLoopSurfaces:
         assert "/scores/feedback" in src
 
     def test_arm_analyze_posts_feedback(self):
-        src = pathlib.Path("client/src/components/ARMAnalyze.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/app/ARMAnalyze.jsx").read_text(encoding="utf-8")
         assert "postScoreFeedback" in src
         assert 'source_type: "arm"' in src
 
     def test_agent_console_posts_agent_feedback(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "postScoreFeedback" in src
         assert 'source_type: "agent"' in src
 
     def test_agent_console_still_loads_suggestions(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "getAgentSuggestions" in src
 
     def test_arm_analyze_feedback_buttons_present(self):
-        src = pathlib.Path("client/src/components/ARMAnalyze.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/app/ARMAnalyze.jsx").read_text(encoding="utf-8")
         assert "Thumb Up" in src
         assert "Thumb Down" in src
 
     def test_agent_console_feedback_labels_present(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "Helpful" in src
         assert "Not Helpful" in src
 

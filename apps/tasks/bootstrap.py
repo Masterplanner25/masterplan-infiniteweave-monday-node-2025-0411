@@ -21,6 +21,7 @@ def register() -> None:
     _register_async_jobs()
     _register_agent_tools()
     _register_agent_capabilities()
+    _register_syscalls()
     _register_capture_rules()
     _register_flow_results()
     _register_flow_plans()
@@ -175,6 +176,12 @@ def _register_agent_tools() -> None:
 def _register_agent_capabilities() -> None:
     from apps.tasks.agents.capabilities import register as register_task_capabilities
     register_task_capabilities()
+
+
+def _register_syscalls() -> None:
+    from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
+
+    register_task_syscall_handlers()
 
 
 def _register_capture_rules() -> None:

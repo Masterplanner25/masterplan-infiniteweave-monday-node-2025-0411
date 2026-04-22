@@ -483,22 +483,22 @@ class TestAPIFunctions:
 
     def test_agent_console_jsx_exists(self):
         import os
-        assert os.path.exists("client/src/components/AgentConsole.jsx")
+        assert os.path.exists("client/src/components/platform/AgentConsole.jsx")
 
     def test_agent_console_jsx_has_goal_input(self):
-        with open("client/src/components/AgentConsole.jsx") as f:
+        with open("client/src/components/platform/AgentConsole.jsx") as f:
             content = f.read()
         assert "goal" in content.lower()
         assert "Run Agent" in content or "run agent" in content.lower()
 
     def test_agent_console_jsx_has_approve_reject(self):
-        with open("client/src/components/AgentConsole.jsx") as f:
+        with open("client/src/components/platform/AgentConsole.jsx") as f:
             content = f.read()
         assert "Approve" in content
         assert "Reject" in content
 
     def test_agent_console_jsx_has_risk_badge(self):
-        with open("client/src/components/AgentConsole.jsx") as f:
+        with open("client/src/components/platform/AgentConsole.jsx") as f:
             content = f.read()
         assert "RiskBadge" in content or "risk" in content.lower()
 
@@ -509,7 +509,7 @@ class TestAPIFunctions:
         assert "AgentConsole" in content
 
     def test_sidebar_has_agent_console_link(self):
-        with open("client/src/components/Sidebar.jsx", encoding="utf-8") as f:
+        with open("client/src/components/shared/Sidebar.jsx", encoding="utf-8") as f:
             content = f.read()
         assert "/agent" in content
         assert "Agent Console" in content

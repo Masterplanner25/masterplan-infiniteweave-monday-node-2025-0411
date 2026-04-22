@@ -237,6 +237,48 @@ def _enforce_redis_startup_guard() -> None:
     logger.info("[startup] Redis connectivity verified.")
 
 
+def _check_worker_presence(log) -> None:
+    """
+    Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
+
+    This is a non-fatal advisory check. The server starts regardless — but operators
+    need to know that jobs will queue silently if no worker is running.
+    """
+    from AINDY.config import settings
+
+    if not settings.REDIS_URL:
+        log.error(
+            "[startup] EXECUTION_MODE=distributed requires REDIS_URL. "
+            "Jobs will fail to enqueue. Set REDIS_URL or change EXECUTION_MODE=thread."
+        )
+        return
+
+    heartbeat_key = "aindy:worker:heartbeat"
+    try:
+        import redis as _redis
+
+        client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        last_beat = client.get(heartbeat_key)
+        if last_beat is None:
+            log.warning(
+                "[startup] EXECUTION_MODE=distributed: no worker heartbeat found in Redis "
+                "(key=%s). If no worker process is running, enqueued jobs will not be "
+                "processed. Start a worker with: "
+                "WORKER_CONCURRENCY=1 python -m AINDY.worker.worker_loop",
+                heartbeat_key,
+            )
+        else:
+            log.info(
+                "[startup] Worker heartbeat detected (last_beat=%s).", last_beat.decode()
+            )
+    except Exception as exc:
+        log.warning(
+            "[startup] Could not check worker heartbeat (Redis error: %s). "
+            "If EXECUTION_MODE=distributed, ensure a worker process is running.",
+            exc,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
@@ -256,6 +298,14 @@ async def lifespan(app: FastAPI):
 
     # Redis production guard
     _enforce_redis_startup_guard()
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        if not settings.REDIS_URL and not settings.is_prod:
+            logger.warning(
+                "[startup] Redis is not configured (REDIS_URL is unset). "
+                "Running in single-instance mode. WAIT/RESUME events will not "
+                "propagate across multiple instances. Set REDIS_URL and "
+                "AINDY_REQUIRE_REDIS=true for multi-instance deployments."
+            )
 
     # Cache backend selection:
     # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
@@ -303,8 +353,20 @@ async def lifespan(app: FastAPI):
 
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         validate_queue_backend()
+    if (
+        not settings.is_testing
+        and not os.getenv("PYTEST_CURRENT_TEST")
+        and settings.EXECUTION_MODE == "distributed"
+    ):
+        _check_worker_presence(logger)
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
+    if not enforce_schema and settings.is_prod:
+        raise RuntimeError(
+            "AINDY_ENFORCE_SCHEMA=false is not permitted in production (ENV=production). "
+            "Schema enforcement is a required safety gate. "
+            "To deploy with a schema change, run: alembic upgrade head"
+        )
     if enforce_schema and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not (Config and ScriptDirectory and MigrationContext):
             logger.error("Schema guard unavailable: alembic not installed.")
@@ -328,6 +390,12 @@ async def lifespan(app: FastAPI):
                 raise RuntimeError("Schema drift detected. Run alembic upgrade head.")
         finally:
             db.close()
+    elif not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        logger.warning(
+            "[startup] Schema enforcement is DISABLED (AINDY_ENFORCE_SCHEMA=false). "
+            "The server will start even if the database schema is behind migrations. "
+            "This is only safe for development. Do not use in production."
+        )
 
     enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
@@ -492,13 +560,6 @@ async def lifespan(app: FastAPI):
             "source": "main",
         }
     )
-
-    # Warn if DB schema is behind the latest migration (non-fatal)
-    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        try:
-            _check_alembic_head()
-        except Exception as _alembic_exc:
-            logger.warning("[startup] Alembic head check raised unexpectedly: %s", _alembic_exc)
 
     yield
     # --- Shutdown ---

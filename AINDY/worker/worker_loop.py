@@ -651,6 +651,30 @@ def _run_stale_recovery(
             time.sleep(1)
 
 
+def _run_heartbeat(queue_backend) -> None:
+    """Write a worker heartbeat to Redis every 30 seconds."""
+    import time as _time
+    from datetime import datetime, timezone
+
+    heartbeat_key = "aindy:worker:heartbeat"
+    heartbeat_ttl = 90  # Expires after 3 missed beats — worker considered gone
+
+    while not _STOP.is_set():
+        try:
+            if hasattr(queue_backend, "_redis"):
+                queue_backend._redis.set(
+                    heartbeat_key,
+                    datetime.now(timezone.utc).isoformat(),
+                    ex=heartbeat_ttl,
+                )
+        except Exception as exc:
+            logger.debug("[Worker] heartbeat write failed: %s", exc)
+        for _ in range(30):
+            if _STOP.is_set():
+                return
+            _time.sleep(1)
+
+
 # ---------------------------------------------------------------------------
 # Worker loop
 # ---------------------------------------------------------------------------
@@ -714,6 +738,13 @@ def run_worker_loop(
         daemon=True,
     )
     stale_thread.start()
+    heartbeat_thread = threading.Thread(
+        target=_run_heartbeat,
+        args=(q,),
+        name="aindy-worker-heartbeat",
+        daemon=True,
+    )
+    heartbeat_thread.start()
 
     # â”€â”€ Dequeue worker threads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if concurrency <= 1:
@@ -735,6 +766,7 @@ def run_worker_loop(
             t.join(timeout=10)
 
     stale_thread.join(timeout=5)
+    heartbeat_thread.join(timeout=5)
     logger.info("[Worker] stopped")
 
 

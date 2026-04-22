@@ -43,6 +43,7 @@ score failure never crashes parent workflows.
 import json
 import logging
 import math
+import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
@@ -72,6 +73,43 @@ _ORCHESTRATOR_ACTIVE: ContextVar[bool] = ContextVar(
 def _db_user_id(user_id: str):
     parsed = parse_user_id(user_id)
     return parsed if parsed is not None else user_id
+
+
+def _dispatch_task_syscall(user_id: str, db: Session) -> dict:
+    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=["task.read"],
+        trace_id="",
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(
+        "sys.v1.task.get_user_tasks",
+        {"user_id": str(user_id)},
+        ctx,
+    )
+    if result["status"] == "error":
+        logger.warning("task syscall failed for %s: %s", user_id, result["error"])
+        return {"tasks": []}
+    return result["data"]
+
+
+def _parse_task_end_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _get_user_tasks_for_scoring(user_id: str, db: Session) -> list[dict]:
+    return _dispatch_task_syscall(user_id, db).get("tasks", [])
 
 
 @contextmanager
@@ -139,39 +177,40 @@ def calculate_execution_speed(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.tasks.models import Task
-
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
+        tasks = _get_user_tasks_for_scoring(user_id, db)
 
-        # Current window velocity
-        recent = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status == "completed",
-            Task.end_time >= window_start,
-        ).count()
+        completed_tasks = [
+            task for task in tasks
+            if task.get("status") == "completed"
+        ]
+
+        recent = 0
+        for task in completed_tasks:
+            end_time = _parse_task_end_time(task.get("end_time"))
+            if end_time is not None and end_time >= window_start:
+                recent += 1
 
         current_velocity = recent / SCORING_WINDOW_DAYS
 
-        # Historical baseline — first completed task
-        first_task = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status == "completed",
-        ).order_by(Task.end_time.asc()).first()
-
-        if not first_task or not first_task.end_time:
+        completed_end_times = sorted(
+            end_time
+            for end_time in (
+                _parse_task_end_time(task.get("end_time"))
+                for task in completed_tasks
+            )
+            if end_time is not None
+        )
+        if not completed_end_times:
             return 50.0, recent
 
-        # Days active since first completed task
-        first_end = first_task.end_time
+        first_end = completed_end_times[0]
         if first_end.tzinfo is None:
             first_end = first_end.replace(tzinfo=timezone.utc)
         days_active = max(1, (now - first_end).days)
 
-        total_completed = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status == "completed",
-        ).count()
+        total_completed = len(completed_tasks)
 
         historical_avg = total_completed / days_active
 
@@ -203,22 +242,17 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.tasks.models import Task
         from apps.arm.models import AnalysisResult
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
+        tasks = _get_user_tasks_for_scoring(user_id, db)
 
-        # Task completion rate
-        completed = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status == "completed",
-        ).count()
-
-        pending = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status.in_(["pending", "in_progress"]),
-        ).count()
+        completed = sum(1 for task in tasks if task.get("status") == "completed")
+        pending = sum(
+            1 for task in tasks
+            if task.get("status") in {"pending", "in_progress"}
+        )
 
         total = completed + pending
         completion_rate = completed / total if total > 0 else 0.5
@@ -399,8 +433,6 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.tasks.models import Task
-
         MasterPlan = get_symbol("MasterPlan")
         if MasterPlan is None:
             return 50.0, 0
@@ -413,11 +445,9 @@ def calculate_masterplan_progress(user_id: str, db: Session) -> tuple:
         if not plan:
             return 50.0, 0
 
-        total = db.query(Task).filter(Task.user_id == user_id).count()
-        completed = db.query(Task).filter(
-            Task.user_id == user_id,
-            Task.status == "completed",
-        ).count()
+        tasks = _get_user_tasks_for_scoring(user_id, db)
+        total = len(tasks)
+        completed = sum(1 for task in tasks if task.get("status") == "completed")
 
         completion_pct = completed / total if total > 0 else 0.0
 

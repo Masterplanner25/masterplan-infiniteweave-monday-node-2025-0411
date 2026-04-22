@@ -1,47 +1,47 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
 // --- COMPONENT IMPORTS ---
-import Sidebar from "./components/Sidebar"; // Extracting this makes the file manageable
-import Dashboard from "./components/Dashboard";
-import HealthDashboard from "./components/HealthDashboard";
-import ResearchEngine from "./components/ResearchEngine";
-import AiSeoTool from "./components/AiSeoTool";
-import InfiniteNetwork from "./components/InfiniteNetwork";
-import LeadGen from "./components/LeadGen";
-import FreelanceDashboard from "./components/FreelanceDashboard";
-import TaskDashboard from "./components/TaskDashboard";
-import MasterPlanDashboard from "./components/MasterPlanDashboard";
-import ExecutionConsole from "./components/ExecutionConsole";
-import FlowEngineConsole from "./components/FlowEngineConsole";
-import AnalyticsPanel from "./components/AnalyticsPanel";
-import Genesis from "./components/Genesis";
-import AgentApprovalInbox from "./components/AgentApprovalInbox";
-import ObservabilityDashboard from "./components/ObservabilityDashboard";
-import RippleTraceViewer from "./components/RippleTraceViewer";
-import LoginPage from "./components/LoginPage";
+import Sidebar from "./components/shared/Sidebar"; // Extracting this makes the file manageable
+import Dashboard from "./components/app/Dashboard";
+import HealthDashboard from "./components/platform/HealthDashboard";
+import ResearchEngine from "./components/app/ResearchEngine";
+import AiSeoTool from "./components/app/AiSeoTool";
+import InfiniteNetwork from "./components/app/InfiniteNetwork";
+import LeadGen from "./components/app/LeadGen";
+import FreelanceDashboard from "./components/app/FreelanceDashboard";
+import TaskDashboard from "./components/app/TaskDashboard";
+import MasterPlanDashboard from "./components/app/MasterPlanDashboard";
+import ExecutionConsole from "./components/platform/ExecutionConsole";
+import FlowEngineConsole from "./components/platform/FlowEngineConsole";
+import AnalyticsPanel from "./components/app/AnalyticsPanel";
+import Genesis from "./components/app/Genesis";
+import AgentApprovalInbox from "./components/platform/AgentApprovalInbox";
+import ObservabilityDashboard from "./components/platform/ObservabilityDashboard";
+import RippleTraceViewer from "./components/platform/RippleTraceViewer";
+import LoginPage from "./components/shared/LoginPage";
 import RegisterPage from "./pages/Register";
 import { useAuth } from "./context/AuthContext";
 import { useSystem } from "./context/SystemContext";
 
 // ARM Components
-import ARMAnalyze from "./components/ARMAnalyze";
-import ARMGenerate from "./components/ARMGenerate";
-import ARMLogs from "./components/ARMLogs";
-import ARMConfig from "./components/ARMConfig";
+import ARMAnalyze from "./components/app/ARMAnalyze";
+import ARMGenerate from "./components/app/ARMGenerate";
+import ARMLogs from "./components/app/ARMLogs";
+import ARMConfig from "./components/app/ARMConfig";
 
 // Social Layer
-import ProfileView from "./components/ProfileView";
-import Feed from "./components/Feed";
+import ProfileView from "./components/app/ProfileView";
+import Feed from "./components/app/Feed";
 
 // Agent
-import AgentConsole from "./components/AgentConsole";
+import AgentConsole from "./components/platform/AgentConsole";
 
 // Memory Layer
-import MemoryBrowser from "./components/MemoryBrowser";
-import IdentityDashboard from "./components/IdentityDashboard";
-import AgentRegistry from "./components/AgentRegistry";
+import MemoryBrowser from "./components/app/MemoryBrowser";
+import IdentityDashboard from "./components/app/IdentityDashboard";
+import AgentRegistry from "./components/platform/AgentRegistry";
 
 import "./App.css";
 

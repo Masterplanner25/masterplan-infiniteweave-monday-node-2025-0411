@@ -55,6 +55,73 @@ def acquire_execution_lease(
     owner_id: str,
     ttl_seconds: int,
 ) -> bool:
+    redis_result = _try_redis_lock(name, owner_id, ttl_seconds)
+    if redis_result is not None:
+        return redis_result
+    return _acquire_db_lease(
+        db,
+        name=name,
+        owner_id=owner_id,
+        ttl_seconds=ttl_seconds,
+    )
+
+
+def _try_redis_lock(name: str, owner_id: str, ttl_seconds: int) -> bool | None:
+    """
+    Attempt to acquire a distributed lock via Redis SETNX.
+
+    Returns:
+        True  — lock acquired
+        False — lock held by another owner
+        None  — Redis unavailable or not configured (caller should fall back to DB)
+    """
+    try:
+        from AINDY.config import settings
+
+        if not settings.REDIS_URL:
+            return None
+
+        import redis as _redis
+
+        client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        lock_key = f"aindy:lease:{name}"
+        acquired = client.set(lock_key, owner_id, nx=True, ex=ttl_seconds)
+        return bool(acquired)
+    except Exception:
+        return None
+
+
+def _release_redis_lock(name: str, owner_id: str) -> None:
+    """Release a Redis lock only if this owner holds it (Lua script for atomicity)."""
+    try:
+        from AINDY.config import settings
+
+        if not settings.REDIS_URL:
+            return
+
+        import redis as _redis
+
+        client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        lock_key = f"aindy:lease:{name}"
+        _LUA_RELEASE = """
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+        else
+            return 0
+        end
+        """
+        client.eval(_LUA_RELEASE, 1, lock_key, owner_id)
+    except Exception:
+        pass
+
+
+def _acquire_db_lease(
+    db: Session,
+    *,
+    name: str,
+    owner_id: str,
+    ttl_seconds: int,
+) -> bool:
     now = utcnow()
     expires_at = now + timedelta(seconds=ttl_seconds)
     if supports_managed_transactions(db):
