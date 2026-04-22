@@ -117,10 +117,7 @@ def get_current_user(
                 detail="Authentication required",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        try:
-            return decode_access_token(credentials.credentials)
-        except HTTPException:
-            return {"sub": "00000000-0000-0000-0000-000000000001"}
+        return decode_access_token(credentials.credentials)
     if credentials is None:
         raise HTTPException(
             status_code=401,

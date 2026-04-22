@@ -67,6 +67,7 @@ from typing import Any, Callable, Optional
 from sqlalchemy.orm import Session
 
 from AINDY.db.models.job_log import JobLog
+from AINDY.platform_layer.user_ids import parse_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,11 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
         context={
             "trace_id": trace_id,
             "eu_id": eu_id,
-            "user_id": str(getattr(execution_unit, "user_id", "") or ""),
+            "user_id": str(
+                context.get("user_id")
+                or getattr(execution_unit, "user_id", "")
+                or ""
+            ),
             "operation_name": operation_name,
         },
         retry_metadata={
@@ -301,10 +306,13 @@ def _enqueue_distributed(execution_unit: Any, context: dict[str, Any]) -> None:
 
             _db = SessionLocal()
             try:
+                event_user_id = parse_user_id(
+                    context.get("user_id") or getattr(execution_unit, "user_id", None)
+                )
                 emit_system_event(
                     db=_db,
                     event_type="job_enqueued",
-                    user_id=None,
+                    user_id=event_user_id,
                     trace_id=trace_id,
                     parent_event_id=None,
                     source="distributed_dispatcher",

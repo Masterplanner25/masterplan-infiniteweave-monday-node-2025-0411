@@ -23,6 +23,7 @@ def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Ses
         from AINDY.runtime.nodus_flow_compiler import compile_nodus_flow
         from AINDY.runtime.flow_engine import PersistentFlowRunner, register_flow
         from AINDY.utils.uuid_utils import normalize_uuid
+        from AINDY.platform_layer.user_ids import require_user_id
 
         try:
             compiled_flow = compile_nodus_flow(body.script, body.flow_name)
@@ -44,12 +45,12 @@ def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Ses
             import uuid as _uuid
             from AINDY.core.execution_gate import flow_result_to_envelope, require_execution_unit
 
-            uid = normalize_uuid(user_id) if user_id else None
+            uid = require_user_id(user_id)
             correlation = str(_uuid.uuid4())
             pre_eu = require_execution_unit(
                 db=db,
                 eu_type="flow",
-                user_id=user_id or "",
+                user_id=str(uid),
                 source_type="nodus_flow_run",
                 source_id=correlation,
                 correlation_id=correlation,
