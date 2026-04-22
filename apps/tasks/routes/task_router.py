@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_service import ExecutionContext
 from AINDY.core.execution_service import run_execution
-from AINDY.core.observability_events import emit_observability_event
+from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.tasks.schemas.task_schemas import TaskCreate, TaskAction
@@ -115,9 +115,10 @@ def create_task(
     # row in the test session, and the FK on system_events.user_id would fail.
     # The event is still fully observable via trace_id and payload.
     try:
-        emit_observability_event(
+        emit_system_event(
+            db=db,
             event_type=SystemEventTypes.TASK_CREATED,
-            user_id=None,
+            user_id=user_id,
             payload={
                 "operation": "create",
                 "name": task.name,
@@ -127,7 +128,7 @@ def create_task(
             source="task",
         )
     except Exception as _obs_exc:
-        logger.warning("[task] observability emit failed (create): %s", _obs_exc)
+        logger.warning("[task] system event emit failed (create): %s", _obs_exc)
 
     return response
 

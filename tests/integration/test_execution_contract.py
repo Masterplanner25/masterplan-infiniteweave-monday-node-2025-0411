@@ -69,6 +69,11 @@ def _events_of_type(db_session, event_type: str):
     )
 
 
+def _latest_event_of_type(db_session, event_type: str):
+    events = _events_of_type(db_session, event_type)
+    return events[-1] if events else None
+
+
 def _count_events_of_type(db_session, event_type: str) -> int:
     return len(_events_of_type(db_session, event_type))
 
@@ -113,6 +118,9 @@ def test_task_create_emits_task_created_event(client, auth_headers, db_session, 
         f"No new '{TaskEventTypes.TASK_CREATED}' event has 'task_id' in payload. "
         f"Payloads: {[ev.payload for ev in new_events]}"
     )
+    latest = _latest_event_of_type(db_session, TaskEventTypes.TASK_CREATED)
+    assert latest is not None
+    assert str(latest.user_id) == user_id
 
 
 # ── Test 2 ────────────────────────────────────────────────────────────────────
@@ -136,6 +144,9 @@ def test_task_start_emits_task_started_event(db_session, test_user):
         f"Expected at least one new '{TaskEventTypes.TASK_STARTED}' event "
         f"(before={before}, after={after})"
     )
+    latest = _latest_event_of_type(db_session, TaskEventTypes.TASK_STARTED)
+    assert latest is not None
+    assert str(latest.user_id) == user_id
 
 
 # ── Test 3 ────────────────────────────────────────────────────────────────────
@@ -160,6 +171,9 @@ def test_task_complete_emits_task_completed_event(db_session, test_user):
         f"Expected at least one new '{TaskEventTypes.TASK_COMPLETED}' event "
         f"(before={before}, after={after})"
     )
+    latest = _latest_event_of_type(db_session, TaskEventTypes.TASK_COMPLETED)
+    assert latest is not None
+    assert str(latest.user_id) == user_id
 
 
 # ── Test 4 ────────────────────────────────────────────────────────────────────
@@ -184,6 +198,9 @@ def test_task_pause_emits_task_paused_event(db_session, test_user):
         f"Expected at least one new '{TaskEventTypes.TASK_PAUSED}' event "
         f"(before={before}, after={after})"
     )
+    latest = _latest_event_of_type(db_session, TaskEventTypes.TASK_PAUSED)
+    assert latest is not None
+    assert str(latest.user_id) == user_id
 
 
 # ── Test 5 ────────────────────────────────────────────────────────────────────
