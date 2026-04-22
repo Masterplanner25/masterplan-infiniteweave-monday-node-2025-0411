@@ -50,7 +50,6 @@ def _patch_session_local_to_engine(app, testing_session_factory, monkeypatch):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-_TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 _TASK_NAME_BASE = "exec-contract-test"
 
 
@@ -81,11 +80,12 @@ def test_task_create_emits_task_created_event(client, auth_headers, db_session, 
     POST /apps/tasks/create must emit a SystemEvent with event_type == 'task.created'.
     The event payload must contain both 'task_id' and 'name' keys.
     """
+    user_id = str(test_user.id)
     before = _count_events_of_type(db_session, TaskEventTypes.TASK_CREATED)
 
     response = client.post(
         "/apps/tasks/create",
-        json={"title": _task_name("create"), "user_id": _TEST_USER_ID},
+        json={"title": _task_name("create"), "user_id": user_id},
         headers=auth_headers,
     )
 
@@ -121,14 +121,15 @@ def test_task_start_emits_task_started_event(db_session, test_user):
     """
     Calling start_task() via the service layer must emit a 'task.started' event.
     """
+    user_id = str(test_user.id)
     from apps.tasks.services.task_service import create_task, start_task
 
     name = _task_name("start")
-    create_task(db_session, name, user_id=_TEST_USER_ID)
+    create_task(db_session, name, user_id=user_id)
 
     before = _count_events_of_type(db_session, TaskEventTypes.TASK_STARTED)
 
-    start_task(db_session, name, user_id=_TEST_USER_ID)
+    start_task(db_session, name, user_id=user_id)
 
     after = _count_events_of_type(db_session, TaskEventTypes.TASK_STARTED)
     assert after > before, (
@@ -143,15 +144,16 @@ def test_task_complete_emits_task_completed_event(db_session, test_user):
     """
     Calling complete_task() via the service layer must emit a 'task.completed' event.
     """
+    user_id = str(test_user.id)
     from apps.tasks.services.task_service import create_task, start_task, complete_task
 
     name = _task_name("complete")
-    create_task(db_session, name, user_id=_TEST_USER_ID)
-    start_task(db_session, name, user_id=_TEST_USER_ID)
+    create_task(db_session, name, user_id=user_id)
+    start_task(db_session, name, user_id=user_id)
 
     before = _count_events_of_type(db_session, TaskEventTypes.TASK_COMPLETED)
 
-    complete_task(db_session, name, user_id=_TEST_USER_ID)
+    complete_task(db_session, name, user_id=user_id)
 
     after = _count_events_of_type(db_session, TaskEventTypes.TASK_COMPLETED)
     assert after > before, (
@@ -166,15 +168,16 @@ def test_task_pause_emits_task_paused_event(db_session, test_user):
     """
     Calling pause_task() via the service layer must emit a 'task.paused' event.
     """
+    user_id = str(test_user.id)
     from apps.tasks.services.task_service import create_task, start_task, pause_task
 
     name = _task_name("pause")
-    create_task(db_session, name, user_id=_TEST_USER_ID)
-    start_task(db_session, name, user_id=_TEST_USER_ID)
+    create_task(db_session, name, user_id=user_id)
+    start_task(db_session, name, user_id=user_id)
 
     before = _count_events_of_type(db_session, TaskEventTypes.TASK_PAUSED)
 
-    pause_task(db_session, name, user_id=_TEST_USER_ID)
+    pause_task(db_session, name, user_id=user_id)
 
     after = _count_events_of_type(db_session, TaskEventTypes.TASK_PAUSED)
     assert after > before, (
@@ -218,13 +221,14 @@ def test_contract_events_are_never_fatal(client, auth_headers, test_user):
     A failure inside emit_observability_event() must NOT propagate to the caller.
     POST /apps/tasks/create must still return 2xx even when the emit raises.
     """
+    user_id = str(test_user.id)
     with patch(
         "core.observability_events.emit_observability_event",
         side_effect=RuntimeError("simulated emit failure"),
     ):
         response = client.post(
             "/apps/tasks/create",
-            json={"title": _task_name("emit-fault"), "user_id": _TEST_USER_ID},
+            json={"title": _task_name("emit-fault"), "user_id": user_id},
             headers=auth_headers,
         )
 
