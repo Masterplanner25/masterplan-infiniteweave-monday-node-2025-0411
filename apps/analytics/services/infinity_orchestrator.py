@@ -115,7 +115,7 @@ def get_user_metrics(*args, **kwargs):
 
 def get_relevant_memories(payload: dict, *, db):
     return dependency_adapter.fetch_memory_signals(
-        user_id=str(payload.get("user_id") or ""),
+        user_id=payload.get("user_id"),
         trigger_event=str(payload.get("trigger_event") or "manual"),
         db=db,
     )

@@ -3,8 +3,19 @@ from __future__ import annotations
 import math
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from AINDY.memory.memory_persistence import MemoryNodeModel
+from AINDY.platform_layer.user_ids import parse_user_id
+
+
+def normalize_uuid(value: Any) -> UUID:
+    if isinstance(value, UUID):
+        return value
+    parsed = parse_user_id(value)
+    if parsed is None:
+        raise ValueError("Invalid UUID")
+    return parsed
 
 
 def score_memory(memory_node: dict[str, Any]) -> float:
@@ -36,12 +47,18 @@ def score_memory(memory_node: dict[str, Any]) -> float:
 
 
 def get_relevant_memories(context: dict[str, Any], db, limit: int = 8) -> list[dict[str, Any]]:
-    user_id = context.get("user_id")
-    if not user_id:
+    raw_user_id = context.get("user_id")
+    if not raw_user_id:
+        return []
+    try:
+        user_id = normalize_uuid(raw_user_id)
+    except ValueError:
         return []
 
     trigger_event = str(context.get("trigger_event") or "").lower()
     context_terms = set(_extract_terms(context))
+
+    assert isinstance(user_id, UUID)
 
     rows = (
         db.query(MemoryNodeModel)

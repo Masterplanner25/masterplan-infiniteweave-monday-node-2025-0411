@@ -6,7 +6,7 @@ from sqlalchemy import case, select
 
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 from AINDY.platform_layer.system_state_service import compute_current_state
-from AINDY.platform_layer.user_ids import parse_user_id
+from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
 
 
 def fetch_recent_memory(user_id: str, db, *, context: str = "infinity_loop") -> list[dict]:
@@ -34,10 +34,11 @@ def fetch_social_performance_signals(*, user_id: str) -> list[dict[str, Any]]:
 
 
 def fetch_memory_signals(*, user_id: str, trigger_event: str, db) -> list[dict[str, Any]]:
+    normalized_user_id = require_user_id(user_id)
     return list(
         get_relevant_memories(
             {
-                "user_id": user_id,
+                "user_id": normalized_user_id,
                 "trigger_event": trigger_event,
                 "current_state": "infinity_loop",
                 "goal": "select next_action",
