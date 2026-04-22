@@ -20,6 +20,8 @@ def test_infinity_loop_imports_without_tasks_or_masterplan_modules(monkeypatch):
     _block_imports(
         monkeypatch,
         {
+            "apps.automation.models",
+            "apps.tasks.models",
             "apps.tasks.services.task_service",
             "apps.masterplan.services.goal_service",
         },
@@ -47,6 +49,29 @@ def test_infinity_orchestrator_imports_without_cross_domain_modules(monkeypatch)
         },
     )
     module_name = "apps.analytics.services.infinity_orchestrator"
+    original = sys.modules.get(module_name)
+    if original is not None:
+        mod = importlib.reload(original)
+        assert mod is original
+        return
+
+    mod = importlib.import_module(module_name)
+    assert mod is not None
+    sys.modules.pop(module_name, None)
+
+
+def test_analytics_dependency_adapter_imports_without_cross_domain_modules(monkeypatch):
+    _block_imports(
+        monkeypatch,
+        {
+            "apps.automation.models",
+            "apps.identity.services.identity_boot_service",
+            "apps.social.services.social_performance_service",
+            "apps.tasks.models",
+            "apps.tasks.services.task_service",
+        },
+    )
+    module_name = "apps.analytics.services.dependency_adapter"
     original = sys.modules.get(module_name)
     if original is not None:
         mod = importlib.reload(original)

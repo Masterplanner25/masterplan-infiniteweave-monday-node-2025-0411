@@ -86,6 +86,7 @@ _route_prefixes: dict[str, str] = {
 _required_flow_nodes: list[str] = []
 _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
+_degraded_domains: list[str] = []
 
 
 def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
@@ -518,6 +519,56 @@ def register_symbols(symbols: dict[str, Any]) -> None:
     for name, value in symbols.items():
         if not name.startswith("__"):
             register_symbol(name, value)
+
+
+def publish_degraded_domains(domains: Iterable[str]) -> list[str]:
+    published: list[str] = []
+    seen: set[str] = set()
+    for domain in domains:
+        if not isinstance(domain, str):
+            continue
+        normalized = domain.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        published.append(normalized)
+
+    global _degraded_domains
+    _degraded_domains = published
+    return list(_degraded_domains)
+
+
+def get_degraded_domains() -> list[str]:
+    return list(_degraded_domains)
+
+
+def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:
+    if manifest_path is None:
+        manifest_path = Path(__file__).resolve().parents[2] / "aindy_plugins.json"
+    path = Path(manifest_path)
+    if not path.exists():
+        return []
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    boot_order: list[str] = []
+    for module_name in data.get("plugins", []):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception as exc:
+            logger.warning("Skipping boot-order discovery for plugin %s: %s", module_name, exc)
+            continue
+        discover = getattr(module, "get_resolved_boot_order", None)
+        if callable(discover):
+            try:
+                value = discover()
+            except Exception as exc:
+                logger.warning("Plugin %s boot-order discovery failed: %s", module_name, exc)
+                continue
+            if isinstance(value, list):
+                boot_order.extend(name for name in value if isinstance(name, str) and name.strip())
+                continue
+        boot_order.append(module_name)
+    return boot_order
 
 
 def load_plugins(manifest_path: str | Path | None = None) -> list[str]:

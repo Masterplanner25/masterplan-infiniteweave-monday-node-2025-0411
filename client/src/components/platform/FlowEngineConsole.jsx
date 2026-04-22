@@ -1,14 +1,14 @@
 // src/components/FlowEngineConsole.jsx
 import React, { useState, useCallback, useEffect } from "react";
 import {
-  buildApiUrl,
   getFlowRuns,
   getFlowRunHistory,
   resumeFlowRun,
   getFlowRegistry,
   getAutomationLogs,
   replayAutomationLog,
-  getSchedulerStatus } from "../../api";
+  getSchedulerStatus } from "../../api/operator.js";
+import { buildApiUrl } from "../../api/_core.js";
 
 // ── Design tokens (A.I.N.D.Y. dark theme) ────────────────────────────────────
 import { safeMap } from "../../utils/safe";const C = {

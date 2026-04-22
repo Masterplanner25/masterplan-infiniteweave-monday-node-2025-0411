@@ -157,7 +157,10 @@ def _load_flows(db: Session, stats: dict[str, int]) -> None:
 
 def _load_webhooks(db: Session, stats: dict[str, int]) -> None:
     from AINDY.db.models.webhook_subscription import WebhookSubscription as WS
-    from AINDY.platform_layer.event_service import _SUBSCRIPTIONS, _load_subscription
+    from AINDY.platform_layer.event_service import (
+        has_loaded_webhook_subscription,
+        restore_webhook_subscription,
+    )
 
     try:
         rows = db.query(WS).filter(WS.is_active).all()
@@ -167,12 +170,12 @@ def _load_webhooks(db: Session, stats: dict[str, int]) -> None:
 
     for row in rows:
         sub_id = str(row.id)
-        if sub_id in _SUBSCRIPTIONS:
+        if has_loaded_webhook_subscription(sub_id):
             logger.debug("platform_loader: webhook %s already loaded â€” skip", sub_id)
             stats["webhooks_skipped"] += 1
             continue
         try:
-            _load_subscription(
+            restore_webhook_subscription(
                 subscription_id=sub_id,
                 event_type=row.event_type,
                 callback_url=row.callback_url,

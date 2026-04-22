@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
-import { getCausalGraph, getInfluenceGraph, getNarrative } from "../../api";import { safeMap } from "../../utils/safe";
+import { getCausalGraph, getInfluenceGraph, getNarrative } from "../../api/legacy.js";import { safeMap } from "../../utils/safe";
 
 const COLORS = {
   canvas: "#06070b",

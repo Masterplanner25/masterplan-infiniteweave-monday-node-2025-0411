@@ -2,8 +2,6 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import case
-from sqlalchemy import select
 logger = logging.getLogger(__name__)
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.core.system_event_service import emit_error_event
@@ -11,6 +9,7 @@ from AINDY.platform_layer.registry import get_job
 from AINDY.platform_layer.trace_context import get_current_trace_id
 from AINDY.platform_layer.user_ids import parse_user_id
 from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
+from apps.analytics.services import dependency_adapter
 
 THRASH_GUARD_MINUTES = 60
 TASK_REPRIORITIZATION_LIMIT = 5
@@ -35,19 +34,41 @@ def _normalize_user_id(user_id: str | uuid.UUID | None):
     return parse_user_id(user_id) if user_id is not None else None
 
 
+def get_latest_adjustment_record(*args, **kwargs):
+    return dependency_adapter.get_latest_loop_adjustment(*args, **kwargs)
+
+
+def list_strategy_accuracy_adjustments(*args, **kwargs):
+    return dependency_adapter.list_strategy_accuracy_adjustments(*args, **kwargs)
+
+
+def get_pending_adjustment_record(*args, **kwargs):
+    return dependency_adapter.get_pending_loop_adjustment(*args, **kwargs)
+
+
+def list_recent_feedback_rows(*args, **kwargs):
+    return dependency_adapter.list_recent_feedback_rows(*args, **kwargs)
+
+
+def fetch_next_ready_task(*args, **kwargs):
+    return dependency_adapter.fetch_next_ready_task(*args, **kwargs)
+
+
+def list_incomplete_tasks(*args, **kwargs):
+    return dependency_adapter.list_incomplete_tasks(*args, **kwargs)
+
+
+def create_loop_adjustment_record(**kwargs):
+    return dependency_adapter.create_loop_adjustment(**kwargs)
+
+
+def get_latest_adjustment_for_update(*args, **kwargs):
+    return dependency_adapter.get_latest_loop_adjustment_for_update(*args, **kwargs)
+
+
 def get_latest_adjustment(user_id: str, db):
     try:
-        from apps.automation.models import LoopAdjustment
-        owner_user_id = _normalize_user_id(user_id)
-        if owner_user_id is None:
-            return None
-
-        return (
-            db.query(LoopAdjustment)
-            .filter(LoopAdjustment.user_id == owner_user_id)
-            .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
-            .first()
-        )
+        return get_latest_adjustment_record(user_id=user_id, db=db)
     except Exception as exc:
         logger.warning("[InfinityLoop] get_latest_adjustment failed for %s: %s", user_id, exc)
         return None
@@ -96,21 +117,7 @@ def _build_expectation(decision_type: str, score_snapshot: dict | None) -> tuple
 
 def _get_strategy_accuracy_context(user_id: str, db, limit: int = 20) -> dict[str, float]:
     try:
-        from apps.automation.models import LoopAdjustment
-        owner_user_id = _normalize_user_id(user_id)
-        if owner_user_id is None:
-            return {}
-
-        rows = (
-            db.query(LoopAdjustment)
-            .filter(
-                LoopAdjustment.user_id == owner_user_id,
-                LoopAdjustment.prediction_accuracy.isnot(None),
-            )
-            .order_by(LoopAdjustment.evaluated_at.desc(), LoopAdjustment.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        rows = list_strategy_accuracy_adjustments(user_id=user_id, db=db, limit=limit)
         grouped: dict[str, list[float]] = {}
         for row in rows:
             grouped.setdefault(row.decision_type, []).append(float(row.prediction_accuracy) / 100.0)
@@ -162,33 +169,16 @@ def evaluate_pending_adjustment(
     actual_score: float | None,
     db,
 ) -> dict | None:
-    from apps.automation.models import LoopAdjustment
-
     try:
-        owner_user_id = _normalize_user_id(user_id)
-        if owner_user_id is None:
+        adjustment = None
+        if _normalize_user_id(user_id) is None:
             return None
         with transaction_scope(db):
-            if supports_managed_transactions(db):
-                adjustment = db.execute(
-                    select(LoopAdjustment)
-                    .where(
-                        LoopAdjustment.user_id == owner_user_id,
-                        LoopAdjustment.evaluated_at.is_(None),
-                    )
-                    .order_by(LoopAdjustment.created_at.desc())
-                    .with_for_update()
-                ).scalars().first()
-            else:
-                adjustment = (
-                    db.query(LoopAdjustment)
-                    .filter(
-                        LoopAdjustment.user_id == owner_user_id,
-                        LoopAdjustment.evaluated_at.is_(None),
-                    )
-                    .order_by(LoopAdjustment.created_at.desc())
-                    .first()
-                )
+            adjustment = get_pending_adjustment_record(
+                user_id=user_id,
+                db=db,
+                managed_transactions=supports_managed_transactions(db),
+            )
             if not adjustment:
                 return None
 
@@ -238,18 +228,9 @@ def evaluate_pending_adjustment(
 
 def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
     try:
-        from apps.automation.models import UserFeedback
-        owner_user_id = _normalize_user_id(user_id)
-        if owner_user_id is None:
+        rows = list_recent_feedback_rows(user_id=user_id, db=db, limit=limit)
+        if not rows:
             return {"count": 0, "positive": 0, "negative": 0, "latest_feedback_text": None}
-
-        rows = (
-            db.query(UserFeedback)
-            .filter(UserFeedback.user_id == owner_user_id)
-            .order_by(UserFeedback.created_at.desc())
-            .limit(limit)
-            .all()
-        )
         positives = sum(1 for row in rows if getattr(row, "feedback_value", 0) > 0)
         negatives = sum(1 for row in rows if getattr(row, "feedback_value", 0) < 0)
         return {
@@ -271,35 +252,16 @@ def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
 
 
 def _get_top_incomplete_task(user_id: str, db) -> dict | None:
-    from apps.tasks.services.task_service import get_next_ready_task
-
     try:
-        next_ready = get_next_ready_task(db=db, user_id=user_id)
+        next_ready = fetch_next_ready_task(db=db, user_id=user_id)
         if next_ready:
             return next_ready
     except Exception as exc:
         logger.warning("[InfinityLoop] next ready task lookup failed for %s: %s", user_id, exc)
-
-    from apps.tasks.models import Task
-
-    user_uuid = _normalize_user_id(user_id) or user_id
-
-    priority_rank = case(
-        (Task.priority == "high", 3),
-        (Task.priority == "medium", 2),
-        else_=1,
-    )
-    task = (
-        db.query(Task)
-        .filter(
-            Task.user_id == user_uuid,
-            Task.status.in_(["pending", "in_progress", "paused"]),
-        )
-        .order_by(priority_rank.desc(), Task.due_date.asc().nulls_last(), Task.id.asc())
-        .first()
-    )
-    if not task:
+    tasks = list_incomplete_tasks(user_id=user_id, db=db, limit=1)
+    if not tasks:
         return None
+    task = tasks[0]
     return {
         "task_id": task.id,
         "name": task.name,
@@ -732,27 +694,9 @@ def _decide(
 
 
 def _reprioritize_tasks(user_id: str, db) -> dict:
-    from apps.tasks.models import Task
-
-    user_uuid = _normalize_user_id(user_id)
-    if user_uuid is None:
+    if _normalize_user_id(user_id) is None:
         return {"reason": "invalid_user_id", "task_ids": []}
-
-    priority_rank = case(
-        (Task.priority == "high", 3),
-        (Task.priority == "medium", 2),
-        else_=1,
-    )
-    tasks = (
-        db.query(Task)
-        .filter(
-            Task.user_id == user_uuid,
-            Task.status.in_(["pending", "in_progress", "paused"]),
-        )
-        .order_by(priority_rank.desc(), Task.due_date.asc().nulls_last(), Task.id.asc())
-        .limit(TASK_REPRIORITIZATION_LIMIT)
-        .all()
-    )
+    tasks = list_incomplete_tasks(user_id=user_id, db=db, limit=TASK_REPRIORITIZATION_LIMIT)
 
     if not tasks:
         return {"reason": "no_incomplete_tasks", "task_ids": []}
@@ -783,8 +727,6 @@ def run_loop(
     feedback_context: dict | None = None,
     loop_context: dict | None = None,
 ):
-    from apps.automation.models import LoopAdjustment
-
     try:
         with transaction_scope(db):
             normalized_trigger = _normalize_trigger_event(trigger_event)
@@ -816,12 +758,10 @@ def run_loop(
             now = datetime.now(timezone.utc)
 
             if supports_managed_transactions(db):
-                last_adjustment = db.execute(
-                    select(LoopAdjustment)
-                    .where(LoopAdjustment.user_id == persisted_user_id)
-                    .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
-                    .with_for_update()
-                ).scalars().first()
+                last_adjustment = get_latest_adjustment_for_update(
+                    persisted_user_id=persisted_user_id,
+                    db=db,
+                )
             else:
                 last_adjustment = get_latest_adjustment(user_id=owner_user_id, db=db)
             if (
@@ -882,7 +822,7 @@ def run_loop(
 
             expected_outcome, expected_score = _build_expectation(decision_type, score_snapshot)
 
-            adjustment = LoopAdjustment(
+            adjustment = create_loop_adjustment_record(
                 user_id=persisted_user_id,
                 trace_id=get_current_trace_id(),
                 trigger_event=normalized_trigger,

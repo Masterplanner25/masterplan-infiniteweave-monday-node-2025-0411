@@ -1,9 +1,15 @@
-"""Application plugin bootstrap aggregator with degraded-mode handling."""
+"""Application plugin bootstrap aggregator with degraded-mode handling.
+
+`BOOTSTRAP_DEPENDS_ON` is the hard startup-order graph used by the runtime.
+`APP_DEPENDS_ON` is the broader direct cross-app import graph used for
+architecture governance and drift detection.
+"""
 from __future__ import annotations
 
 import logging
 
 from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
+from AINDY.platform_layer.registry import publish_degraded_domains
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +75,7 @@ def bootstrap() -> None:
     if _BOOTSTRAPPED:
         return
 
+    publish_degraded_domains(())
     app_bootstraps = discover_app_bootstraps()
     ordered_apps = resolve_boot_order(app_bootstraps)
     logger.info("Boot order resolved: %s", " -> ".join(ordered_apps))
@@ -85,6 +92,7 @@ def bootstrap() -> None:
             if app_name in CORE_DOMAINS:
                 _BOOTSTRAPPED = False
                 _DEGRADED_DOMAINS = failed_peripheral
+                publish_degraded_domains(_DEGRADED_DOMAINS)
                 raise RuntimeError(
                     f"Core domain {app_name} blocked by failed dependency: {blocked_by}"
                 )
@@ -101,6 +109,7 @@ def bootstrap() -> None:
             if app_name in CORE_DOMAINS:
                 _BOOTSTRAPPED = False
                 _DEGRADED_DOMAINS = failed_peripheral
+                publish_degraded_domains(_DEGRADED_DOMAINS)
                 logger.exception("Core domain bootstrap failed for %s: %s", app_name, exc)
                 raise RuntimeError(
                     f"Core domain bootstrap failed for {app_name}: {exc}"
@@ -114,6 +123,7 @@ def bootstrap() -> None:
             failed_peripheral.append(app_name)
 
     _DEGRADED_DOMAINS = failed_peripheral
+    publish_degraded_domains(_DEGRADED_DOMAINS)
     _BOOTSTRAPPED = True
     if failed_peripheral:
         logger.warning(

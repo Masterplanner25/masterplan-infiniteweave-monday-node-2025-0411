@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:

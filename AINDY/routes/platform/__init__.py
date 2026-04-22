@@ -16,11 +16,16 @@ from AINDY.routes.platform.nodus_router import list_nodus_scripts, run_nodus_scr
 from AINDY.routes.platform.nodus_schedule_router import create_nodus_schedule, delete_nodus_schedule, list_nodus_schedules, router as nodus_schedule_router
 from AINDY.routes.platform.nodus_shared import (
     _NODUS_SCRIPT_REGISTRY,
+    _SCRIPTS_DIR,
     _ensure_nodus_flow_registered,
     _format_nodus_response,
     _run_flow_platform,
     _run_nodus_script,
     _validate_nodus_source,
+    list_nodus_script_summaries,
+    load_named_nodus_script_or_404,
+    nodus_script_exists,
+    save_nodus_script,
 )
 from AINDY.routes.platform.platform_ops_router import (
     dispatch_syscall,

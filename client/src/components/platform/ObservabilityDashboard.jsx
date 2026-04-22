@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis } from "recharts";
 
-import { getObservabilityDashboard } from "../../api";
+import { getObservabilityDashboard } from "../../api/operator.js";
 import { useSystem } from "../../context/SystemContext";
 import {
   ActionButton,

@@ -367,7 +367,7 @@ class TestRunNodusScriptEndpoint:
         m._NODUS_SCRIPT_REGISTRY.clear()
         try:
             with patch("AINDY.routes.platform_router._validate_nodus_source"), \
-                 patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
+                 patch("AINDY.platform_layer.nodus_script_store._SCRIPTS_DIR") as mock_dir:
                 mock_dir.__truediv__.return_value.exists.return_value = False
                 with pytest.raises(HTTPException) as exc_info:
                     from AINDY.routes.platform_router import NodusRunRequest, run_nodus_script
@@ -507,7 +507,7 @@ class TestListNodusScriptsEndpoint:
         m._NODUS_SCRIPT_REGISTRY.update(registry)
 
         try:
-            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.platform_layer.nodus_script_store._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = False  # skip disk scan
                 return list_nodus_scripts(request=MagicMock(), current_user={"sub": str(uuid.uuid4())})
         finally:
@@ -551,7 +551,7 @@ class TestNodusRouterHttpBranches:
                  patch.object(nodus_module, "_format_nodus_response", return_value={"status": "SUCCESS", "trace_id": "trace-1"}) as mock_format, \
                  patch.object(nodus_module, "execute_with_pipeline_sync", side_effect=lambda **kw: kw["handler"](None)), \
                  patch("AINDY.core.execution_gate.flow_result_to_envelope", return_value={"trace_id": "trace-1"}), \
-                 patch.object(nodus_module, "_SCRIPTS_DIR") as mock_dir:
+                 patch("AINDY.platform_layer.nodus_script_store._SCRIPTS_DIR") as mock_dir:
                 disk_path = MagicMock()
                 disk_path.exists.return_value = True
                 disk_path.read_text.return_value = "let restored = true"
@@ -697,7 +697,7 @@ class TestListNodusScriptsEndpointContinued:
         m._NODUS_SCRIPT_REGISTRY.update(registry)
 
         try:
-            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.platform_layer.nodus_script_store._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = False
                 return list_nodus_scripts(request=MagicMock(), current_user={"sub": str(uuid.uuid4())})
         finally:
@@ -763,7 +763,7 @@ class TestListNodusScriptsEndpointContinued:
         mock_path.read_text.return_value = disk_script_content
 
         try:
-            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
+            with patch("AINDY.platform_layer.nodus_script_store._SCRIPTS_DIR") as mock_dir:
                 mock_dir.exists.return_value = True
                 mock_dir.glob.return_value = [mock_path]
 

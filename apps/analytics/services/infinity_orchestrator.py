@@ -13,9 +13,8 @@ from AINDY.core.execution_signal_helper import queue_system_event
 emit_system_event = queue_system_event
 from AINDY.db.database import SessionLocal
 from AINDY.platform_layer.registry import get_job
-from AINDY.memory.memory_scoring_service import get_relevant_memories
-from AINDY.platform_layer.system_state_service import compute_current_state
 from AINDY.platform_layer.trace_context import get_current_trace_id
+from apps.analytics.services import dependency_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +81,59 @@ def orchestrator_score_context(*args, **kwargs):
     return _orchestrator_score_context(*args, **kwargs)
 
 
+def fetch_recent_memory(*args, **kwargs):
+    return dependency_adapter.fetch_recent_memory(*args, **kwargs)
+
+
+def fetch_user_metrics(*args, **kwargs):
+    return dependency_adapter.fetch_user_metrics(*args, **kwargs)
+
+
+def fetch_memory_signals(*args, **kwargs):
+    return dependency_adapter.fetch_memory_signals(*args, **kwargs)
+
+
+def fetch_system_state(*args, **kwargs):
+    return dependency_adapter.fetch_system_state(*args, **kwargs)
+
+
+def fetch_task_graph_context(*args, **kwargs):
+    return dependency_adapter.fetch_task_graph_context(*args, **kwargs)
+
+
+def fetch_social_performance_signals(*args, **kwargs):
+    return dependency_adapter.fetch_social_performance_signals(*args, **kwargs)
+
+
+def get_recent_memory(*args, **kwargs):
+    return fetch_recent_memory(*args, **kwargs)
+
+
+def get_user_metrics(*args, **kwargs):
+    return fetch_user_metrics(*args, **kwargs)
+
+
+def get_relevant_memories(payload: dict, *, db):
+    return dependency_adapter.fetch_memory_signals(
+        user_id=str(payload.get("user_id") or ""),
+        trigger_event=str(payload.get("trigger_event") or "manual"),
+        db=db,
+    )
+
+
+def compute_current_state(*args, **kwargs):
+    return fetch_system_state(*args, **kwargs)
+
+
+def get_task_graph_context(*args, **kwargs):
+    return fetch_task_graph_context(*args, **kwargs)
+
+
+def get_social_performance_signals(*args, **kwargs):
+    return fetch_social_performance_signals(*args, **kwargs)
+
+
 def execute(user_id: str, trigger_event: str, db):
-    from apps.identity.services.identity_boot_service import get_recent_memory, get_user_metrics
-    from apps.social.services.social_performance_service import get_social_performance_signals
-    from apps.tasks.services.task_service import get_task_graph_context
     rank_goals = get_job("goals.rank")
 
     trace_id = get_current_trace_id() or f"loop:{trigger_event}"

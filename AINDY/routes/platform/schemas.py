@@ -1,13 +1,12 @@
-import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
-
-_script_lock = threading.Lock()
-_NODUS_SCRIPT_REGISTRY: Dict[str, Dict[str, Any]] = {}
-_SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts" / "nodus"
+from AINDY.platform_layer.nodus_script_store import (
+    _NODUS_SCRIPT_REGISTRY,
+    _SCRIPTS_DIR,
+    _script_lock,
+)
 
 
 class FlowDefinition(BaseModel):

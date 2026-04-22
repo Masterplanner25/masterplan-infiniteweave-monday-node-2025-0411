@@ -26,3 +26,42 @@ def test_ready_returns_ready(client, db_session):
 
     assert response.status_code == 200
     assert response.json()["status"] == "ready"
+    assert "checks" in response.json()
+
+
+def test_health_reports_degraded_domains(client, monkeypatch):
+    import importlib
+
+    health_router = importlib.import_module("AINDY.routes.health_router")
+
+    monkeypatch.setattr(health_router, "get_degraded_domains", lambda: ["bridge", "autonomy"])
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["degraded_domains"] == ["bridge", "autonomy"]
+
+
+def test_ready_returns_503_when_required_runtime_contract_not_met(client, monkeypatch):
+    import importlib
+
+    health_service = importlib.import_module("AINDY.platform_layer.health_service")
+
+    monkeypatch.setattr(
+        health_service,
+        "get_readiness_report",
+        lambda: (
+            503,
+            {
+                "status": "not_ready",
+                "checks": {"worker": "missing"},
+                "required_failures": ["worker"],
+            },
+        ),
+    )
+
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+    assert response.json()["required_failures"] == ["worker"]

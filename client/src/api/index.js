@@ -1,14 +1,8 @@
 export * from "./_core.js";
-export * from "./auth.js";
-export * from "./tasks.js";
-export * from "./masterplan.js";
-export * from "./arm.js";
-export * from "./analytics.js";
-export * from "./social.js";
-export * from "./search.js";
-export * from "./memory.js";
-export * from "./identity.js";
-export * from "./agent.js";
-export * from "./freelance.js";
-export * from "./rippletrace.js";
-export * from "./platform.js";
+export * from "./product.js";
+export * from "./operator.js";
+export * from "./legacy.js";
+
+export * as productApi from "./product.js";
+export * as operatorApi from "./operator.js";
+export * as legacyApi from "./legacy.js";

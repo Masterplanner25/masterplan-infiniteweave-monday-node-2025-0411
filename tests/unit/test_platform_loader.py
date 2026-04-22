@@ -205,8 +205,8 @@ def test_load_webhooks_only_active(monkeypatch):
     calls: list[dict] = []
 
     monkeypatch.setattr(webhook_model_module, "WebhookSubscription", FakeWebhookSubscription)
-    monkeypatch.setattr(event_service, "_SUBSCRIPTIONS", {"existing-id": object()})
-    monkeypatch.setattr(event_service, "_load_subscription", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(event_service, "has_loaded_webhook_subscription", lambda sub_id: sub_id == "existing-id")
+    monkeypatch.setattr(event_service, "restore_webhook_subscription", lambda **kwargs: calls.append(kwargs) or True)
 
     stats = {"webhooks_loaded": 0, "webhooks_skipped": 0}
     loader._load_webhooks(db, stats)
@@ -290,3 +290,108 @@ def test_loader_skips_bad_row_and_continues(monkeypatch, caplog):
     assert stats["nodes_loaded"] == 1
     assert stats["nodes_skipped"] == 1
     assert "skipping node 'bad-node'" in caplog.text or 'skipping node "bad-node"' in caplog.text
+
+
+def test_load_dynamic_registry_reports_combined_restore_summary(monkeypatch):
+    import AINDY.db.models.dynamic_node as dynamic_node_module
+    import AINDY.db.models.dynamic_flow as dynamic_flow_module
+    import AINDY.db.models.webhook_subscription as webhook_model_module
+    import AINDY.runtime.flow_engine as flow_engine
+    import AINDY.platform_layer.node_registry as node_registry
+    import AINDY.runtime.flow_registry as flow_registry
+    import AINDY.platform_layer.event_service as event_service
+
+    class FakeDynamicNode:
+        is_active = object()
+
+    class FakeDynamicFlow:
+        is_active = object()
+
+    class FakeWebhookSubscription:
+        is_active = object()
+
+    now = datetime(2026, 4, 22, 12, 0, tzinfo=timezone.utc)
+    db = _FakeSession(
+        {
+            FakeDynamicNode: [
+                SimpleNamespace(
+                    name="existing-node",
+                    node_type="plugin",
+                    handler_config={"handler": "pkg:existing"},
+                    secret="s1",
+                    created_by="user-1",
+                    is_active=True,
+                ),
+                SimpleNamespace(
+                    name="restored-node",
+                    node_type="plugin",
+                    handler_config={"handler": "pkg:restored"},
+                    secret="s2",
+                    created_by="user-2",
+                    is_active=True,
+                ),
+            ],
+            FakeDynamicFlow: [
+                SimpleNamespace(
+                    name="existing-flow",
+                    definition_json={"nodes": ["a"], "edges": {}, "start": "a", "end": ["a"]},
+                    created_by="user-1",
+                    is_active=True,
+                ),
+                SimpleNamespace(
+                    name="restored-flow",
+                    definition_json={"nodes": ["start", "end"], "edges": {"start": ["end"]}, "start": "start", "end": ["end"]},
+                    created_by="user-2",
+                    is_active=True,
+                ),
+            ],
+            FakeWebhookSubscription: [
+                SimpleNamespace(
+                    id="existing-sub",
+                    event_type="execution.completed",
+                    callback_url="https://example.test/existing",
+                    secret="one",
+                    created_by="user-1",
+                    created_at=now,
+                    is_active=True,
+                ),
+                SimpleNamespace(
+                    id="restored-sub",
+                    event_type="task.completed",
+                    callback_url="https://example.test/restored",
+                    secret="two",
+                    created_by="user-2",
+                    created_at=now,
+                    is_active=True,
+                ),
+            ],
+        }
+    )
+
+    node_calls: list[str] = []
+    flow_calls: list[str] = []
+    webhook_calls: list[str] = []
+
+    monkeypatch.setattr(dynamic_node_module, "DynamicNode", FakeDynamicNode)
+    monkeypatch.setattr(dynamic_flow_module, "DynamicFlow", FakeDynamicFlow)
+    monkeypatch.setattr(webhook_model_module, "WebhookSubscription", FakeWebhookSubscription)
+    monkeypatch.setattr(flow_engine, "NODE_REGISTRY", {"existing-node": object()})
+    monkeypatch.setattr(flow_engine, "FLOW_REGISTRY", {"existing-flow": object()})
+    monkeypatch.setattr(node_registry, "register_external_node", lambda name, *_args, **_kwargs: node_calls.append(name))
+    monkeypatch.setattr(flow_registry, "register_dynamic_flow", lambda name, **_kwargs: flow_calls.append(name))
+    monkeypatch.setattr(event_service, "has_loaded_webhook_subscription", lambda sub_id: sub_id == "existing-sub")
+    monkeypatch.setattr(event_service, "restore_webhook_subscription", lambda **kwargs: webhook_calls.append(kwargs["subscription_id"]) or True)
+
+    stats = loader.load_dynamic_registry(db)
+
+    assert stats == {
+        "nodes_loaded": 1,
+        "nodes_skipped": 1,
+        "flows_loaded": 1,
+        "flows_skipped": 1,
+        "webhooks_loaded": 1,
+        "webhooks_skipped": 1,
+    }
+    assert node_calls == ["restored-node"]
+    assert flow_calls == ["restored-flow"]
+    assert webhook_calls == ["restored-sub"]

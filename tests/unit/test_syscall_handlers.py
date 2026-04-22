@@ -639,10 +639,10 @@ class TestWatcherHandlers:
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock()
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         sig = self._valid_signal()
@@ -653,7 +653,7 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             with pytest.raises(ValueError, match="unknown signal_type"):
                 _handle_watcher_ingest({"signals": [sig]}, _ctx())
@@ -664,10 +664,10 @@ class TestWatcherHandlers:
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_watcher_signal_mod = MagicMock(WatcherSignal=MagicMock(return_value=mock_row))
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         with patch.dict("sys.modules", {
@@ -675,7 +675,7 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [self._valid_signal()]}, _ctx())
 
@@ -688,10 +688,10 @@ class TestWatcherHandlers:
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock(WatcherSignal=MagicMock(return_value=MagicMock()))
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         sig1 = self._valid_signal()
@@ -702,7 +702,7 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [sig1, sig2]}, _ctx())
 
