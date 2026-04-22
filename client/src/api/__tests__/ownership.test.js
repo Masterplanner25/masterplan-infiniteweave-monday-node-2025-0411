@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
@@ -11,6 +13,8 @@ import * as operatorApi from "../operator.js";
 import * as legacyApi from "../legacy.js";
 import * as platformApi from "../platform.js";
 import * as barrelApi from "../../api.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe("client API ownership boundaries", () => {
   beforeEach(() => {
@@ -66,11 +70,14 @@ describe("client API ownership boundaries", () => {
   });
 
   it("uses explicit API categories in the focused UI components", () => {
-    const dashboardSource = readFileSync(new URL("../../components/app/Dashboard.jsx", import.meta.url), "utf8");
-    const graphViewSource = readFileSync(new URL("../../components/app/GraphView.jsx", import.meta.url), "utf8");
-    const flowConsoleSource = readFileSync(new URL("../../components/platform/FlowEngineConsole.jsx", import.meta.url), "utf8");
-    const observabilitySource = readFileSync(new URL("../../components/platform/ObservabilityDashboard.jsx", import.meta.url), "utf8");
-    const healthSource = readFileSync(new URL("../../components/platform/HealthDashboard.jsx", import.meta.url), "utf8");
+    const dashboardSource = readFileSync(resolve(__dirname, "../../components/app/Dashboard.jsx"), "utf8");
+    const graphViewSource = readFileSync(resolve(__dirname, "../../components/app/GraphView.jsx"), "utf8");
+    const flowConsoleSource = readFileSync(resolve(__dirname, "../../components/platform/FlowEngineConsole.jsx"), "utf8");
+    const observabilitySource = readFileSync(
+      resolve(__dirname, "../../components/platform/ObservabilityDashboard.jsx"),
+      "utf8",
+    );
+    const healthSource = readFileSync(resolve(__dirname, "../../components/platform/HealthDashboard.jsx"), "utf8");
 
     expect(dashboardSource).toContain('from "../../api/legacy.js"');
     expect(dashboardSource).toContain('from "../../api/product.js"');
