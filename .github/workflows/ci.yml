@@ -40,16 +40,16 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: base
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
         options: >-
-          --health-cmd pg_isready
+          --health-cmd="pg_isready -U test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5433:5432
+          - 5432:5432
       redis:
         image: redis:7-alpine
         ports:
@@ -72,7 +72,9 @@ jobs:
     env:
       ENV: test
       PYTHONPATH: .
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+      TESTING: "true"
+      TEST_MODE: "true"
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
       MONGO_URL: mongodb://localhost:27017
       MONGO_DB_NAME: aindy_test
       OPENAI_API_KEY: sk-test-placeholder
@@ -99,6 +101,18 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r AINDY/requirements.txt
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL readiness
+        run: |
+          until pg_isready -h localhost -p 5432 -U test; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+        env:
+          PGPASSWORD: test
 
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
@@ -175,10 +189,13 @@ jobs:
       - name: Run integration tests (PostgreSQL)
         working-directory: ${{ github.workspace }}
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/1
           ENV: test
-          TESTING: "false"
+          AINDY_TEST_DB: postgres
+          AINDY_ALLOW_SQLITE: "false"
+          TESTING: "true"
+          TEST_MODE: "true"
           AINDY_SKIP_MONGO_PING: "false"
           SKIP_MONGO_PING: "false"
           MONGO_URL: mongodb://localhost:27017
@@ -219,16 +236,16 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: base
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
         options: >-
-          --health-cmd pg_isready
+          --health-cmd="pg_isready -U test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5433:5432
+          - 5432:5432
       redis:
         image: redis:7-alpine
         ports:
@@ -251,10 +268,9 @@ jobs:
     env:
       ENV: test
       PYTHONPATH: .
-      TESTING: "false"
       AINDY_TEST_DB: postgres
       AINDY_ALLOW_SQLITE: "false"
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/base
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
       MONGO_URL: mongodb://localhost:27017
       MONGO_DB_NAME: aindy_test
       OPENAI_API_KEY: sk-test-placeholder
@@ -265,6 +281,8 @@ jobs:
       ALLOWED_ORIGINS: "http://localhost:3000"
       AINDY_SKIP_MONGO_PING: "true"
       SKIP_MONGO_PING: "true"
+      TEST_MODE: "true"
+      TESTING: "true"
 
     steps:
       - uses: actions/checkout@v4
@@ -283,6 +301,18 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r AINDY/requirements.txt
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for PostgreSQL readiness
+        run: |
+          until pg_isready -h localhost -p 5432 -U test; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+        env:
+          PGPASSWORD: test
 
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
