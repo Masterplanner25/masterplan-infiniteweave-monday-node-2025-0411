@@ -1,7 +1,7 @@
 import logging
 
 from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
-from apps.automation.flows._flow_registration import (
+from AINDY.runtime.flow_helpers import (
     register_nodes,
     register_single_node_flows,
 )

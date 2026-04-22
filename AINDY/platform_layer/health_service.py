@@ -7,7 +7,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -27,6 +27,7 @@ class DependencyStatus:
     latency_ms: float | None = None
     detail: str | None = None
     critical: bool = False
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -45,6 +46,7 @@ class SystemHealth:
                     "status": dep.status,
                     "latency_ms": dep.latency_ms,
                     "detail": dep.detail,
+                    **dep.metadata,
                 }
                 for dep in self.dependencies
             },
@@ -231,6 +233,38 @@ def check_redis_available(*, use_cache: bool = True) -> bool:
     return check_redis(use_cache=use_cache).status == "ok"
 
 
+def check_queue() -> DependencyStatus:
+    try:
+        from AINDY.core.distributed_queue import get_queue_health_snapshot
+
+        snapshot = get_queue_health_snapshot()
+        status: HealthStatus = "degraded" if snapshot["degraded"] else "ok"
+        detail = snapshot.get("reason")
+        return DependencyStatus(
+            name="queue",
+            status=status,
+            detail=detail,
+            critical=False,
+            metadata={
+                "backend": snapshot["backend"],
+                "degraded": snapshot["degraded"],
+                "redis_available": snapshot["redis_available"],
+            },
+        )
+    except Exception as exc:
+        return DependencyStatus(
+            name="queue",
+            status="unavailable",
+            detail=str(exc),
+            critical=False,
+            metadata={
+                "backend": "unknown",
+                "degraded": True,
+                "redis_available": False,
+            },
+        )
+
+
 def check_mongo(timeout: float = 2.0) -> DependencyStatus:
     start = time.monotonic()
     try:
@@ -334,6 +368,7 @@ def get_system_health(*, force: bool = False) -> SystemHealth:
     deps = [
         check_postgres(),
         check_redis(),
+        check_queue(),
         check_mongo(),
         check_schema(),
     ]

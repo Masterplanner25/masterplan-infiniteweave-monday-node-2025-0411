@@ -54,13 +54,10 @@ logger = logging.getLogger(__name__)
 
 # Redis key schema
 # ----------------
-# Tenant concurrency counter: aindy:rm:tenant:{tenant_id}:active
-# Per-EU cpu_ms accumulator:  aindy:rm:eu:{eu_id}:cpu_ms
-# Per-EU syscall counter:     aindy:rm:eu:{eu_id}:syscalls
-# Per-EU memory high-water:   aindy:rm:eu:{eu_id}:memory_bytes
+# Tenant concurrency counter: aindy:quota:concurrent:{tenant_id}
 #
-# Per-EU keys are given a 3600-second TTL as a cleanup safety net.
-# Tenant concurrency keys are given an 86400-second TTL as a cleanup safety net.
+# Per-EU usage tracking remains process-local by design. Only tenant
+# concurrent execution count is coordinated across instances.
 
 # ── Quota constants ───────────────────────────────────────────────────────────
 
@@ -275,7 +272,7 @@ class ResourceManager:
         self._lock = threading.Lock()
         self._backend = _get_backend()
         self.MAX_CONCURRENT_PER_TENANT = MAX_CONCURRENT_PER_TENANT
-        self._redis_client = None
+        self._redis = None
         self._redis_check_lock = threading.Lock()
         self._redis_last_check: float = 0.0
         self._redis_mode_logged: bool | None = None
@@ -289,20 +286,23 @@ class ResourceManager:
         self._eu_tenant: dict[str, str] = {}
         self._pending_purge: set[str] = set()
 
+    def _concurrency_key(self, tenant_id: str) -> str:
+        return f"aindy:quota:concurrent:{tenant_id}"
+
     def _get_redis(self):
         now = time.monotonic()
         if (now - self._redis_last_check) <= self._REDIS_CHECK_INTERVAL:
-            return self._redis_client
+            return self._redis
 
         with self._redis_check_lock:
             now = time.monotonic()
             if (now - self._redis_last_check) <= self._REDIS_CHECK_INTERVAL:
-                return self._redis_client
+                return self._redis
 
             self._redis_last_check = now
             redis_url = settings.REDIS_URL or os.getenv("REDIS_URL")
             if not redis_url:
-                self._redis_client = None
+                self._redis = None
                 self._redis_mode_logged = None
                 return None
 
@@ -316,21 +316,21 @@ class ResourceManager:
                     socket_timeout=1,
                 )
                 client.ping()
-                self._redis_client = client
+                self._redis = client
                 if self._redis_mode_logged is False:
                     logger.warning("[resource_manager] Redis reconnected; using shared quota counters")
                 self._redis_mode_logged = True
             except Exception as exc:
                 if self._redis_mode_logged is not False:
                     logger.warning("[resource_manager] Redis unavailable: %s", exc)
-                self._redis_client = None
+                self._redis = None
                 self._redis_mode_logged = False
-            return self._redis_client
+            return self._redis
 
     def _drop_redis_client(self, message: str, exc: Exception) -> None:
         logger.warning(message, exc)
         with self._redis_check_lock:
-            self._redis_client = None
+            self._redis = None
             self._redis_last_check = time.monotonic()
             self._redis_mode_logged = False
 
@@ -526,7 +526,7 @@ class ResourceManager:
         tid = str(tenant_id)
         redis_client = self._get_redis()
         if redis_client is not None:
-            key = f"aindy:rm:tenant:{tid}:active"
+            key = self._concurrency_key(tid)
             try:
                 active = int(redis_client.get(key) or 0)
             except Exception as exc:
@@ -576,33 +576,23 @@ class ResourceManager:
         if not can_run:
             return False, concurrency_reason
 
-        cpu_time_ms = self._backend_get_cpu_ms(str(eu_id))
-        syscall_count = self._backend_get_syscalls(str(eu_id))
-
         with self._lock:
             snap = self._usage.get(str(eu_id))
             if snap is None:
                 return True, None
 
-            snap_cpu_time_ms = (
-                cpu_time_ms if cpu_time_ms is not None else snap.cpu_time_ms
-            )
-            snap_syscall_count = (
-                syscall_count if syscall_count is not None else snap.syscall_count
-            )
-
-            if snap_cpu_time_ms > MAX_CPU_TIME_MS:
+            if snap.cpu_time_ms > MAX_CPU_TIME_MS:
                 reason = (
                     f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"cpu_time_ms limit ({snap_cpu_time_ms} > {MAX_CPU_TIME_MS})"
+                    f"cpu_time_ms limit ({snap.cpu_time_ms} > {MAX_CPU_TIME_MS})"
                 )
                 logger.warning("[ResourceManager] %s", reason)
                 return False, reason
 
-            if snap_syscall_count > MAX_SYSCALLS_PER_EXECUTION:
+            if snap.syscall_count > MAX_SYSCALLS_PER_EXECUTION:
                 reason = (
                     f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"syscall_count limit ({snap_syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
+                    f"syscall_count limit ({snap.syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
                 )
                 logger.warning("[ResourceManager] %s", reason)
                 return False, reason
@@ -623,12 +613,9 @@ class ResourceManager:
         tid = str(tenant_id)
         redis_client = self._get_redis()
         if redis_client is not None:
-            key = f"aindy:rm:tenant:{tid}:active"
+            key = self._concurrency_key(tid)
             try:
-                pipe = redis_client.pipeline()
-                pipe.incr(key)
-                pipe.expire(key, TENANT_KEY_TTL_SECONDS)
-                pipe.execute()
+                redis_client.incr(key)
             except Exception as exc:
                 self._drop_redis_client(
                     "[resource_manager] Redis incr failed, using local: %s",
@@ -646,6 +633,21 @@ class ResourceManager:
                 if eid not in self._usage:
                     self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id=tid)
                 self._eu_tenant[eid] = tid
+
+    def reset_tenant_quota(self, tenant_id: str) -> None:
+        tid = str(tenant_id)
+        redis_client = self._get_redis()
+        if redis_client is not None:
+            try:
+                redis_client.set(self._concurrency_key(tid), 0)
+                return
+            except Exception as exc:
+                self._drop_redis_client(
+                    "[resource_manager] Redis reset failed, using local: %s",
+                    exc,
+                )
+        with self._lock:
+            self._active_counts[tid] = 0
 
     def mark_completed(self, tenant_id: str, eu_id: str | None = None) -> None:
         """Decrement active execution counter for *tenant_id*.
@@ -680,12 +682,17 @@ class ResourceManager:
         effective_new_active = 0
         redis_client = self._get_redis()
         if redis_client is not None:
-            key = f"aindy:rm:tenant:{tid}:active"
+            key = self._concurrency_key(tid)
             try:
                 effective_current = int(redis_client.get(key) or 0)
-                if effective_current > 0:
-                    effective_new_active = int(redis_client.decr(key))
-                else:
+                effective_new_active = int(redis_client.decr(key))
+                if effective_new_active < 0:
+                    logger.warning(
+                        "[ResourceManager] tenant concurrency counter underflow tenant=%s value=%d",
+                        tid,
+                        effective_new_active,
+                    )
+                    self.reset_tenant_quota(tid)
                     effective_new_active = 0
             except Exception as exc:
                 self._drop_redis_client(
@@ -706,8 +713,6 @@ class ResourceManager:
                     self._active_counts[tid] = count - 1
                 effective_new_active = self._active_counts.get(tid, 0)
 
-        if eu_id:
-            self._backend_delete_eu(str(eu_id))
         with self._lock:
             if eu_id:
                 self._pending_purge.add(str(eu_id))
@@ -737,7 +742,6 @@ class ResourceManager:
     def record_cpu(self, eu_id: str, ms: int) -> None:
         eid = str(eu_id)
         delta = int(ms)
-        self._backend_add_cpu_ms(eid, delta)
         with self._lock:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
@@ -746,7 +750,6 @@ class ResourceManager:
     def record_memory(self, eu_id: str, bytes_used: int) -> None:
         eid = str(eu_id)
         value = int(bytes_used)
-        self._backend_set_memory_if_greater(eid, value)
         with self._lock:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
@@ -757,8 +760,6 @@ class ResourceManager:
         steps = max(0, int(count))
         if steps == 0:
             return
-        for _ in range(steps):
-            self._backend_increment_syscalls(eid)
         with self._lock:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
@@ -797,7 +798,7 @@ class ResourceManager:
         tid = str(tenant_id)
         redis_client = self._get_redis()
         if redis_client is not None:
-            key = f"aindy:rm:tenant:{tid}:active"
+            key = self._concurrency_key(tid)
             try:
                 return int(redis_client.get(key) or 0)
             except Exception as exc:
@@ -837,7 +838,6 @@ class ResourceManager:
 
         Safe to call at any point after ``mark_completed()``.
         """
-        self._backend_delete_eu(str(eu_id))
         with self._lock:
             self._usage.pop(str(eu_id), None)
             self._eu_tenant.pop(str(eu_id), None)
@@ -847,7 +847,6 @@ class ResourceManager:
 
         For use in tests only. Never call in production.
         """
-        self._backend_reset_all()
         with self._lock:
             self._usage.clear()
             self._active_counts.clear()

@@ -11,9 +11,8 @@ import logging
 
 from AINDY.core.execution_signal_helper import queue_system_event
 emit_system_event = queue_system_event
-from apps.analytics.services.concurrency import acquire_execution_lease, make_execution_owner_id, transaction_scope
-from apps.analytics.services.infinity_loop import evaluate_pending_adjustment, get_latest_adjustment, run_loop, serialize_adjustment
-from apps.analytics.services.infinity_service import calculate_infinity_score, get_user_kpi_snapshot, orchestrator_score_context
+from AINDY.db.database import SessionLocal
+from AINDY.platform_layer.registry import get_job
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 from AINDY.platform_layer.system_state_service import compute_current_state
 from AINDY.platform_layer.trace_context import get_current_trace_id
@@ -23,11 +22,71 @@ logger = logging.getLogger(__name__)
 _ANALYTICS_EXECUTION_LEASE_TTL_SECONDS = 5
 
 
+def acquire_execution_lease(*args, **kwargs):
+    from apps.analytics.services.concurrency import acquire_execution_lease as _acquire_execution_lease
+
+    return _acquire_execution_lease(*args, **kwargs)
+
+
+def make_execution_owner_id(*args, **kwargs):
+    from apps.analytics.services.concurrency import make_execution_owner_id as _make_execution_owner_id
+
+    return _make_execution_owner_id(*args, **kwargs)
+
+
+def transaction_scope(*args, **kwargs):
+    from apps.analytics.services.concurrency import transaction_scope as _transaction_scope
+
+    return _transaction_scope(*args, **kwargs)
+
+
+def evaluate_pending_adjustment(*args, **kwargs):
+    from apps.analytics.services.infinity_loop import evaluate_pending_adjustment as _evaluate_pending_adjustment
+
+    return _evaluate_pending_adjustment(*args, **kwargs)
+
+
+def get_latest_adjustment(*args, **kwargs):
+    from apps.analytics.services.infinity_loop import get_latest_adjustment as _get_latest_adjustment
+
+    return _get_latest_adjustment(*args, **kwargs)
+
+
+def run_loop(*args, **kwargs):
+    from apps.analytics.services.infinity_loop import run_loop as _run_loop
+
+    return _run_loop(*args, **kwargs)
+
+
+def serialize_adjustment(*args, **kwargs):
+    from apps.analytics.services.infinity_loop import serialize_adjustment as _serialize_adjustment
+
+    return _serialize_adjustment(*args, **kwargs)
+
+
+def calculate_infinity_score(*args, **kwargs):
+    from apps.analytics.services.infinity_service import calculate_infinity_score as _calculate_infinity_score
+
+    return _calculate_infinity_score(*args, **kwargs)
+
+
+def get_user_kpi_snapshot(*args, **kwargs):
+    from apps.analytics.services.infinity_service import get_user_kpi_snapshot as _get_user_kpi_snapshot
+
+    return _get_user_kpi_snapshot(*args, **kwargs)
+
+
+def orchestrator_score_context(*args, **kwargs):
+    from apps.analytics.services.infinity_service import orchestrator_score_context as _orchestrator_score_context
+
+    return _orchestrator_score_context(*args, **kwargs)
+
+
 def execute(user_id: str, trigger_event: str, db):
     from apps.identity.services.identity_boot_service import get_recent_memory, get_user_metrics
-    from apps.masterplan.services.goal_service import rank_goals
     from apps.social.services.social_performance_service import get_social_performance_signals
     from apps.tasks.services.task_service import get_task_graph_context
+    rank_goals = get_job("goals.rank")
 
     trace_id = get_current_trace_id() or f"loop:{trigger_event}"
     execution_owner_id = make_execution_owner_id()
@@ -79,7 +138,7 @@ def execute(user_id: str, trigger_event: str, db):
         logger.warning("[InfinityOrchestrator] system state lookup failed for %s: %s", user_id, exc)
         system_state = {}
     try:
-        goals = rank_goals(db, user_id, system_state=system_state)
+        goals = rank_goals(db, user_id, system_state=system_state) if callable(rank_goals) else []
     except Exception as exc:
         logger.warning("[InfinityOrchestrator] goal ranking failed for %s: %s", user_id, exc)
         goals = []
@@ -227,5 +286,22 @@ def execute(user_id: str, trigger_event: str, db):
             "memory_summary": memory_summary,
         },
     }
+
+
+def handle_goal_state_changed(payload: dict) -> None:
+    user_id = payload.get("user_id")
+    if not user_id:
+        return
+    db = SessionLocal()
+    try:
+        execute(
+            user_id=str(user_id),
+            trigger_event="masterplan_goal_state_changed",
+            db=db,
+        )
+    except Exception as exc:
+        logger.warning("[InfinityOrchestrator] goal state change handler failed for %s: %s", user_id, exc)
+    finally:
+        db.close()
 
 

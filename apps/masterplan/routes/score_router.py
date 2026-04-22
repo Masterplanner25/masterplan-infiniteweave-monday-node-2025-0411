@@ -24,14 +24,12 @@ class FeedbackRequest(BaseModel):
 
 
 def _latest_adjustment_payload(user_id: str, db: Session):
-    from apps.analytics.services.infinity_loop import get_latest_adjustment, serialize_adjustment
+    from AINDY.platform_layer.registry import get_job
 
-    latest = get_latest_adjustment(user_id, db)
-    if latest is None:
+    latest_adjustment_payload = get_job("analytics.latest_adjustment_payload")
+    if not callable(latest_adjustment_payload):
         return None
-    payload = dict(serialize_adjustment(latest))
-    payload.pop("id", None)
-    return payload
+    return latest_adjustment_payload(user_id, db)
 
 
 # ------------------------------

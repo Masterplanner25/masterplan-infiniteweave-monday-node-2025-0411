@@ -7,6 +7,8 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_models()
@@ -72,7 +74,8 @@ def _register_response_adapters() -> None:
 
 
 def _register_events() -> None:
-    from AINDY.platform_layer.registry import register_event_type
+    from AINDY.core.system_event_types import SystemEventTypes
+    from AINDY.platform_layer.registry import register_event_handler, register_event_type
     from apps.masterplan.events import MasterplanEventTypes
     from apps.masterplan.services.watcher_events import register_masterplan_event_handlers
 
@@ -80,6 +83,11 @@ def _register_events() -> None:
     for value in vars(MasterplanEventTypes).values():
         if isinstance(value, str):
             register_event_type(value)
+    register_event_type(SystemEventTypes.MASTERPLAN_GOAL_STATE_CHANGED)
+    register_event_type(SystemEventTypes.EXECUTION_COMPLETED)
+    register_event_type(SystemEventTypes.ANALYTICS_SCORE_UPDATED)
+    register_event_handler(SystemEventTypes.EXECUTION_COMPLETED, _handle_execution_completed)
+    register_event_handler(SystemEventTypes.ANALYTICS_SCORE_UPDATED, _handle_analytics_score_updated)
 
 
 def _register_jobs() -> None:
@@ -259,6 +267,27 @@ def _calculate_goal_alignment(*args, **kwargs):
 def _update_goals_from_execution(*args, **kwargs):
     from apps.masterplan.services.goal_service import update_goals_from_execution
     return update_goals_from_execution(*args, **kwargs)
+
+
+def _handle_execution_completed(context: dict):
+    from apps.masterplan.services.goal_service import update_goals_from_execution
+
+    db = context.get("db")
+    if db is None or "execution_result" not in context:
+        return None
+    return update_goals_from_execution(
+        db,
+        user_id=context.get("user_id"),
+        workflow_type=context.get("workflow_type"),
+        execution_result=context.get("execution_result"),
+        success=context.get("success", True),
+    )
+
+
+def _handle_analytics_score_updated(context: dict):
+    from apps.masterplan.services.goal_service import handle_score_updated
+
+    return handle_score_updated(context)
 
 
 def _scheduler_recalculate_all_etas() -> None:

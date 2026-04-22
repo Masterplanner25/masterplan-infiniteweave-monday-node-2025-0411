@@ -5,6 +5,19 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = [
+    "agent",
+    "analytics",
+    "arm",
+    "autonomy",
+    "dashboard",
+    "freelance",
+    "masterplan",
+    "rippletrace",
+    "search",
+    "tasks",
+]
+
 
 def register() -> None:
     _register_models()
@@ -18,6 +31,7 @@ def register() -> None:
     _register_flows()
     _register_flow_results()
     _register_flow_plans()
+    _register_required_flow_nodes()
 
 
 def _register_models() -> None:
@@ -135,6 +149,13 @@ def _register_flow_plans() -> None:
         {"steps": ["memory_execution_validate", "memory_execution_run", "memory_execution_orchestrate"]},
     )
     register_flow_plan("generic", {"steps": ["execute", "store_result"]})
+
+
+def _register_required_flow_nodes() -> None:
+    from AINDY.platform_layer.registry import register_required_flow_node
+
+    register_required_flow_node("memory_execution_validate")
+    register_required_flow_node("watcher_ingest_validate")
 
 
 def _automation_execute(payload, db):

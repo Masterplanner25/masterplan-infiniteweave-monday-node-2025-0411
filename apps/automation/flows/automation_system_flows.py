@@ -1,7 +1,7 @@
 import logging
 
 from AINDY.runtime.flow_engine import FLOW_REGISTRY, register_flow
-from apps.automation.flows._flow_registration import (
+from AINDY.runtime.flow_helpers import (
     register_nodes,
     register_single_node_flows,
 )
@@ -10,6 +10,17 @@ logger = logging.getLogger(__name__)
 
 
 # -- Node functions -----------------------------------------------------------
+
+def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dict:
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
+
+    ctx = make_syscall_ctx_from_flow(context, capabilities=[capability])
+    if context.get("db") is not None:
+        ctx.metadata["_db"] = context.get("db")
+    result = get_dispatcher().dispatch(name, state, ctx)
+    if result["status"] == "error":
+        return {"status": "RETRY", "error": result["error"]}
+    return {"status": "SUCCESS", "output_patch": result["data"]}
 
 def automation_logs_list_node(state, context):
     try:
@@ -113,31 +124,18 @@ def automation_scheduler_status_node(state, context):
         return {"status": "FAILURE", "error": str(e)}
 
 def automation_task_trigger_node(state, context):
-    try:
-        from apps.tasks.services.task_service import get_task_by_id, queue_task_automation
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        task_id = state.get("task_id")
-        automation_type = state.get("automation_type")
-        automation_config = state.get("automation_config")
-        task = get_task_by_id(db, task_id, user_id)
-        if not task:
-            return {"status": "FAILURE", "error": "HTTP_404:Task not found"}
-        if automation_type is not None:
-            task.automation_type = automation_type
-        if automation_config is not None:
-            task.automation_config = automation_config
-        db.commit()
-        db.refresh(task)
-        if not task.automation_type:
-            return {"status": "FAILURE", "error": "HTTP_422:task_automation_not_configured"}
-        dispatch = queue_task_automation(db=db, task=task, user_id=user_id, reason="manual_trigger")
-        if not dispatch:
-            return {"status": "FAILURE", "error": "HTTP_500:task_automation_dispatch_failed"}
-        return {"status": "SUCCESS", "output_patch": {"automation_task_trigger_result": dispatch}}
-    except Exception as e:
-        return {"status": "FAILURE", "error": str(e)}
+    payload = {
+        "task_id": state.get("task_id"),
+        "automation_type": state.get("automation_type"),
+        "automation_config": state.get("automation_config"),
+        "reason": "manual_trigger",
+    }
+    return _syscall_node(
+        "sys.v1.task.queue_automation",
+        payload,
+        context,
+        "task.write",
+    )
 
 
 # -- Registration -------------------------------------------------------------

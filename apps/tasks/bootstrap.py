@@ -6,6 +6,8 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_models()
@@ -19,9 +21,11 @@ def register() -> None:
     _register_async_jobs()
     _register_agent_tools()
     _register_agent_capabilities()
+    _register_syscalls()
     _register_capture_rules()
     _register_flow_results()
     _register_flow_plans()
+    _register_required_flow_nodes()
 
 
 def _register_models() -> None:
@@ -175,6 +179,12 @@ def _register_agent_capabilities() -> None:
     register_task_capabilities()
 
 
+def _register_syscalls() -> None:
+    from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
+
+    register_task_syscall_handlers()
+
+
 def _register_capture_rules() -> None:
     from AINDY.platform_layer.registry import register_memory_policy
     from apps.tasks.memory_policy import register as register_tasks_memory_policy
@@ -222,6 +232,12 @@ def _register_flow_plans() -> None:
         "watcher_ingest",
         {"steps": ["watcher_ingest_validate", "watcher_ingest_persist", "watcher_ingest_orchestrate"]},
     )
+
+
+def _register_required_flow_nodes() -> None:
+    from AINDY.platform_layer.registry import register_required_flow_node
+
+    register_required_flow_node("task_complete")
 
 
 def _job_watcher_ingest(payload: dict, db):

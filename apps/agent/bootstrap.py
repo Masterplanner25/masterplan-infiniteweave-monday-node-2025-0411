@@ -1,6 +1,8 @@
 """Agent domain bootstrap."""
 from __future__ import annotations
 
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+
 
 def register() -> None:
     _register_router()
@@ -10,6 +12,7 @@ def register() -> None:
     _register_agent_capabilities()
     _register_agent_runtime_extensions()
     _register_trigger_evaluators()
+    _register_flows()
     _register_flow_results()
 
 
@@ -48,6 +51,12 @@ def _register_agent_runtime_extensions() -> None:
 def _register_trigger_evaluators() -> None:
     from apps.agent.agents.triggers import register
     register()
+
+
+def _register_flows() -> None:
+    from apps.agent.flows import agent_flows
+
+    agent_flows.register()
 
 
 def _register_flow_results() -> None:

@@ -3,13 +3,16 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from apps.automation.models import AutomationLog
 from apps.masterplan.models import MasterPlan
-from apps.tasks.models import Task
-from apps.tasks.services.task_service import create_task
 
 
 _CHILD_KEYS = ("phases", "milestones", "steps", "tasks", "actions", "initiatives", "objectives")
+
+
+def create_task(*args, **kwargs):
+    from apps.tasks.services.task_service import create_task as _create_task
+
+    return _create_task(*args, **kwargs)
 
 
 def sync_masterplan_tasks(
@@ -19,6 +22,8 @@ def sync_masterplan_tasks(
     user_id: str | uuid.UUID,
     replace_existing: bool = False,
 ) -> dict[str, Any]:
+    from apps.tasks.models import Task
+
     owner_user_id = uuid.UUID(str(user_id))
     existing = (
         db.query(Task)
@@ -74,6 +79,9 @@ def sync_masterplan_tasks(
 
 
 def get_masterplan_execution_status(*, db, masterplan_id: int, user_id: str | uuid.UUID) -> dict[str, Any]:
+    from apps.automation.models import AutomationLog
+    from apps.tasks.models import Task
+
     owner_user_id = uuid.UUID(str(user_id))
     tasks = (
         db.query(Task)

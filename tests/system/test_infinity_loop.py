@@ -124,19 +124,20 @@ class TestInfinityLoopHelpers:
     def test_latest_adjustment_payload_helper_returns_none_without_adjustment(self):
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
 
-        with patch("apps.analytics.services.infinity_loop.get_latest_adjustment", return_value=None):
+        with patch("AINDY.platform_layer.registry.get_job", return_value=lambda user_id, db: None):
             assert _latest_adjustment_payload("u1", MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
 
-        with patch("apps.analytics.services.infinity_loop.get_latest_adjustment", return_value=MagicMock()), \
-             patch("apps.analytics.services.infinity_loop.serialize_adjustment", return_value={
-                 "id": "adj-1",
-                 "decision_type": "continue_highest_priority_task",
-                 "applied_at": "2026-01-01T00:00:00+00:00",
-                 "adjustment_payload": {"reason": "kpis_stable", "next_action": {"type": "continue_highest_priority_task"}},
-             }):
+        with patch(
+            "AINDY.platform_layer.registry.get_job",
+            return_value=lambda user_id, db: {
+                "decision_type": "continue_highest_priority_task",
+                "applied_at": "2026-01-01T00:00:00+00:00",
+                "adjustment_payload": {"reason": "kpis_stable", "next_action": {"type": "continue_highest_priority_task"}},
+            },
+        ):
             result = _latest_adjustment_payload("u1", MagicMock())
 
         assert result == {
@@ -709,26 +710,26 @@ class TestFrontendLoopSurfaces:
         assert "/scores/feedback" in src
 
     def test_arm_analyze_posts_feedback(self):
-        src = pathlib.Path("client/src/components/ARMAnalyze.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/app/ARMAnalyze.jsx").read_text(encoding="utf-8")
         assert "postScoreFeedback" in src
         assert 'source_type: "arm"' in src
 
     def test_agent_console_posts_agent_feedback(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "postScoreFeedback" in src
         assert 'source_type: "agent"' in src
 
     def test_agent_console_still_loads_suggestions(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "getAgentSuggestions" in src
 
     def test_arm_analyze_feedback_buttons_present(self):
-        src = pathlib.Path("client/src/components/ARMAnalyze.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/app/ARMAnalyze.jsx").read_text(encoding="utf-8")
         assert "Thumb Up" in src
         assert "Thumb Down" in src
 
     def test_agent_console_feedback_labels_present(self):
-        src = pathlib.Path("client/src/components/AgentConsole.jsx").read_text(encoding="utf-8")
+        src = pathlib.Path("client/src/components/platform/AgentConsole.jsx").read_text(encoding="utf-8")
         assert "Helpful" in src
         assert "Not Helpful" in src
 

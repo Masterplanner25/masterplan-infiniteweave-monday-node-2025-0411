@@ -7,17 +7,14 @@ from __future__ import annotations
 
 import logging
 
+from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
+
 logger = logging.getLogger(__name__)
 
 _BOOTSTRAPPED = False
 
 
-def bootstrap() -> None:
-    global _BOOTSTRAPPED
-    if _BOOTSTRAPPED:
-        return
-    _BOOTSTRAPPED = True
-
+def discover_app_bootstraps() -> dict[str, object]:
     from apps.tasks import bootstrap as tasks_bootstrap
     from apps.analytics import bootstrap as analytics_bootstrap
     from apps.masterplan import bootstrap as masterplan_bootstrap
@@ -35,25 +32,48 @@ def bootstrap() -> None:
     from apps.dashboard import bootstrap as dashboard_bootstrap
     from apps.network_bridge import bootstrap as network_bridge_bootstrap
 
-    for mod in (
-        tasks_bootstrap,
-        analytics_bootstrap,
-        masterplan_bootstrap,
-        automation_bootstrap,
-        arm_bootstrap,
-        search_bootstrap,
-        identity_bootstrap,
-        rippletrace_bootstrap,
-        social_bootstrap,
-        freelance_bootstrap,
-        agent_bootstrap,
-        authorship_bootstrap,
-        bridge_bootstrap,
-        autonomy_bootstrap,
-        dashboard_bootstrap,
-        network_bridge_bootstrap,
-    ):
-        mod.register()
+    return {
+        "tasks": tasks_bootstrap,
+        "analytics": analytics_bootstrap,
+        "masterplan": masterplan_bootstrap,
+        "automation": automation_bootstrap,
+        "arm": arm_bootstrap,
+        "search": search_bootstrap,
+        "identity": identity_bootstrap,
+        "rippletrace": rippletrace_bootstrap,
+        "social": social_bootstrap,
+        "freelance": freelance_bootstrap,
+        "agent": agent_bootstrap,
+        "authorship": authorship_bootstrap,
+        "bridge": bridge_bootstrap,
+        "autonomy": autonomy_bootstrap,
+        "dashboard": dashboard_bootstrap,
+        "network_bridge": network_bridge_bootstrap,
+    }
+
+
+def get_resolved_boot_order() -> list[str]:
+    return resolve_boot_order(discover_app_bootstraps())
+
+
+def bootstrap() -> None:
+    global _BOOTSTRAPPED
+    if _BOOTSTRAPPED:
+        return
+    _BOOTSTRAPPED = True
+
+    app_bootstraps = discover_app_bootstraps()
+    ordered_apps = resolve_boot_order(app_bootstraps)
+    logger.info("Boot order resolved: %s", " → ".join(ordered_apps))
+
+    for app_name in ordered_apps:
+        mod = app_bootstraps[app_name]
+        try:
+            mod.register()
+        except ValueError as exc:
+            app_name = mod.__name__.removesuffix(".bootstrap")
+            logger.exception("Bootstrap registration failed for %s: %s", app_name, exc)
+            raise RuntimeError(f"Bootstrap registration failed for {app_name}: {exc}") from exc
 
 
 def bootstrap_models() -> None:

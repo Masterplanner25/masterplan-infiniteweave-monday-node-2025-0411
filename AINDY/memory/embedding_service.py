@@ -12,8 +12,6 @@ import time
 from typing import Optional
 import threading
 
-from openai import OpenAI
-
 from AINDY.config import settings
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
@@ -23,6 +21,7 @@ from AINDY.platform_layer.metrics import (
     embedding_generation_total,
 )
 from AINDY.platform_layer.openai_client import create_embedding
+from AINDY.platform_layer.openai_client import get_openai_client
 
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIMENSIONS = 1536
@@ -41,16 +40,16 @@ class EmbeddingFailedError(RuntimeError):
     """
 
 
-_client: Optional[OpenAI] = None
+_client = None
 _client_lock = threading.Lock()
 
 
-def get_client() -> OpenAI:
+def get_client():
     global _client
     if _client is None:
         with _client_lock:
             if _client is None:
-                _client = OpenAI(api_key=settings.OPENAI_API_KEY)
+                _client = get_openai_client()
     return _client
 
 

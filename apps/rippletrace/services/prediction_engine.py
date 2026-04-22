@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from typing import List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import PingDB
-from apps.analytics.models import ScoreSnapshotDB
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.learning_engine import get_learning_thresholds, record_prediction
 
@@ -21,6 +22,8 @@ def _minutes_between(oldest, latest):
 
 
 def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = True) -> dict:
+    from apps.analytics.models import ScoreSnapshotDB
+
     snapshots = (
         db.query(ScoreSnapshotDB)
         .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)

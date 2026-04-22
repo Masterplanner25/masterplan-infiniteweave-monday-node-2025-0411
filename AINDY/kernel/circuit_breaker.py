@@ -155,6 +155,16 @@ _openai_circuit_breaker = CircuitBreaker(
     recovery_timeout_secs=60,
 )
 
+_deepseek_circuit_breaker = CircuitBreaker(
+    name="deepseek",
+    failure_threshold=3,
+    recovery_timeout_secs=60,
+)
+
 
 def get_openai_circuit_breaker() -> CircuitBreaker:
     return _openai_circuit_breaker
+
+
+def get_deepseek_circuit_breaker() -> CircuitBreaker:
+    return _deepseek_circuit_breaker

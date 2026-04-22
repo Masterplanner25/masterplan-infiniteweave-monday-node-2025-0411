@@ -4,12 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from AINDY.platform_layer.registry import get_symbol, load_plugins
+from AINDY.platform_layer.registry import get_symbol, load_plugins, register_flows
 
 
 def _resolve_symbol(name: str) -> Any:
     load_plugins()
     value = get_symbol(name)
+    if value is None:
+        # Flow handlers may not have run yet (server lifespan not started). Trigger
+        # them now so domain modules are imported and their symbols registered.
+        register_flows()
+        value = get_symbol(name)
     if value is None:
         raise AttributeError(f"flow extension symbol {name!r} is not registered")
     return value

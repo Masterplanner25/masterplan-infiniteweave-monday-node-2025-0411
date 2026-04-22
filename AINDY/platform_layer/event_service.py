@@ -32,11 +32,18 @@ import logging
 import threading
 import time
 import uuid
+import concurrent.futures as _futures
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from sqlalchemy.orm import Session
+
+from AINDY.config import settings
+from AINDY.platform_layer.metrics import (
+    event_handler_duration_seconds,
+    event_handler_timeouts_total,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,18 +138,87 @@ def dispatch_internal_event_handlers(
         "db": db,
     }
     dispatched = 0
+    timeout_seconds = max(0.0, float(settings.AINDY_EVENT_HANDLER_TIMEOUT_SECONDS))
     for handler in handlers:
-        try:
-            handler(event)
+        handler_name = getattr(handler, "__name__", repr(handler))
+        started_at = time.perf_counter()
+        result = _invoke_handler_with_timeout(handler, event, timeout_seconds)
+        elapsed_seconds = time.perf_counter() - started_at
+        elapsed_ms = round(elapsed_seconds * 1000, 2)
+
+        if result == "ok":
             dispatched += 1
-        except Exception as exc:
-            logger.warning(
-                "internal event handler failed: event=%s handler=%s error=%s",
+            event_handler_duration_seconds.labels(
+                event_type=event_type,
+                handler_name=handler_name,
+                result="ok",
+            ).observe(elapsed_seconds)
+            logger.debug(
+                "internal event handler completed: event=%s handler=%s elapsed_ms=%.2f",
                 event_type,
-                getattr(handler, "__name__", repr(handler)),
-                exc,
+                handler_name,
+                elapsed_ms,
             )
+            continue
+
+        if result == "timeout":
+            event_handler_timeouts_total.labels(event_type=event_type).inc()
+            event_handler_duration_seconds.labels(
+                event_type=event_type,
+                handler_name=handler_name,
+                result="timeout",
+            ).observe(elapsed_seconds)
+            logger.warning(
+                "internal event handler timed out: event=%s handler=%s timeout_seconds=%.2f elapsed_ms=%.2f",
+                event_type,
+                handler_name,
+                timeout_seconds,
+                elapsed_ms,
+            )
+            continue
+
+        _, exc = result
+        event_handler_duration_seconds.labels(
+            event_type=event_type,
+            handler_name=handler_name,
+            result="error",
+        ).observe(elapsed_seconds)
+        logger.warning(
+            "internal event handler failed: event=%s handler=%s error=%s elapsed_ms=%.2f",
+            event_type,
+            handler_name,
+            exc,
+            elapsed_ms,
+        )
     return dispatched
+
+
+def _invoke_handler_with_timeout(
+    handler: Callable[[dict[str, Any]], Any],
+    event: dict[str, Any],
+    timeout_seconds: float,
+) -> str | tuple[str, Exception]:
+    """
+    Run one handler with a wall-clock timeout.
+
+    A dedicated single-worker executor is used per invocation so a timed-out
+    handler cannot monopolize a shared worker and block subsequent handlers.
+    Cancellation is best-effort only: a timed-out handler thread may continue
+    running in the background until it returns.
+    """
+    executor = _futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="event-handler")
+    future = executor.submit(handler, event)
+    try:
+        future.result(timeout=timeout_seconds)
+        executor.shutdown(wait=True, cancel_futures=False)
+        return "ok"
+    except _futures.TimeoutError:
+        future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        return "timeout"
+    except Exception as exc:
+        executor.shutdown(wait=True, cancel_futures=False)
+        return ("error", exc)
 
 
 # ---------------------------------------------------------------------------

@@ -10,6 +10,8 @@ class SystemEventTypes:
     EXECUTION_FAILED = "execution.failed"
     EXECUTION_WAITING = "execution.waiting"
     EXECUTION_STEP_COMPLETED = "execution.step.completed"
+    ANALYTICS_SCORE_UPDATED = "analytics.score.updated"
+    MASTERPLAN_GOAL_STATE_CHANGED = "masterplan.goal_state.changed"
 
     FLOW_NODE_STARTED = "flow.node.started"
     FLOW_WAITING = "flow.waiting"

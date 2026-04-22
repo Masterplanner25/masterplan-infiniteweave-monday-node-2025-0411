@@ -1,9 +1,9 @@
+from __future__ import annotations
+
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-
-from apps.analytics.models import ScoreSnapshotDB
 
 NARRATIVE_SPIKE_THRESHOLD = 5.0
 EMERGING_VELOCITY_THRESHOLD = 0.75
@@ -71,6 +71,8 @@ def _construct_delta_payload(
 
 
 def compute_deltas(drop_point_id: str, db: Session) -> dict:
+    from apps.analytics.models import ScoreSnapshotDB
+
     snapshots = (
         db.query(ScoreSnapshotDB)
         .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
@@ -92,6 +94,8 @@ def compute_deltas(drop_point_id: str, db: Session) -> dict:
 
 
 def drop_point_ids_with_history(db: Session) -> List[str]:
+    from apps.analytics.models import ScoreSnapshotDB
+
     rows = (
         db.query(ScoreSnapshotDB.drop_point_id)
         .group_by(ScoreSnapshotDB.drop_point_id)
@@ -104,6 +108,8 @@ def drop_point_ids_with_history(db: Session) -> List[str]:
 def _delta_stats_for_drop(
     drop_point_id: str, db: Session
 ) -> Optional[Tuple[ScoreSnapshotDB, ScoreSnapshotDB, Dict]]:
+    from apps.analytics.models import ScoreSnapshotDB
+
     snapshots = (
         db.query(ScoreSnapshotDB)
         .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)

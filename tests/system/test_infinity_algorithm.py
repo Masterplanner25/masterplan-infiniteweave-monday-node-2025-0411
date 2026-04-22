@@ -619,19 +619,19 @@ class TestAPIFunctionsInApiJs:
 
     def test_infinity_score_panel_in_dashboard(self):
         import pathlib
-        src = pathlib.Path("client/src/components/Dashboard.jsx").read_text()
+        src = pathlib.Path("client/src/components/app/Dashboard.jsx").read_text()
         assert "InfinityScorePanel" in src, "Dashboard missing InfinityScorePanel"
 
     def test_dashboard_imports_score_api_functions(self):
         import pathlib
-        src = pathlib.Path("client/src/components/Dashboard.jsx").read_text()
+        src = pathlib.Path("client/src/components/app/Dashboard.jsx").read_text()
         assert "getMyScore" in src
         assert "recalculateScore" in src
         assert "getScoreHistory" in src
 
     def test_score_ring_component_in_dashboard(self):
         import pathlib
-        src = pathlib.Path("client/src/components/Dashboard.jsx").read_text()
+        src = pathlib.Path("client/src/components/app/Dashboard.jsx").read_text()
         assert "ScoreRing" in src or "master_score" in src or "master" in src.lower()
 
 

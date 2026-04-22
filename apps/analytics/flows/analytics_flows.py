@@ -1,6 +1,7 @@
 import logging
 
-from apps.automation.flows._flow_registration import register_nodes, register_single_node_flows
+from AINDY.platform_layer.registry import get_symbol
+from AINDY.runtime.flow_helpers import register_nodes, register_single_node_flows
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,6 @@ def score_feedback_list_node(state, context):
 def analytics_linkedin_ingest_node(state, context):
     try:
         import uuid
-        from apps.masterplan.models import MasterPlan
         from apps.analytics.models import CanonicalMetricDB
         from apps.analytics.schemas.analytics import LinkedInRawInput
         from apps.social.services.linkedin_adapter import linkedin_adapter
@@ -136,6 +136,9 @@ def analytics_linkedin_ingest_node(state, context):
         user_id = uuid.UUID(str(context.get("user_id")))
         data_dict = state.get("data", {})
         masterplan_id = data_dict.get("masterplan_id")
+        MasterPlan = get_symbol("MasterPlan")
+        if MasterPlan is None:
+            return {"status": "FAILURE", "error": "HTTP_503:MasterPlan model unavailable"}
 
         plan = db.query(MasterPlan).filter(
             MasterPlan.id == masterplan_id,
@@ -175,7 +178,6 @@ def analytics_linkedin_ingest_node(state, context):
 def analytics_masterplan_get_node(state, context):
     try:
         import uuid
-        from apps.masterplan.models import MasterPlan
         from apps.analytics.models import CanonicalMetricDB
 
         db = context.get("db")
@@ -184,6 +186,9 @@ def analytics_masterplan_get_node(state, context):
         period_type = state.get("period_type")
         platform = state.get("platform")
         scope_type = state.get("scope_type")
+        MasterPlan = get_symbol("MasterPlan")
+        if MasterPlan is None:
+            return {"status": "FAILURE", "error": "HTTP_503:MasterPlan model unavailable"}
 
         plan = db.query(MasterPlan).filter(
             MasterPlan.id == masterplan_id,
@@ -210,13 +215,15 @@ def analytics_masterplan_get_node(state, context):
 def analytics_masterplan_summary_node(state, context):
     try:
         import uuid
-        from apps.masterplan.models import MasterPlan
         from apps.analytics.models import CanonicalMetricDB
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         masterplan_id = state.get("masterplan_id")
         group_by = state.get("group_by")
+        MasterPlan = get_symbol("MasterPlan")
+        if MasterPlan is None:
+            return {"status": "FAILURE", "error": "HTTP_503:MasterPlan model unavailable"}
 
         plan = db.query(MasterPlan).filter(
             MasterPlan.id == masterplan_id,

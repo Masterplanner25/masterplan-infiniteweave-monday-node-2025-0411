@@ -59,6 +59,10 @@ class _FakeRedis:
         self._values[key] = value
         return value
 
+    def set(self, key: str, value):
+        self._values[key] = int(value)
+        return True
+
     def expire(self, key: str, ttl: int):
         self._ttls[key] = ttl
         return True
@@ -110,7 +114,16 @@ class TestResourceManagerRedisMode:
         rm.mark_started("tenant-a", "eu-1")
         rm.mark_completed("tenant-a", "eu-1")
 
-        assert int(fake.get("aindy:rm:tenant:tenant-a:active") or 0) == 0
+        assert int(fake.get("aindy:quota:concurrent:tenant-a") or 0) == 0
+
+    def test_mark_completed_clamps_negative_counter_to_zero(self, monkeypatch):
+        fake = _build_fake_redis()
+        rm = ResourceManager()
+        monkeypatch.setattr(rm, "_get_redis", lambda: fake)
+
+        rm.mark_completed("tenant-a", "eu-1")
+
+        assert int(fake.get("aindy:quota:concurrent:tenant-a") or 0) == 0
 
     def test_is_redis_mode_reflects_cached_client(self, monkeypatch):
         rm = ResourceManager()
@@ -133,15 +146,15 @@ def test_redis_failure_falls_through_to_local(monkeypatch):
     assert rm.get_tenant_active("tenant-a") == 1
 
 
-def test_eu_keys_expired():
-    backend = MagicMock()
-    backend.delete_eu.return_value = None
+def test_mark_started_and_completed_preserve_in_memory_behavior_without_redis(monkeypatch):
+    rm = ResourceManager()
+    monkeypatch.setattr(rm, "_get_redis", lambda: None)
 
-    with patch("AINDY.kernel.resource_manager._get_backend", return_value=backend):
-        rm = ResourceManager()
-        rm.mark_completed("tenant-a", "eu-1")
+    rm.mark_started("tenant-a", "eu-1")
+    assert rm.get_tenant_active("tenant-a") == 1
 
-    backend.delete_eu.assert_called_once_with("eu-1")
+    rm.mark_completed("tenant-a", "eu-1")
+    assert rm.get_tenant_active("tenant-a") == 0
 
 
 def test_reset_clears_only_aindy_rm_keys():
@@ -162,3 +175,19 @@ def test_reset_clears_only_aindy_rm_keys():
         call(cursor="1", match="aindy:rm:*", count=100),
     ]
     assert client.flushdb.called is False
+
+
+def test_can_execute_falls_back_to_local_on_redis_error(monkeypatch):
+    class _BrokenRedis:
+        def get(self, _key):
+            raise RuntimeError("redis down")
+
+    rm = ResourceManager()
+    rm._active_counts["tenant-a"] = 1
+    monkeypatch.setattr(rm, "_get_redis", lambda: _BrokenRedis())
+
+    with _production_quota():
+        ok, reason = rm.can_execute("tenant-a", "eu-1")
+
+    assert ok is True
+    assert reason is None

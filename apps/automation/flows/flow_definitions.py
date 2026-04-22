@@ -651,6 +651,7 @@ def register_all_flows() -> None:
                 ],
             },
             "end": ["genesis_store_synthesis"],
+            "wait_timeout_minutes": 120,
         },
     )
 

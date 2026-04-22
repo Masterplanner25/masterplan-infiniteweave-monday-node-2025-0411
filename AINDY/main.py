@@ -18,6 +18,7 @@ from sqlalchemy import create_engine
 from contextlib import asynccontextmanager
 
 from AINDY.platform_layer import scheduler_service
+from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.registry import (
     emit_event,
@@ -119,7 +120,14 @@ for _handler in logging.root.handlers:
 logger = logging.getLogger(__name__)
 _OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
 try:
+    from apps.bootstrap import discover_app_bootstraps
+
+    _resolved_boot_order = resolve_boot_order(discover_app_bootstraps())
+    if _resolved_boot_order:
+        logger.info("Boot order resolved: %s", " → ".join(_resolved_boot_order))
     load_plugins()
+except RuntimeError:
+    raise
 except Exception as exc:
     logger.warning("Plugin loading skipped: %s", exc)
 
@@ -170,6 +178,11 @@ def _ensure_dev_api_key():
 
             existing = db.query(PlatformAPIKey).filter_by(key_hash=key_hash).first()
             if existing:
+                user = db.query(User).filter(User.id == existing.user_id).first()
+                if user and not user.is_admin:
+                    user.is_admin = True
+                    db.commit()
+                    logger.info("Existing dev key user elevated to admin.")
                 logger.info("Dev API key already exists.")
                 return
 
@@ -181,10 +194,15 @@ def _ensure_dev_api_key():
                     email="dev@aindy.local",
                     hashed_password="dev",
                     is_active=True,
+                    is_admin=True,
                 )
                 db.add(user)
                 db.commit()
                 logger.info("Dev user created.")
+            elif not user.is_admin:
+                user.is_admin = True
+                db.commit()
+                logger.info("Dev user elevated to admin.")
 
             dev_key = PlatformAPIKey(
                 key_hash=key_hash,
@@ -229,6 +247,48 @@ def _enforce_redis_startup_guard() -> None:
     logger.info("[startup] Redis connectivity verified.")
 
 
+def _check_worker_presence(log) -> None:
+    """
+    Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
+
+    This is a non-fatal advisory check. The server starts regardless — but operators
+    need to know that jobs will queue silently if no worker is running.
+    """
+    from AINDY.config import settings
+
+    if not settings.REDIS_URL:
+        log.error(
+            "[startup] EXECUTION_MODE=distributed requires REDIS_URL. "
+            "Jobs will fail to enqueue. Set REDIS_URL or change EXECUTION_MODE=thread."
+        )
+        return
+
+    heartbeat_key = "aindy:worker:heartbeat"
+    try:
+        import redis as _redis
+
+        client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
+        last_beat = client.get(heartbeat_key)
+        if last_beat is None:
+            log.warning(
+                "[startup] EXECUTION_MODE=distributed: no worker heartbeat found in Redis "
+                "(key=%s). If no worker process is running, enqueued jobs will not be "
+                "processed. Start a worker with: "
+                "WORKER_CONCURRENCY=1 python -m AINDY.worker.worker_loop",
+                heartbeat_key,
+            )
+        else:
+            log.info(
+                "[startup] Worker heartbeat detected (last_beat=%s).", last_beat.decode()
+            )
+    except Exception as exc:
+        log.warning(
+            "[startup] Could not check worker heartbeat (Redis error: %s). "
+            "If EXECUTION_MODE=distributed, ensure a worker process is running.",
+            exc,
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
@@ -248,6 +308,14 @@ async def lifespan(app: FastAPI):
 
     # Redis production guard
     _enforce_redis_startup_guard()
+    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        if not settings.REDIS_URL and not settings.is_prod:
+            logger.warning(
+                "[startup] Redis is not configured (REDIS_URL is unset). "
+                "Running in single-instance mode. WAIT/RESUME events will not "
+                "propagate across multiple instances. Set REDIS_URL and "
+                "AINDY_REQUIRE_REDIS=true for multi-instance deployments."
+            )
 
     # Cache backend selection:
     # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
@@ -295,8 +363,20 @@ async def lifespan(app: FastAPI):
 
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         validate_queue_backend()
+    if (
+        not settings.is_testing
+        and not os.getenv("PYTEST_CURRENT_TEST")
+        and settings.EXECUTION_MODE == "distributed"
+    ):
+        _check_worker_presence(logger)
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
+    if not enforce_schema and settings.is_prod:
+        raise RuntimeError(
+            "AINDY_ENFORCE_SCHEMA=false is not permitted in production (ENV=production). "
+            "Schema enforcement is a required safety gate. "
+            "To deploy with a schema change, run: alembic upgrade head"
+        )
     if enforce_schema and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not (Config and ScriptDirectory and MigrationContext):
             logger.error("Schema guard unavailable: alembic not installed.")
@@ -320,6 +400,12 @@ async def lifespan(app: FastAPI):
                 raise RuntimeError("Schema drift detected. Run alembic upgrade head.")
         finally:
             db.close()
+    elif not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
+        logger.warning(
+            "[startup] Schema enforcement is DISABLED (AINDY_ENFORCE_SCHEMA=false). "
+            "The server will start even if the database schema is behind migrations. "
+            "This is only safe for development. Do not use in production."
+        )
 
     enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
@@ -350,6 +436,20 @@ async def lifespan(app: FastAPI):
     # Register Flow Engine flows and nodes (static startup definitions)
     from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
+
+    # Verify that domain-declared required flow nodes were actually registered —
+    # silent failures in flow modules can otherwise produce a running server with
+    # a broken flow graph.
+    from AINDY.platform_layer.registry import get_required_flow_nodes
+    from AINDY.runtime.flow_engine import NODE_REGISTRY as _NODE_REGISTRY
+    _required_nodes = get_required_flow_nodes()
+    _missing_nodes = [n for n in _required_nodes if n not in _NODE_REGISTRY]
+    if _missing_nodes:
+        logger.error(
+            "[startup] Required flow nodes missing from registry after bootstrap: %s. "
+            "Cross-domain flows will be unavailable for these nodes.",
+            _missing_nodes,
+        )
 
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
@@ -467,13 +567,6 @@ async def lifespan(app: FastAPI):
         }
     )
 
-    # Warn if DB schema is behind the latest migration (non-fatal)
-    if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        try:
-            _check_alembic_head()
-        except Exception as _alembic_exc:
-            logger.warning("[startup] Alembic head check raised unexpectedly: %s", _alembic_exc)
-
     yield
     # --- Shutdown ---
     emit_event("system.shutdown", {"log": logger, "source": "main"})
@@ -490,6 +583,12 @@ async def lifespan(app: FastAPI):
         shutdown_async_jobs(wait=True)
     except Exception as exc:
         logger.warning("Async job shutdown failed (non-fatal): %s", exc)
+    try:
+        from AINDY.db.mongo_setup import close_mongo_client
+
+        close_mongo_client()
+    except Exception as exc:
+        logger.warning("MongoDB shutdown failed (non-fatal): %s", exc)
 
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)

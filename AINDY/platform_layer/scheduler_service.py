@@ -194,6 +194,16 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     )
 
     scheduler.add_job(
+        _check_queue_backend_health,
+        trigger=IntervalTrigger(seconds=60),
+        id="queue_backend_reconnect",
+        name="Queue backend reconnect",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
         _expire_timed_out_waits,
         trigger=IntervalTrigger(minutes=5),
         id="expire_timed_out_waits",
@@ -325,6 +335,16 @@ def _process_deferred_async_jobs() -> None:
             logger.info("Deferred async jobs resumed: %d", resumed)
     except Exception as exc:
         logger.warning("Deferred async job processing failed: %s", exc)
+
+
+def _check_queue_backend_health() -> None:
+    try:
+        from AINDY.core.distributed_queue import attempt_queue_backend_reconnect
+
+        if attempt_queue_backend_reconnect():
+            logger.info("Distributed queue backend recovered to Redis")
+    except Exception as exc:
+        logger.warning("Queue backend health check failed: %s", exc)
 
 
 def _expire_timed_out_waits() -> None:
