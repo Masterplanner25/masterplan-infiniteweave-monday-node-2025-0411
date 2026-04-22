@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from AINDY.db.database import SessionLocal
 from AINDY.db.models.background_task_lease import BackgroundTaskLease
-from apps.masterplan.models import MasterPlan
 from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.core.observability_events import emit_observability_event
@@ -394,6 +393,8 @@ def create_task(
     user_id: str | uuid.UUID | None = None,
 ):
     """Creates a new task entry in the database."""
+    from apps.masterplan.models import MasterPlan
+
     owner_user_id = _user_uuid(user_id)
     if not owner_user_id:
         raise ValueError("user_id is required to create a task")
@@ -630,6 +631,8 @@ def queue_task_automation(
 
 
 def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
+    from apps.masterplan.models import MasterPlan
+
     owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
     if not task or not owner_user_id:

@@ -25,6 +25,7 @@ def register() -> None:
     _register_capture_rules()
     _register_flow_results()
     _register_flow_plans()
+    _register_required_flow_nodes()
 
 
 def _register_models() -> None:
@@ -231,6 +232,12 @@ def _register_flow_plans() -> None:
         "watcher_ingest",
         {"steps": ["watcher_ingest_validate", "watcher_ingest_persist", "watcher_ingest_orchestrate"]},
     )
+
+
+def _register_required_flow_nodes() -> None:
+    from AINDY.platform_layer.registry import register_required_flow_node
+
+    register_required_flow_node("task_complete")
 
 
 def _job_watcher_ingest(payload: dict, db):

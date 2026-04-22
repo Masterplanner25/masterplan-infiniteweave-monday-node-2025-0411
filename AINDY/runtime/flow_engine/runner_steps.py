@@ -1,4 +1,5 @@
 from AINDY.runtime.flow_engine.node_executor import resolve_next_node
+from AINDY.runtime.flow_engine.registry import FLOW_REGISTRY
 from AINDY.runtime.flow_engine.runner_completion import maybe_finalize_completion
 from AINDY.runtime.flow_engine.serialization import (
     _format_execution_response,
@@ -15,6 +16,13 @@ from AINDY.runtime.flow_engine.shared import (
     set_parent_event_id,
     time,
 )
+
+
+def _get_flow_wait_timeout(flow_name: str) -> int | None:
+    flow_def = FLOW_REGISTRY.get(flow_name)
+    if flow_def is None:
+        return None
+    return flow_def.get("wait_timeout_minutes")
 
 
 def _claim_waiting_run(self, run, db_run_id: str):
@@ -149,7 +157,8 @@ def _check_resources(self, run, state: dict, current_node: str, node_started_eve
         if not can_run:
             run.status = "waiting"
             run.waiting_for = "resource_available"
-            run.wait_deadline = _default_wait_deadline()
+            _timeout = _get_flow_wait_timeout(run.flow_name)
+            run.wait_deadline = _default_wait_deadline(_timeout)
             run.current_node = current_node
             run.state = _json_safe(state)
             self.db.commit()
@@ -276,7 +285,8 @@ def _handle_node_status(
             )
         run.status = "waiting"
         run.waiting_for = wait_for
-        run.wait_deadline = _default_wait_deadline()
+        _timeout = _get_flow_wait_timeout(run.flow_name)
+        run.wait_deadline = _default_wait_deadline(_timeout)
         run.state = _json_safe(state)
         run.current_node = current_node
         self.db.commit()

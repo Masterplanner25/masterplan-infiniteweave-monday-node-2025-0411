@@ -178,6 +178,11 @@ def _ensure_dev_api_key():
 
             existing = db.query(PlatformAPIKey).filter_by(key_hash=key_hash).first()
             if existing:
+                user = db.query(User).filter(User.id == existing.user_id).first()
+                if user and not user.is_admin:
+                    user.is_admin = True
+                    db.commit()
+                    logger.info("Existing dev key user elevated to admin.")
                 logger.info("Dev API key already exists.")
                 return
 
@@ -189,10 +194,15 @@ def _ensure_dev_api_key():
                     email="dev@aindy.local",
                     hashed_password="dev",
                     is_active=True,
+                    is_admin=True,
                 )
                 db.add(user)
                 db.commit()
                 logger.info("Dev user created.")
+            elif not user.is_admin:
+                user.is_admin = True
+                db.commit()
+                logger.info("Dev user elevated to admin.")
 
             dev_key = PlatformAPIKey(
                 key_hash=key_hash,
@@ -427,17 +437,13 @@ async def lifespan(app: FastAPI):
     from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
 
-    # Verify that critical flow nodes were actually registered — silent failures
-    # in cross-domain flow modules produce a running server with a broken flow graph.
-    _REQUIRED_FLOW_NODES = [
-        "arm_analyze_code",
-        "arm_validate_input",
-        "task_complete",
-        "memory_execution_validate",
-        "watcher_ingest_validate",
-    ]
+    # Verify that domain-declared required flow nodes were actually registered —
+    # silent failures in flow modules can otherwise produce a running server with
+    # a broken flow graph.
+    from AINDY.platform_layer.registry import get_required_flow_nodes
     from AINDY.runtime.flow_engine import NODE_REGISTRY as _NODE_REGISTRY
-    _missing_nodes = [n for n in _REQUIRED_FLOW_NODES if n not in _NODE_REGISTRY]
+    _required_nodes = get_required_flow_nodes()
+    _missing_nodes = [n for n in _required_nodes if n not in _NODE_REGISTRY]
     if _missing_nodes:
         logger.error(
             "[startup] Required flow nodes missing from registry after bootstrap: %s. "
@@ -577,6 +583,12 @@ async def lifespan(app: FastAPI):
         shutdown_async_jobs(wait=True)
     except Exception as exc:
         logger.warning("Async job shutdown failed (non-fatal): %s", exc)
+    try:
+        from AINDY.db.mongo_setup import close_mongo_client
+
+        close_mongo_client()
+    except Exception as exc:
+        logger.warning("MongoDB shutdown failed (non-fatal): %s", exc)
 
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)

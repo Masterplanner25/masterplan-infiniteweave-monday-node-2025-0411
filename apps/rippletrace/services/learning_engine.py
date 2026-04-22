@@ -1,11 +1,10 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
-
-from apps.analytics.models import ScoreSnapshotDB
-from apps.automation.models import LearningRecordDB, LearningThresholdDB
 
 DEFAULT_VELOCITY_TREND = 0.35
 DEFAULT_NARRATIVE_TREND = 1.0
@@ -16,6 +15,8 @@ SPIKE_DELTA = 5.0
 
 
 def get_learning_thresholds(db: Session) -> LearningThresholdDB:
+    from apps.automation.models import LearningThresholdDB
+
     record = db.query(LearningThresholdDB).first()
     if record:
         return record
@@ -41,6 +42,8 @@ def record_prediction(
     velocity_at_prediction: float,
     narrative_at_prediction: float,
 ):
+    from apps.automation.models import LearningRecordDB
+
     learning = LearningRecordDB(
         id=str(uuid.uuid4()),
         drop_point_id=drop_point_id,
@@ -57,6 +60,9 @@ def record_prediction(
 
 
 def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
+    from apps.analytics.models import ScoreSnapshotDB
+    from apps.automation.models import LearningRecordDB
+
     record = (
         db.query(LearningRecordDB)
         .filter(
@@ -105,6 +111,8 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
 
 
 def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
+    from apps.automation.models import LearningRecordDB
+
     records = (
         db.query(LearningRecordDB)
         .filter(LearningRecordDB.actual_outcome.isnot(None))
@@ -154,6 +162,8 @@ def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
 
 
 def learning_stats(db: Session) -> Dict:
+    from apps.automation.models import LearningRecordDB
+
     records = db.query(LearningRecordDB).all()
     total = len(records)
     evaluated = [r for r in records if r.actual_outcome]

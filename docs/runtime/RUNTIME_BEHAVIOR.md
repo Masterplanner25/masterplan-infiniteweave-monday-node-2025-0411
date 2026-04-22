@@ -12,7 +12,7 @@ This document describes the current runtime behavior of the FastAPI backend as i
      - If `AINDY_SKIP_MONGO_PING=1` / `SKIP_MONGO_PING=true`, Mongo verification is explicitly bypassed for tests or constrained local runs.
   3. Enforce `SECRET_KEY` safety rules. Production startup fails if the placeholder secret is still configured.
   4. Enforce schema drift guard when `AINDY_ENFORCE_SCHEMA=true` by comparing the current Alembic revision to head.
-  5. Attempt to acquire the background-task leadership lease via `task_services.start_background_tasks(...)`.
+  5. Attempt to acquire the background-task leadership lease via `lifecycle_services.start_background_tasks(...)`.
   6. Start APScheduler only on the lease-holder instance via `platform_layer.scheduler_service.start()`.
       - If APScheduler is unavailable (e.g., lightweight test runs), `start()` simply logs that the scheduler is disabled and the rest of the stack continues without background jobs.
   7. Register canonical flow-engine nodes and flows via `runtime.flow_definitions.register_all_flows()`.
@@ -23,12 +23,15 @@ This document describes the current runtime behavior of the FastAPI backend as i
 
 ## 2. Background Task Lifecycle
 - Background execution is no longer driven by daemon threads in `main.py`.
-- Inter-instance coordination is handled by a DB lease in `apps/tasks/services/task_service.py`.
+- Inter-instance coordination is handled through platform-level lifecycle events in `AINDY/worker/__init__.py` (`LifecycleServices`).
+- `LifecycleServices.start_background_tasks()` and `LifecycleServices.stop_background_tasks()` dispatch `system.startup` / `system.shutdown` through the platform registry via `emit_event(...)`.
+- `task_services = lifecycle_services` remains as a compatibility alias for older callers that pre-date the refactor.
+- Leader election is backed by the `background_task_leases` database table.
 - Only the lease leader starts APScheduler jobs; a missing APScheduler dependency means background jobs are disabled but the API remains responsive for tests or constrained environments.
 - Lease timestamps are normalized to timezone-aware UTC in Python before comparison or persistence.
 - Scheduler lifecycle:
-  - startup: `task_services.start_background_tasks(...)` -> `scheduler_service.start()`
-  - shutdown: `task_services.stop_background_tasks(...)` -> `scheduler_service.stop()`
+  - startup: `lifecycle_services.start_background_tasks(...)` -> `emit_event("system.startup")` -> `scheduler_service.start()`
+  - shutdown: `lifecycle_services.stop_background_tasks(...)` -> `emit_event("system.shutdown")` -> `scheduler_service.stop()`
 - This prevents follower instances from starting duplicate background schedulers.
 
 ## 3. Database Session Lifecycle

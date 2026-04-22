@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from math import log
 from typing import List, Optional
@@ -7,8 +9,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB, PingDB
-from apps.analytics.models import ScoreSnapshotDB
-
 SEMANTIC_KEYWORDS = {"similar", "echo", "same idea"}
 INFERRED_KEYWORDS = {"unexpected", "random", "coincidence"}
 
@@ -47,6 +47,8 @@ def _map_drop_point_schema(drop_point: DropPointDB) -> dict:
 
 
 def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
+    from apps.analytics.models import ScoreSnapshotDB
+
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )

@@ -20,7 +20,6 @@ from apps.freelance.schemas.freelance import (
     FeedbackCreate,
 )
 
-from apps.automation.services.automation_execution_service import execute_automation_action
 from AINDY.platform_layer.app_runtime import (
     dispatch_autonomous_job,
     emit_error_event,
@@ -33,7 +32,6 @@ from AINDY.platform_layer.trace_context import is_pipeline_active
 from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
 from AINDY.config import settings
 from AINDY.memory.memory_scoring_service import get_relevant_memories
-from apps.tasks.services.task_service import queue_task_automation
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +492,8 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
 
 
 def _dispatch_delivery(order: FreelanceOrder, *, db: Session) -> dict:
+    from apps.automation.services.automation_execution_service import execute_automation_action
+
     delivery_type = str(order.delivery_type or "manual").strip().lower() or "manual"
     config = dict(order.delivery_config or {})
     if delivery_type == "manual":
@@ -566,6 +566,7 @@ def _sync_freelance_automation(db: Session, order: FreelanceOrder) -> None:
     try:
         if not order.task_id or not order.user_id:
             return
+        from apps.tasks.services.task_service import queue_task_automation
         from apps.tasks.services.task_service import get_task_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:

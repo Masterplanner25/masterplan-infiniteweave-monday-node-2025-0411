@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { getAgentRuns } from "../../api";
+import { useAuth } from "../../context/AuthContext";
 import { APPROVAL_EVENT } from "../platform/AgentApprovalInbox";
 
 const SubNavItem = ({ to, children, active, badge }) => (
@@ -48,6 +49,8 @@ const NavSection = ({ title, icon, isOpen, toggle, children, isAnyChildActive })
 
 export default function Sidebar() {
   const location = useLocation();
+  const { user } = useAuth();
+  const isAdmin = user?.is_admin === true;
   const [openSection, setOpenSection] = useState("System");
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
@@ -58,13 +61,17 @@ export default function Sidebar() {
   };
 
   const loadPendingApprovals = useCallback(async () => {
+    if (!isAdmin) {
+      setPendingApprovals(0);
+      return;
+    }
     try {
       const runs = await getAgentRuns("pending_approval", 100);
       setPendingApprovals(Array.isArray(runs) ? runs.length : 0);
     } catch {
       setPendingApprovals(0);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     loadPendingApprovals();
@@ -141,22 +148,24 @@ export default function Sidebar() {
           isAnyChildActive={
             isActive("/masterplan") ||
             isActive("/tasks") ||
-            isActive("/console") ||
             isActive("/agent") ||
             isActive("/freelance/dashboard") ||
-            isActive("/observability") ||
-            isActive("/rippletrace")
+            (isAdmin && (isActive("/console") || isActive("/agent/approvals") || isActive("/observability") || isActive("/rippletrace")))
           }
         >
           <SubNavItem to="/masterplan" active={isActive("/masterplan")}>Master Plan</SubNavItem>
           <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
-          <SubNavItem to="/console" active={isActive("/console")}>Console</SubNavItem>
           <SubNavItem to="/agent" active={location.pathname === "/agent"}>Agent Console</SubNavItem>
-          <SubNavItem to="/agent/approvals" active={isActive("/agent/approvals")} badge={pendingApprovals || null}>
-            Approval Inbox
-          </SubNavItem>
-          <SubNavItem to="/observability" active={isActive("/observability")}>Observability</SubNavItem>
-          <SubNavItem to="/rippletrace" active={isActive("/rippletrace")}>Ripple Trace</SubNavItem>
+          {isAdmin ? (
+            <>
+              <SubNavItem to="/console" active={isActive("/console")}>Console</SubNavItem>
+              <SubNavItem to="/agent/approvals" active={isActive("/agent/approvals")} badge={pendingApprovals || null}>
+                Approval Inbox
+              </SubNavItem>
+              <SubNavItem to="/observability" active={isActive("/observability")}>Observability</SubNavItem>
+              <SubNavItem to="/rippletrace" active={isActive("/rippletrace")}>Ripple Trace</SubNavItem>
+            </>
+          ) : null}
           <SubNavItem to="/freelance/dashboard" active={isActive("/freelance/dashboard")}>Freelance Hub</SubNavItem>
         </NavSection>
 
@@ -178,11 +187,11 @@ export default function Sidebar() {
           icon="💾"
           isOpen={openSection === "Memory"}
           toggle={() => toggleSection("Memory")}
-          isAnyChildActive={isActive("/memory") || isActive("/identity") || isActive("/agents")}
+          isAnyChildActive={isActive("/memory") || isActive("/identity") || (isAdmin && isActive("/agents"))}
         >
           <SubNavItem to="/memory" active={isActive("/memory")}>Memory Browser</SubNavItem>
           <SubNavItem to="/identity" active={isActive("/identity")}>Identity Profile</SubNavItem>
-          <SubNavItem to="/agents" active={isActive("/agents")}>Agent Federation</SubNavItem>
+          {isAdmin ? <SubNavItem to="/agents" active={isActive("/agents")}>Agent Federation</SubNavItem> : null}
         </NavSection>
       </nav>
 

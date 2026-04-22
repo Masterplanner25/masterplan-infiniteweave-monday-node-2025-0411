@@ -77,6 +77,18 @@ These 6 columns were added to `ExecutionUnit` in the OS Layer sprint migration.
 
 When `check_quota()` returns `(False, reason)`, the dispatcher returns an error envelope immediately — no handler runs. This prevents runaway executions from consuming unbounded resources.
 
+### Cross-Instance Limitation
+
+**ResourceManager is a per-process in-memory singleton.**
+
+In a multi-instance deployment, each server instance maintains its own `_active_eus` dict and per-EU usage records. Concurrent execution quota (`MAX_CONCURRENT_PER_TENANT`) is enforced within a single process only.
+
+A tenant can exceed the configured limit by distributing requests across N instances â€” each instance will allow up to `MAX_CONCURRENT_PER_TENANT` executions independently.
+
+CPU time and memory quota are per-execution and correctly reflect usage within the process that runs the execution. They are not affected by this limitation.
+
+**To enforce concurrent execution limits globally in a multi-instance deployment, the `can_execute()` / `mark_started()` / `mark_completed()` methods require Redis-backed atomic counters.** This is tracked as a known gap. Until resolved, treat `MAX_CONCURRENT_PER_TENANT` as a per-instance limit, not a per-tenant global limit.
+
 ---
 
 ## 4. SchedulerEngine

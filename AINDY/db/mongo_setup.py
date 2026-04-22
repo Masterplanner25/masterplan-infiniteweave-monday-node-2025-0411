@@ -63,6 +63,26 @@ def init_mongo(*, required: bool | None = None) -> MongoClient | None:
     """Backward-compatible startup entrypoint."""
     return ensure_mongo_ready(required=required)
 
+
+def close_mongo_client() -> None:
+    """Close the process-level MongoDB client if one was opened.
+
+    Safe to call multiple times — no-ops if no client is open.
+    """
+    global _client
+    if _client is None:
+        return
+    try:
+        _client.close()
+        logger.info("MongoDB client closed.")
+    except Exception as exc:
+        logger.warning("MongoDB client close failed (non-fatal): %s", exc)
+    finally:
+        _client = None
+
+
+shutdown_mongo = close_mongo_client
+
 def get_mongo_client():
     """
     Singleton pattern to create a single MongoDB client instance.

@@ -1,7 +1,7 @@
 import logging
 
 from AINDY.platform_layer.registry import get_symbol
-from apps.automation.flows._flow_registration import register_nodes, register_single_node_flows
+from AINDY.runtime.flow_helpers import register_nodes, register_single_node_flows
 
 logger = logging.getLogger(__name__)
 

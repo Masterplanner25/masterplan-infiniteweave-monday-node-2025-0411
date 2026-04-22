@@ -49,7 +49,7 @@ def register(
             },
             required=True,
         )
-        token = create_access_token({"sub": str(user.id), "email": user.email})
+        token = create_access_token({"sub": str(user.id), "email": user.email, "is_admin": bool(user.is_admin)})
         return {"access_token": token, "token_type": "bearer"}
 
     if request is None:
@@ -86,7 +86,7 @@ def login(
             },
             required=True,
         )
-        token = create_access_token({"sub": str(user.id), "email": user.email})
+        token = create_access_token({"sub": str(user.id), "email": user.email, "is_admin": bool(user.is_admin)})
         return {"access_token": token, "token_type": "bearer"}
 
     if request is None:

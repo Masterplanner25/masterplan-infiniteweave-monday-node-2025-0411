@@ -10,8 +10,34 @@ import {
 
 const AuthContext = createContext(null);
 
+function parseJwtPayload(token) {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const [, payload = ""] = token.split(".");
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(window.atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => getStoredToken());
+  const user = useMemo(() => {
+    const payload = parseJwtPayload(token);
+    if (!payload) {
+      return null;
+    }
+    return {
+      ...payload,
+      is_admin: payload?.is_admin === true,
+    };
+  }, [token]);
+  const isAdmin = user?.is_admin === true;
 
   useEffect(() => {
     setToken(getStoredToken());
@@ -47,13 +73,15 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       token,
+      user,
+      isAdmin,
       isAuthenticated: Boolean(token),
       login,
       register,
       logout,
       setToken,
     }),
-    [token],
+    [token, user, isAdmin],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

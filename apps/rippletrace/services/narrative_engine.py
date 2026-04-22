@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB, PingDB
-from apps.analytics.models import ScoreSnapshotDB
 from apps.rippletrace.services.causal_engine import get_causal_chain
 from apps.rippletrace.services.delta_engine import compute_deltas
 from apps.rippletrace.services.prediction_engine import predict_drop_point
@@ -43,6 +44,8 @@ def generate_story_summary(narrative_data: Dict) -> str:
 
 
 def generate_narrative(drop_point_id: str, db: Session) -> Dict:
+    from apps.analytics.models import ScoreSnapshotDB
+
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )

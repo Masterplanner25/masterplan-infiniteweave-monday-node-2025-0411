@@ -56,6 +56,21 @@ function ProtectedRoute() {
   return <Outlet />;
 }
 
+function PlatformRoute() {
+  const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (!user?.is_admin) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Outlet />;
+}
+
 function BootGate() {
   const { booting, booted, bootError, bootSystem } = useSystem();
 
@@ -136,8 +151,6 @@ export default function App() {
                 <Route path="/freelance/dashboard" element={<FreelanceDashboard />} />
                 <Route path="/tasks" element={<TaskDashboard />} />
                 <Route path="/masterplan" element={<MasterPlanDashboard />} />
-                <Route path="/console" element={<ExecutionConsole />} />
-                <Route path="/flow-console" element={<FlowEngineConsole />} />
                 <Route path="/arm/analyze" element={<ARMAnalyze />} />
                 <Route path="/arm/generate" element={<ARMGenerate />} />
                 <Route path="/arm/logs" element={<ARMLogs />} />
@@ -147,11 +160,15 @@ export default function App() {
                 <Route path="/social/profile/:username?" element={<ProfileView />} />
                 <Route path="/memory" element={<MemoryBrowser />} />
                 <Route path="/identity" element={<IdentityDashboard />} />
-                <Route path="/agents" element={<AgentRegistry />} />
                 <Route path="/agent" element={<AgentConsole />} />
-                <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
-                <Route path="/observability" element={<ObservabilityDashboard />} />
-                <Route path="/rippletrace" element={<RippleTraceViewer />} />
+                <Route element={<PlatformRoute />}>
+                  <Route path="/console" element={<ExecutionConsole />} />
+                  <Route path="/flow-console" element={<FlowEngineConsole />} />
+                  <Route path="/agents" element={<AgentRegistry />} />
+                  <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
+                  <Route path="/observability" element={<ObservabilityDashboard />} />
+                  <Route path="/rippletrace" element={<RippleTraceViewer />} />
+                </Route>
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>

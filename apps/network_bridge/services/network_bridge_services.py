@@ -1,13 +1,14 @@
 # /services/network_bridge_services.py
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-from apps.authorship.models import AuthorDB
 import uuid
 
 def register_author(db: Session, name: str, platform: str, notes: str | None = None, user_id: str | uuid.UUID | None = None):
     """
     Registers or updates an author record in the database.
     """
+    from apps.authorship.models import AuthorDB
+
     normalized_user_id = None
     if user_id:
         normalized_user_id = uuid.UUID(str(user_id))
@@ -78,6 +79,8 @@ def connect_external_author(
 
 
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
+    from apps.authorship.models import AuthorDB
+
     query = db.query(AuthorDB)
     if platform:
         query = query.filter(AuthorDB.platform == platform)

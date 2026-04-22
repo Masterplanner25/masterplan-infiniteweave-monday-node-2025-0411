@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from apps.analytics.models import ScoreSnapshotDB
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.prediction_engine import predict_drop_point
 
@@ -51,6 +52,8 @@ def _normalize(value: Optional[float]) -> float:
 
 
 def _latest_snapshot(drop_point_id: str, db: Session) -> Optional[ScoreSnapshotDB]:
+    from apps.analytics.models import ScoreSnapshotDB
+
     return (
         db.query(ScoreSnapshotDB)
         .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)

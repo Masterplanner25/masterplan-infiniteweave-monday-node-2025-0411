@@ -28,7 +28,10 @@ emit_system_event = queue_system_event
 logger = logging.getLogger(__name__)
 
 
-def _default_wait_deadline() -> datetime:
-    return datetime.now(timezone.utc) + timedelta(
-        minutes=settings.FLOW_WAIT_TIMEOUT_MINUTES
+def _default_wait_deadline(timeout_minutes: int | None = None) -> datetime:
+    minutes = (
+        timeout_minutes
+        if timeout_minutes is not None
+        else settings.FLOW_WAIT_TIMEOUT_MINUTES
     )
+    return datetime.now(timezone.utc) + timedelta(minutes=minutes)

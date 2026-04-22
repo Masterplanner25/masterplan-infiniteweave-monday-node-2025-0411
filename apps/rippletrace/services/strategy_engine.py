@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import uuid
 from collections import Counter
@@ -7,7 +9,6 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from apps.rippletrace.models import DropPointDB
-from apps.automation.models import LearningRecordDB
 from apps.rippletrace.models import StrategyDB
 
 SUCCESS_NARRATIVE_THRESHOLD = 15.0
@@ -21,6 +22,8 @@ def _split_terms(value: Optional[str]) -> List[str]:
 
 
 def get_successful_drops(db: Session) -> List[Dict]:
+    from apps.automation.models import LearningRecordDB
+
     narrative_success = (
         db.query(DropPointDB)
         .filter(DropPointDB.narrative_score >= SUCCESS_NARRATIVE_THRESHOLD)

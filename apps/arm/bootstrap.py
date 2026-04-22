@@ -24,6 +24,7 @@ def register() -> None:
     _register_capture_rules()
     _register_flow_results()
     _register_flow_plans()
+    _register_required_flow_nodes()
 
 
 def _register_models() -> None:
@@ -115,6 +116,13 @@ def _register_flow_plans() -> None:
         "arm_generation",
         {"steps": ["validate_input", "generate_code", "store_result"]},
     )
+
+
+def _register_required_flow_nodes() -> None:
+    from AINDY.platform_layer.registry import register_required_flow_node
+
+    register_required_flow_node("arm_analyze_code")
+    register_required_flow_node("arm_validate_input")
 
 
 def _create_arm_analyzer():

@@ -83,6 +83,7 @@ _route_prefixes: dict[str, str] = {
     "nodus": "nodus",
     "platform": "job",
 }
+_required_flow_nodes: list[str] = []
 _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
 
@@ -488,6 +489,18 @@ def register_route_prefix(prefix: str, execution_unit_type: str) -> None:
 
 def get_route_prefix(prefix: str) -> str | None:
     return _route_prefixes.get(prefix)
+
+
+def register_required_flow_node(node_name: str) -> str:
+    """Register a flow node name that must exist after bootstrap."""
+    if not node_name or not isinstance(node_name, str):
+        raise ValueError(f"node_name must be a non-empty string, got {node_name!r}")
+    _required_flow_nodes.append(node_name)
+    return node_name
+
+
+def get_required_flow_nodes() -> list[str]:
+    return list(_required_flow_nodes)
 
 
 def register_symbol(name: str, value: Any) -> Any:

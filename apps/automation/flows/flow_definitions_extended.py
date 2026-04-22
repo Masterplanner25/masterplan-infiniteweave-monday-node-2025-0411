@@ -8,7 +8,7 @@ registry so they remain discoverable via AINDY.runtime.flow_definitions_extended
 
 Injection contract: the runtime shim may inject FLOW_REGISTRY and register_flow
 into this module's globals for testing. Both helpers check globals() first so
-the injected values are propagated to _flow_registration and all sub-modules.
+the injected values are propagated to flow_helpers and all sub-modules.
 """
 import importlib
 import logging
@@ -46,7 +46,7 @@ def _register_intra_domain_flows() -> None:
     from AINDY.platform_layer.registry import register_symbols
     from AINDY.runtime.flow_engine import FLOW_REGISTRY as _default_registry
     from AINDY.runtime.flow_engine import register_flow as _default_register_flow
-    from apps.automation.flows import _flow_registration
+    from AINDY.runtime import flow_helpers
 
     # Prefer values injected into this module's globals by the runtime shim (used in
     # tests). Fall back to the canonical imports when no injection is active or when
@@ -62,8 +62,8 @@ def _register_intra_domain_flows() -> None:
     intra_modules = [importlib.import_module(p) for p in _INTRA_DOMAIN_FLOW_MODULES]
 
     # Inject registry references so intra-domain modules share the same objects.
-    _flow_registration.FLOW_REGISTRY = FLOW_REGISTRY
-    _flow_registration.register_flow = _register_flow
+    flow_helpers.FLOW_REGISTRY = FLOW_REGISTRY
+    flow_helpers.register_flow = _register_flow
     automation_flows.FLOW_REGISTRY = FLOW_REGISTRY
     automation_flows.register_flow = _register_flow
     for mod in intra_modules:
@@ -71,7 +71,7 @@ def _register_intra_domain_flows() -> None:
         mod.register_flow = _register_flow
 
     # Register all public symbols so they're discoverable via the runtime shim.
-    all_intra = [_flow_registration, automation_flows, *intra_modules]
+    all_intra = [flow_helpers, automation_flows, *intra_modules]
     register_symbols(
         {
             name: value

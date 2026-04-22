@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
-from apps.agent.agents.tool_helpers import dispatch_tool_syscall
 
 
 def register() -> None:
@@ -28,6 +27,8 @@ def register() -> None:
 
 
 def arm_analyze(args: dict, user_id: str, db) -> dict:
+    from apps.agent.agents.tool_helpers import dispatch_tool_syscall
+
     data = dispatch_tool_syscall("sys.v1.arm.analyze", args, user_id, "arm.analyze")
     return {
         "summary": data.get("summary", ""),
@@ -38,6 +39,8 @@ def arm_analyze(args: dict, user_id: str, db) -> dict:
 
 
 def arm_generate(args: dict, user_id: str, db) -> dict:
+    from apps.agent.agents.tool_helpers import dispatch_tool_syscall
+
     data = dispatch_tool_syscall("sys.v1.arm.generate", args, user_id, "arm.generate")
     return {
         "generated_code": data.get("generated_code", ""),

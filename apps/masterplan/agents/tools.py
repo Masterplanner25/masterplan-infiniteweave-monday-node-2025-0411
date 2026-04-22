@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
-from apps.agent.agents.tool_helpers import dispatch_tool_syscall
 
 
 def register() -> None:
@@ -19,4 +18,6 @@ def register() -> None:
 
 
 def genesis_message(args: dict, user_id: str, db) -> dict:
+    from apps.agent.agents.tool_helpers import dispatch_tool_syscall
+
     return dispatch_tool_syscall("sys.v1.genesis.message", args, user_id, "genesis.message")
