@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TEST_USER_ID_1 = "00000000-0000-0000-0000-000000000001"
+TEST_USER_ID_2 = "00000000-0000-0000-0000-000000000002"
 
 
 def test_analytics_orchestration_files_avoid_direct_cross_domain_imports():
@@ -93,7 +95,7 @@ def test_orchestrator_execute_preserves_representative_output(monkeypatch):
         },
     )
 
-    result = orchestrator.execute(user_id="u-1", trigger_event="manual", db=object())
+    result = orchestrator.execute(user_id=TEST_USER_ID_1, trigger_event="manual", db=object())
 
     assert result["score"]["metadata"]["memory_context_count"] == 2
     assert result["memory_context_count"] == 2
@@ -156,7 +158,7 @@ def test_orchestrator_optional_domain_reads_degrade_gracefully(monkeypatch):
         },
     )
 
-    result = orchestrator.execute(user_id="u-2", trigger_event="scheduled", db=object())
+    result = orchestrator.execute(user_id=TEST_USER_ID_2, trigger_event="scheduled", db=object())
 
     assert result["adjustment"]["id"] == "adj-2"
     assert result["next_action"]["type"] == "review_plan"
