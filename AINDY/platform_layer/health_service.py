@@ -37,10 +37,13 @@ class SystemHealth:
     dependencies: list[DependencyStatus] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        from apps.bootstrap import get_degraded_domains
+
         return {
             "status": self.tier,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": settings.VERSION,
+            "degraded_domains": get_degraded_domains(),
             "dependencies": {
                 dep.name: {
                     "status": dep.status,

@@ -3,12 +3,14 @@ artifacts as the original monolithic apps/bootstrap.py."""
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 
 def _reset_bootstrap():
     """Reset bootstrap state so it re-runs in this test."""
     import apps.bootstrap as bs
     bs._BOOTSTRAPPED = False
+    bs._DEGRADED_DOMAINS = []
 
 
 def _call_bootstrap():
@@ -165,3 +167,83 @@ def test_bootstrap_models_delegates():
     import apps.bootstrap as bs
     bs.bootstrap_models()
     assert bs._BOOTSTRAPPED is True, "bootstrap_models() did not set _BOOTSTRAPPED"
+
+
+def test_core_domain_failure_raises(monkeypatch):
+    _reset_bootstrap()
+    import apps.bootstrap as bs
+
+    app_bootstraps = {
+        "tasks": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=[],
+            register=lambda: (_ for _ in ()).throw(ValueError("boom")),
+        ),
+    }
+
+    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
+    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks"])
+
+    try:
+        try:
+            bs.bootstrap()
+        except RuntimeError as exc:
+            assert "Core domain bootstrap failed for tasks" in str(exc)
+        else:
+            assert False, "Expected bootstrap() to raise for core domain failure"
+    finally:
+        _reset_bootstrap()
+
+
+def test_peripheral_domain_failure_skips(monkeypatch):
+    _reset_bootstrap()
+    import apps.bootstrap as bs
+
+    app_bootstraps = {
+        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=lambda: None),
+        "bridge": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=[],
+            register=lambda: (_ for _ in ()).throw(ValueError("bridge down")),
+        ),
+    }
+
+    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
+    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "bridge"])
+
+    try:
+        bs.bootstrap()
+        assert bs.get_degraded_domains() == ["bridge"]
+    finally:
+        _reset_bootstrap()
+
+
+def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
+    _reset_bootstrap()
+    import apps.bootstrap as bs
+
+    calls: list[str] = []
+
+    def _ok(name: str):
+        return lambda: calls.append(name)
+
+    def _fail():
+        calls.append("bridge")
+        raise ValueError("bridge down")
+
+    app_bootstraps = {
+        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("tasks")),
+        "bridge": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_fail),
+        "automation": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=["bridge"],
+            register=_ok("automation"),
+        ),
+    }
+
+    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
+    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "bridge", "automation"])
+
+    try:
+        bs.bootstrap()
+        assert calls == ["tasks", "bridge"]
+        assert bs.get_degraded_domains() == ["bridge", "automation"]
+    finally:
+        _reset_bootstrap()

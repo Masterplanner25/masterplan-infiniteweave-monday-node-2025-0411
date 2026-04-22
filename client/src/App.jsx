@@ -1,49 +1,50 @@
-import React from "react";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
-// --- COMPONENT IMPORTS ---
-import Sidebar from "./components/shared/Sidebar"; // Extracting this makes the file manageable
-import Dashboard from "./components/app/Dashboard";
-import HealthDashboard from "./components/platform/HealthDashboard";
-import ResearchEngine from "./components/app/ResearchEngine";
-import AiSeoTool from "./components/app/AiSeoTool";
-import InfiniteNetwork from "./components/app/InfiniteNetwork";
-import LeadGen from "./components/app/LeadGen";
-import FreelanceDashboard from "./components/app/FreelanceDashboard";
-import TaskDashboard from "./components/app/TaskDashboard";
-import MasterPlanDashboard from "./components/app/MasterPlanDashboard";
-import ExecutionConsole from "./components/platform/ExecutionConsole";
-import FlowEngineConsole from "./components/platform/FlowEngineConsole";
-import AnalyticsPanel from "./components/app/AnalyticsPanel";
-import Genesis from "./components/app/Genesis";
-import AgentApprovalInbox from "./components/platform/AgentApprovalInbox";
-import ObservabilityDashboard from "./components/platform/ObservabilityDashboard";
-import RippleTraceViewer from "./components/platform/RippleTraceViewer";
+import ErrorBoundary from "./components/shared/ErrorBoundary";
 import LoginPage from "./components/shared/LoginPage";
 import RegisterPage from "./pages/Register";
 import { useAuth } from "./context/AuthContext";
 import { useSystem } from "./context/SystemContext";
 
-// ARM Components
-import ARMAnalyze from "./components/app/ARMAnalyze";
-import ARMGenerate from "./components/app/ARMGenerate";
-import ARMLogs from "./components/app/ARMLogs";
-import ARMConfig from "./components/app/ARMConfig";
-
-// Social Layer
-import ProfileView from "./components/app/ProfileView";
-import Feed from "./components/app/Feed";
-
-// Agent
-import AgentConsole from "./components/platform/AgentConsole";
-
-// Memory Layer
-import MemoryBrowser from "./components/app/MemoryBrowser";
-import IdentityDashboard from "./components/app/IdentityDashboard";
-import AgentRegistry from "./components/platform/AgentRegistry";
-
 import "./App.css";
+
+const Sidebar = lazy(() => import("./components/shared/Sidebar"));
+const Dashboard = lazy(() => import("./components/app/Dashboard"));
+const HealthDashboard = lazy(() => import("./components/platform/HealthDashboard"));
+const ResearchEngine = lazy(() => import("./components/app/ResearchEngine"));
+const AiSeoTool = lazy(() => import("./components/app/AiSeoTool"));
+const InfiniteNetwork = lazy(() => import("./components/app/InfiniteNetwork"));
+const LeadGen = lazy(() => import("./components/app/LeadGen"));
+const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
+const TaskDashboard = lazy(() => import("./components/app/TaskDashboard"));
+const MasterPlanDashboard = lazy(() => import("./components/app/MasterPlanDashboard"));
+const ExecutionConsole = lazy(() => import("./components/platform/ExecutionConsole"));
+const FlowEngineConsole = lazy(() => import("./components/platform/FlowEngineConsole"));
+const AnalyticsPanel = lazy(() => import("./components/app/AnalyticsPanel"));
+const Genesis = lazy(() => import("./components/app/Genesis"));
+const AgentApprovalInbox = lazy(() => import("./components/platform/AgentApprovalInbox"));
+const ObservabilityDashboard = lazy(() => import("./components/platform/ObservabilityDashboard"));
+const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceViewer"));
+const ARMAnalyze = lazy(() => import("./components/app/ARMAnalyze"));
+const ARMGenerate = lazy(() => import("./components/app/ARMGenerate"));
+const ARMLogs = lazy(() => import("./components/app/ARMLogs"));
+const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
+const ProfileView = lazy(() => import("./components/app/ProfileView"));
+const Feed = lazy(() => import("./components/app/Feed"));
+const AgentConsole = lazy(() => import("./components/platform/AgentConsole"));
+const MemoryBrowser = lazy(() => import("./components/app/MemoryBrowser"));
+const IdentityDashboard = lazy(() => import("./components/app/IdentityDashboard"));
+const AgentRegistry = lazy(() => import("./components/platform/AgentRegistry"));
+
+function PageLoadingSpinner() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#09090b]">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-300" />
+    </div>
+  );
+}
 
 function ProtectedRoute() {
   const location = useLocation();
@@ -133,47 +134,51 @@ export default function App() {
   return (
     <TooltipProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<BootGate />}>
-              <Route element={<AppShell />}>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/dashboard/graph" element={<Dashboard />} />
-                <Route path="/genesis" element={<Genesis />} />
-                <Route path="/health" element={<HealthDashboard />} />
-                <Route path="/research" element={<ResearchEngine />} />
-                <Route path="/seo" element={<AiSeoTool />} />
-                <Route path="/leadgen" element={<LeadGen />} />
-                <Route path="/analytics" element={<AnalyticsPanel />} />
-                <Route path="/freelance/dashboard" element={<FreelanceDashboard />} />
-                <Route path="/tasks" element={<TaskDashboard />} />
-                <Route path="/masterplan" element={<MasterPlanDashboard />} />
-                <Route path="/arm/analyze" element={<ARMAnalyze />} />
-                <Route path="/arm/generate" element={<ARMGenerate />} />
-                <Route path="/arm/logs" element={<ARMLogs />} />
-                <Route path="/arm/config" element={<ARMConfig />} />
-                <Route path="/network" element={<InfiniteNetwork />} />
-                <Route path="/network/feed" element={<Feed />} />
-                <Route path="/social/profile/:username?" element={<ProfileView />} />
-                <Route path="/memory" element={<MemoryBrowser />} />
-                <Route path="/identity" element={<IdentityDashboard />} />
-                <Route path="/agent" element={<AgentConsole />} />
-                <Route element={<PlatformRoute />}>
-                  <Route path="/console" element={<ExecutionConsole />} />
-                  <Route path="/flow-console" element={<FlowEngineConsole />} />
-                  <Route path="/agents" element={<AgentRegistry />} />
-                  <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
-                  <Route path="/observability" element={<ObservabilityDashboard />} />
-                  <Route path="/rippletrace" element={<RippleTraceViewer />} />
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoadingSpinner />}>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<BootGate />}>
+                  <Route element={<AppShell />}>
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/dashboard/graph" element={<Dashboard />} />
+                    <Route path="/genesis" element={<Genesis />} />
+                    <Route path="/health" element={<HealthDashboard />} />
+                    <Route path="/research" element={<ResearchEngine />} />
+                    <Route path="/seo" element={<AiSeoTool />} />
+                    <Route path="/leadgen" element={<LeadGen />} />
+                    <Route path="/analytics" element={<AnalyticsPanel />} />
+                    <Route path="/freelance/dashboard" element={<FreelanceDashboard />} />
+                    <Route path="/tasks" element={<TaskDashboard />} />
+                    <Route path="/masterplan" element={<MasterPlanDashboard />} />
+                    <Route path="/arm/analyze" element={<ARMAnalyze />} />
+                    <Route path="/arm/generate" element={<ARMGenerate />} />
+                    <Route path="/arm/logs" element={<ARMLogs />} />
+                    <Route path="/arm/config" element={<ARMConfig />} />
+                    <Route path="/network" element={<InfiniteNetwork />} />
+                    <Route path="/network/feed" element={<Feed />} />
+                    <Route path="/social/profile/:username?" element={<ProfileView />} />
+                    <Route path="/memory" element={<MemoryBrowser />} />
+                    <Route path="/identity" element={<IdentityDashboard />} />
+                    <Route path="/agent" element={<AgentConsole />} />
+                    <Route element={<PlatformRoute />}>
+                      <Route path="/console" element={<ExecutionConsole />} />
+                      <Route path="/flow-console" element={<FlowEngineConsole />} />
+                      <Route path="/agents" element={<AgentRegistry />} />
+                      <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
+                      <Route path="/observability" element={<ObservabilityDashboard />} />
+                      <Route path="/rippletrace" element={<RippleTraceViewer />} />
+                    </Route>
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  </Route>
                 </Route>
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Route>
-            </Route>
-          </Route>
-        </Routes>
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>
   );

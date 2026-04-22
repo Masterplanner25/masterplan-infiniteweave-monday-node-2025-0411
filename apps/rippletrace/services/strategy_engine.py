@@ -22,7 +22,7 @@ def _split_terms(value: Optional[str]) -> List[str]:
 
 
 def get_successful_drops(db: Session) -> List[Dict]:
-    from apps.automation.models import LearningRecordDB
+    from AINDY.db.models.learning import LearningRecordDB
 
     narrative_success = (
         db.query(DropPointDB)

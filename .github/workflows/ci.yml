@@ -111,8 +111,66 @@ jobs:
       - name: Confirm repo root contents
         run: ls -la
 
+      - name: Guard coverage omit list
+        run: |
+          python - <<'PY'
+          import configparser
+          import sys
+
+          cfg = configparser.ConfigParser()
+          cfg.read(".coveragerc")
+          raw = cfg.get("run", "omit", fallback="")
+          omit_entries = {
+              line.strip()
+              for line in raw.splitlines()
+              if line.strip()
+          }
+          allowed = {
+              "*/tests/*",
+              "*/venv/*",
+              "*/.venv/*",
+              "*/site-packages/*",
+              "alembic/*",
+              "*/migrations/*",
+              "tools/*",
+              "validate_memory_loop.py",
+              "Single File Engine.py",
+              "Nodus_Runner.py",
+          }
+          forbidden_entries = {
+              "*/routes/*",
+              "*/memory/*",
+              "*/nodus/*",
+              "*/worker/*",
+              "*/sdk/*",
+              "*/watcher/*",
+          }
+
+          unexpected = sorted(omit_entries - allowed)
+          forbidden = sorted(
+              entry for entry in omit_entries
+              if entry in forbidden_entries
+          )
+
+          if unexpected or forbidden:
+              if unexpected:
+                  print("Unexpected coverage omit entries:", unexpected)
+              if forbidden:
+                  print("Forbidden production coverage omit entries:", forbidden)
+              sys.exit(1)
+
+          print("Coverage omit list verified:", sorted(omit_entries))
+          PY
+
       - name: Run tests with coverage
-        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
+        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short --cov=AINDY --cov=apps --cov-report=xml:AINDY/coverage.xml --cov-fail-under=68 -q
+
+      - name: Generate API reference
+        run: PYTHONPATH=. python tools/generate_api_reference.py
+        env:
+          DATABASE_URL: sqlite:///tmp_docgen.db
+          SECRET_KEY: docgen-placeholder
+          ENV: dev
 
       - name: Run integration tests (PostgreSQL)
         working-directory: ${{ github.workspace }}
@@ -242,6 +300,26 @@ jobs:
         with:
           name: coverage-xml-postgres
           path: AINDY/coverage.xml
+
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+
+      - run: npm test
 
   docker-build:
     name: Docker Build

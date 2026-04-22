@@ -25,9 +25,12 @@ from __future__ import annotations
 
 import sys
 import uuid
+import importlib
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 
@@ -511,6 +514,196 @@ class TestListNodusScriptsEndpoint:
             m._NODUS_SCRIPT_REGISTRY.clear()
             m._NODUS_SCRIPT_REGISTRY.update(original)
 
+
+@pytest.fixture
+def nodus_platform_client():
+    from AINDY.db.database import get_db
+    from AINDY.routes.platform import router as platform_router
+    from AINDY.services.auth_service import get_current_user
+
+    app = FastAPI()
+    app.include_router(platform_router)
+    app.dependency_overrides[get_current_user] = lambda: {"sub": "user-1"}
+    app.dependency_overrides[get_db] = lambda: "db-session"
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+class TestNodusRouterHttpBranches:
+    def test_run_route_restores_script_from_disk(self, nodus_platform_client):
+        nodus_module = importlib.import_module("AINDY.routes.platform.nodus_router")
+
+        flow_result = {
+            "status": "SUCCESS",
+            "trace_id": "trace-1",
+            "run_id": "run-1",
+            "state": {},
+            "data": {},
+        }
+
+        original = dict(nodus_module._NODUS_SCRIPT_REGISTRY)
+        nodus_module._NODUS_SCRIPT_REGISTRY.clear()
+        try:
+            with patch.object(nodus_module, "_validate_nodus_source") as mock_validate, \
+                 patch.object(nodus_module, "_run_nodus_script", return_value=flow_result) as mock_run, \
+                 patch.object(nodus_module, "_format_nodus_response", return_value={"status": "SUCCESS", "trace_id": "trace-1"}) as mock_format, \
+                 patch.object(nodus_module, "execute_with_pipeline_sync", side_effect=lambda **kw: kw["handler"](None)), \
+                 patch("AINDY.core.execution_gate.flow_result_to_envelope", return_value={"trace_id": "trace-1"}), \
+                 patch.object(nodus_module, "_SCRIPTS_DIR") as mock_dir:
+                disk_path = MagicMock()
+                disk_path.exists.return_value = True
+                disk_path.read_text.return_value = "let restored = true"
+                mock_dir.__truediv__.return_value = disk_path
+
+                response = nodus_platform_client.post(
+                    "/platform/nodus/run",
+                    json={"script_name": "restored-script", "input": {"goal": "x"}},
+                )
+
+            assert response.status_code == 200
+            assert response.json()["status"] == "SUCCESS"
+            assert "execution_envelope" in response.json()
+            assert nodus_module._NODUS_SCRIPT_REGISTRY["restored-script"]["restored_from_disk"] is True
+            mock_validate.assert_not_called()
+            mock_run.assert_called_once_with(
+                script="let restored = true",
+                input_payload={"goal": "x"},
+                error_policy="fail",
+                db="db-session",
+                user_id="user-1",
+            )
+            mock_format.assert_called_once_with(flow_result)
+        finally:
+            nodus_module._NODUS_SCRIPT_REGISTRY.clear()
+            nodus_module._NODUS_SCRIPT_REGISTRY.update(original)
+
+    def test_upload_route_handles_disk_write_oserror(self, nodus_platform_client):
+        nodus_module = importlib.import_module("AINDY.routes.platform.nodus_router")
+
+        original = dict(nodus_module._NODUS_SCRIPT_REGISTRY)
+        nodus_module._NODUS_SCRIPT_REGISTRY.clear()
+        try:
+            with patch.object(nodus_module, "_validate_nodus_source"), \
+                 patch.object(nodus_module, "_SCRIPTS_DIR") as mock_dir:
+                mock_dir.mkdir.side_effect = OSError("disk unavailable")
+
+                response = nodus_platform_client.post(
+                    "/platform/nodus/upload",
+                    json={"name": "resilient-script", "content": "let x = 1"},
+                )
+
+            assert response.status_code == 201
+            body = response.json()
+            assert body["name"] == "resilient-script"
+            assert body["uploaded_by"] == "user-1"
+            assert nodus_module._NODUS_SCRIPT_REGISTRY["resilient-script"]["content"] == "let x = 1"
+        finally:
+            nodus_module._NODUS_SCRIPT_REGISTRY.clear()
+            nodus_module._NODUS_SCRIPT_REGISTRY.update(original)
+
+
+class TestNodusFlowRouterHttpBranches:
+    def test_flow_route_returns_compilation_failure_payload(self, nodus_platform_client):
+        nodus_flow_module = importlib.import_module("AINDY.routes.platform.nodus_flow_router")
+
+        with patch.object(nodus_flow_module, "_validate_nodus_source"), \
+             patch.object(nodus_flow_module, "execute_with_pipeline_sync", side_effect=lambda **kw: kw["handler"](None)), \
+             patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", side_effect=ValueError("bad nodus flow")):
+            response = nodus_platform_client.post(
+                "/platform/nodus/flow",
+                json={"flow_name": "bad-flow", "script": "step broken", "run": False},
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "flow_name": "bad-flow",
+            "compiled": False,
+            "error": "bad nodus flow",
+        }
+
+    def test_flow_route_registers_and_runs_compiled_flow(self, nodus_platform_client):
+        nodus_flow_module = importlib.import_module("AINDY.routes.platform.nodus_flow_router")
+
+        compiled_flow = {
+            "start": "start-node",
+            "end": ["done-node"],
+            "edges": {"start-node": ["done-node"], "done-node": []},
+        }
+        runner = MagicMock()
+        runner.start.return_value = {
+            "status": "SUCCESS",
+            "run_id": "run-123",
+            "trace_id": "trace-123",
+            "error": None,
+        }
+        eu = MagicMock()
+        eu.id = "eu-123"
+        execution_units = MagicMock()
+
+        with patch.object(nodus_flow_module, "_validate_nodus_source"), \
+             patch.object(nodus_flow_module, "execute_with_pipeline_sync", side_effect=lambda **kw: kw["handler"](None)), \
+             patch("AINDY.runtime.nodus_flow_compiler.compile_nodus_flow", return_value=compiled_flow), \
+             patch("AINDY.runtime.flow_engine.register_flow") as mock_register_flow, \
+             patch("AINDY.runtime.flow_engine.PersistentFlowRunner", return_value=runner) as mock_runner_cls, \
+             patch("AINDY.utils.uuid_utils.normalize_uuid", return_value="normalized-user"), \
+             patch("AINDY.core.execution_gate.require_execution_unit", return_value=eu), \
+             patch("AINDY.core.execution_gate.flow_result_to_envelope", return_value={"trace_id": "trace-123"}), \
+             patch("AINDY.core.execution_unit_service.ExecutionUnitService", return_value=execution_units):
+            response = nodus_platform_client.post(
+                "/platform/nodus/flow",
+                json={
+                    "flow_name": "demo-flow",
+                    "script": "step start",
+                    "input": {"alpha": 1},
+                    "register": True,
+                    "run": True,
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["flow_name"] == "demo-flow"
+        assert body["compiled"] is True
+        assert body["registered"] is True
+        assert body["nodes"] == ["start-node", "done-node"]
+        assert body["run_result"] == {
+            "status": "SUCCESS",
+            "run_id": "run-123",
+            "trace_id": "trace-123",
+            "error": None,
+            "execution_envelope": {"trace_id": "trace-123"},
+        }
+        mock_register_flow.assert_called_once_with("demo-flow", compiled_flow)
+        mock_runner_cls.assert_called_once_with(
+            flow=compiled_flow,
+            db="db-session",
+            user_id="normalized-user",
+            workflow_type="nodus_flow",
+        )
+        runner.start.assert_called_once_with(initial_state={"alpha": 1}, flow_name="demo-flow")
+        execution_units.link_flow_run.assert_called_once_with("eu-123", "run-123")
+        execution_units.update_status.assert_called_once_with("eu-123", "completed")
+
+
+class TestListNodusScriptsEndpointContinued:
+    def _list(self, registry: dict) -> dict:
+        from AINDY.routes.platform_router import list_nodus_scripts
+        m = _module()
+
+        original = dict(m._NODUS_SCRIPT_REGISTRY)
+        m._NODUS_SCRIPT_REGISTRY.clear()
+        m._NODUS_SCRIPT_REGISTRY.update(registry)
+
+        try:
+            with patch("AINDY.routes.platform_router._SCRIPTS_DIR") as mock_dir:
+                mock_dir.exists.return_value = False
+                return list_nodus_scripts(request=MagicMock(), current_user={"sub": str(uuid.uuid4())})
+        finally:
+            m._NODUS_SCRIPT_REGISTRY.clear()
+            m._NODUS_SCRIPT_REGISTRY.update(original)
+
     def test_empty_registry_returns_zero_count(self):
         result = self._list({})
         assert result["count"] == 0
@@ -582,4 +775,3 @@ class TestListNodusScriptsEndpoint:
         finally:
             m._NODUS_SCRIPT_REGISTRY.clear()
             m._NODUS_SCRIPT_REGISTRY.update(original)
-

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     AINDY_WATCHDOG_INTERVAL_MINUTES: int = 2
 
     # --- Auth ---
+    # SECRET_KEY rotation:
+    # 1. Generate: python -c "import secrets; print(secrets.token_hex(32))"
+    # 2. Set in .env. All active JWTs will be invalidated on next restart.
+    # 3. Do not reuse old keys. Minimum 32 characters required in non-dev environments.
     SECRET_KEY: str = "dev-secret-change-in-production"
     AINDY_API_KEY: str | None = None
     AINDY_SERVICE_KEY: str | None = None
@@ -197,6 +201,11 @@ class Settings(BaseSettings):
     @property
     def is_testing(self) -> bool:
         return self.TESTING or self.TEST_MODE or self.ENV.lower() == "test"
+
+    @property
+    def requires_redis(self) -> bool:
+        """True when the deployment mode requires Redis (non-dev, non-test, or explicit flag)."""
+        return self.AINDY_REQUIRE_REDIS or self.ENV.lower() not in ("dev", "development", "test")
 
 
 # --------------------------------------------------------------------

@@ -19,11 +19,18 @@ logger = logging.getLogger(__name__)
 _INSTANCE_ID = str(_uuid.uuid4())
 
 
+def _get_degraded_domains() -> list[str]:
+    from apps.bootstrap import get_degraded_domains
+
+    return get_degraded_domains()
+
+
 def _testing_health_payload() -> dict:
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": settings.VERSION,
+        "degraded_domains": _get_degraded_domains(),
         "dependencies": {},
     }
 
@@ -189,6 +196,7 @@ async def _build_deep_health_payload() -> dict:
     return {
         "status": overall_status,
         "instance_id": _INSTANCE_ID,
+        "degraded_domains": _get_degraded_domains(),
         "checks": checks,
     }
 

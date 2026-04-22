@@ -6,17 +6,14 @@ Purpose: Exposes API routes to trigger A.I.N.D.Y.'s autonomous
 lead discovery and scoring engine.
 """
 
-import json
 import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
-from AINDY.core.execution_service import ExecutionContext, run_execution
 from AINDY.db.database import get_db
 from apps.search.schemas.leadgen_schema import LeadGenItem
 from AINDY.services.auth_service import get_current_user
@@ -26,37 +23,6 @@ from apps.search.services.search_service import build_learning_context, get_cach
 router = APIRouter(prefix="/leadgen", tags=["Lead Generation"])
 legacy_router = APIRouter(tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
-
-
-def _unwrap_execution_response(response):
-    if isinstance(response, dict):
-        payload = response.get("data")
-        if (
-            response.get("status") == "SUCCESS"
-            and isinstance(payload, dict)
-            and "trace_id" in response
-        ):
-            return payload
-        return response
-
-    if isinstance(response, JSONResponse):
-        payload = json.loads(response.body.decode("utf-8"))
-        if (
-            isinstance(payload, dict)
-            and payload.get("status") == "SUCCESS"
-            and isinstance(payload.get("data"), dict)
-            and "trace_id" in payload
-        ):
-            return JSONResponse(
-                status_code=response.status_code,
-                content=payload["data"],
-                headers=dict(response.headers),
-            )
-    return response
-
-
-def _run_leadgen_execution(context: ExecutionContext, fn):
-    return _unwrap_execution_response(run_execution(context, fn))
 
 
 def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
@@ -151,15 +117,15 @@ def generate_b2b_leads(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _run_leadgen_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="leadgen",
-            operation="leadgen.generate",
-            start_payload={"query": query},
-        ),
-        lambda: _do_generate_b2b_leads(db, user_id, query),
+    def handler(_ctx):
+        return _do_generate_b2b_leads(db, user_id, query)
+    return _execute_leadgen(
+        request,
+        "leadgen.generate",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload={"query": query},
     )
 
 

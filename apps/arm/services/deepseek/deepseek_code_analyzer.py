@@ -96,9 +96,10 @@ class DeepSeekCodeAnalyzer:
     """
     ARM reasoning engine — analysis and code generation via OpenAI GPT-4o.
 
-    Initialised once per server process (singleton in arm_router.py).
-    Thread-safe: each call creates its own DB records and does not mutate
-    shared state beyond the singleton's config reference.
+    Initialized once per server process in the ARM bootstrap singleton.
+    Thread-safe: each public operation refreshes runtime config from the
+    active DB session before executing, so persisted config updates are
+    visible even when the analyzer instance is long-lived.
     """
 
     def __init__(self, config_path: str = None):
