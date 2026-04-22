@@ -359,6 +359,24 @@ async def lifespan(app: FastAPI):
     from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
 
+    # Verify that critical flow nodes were actually registered — silent failures
+    # in cross-domain flow modules produce a running server with a broken flow graph.
+    _REQUIRED_FLOW_NODES = [
+        "arm_analyze_code",
+        "arm_validate_input",
+        "task_complete",
+        "memory_execution_validate",
+        "watcher_ingest_validate",
+    ]
+    from AINDY.runtime.flow_engine import NODE_REGISTRY as _NODE_REGISTRY
+    _missing_nodes = [n for n in _REQUIRED_FLOW_NODES if n not in _NODE_REGISTRY]
+    if _missing_nodes:
+        logger.error(
+            "[startup] Required flow nodes missing from registry after bootstrap: %s. "
+            "Cross-domain flows will be unavailable for these nodes.",
+            _missing_nodes,
+        )
+
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
