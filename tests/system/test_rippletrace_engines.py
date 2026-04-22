@@ -6,7 +6,7 @@ import pytest
 
 from apps.rippletrace.models import DropPointDB
 from apps.analytics.models import ScoreSnapshotDB
-from apps.automation.models import LearningRecordDB, LearningThresholdDB
+from AINDY.db.models.learning import LearningRecordDB, LearningThresholdDB
 from apps.rippletrace.models import PlaybookDB, StrategyDB
 from apps.rippletrace.services import (
     causal_engine,

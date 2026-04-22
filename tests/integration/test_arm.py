@@ -253,6 +253,23 @@ class TestConfigManager:
         assert cm.get("model") != "tampered"
         assert cfg2["model"] != "tampered"
 
+    def test_arm_config_update_visible_to_analyzer(self, db_session, monkeypatch):
+        from apps.arm.dao import arm_config_dao
+        from apps.arm.services.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
+
+        monkeypatch.setattr(
+            "apps.arm.services.deepseek.deepseek_code_analyzer.get_deepseek_client",
+            lambda: object(),
+        )
+
+        arm_config_dao.upsert_config(db_session, temperature=0.9)
+        db_session.commit()
+
+        analyzer = DeepSeekCodeAnalyzer()
+        analyzer._refresh_runtime_config(db=db_session)
+
+        assert analyzer.config.get("temperature") == 0.9
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FileProcessor

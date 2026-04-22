@@ -16,6 +16,7 @@ def _patch_startup_prereqs(monkeypatch, main):
     monkeypatch.setenv("AINDY_ENFORCE_SCHEMA", "false")
     monkeypatch.setattr(main.settings, "TESTING", False)
     monkeypatch.setattr(main.settings, "TEST_MODE", False)
+    monkeypatch.setattr(main.settings, "SECRET_KEY", "schema-guard-test-secret-key-32chars")
     monkeypatch.setattr(main.settings, "AINDY_CACHE_BACKEND", "memory")
     monkeypatch.setattr(main, "_enforce_redis_startup_guard", lambda: None)
     monkeypatch.setattr(main.FastAPICache, "init", lambda *args, **kwargs: None)

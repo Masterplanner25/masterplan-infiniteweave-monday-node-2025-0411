@@ -15,7 +15,7 @@ SPIKE_DELTA = 5.0
 
 
 def get_learning_thresholds(db: Session) -> LearningThresholdDB:
-    from apps.automation.models import LearningThresholdDB
+    from AINDY.db.models.learning import LearningThresholdDB
 
     record = db.query(LearningThresholdDB).first()
     if record:
@@ -42,7 +42,7 @@ def record_prediction(
     velocity_at_prediction: float,
     narrative_at_prediction: float,
 ):
-    from apps.automation.models import LearningRecordDB
+    from AINDY.db.models.learning import LearningRecordDB
 
     learning = LearningRecordDB(
         id=str(uuid.uuid4()),
@@ -61,7 +61,7 @@ def record_prediction(
 
 def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
     from apps.analytics.models import ScoreSnapshotDB
-    from apps.automation.models import LearningRecordDB
+    from AINDY.db.models.learning import LearningRecordDB
 
     record = (
         db.query(LearningRecordDB)
@@ -111,7 +111,7 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
 
 
 def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
-    from apps.automation.models import LearningRecordDB
+    from AINDY.db.models.learning import LearningRecordDB
 
     records = (
         db.query(LearningRecordDB)
@@ -162,7 +162,7 @@ def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
 
 
 def learning_stats(db: Session) -> Dict:
-    from apps.automation.models import LearningRecordDB
+    from AINDY.db.models.learning import LearningRecordDB
 
     records = db.query(LearningRecordDB).all()
     total = len(records)

@@ -1,17 +1,16 @@
 [run]
+# id="p6h9fz"
+# WARNING:
+# Do not exclude production code from coverage.
+# routes/, memory/, nodus/, worker/ must always be measured.
 omit =
     */tests/*
-    */sdk/*
-    */routes/*
-    */memory/*
-    */watcher/*
-    */nodus/*
-    */worker/*
     */venv/*
     */.venv/*
     */site-packages/*
     alembic/*
     */migrations/*
+    tools/*
     validate_memory_loop.py
     Single File Engine.py
     Nodus_Runner.py

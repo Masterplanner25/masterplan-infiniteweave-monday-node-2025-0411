@@ -1,15 +1,12 @@
 # routes/research_results_router.py
 
-import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
-from AINDY.core.execution_service import ExecutionContext, run_execution
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.schemas.research_results_schema import ResearchResultCreate
@@ -21,48 +18,6 @@ from AINDY.services.auth_service import get_current_user
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
 search_history_router = APIRouter(prefix="/search", tags=["Search History"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)
-
-
-def _unwrap_execution_response(response):
-    if isinstance(response, dict):
-        payload = response.get("data")
-        if (
-            response.get("status") == "SUCCESS"
-            and isinstance(payload, dict)
-            and "trace_id" in response
-        ):
-            return payload
-        return response
-
-    if isinstance(response, JSONResponse):
-        payload = json.loads(response.body.decode("utf-8"))
-        if (
-            isinstance(payload, dict)
-            and payload.get("status") == "SUCCESS"
-            and isinstance(payload.get("data"), dict)
-            and "trace_id" in payload
-        ):
-            return JSONResponse(
-                status_code=response.status_code,
-                content=payload["data"],
-                headers=dict(response.headers),
-            )
-    return response
-
-
-def _run_research_execution(
-    context: ExecutionContext,
-    fn,
-    *,
-    success_status_code: int = 200,
-):
-    return _unwrap_execution_response(
-        run_execution(
-            context,
-            fn,
-            success_status_code=success_status_code,
-        )
-    )
 
 
 def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str):
@@ -143,15 +98,15 @@ def create_result(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _run_research_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="research",
-            operation="research.create",
-            start_payload=result.model_dump(),
-        ),
-        lambda: _do_create_result(db, result, user_id),
+    def handler(_ctx):
+        return _do_create_result(db, result, user_id)
+    return _execute_research(
+        request,
+        "research.create",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload=result.model_dump(),
         success_status_code=201,
     )
 
@@ -207,15 +162,15 @@ def run_research_query(
             "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
         }
 
-    return _run_research_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="research",
-            operation="research.query",
-            start_payload=request.model_dump(),
-        ),
-        lambda: _do_run_research_query(db, request, user_id),
+    def handler(_ctx):
+        return _do_run_research_query(db, request, user_id)
+    return _execute_research(
+        http_request,
+        "research.query",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload=request.model_dump(),
     )
 
 
@@ -260,14 +215,14 @@ def delete_search_history_detail(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _run_research_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="research",
-            operation="search.history.delete",
-            start_payload={"history_id": history_id},
-        ),
-        lambda: _do_delete_search_history_detail(db, history_id, user_id),
+    def handler(_ctx):
+        return _do_delete_search_history_detail(db, history_id, user_id)
+    return _execute_research(
+        request,
+        "search.history.delete",
+        handler,
+        db=db,
+        user_id=user_id,
+        input_payload={"history_id": history_id},
     )
 

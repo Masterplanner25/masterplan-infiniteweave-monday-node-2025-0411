@@ -309,6 +309,7 @@ def test_flow_result_completion_event_registration_is_accepted():
 def test_startup_fails_fast_on_invalid_bootstrap(monkeypatch, caplog):
     caplog.set_level(logging.ERROR)
     monkeypatch.setattr(apps_bootstrap, "_BOOTSTRAPPED", False)
+    monkeypatch.setattr(apps_bootstrap, "_DEGRADED_DOMAINS", [])
 
     import apps.tasks.bootstrap as tasks_bootstrap
 
@@ -320,8 +321,9 @@ def test_startup_fails_fast_on_invalid_bootstrap(monkeypatch, caplog):
     with pytest.raises(RuntimeError) as exc_info:
         apps_bootstrap.bootstrap()
 
-    assert "apps.tasks" in str(exc_info.value)
+    assert "Core domain bootstrap failed for tasks" in str(exc_info.value)
     assert "tasks.background.start" in str(exc_info.value)
-    assert "apps.tasks" in caplog.text
+    assert "tasks" in caplog.text
 
     monkeypatch.setattr(apps_bootstrap, "_BOOTSTRAPPED", False)
+    monkeypatch.setattr(apps_bootstrap, "_DEGRADED_DOMAINS", [])

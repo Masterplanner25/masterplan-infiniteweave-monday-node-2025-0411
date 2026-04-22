@@ -23,6 +23,7 @@ from .agent_registry import AgentRegistry
 from .execution_unit import ExecutionUnit
 from .event_edge import EventEdge
 from .job_log import JobLog
+from .learning import LearningRecordDB, LearningThresholdDB
 from .nodus_scheduled_job import NodusScheduledJob
 from .nodus_trace_event import NodusTraceEvent
 from .api_key import PlatformAPIKey
@@ -61,6 +62,8 @@ __all__ = [
     "ExecutionUnit",
     "EventEdge",
     "JobLog",
+    "LearningRecordDB",
+    "LearningThresholdDB",
     "NodusScheduledJob",
     "NodusTraceEvent",
     "PlatformAPIKey",

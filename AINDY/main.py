@@ -231,11 +231,11 @@ def _check_redis_available() -> bool:
 def _enforce_redis_startup_guard() -> None:
     if settings.is_testing:
         return
-    if not (settings.is_prod or settings.AINDY_REQUIRE_REDIS):
+    if not settings.requires_redis:
         return
     if not settings.REDIS_URL:
         raise RuntimeError(
-            "REDIS_URL is required in production. "
+            "REDIS_URL is required in non-development deployments. "
             "Set REDIS_URL in your environment or set "
             "AINDY_REQUIRE_REDIS=false to allow single-instance mode."
         )
@@ -292,30 +292,49 @@ def _check_worker_presence(log) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
-    # SECRET_KEY guard — reject insecure placeholder in production
+    # SECRET_KEY guard — reject insecure placeholder outside local dev/test
     _placeholder = "dev-secret-change-in-production"
     if settings.SECRET_KEY == _placeholder:
-        if settings.is_prod:
+        if settings.requires_redis:
             raise RuntimeError(
                 "SECRET_KEY is using the insecure default placeholder. "
-                "Set a strong SECRET_KEY in your .env before running in production."
+                "Set a strong SECRET_KEY in your .env before running in non-development deployments."
             )
         else:
             logger.warning(
                 "SECRET_KEY is using the insecure default placeholder. "
                 "This is acceptable for local development but MUST be changed before production."
             )
+    _min_key_length = 32
+    if not settings.is_testing and len(settings.SECRET_KEY) < _min_key_length:
+        if settings.requires_redis:
+            raise RuntimeError(
+                f"SECRET_KEY is too short ({len(settings.SECRET_KEY)} chars). "
+                f"Minimum required: {_min_key_length} characters for non-development deployments."
+            )
+        else:
+            logger.warning(
+                "SECRET_KEY is short (%d chars). Use at least %d chars in production.",
+                len(settings.SECRET_KEY), _min_key_length,
+            )
 
     # Redis production guard
     _enforce_redis_startup_guard()
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
-        if not settings.REDIS_URL and not settings.is_prod:
+        if not settings.REDIS_URL and not settings.requires_redis:
             logger.warning(
                 "[startup] Redis is not configured (REDIS_URL is unset). "
                 "Running in single-instance mode. WAIT/RESUME events will not "
                 "propagate across multiple instances. Set REDIS_URL and "
                 "AINDY_REQUIRE_REDIS=true for multi-instance deployments."
             )
+    logger.info(
+        "Startup config: ENV=%s requires_redis=%s execution_mode=%s cache=%s",
+        settings.ENV,
+        settings.requires_redis,
+        settings.EXECUTION_MODE,
+        settings.AINDY_CACHE_BACKEND,
+    )
 
     # Cache backend selection:
     # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
@@ -332,10 +351,10 @@ async def lifespan(app: FastAPI):
             logger.error("Redis cache backend unavailable: %s", exc)
             raise RuntimeError("Redis cache backend unavailable.") from exc
         if not settings.REDIS_URL:
-            if settings.is_prod or settings.AINDY_REQUIRE_REDIS:
+            if settings.requires_redis:
                 raise RuntimeError(
                     "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set. "
-                    "This is not allowed in production. Set REDIS_URL."
+                    "This is not allowed in non-development deployments. Set REDIS_URL."
                 )
             logger.warning(
                 "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set; "

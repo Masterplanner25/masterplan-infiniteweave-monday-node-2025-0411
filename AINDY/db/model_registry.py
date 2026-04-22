@@ -28,6 +28,7 @@ import AINDY.db.models.execution_unit  # noqa: F401
 import AINDY.db.models.event_edge  # noqa: F401
 import AINDY.db.models.flow_run  # noqa: F401
 import AINDY.db.models.job_log  # noqa: F401
+import AINDY.db.models.learning  # noqa: F401
 import AINDY.db.models.memory_metrics  # noqa: F401
 import AINDY.db.models.memory_node_history  # noqa: F401
 import AINDY.db.models.memory_trace  # noqa: F401
