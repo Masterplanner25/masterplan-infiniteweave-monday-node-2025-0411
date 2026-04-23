@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
+import AINDY.main as main_module
 from AINDY.db.models.job_log import JobLog
 from AINDY.services.auth_service import create_access_token
 from AINDY.services.auth_service import get_current_user
@@ -67,3 +69,18 @@ def test_async_root_execution_event_uses_job_user_id(db_session, monkeypatch):
     assert captured["event_type"] == "execution.started"
     assert captured["trace_id"] == log_id
     assert captured["user_id"] == user_id
+
+
+def test_request_user_extraction_prefers_authenticated_request_state():
+    authenticated_user_id = uuid.uuid4()
+    token_user_id = uuid.uuid4()
+    request = SimpleNamespace(
+        state=SimpleNamespace(user_id=str(authenticated_user_id)),
+        headers={
+            "Authorization": f"Bearer {create_access_token({'sub': str(token_user_id), 'email': 'token@aindy.test'})}"
+        },
+    )
+
+    extracted = main_module._extract_user_id_from_request(request)
+
+    assert extracted == authenticated_user_id

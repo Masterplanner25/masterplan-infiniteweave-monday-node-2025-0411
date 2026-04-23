@@ -884,6 +884,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 def _extract_user_id_from_request(request: Request):
+    request_state = getattr(request, "state", None)
+    state_user_id = getattr(request_state, "user_id", None)
+    if state_user_id not in (None, ""):
+        try:
+            from AINDY.platform_layer.user_ids import require_user_id
+
+            return require_user_id(state_user_id)
+        except Exception:
+            return None
+
     auth = request.headers.get("Authorization")
     if not auth or not auth.lower().startswith("bearer "):
         return None
