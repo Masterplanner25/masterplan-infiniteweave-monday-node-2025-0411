@@ -30,12 +30,16 @@ async def execute_with_pipeline(
     trace_id = (metadata or {}).get("trace_id")
     if trace_id:
         ctx.request_id = str(trace_id)
-    ctx.user_id = user_id
+    resolved_user_id = user_id
+    if resolved_user_id is None and active_request is not None:
+        resolved_user_id = getattr(getattr(active_request, "state", None), "user_id", None)
+    ctx.user_id = resolved_user_id
     if input_payload is not None:
         ctx.input_payload = input_payload
     ctx.metadata.update(metadata or {})
     ctx.metadata["status_code"] = success_status_code
     if active_request is not None:
+        active_request.state.user_id = resolved_user_id
         active_request.state.execution_context = ctx
     pipeline = ExecutionPipeline()
     result = await pipeline.run(ctx, handler)

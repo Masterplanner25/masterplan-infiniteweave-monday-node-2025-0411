@@ -56,7 +56,12 @@ async def get_my_score(
             )
         return data
 
-    return await execute_with_pipeline(request, "scores_get_me", handler)
+    return await execute_with_pipeline(
+        request,
+        "scores_get_me",
+        handler,
+        user_id=str(current_user["sub"]),
+    )
 
 
 # ------------------------------
@@ -81,7 +86,12 @@ async def recalculate_my_score(
             raise HTTPException(status_code=500, detail="Score recalculation flow failed")
         return result.get("data")
 
-    return await execute_with_pipeline(request, "scores_recalculate", handler)
+    return await execute_with_pipeline(
+        request,
+        "scores_recalculate",
+        handler,
+        user_id=str(current_user["sub"]),
+    )
 
 
 # ------------------------------
@@ -102,7 +112,12 @@ async def get_score_history(
             raise HTTPException(status_code=500, detail="Score history fetch failed")
         return result.get("data")
 
-    return await execute_with_pipeline(request, "scores_history", handler)
+    return await execute_with_pipeline(
+        request,
+        "scores_history",
+        handler,
+        user_id=str(current_user["sub"]),
+    )
 
 
 # ------------------------------
@@ -134,7 +149,12 @@ async def record_score_feedback(
             raise HTTPException(status_code=500, detail="Score feedback flow failed")
         return result.get("data")
 
-    return await execute_with_pipeline(request, "scores_feedback", handler)
+    return await execute_with_pipeline(
+        request,
+        "scores_feedback",
+        handler,
+        user_id=str(current_user["sub"]),
+    )
 
 
 @router.get("/feedback")
@@ -152,4 +172,9 @@ async def get_score_feedback(
             raise HTTPException(status_code=500, detail="Score feedback list failed")
         return result.get("data")
 
-    return await execute_with_pipeline(request, "scores_feedback_list", handler)
+    return await execute_with_pipeline(
+        request,
+        "scores_feedback_list",
+        handler,
+        user_id=str(current_user["sub"]),
+    )

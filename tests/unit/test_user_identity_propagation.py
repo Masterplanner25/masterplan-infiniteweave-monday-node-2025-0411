@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from AINDY.db.models.job_log import JobLog
+from AINDY.services.auth_service import create_access_token
 from AINDY.services.auth_service import get_current_user
 
 
@@ -14,6 +15,20 @@ def test_get_current_user_rejects_invalid_token_in_test_mode():
             credentials=type("Creds", (), {"credentials": "not-a-token"})(),
             platform_key=None,
             db=None,
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 401
+
+
+def test_get_current_user_rejects_valid_token_for_missing_user(db_session):
+    missing_user_id = uuid.uuid4()
+    token = create_access_token({"sub": str(missing_user_id), "email": "missing@aindy.test"})
+
+    with pytest.raises(Exception) as exc_info:
+        get_current_user(
+            credentials=type("Creds", (), {"credentials": token})(),
+            platform_key=None,
+            db=db_session,
         )
 
     assert getattr(exc_info.value, "status_code", None) == 401

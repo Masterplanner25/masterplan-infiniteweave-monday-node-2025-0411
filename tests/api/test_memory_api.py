@@ -57,6 +57,25 @@ def test_memory_routes_require_auth(client):
     assert client.post("/apps/memory/nodes", json={"content": "x"}).status_code == 401
 
 
+def test_memory_nodus_route_rejects_token_for_missing_user(client):
+    missing_user_id = uuid.uuid4()
+    headers = {
+        "Authorization": f"Bearer {create_access_token({'sub': str(missing_user_id), 'email': 'missing-memory@aindy.test'})}"
+    }
+
+    response = client.post(
+        "/apps/memory/nodus/execute",
+        headers=headers,
+        json={
+            "task_name": "memory async smoke",
+            "task_code": "task smoke { }",
+            "session_tags": ["pytest"],
+        },
+    )
+
+    assert response.status_code == 401
+
+
 def test_memory_node_create_and_get_are_db_backed_and_user_scoped(
     client,
     db_session,

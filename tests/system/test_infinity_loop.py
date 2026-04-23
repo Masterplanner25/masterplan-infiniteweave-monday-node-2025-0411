@@ -3,6 +3,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+from AINDY.services.auth_service import create_access_token
 
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
@@ -506,6 +507,24 @@ class TestScoreRouterLoopSurface:
             "source_id": "analysis-1",
             "feedback_value": 1,
         })
+        assert response.status_code == 401
+
+    def test_feedback_post_rejects_token_for_missing_user(self, client):
+        missing_user_id = uuid.uuid4()
+        headers = {
+            "Authorization": f"Bearer {create_access_token({'sub': str(missing_user_id), 'email': 'missing-score@aindy.test'})}"
+        }
+
+        response = client.post(
+            "/scores/feedback",
+            headers=headers,
+            json={
+                "source_type": "arm",
+                "source_id": "analysis-1",
+                "feedback_value": 1,
+            },
+        )
+
         assert response.status_code == 401
 
     def test_feedback_get_requires_auth(self, client):
