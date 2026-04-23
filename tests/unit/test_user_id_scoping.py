@@ -112,9 +112,10 @@ class TestHandleRecurrenceUserScoping:
 class TestUpdateGoalProgressUserScoping:
     """update_goal_progress(user_id=X) must not update another user's goal."""
 
-    def _create_goal(self, db_session, user_id):
+    def _create_goal(self, db_session, create_test_user, user_id):
         from apps.masterplan.goals import Goal
 
+        create_test_user(user_id=user_id)
         goal = Goal(
             user_id=user_id,
             name=f"goal-{user_id}",
@@ -130,11 +131,12 @@ class TestUpdateGoalProgressUserScoping:
         db_session.refresh(goal)
         return goal
 
-    def test_cross_user_update_blocked(self, db_session):
+    def test_cross_user_update_blocked(self, db_session, create_test_user):
         """user_A cannot update user_B's goal when user_id is enforced."""
         from apps.masterplan.services.goal_service import update_goal_progress
 
-        goal_b = self._create_goal(db_session, USER_B)
+        create_test_user(user_id=USER_A)
+        goal_b = self._create_goal(db_session, create_test_user, USER_B)
 
         # user_A attempts to update user_B's goal
         result = update_goal_progress(
@@ -153,11 +155,11 @@ class TestUpdateGoalProgressUserScoping:
         if state is not None:
             assert float(state.progress or 0.0) == 0.0
 
-    def test_own_goal_update_succeeds(self, db_session):
+    def test_own_goal_update_succeeds(self, db_session, create_test_user):
         """user_A can update their own goal."""
         from apps.masterplan.services.goal_service import update_goal_progress
 
-        goal_a = self._create_goal(db_session, USER_A)
+        goal_a = self._create_goal(db_session, create_test_user, USER_A)
 
         result = update_goal_progress(
             db_session,
@@ -169,11 +171,11 @@ class TestUpdateGoalProgressUserScoping:
         assert result is not None
         assert str(result["id"]) == str(goal_a.id)
 
-    def test_no_user_id_still_updates_by_id(self, db_session):
+    def test_no_user_id_still_updates_by_id(self, db_session, create_test_user):
         """Backward-compat: omitting user_id updates any goal by ID."""
         from apps.masterplan.services.goal_service import update_goal_progress
 
-        goal_b = self._create_goal(db_session, USER_B)
+        goal_b = self._create_goal(db_session, create_test_user, USER_B)
 
         # No user_id supplied — legacy callers are unaffected
         result = update_goal_progress(db_session, goal_b.id, {"progress_delta": 0.1})

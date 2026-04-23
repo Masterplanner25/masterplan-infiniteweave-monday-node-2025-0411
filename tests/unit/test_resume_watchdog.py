@@ -80,7 +80,7 @@ def test_scan_skips_flow_with_no_matching_system_event(db_session):
     scheduler.notify_event.assert_not_called()
 
 
-def test_scan_resumes_when_matching_system_event_exists(db_session):
+def test_scan_resumes_when_matching_system_event_exists(db_session, test_user):
     from AINDY.core.resume_watchdog import scan_and_resume_stranded_flows
 
     _, waiting_row = _seed_waiting_flow(
@@ -93,6 +93,7 @@ def test_scan_resumes_when_matching_system_event_exists(db_session):
     db_session.add(
         SystemEvent(
             type="task.completed",
+            user_id=test_user.id,
             trace_id="trace-resume-run",
             source="test",
             payload={},
@@ -116,7 +117,7 @@ def test_scan_resumes_when_matching_system_event_exists(db_session):
     )
 
 
-def test_scan_reregisters_missing_callback_before_resume(db_session):
+def test_scan_reregisters_missing_callback_before_resume(db_session, test_user):
     from AINDY.core.resume_watchdog import scan_and_resume_stranded_flows
 
     _seed_waiting_flow(
@@ -129,6 +130,7 @@ def test_scan_reregisters_missing_callback_before_resume(db_session):
     db_session.add(
         SystemEvent(
             type="task.completed",
+            user_id=test_user.id,
             trace_id="trace-rehydrate-run",
             source="test",
             payload={},

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from AINDY.db.models.memory_metrics import MemoryMetric
+from AINDY.db.models.user import User
 from AINDY.runtime.memory.memory_metrics import MemoryMetricsEngine
 from AINDY.runtime.memory.metrics_store import MemoryMetricsStore
 from AINDY.runtime.memory.types import MemoryContext, MemoryItem
+from AINDY.services.auth_service import hash_password
 
 
 def test_metrics_engine_quality_scores():
@@ -43,9 +47,20 @@ def test_compute_impact_with_context():
 def test_metrics_store_record_and_summary():
     engine = create_engine("sqlite:///:memory:")
     MemoryMetric.__table__.create(bind=engine)
+    User.__table__.create(bind=engine)
     Session = sessionmaker(bind=engine)
     db = Session()
-    user_id = "00000000-0000-0000-0000-000000000001"
+    user_id = uuid.uuid4()
+    db.add(
+        User(
+            id=user_id,
+            email="memory-metrics@aindy.test",
+            username="memory_metrics_user",
+            hashed_password=hash_password("Passw0rd!123"),
+            is_active=True,
+        )
+    )
+    db.commit()
 
     store = MemoryMetricsStore()
     store.record(

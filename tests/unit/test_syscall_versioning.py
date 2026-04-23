@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from AINDY.services.auth_service import create_access_token
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _ctx(**kwargs):
@@ -531,11 +533,13 @@ class TestDispatcherVersionFallback:
 # J — GET /platform/syscalls endpoint
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _make_headers():
-    import os
-    from jose import jwt
-    secret = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
-    token = jwt.encode({"sub": "test_user", "user_id": 1}, secret, algorithm="HS256")
+def _make_headers(test_user):
+    token = create_access_token(
+        {
+            "sub": str(test_user.id),
+            "email": test_user.email,
+        }
+    )
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -545,55 +549,55 @@ class TestSyscallsEndpoint:
         from AINDY.main import app
         return TestClient(app, raise_server_exceptions=False)
 
-    def _auth(self, client):
-        return _make_headers()
+    def _auth(self, test_user):
+        return _make_headers(test_user)
 
-    def test_endpoint_returns_200(self):
+    def test_endpoint_returns_200(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls", headers=headers)
         assert resp.status_code == 200
 
-    def test_response_has_versions_key(self):
+    def test_response_has_versions_key(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls", headers=headers)
         data = resp.json()
         assert "versions" in data
         assert "v1" in data["versions"]
 
-    def test_response_has_syscalls_key(self):
+    def test_response_has_syscalls_key(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls", headers=headers)
         data = resp.json()
         assert "syscalls" in data
         assert "v1" in data["syscalls"]
 
-    def test_memory_read_present_in_v1(self):
+    def test_memory_read_present_in_v1(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls", headers=headers)
         data = resp.json()
         assert "memory.read" in data["syscalls"]["v1"]
 
-    def test_v2_present(self):
+    def test_v2_present(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls", headers=headers)
         data = resp.json()
         assert "v2" in data["versions"]
         assert "memory.read" in data["syscalls"]["v2"]
 
-    def test_version_filter(self):
+    def test_version_filter(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls?version=v1", headers=headers)
         data = resp.json()
         assert list(data["syscalls"].keys()) == ["v1"]
 
-    def test_unknown_version_returns_404(self):
+    def test_unknown_version_returns_404(self, test_user):
         client = self._client()
-        headers = self._auth(client)
+        headers = self._auth(test_user)
         resp = client.get("/platform/syscalls?version=v99", headers=headers)
         assert resp.status_code == 404
