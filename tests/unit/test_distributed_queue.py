@@ -280,6 +280,7 @@ class TestExecutionDispatcherDistributed:
     def test_submit_async_job_enqueues_when_distributed_without_local_runner(
         self,
         db_session_factory,
+        create_test_user,
         monkeypatch,
     ):
         """Distributed mode must enqueue instead of inline fallback in the API process."""
@@ -302,7 +303,7 @@ class TestExecutionDispatcherDistributed:
         monkeypatch.setattr(async_job_service, "_is_background_runner_active", lambda: False)
         monkeypatch.setattr(async_job_service, "_session_dialect_name", lambda _db: "postgresql")
         monkeypatch.setattr(async_job_service, "_emit_async_system_event", lambda **_kwargs: None)
-        user_id = uuid.uuid4()
+        user_id = create_test_user().id
 
         with patch("AINDY.core.distributed_queue.get_queue", return_value=q):
             log_id = async_job_service.submit_async_job(

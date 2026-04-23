@@ -36,10 +36,10 @@ def test_get_current_user_rejects_valid_token_for_missing_user(db_session):
     assert getattr(exc_info.value, "status_code", None) == 401
 
 
-def test_async_root_execution_event_uses_job_user_id(db_session, monkeypatch):
+def test_async_root_execution_event_uses_job_user_id(db_session, create_test_user, monkeypatch):
     import AINDY.platform_layer.async_job_service as async_job_service
 
-    user_id = uuid.uuid4()
+    user_id = create_test_user().id
     log_id = str(uuid.uuid4())
     db_session.add(
         JobLog(
@@ -71,8 +71,8 @@ def test_async_root_execution_event_uses_job_user_id(db_session, monkeypatch):
     assert captured["user_id"] == user_id
 
 
-def test_request_user_extraction_prefers_authenticated_request_state():
-    authenticated_user_id = uuid.uuid4()
+def test_request_user_extraction_prefers_authenticated_request_state(create_test_user):
+    authenticated_user_id = create_test_user().id
     token_user_id = uuid.uuid4()
     request = SimpleNamespace(
         state=SimpleNamespace(user_id=str(authenticated_user_id)),

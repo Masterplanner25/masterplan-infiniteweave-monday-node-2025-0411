@@ -531,7 +531,7 @@ class TestScoreRouterLoopSurface:
         response = client.get("/scores/feedback")
         assert response.status_code == 401
 
-    def test_feedback_post_writes_row(self, client, auth_headers, db_session, test_user):
+    def test_feedback_post_writes_row(self, client, auth_headers, testing_session_factory, test_user):
         from apps.automation.models import UserFeedback
 
         response = client.post(
@@ -544,11 +544,15 @@ class TestScoreRouterLoopSurface:
             },
         )
         assert response.status_code == 200
-        feedback = db_session.query(UserFeedback).filter(UserFeedback.user_id == test_user.id).first()
-        assert feedback is not None
-        assert feedback.source_type == "arm"
-        assert feedback.source_id == "analysis-1"
-        assert feedback.feedback_value == 1
+        db = testing_session_factory()
+        try:
+            feedback = db.query(UserFeedback).filter(UserFeedback.user_id == test_user.id).first()
+            assert feedback is not None
+            assert feedback.source_type == "arm"
+            assert feedback.source_id == "analysis-1"
+            assert feedback.feedback_value == 1
+        finally:
+            db.close()
 
     def test_feedback_get_returns_history(self, client, auth_headers, db_session, test_user):
         from apps.automation.models import UserFeedback
@@ -571,9 +575,10 @@ class TestScoreRouterLoopSurface:
         data = payload.get("data", payload)
         assert data["count"] == 1
 
-    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, db_session, test_user):
+    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, testing_session_factory, test_user):
         from apps.automation.models import LoopAdjustment
 
+        db = testing_session_factory()
         adjustment = LoopAdjustment(
             id=uuid.uuid4(),
             user_id=test_user.id,
@@ -581,21 +586,24 @@ class TestScoreRouterLoopSurface:
             decision_type="review_plan",
             adjustment_payload={"next_action": {"type": "review_plan"}},
         )
-        db_session.add(adjustment)
-        db_session.commit()
+        db.add(adjustment)
+        db.commit()
 
-        response = client.post(
-            "/scores/feedback",
-            headers=auth_headers,
-            json={
-                "source_type": "manual",
-                "feedback_value": 1,
-                "loop_adjustment_id": str(adjustment.id),
-            },
-        )
-        assert response.status_code == 200
-        db_session.refresh(adjustment)
-        assert adjustment.evaluated_at is not None
+        try:
+            response = client.post(
+                "/scores/feedback",
+                headers=auth_headers,
+                json={
+                    "source_type": "manual",
+                    "feedback_value": 1,
+                    "loop_adjustment_id": str(adjustment.id),
+                },
+            )
+            assert response.status_code == 200
+            db.refresh(adjustment)
+            assert adjustment.evaluated_at is not None
+        finally:
+            db.close()
 
     def test_feedback_post_rejects_invalid_value(self, client, auth_headers):
         response = client.post(
