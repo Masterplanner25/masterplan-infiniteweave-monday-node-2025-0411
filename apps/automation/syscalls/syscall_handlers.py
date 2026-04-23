@@ -581,11 +581,12 @@ def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
     from uuid import UUID
 
     from AINDY.db.database import SessionLocal
+    from AINDY.platform_layer.user_ids import require_user_id
     from apps.automation.models import LoopAdjustment, UserFeedback
 
     db = SessionLocal()
     try:
-        user_id = UUID(str(context.user_id))
+        user_id = require_user_id(context.user_id)
         feedback = UserFeedback(
             user_id=user_id,
             source_type=payload.get("source_type"),
@@ -633,7 +634,11 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
 
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.watcher_signal import WatcherSignal
-    from AINDY.watcher.constants import _VALID_ACTIVITY_TYPES, _VALID_SIGNAL_TYPES, _parse_timestamp
+    from AINDY.platform_layer.watcher_contract import (
+        get_valid_activity_types,
+        get_valid_signal_types,
+        parse_signal_timestamp,
+    )
 
     signals: list = payload.get("signals") or []
     if not isinstance(signals, list) or not signals:
@@ -648,12 +653,12 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
         for idx, sig in enumerate(signals):
             signal_type = sig.get("signal_type")
             activity_type = sig.get("activity_type")
-            if signal_type not in _VALID_SIGNAL_TYPES:
+            if signal_type not in get_valid_signal_types():
                 raise ValueError(f"Signal [{idx}]: unknown signal_type {signal_type!r}")
-            if activity_type not in _VALID_ACTIVITY_TYPES:
+            if activity_type not in get_valid_activity_types():
                 raise ValueError(f"Signal [{idx}]: unknown activity_type {activity_type!r}")
 
-            ts = _parse_timestamp(sig.get("timestamp"))
+            ts = parse_signal_timestamp(sig.get("timestamp"))
             meta = sig.get("metadata") or {}
             signal_user_id = sig.get("user_id")
             if signal_user_id and not batch_user_id:
@@ -840,20 +845,23 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
 
 def _mas_memory_list(payload: dict, context) -> dict:
     """sys.v1.memory.list — list MAS nodes at a path prefix."""
-    from AINDY.kernel.syscall_registry import _handle_memory_list
-    return _handle_memory_list(payload, context)
+    from AINDY.platform_layer.memory_runtime import list_memory_nodes
+
+    return list_memory_nodes(payload, context)
 
 
 def _mas_memory_tree(payload: dict, context) -> dict:
     """sys.v1.memory.tree — hierarchical tree of nodes under a path."""
-    from AINDY.kernel.syscall_registry import _handle_memory_tree
-    return _handle_memory_tree(payload, context)
+    from AINDY.platform_layer.memory_runtime import get_memory_tree
+
+    return get_memory_tree(payload, context)
 
 
 def _mas_memory_trace(payload: dict, context) -> dict:
     """sys.v1.memory.trace — causal trace from node at path."""
-    from AINDY.kernel.syscall_registry import _handle_memory_trace
-    return _handle_memory_trace(payload, context)
+    from AINDY.platform_layer.memory_runtime import trace_memory_chain
+
+    return trace_memory_chain(payload, context)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -866,17 +874,14 @@ def register_all_domain_handlers() -> None:
     Called once at application startup. Safe to call multiple times
     (subsequent calls overwrite with the same values — idempotent).
     """
+    from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
+
+    register_task_syscall_handlers()
+
     # Tuples: (name, handler, capability, description, stable)
     # Domain-specific handlers are stable=False — they wrap application logic
     # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
-        # Task
-        ("sys.v1.task.create",             _handle_task_create,           "task.create",           "Create a task",                                          False),
-        ("sys.v1.task.complete",           _handle_task_complete,         "task.complete",         "Mark task complete (flow nodes)",                        False),
-        ("sys.v1.task.complete_full",      _handle_task_complete_full,    "task.complete_full",    "Full task completion with orchestration (agent tools)",  False),
-        ("sys.v1.task.start",              _handle_task_start,            "task.start",            "Start a task",                                           False),
-        ("sys.v1.task.pause",              _handle_task_pause,            "task.pause",            "Pause a task",                                           False),
-        ("sys.v1.task.orchestrate",        _handle_task_orchestrate,      "task.orchestrate",      "Post-completion task orchestration",                     False),
         # LeadGen
         ("sys.v1.leadgen.search",          _handle_leadgen_search,        "leadgen.search",        "B2B lead search via create_lead_results",                False),
         ("sys.v1.leadgen.search_ai",       _handle_leadgen_search_ai,     "leadgen.search_ai",     "AI-powered B2B lead search",                            False),
@@ -891,8 +896,6 @@ def register_all_domain_handlers() -> None:
         # Score
         ("sys.v1.score.recalculate",       _handle_score_recalculate,     "score.recalculate",     "Recalculate Infinity Score",                             False),
         ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False),
-        # Watcher
-        ("sys.v1.watcher.ingest",          _handle_watcher_ingest,        "watcher.ingest",        "Persist batch of WatcherSignals",                        False),
         # Goal
         ("sys.v1.goal.create",             _handle_goal_create,           "goal.create",           "Create a goal",                                          False),
         # Research

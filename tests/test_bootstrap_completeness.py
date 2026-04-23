@@ -9,8 +9,11 @@ from types import SimpleNamespace
 def _reset_bootstrap():
     """Reset bootstrap state so it re-runs in this test."""
     import apps.bootstrap as bs
+    from AINDY.platform_layer import registry
+
     bs._BOOTSTRAPPED = False
     bs._DEGRADED_DOMAINS = []
+    registry.publish_degraded_domains(())
 
 
 def _call_bootstrap():
@@ -197,6 +200,7 @@ def test_core_domain_failure_raises(monkeypatch):
 def test_peripheral_domain_failure_skips(monkeypatch):
     _reset_bootstrap()
     import apps.bootstrap as bs
+    from AINDY.platform_layer.registry import get_degraded_domains
 
     app_bootstraps = {
         "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=lambda: None),
@@ -212,6 +216,7 @@ def test_peripheral_domain_failure_skips(monkeypatch):
     try:
         bs.bootstrap()
         assert bs.get_degraded_domains() == ["bridge"]
+        assert get_degraded_domains() == ["bridge"]
     finally:
         _reset_bootstrap()
 
@@ -219,6 +224,7 @@ def test_peripheral_domain_failure_skips(monkeypatch):
 def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
     _reset_bootstrap()
     import apps.bootstrap as bs
+    from AINDY.platform_layer.registry import get_degraded_domains
 
     calls: list[str] = []
 
@@ -245,5 +251,6 @@ def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
         bs.bootstrap()
         assert calls == ["tasks", "bridge"]
         assert bs.get_degraded_domains() == ["bridge", "automation"]
+        assert get_degraded_domains() == ["bridge", "automation"]
     finally:
         _reset_bootstrap()

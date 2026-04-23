@@ -10,7 +10,7 @@ def _request(path: str, method: str = "GET") -> Request:
     return Request({"type": "http", "method": method, "path": path, "headers": []})
 
 
-def test_execute_durable_search_reuses_cached_result(monkeypatch):
+def test_execute_durable_search_reuses_cached_result(monkeypatch, persisted_user):
     from apps.search.services import search_service
 
     cached = {"query": "agency", "results": [{"company": "Acme"}], "history_id": "h-1"}
@@ -24,7 +24,7 @@ def test_execute_durable_search_reuses_cached_result(monkeypatch):
 
     result = search_service.execute_durable_search(
         db=object(),
-        user_id="00000000-0000-0000-0000-000000000001",
+        user_id=str(persisted_user.id),
         query="agency",
         search_type="lead_preview",
         memory_tags=["leadgen"],
@@ -34,7 +34,7 @@ def test_execute_durable_search_reuses_cached_result(monkeypatch):
     assert result is cached
 
 
-def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
+def test_research_query_direct_path_uses_unified_search_contract(monkeypatch, persisted_user):
     from apps.search.routes.research_results_router import run_research_query
     from apps.search.schemas.research_results_schema import ResearchResultCreate
 
@@ -80,7 +80,7 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
     result = run_research_query(
         request=ResearchResultCreate(query="durable search", summary="fallback"),
         db=object(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
     )
 
     assert result["summary"] == "Shared summary"
@@ -88,7 +88,7 @@ def test_research_query_direct_path_uses_unified_search_contract(monkeypatch):
     assert result["learning_context"]["search_type"] == "research"
     assert result["learning_context"]["memory_count"] == 2
     assert captured["query"] == "durable search"
-    assert captured["user_id"] == "00000000-0000-0000-0000-000000000001"
+    assert captured["user_id"] == str(persisted_user.id)
 
 
 def test_preview_lead_search_route_uses_shared_search_service(client, auth_headers, monkeypatch):

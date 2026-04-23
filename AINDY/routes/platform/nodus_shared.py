@@ -3,7 +3,15 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from AINDY.routes.platform.schemas import _NODUS_SCRIPT_REGISTRY, _SCRIPTS_DIR, _script_lock
+from AINDY.platform_layer.nodus_script_store import (
+    _NODUS_SCRIPT_REGISTRY,
+    _SCRIPTS_DIR,
+    _script_lock,
+    list_script_metadata,
+    load_script_source,
+    script_exists,
+    store_script,
+)
 
 
 def _run_flow_platform(flow_name: str, state: dict, db: Session, user_id: str | None) -> dict:
@@ -64,3 +72,41 @@ def _validate_nodus_source(source: str, field: str = "script") -> None:
             status_code=422,
             detail={"error": "nodus_security_violation", "message": str(exc), "field": field},
         )
+
+
+def load_named_nodus_script_or_404(name: str) -> str:
+    script_source = load_script_source(name)
+    if script_source is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "script_not_found",
+                "message": f"Script {name!r} not found. Upload it first via POST /platform/nodus/upload.",
+            },
+        )
+    return script_source
+
+
+def save_nodus_script(
+    *,
+    name: str,
+    content: str,
+    description: str | None,
+    uploaded_at: str | None,
+    uploaded_by: str | None,
+) -> dict[str, Any]:
+    return store_script(
+        name=name,
+        content=content,
+        description=description,
+        uploaded_at=uploaded_at,
+        uploaded_by=uploaded_by,
+    )
+
+
+def list_nodus_script_summaries() -> list[dict[str, Any]]:
+    return list_script_metadata(include_disk=True)
+
+
+def nodus_script_exists(name: str) -> bool:
+    return script_exists(name)

@@ -513,7 +513,11 @@ def submit_async_job(
                 _dr = _dispatch(
                     JOB_DISPATCH_STUB,
                     handler_fn=lambda: _execute_job(log_id, task_name, payload),
-                    context={"log_id": log_id, "task_name": task_name},
+                    context={
+                        "log_id": log_id,
+                        "task_name": task_name,
+                        "user_id": str(user_uuid) if user_uuid is not None else None,
+                    },
                 )
                 if _dr.future is not None and _dr.future.cancelled():
                     raise RuntimeError(f"Async job '{task_name}' was cancelled before execution")
@@ -845,10 +849,12 @@ def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
     root_event_id = _get_root_execution_event_id(db, trace_id)
     if root_event_id:
         return root_event_id
+    log = db.query(JobLog).filter(JobLog.id == trace_id).first()
+    event_user_id = getattr(log, "user_id", None) if log is not None else None
     created_id = _emit_async_system_event(
         db=db,
         event_type=SystemEventTypes.EXECUTION_STARTED,
-        user_id=None,
+        user_id=event_user_id,
         trace_id=trace_id,
         parent_event_id=None,
         source="async",
@@ -999,7 +1005,11 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
                 _dispatch(
                     JOB_DISPATCH_STUB,
                     handler_fn=lambda: _execute_job(log_id, task_name, payload),
-                    context={"log_id": log_id, "retry": True},
+                    context={
+                        "log_id": log_id,
+                        "retry": True,
+                        "user_id": str(getattr(log, "user_id", None)) if getattr(log, "user_id", None) is not None else None,
+                    },
                 )
                 return
 

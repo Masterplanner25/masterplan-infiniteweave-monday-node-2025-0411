@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getDashboardHealth } from "../../api";import { safeMap } from "../../utils/safe";
+import { getDashboardHealth } from "../../api/legacy.js";import { safeMap } from "../../utils/safe";
 
 export default function HealthDashboard() {
   const [logs, setLogs] = useState([]);

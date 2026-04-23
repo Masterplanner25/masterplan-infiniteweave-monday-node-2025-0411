@@ -12,6 +12,7 @@ from sqlalchemy import text
 from AINDY.config import settings
 from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal
+from AINDY.platform_layer.registry import get_degraded_domains
 from AINDY.platform_layer.rate_limiter import limiter
 
 router = APIRouter(tags=["Health"])
@@ -20,8 +21,6 @@ _INSTANCE_ID = str(_uuid.uuid4())
 
 
 def _get_degraded_domains() -> list[str]:
-    from apps.bootstrap import get_degraded_domains
-
     return get_degraded_domains()
 
 
@@ -234,8 +233,8 @@ async def health_check_deep(request: Request):
 
 @router.get("/ready", summary="Check Readiness")
 @limiter.limit("120/minute")
-def readiness(request: Request) -> dict:
-    return {
-        "status": "ready",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+def readiness(request: Request):
+    from AINDY.platform_layer.health_service import get_readiness_report
+
+    status_code, payload = get_readiness_report()
+    return JSONResponse(status_code=status_code, content=payload)

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getDashboardOverview, getMyScore, recalculateScore, getScoreHistory } from "../../api";
+import { getDashboardOverview } from "../../api/legacy.js";
+import { getMyScore, recalculateScore, getScoreHistory } from "../../api/product.js";
 import { useSystem } from "../../context/SystemContext";
 import FlowEngineConsole from "../platform/FlowEngineConsole";
 import GraphView from "./GraphView";import { safeMap } from "../../utils/safe";

@@ -21,8 +21,9 @@ def _register_wait(engine: SchedulerEngine, run_id: str) -> None:
 
 def _seed_wait_row(db_session, run_id: str) -> None:
     now = datetime.now(timezone.utc)
-    db_session.add(
-        WaitingFlowRun(
+    row = db_session.query(WaitingFlowRun).filter(WaitingFlowRun.run_id == run_id).first()
+    if row is None:
+        row = WaitingFlowRun(
             run_id=run_id,
             event_type="order.completed",
             correlation_id=None,
@@ -33,7 +34,16 @@ def _seed_wait_row(db_session, run_id: str) -> None:
             priority="normal",
             instance_id="test",
         )
-    )
+        db_session.add(row)
+    else:
+        row.event_type = "order.completed"
+        row.correlation_id = None
+        row.waited_since = now - timedelta(minutes=1)
+        row.max_wait_seconds = None
+        row.timeout_at = now + timedelta(minutes=5)
+        row.eu_id = f"eu-{run_id}"
+        row.priority = "normal"
+        row.instance_id = "test"
     db_session.commit()
 
 

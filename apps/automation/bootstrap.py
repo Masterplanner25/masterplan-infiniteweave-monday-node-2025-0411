@@ -5,6 +5,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_MOVED_SYSCALL_SYMBOLS = {
+    "_handle_task_create",
+    "_handle_task_complete",
+    "_handle_task_complete_full",
+    "_handle_task_start",
+    "_handle_task_pause",
+    "_handle_task_orchestrate",
+    "_handle_watcher_ingest",
+}
+
+_MOVED_FLOW_SYMBOLS = {
+    "task_create_validate",
+    "task_create_execute",
+    "task_validate",
+    "task_complete",
+    "task_orchestrate",
+    "task_start_execute",
+    "task_pause_execute",
+    "watcher_ingest_validate",
+    "watcher_ingest_persist",
+    "watcher_ingest_orchestrate",
+}
+
 BOOTSTRAP_DEPENDS_ON: list[str] = [
     "agent",
     "analytics",
@@ -12,6 +35,15 @@ BOOTSTRAP_DEPENDS_ON: list[str] = [
     "autonomy",
     "dashboard",
     "freelance",
+    "masterplan",
+    "rippletrace",
+    "search",
+    "tasks",
+]
+APP_DEPENDS_ON: list[str] = [
+    "analytics",
+    "arm",
+    "authorship",
     "masterplan",
     "rippletrace",
     "search",
@@ -118,7 +150,11 @@ def _register_flows() -> None:
             name: value
             for module in (flow_definitions, flow_definitions_extended, syscall_handlers)
             for name, value in vars(module).items()
-            if not name.startswith("__")
+            if (
+                not name.startswith("__")
+                and name not in _MOVED_SYSCALL_SYMBOLS
+                and name not in _MOVED_FLOW_SYMBOLS
+            )
         }
     )
 
@@ -155,7 +191,6 @@ def _register_required_flow_nodes() -> None:
     from AINDY.platform_layer.registry import register_required_flow_node
 
     register_required_flow_node("memory_execution_validate")
-    register_required_flow_node("watcher_ingest_validate")
 
 
 def _automation_execute(payload, db):

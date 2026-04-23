@@ -7,6 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = ["agent", "analytics", "masterplan"]
 
 
 def register() -> None:
@@ -180,9 +181,17 @@ def _register_agent_capabilities() -> None:
 
 
 def _register_syscalls() -> None:
-    from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.tasks.syscalls import syscall_handlers
 
-    register_task_syscall_handlers()
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(syscall_handlers).items()
+            if not name.startswith("__")
+        }
+    )
+    syscall_handlers.register_task_syscall_handlers()
 
 
 def _register_capture_rules() -> None:

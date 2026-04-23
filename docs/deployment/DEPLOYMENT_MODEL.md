@@ -1,134 +1,290 @@
 # Deployment Model
 
-This document describes the current deployment shape of A.I.N.D.Y. and the operational constraints implied by the codebase.
+This document describes the deployment shapes that A.I.N.D.Y. supports today, based on the current runtime code and startup guards.
 
-## 1. Current Deployment Structure
-- Backend entry point: `AINDY/main.py` (FastAPI app).
-- Gateway entry point: `AINDY/server.js` (Express bridge/gateway).
-- Frontend: `client/` (React + Vite).
-- Domain routes are registered from `AINDY/routes/__init__.py`.
-- Legacy compatibility endpoints are now router-backed in `AINDY/routes/legacy_surface_router.py`; they are no longer defined in `main.py`.
+This is an operator document. It does not describe aspirational architecture. If a topology is not listed here as supported, treat it as unsupported.
 
-## 2. Startup Sequence
-Recommended order:
-1. Provide required environment variables.
-2. Start PostgreSQL.
-3. Start MongoDB if using social-layer features.
-4. Start Redis if `EXECUTION_MODE=distributed` or `AINDY_CACHE_BACKEND=redis`.
-5. Run `alembic upgrade head`.
-6. Start FastAPI with `uvicorn main:app`.
-7. Start one or more worker processes if `EXECUTION_MODE=distributed` (see §5a).
-8. Start `server.js` if the Node gateway is required.
-9. Start the frontend from `client/`.
+## Supported deployment model
 
-## 3. Runtime Enforcement at Startup
-The backend performs real startup checks:
-- cache backend initialization (`memory` or `redis`)
-- `SECRET_KEY` safety validation
-- Alembic schema drift guard when `AINDY_ENFORCE_SCHEMA=true`
-- background-task lease acquisition
-- APScheduler startup only on the lease leader (if the `apscheduler` dependency is present; otherwise the service logs that the scheduler is disabled)
-- flow registration
-- stuck-run recovery scan
-- **distributed event bus subscriber** (`kernel/event_bus.py`) — starts before rehydration so the thread is ready when the first resume event arrives
-- **EU WAIT rehydration** (`core/wait_rehydration.py`) — re-registers EU-level resume callbacks for all `status='waiting'` ExecutionUnits
-- **FlowRun WAIT rehydration** (`core/flow_run_rehydration.py`) — re-registers `PersistentFlowRunner` callbacks for all `status='waiting'` FlowRuns
+### 1. Single-instance deployment
 
-Rehydration ordering is intentional: event bus subscriber starts first so no event is missed during callback re-registration.
+Supported today for:
+- local development
+- test and staging
+- limited production use with one API instance
 
-If schema drift is detected, startup fails with `Run alembic upgrade head`.
+Shape:
+- 1 FastAPI API process
+- 0 separate worker processes when `EXECUTION_MODE=thread`
+- PostgreSQL required
+- MongoDB required only if your enabled product surface depends on Mongo-backed features
+- Redis optional in development, optional in some single-instance production paths, but strongly recommended if you need distributed execution or shared cache semantics
 
-## 4. Environment Variables
-Required or operationally important variables:
+This is the simplest and safest deployment shape if you do not need horizontal scaling.
+
+### 2. Limited multi-instance deployment
+
+Supported today with constraints for:
+- multiple API instances behind a load balancer
+- one or more separate worker processes
+- Redis-backed queue/event-bus behavior
+- single scheduler leader elected through the DB lease path
+
+Shape:
+- 2+ FastAPI API instances
+- 1+ worker processes when `EXECUTION_MODE=distributed`
+- PostgreSQL required
+- Redis required
+- MongoDB required only for Mongo-backed features
+
+This mode is limited production-capable, not fully general horizontal scale. It is intended for controlled multi-instance operation, not arbitrary stateless scale-out of every subsystem.
+
+## Unsupported or unsafe patterns
+
+Do not treat these as supported today:
+
+- Multi-instance deployment without Redis
+  - Cross-instance WAIT/RESUME and event propagation become local-only.
+- Production deployment with `EXECUTION_MODE=distributed` but no worker process
+  - The API may accept work, but readiness should fail because async work cannot actually execute.
+- Production deployment with Redis-required settings but `AINDY_EVENT_BUS_ENABLED=false`
+  - Startup is guarded against this because it is unsafe for distributed resume behavior.
+- Production deployment with per-process memory cache relied on for shared semantics
+  - In production, cache must be Redis-backed or explicitly disabled.
+- Multiple scheduler leaders
+  - Only one lease leader is intended to run APScheduler jobs.
+- Treating degraded peripheral domains as invisible
+  - Degraded startup is intentional for some peripheral domains, but it is surfaced in health/readiness and should be monitored.
+- Assuming every runtime invariant is globally distributed
+  - Some state is still process-local by design or by current limitation.
+
+## Required infrastructure by environment
+
+### Production minimum
+
+Required:
+- PostgreSQL
+- Alembic migrations applied to head
+- Strong `SECRET_KEY`
+- Explicit `ALLOWED_ORIGINS`
+
+Required when using distributed execution or limited multi-instance deployment:
+- Redis
+- `EXECUTION_MODE=distributed`
+- one or more worker processes
+- event bus enabled
+
+Required when your enabled features use Mongo-backed functionality:
+- MongoDB
+
+Recommended:
+- dedicated API and worker process supervision
+- readiness checks on `/ready`
+- scheduler status monitoring
+- durable log and metric collection
+
+### Development minimum
+
+Required:
+- PostgreSQL
+- `SECRET_KEY`
+
+Optional in local bring-up:
+- Redis
+- worker process
+- MongoDB, if you are not exercising Mongo-backed features
+
+Development is intentionally more permissive. The runtime allows local bring-up paths that production startup will reject.
+
+## Process model
+
+### API process
+
+Entrypoint:
+
+```bash
+uvicorn AINDY.main:app
+```
+
+What the API process does at startup:
+- validates `SECRET_KEY`
+- enforces Redis/event-bus production guards where required
+- validates queue backend availability when applicable
+- enforces schema drift checks when enabled
+- initializes cache backend
+- initializes Mongo connectivity when required
+- registers runtime flows and nodes
+- restores dynamic platform registry state from the DB
+- starts the event-bus subscriber
+- rehydrates waiting execution state
+- acquires background-task lease and starts APScheduler only on the leader
+
+What can fail startup:
+- missing required Redis in production-style deployments
+- event bus disabled in Redis-required deployments
+- schema drift
+- missing required flow nodes in production
+- required event-bus subscriber startup failure
+- insecure production secret configuration
+
+### Worker process
+
+Entrypoint:
+
+```bash
+python -m AINDY.worker.__main__
+```
+
+Worker contract:
+- intended only for `EXECUTION_MODE=distributed`
+- requires queue backend readiness
+- requires background-task schema readiness
+- writes worker heartbeat to Redis
+- performs immediate stale-job recovery on startup
+- continues periodic stale-job recovery while running
+
+Operational expectation:
+- if the API is in distributed execution mode, at least one healthy worker must be running
+- worker absence is a readiness problem, not just an observability issue
+
+## Data stores and supporting services
+
+### PostgreSQL
+
+PostgreSQL is the primary required system of record.
+
+It currently backs:
+- auth and ownership data
+- flow and execution state
+- scheduler lease state
+- dynamic platform registry persistence
+- health and observability records
+
+Operational rule:
+- run `alembic upgrade head` before exposing the API in production
+
+### MongoDB
+
+MongoDB is optional only if you are not using the Mongo-backed feature set.
+
+Treat MongoDB as required when your deployment includes:
+- social-layer features
+- Mongo-backed identity/profile features
+- any route or flow path that depends on Mongo documents rather than solely PostgreSQL-backed state
+
+Current runtime behavior is fail-fast when Mongo is required and unavailable.
+
+### Redis
+
+Redis is required for:
+- limited multi-instance deployments
+- distributed execution mode
+- shared cache semantics in production
+- distributed event bus behavior
+- worker heartbeat visibility
+
+Redis is optional for:
+- local development
+- single-instance thread-mode API bring-up
+
+Operational rule:
+- if you need shared runtime behavior across instances, configure Redis explicitly and treat it as part of the core production stack
+
+## Scheduler behavior
+
+Scheduler behavior today:
+- APScheduler is started only on the DB lease leader
+- follower API instances still serve traffic but do not run scheduled jobs
+- scheduler leadership is visible through observability and readiness surfaces
+
+This is the supported pattern for multi-instance API deployment:
+- many API instances may exist
+- exactly one should be the active scheduler leader at a time
+
+## Degraded-mode expectations
+
+Degraded startup is intentional for some peripheral domains.
+
+Current contract:
+- core domain bootstrap failure is startup-fatal
+- peripheral domain bootstrap failure may be tolerated
+- tolerated failures are published as degraded domains through runtime-owned state
+- `/health` and `/ready` expose degraded-domain information
+
+Operator meaning:
+- degraded peripheral domains do not automatically mean the platform is down
+- they do mean part of the product surface is unavailable or reduced
+- production rollout should treat repeated degraded domains as an incident signal, not normal background noise
+
+## Environment variables with operational impact
+
+The following settings matter for deployment behavior:
+
+- `ENV`
 - `DATABASE_URL`
 - `SECRET_KEY`
-- `OPENAI_API_KEY`
 - `ALLOWED_ORIGINS`
 - `AINDY_ENFORCE_SCHEMA`
 - `AINDY_ENABLE_BACKGROUND_TASKS`
+- `EXECUTION_MODE`
+- `REDIS_URL`
+- `AINDY_REQUIRE_REDIS`
+- `AINDY_EVENT_BUS_ENABLED`
 - `AINDY_CACHE_BACKEND`
-- `REDIS_URL` when Redis cache or distributed execution is enabled
 - `MONGO_URL`
 - `MONGO_DB_NAME`
+- `WORKER_CONCURRENCY`
+- `WORKER_MAX_CONCURRENT_JOBS`
+- `WORKER_VISIBILITY_TIMEOUT_SECS`
+- `WORKER_STALE_CHECK_INTERVAL_SECS`
 
-Distributed event bus variables (all optional — system falls back to local-only mode if unset or Redis is unavailable):
-- `AINDY_REDIS_URL` — Redis connection URL (default: `redis://localhost:6379/0`)
-- `AINDY_EVENT_BUS_CHANNEL` — pub/sub channel name (default: `aindy:scheduler_events`)
-- `AINDY_EVENT_BUS_ENABLED` — set to `false` / `0` / `no` to disable entirely (default: enabled)
-- `INSTANCE_ID` — stable identifier for this pod/process; used to deduplicate own-instance pub/sub messages (defaults to `HOSTNAME` or `socket.gethostname()`)
+## Startup order
 
-Distributed execution variables (all optional — system defaults to thread-pool mode):
-- `EXECUTION_MODE` — `thread` (default, single-process ThreadPoolExecutor) or `distributed` (Redis-backed queue)
-- `AINDY_QUEUE_NAME` — main queue key in Redis (default: `aindy:jobs`)
-- `AINDY_ASYNC_JOB_WORKERS` — ThreadPoolExecutor size when `EXECUTION_MODE=thread` (default: `4`)
-- `AINDY_RETRY_BACKOFF_BASE_MS` — base delay for exponential retry backoff in ms (default: `1000`)
-- `AINDY_RETRY_BACKOFF_MAX_MS` — maximum retry backoff delay in ms (default: `30000`)
+Recommended production order:
 
-Worker process variables (only relevant when running `worker/worker_loop.py`):
-- `WORKER_CONCURRENCY` — number of parallel dequeue threads per worker process (default: `1`)
-- `WORKER_MAX_CONCURRENT_JOBS` — semaphore limit on in-progress jobs per process; `0` = unlimited (default: `0`)
-- `WORKER_VISIBILITY_TIMEOUT_SECS` — seconds before an in-flight job is considered stale and re-enqueued (default: `300`)
-- `WORKER_STALE_CHECK_INTERVAL_SECS` — how often the stale-recovery thread scans in-flight jobs (default: `60`)
+1. Start PostgreSQL.
+2. Start MongoDB if your enabled features require it.
+3. Start Redis if using multi-instance or distributed execution.
+4. Run `alembic upgrade head`.
+5. Start API instances.
+6. Start worker processes if `EXECUTION_MODE=distributed`.
+7. Verify `/ready` and scheduler status before exposing traffic broadly.
 
-## 5. Background Work Model
-- Background work is not started by daemon threads.
-- APScheduler is the active scheduler when installed; otherwise the system continues running without scheduled jobs.
-- Leadership is coordinated through the DB lease in `background_task_leases`.
-- Lease timestamps are normalized as timezone-aware UTC in the Python lease path before comparison or persistence.
-- Only one instance should actively run scheduled jobs at a time.
-- Follower instances still serve API traffic but do not start the scheduler.
+## Health and readiness interpretation
 
-## 5a. Distributed Worker Process
-When `EXECUTION_MODE=distributed`, async jobs are enqueued to a Redis-backed queue instead of the in-process ThreadPoolExecutor.  One or more worker processes must be started separately:
+Use:
+- `/health` for liveness and dependency visibility
+- `/ready` for deployment readiness
 
-```bash
-# Single worker
-python -m worker.worker_loop
+Readiness reflects:
+- startup completion
+- required Postgres/Redis/queue/schema conditions
+- scheduler expectations for the current role
+- event-bus readiness when required
+- worker heartbeat when distributed execution is required
+- degraded peripheral domains as surfaced context
 
-# 4 parallel dequeue threads, max 8 concurrent jobs
-WORKER_CONCURRENCY=4 WORKER_MAX_CONCURRENT_JOBS=8 python -m worker.worker_loop
-```
+Do not route production traffic based only on process liveness.
 
-Worker reliability features:
-- **Visibility timeout recovery** — on startup and every `WORKER_STALE_CHECK_INTERVAL_SECS`, the worker re-enqueues in-flight jobs whose workers crashed before ack/fail.
-- **Dead Letter Queue** — terminal failures are moved to `aindy:jobs:dead` for operator inspection and replay.
-- **Retry backoff** — exponential backoff (`AINDY_RETRY_BACKOFF_BASE_MS`, `AINDY_RETRY_BACKOFF_MAX_MS`) is applied before re-enqueueing failed jobs; uses a Redis sorted set (`aindy:jobs:delayed`) with a Lua script for atomic promotion.
-- **Concurrency guard** — `WORKER_MAX_CONCURRENT_JOBS` limits simultaneous in-progress jobs per process via a semaphore.
-- **DB claim safety** — each worker performs an atomic `UPDATE WHERE status='pending'` before executing, preventing duplicate execution after a visibility-timeout re-enqueue.
+## Known limitations and caveats
 
-The inline (thread-pool) path is completely unchanged when `EXECUTION_MODE=thread` and no worker process is required.
+Current known limitations:
+- multi-instance support is limited, not fully elastic
+- some operational state remains process-local by design
+- Mongo is not a universal readiness gate for every deployment, so feature selection still matters
+- collective restart windows remain less robust than a fully durable event-stream design
+- not every subsystem is globally coordinated through Redis-backed state
+- per-instance limits and local caches still exist in some areas and should not be assumed to be globally consistent
 
-## 6. Scaling Reality
-What scales reasonably:
-- stateless API reads and writes behind the Postgres-backed auth and ownership model
-- multiple API instances, provided lease leadership remains single-writer for scheduler duties
+For deeper runtime details, see:
+- [Runtime Behavior](../runtime/RUNTIME_BEHAVIOR.md)
+- [OS Isolation Layer](../runtime/OS_ISOLATION_LAYER.md)
+- [Multi-Instance Resume](../architecture/MULTI_INSTANCE_RESUME.md)
+- [Migration Policy](./MIGRATION_POLICY.md)
 
-What does not yet scale cleanly:
-- synchronous LLM-heavy request paths
-- mixed Postgres + Mongo side effects without outbox coordination
-- in-process execution/orchestration under high concurrent load
+## Practical recommendation
 
-## 7. Observability Surface
-Available:
-- request metrics persisted to `request_metrics`
-- durable `SystemEvent` rows for successful health/auth/async-execution paths
-- health logs
-- scheduler/leadership status
-- flow runs and automation logs
-- agent run traces
-- distributed event bus (`kernel/event_bus.py`) — Redis pub/sub cross-instance resume event routing
+If you need the most predictable production operation today, use one of these:
 
-Missing:
-- distributed tracing
-- consistent provider-level latency/cost telemetry
-
-## 8. Current Deployment Risks
-- External provider latency still impacts request-serving threads.
-- Mongo-backed features remain optional and are not enforced as a readiness gate.
-- Redis cache is optional; default in-memory cache remains per-process.
-- Legacy compatibility routes keep old client surfaces alive, but they do not reduce monolith coupling.
-
-## 9. CI/CD
-- GitHub Actions runs lint and tests on push/PR.
-- CI applies Alembic migrations before tests.
-- Coverage enforcement exists, but CI success does not prove multi-process or production-runtime correctness.
+1. Single API instance, `EXECUTION_MODE=thread`, PostgreSQL, Mongo only if needed, Redis optional.
+2. Multiple API instances plus separate workers, with PostgreSQL and Redis, and with the understanding that this is a limited multi-instance deployment model rather than a fully general horizontally scalable control plane.

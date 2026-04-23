@@ -18,10 +18,17 @@ from sqlalchemy import create_engine
 from contextlib import asynccontextmanager
 
 from AINDY.platform_layer import scheduler_service
-from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
+from AINDY.platform_layer.deployment_contract import (
+    background_tasks_enabled,
+    event_bus_required,
+    publish_api_runtime_state,
+    reset_runtime_state,
+)
+from AINDY.platform_layer.cache_backend import NoOpCacheBackend
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.registry import (
     emit_event,
+    get_plugin_boot_order,
     get_legacy_root_routers,
     get_routers,
     load_plugins,
@@ -120,9 +127,7 @@ for _handler in logging.root.handlers:
 logger = logging.getLogger(__name__)
 _OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
 try:
-    from apps.bootstrap import discover_app_bootstraps
-
-    _resolved_boot_order = resolve_boot_order(discover_app_bootstraps())
+    _resolved_boot_order = get_plugin_boot_order()
     if _resolved_boot_order:
         logger.info("Boot order resolved: %s", " → ".join(_resolved_boot_order))
     load_plugins()
@@ -247,6 +252,18 @@ def _enforce_redis_startup_guard() -> None:
     logger.info("[startup] Redis connectivity verified.")
 
 
+def _enforce_event_bus_startup_guard() -> None:
+    if settings.is_testing:
+        return
+    if not event_bus_required():
+        return
+    if os.getenv("AINDY_EVENT_BUS_ENABLED", "true").lower() in {"0", "false", "no", "off"}:
+        raise RuntimeError(
+            "AINDY_EVENT_BUS_ENABLED=false is not permitted when Redis-backed deployment "
+            "contracts are required. Enable the event bus for production-safe WAIT/RESUME behavior."
+        )
+
+
 def _check_worker_presence(log) -> None:
     """
     Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
@@ -289,9 +306,117 @@ def _check_worker_presence(log) -> None:
         )
 
 
+def _cache_behavior_mode() -> str:
+    if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
+        return "testing"
+    if settings.is_dev:
+        return "development"
+    return "production"
+
+
+def _initialize_cache_backend() -> str:
+    """Initialize FastAPICache with explicit multi-instance semantics.
+
+    Returns one of: ``redis``, ``memory``, ``disabled``.
+    """
+    cache_backend = settings.AINDY_CACHE_BACKEND.lower()
+    behavior_mode = _cache_behavior_mode()
+
+    if behavior_mode == "testing":
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+        logger.info("Cache backend initialized: memory (testing mode)")
+        return "memory"
+
+    if cache_backend == "redis":
+        try:
+            from redis import asyncio as aioredis
+            from fastapi_cache.backends.redis import RedisBackend
+        except Exception as exc:
+            if behavior_mode == "production":
+                FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
+                logger.warning(
+                    "Redis cache backend unavailable in production; caching disabled "
+                    "to avoid instance-local divergence: %s",
+                    exc,
+                )
+                return "disabled"
+            logger.warning("Redis cache backend unavailable; falling back to memory cache: %s", exc)
+            FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+            return "memory"
+
+        if not settings.REDIS_URL:
+            if behavior_mode == "production":
+                FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
+                logger.warning(
+                    "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set in production; "
+                    "caching disabled to avoid instance-local divergence."
+                )
+                return "disabled"
+            logger.warning(
+                "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set; "
+                "falling back to in-memory cache for local development."
+            )
+            FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+            return "memory"
+
+        try:
+            redis = aioredis.from_url(
+                settings.REDIS_URL,
+                encoding="utf8",
+                decode_responses=True,
+            )
+            FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
+            logger.info("Cache backend initialized: redis")
+            return "redis"
+        except Exception as exc:
+            if behavior_mode == "production":
+                FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
+                logger.warning(
+                    "Redis cache initialization failed in production; caching disabled "
+                    "to avoid instance-local divergence: %s",
+                    exc,
+                )
+                return "disabled"
+            logger.warning(
+                "Redis cache initialization failed; falling back to in-memory cache for development: %s",
+                exc,
+            )
+            FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+            return "memory"
+
+    if cache_backend == "memory":
+        if behavior_mode == "production":
+            FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
+            logger.warning(
+                "AINDY_CACHE_BACKEND=memory in production disables caching. "
+                "Instance-local cache semantics are not allowed in multi-instance-safe mode."
+            )
+            return "disabled"
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+        logger.info("Cache backend initialized: memory")
+        return "memory"
+
+    if cache_backend in {"off", "disabled", "none"}:
+        FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
+        logger.info("Cache backend initialized: disabled")
+        return "disabled"
+
+    raise RuntimeError(
+        f"Unsupported AINDY_CACHE_BACKEND={settings.AINDY_CACHE_BACKEND!r}. "
+        "Expected one of: redis, memory, off."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
+    reset_runtime_state()
+    publish_api_runtime_state(
+        startup_complete=False,
+        background_enabled=False,
+        scheduler_role="disabled",
+        event_bus_ready=False,
+    )
     # SECRET_KEY guard — reject insecure placeholder outside local dev/test
     _placeholder = "dev-secret-change-in-production"
     if settings.SECRET_KEY == _placeholder:
@@ -320,6 +445,7 @@ async def lifespan(app: FastAPI):
 
     # Redis production guard
     _enforce_redis_startup_guard()
+    _enforce_event_bus_startup_guard()
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not settings.REDIS_URL and not settings.requires_redis:
             logger.warning(
@@ -340,35 +466,8 @@ async def lifespan(app: FastAPI):
     # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
     # "memory" - single-process only; two instances will have independent caches
     # Falls back to memory if REDIS_URL is absent regardless of this setting.
-    cache_backend = settings.AINDY_CACHE_BACKEND.lower()
-    if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
-        cache_backend = "memory"
-    if cache_backend == "redis":
-        try:
-            from redis import asyncio as aioredis
-            from fastapi_cache.backends.redis import RedisBackend
-        except Exception as exc:
-            logger.error("Redis cache backend unavailable: %s", exc)
-            raise RuntimeError("Redis cache backend unavailable.") from exc
-        if not settings.REDIS_URL:
-            if settings.requires_redis:
-                raise RuntimeError(
-                    "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set. "
-                    "This is not allowed in non-development deployments. Set REDIS_URL."
-                )
-            logger.warning(
-                "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set; "
-                "falling back to in-memory cache for single-instance startup."
-            )
-            FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
-            logger.info("Cache backend initialized: memory")
-        else:
-            redis = aioredis.from_url(settings.REDIS_URL, encoding="utf8", decode_responses=True)
-            FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
-            logger.info("Cache backend initialized: redis")
-    else:
-        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
-        logger.info("Cache backend initialized: memory")
+    cache_mode = _initialize_cache_backend()
+    logger.info("Cache behavior mode: %s", cache_mode)
 
     ensure_mongo_ready(required=settings.MONGO_REQUIRED)
 
@@ -426,15 +525,15 @@ async def lifespan(app: FastAPI):
             "This is only safe for development. Do not use in production."
         )
 
-    enable_background = os.getenv("AINDY_ENABLE_BACKGROUND_TASKS", "true").lower() in {"1", "true", "yes"}
-    if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
-        enable_background = False
+    enable_background = background_tasks_enabled()
+    publish_api_runtime_state(background_enabled=enable_background)
 
     startup_results = emit_event(
         "system.startup",
         {"enable": enable_background, "log": logger, "source": "main"},
     )
     is_leader = enable_background and all(result is not False for result in startup_results)
+    scheduler_role = "disabled"
     if is_leader:
         scheduler_service.start()
         _sched = scheduler_service.get_scheduler()
@@ -442,6 +541,10 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 "APScheduler failed to start. Check apscheduler installation."
             )
+        scheduler_role = "leader"
+    elif enable_background:
+        scheduler_role = "follower"
+    publish_api_runtime_state(scheduler_role=scheduler_role)
 
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from AINDY.core.request_metric_writer import get_writer as get_metric_writer
@@ -464,11 +567,16 @@ async def lifespan(app: FastAPI):
     _required_nodes = get_required_flow_nodes()
     _missing_nodes = [n for n in _required_nodes if n not in _NODE_REGISTRY]
     if _missing_nodes:
-        logger.error(
+        message = (
             "[startup] Required flow nodes missing from registry after bootstrap: %s. "
-            "Cross-domain flows will be unavailable for these nodes.",
-            _missing_nodes,
+            "Cross-domain flows will be unavailable for these nodes."
         )
+        if settings.is_prod:
+            logger.error(message, _missing_nodes)
+            raise RuntimeError(
+                f"Required flow nodes missing after bootstrap: {_missing_nodes}"
+            )
+        logger.error(message, _missing_nodes)
 
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
@@ -527,7 +635,13 @@ async def lifespan(app: FastAPI):
         try:
             from AINDY.kernel.event_bus import get_event_bus
             get_event_bus().start_subscriber()
+            publish_api_runtime_state(event_bus_ready=True)
         except Exception as _bus_exc:
+            publish_api_runtime_state(event_bus_ready=False)
+            if event_bus_required():
+                raise RuntimeError(
+                    f"Event bus subscriber failed to start: {_bus_exc}"
+                ) from _bus_exc
             logger.warning(
                 "[startup] Event bus subscriber failed to start (non-fatal): %s", _bus_exc
             )
@@ -585,9 +699,11 @@ async def lifespan(app: FastAPI):
             "source": "main",
         }
     )
+    publish_api_runtime_state(startup_complete=True)
 
     yield
     # --- Shutdown ---
+    publish_api_runtime_state(startup_complete=False, event_bus_ready=False)
     emit_event("system.shutdown", {"log": logger, "source": "main"})
     scheduler_service.stop()
     try:
@@ -768,6 +884,16 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 def _extract_user_id_from_request(request: Request):
+    request_state = getattr(request, "state", None)
+    state_user_id = getattr(request_state, "user_id", None)
+    if state_user_id not in (None, ""):
+        try:
+            from AINDY.platform_layer.user_ids import require_user_id
+
+            return require_user_id(state_user_id)
+        except Exception:
+            return None
+
     auth = request.headers.get("Authorization")
     if not auth or not auth.lower().startswith("bearer "):
         return None

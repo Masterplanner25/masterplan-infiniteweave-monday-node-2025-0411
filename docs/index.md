@@ -1,6 +1,12 @@
 # A.I.N.D.Y. Documentation
 
-**A.I.N.D.Y.** is a language-executing runtime. You write Nodus scripts that read and write memory, trigger flows, and emit events — all through a clean syscall interface.
+**A.I.N.D.Y.** is a modular-monolith runtime and application platform.
+
+Current shape:
+- runtime and platform code in `AINDY/`
+- domain apps in `apps/`
+- one React client in `client/`
+- one deployable backend/runtime, not a fleet of separate services
 
 ---
 
@@ -15,6 +21,24 @@
 | [SDK](sdk/index.md) | Python SDK for external integrations |
 | [Watcher](watcher/index.md) | OS-level attention monitoring agent |
 | [Tutorials](tutorials/index.md) | Three end-to-end walkthroughs |
+| [Deployment Model](deployment/DEPLOYMENT_MODEL.md) | Supported production topologies, required services, operator caveats |
+
+---
+
+## Production status
+
+Production-safe today:
+- single-instance deployment
+- limited multi-instance deployment with Redis and explicit worker processes
+- lease-gated scheduler leadership
+- readiness and health surfaces aligned to runtime expectations
+
+Still transitional:
+- some legacy route surfaces and compatibility layers
+- some process-local state and limits
+- broader boundary cleanup between runtime/platform code and domain apps
+
+Use the deployment model and runtime docs as the source of truth, not older repository narratives.
 
 ---
 
@@ -22,9 +46,10 @@
 
 | | |
 |---|---|
-| [Plugin Registry Pattern](architecture/PLUGIN_REGISTRY_PATTERN.md) | How domain apps integrate with the AINDY runtime — the actual wiring mechanism |
+| [Plugin Registry Pattern](architecture/PLUGIN_REGISTRY_PATTERN.md) | How domain apps integrate with the AINDY runtime - the actual wiring mechanism |
 | [Cross-Domain Coupling](architecture/CROSS_DOMAIN_COUPLING.md) | Where analytics and automation intentionally cross domain boundaries, and the rules for doing so safely |
 | [System Spec](architecture/SYSTEM_SPEC.md) | Top-level system specification |
+| [AINDY Internals](architecture/AINDY_INTERNALS.md) | Directory structure and runtime-oriented code map |
 
 ---
 

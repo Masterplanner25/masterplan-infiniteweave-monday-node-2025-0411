@@ -135,3 +135,27 @@ def reset_resource_manager():
     except Exception:
         pass
 
+
+@pytest.fixture(autouse=True)
+def clear_global_app_dependency_overrides():
+    """Prevent override leakage across tests that import the global FastAPI app.
+
+    Many tests use ``from AINDY.main import app`` directly instead of the shared
+    ``app`` fixture in ``tests/fixtures/client.py``. Those tests can leave
+    ``app.dependency_overrides`` populated when they fail early or omit cleanup,
+    which makes later authenticated tests resolve the wrong dependencies.
+
+    Clear overrides on both sides of every test so order does not matter.
+    """
+    try:
+        from AINDY.main import app as fastapi_app
+
+        fastapi_app.dependency_overrides.clear()
+    except Exception:
+        fastapi_app = None
+
+    yield
+
+    if fastapi_app is not None:
+        fastapi_app.dependency_overrides.clear()
+

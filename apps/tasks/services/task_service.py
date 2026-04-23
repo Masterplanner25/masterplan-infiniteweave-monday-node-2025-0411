@@ -13,7 +13,7 @@ from AINDY.db.database import SessionLocal
 from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
-from AINDY.core.observability_events import emit_observability_event
+from AINDY.core.system_event_service import emit_system_event
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,26 @@ def _user_uuid(user_id: str | uuid.UUID | None) -> uuid.UUID | None:
     if not user_id:
         return None
     return uuid.UUID(str(user_id))
+
+
+def _emit_task_event(
+    db: Session,
+    *,
+    event_type: str,
+    user_id: str | uuid.UUID | None,
+    payload: dict[str, Any],
+) -> None:
+    """Persist task lifecycle events on the caller's session."""
+    try:
+        emit_system_event(
+            db=db,
+            event_type=event_type,
+            user_id=user_id,
+            payload=payload,
+            source="task",
+        )
+    except Exception as exc:
+        logger.warning("[task] system event emit failed (%s): %s", event_type, exc)
 
 
 def _serialize_dependency(task_id: int, dependency_type: str = "hard") -> dict[str, Any]:
@@ -435,15 +455,12 @@ def create_task(
     db.commit()
     db.refresh(task)
     logger.info("Created task: %s", task.name)
-    try:
-        emit_observability_event(
-            event_type=SystemEventTypes.TASK_CREATED,
-            user_id=str(owner_user_id) if owner_user_id else None,
-            payload={"task_id": task.id, "name": task.name, "category": task.category},
-            source="task",
-        )
-    except Exception as _obs_exc:
-        logger.warning("[task] observability emit failed (create): %s", _obs_exc)
+    _emit_task_event(
+        db,
+        event_type=SystemEventTypes.TASK_CREATED,
+        user_id=owner_user_id,
+        payload={"task_id": task.id, "name": task.name, "category": task.category},
+    )
     try:
         from AINDY.core.execution_unit_service import ExecutionUnitService
         ExecutionUnitService(db).create(
@@ -480,15 +497,12 @@ def start_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.start_time = datetime.now()
         task.status = "in_progress"
         db.commit()
-        try:
-            emit_observability_event(
-                event_type=SystemEventTypes.TASK_STARTED,
-                user_id=str(_user_uuid(user_id)) if user_id else None,
-                payload={"task_id": task.id, "name": task.name},
-                source="task",
-            )
-        except Exception as _obs_exc:
-            logger.warning("[task] observability emit failed (start): %s", _obs_exc)
+        _emit_task_event(
+            db,
+            event_type=SystemEventTypes.TASK_STARTED,
+            user_id=_user_uuid(user_id),
+            payload={"task_id": task.id, "name": task.name},
+        )
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
@@ -513,15 +527,12 @@ def pause_task(db: Session, name: str, user_id: str | uuid.UUID | None):
         task.time_spent += duration
         task.status = "paused"
         db.commit()
-        try:
-            emit_observability_event(
-                event_type=SystemEventTypes.TASK_PAUSED,
-                user_id=str(_user_uuid(user_id)) if user_id else None,
-                payload={"task_id": task.id, "name": task.name},
-                source="task",
-            )
-        except Exception as _obs_exc:
-            logger.warning("[task] observability emit failed (pause): %s", _obs_exc)
+        _emit_task_event(
+            db,
+            event_type=SystemEventTypes.TASK_PAUSED,
+            user_id=_user_uuid(user_id),
+            payload={"task_id": task.id, "name": task.name},
+        )
         try:
             from AINDY.core.execution_unit_service import ExecutionUnitService
             _eus = ExecutionUnitService(db)
@@ -555,15 +566,12 @@ def complete_task(db: Session, name: str, user_id: str = None):
     task.end_time = now
     unlocked_tasks = _unlock_downstream_tasks(db, task, user_id=user_id)
     db.commit()
-    try:
-        emit_observability_event(
-            event_type=SystemEventTypes.TASK_COMPLETED,
-            user_id=str(owner_user_id) if owner_user_id else None,
-            payload={"task_id": task.id, "name": task.name},
-            source="task",
-        )
-    except Exception as _obs_exc:
-        logger.warning("[task] observability emit failed (complete): %s", _obs_exc)
+    _emit_task_event(
+        db,
+        event_type=SystemEventTypes.TASK_COMPLETED,
+        user_id=owner_user_id,
+        payload={"task_id": task.id, "name": task.name},
+    )
     try:
         from AINDY.core.execution_unit_service import ExecutionUnitService
         _eus = ExecutionUnitService(db)

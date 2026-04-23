@@ -118,3 +118,4 @@ print(result["events_emitted"]) # 1
 - [Syscall Reference](../syscalls/index.md) — every available syscall
 - [Nodus](../nodus/index.md) — writing scripts directly
 - [SDK](../sdk/index.md) — full SDK reference
+- [Deployment Model](../deployment/DEPLOYMENT_MODEL.md) — supported production topology and infrastructure requirements

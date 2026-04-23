@@ -43,3 +43,29 @@ def test_check_worker_presence_warns_when_no_heartbeat(monkeypatch):
 
     logger.warning.assert_called()
     assert "no worker heartbeat" in logger.warning.call_args[0][0].lower()
+
+
+def test_stale_recovery_runs_immediate_startup_scan_and_exits_promptly(monkeypatch):
+    worker_loop.reset_worker_state()
+    logger = MagicMock()
+    calls: list[int] = []
+
+    class _Backend:
+        def requeue_stale_jobs(self, visibility_timeout):
+            calls.append(visibility_timeout)
+            worker_loop._STOP.set()
+            return 2
+
+    monkeypatch.setattr(worker_loop, "logger", logger)
+    monkeypatch.setattr(worker_loop.time, "sleep", lambda _seconds: None)
+
+    worker_loop._run_stale_recovery(
+        _Backend(),
+        visibility_timeout=45,
+        check_interval=5,
+    )
+
+    assert calls == [45]
+    logger.info.assert_called_once()
+    assert "stale recovery" in logger.info.call_args[0][0].lower()
+    worker_loop.reset_worker_state()

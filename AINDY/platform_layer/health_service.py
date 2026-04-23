@@ -14,6 +14,15 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from AINDY.config import settings
+from AINDY.platform_layer.deployment_contract import (
+    deployment_contract_summary,
+    event_bus_required,
+    get_api_runtime_state,
+    queue_backend_required,
+    redis_required,
+    worker_required,
+)
+from AINDY.platform_layer.registry import get_degraded_domains
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +46,12 @@ class SystemHealth:
     dependencies: list[DependencyStatus] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        from apps.bootstrap import get_degraded_domains
-
         return {
             "status": self.tier,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": settings.VERSION,
             "degraded_domains": get_degraded_domains(),
+            "deployment_contract": deployment_contract_summary(),
             "dependencies": {
                 dep.name: {
                     "status": dep.status,
@@ -163,12 +171,12 @@ def check_redis(timeout: float = 1.0, *, use_cache: bool = True) -> DependencySt
             status="ok" if _redis_health_cached_result else "unavailable",
             latency_ms=latency if settings.REDIS_URL else None,
             detail=None if (_redis_health_cached_result or settings.REDIS_URL) else "REDIS_URL not configured (single-instance mode)",
-            critical=False,
+            critical=redis_required(),
         ) if settings.REDIS_URL else DependencyStatus(
             name="redis",
             status="degraded",
             detail="REDIS_URL not configured (single-instance mode)",
-            critical=False,
+            critical=redis_required(),
         )
 
     with _redis_health_lock:
@@ -180,12 +188,12 @@ def check_redis(timeout: float = 1.0, *, use_cache: bool = True) -> DependencySt
                 status="ok" if _redis_health_cached_result else "unavailable",
                 latency_ms=latency if settings.REDIS_URL else None,
                 detail=None if (_redis_health_cached_result or settings.REDIS_URL) else "REDIS_URL not configured (single-instance mode)",
-                critical=False,
+                critical=redis_required(),
             ) if settings.REDIS_URL else DependencyStatus(
                 name="redis",
                 status="degraded",
                 detail="REDIS_URL not configured (single-instance mode)",
-                critical=False,
+                critical=redis_required(),
             )
 
         if not settings.REDIS_URL:
@@ -193,7 +201,7 @@ def check_redis(timeout: float = 1.0, *, use_cache: bool = True) -> DependencySt
                 name="redis",
                 status="degraded",
                 detail="REDIS_URL not configured (single-instance mode)",
-                critical=False,
+                critical=redis_required(),
             )
             _redis_health_cached_result = False
             _redis_health_checked_at = now
@@ -214,7 +222,7 @@ def check_redis(timeout: float = 1.0, *, use_cache: bool = True) -> DependencySt
                 name="redis",
                 status="ok",
                 latency_ms=latency,
-                critical=False,
+                critical=redis_required(),
             )
         except Exception as exc:
             logger.warning("[health] Redis ping failed: %s", exc)
@@ -225,7 +233,7 @@ def check_redis(timeout: float = 1.0, *, use_cache: bool = True) -> DependencySt
                 status="unavailable",
                 latency_ms=latency,
                 detail=str(exc),
-                critical=False,
+                critical=redis_required(),
             )
 
         _redis_health_checked_at = now
@@ -247,7 +255,7 @@ def check_queue() -> DependencyStatus:
             name="queue",
             status=status,
             detail=detail,
-            critical=False,
+            critical=queue_backend_required(),
             metadata={
                 "backend": snapshot["backend"],
                 "degraded": snapshot["degraded"],
@@ -259,7 +267,7 @@ def check_queue() -> DependencyStatus:
             name="queue",
             status="unavailable",
             detail=str(exc),
-            critical=False,
+            critical=queue_backend_required(),
             metadata={
                 "backend": "unknown",
                 "degraded": True,
@@ -401,3 +409,107 @@ def get_system_health(*, force: bool = False) -> SystemHealth:
         _health_cache = result
         _health_cache_checked_at = now
     return result
+
+
+def get_readiness_report() -> tuple[int, dict[str, Any]]:
+    if settings.is_testing:
+        return 200, {
+            "status": "ready",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "checks": {"testing_mode": True},
+            "required_failures": [],
+            "deployment_contract": deployment_contract_summary(),
+        }
+
+    health = get_system_health(force=True)
+    api_state = get_api_runtime_state()
+    dependency_by_name = {dep.name: dep for dep in health.dependencies}
+
+    checks: dict[str, Any] = {
+        "startup_complete": bool(api_state.get("startup_complete")),
+        "scheduler_role": api_state.get("scheduler_role", "disabled"),
+        "background_enabled": bool(api_state.get("background_enabled")),
+        "event_bus_ready": bool(api_state.get("event_bus_ready")),
+        "degraded_domains": get_degraded_domains(),
+    }
+
+    failures: list[str] = []
+    if not checks["startup_complete"]:
+        failures.append("startup_incomplete")
+
+    postgres = dependency_by_name.get("postgres")
+    if postgres is not None:
+        checks["postgres"] = postgres.status
+        if postgres.status != "ok":
+            failures.append("postgres")
+
+    schema = dependency_by_name.get("schema")
+    if schema is not None:
+        checks["schema"] = schema.status
+        if schema.critical and schema.status != "ok":
+            failures.append("schema")
+
+    redis = dependency_by_name.get("redis")
+    if redis is not None:
+        checks["redis"] = redis.status
+        if redis_required() and redis.status != "ok":
+            failures.append("redis")
+
+    queue = dependency_by_name.get("queue")
+    if queue is not None:
+        checks["queue"] = queue.status
+        checks["queue_backend"] = queue.metadata.get("backend")
+        if queue_backend_required() and queue.status != "ok":
+            failures.append("queue")
+
+    if checks["background_enabled"] and checks["scheduler_role"] == "leader":
+        try:
+            from AINDY.platform_layer import scheduler_service
+
+            scheduler = scheduler_service.get_scheduler()
+            checks["scheduler"] = "ok" if getattr(scheduler, "running", False) else "not_running"
+        except Exception as exc:
+            checks["scheduler"] = "not_running"
+            checks["scheduler_detail"] = str(exc)
+        if checks["scheduler"] != "ok":
+            failures.append("scheduler")
+    else:
+        checks["scheduler"] = checks["scheduler_role"]
+
+    if event_bus_required():
+        if not checks["event_bus_ready"]:
+            failures.append("event_bus")
+
+    if worker_required():
+        worker = _check_worker_heartbeat()
+        checks["worker"] = worker["status"]
+        if worker.get("detail"):
+            checks["worker_detail"] = worker["detail"]
+        if worker["status"] != "ok":
+            failures.append("worker")
+    else:
+        checks["worker"] = "not_required"
+
+    status_code = 200 if not failures else 503
+    return status_code, {
+        "status": "ready" if not failures else "not_ready",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "checks": checks,
+        "required_failures": failures,
+        "deployment_contract": deployment_contract_summary(),
+    }
+
+
+def _check_worker_heartbeat() -> dict[str, str]:
+    if not settings.REDIS_URL:
+        return {"status": "missing", "detail": "REDIS_URL not configured"}
+    try:
+        import redis as _redis
+
+        client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1, socket_timeout=1)
+        val = client.get("aindy:worker:heartbeat")
+        if val is None:
+            return {"status": "missing", "detail": "No worker heartbeat in Redis"}
+        return {"status": "ok", "detail": f"last_beat={val.decode()}"}
+    except Exception as exc:
+        return {"status": "error", "detail": str(exc)}

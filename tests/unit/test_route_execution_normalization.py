@@ -4,7 +4,7 @@ import importlib
 from unittest.mock import MagicMock
 
 
-def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch):
+def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch, persisted_user):
     agent_router = importlib.import_module("apps.agent.routes.agent_router")
 
     captured = {}
@@ -31,7 +31,7 @@ def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch):
     result = agent_router.create_agent_run(
         request=MagicMock(),
         body=agent_router.RunRequest(goal="Ship v1"),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
         db=MagicMock(),
     )
 
@@ -41,7 +41,7 @@ def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch):
     assert captured["payload"]["goal"] == "Ship v1"
 
 
-def test_agent_tools_route_uses_shared_execution_wrapper(monkeypatch):
+def test_agent_tools_route_uses_shared_execution_wrapper(monkeypatch, persisted_user):
     agent_router = importlib.import_module("apps.agent.routes.agent_router")
 
     captured = {}
@@ -54,7 +54,7 @@ def test_agent_tools_route_uses_shared_execution_wrapper(monkeypatch):
 
     result = agent_router.list_tools(
         request=MagicMock(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
         db=MagicMock(),
     )
 
@@ -62,7 +62,7 @@ def test_agent_tools_route_uses_shared_execution_wrapper(monkeypatch):
     assert captured["operation"] == "agent.tools.list"
 
 
-def test_genesis_create_session_uses_shared_execution_wrapper(monkeypatch):
+def test_genesis_create_session_uses_shared_execution_wrapper(monkeypatch, persisted_user):
     genesis_router = importlib.import_module("apps.masterplan.routes.genesis_router")
 
     captured = {}
@@ -77,7 +77,7 @@ def test_genesis_create_session_uses_shared_execution_wrapper(monkeypatch):
     result = genesis_router.create_genesis_session(
         request=MagicMock(),
         db=MagicMock(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
     )
 
     assert result["status"] == "SUCCESS"
@@ -85,7 +85,7 @@ def test_genesis_create_session_uses_shared_execution_wrapper(monkeypatch):
     assert captured["source"] == "genesis"
 
 
-def test_genesis_get_session_uses_shared_execution_wrapper(monkeypatch):
+def test_genesis_get_session_uses_shared_execution_wrapper(monkeypatch, persisted_user):
     genesis_router = importlib.import_module("apps.masterplan.routes.genesis_router")
 
     captured = {}
@@ -101,7 +101,7 @@ def test_genesis_get_session_uses_shared_execution_wrapper(monkeypatch):
         request=MagicMock(),
         session_id=7,
         db=MagicMock(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
     )
 
     assert result["status"] == "SUCCESS"

@@ -14,6 +14,7 @@ All tests use TESTING=true / InMemoryQueueBackend — no Redis required.
 from __future__ import annotations
 
 import os
+import uuid
 import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -279,6 +280,7 @@ class TestExecutionDispatcherDistributed:
     def test_submit_async_job_enqueues_when_distributed_without_local_runner(
         self,
         db_session_factory,
+        create_test_user,
         monkeypatch,
     ):
         """Distributed mode must enqueue instead of inline fallback in the API process."""
@@ -301,12 +303,13 @@ class TestExecutionDispatcherDistributed:
         monkeypatch.setattr(async_job_service, "_is_background_runner_active", lambda: False)
         monkeypatch.setattr(async_job_service, "_session_dialect_name", lambda _db: "postgresql")
         monkeypatch.setattr(async_job_service, "_emit_async_system_event", lambda **_kwargs: None)
+        user_id = create_test_user().id
 
         with patch("AINDY.core.distributed_queue.get_queue", return_value=q):
             log_id = async_job_service.submit_async_job(
                 task_name="distributed.submit.test",
                 payload={"operation_name": "distributed.submit.test"},
-                user_id=None,
+                user_id=user_id,
                 source="unit",
             )
 
@@ -314,12 +317,14 @@ class TestExecutionDispatcherDistributed:
         assert job is not None
         assert job.job_id == log_id
         assert job.task_name == "distributed.submit.test"
+        assert job.context["user_id"] == str(user_id)
 
         db = db_session_factory()
         try:
             log = db.query(JobLog).filter(JobLog.id == log_id).first()
             assert log is not None
             assert log.status == "pending"
+            assert log.user_id == user_id
         finally:
             db.close()
 

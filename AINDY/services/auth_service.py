@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from AINDY.config import settings
 from AINDY.db.database import get_db
+from AINDY.platform_layer.user_ids import parse_user_id
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -92,6 +93,48 @@ def decode_access_token(token: str) -> dict:
         )
 
 
+def _resolve_authenticated_jwt_user(payload: dict, db: Session | None) -> dict:
+    from AINDY.db.models.user import User
+
+    user_uuid = parse_user_id(payload.get("sub"))
+    if user_uuid is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authenticated user id",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    resolved = dict(payload)
+    resolved["sub"] = str(user_uuid)
+    resolved["user_id"] = str(user_uuid)
+
+    if db is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication backend unavailable",
+        )
+    if not isinstance(db, Session):
+        return resolved
+
+    try:
+        user = db.query(User).filter(User.id == user_uuid).first()
+    except Exception:
+        if settings.TEST_MODE:
+            return resolved
+        raise
+    if user is None or not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    resolved["sub"] = str(user.id)
+    resolved["user_id"] = str(user.id)
+    resolved.setdefault("email", user.email)
+    resolved.setdefault("username", user.username)
+    return resolved
+
+
 # ── FastAPI dependencies ────────────────────────────────────────────────────
 
 def get_current_user(
@@ -117,17 +160,20 @@ def get_current_user(
                 detail="Authentication required",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        try:
-            return decode_access_token(credentials.credentials)
-        except HTTPException:
-            return {"sub": "00000000-0000-0000-0000-000000000001"}
+        return _resolve_authenticated_jwt_user(
+            decode_access_token(credentials.credentials),
+            db,
+        )
     if credentials is None:
         raise HTTPException(
             status_code=401,
             detail="Authentication required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return decode_access_token(credentials.credentials)
+    return _resolve_authenticated_jwt_user(
+        decode_access_token(credentials.credentials),
+        db,
+    )
 
 
 def _resolve_platform_key_as_user(raw_key: str, db: Session) -> dict:

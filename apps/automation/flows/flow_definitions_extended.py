@@ -32,7 +32,6 @@ _INTRA_DOMAIN_FLOW_MODULES = [
     "apps.automation.flows.flow_engine_flows",
     "apps.automation.flows.automation_system_flows",
     "apps.automation.flows.observability_flows",
-    "apps.automation.flows.watcher_flows",
     "apps.automation.flows.dashboard_autonomy_flows",
 ]
 

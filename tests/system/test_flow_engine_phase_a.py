@@ -358,7 +358,7 @@ class TestAutomationEndpoints:
         # 404 (not found) or 400 (wrong status) — both acceptable; 401 is not
         assert r.status_code != 401
 
-    def test_replay_rejects_invalid_execution_token(self):
+    def test_replay_rejects_invalid_execution_token(self, test_user):
         import uuid
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
@@ -366,7 +366,7 @@ class TestAutomationEndpoints:
         from AINDY.services.auth_service import get_current_user
         from AINDY.db.database import get_db
 
-        user_id = str(uuid.uuid4())
+        user_id = str(test_user.id)
         app = FastAPI()
         app.include_router(router)
         app.dependency_overrides[get_current_user] = lambda: {"sub": user_id}

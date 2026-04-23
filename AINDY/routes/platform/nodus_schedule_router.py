@@ -5,8 +5,7 @@ from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.routes.platform.nodus_shared import (
     _NODUS_SCRIPT_REGISTRY,
-    _SCRIPTS_DIR,
-    _script_lock,
+    load_named_nodus_script_or_404,
     _validate_nodus_source,
 )
 from AINDY.routes.platform.schemas import NodusScheduleRequest
@@ -23,16 +22,7 @@ def create_nodus_schedule(request: Request, body: NodusScheduleRequest, db: Sess
         _validate_nodus_source(body.script, field="script")
         script_source = body.script
     else:
-        with _script_lock:
-            record = _NODUS_SCRIPT_REGISTRY.get(body.script_name)
-        if not record:
-            disk_path = _SCRIPTS_DIR / f"{body.script_name}.nodus"
-            if disk_path.exists():
-                script_source = disk_path.read_text(encoding="utf-8")
-            else:
-                raise HTTPException(status_code=404, detail={"error": "script_not_found", "message": f"Script {body.script_name!r} not found. Upload it first via POST /platform/nodus/upload."})
-        else:
-            script_source = record["content"]
+        script_source = load_named_nodus_script_or_404(body.script_name)
         _validate_nodus_source(script_source, field="script_name")
 
     from AINDY.runtime.nodus_schedule_service import create_nodus_scheduled_job

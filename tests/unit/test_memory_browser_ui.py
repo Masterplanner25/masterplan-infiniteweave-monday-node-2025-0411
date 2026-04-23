@@ -6,27 +6,11 @@ Covers the Memory Browser, Identity Dashboard, and Agent Registry routes
 that are now surfaced in the React frontend.
 """
 import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
 
 
+
 # ── Fixtures ────────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def client():
-    from AINDY.main import app
-    return TestClient(app, raise_server_exceptions=False)
-
-
-@pytest.fixture
-def auth_headers():
-    """Return valid bearer-token headers for authenticated endpoints."""
-    import os
-    from jose import jwt
-    secret = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
-    token = jwt.encode({"sub": "test_user", "user_id": 1}, secret, algorithm="HS256")
-    return {"Authorization": f"Bearer {token}"}
-
 
 # ── TestMemoryBrowserEndpoints ───────────────────────────────────────────────
 

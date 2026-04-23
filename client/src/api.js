@@ -1,185 +1,117 @@
 /**
- * api.js — Stable public API surface for A.I.N.D.Y. client.
+ * api.js - Stable public compatibility API surface for the client.
  *
- * This file is the compatibility layer over the modular API modules in ./api/.
- * Import from here to maintain a stable contract; internal modules can be
- * refactored without breaking callers.
+ * Prefer the explicit category modules for new code:
+ * - ./api/product.js
+ * - ./api/operator.js
+ * - ./api/legacy.js
  *
- * Implementation lives in ./api/<domain>.js — do not duplicate logic here.
+ * This file remains as a flat compatibility barrel for older imports and
+ * contract tests that still inspect `client/src/api.js` directly.
  */
 
-// ── Core utilities ────────────────────────────────────────────────────────────
-export {
-  API_BASE,
-  getStoredToken,
-  setStoredToken,
-  clearStoredToken,
-  buildApiUrl,
-  authRequest,
-  authRequestExternal,
-} from "./api/_core.js";
+import * as productApi from "./api/product.js";
+import * as operatorApi from "./api/operator.js";
+import * as legacyApi from "./api/legacy.js";
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
-export { loginUser, registerUser, bootIdentity } from "./api/auth.js";
+export * from "./api/index.js";
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
-export { getTasks, createTask, completeTask, startTask } from "./api/tasks.js";
+export { productApi, operatorApi, legacyApi };
 
-// ── Masterplan & Genesis ──────────────────────────────────────────────────────
-export {
-  startGenesisSession,
-  sendGenesisMessage,
-  getGenesisSession,
-  synthesizeGenesisDraft,
-  getGenesisDraft,
-  lockMasterPlan,
-  auditGenesisDraft,
-  listMasterPlans,
-  getMasterPlan,
-  activateMasterPlan,
-  setMasterplanAnchor,
-  getMasterplanProjection,
-} from "./api/masterplan.js";
-
-// ── ARM ───────────────────────────────────────────────────────────────────────
-export {
-  runARMAnalysis,
-  runARMGenerate,
-  getARMLogs,
-  getARMConfig,
-  updateARMConfig,
-  getARMMetrics,
-  getARMConfigSuggestions,
-} from "./api/arm.js";
-
-// ── Analytics & Scoring ───────────────────────────────────────────────────────
-export {
-  getMyScore,
-  recalculateScore,
-  getScoreHistory,
-  postScoreFeedback,
-  getScoreFeedback,
-  ingestLinkedInManual,
-  getMasterplanSummary,
-  calculateTwr,
-  calculateEngagement,
-  calculateAiEfficiency,
-  calculateImpactScore,
-  calculateIncomeEfficiency,
-  calculateRevenueScaling,
-  calculateExecutionSpeed,
-  calculateAttentionValue,
-  calculateEngagementRate,
-  calculateBusinessGrowth,
-  calculateMonetizationEfficiency,
-  calculateAiProductivityBoost,
-  calculateDecisionEfficiency,
-  calculateLostPotential,
-} from "./api/analytics.js";
-
-// ── Social ────────────────────────────────────────────────────────────────────
-export {
-  getProfile,
-  upsertProfile,
-  getFeed,
-  createPost,
-  getSocialAnalytics,
-  recordSocialInteraction,
-} from "./api/social.js";
-
-// ── Search & SEO ──────────────────────────────────────────────────────────────
-export {
-  runResearch,
-  getSearchHistory,
-  getSearchHistoryItem,
-  deleteSearchHistoryItem,
-  runLeadGen,
-  analyzeSeo,
-  generateMeta,
-  suggestSeoImprovements,
-} from "./api/search.js";
-
-// ── Memory ────────────────────────────────────────────────────────────────────
-export {
-  getMemoryNodes,
-  recallMemory,
-  getMemorySuggestions,
-  recordMemoryFeedback,
-  getNodePerformance,
-  traverseMemory,
-  getNodeHistory,
-  getFederatedRecall,
-  shareMemoryNode,
-  getMemoryMetricsDashboard,
-} from "./api/memory.js";
-
-// ── Identity ──────────────────────────────────────────────────────────────────
-export {
-  getIdentityProfile,
-  updateIdentityProfile,
-  getIdentityEvolution,
-  getIdentityContext,
-} from "./api/identity.js";
-
-// ── Agent ─────────────────────────────────────────────────────────────────────
-export {
-  createAgentRun,
-  getAgentRuns,
-  getAgentRun,
-  approveAgentRun,
-  rejectAgentRun,
-  getAgentRunSteps,
-  getAgentTools,
-  getAgentTrust,
-  updateAgentTrust,
-  getAgentSuggestions,
-  fetchRunEvents,
-  getAgents,
-  recallFromAgent,
-  getFederatedMemory,
-} from "./api/agent.js";
-
-// ── Freelance ─────────────────────────────────────────────────────────────────
-export {
-  getFreelanceOrders,
-  getFreelanceFeedback,
-  getFreelanceMetricsLatest,
-} from "./api/freelance.js";
-
-// ── RippleTrace ───────────────────────────────────────────────────────────────
-export {
-  getRippleDropPoints,
-  getRipplePings,
-  getRecentRippleEvents,
-  getRippleTrace,
-  getRippleTraceGraph,
-} from "./api/rippletrace.js";
-
-// ── Platform (flows, automation, observability, dashboard) ────────────────────
-export {
-  getDashboardOverview,
-  getDashboardHealth,
-  getInfluenceGraph,
-  getCausalGraph,
-  getNarrative,
-  getFlowRuns,
-  getFlowRun,
-  getFlowRunHistory,
-  resumeFlowRun,
-  getFlowRegistry,
-  getAutomationLogs,
-  getAutomationLog,
-  replayAutomationLog,
-  getSchedulerStatus,
-  getObservabilityRequests,
-  getObservabilityDashboard,
-} from "./api/platform.js";
-
-// ── Endpoint constants ────────────────────────────────────────────────────────
-// Canonical path strings for key API endpoints. Declared here so callers and
-// tests have a single source of truth without importing individual modules.
 export const ENDPOINTS = {
+  GET_FLOW_RUNS: "/flow/runs",
   SCORES_ME: "/scores/me",
   SCORES_FEEDBACK: "/scores/feedback",
   AGENT_SUGGESTIONS: "/agent/suggestions",
 };
+
+// Flow/operator compatibility
+export function getFlowRuns(status = null, workflowType = null, limit = 20) {
+  return operatorApi.getFlowRuns(status, workflowType, limit);
+}
+
+export function getFlowRun(runId) {
+  return operatorApi.getFlowRun(runId);
+}
+
+export function getFlowRunHistory(runId) {
+  return operatorApi.getFlowRunHistory(runId);
+}
+
+export function resumeFlowRun(runId, eventType, payload = {}) {
+  return operatorApi.resumeFlowRun(runId, eventType, payload);
+}
+
+export function getFlowRegistry() {
+  return operatorApi.getFlowRegistry();
+}
+
+export function getAutomationLogs(status = null, source = null, limit = 50) {
+  return operatorApi.getAutomationLogs(status, source, limit);
+}
+
+export function getAutomationLog(logId) {
+  return operatorApi.getAutomationLog(logId);
+}
+
+export function replayAutomationLog(logId) {
+  return operatorApi.replayAutomationLog(logId);
+}
+
+export function getSchedulerStatus() {
+  return operatorApi.getSchedulerStatus();
+}
+
+// Score/product compatibility
+export function getMyScore() {
+  return productApi.getMyScore();
+}
+
+export function recalculateScore() {
+  return productApi.recalculateScore();
+}
+
+export function getScoreHistory(limit = 30) {
+  return productApi.getScoreHistory(limit);
+}
+
+export function postScoreFeedback(payload) {
+  return productApi.postScoreFeedback(payload);
+}
+
+export function getScoreFeedback(limit = 50) {
+  return productApi.getScoreFeedback(limit);
+}
+
+// Agent/product compatibility
+export function createAgentRun(payload) {
+  return productApi.createAgentRun(payload);
+}
+
+export function getAgentRuns(status = null, limit = 20) {
+  return productApi.getAgentRuns(status, limit);
+}
+
+export function approveAgentRun(runId) {
+  return productApi.approveAgentRun(runId);
+}
+
+export function rejectAgentRun(runId) {
+  return productApi.rejectAgentRun(runId);
+}
+
+export function getAgentTools() {
+  return productApi.getAgentTools();
+}
+
+export function getAgentTrust() {
+  return productApi.getAgentTrust();
+}
+
+export function updateAgentTrust(payload) {
+  return productApi.updateAgentTrust(payload);
+}
+
+export function getAgentSuggestions() {
+  return productApi.getAgentSuggestions();
+}

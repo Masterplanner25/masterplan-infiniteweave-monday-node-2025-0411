@@ -329,6 +329,39 @@ def _load_subscription(
         }
 
 
+def has_loaded_webhook_subscription(subscription_id: str) -> bool:
+    with _webhook_lock:
+        return subscription_id in _SUBSCRIPTIONS
+
+
+def restore_webhook_subscription(
+    *,
+    subscription_id: str,
+    event_type: str,
+    callback_url: str,
+    secret: str | None,
+    user_id: str | None,
+    created_at: str,
+) -> bool:
+    """
+    Restore one persisted subscription into the runtime in-memory dispatcher.
+
+    Returns True when the subscription was loaded, False when it was already
+    present. This is a restart-recovery API, not a public route surface.
+    """
+    if has_loaded_webhook_subscription(subscription_id):
+        return False
+    _load_subscription(
+        subscription_id=subscription_id,
+        event_type=event_type,
+        callback_url=callback_url,
+        secret=secret,
+        user_id=user_id,
+        created_at=created_at,
+    )
+    return True
+
+
 def unsubscribe_webhook(subscription_id: str, *, db: Session | None = None) -> bool:
     """
     Remove a subscription from memory and optionally soft-delete from DB.

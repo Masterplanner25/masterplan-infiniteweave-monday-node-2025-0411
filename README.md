@@ -1,152 +1,163 @@
-# 🌐 Masterplan Infinite Weave: A.I.N.D.Y.
-### The AI-First Social Operating System
+# A.I.N.D.Y.
 
-> **"The resume is dead. Long live Velocity."**
+A.I.N.D.Y. is a Python/FastAPI runtime and application platform for memory operations, flow execution, Nodus script execution, agent runs, scheduling, and domain application orchestration.
 
-**Masterplan Infinite Weave (MPIW)** is a living, AI-native knowledge and execution ecosystem.
-**A.I.N.D.Y.** (Augmented Intelligence Network for Development & Yield) is the operational core that transforms that knowledge into measurable execution.
+The repository is a modular monolith in transition:
+- one deployable backend/runtime
+- multiple domain apps under `apps/`
+- shared runtime/platform code under `AINDY/`
+- one React client under `client/`
 
-This repository represents the **v1.0 Release**: The full convergence of the Execution Engine, the Memory Scribe, and the Trust-Based Social Layer.
-
----
-
-## 🧠 The Philosophy: "Anti-LinkedIn"
-
-Traditional platforms reward *performance* (posting). A.I.N.D.Y. rewards *execution* (building).
-
-1.  **Proof of Velocity:** Your profile isn't a static resume. It is a live dashboard of your **TWR (Time-to-Wealth Ratio)** and **Execution Velocity**, updated automatically as you complete tasks.
-2.  **Trust Tiers:** No more "1st/2nd/3rd connections." Relationships are defined by **Trust** (Inner Circle, Collaborator, Observer).
-3.  **The Memory Scribe:** You don't document your life; the AI does. Every social broadcast is automatically logged into a symbolic memory structure for long-term retrieval.
-
----
-
-## 🧬 Ecosystem Architecture
-
-A.I.N.D.Y. runs on a **Hybrid Intelligence Stack**:
-
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Frontend** | **React + Vite** | The Interface (Dashboard, Profile, Feed, Composer). |
-| **Backend** | **FastAPI (Python)** | Modular API handling routing, logic, and background threads. |
-| **Metrics DB** | **PostgreSQL (SQLAlchemy)** | Stores structured data: Tasks, TWR Scores, Financial Metrics. |
-| **Social DB** | **MongoDB** | Stores flexible data: User Profiles, Feeds, Posts, Trust Graphs. |
-| **Intelligence** | **OpenAI + Symbolic Bridge** | The "Brain" that analyzes text and stores long-term memory nodes. |
-
----
-
-## 🚀 Features Live in v1.0
-
-### 1. The Velocity Engine
-* **Task Dashboard:** Create, Start, and Complete tasks.
-* **Auto-Calculation:** Completing a task triggers a TWR calculation based on complexity vs. time spent.
-* **Profile Sync:** Completion events automatically update your public **Execution Velocity** score in the Social Layer.
-
-### 2. The Trust Feed (Social Layer)
-* **Post Composer:** Broadcast updates to specific audiences.
-* **Trust Selectors:** Choose visibility: `🌍 Public`, `🤝 Partners`, or `🔒 Inner Circle`.
-* **Live Feed:** A chronological stream of verified network activity.
-
-### 3. The Memory Scribe
-* **Auto-Documentation:** Every post sent to the Social Layer is simultaneously "teleported" to the **Bridge**.
-* **Symbolic Storage:** The AI creates a `MemoryNode` referencing the post, ensuring it "remembers" your context forever.
-
-### 4. Identity Nodes
-* **Live Profile:** Displays Username, Tagline, and Bio.
-* **Metrics Visualization:** Real-time display of TWR Score and Velocity.
-
----
-
-## 🛠️ Installation & Setup
-
-### Prerequisites
-* Python 3.10+
-* Node.js 18+
-* MongoDB (Local Community Edition or Atlas)
-
-### 1. Start the Backend (The Brain)
-```powershell
-cd AINDY
-uvicorn main:app --reload
-
-Server runs at: http://127.0.0.1:8000
-
-Start the Frontend (The Face)
-cd client
-npm run dev
-
-Client runs at: http://localhost:5173
-
-A.I.N.D.Y/
-├── AINDY/                  # BACKEND (Python)
-│   ├── bridge/             # The link between AI Memory and Database
-│   ├── db/                 # Database configurations (SQL + Mongo)
-│   │   ├── models/         # Data Models (Social, Metrics, Tasks)
-│   │   ├── mongo_setup.py  # MongoDB Connection
-│   │   └── database.py     # PostgreSQL Connection
-│   ├── routes/             # API Endpoints (social, tasks, arm)
-│   ├── services/           # Business Logic (Calculations, Scribe)
-│   └── main.py             # Application Entry Point
-│
-├── client/                 # FRONTEND (React)
-│   ├── src/
-│   │   ├── api.js          # API Bridge functions
-│   │   ├── components/     # UI Modules (Feed, Profile, TaskDash)
-│   │   └── App.jsx         # Main Router & Sidebar
-
-Author
-Shawn Knight Meta-Architect • Founder of The Masterplan Infinite Weave
-
-Medium: Masterplan Infinite Weave Publication
-
-LinkedIn: @masterplaninfiniteweave
-
-GitHub: @Masterplanner25
-
-© 2025 Shawn Knight · Masterplan Infinite Weave
-
+This README is intentionally engineering-focused. It describes the repository as it exists today, not the historical product pitch or an aspirational future architecture.
 
 [![CI](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml/badge.svg)](https://github.com/Masterplanner25/masterplan-infiniteweave-monday-node-2025-0411/actions/workflows/ci.yml)
 
----
+## What this repository contains
 
-## Platform
+Backend/runtime:
+- [AINDY/](AINDY) - runtime, platform layer, routes, memory, scheduler, agents, worker entrypoints
+- [apps/](apps) - domain apps registered into the runtime via bootstrap/registry wiring
+- [alembic/](alembic) - SQL schema migrations
+- [tests/](tests) - unit, API, and system coverage
 
-A.I.N.D.Y. is a FastAPI-based platform backend for versioned syscalls, Nodus
-execution, memory retrieval and persistence, flow orchestration, agent runs, and
-execution observability.
+Frontend:
+- [client/](client) - React/Vite client
 
-The release-facing entrypoints are the public health routes, the auth routes,
-and the `/platform/*` surface. The platform surface exposes:
+Operational/docs:
+- [docs/](docs) - current documentation
+- [docker-compose.yml](docker-compose.yml) - local/dev container stack
+- [server.js](server.js) - optional Node gateway/bridge
 
-- platform API key management
-- syscall discovery and dispatch
-- dynamic flow and node registration
-- Nodus script execution, trace lookup, and scheduling
-- tenant usage and memory address space queries
-- OS-level attention monitoring via the [Watcher](docs/watcher/index.md)
+## Current system shape
+
+At a high level:
+
+```text
+React/Vite client
+    |
+    v
+FastAPI app (AINDY/main.py)
+    |
+    +-- runtime/platform layers in AINDY/
+    +-- domain apps in apps/
+    +-- PostgreSQL primary state
+    +-- MongoDB for Mongo-backed features
+    +-- Redis for distributed execution / event bus / shared cache semantics
+```
+
+Important boundaries:
+- `AINDY/` owns runtime and platform behavior.
+- `apps/` owns domain behavior and registers into the runtime.
+- The system is still one deployment unit, not a set of independently deployable services.
+
+## Supported workflows today
+
+Supported and actively implemented:
+- authenticated API access with JWT and platform API keys
+- memory read/write/recall operations
+- flow registration and flow execution
+- Nodus script execution, scheduling, and trace lookup
+- agent runs and agent observability
+- task, analytics, ARM, masterplan, search, social, identity, rippletrace, and other domain workflows through the monolith
+- health, readiness, scheduler, and observability surfaces
+
+Do not assume from this that every surface is equally mature or equally production-safe.
+
+## Production-safe today vs transitional
+
+### Production-safe today
+
+Reasonably supported today:
+- single-instance deployment with PostgreSQL and the required app configuration
+- limited multi-instance deployment when Redis is configured and separate workers are used where required
+- lease-gated scheduler leadership
+- readiness checks that reflect required runtime expectations
+- dynamic registry restore and restart rehydration paths
+- degraded startup for explicitly peripheral domains
+
+### Transitional or constrained
+
+Still transitional:
+- overall app/runtime boundary cleanup across the full repo
+- some legacy or mixed route surfaces preserved for compatibility
+- limited multi-instance behavior rather than fully general horizontal scale
+- some process-local state and per-instance limits that are acceptable today but not globally coordinated
+- mixed Postgres/Mongo operational behavior depending on the feature surface in use
+- optional Node gateway path that is not the core backend entrypoint
+
+For deployment guidance, use the deployment docs rather than inferring from old README text.
+
+## Quick start
+
+Prerequisites:
+- Python 3.10+
+- Node.js 18+
+- PostgreSQL
+- MongoDB if you need Mongo-backed features
+- Redis if you need distributed execution, shared cache semantics, or limited multi-instance deployment
+
+Backend:
+
+```powershell
+alembic upgrade head
+uvicorn AINDY.main:app --reload
+```
+
+Frontend:
+
+```powershell
+cd client
+npm run dev
+```
+
+Default local URLs:
+- backend: `http://127.0.0.1:8000`
+- frontend: `http://localhost:5173`
+
+## Repository layout
+
+```text
+AINDY/               Runtime, platform, routes, worker, memory, agents
+apps/                Domain apps registered into the runtime
+client/              React/Vite frontend
+docs/                Engineering and operator documentation
+alembic/             Database migrations
+tests/               Unit, API, and system tests
+server.js            Optional Node gateway
+```
+
+## Deployment expectations
+
+Use [docs/deployment/DEPLOYMENT_MODEL.md](docs/deployment/DEPLOYMENT_MODEL.md) as the source of truth for:
+- supported single-instance deployment
+- limited multi-instance deployment
+- API/worker process expectations
+- Redis, PostgreSQL, and Mongo requirements
+- scheduler leadership behavior
+- degraded-mode expectations
 
 ## Documentation
 
 | | |
 |---|---|
-| [Getting Started](docs/getting-started/index.md) | Up and running in 5 minutes |
-| [Syscall System](docs/runtime/SYSCALL_SYSTEM.md) | Versioned syscall layer, ABI contracts |
-| [System Spec](docs/architecture/SYSTEM_SPEC.md) | Top-level system specification |
-| [Runtime Behavior](docs/runtime/RUNTIME_BEHAVIOR.md) | Scheduler, event bus, execution modes |
-| [Execution Contract](docs/runtime/EXECUTION_CONTRACT.md) | What the flow engine guarantees |
-| [OS Isolation Layer](docs/runtime/OS_ISOLATION_LAYER.md) | Tenant isolation and quota enforcement |
-| [Plugin Registry Pattern](docs/architecture/PLUGIN_REGISTRY_PATTERN.md) | How apps integrate with the runtime |
-| [API Contracts](docs/platform/interfaces/API_CONTRACTS.md) | Endpoint and component contracts |
-| [Testing Strategy](docs/platform/engineering/TESTING_STRATEGY.md) | Test suite structure and coverage targets |
-| [AINDY Internals](docs/architecture/AINDY_INTERNALS.md) | Directory structure and runtime notes |
-| [Full Docs](docs/index.md) | Complete documentation index |
+| [Getting Started](docs/getting-started/index.md) | Local bring-up and first API usage |
+| [Deployment Model](docs/deployment/DEPLOYMENT_MODEL.md) | Supported topologies, required infra, production caveats |
+| [System Spec](docs/architecture/SYSTEM_SPEC.md) | Current architectural specification |
+| [Runtime Behavior](docs/runtime/RUNTIME_BEHAVIOR.md) | Startup, scheduler, event bus, execution modes |
+| [Execution Contract](docs/runtime/EXECUTION_CONTRACT.md) | Runtime execution guarantees |
+| [Syscall System](docs/runtime/SYSCALL_SYSTEM.md) | Versioned syscall layer and scope |
+| [OS Isolation Layer](docs/runtime/OS_ISOLATION_LAYER.md) | Resource management, waits, distributed resume caveats |
+| [Plugin Registry Pattern](docs/architecture/PLUGIN_REGISTRY_PATTERN.md) | How apps integrate with runtime-owned surfaces |
+| [API Contracts](docs/platform/interfaces/API_CONTRACTS.md) | Route and platform interface contracts |
+| [Testing Strategy](docs/platform/engineering/TESTING_STRATEGY.md) | Test structure and reliability focus |
+| [Full Docs Index](docs/index.md) | Complete docs entry point |
 
----
+## Legacy context
 
-### Legacy Note
+This repository still contains historical product framing and compatibility surfaces from earlier A.I.N.D.Y. and Masterplan Infinite Weave iterations.
 
-Earlier experimental builds (Memory Bridge v1, RippleTrace MVP, initial A.I.N.D.Y. prototypes)
-are preserved in the `/legacy` folder for historical and educational purposes.
-Current development continues under `/AINDY` (backend) and `/MemoryBridge` (symbolic layer).
-
-
+Treat that material as legacy context unless it is clearly referenced from the current docs index. The primary current system lives in:
+- `AINDY/`
+- `apps/`
+- `client/`
+- `docs/`

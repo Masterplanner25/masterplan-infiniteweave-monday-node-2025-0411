@@ -3,6 +3,9 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+from AINDY.services.auth_service import create_access_token
+
+TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class TestInfinityLoopModels:
@@ -125,7 +128,7 @@ class TestInfinityLoopHelpers:
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
 
         with patch("AINDY.platform_layer.registry.get_job", return_value=lambda user_id, db: None):
-            assert _latest_adjustment_payload("u1", MagicMock()) is None
+            assert _latest_adjustment_payload(TEST_USER_ID, MagicMock()) is None
 
     def test_latest_adjustment_payload_helper_strips_id(self):
         from apps.masterplan.routes.score_router import _latest_adjustment_payload
@@ -138,7 +141,7 @@ class TestInfinityLoopHelpers:
                 "adjustment_payload": {"reason": "kpis_stable", "next_action": {"type": "continue_highest_priority_task"}},
             },
         ):
-            result = _latest_adjustment_payload("u1", MagicMock())
+            result = _latest_adjustment_payload(TEST_USER_ID, MagicMock())
 
         assert result == {
             "decision_type": "continue_highest_priority_task",
@@ -289,7 +292,7 @@ class TestRunLoop:
             lambda user_id, db: None,
         )
 
-        adjustment = run_loop("u1", "manual", db)
+        adjustment = run_loop(TEST_USER_ID, "manual", db)
         assert adjustment is not None
         db.add.assert_called_once()
         db.commit.assert_called_once()
@@ -318,7 +321,7 @@ class TestRunLoop:
             lambda user_id, db: existing,
         )
 
-        result = run_loop("u1", "manual", db)
+        result = run_loop(TEST_USER_ID, "manual", db)
         assert result is existing
         db.add.assert_not_called()
 
@@ -346,9 +349,9 @@ class TestRunLoop:
             return {"task_ids": [1, 2, 3]}
 
         monkeypatch.setattr("apps.analytics.services.infinity_loop._reprioritize_tasks", fake_reprio)
-        adjustment = run_loop("u1", "task_completed", db)
+        adjustment = run_loop(TEST_USER_ID, "task_completed", db)
         assert adjustment is not None
-        assert called["user_id"] == "u1"
+        assert called["user_id"] == uuid.UUID(TEST_USER_ID)
 
     def test_run_loop_never_raises(self, monkeypatch):
         from apps.analytics.services.infinity_loop import run_loop
@@ -358,7 +361,7 @@ class TestRunLoop:
             "apps.analytics.services.infinity_service.get_user_kpi_snapshot",
             lambda user_id, db: (_ for _ in ()).throw(RuntimeError("boom")),
         )
-        assert run_loop("u1", "manual", db) is None
+        assert run_loop(TEST_USER_ID, "manual", db) is None
 
     def test_run_loop_normalizes_trigger_event_before_persist(self, monkeypatch):
         from apps.analytics.services.infinity_loop import run_loop
@@ -379,7 +382,7 @@ class TestRunLoop:
             lambda user_id, db: None,
         )
 
-        run_loop("u1", "arm_analysis", db)
+        run_loop(TEST_USER_ID, "arm_analysis", db)
         assert captured["trigger_event"] == "arm_analyzed"
 
     def test_run_loop_never_returns_empty_next_action(self, monkeypatch):
@@ -396,7 +399,7 @@ class TestRunLoop:
             lambda user_id, db: None,
         )
 
-        assert run_loop("u1", "manual", db) is None
+        assert run_loop(TEST_USER_ID, "manual", db) is None
 
 
 class TestPersistedSuggestions:
@@ -413,7 +416,7 @@ class TestPersistedSuggestions:
         }
 
         with patch("apps.analytics.services.infinity_loop.get_latest_adjustment", return_value=latest):
-            result = suggest_tools({}, user_id="u1", db=db)
+            result = suggest_tools({}, user_id=TEST_USER_ID, db=db)
 
         assert result[0]["tool"] == "memory.recall"
 
@@ -432,7 +435,7 @@ class TestPersistedSuggestions:
                     "ai_productivity_boost": 70.0,
                     "master_score": 30.0,
                 },
-                user_id="u1",
+                user_id=TEST_USER_ID,
                 db=db,
             )
 
@@ -479,7 +482,7 @@ class TestScoreRouterLoopSurface:
             "apps.analytics.services.infinity_orchestrator.execute",
             return_value={
                 "score": {
-                    "user_id": "u1",
+                    "user_id": TEST_USER_ID,
                     "master_score": 55.0,
                     "kpis": {},
                     "weights": {},
@@ -506,11 +509,29 @@ class TestScoreRouterLoopSurface:
         })
         assert response.status_code == 401
 
+    def test_feedback_post_rejects_token_for_missing_user(self, client):
+        missing_user_id = uuid.uuid4()
+        headers = {
+            "Authorization": f"Bearer {create_access_token({'sub': str(missing_user_id), 'email': 'missing-score@aindy.test'})}"
+        }
+
+        response = client.post(
+            "/scores/feedback",
+            headers=headers,
+            json={
+                "source_type": "arm",
+                "source_id": "analysis-1",
+                "feedback_value": 1,
+            },
+        )
+
+        assert response.status_code == 401
+
     def test_feedback_get_requires_auth(self, client):
         response = client.get("/scores/feedback")
         assert response.status_code == 401
 
-    def test_feedback_post_writes_row(self, client, auth_headers, db_session, test_user):
+    def test_feedback_post_writes_row(self, client, auth_headers, testing_session_factory, test_user):
         from apps.automation.models import UserFeedback
 
         response = client.post(
@@ -523,11 +544,15 @@ class TestScoreRouterLoopSurface:
             },
         )
         assert response.status_code == 200
-        feedback = db_session.query(UserFeedback).filter(UserFeedback.user_id == test_user.id).first()
-        assert feedback is not None
-        assert feedback.source_type == "arm"
-        assert feedback.source_id == "analysis-1"
-        assert feedback.feedback_value == 1
+        db = testing_session_factory()
+        try:
+            feedback = db.query(UserFeedback).filter(UserFeedback.user_id == test_user.id).first()
+            assert feedback is not None
+            assert feedback.source_type == "arm"
+            assert feedback.source_id == "analysis-1"
+            assert feedback.feedback_value == 1
+        finally:
+            db.close()
 
     def test_feedback_get_returns_history(self, client, auth_headers, db_session, test_user):
         from apps.automation.models import UserFeedback
@@ -550,9 +575,10 @@ class TestScoreRouterLoopSurface:
         data = payload.get("data", payload)
         assert data["count"] == 1
 
-    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, db_session, test_user):
+    def test_feedback_post_marks_adjustment_evaluated(self, client, auth_headers, testing_session_factory, test_user):
         from apps.automation.models import LoopAdjustment
 
+        db = testing_session_factory()
         adjustment = LoopAdjustment(
             id=uuid.uuid4(),
             user_id=test_user.id,
@@ -560,21 +586,24 @@ class TestScoreRouterLoopSurface:
             decision_type="review_plan",
             adjustment_payload={"next_action": {"type": "review_plan"}},
         )
-        db_session.add(adjustment)
-        db_session.commit()
+        db.add(adjustment)
+        db.commit()
 
-        response = client.post(
-            "/scores/feedback",
-            headers=auth_headers,
-            json={
-                "source_type": "manual",
-                "feedback_value": 1,
-                "loop_adjustment_id": str(adjustment.id),
-            },
-        )
-        assert response.status_code == 200
-        db_session.refresh(adjustment)
-        assert adjustment.evaluated_at is not None
+        try:
+            response = client.post(
+                "/scores/feedback",
+                headers=auth_headers,
+                json={
+                    "source_type": "manual",
+                    "feedback_value": 1,
+                    "loop_adjustment_id": str(adjustment.id),
+                },
+            )
+            assert response.status_code == 200
+            db.refresh(adjustment)
+            assert adjustment.evaluated_at is not None
+        finally:
+            db.close()
 
     def test_feedback_post_rejects_invalid_value(self, client, auth_headers):
         response = client.post(
@@ -659,7 +688,7 @@ class TestInfinityOrchestrator:
             },
         )
 
-        result = execute("u1", "manual", MagicMock())
+        result = execute(TEST_USER_ID, "manual", MagicMock())
         assert "score" in result
         assert "adjustment" in result
         assert result["next_action"]["type"] == "continue_highest_priority_task"
@@ -698,7 +727,7 @@ class TestInfinityOrchestrator:
         )
 
         with pytest.raises(RuntimeError):
-            execute("u1", "manual", MagicMock())
+            execute(TEST_USER_ID, "manual", MagicMock())
 
 
 class TestFrontendLoopSurfaces:

@@ -1,4 +1,4 @@
-def test_research_query_uses_ai_analyze(monkeypatch):
+def test_research_query_uses_ai_analyze(monkeypatch, persisted_user):
     from apps.search.routes.research_results_router import run_research_query
     from apps.search.schemas.research_results_schema import ResearchResultCreate
 
@@ -43,7 +43,7 @@ def test_research_query_uses_ai_analyze(monkeypatch):
     result = run_research_query(
         request=ResearchResultCreate(query="test", summary="fallback"),
         db=_DB(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000001"},
+        current_user={"sub": str(persisted_user.id)},
     )
     assert result["summary"] == "Summarized content"
     assert "search_score" in result

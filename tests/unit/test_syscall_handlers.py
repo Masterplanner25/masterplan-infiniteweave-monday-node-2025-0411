@@ -242,6 +242,80 @@ class TestTaskHandlers:
 
         assert result["task_pause_result"]["message"] == "Task paused"
 
+    def test_task_get_ignores_payload_user_id(self):
+        from apps.tasks.syscalls.syscall_handlers import _handle_task_get
+
+        mock_db = MagicMock()
+        mock_task = MagicMock()
+        mock_task.id = 1
+        mock_task.name = "Scoped task"
+        mock_task.status = "active"
+        mock_task.priority = "medium"
+        mock_task.masterplan_id = None
+        mock_task.automation_type = None
+        mock_task.automation_config = None
+        mock_task.end_time = None
+        mock_service = MagicMock(get_task_by_id=MagicMock(return_value=mock_task))
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.tasks.services.task_service": mock_service,
+        }):
+            _handle_task_get(
+                {"task_id": 1, "user_id": "00000000-0000-0000-0000-000000000001"},
+                _ctx(metadata={"_db": mock_db}),
+            )
+
+        assert str(mock_service.get_task_by_id.call_args.args[2]) == _TEST_UUID
+
+    def test_task_queue_automation_ignores_payload_user_id(self):
+        from apps.tasks.syscalls.syscall_handlers import _handle_task_queue_automation
+
+        mock_db = MagicMock()
+        mock_task = MagicMock()
+        mock_task.automation_type = "watcher"
+        mock_task.automation_config = {"x": 1}
+        mock_service = MagicMock(
+            get_task_by_id=MagicMock(return_value=mock_task),
+            queue_task_automation=MagicMock(return_value={"queued": True}),
+        )
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.tasks.services.task_service": mock_service,
+        }):
+            _handle_task_queue_automation(
+                {"task_id": 1, "user_id": "00000000-0000-0000-0000-000000000001"},
+                _ctx(metadata={"_db": mock_db}),
+            )
+
+        assert str(mock_service.get_task_by_id.call_args.args[2]) == _TEST_UUID
+        assert str(mock_service.queue_task_automation.call_args.kwargs["user_id"]) == _TEST_UUID
+
+    def test_task_get_user_tasks_ignores_payload_user_id(self):
+        from apps.tasks.syscalls.syscall_handlers import _handle_task_get_user_tasks
+
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_filter = MagicMock()
+        mock_filter.all.return_value = []
+        mock_query.filter.return_value = mock_filter
+        mock_db.query.return_value = mock_query
+        mock_task_model = MagicMock()
+        mock_task_service = MagicMock(_user_uuid=MagicMock(side_effect=lambda value: value))
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.tasks.models": MagicMock(Task=mock_task_model),
+            "apps.tasks.services.task_service": mock_task_service,
+        }):
+            _handle_task_get_user_tasks(
+                {"user_id": "00000000-0000-0000-0000-000000000001"},
+                _ctx(metadata={"_db": mock_db}),
+            )
+
+        assert str(mock_task_service._user_uuid.call_args.args[0]) == _TEST_UUID
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # C: leadgen domain handlers
@@ -593,6 +667,33 @@ class TestScoreHandlers:
         assert result["score_feedback_result"]["id"] == "fb-123"
         mock_db.add.assert_called_once_with(mock_feedback_obj)
         mock_db.commit.assert_called_once()
+        assert str(mock_user_feedback_cls.call_args.kwargs["user_id"]) == _TEST_UUID
+
+    def test_score_feedback_ignores_payload_user_id(self):
+        from AINDY.kernel.syscall_handlers import _handle_score_feedback
+
+        mock_feedback_obj = MagicMock()
+        mock_feedback_obj.id = "fb-123"
+        mock_db = MagicMock()
+        mock_user_feedback_cls = MagicMock(return_value=mock_feedback_obj)
+        mock_infinity_loop = MagicMock(UserFeedback=mock_user_feedback_cls, LoopAdjustment=MagicMock())
+
+        with patch.dict("sys.modules", {
+            "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "db.models.infinity_loop": mock_infinity_loop,
+            "apps.automation.models": mock_infinity_loop,
+        }):
+            _handle_score_feedback(
+                {
+                    "source_type": "manual",
+                    "feedback_value": 1.0,
+                    "user_id": "00000000-0000-0000-0000-000000000001",
+                },
+                _ctx(user_id=_TEST_UUID),
+            )
+
+        assert str(mock_user_feedback_cls.call_args.kwargs["user_id"]) == _TEST_UUID
 
     def test_score_feedback_rolls_back_on_error(self):
         from AINDY.kernel.syscall_handlers import _handle_score_feedback
@@ -639,10 +740,10 @@ class TestWatcherHandlers:
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock()
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         sig = self._valid_signal()
@@ -653,7 +754,7 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             with pytest.raises(ValueError, match="unknown signal_type"):
                 _handle_watcher_ingest({"signals": [sig]}, _ctx())
@@ -664,10 +765,10 @@ class TestWatcherHandlers:
         mock_db = MagicMock()
         mock_row = MagicMock()
         mock_watcher_signal_mod = MagicMock(WatcherSignal=MagicMock(return_value=mock_row))
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         with patch.dict("sys.modules", {
@@ -675,23 +776,25 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [self._valid_signal()]}, _ctx())
 
         assert result["watcher_ingest_result"]["accepted"] == 1
+        assert result["watcher_batch_user_id"] == _TEST_UUID
         mock_db.add.assert_called_once()
         mock_db.commit.assert_called_once()
+        assert str(mock_watcher_signal_mod.WatcherSignal.call_args.kwargs["user_id"]) == _TEST_UUID
 
     def test_watcher_ingest_counts_session_ended(self):
         from AINDY.kernel.syscall_handlers import _handle_watcher_ingest
 
         mock_db = MagicMock()
         mock_watcher_signal_mod = MagicMock(WatcherSignal=MagicMock(return_value=MagicMock()))
-        mock_watcher_constants = MagicMock(
-            _VALID_SIGNAL_TYPES={"app_focused", "session_ended"},
-            _VALID_ACTIVITY_TYPES={"coding"},
-            _parse_timestamp=MagicMock(return_value=None),
+        mock_watcher_contract = MagicMock(
+            get_valid_signal_types=MagicMock(return_value={"app_focused", "session_ended"}),
+            get_valid_activity_types=MagicMock(return_value={"coding"}),
+            parse_signal_timestamp=MagicMock(return_value=None),
         )
 
         sig1 = self._valid_signal()
@@ -702,7 +805,7 @@ class TestWatcherHandlers:
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
             "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.watcher.constants": mock_watcher_constants,
+            "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [sig1, sig2]}, _ctx())
 

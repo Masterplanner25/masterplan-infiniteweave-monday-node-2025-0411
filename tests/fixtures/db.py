@@ -6,12 +6,12 @@ from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy.exc import OperationalError
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy import types as sqltypes
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PG_UUID
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 from pgvector.sqlalchemy import Vector
 
 
@@ -51,7 +51,24 @@ def test_engine():
     _import_model_registry()
 
     if os.environ.get("AINDY_TEST_DB") == "postgres":
-        engine = create_engine(os.environ["DATABASE_URL"])
+        engine = create_engine(
+            os.environ["DATABASE_URL"],
+            poolclass=NullPool,
+            connect_args={
+                "connect_timeout": 10,
+                "options": "-c statement_timeout=10000 -c idle_in_transaction_session_timeout=10000",
+            },
+        )
+
+        @event.listens_for(engine, "connect")
+        def _set_postgres_test_guards(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("SET TIME ZONE 'UTC';")
+                cursor.execute("SET statement_timeout = '10s';")
+                cursor.execute("SET idle_in_transaction_session_timeout = '10s';")
+            finally:
+                cursor.close()
     else:
         engine = create_engine(
             "sqlite://",
@@ -94,6 +111,9 @@ def db_connection(test_engine):
     connection = test_engine.connect()
     transaction = connection.begin()
     try:
+        if connection.dialect.name == "postgresql":
+            connection.execute(text("SET statement_timeout = '10s'"))
+            connection.execute(text("SET idle_in_transaction_session_timeout = '10s'"))
         yield connection
     finally:
         transaction.rollback()

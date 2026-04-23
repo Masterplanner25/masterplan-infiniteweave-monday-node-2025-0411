@@ -1,137 +1,134 @@
 # SYSTEM_SPEC
 
-This document is the current architectural specification for the A.I.N.D.Y. repository.
+This document is the current high-level architectural specification for the repository.
 
-## 1. System Purpose
-- A.I.N.D.Y. is a FastAPI-based backend for task execution, planning, memory persistence, scoring, agent execution, ARM analysis, RippleTrace analytics, and social/network integrations.
-- The system is a monolith with multiple domains sharing one runtime and one deployment unit.
+It is intentionally conservative. It describes what the codebase is today, not what it may become after further boundary cleanup.
+
+## 1. System purpose
+
+- A.I.N.D.Y. is a FastAPI-based runtime and application platform.
+- It provides memory operations, flow execution, Nodus execution, scheduling, agent execution, observability, and domain application orchestration.
+- The repository is a modular monolith: multiple domain apps share one runtime and one deployment unit.
 - Primary backend entry point: `AINDY/main.py`.
 
-## 2. Top-Level Architecture
+## 2. Top-level repository shape
+
 ```text
-React/Vite client (client/)
+client/              React/Vite frontend
+server.js            Optional Node gateway/bridge
+
+AINDY/               Runtime, platform, routes, worker, memory, agents
+apps/                Domain apps registered into the runtime
+alembic/             PostgreSQL schema migrations
+tests/               Unit, API, and system coverage
+docs/                Engineering and operator documentation
+```
+
+## 3. Runtime shape
+
+```text
+React/Vite client
         |
         v
-Node gateway (server.js) [optional]
-        |
-        v
-FastAPI app (main.py)
+FastAPI app (AINDY/main.py)
   - lifespan startup/shutdown
-  - ~30 routers by default, plus optional legacy surface routing
-  - JWT auth, API key auth, rate limiting
-  - request metrics + structured error handlers
+  - router registration
+  - auth, rate limiting, health/readiness
         |
-        +--> routes/*
-        |     - task
-        |     - memory
-        |     - genesis
-        |     - watcher
-        |     - ARM
-        |     - analytics / rippletrace / dashboard
-        |     - legacy compatibility surface
+        +--> AINDY/platform_layer/*
+        |     runtime-owned interfaces, registry, health, scheduler services
         |
-        +--> core/*, runtime/*, platform_layer/*, agents/*, apps/* or AINDY/platform_layer/*
-        |     - route execution pipeline and envelopes
-        |     - flow engine and Nodus runtime integration
-        |     - scheduler / async jobs / external-call instrumentation
-        |     - agent runtime and coordination
-        |     - domain orchestration and memory-facing services
+        +--> AINDY/runtime/*, AINDY/kernel/*, AINDY/core/*
+        |     flow engine, execution, event bus, waits, retries, worker queue
         |
-        +--> data layer
-              - PostgreSQL via SQLAlchemy/Alembic
-              - MongoDB for social-layer documents
-              - optional Redis cache
+        +--> apps/*
+        |     domain apps bootstrapped into the runtime
+        |
+        +--> AINDY/db/*
+              PostgreSQL models/DAO/migrations integration
+              Mongo integration for Mongo-backed features
 ```
 
-## 3. Runtime Model
-- `main.py` owns app bootstrapping, middleware, lifespan, and root route only.
-- Routers are registered from `routes/__init__.py`.
-- Background scheduling is lease-gated and APScheduler-backed.
-- Canonical execution flows are registered at startup via `runtime.flow_definitions.register_all_flows()`.
-- Compatibility routes that used to live directly in `main.py` now live in `routes/legacy_surface_router.py`.
+Notes:
+- `server.js` is optional and not the core backend entry point.
+- `apps/` is not a separate deployment layer; it is domain code inside the monolith.
+- Runtime/platform boundaries have been tightened in several areas, but the system is still in transition rather than fully "clean platform / clean apps".
 
-## 4. Core Execution Layers
-- API layer: `routes/*`
-- Route execution pipeline: `core/execution_pipeline.py`, `core/execution_helper.py`
-- Orchestration layer: `apps/* or AINDY/platform_layer/*`, `platform_layer/*`, `agents/*`
-- Flow execution layer: `runtime/flow_engine.py`
-- Agent runtime: `agents/agent_runtime.py`, `runtime/nodus_adapter.py`
-- Memory runtime: `runtime/memory/*`
-- Scheduler / external-call instrumentation: `platform_layer/scheduler_service.py`, `platform_layer/external_call_service.py`
-- Data layer: `db/models/*`, `db/dao/*`, Alembic migrations
+## 4. App/platform relationship
 
-## 5. Data Systems
-- Primary DB: PostgreSQL
-- Social/document DB: MongoDB
-- Cache: in-memory by default, Redis optionally
-- User ownership is now UUID-based and enforced across normalized tables.
+Current contract:
+- `AINDY/` owns runtime and platform concerns.
+- `apps/` owns domain behavior and registers routers, jobs, flows, handlers, and bootstrap metadata into runtime-owned interfaces.
+- `apps/bootstrap.py` resolves app bootstrap order and publishes degraded-domain state into runtime-owned registry state.
 
-## 6. Execution Contract
-Canonical execution shape:
+This means:
+- domains are modular in code organization
+- they are not independently deployable services
+- cross-domain interaction still exists and is allowed inside the monolith, but it should go through explicit contracts where possible
 
-`Input -> Execution -> Persist -> Orchestrator -> Observability`
+## 5. Core execution layers
 
-The codebase now documents this contract in:
-- `docs/architecture/EXECUTION_CONTRACT.md`
-- `docs/architecture/EXECUTION_AUDIT.md`
+- API layer: `AINDY/routes/*`
+- Route execution pipeline: `AINDY/core/execution_pipeline.py`, `AINDY/core/execution_helper.py`
+- Runtime/platform layer: `AINDY/platform_layer/*`
+- Flow execution layer: `AINDY/runtime/*`, `AINDY/kernel/*`
+- Agent runtime: `AINDY/agents/*`
+- Domain applications: `apps/*`
+- Data layer: `AINDY/db/*`, Alembic migrations
 
-Standard execution output shape for canonical execution surfaces:
-```json
-{
-  "status": "...",
-  "data": "...",
-  "result": "...",
-  "events": [...],
-  "next_action": "...",
-  "trace_id": "..."
-}
-```
+## 6. Data systems
 
-System-wide activity ledger:
-- `SystemEvent` is the canonical durable record for core execution and observability activity, while some subsystems still retain domain-specific durable records such as agent events, flow history, and automation logs.
-- `SystemEvent` now carries `trace_id`, `parent_event_id`, and `source`, allowing causal reconstruction across core execution paths.
-- RippleTrace now structures execution causality on top of `SystemEvent` through `ripple_edges`, including event-to-event and event-to-memory links.
-- Core execution paths emit required lifecycle events. Route-layer execution is now split between the newer fail-open route pipeline in `core/execution_pipeline.py` and older service-level wrappers/canonical envelopes, so execution normalization is stronger but still not perfectly single-path across the repo.
-- Successful health, auth, and async heavy-execution paths now emit durable success events in addition to core flow execution paths.
-- External interactions now also emit required lifecycle events through `platform_layer/external_call_service.py`.
-- Required outbound event types:
-  - `external.call.started`
-  - `external.call.completed`
-  - `external.call.failed`
-  - `error.external_call`
+- Primary system of record: PostgreSQL
+- Secondary document store: MongoDB for Mongo-backed feature surfaces
+- Redis: required for distributed execution, event-bus behavior, shared production cache semantics, and limited multi-instance deployment
+- Some caches and operational state remain process-local unless explicitly backed by Redis or DB persistence
 
-## 7. Memory and Agentics
-- Memory APIs are split between legacy bridge compatibility (`/bridge/*`) and canonical memory APIs (`/memory/*`).
-- Memory nodes can now store causal execution context (`source_event_id`, `root_event_id`, `causal_depth`, `impact_score`, `memory_type`) in addition to content, embeddings, and feedback metadata.
-- High-impact execution outcomes (`execution.completed`, `execution.failed`, `capability.denied`) can now auto-materialize into Memory Bridge records through the `SystemEvent` path.
-- Agent execution is implemented, persisted, and observable; it is no longer a future-only concept.
-- Flow runs, agent runs, steps, and events are persisted and replayable to a meaningful degree.
-- Agent execution is now fail-closed on missing scoped capability tokens; an approved run without `capability_token` does not execute.
-- `/memory/nodus/execute` is no longer an unrestricted host embedding path. It is now route-gated by source validation, operation allowlists, and optional scoped capability enforcement for write-capable operations.
-- Agent execution now receives pre-run memory context shaped into `similar_past_outcomes`, `relevant_failures`, and `successful_patterns`.
+## 7. Startup and runtime behavior
 
-## 8. RippleTrace
-- RippleTrace includes both canonical `/rippletrace/*` routes and a restored compatibility surface for older dashboard/graph endpoints.
-- Graph and narrative endpoints such as `/influence_graph`, `/causal_graph`, and `/narrative/{drop_point_id}` are now served through `routes/legacy_surface_router.py`.
-- Execution-side RippleTrace is now also represented in `routes/observability_router.py` via trace-graph APIs backed by `SystemEvent` + `ripple_edges`.
+Current startup behavior includes:
+- runtime state reset and startup contract publication
+- secret/config guards
+- Redis/event-bus production guards where required
+- schema enforcement
+- queue backend validation
+- scheduler lease/leadership behavior
+- flow and node registration
+- dynamic registry restore
+- event-bus subscriber startup
+- waiting execution rehydration
+- degraded peripheral-domain reporting
 
-## 9. Invariants
-- PostgreSQL is required for primary app state.
-- JWT/API-key guards remain mandatory on protected routes.
-- Schema drift can block startup.
-- Scheduler leadership is single-instance.
-- Background lease timestamps are compared and persisted as timezone-aware UTC values in the lease path.
-- Canonical execution responses should be traceable and structured.
-- A `trace_id` should be present on all major route responses. Auth, analytics, ARM, main-calculation, and memory routes now also enter the shared route execution pipeline, though some non-target route groups still return raw JSON outside that path.
-- Agent/tool execution must be capability-scoped.
-- Silent `except ...: pass` behavior is not allowed in production execution paths.
-- External calls are not allowed to bypass `SystemEvent` emission.
-- Failure to emit a required `SystemEvent` is execution-fatal for the calling external interaction.
+See:
+- [Runtime Behavior](../runtime/RUNTIME_BEHAVIOR.md)
+- [Deployment Model](../deployment/DEPLOYMENT_MODEL.md)
 
-## 10. Known Architectural Constraints
-- The backend remains a monolith.
-- Some domains still rely on synchronous external model calls.
-- Mongo side effects are not coordinated with Postgres through an outbox/event bus.
-- Legacy compatibility routes preserve old clients, but they also preserve historical surface area.
-- Watcher signal delivery is background-threaded and retrying; required outbound event emission fails the send attempt, but the emitter still follows its retry/drop policy instead of crashing the producer path.
+## 8. Deployment model
 
+Supported today:
+- single-instance deployment
+- limited multi-instance deployment with Redis and explicit worker processes
+
+Not supported as a clean service mesh or microservice platform:
+- independently deployed domain apps
+- arbitrary multi-instance scale without Redis-backed coordination
+- assuming every runtime invariant is globally coordinated across instances
+
+## 9. Current architectural invariants
+
+- PostgreSQL is required for primary runtime/app state.
+- Scheduler leadership is single-instance through the lease path.
+- Distributed execution requires Redis and healthy workers.
+- Readiness is expected to reflect required runtime dependencies, not just process liveness.
+- Peripheral-domain degraded startup is allowed in some cases; core-domain bootstrap failure is not.
+- Runtime-owned code should not depend directly on app-private bootstrap state.
+- New client and backend surfaces should prefer explicit ownership boundaries over compatibility shortcuts.
+
+## 10. Current constraints and transitional areas
+
+- The backend remains one monolith.
+- Some legacy routes and mixed ownership surfaces still exist for compatibility.
+- Some process-local state remains acceptable today but is not ideal for full horizontal scale.
+- Some external-provider and mixed-datastore behaviors remain operationally constrained.
+- Frontend API ownership is clearer than before, but some backend route ownership is still historically mixed.
+
+Those are transitional constraints, not reasons to describe the system as cleaner than it is.
