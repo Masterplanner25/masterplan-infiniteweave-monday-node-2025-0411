@@ -12,7 +12,7 @@ import {
   formatDateTime,
   surfacePalette,
 } from "./SurfacePrimitives";
-import { getRippleTraceGraph } from "../../api";
+import { getRippleTraceGraph } from "../../api/rippletrace.js";
 import { safeMap } from "../../utils/safe";
 
 function nodeTone(node) {

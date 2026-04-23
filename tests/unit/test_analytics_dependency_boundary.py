@@ -42,9 +42,12 @@ def test_orchestrator_execute_preserves_representative_output(monkeypatch):
     from apps.analytics.services import infinity_orchestrator as orchestrator
 
     captured_events = []
+    captured_release = []
 
     monkeypatch.setattr(orchestrator, "emit_system_event", lambda **kwargs: captured_events.append(kwargs))
     monkeypatch.setattr(orchestrator, "acquire_execution_lease", lambda *args, **kwargs: True)
+    monkeypatch.setattr("apps.analytics.services.concurrency.LeaseHeartbeat", type("HB", (), {"__init__": lambda self, *a, **k: None, "start": lambda self: None, "stop": lambda self: None}))
+    monkeypatch.setattr("apps.analytics.services.concurrency.release_execution_lease", lambda *args, **kwargs: captured_release.append((args, kwargs)))
     monkeypatch.setattr(orchestrator, "get_recent_memory", lambda *args, **kwargs: [{"id": "m1"}, {"id": "m2"}])
     monkeypatch.setattr(orchestrator, "get_user_metrics", lambda *args, **kwargs: {"velocity": 3})
     monkeypatch.setattr(orchestrator, "get_relevant_memories", lambda *args, **kwargs: [{"type": "success"}])
@@ -103,6 +106,7 @@ def test_orchestrator_execute_preserves_representative_output(monkeypatch):
     assert result["next_action"]["type"] == "continue_highest_priority_task"
     assert result["adjustment"]["id"] == "adj-1"
     assert [event["event_type"] for event in captured_events] == ["loop.started", "loop.decision"]
+    assert len(captured_release) == 1
 
 
 def test_orchestrator_optional_domain_reads_degrade_gracefully(monkeypatch):
@@ -112,6 +116,8 @@ def test_orchestrator_optional_domain_reads_degrade_gracefully(monkeypatch):
 
     monkeypatch.setattr(orchestrator, "emit_system_event", lambda **kwargs: None)
     monkeypatch.setattr(orchestrator, "acquire_execution_lease", lambda *args, **kwargs: True)
+    monkeypatch.setattr("apps.analytics.services.concurrency.LeaseHeartbeat", type("HB", (), {"__init__": lambda self, *a, **k: None, "start": lambda self: None, "stop": lambda self: None}))
+    monkeypatch.setattr("apps.analytics.services.concurrency.release_execution_lease", lambda *args, **kwargs: None)
     monkeypatch.setattr(orchestrator, "get_recent_memory", lambda *args, **kwargs: [])
     monkeypatch.setattr(orchestrator, "get_user_metrics", lambda *args, **kwargs: {})
     monkeypatch.setattr(orchestrator, "get_relevant_memories", lambda *args, **kwargs: [])

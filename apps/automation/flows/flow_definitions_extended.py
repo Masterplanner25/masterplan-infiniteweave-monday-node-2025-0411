@@ -10,12 +10,24 @@ Injection contract: the runtime shim may inject FLOW_REGISTRY and register_flow
 into this module's globals for testing. Both helpers check globals() first so
 the injected values are propagated to flow_helpers and all sub-modules.
 """
+from __future__ import annotations
+
 import importlib
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Cross-domain modules: failures are isolated — one bad domain does not abort others.
+_RUNTIME_FLOW_MODULES = [
+    "AINDY.runtime.flow_definitions_memory",
+    "AINDY.runtime.flow_definitions_engine",
+    "AINDY.runtime.flow_definitions_observability",
+]
+
+_AUTOMATION_DOMAIN_FLOW_MODULES = [
+    "apps.automation.flows.automation_system_flows",
+    "apps.automation.flows.dashboard_autonomy_flows",
+]
+
 _CROSS_DOMAIN_FLOW_MODULES = [
     "apps.arm.flows.arm_flows",
     "apps.analytics.flows.analytics_flows",
@@ -26,82 +38,86 @@ _CROSS_DOMAIN_FLOW_MODULES = [
     "apps.tasks.flows.tasks_flows",
 ]
 
-# Intra-domain modules within apps.automation.
-_INTRA_DOMAIN_FLOW_MODULES = [
-    "apps.automation.flows.memory_flows",
-    "apps.automation.flows.flow_engine_flows",
-    "apps.automation.flows.automation_system_flows",
-    "apps.automation.flows.observability_flows",
-    "apps.automation.flows.dashboard_autonomy_flows",
-]
-
 
 def register_extended_flows() -> None:
-    _register_intra_domain_flows()
+    _register_runtime_flow_modules()
+    _register_automation_domain_flows()
     _register_cross_domain_flows()
 
 
-def _register_intra_domain_flows() -> None:
-    from AINDY.platform_layer.registry import register_symbols
+def _resolve_registry_bindings():
     from AINDY.runtime.flow_engine import FLOW_REGISTRY as _default_registry
     from AINDY.runtime.flow_engine import register_flow as _default_register_flow
-    from AINDY.runtime import flow_helpers
 
-    # Prefer values injected into this module's globals by the runtime shim (used in
-    # tests). Fall back to the canonical imports when no injection is active or when
-    # the shim has restored None after a test (its cleanup sets the key to None when
-    # the key was absent before injection, so we must treat None as "not injected").
     _g = globals()
     _injected_registry = _g.get("FLOW_REGISTRY")
-    FLOW_REGISTRY = _injected_registry if _injected_registry is not None else _default_registry
+    flow_registry = _injected_registry if _injected_registry is not None else _default_registry
     _injected_flow = _g.get("register_flow")
-    _register_flow = _injected_flow if _injected_flow is not None else _default_register_flow
+    register_flow = _injected_flow if _injected_flow is not None else _default_register_flow
+    return flow_registry, register_flow
 
-    automation_flows = importlib.import_module("apps.automation.flows.automation_flows")
-    intra_modules = [importlib.import_module(p) for p in _INTRA_DOMAIN_FLOW_MODULES]
 
-    # Inject registry references so intra-domain modules share the same objects.
-    flow_helpers.FLOW_REGISTRY = FLOW_REGISTRY
-    flow_helpers.register_flow = _register_flow
-    automation_flows.FLOW_REGISTRY = FLOW_REGISTRY
-    automation_flows.register_flow = _register_flow
-    for mod in intra_modules:
-        mod.FLOW_REGISTRY = FLOW_REGISTRY
-        mod.register_flow = _register_flow
+def _register_runtime_flow_modules() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from AINDY.runtime import flow_helpers
 
-    # Register all public symbols so they're discoverable via the runtime shim.
-    all_intra = [flow_helpers, automation_flows, *intra_modules]
+    flow_registry, register_flow = _resolve_registry_bindings()
+    runtime_modules = [importlib.import_module(path) for path in _RUNTIME_FLOW_MODULES]
+
+    flow_helpers.FLOW_REGISTRY = flow_registry
+    flow_helpers.register_flow = register_flow
+    for mod in runtime_modules:
+        mod.FLOW_REGISTRY = flow_registry
+        mod.register_flow = register_flow
+
     register_symbols(
         {
             name: value
-            for mod in all_intra
+            for mod in [flow_helpers, *runtime_modules]
             for name, value in vars(mod).items()
             if not name.startswith("__")
         }
     )
 
-    if hasattr(automation_flows, "register"):
-        automation_flows.register()
+    for mod in runtime_modules:
+        if hasattr(mod, "register"):
+            mod.register()
+
+
+def _register_automation_domain_flows() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+
+    flow_registry, register_flow = _resolve_registry_bindings()
+    automation_modules = [importlib.import_module(path) for path in _AUTOMATION_DOMAIN_FLOW_MODULES]
+
+    for mod in automation_modules:
+        mod.FLOW_REGISTRY = flow_registry
+        mod.register_flow = register_flow
+
+    register_symbols(
+        {
+            name: value
+            for mod in automation_modules
+            for name, value in vars(mod).items()
+            if not name.startswith("__")
+        }
+    )
+
+    for mod in automation_modules:
+        if hasattr(mod, "register"):
+            mod.register()
 
 
 def _register_cross_domain_flows() -> None:
     from AINDY.platform_layer.registry import register_symbols
-    from AINDY.runtime.flow_engine import FLOW_REGISTRY as _default_registry
-    from AINDY.runtime.flow_engine import register_flow as _default_register_flow
 
-    _g = globals()
-    _injected_registry = _g.get("FLOW_REGISTRY")
-    FLOW_REGISTRY = _injected_registry if _injected_registry is not None else _default_registry
-    _injected_flow = _g.get("register_flow")
-    _register_flow = _injected_flow if _injected_flow is not None else _default_register_flow
+    flow_registry, register_flow = _resolve_registry_bindings()
 
     for module_path in _CROSS_DOMAIN_FLOW_MODULES:
         try:
             mod = importlib.import_module(module_path)
-            # Inject registry references in case the module relies on them being set.
-            mod.FLOW_REGISTRY = FLOW_REGISTRY
-            mod.register_flow = _register_flow
-            # Register module's public symbols so they're discoverable via the runtime shim.
+            mod.FLOW_REGISTRY = flow_registry
+            mod.register_flow = register_flow
             register_symbols(
                 {
                     name: value
@@ -113,7 +129,7 @@ def _register_cross_domain_flows() -> None:
                 mod.register()
             else:
                 logger.warning(
-                    "Flow module %s has no register() function — skipping", module_path
+                    "Flow module %s has no register() function - skipping", module_path
                 )
         except Exception as exc:
             logger.error(

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { getAgentRuns } from "../../api";
+import { getAgentRuns } from "../../api/agent.js";
 import { useAuth } from "../../context/AuthContext";
 import { APPROVAL_EVENT } from "../platform/AgentApprovalInbox";
 

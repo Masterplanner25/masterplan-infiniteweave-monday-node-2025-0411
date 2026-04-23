@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateAttentionValue } from "../../api";
+import { calculateAttentionValue } from "../../api/analytics.js";
 
 export default function AttentionValuePanel() {
   const [contentOutput, setContentOutput] = useState(0);

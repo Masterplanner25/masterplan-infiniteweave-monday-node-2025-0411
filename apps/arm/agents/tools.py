@@ -12,7 +12,7 @@ def register() -> None:
         description="Analyze code or a topic using the ARM reasoning engine",
         capability="tool:arm.analyze",
         required_capability="external_api_call",
-        category="arm",
+        category="analysis",
         egress_scope="external_llm",
     )(arm_analyze)
     register_tool(
@@ -21,7 +21,7 @@ def register() -> None:
         description="Generate or refactor code using the ARM code generation engine",
         capability="tool:arm.generate",
         required_capability="external_api_call",
-        category="arm",
+        category="analysis",
         egress_scope="external_llm",
     )(arm_generate)
 

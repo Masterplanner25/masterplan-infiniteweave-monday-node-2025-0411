@@ -216,15 +216,11 @@ def _execute_webhook_action(payload: dict[str, Any], config: dict[str, Any], *, 
 
 
 def _execute_stripe_action(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "automation_type": "stripe",
-        "status": "stubbed",
-        "action": config.get("action", "payment_trigger"),
-        "customer_email": config.get("customer_email"),
-        "amount": config.get("amount"),
-        "currency": config.get("currency", "usd"),
-        "note": "Stripe trigger is currently a supervised stub and requires provider credentials to go live.",
-    }
+    raise NotImplementedError(
+        "Stripe payment delivery is not yet implemented. "
+        "Set delivery_type to 'email', 'webhook', or 'manual' until Stripe integration is complete. "
+        "See docs/apps/FREELANCING_SYSTEM.md for the integration roadmap."
+    )
 
 
 def _execute_content_generation(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:

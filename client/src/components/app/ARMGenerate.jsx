@@ -1,6 +1,7 @@
 // src/components/ARMGenerate.jsx
 import React, { useState } from "react";
-import { runARMGenerate } from "../../api";import { safeMap } from "../../utils/safe";
+import { runARMGenerate } from "../../api/arm.js";
+import { safeMap } from "../../utils/safe";
 
 const LANGUAGES = ["python", "javascript", "typescript", "jsx", "tsx", "json", "yaml", "markdown"];
 

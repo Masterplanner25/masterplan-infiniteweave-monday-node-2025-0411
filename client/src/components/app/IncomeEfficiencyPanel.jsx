@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { calculateIncomeEfficiency } from "../../api";
+import { calculateIncomeEfficiency } from "../../api/analytics.js";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function IncomeEfficiencyPanel() {
   const [focusedEffort, setFocusedEffort] = useState(0);
@@ -7,6 +9,7 @@ export default function IncomeEfficiencyPanel() {
   const [time, setTime] = useState(0);
   const [capital, setCapital] = useState(0);
   const [result, setResult] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   // --- Internal Styles ---
   const panelStyle = { 
@@ -46,7 +49,7 @@ export default function IncomeEfficiencyPanel() {
       setResult(data);
     } catch (err) {
       console.error("Income Efficiency Error:", err);
-      alert("Calculation failed. Ensure the backend endpoint /income_efficiency exists.");
+      showToast(err?.message || "Calculation failed. Ensure the backend endpoint /income_efficiency exists.");
     }
   };
 
@@ -123,6 +126,7 @@ export default function IncomeEfficiencyPanel() {
           {JSON.stringify(result, null, 2)}
         </pre>
       )}
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>
   );
 }

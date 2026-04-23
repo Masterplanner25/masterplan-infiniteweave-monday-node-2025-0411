@@ -54,6 +54,8 @@ def test_build_nodus_execution_record_normalizes_runtime_metadata():
 def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
     from AINDY.runtime import nodus_execution_service as service
 
+    monkeypatch.setenv("NODUS_SOURCE_PATH", "/tmp/nodus-src")
+
     adapter_instance = MagicMock()
     adapter_instance.run_script.return_value = NodusExecutionResult(
         output_state={"answer": 42},
@@ -122,6 +124,8 @@ def test_execute_nodus_task_payload_delegates_to_runtime_adapter(monkeypatch):
 def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(monkeypatch):
     from AINDY.runtime import nodus_execution_service as service
 
+    monkeypatch.setenv("NODUS_SOURCE_PATH", "/tmp/nodus-src")
+
     monkeypatch.setattr(service, "authorize_nodus_execution", lambda **kwargs: {
         "allowed_operations": ["recall"],
         "required_capabilities": [],
@@ -155,7 +159,7 @@ def test_execute_nodus_task_payload_returns_bridge_ready_when_runtime_missing(mo
         sys.modules.update(_saved)
 
     assert result["status"] == "bridge_ready"
-    assert "Nodus runtime not found" in result["message"]
+    assert "Nodus runtime unavailable" in result["message"]
     assert "POST /memory/recall/v3" in result["available_operations"]
 
 

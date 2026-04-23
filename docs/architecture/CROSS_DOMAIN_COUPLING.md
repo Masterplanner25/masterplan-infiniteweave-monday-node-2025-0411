@@ -151,21 +151,23 @@ not change; only the import timing changes.
 from apps.identity.services.identity_boot_service import get_recent_memory, get_user_metrics
 ```
 
-`apps/identity/services/identity_boot_service.py` imports from `apps.analytics`:
+`apps/identity/services/identity_boot_service.py` no longer imports from
+`apps.analytics`. It resolves the score snapshot at runtime through the
+platform registry:
 ```python
-from apps.analytics.models import UserScore
+from AINDY.platform_layer.registry import get_job
+
+get_snapshot = get_job("analytics.kpi_snapshot")
 ```
 
-This is a **bidirectional dependency**: analytics → identity and identity →
-analytics. It does not currently create a circular import because one direction
-is at module level and the other is inside a function. However, any future
-refactor that makes both directions module-level will deadlock the Python
-import system.
+The remaining runtime direction is analytics → identity via deferred imports
+inside the analytics dependency adapter. That is still coupling, but it is now
+one-way and no longer creates a bidirectional import hazard between the two
+domains.
 
-**Rule**: identity must never become a provider to analytics at module-import
-time. The identity → analytics direction (reading `UserScore`) should use a
-DAO pattern or be replaced by a runtime service call that does not require
-importing the analytics model at identity module load.
+**Rule**: identity must not import analytics internals. Cross-domain score
+reads must go through registry-job dispatch (`get_job("analytics.kpi_snapshot")`)
+or another platform-owned boundary.
 
 ### 2.6 Safe Modification Rules
 
@@ -359,7 +361,7 @@ coupling sites.
 | `analytics/infinity_orchestrator` | `identity`, `masterplan`, `tasks`, `social` | module-level | CASCADE (Prompt 11) |
 | `analytics/infinity_loop` | `tasks`, `masterplan`, `automation.models` | module-level + deferred | CASCADE for module-level |
 | `analytics/routes` | `masterplan.services` | deferred in handler | router_guard violation |
-| `identity/identity_boot_service` | `analytics.models` (UserScore) | module-level | bidirectional risk |
+| `identity/identity_boot_service` | `analytics.kpi_snapshot` job | registry-job dispatch | none |
 | `masterplan/services` | `tasks.models`, `tasks.services` | deferred | acceptable |
 | `masterplan/services` | `automation.models` (AutomationLog) | deferred | acceptable |
 | `automation/flows/automation_flows` | `AINDY.agents.agent_runtime._run_to_dict` | deferred | private API (Prompt 3) |

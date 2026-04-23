@@ -175,7 +175,20 @@ def main() -> int:
     execution_unit_id = str(ctx.get("execution_unit_id") or "")
     filename = str(ctx.get("filename") or f"<nodus:eu:{execution_unit_id}>")
 
-    nodus_path = os.environ.get("NODUS_SOURCE_PATH", r"C:\dev\Coding Language\src")
+    nodus_path = os.environ.get("NODUS_SOURCE_PATH")
+    if not nodus_path:
+        print(
+            json.dumps(
+                {
+                    "status": "failure",
+                    "output_state": {},
+                    "emitted_events": [],
+                    "memory_writes": [],
+                    "error": "NODUS_SOURCE_PATH is not set. Nodus VM cannot be loaded.",
+                }
+            )
+        )
+        sys.exit(1)
     if nodus_path not in sys.path:
         sys.path.insert(0, nodus_path)
 

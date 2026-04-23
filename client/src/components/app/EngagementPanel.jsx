@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateEngagement } from "../../api";
+import { calculateEngagement } from "../../api/analytics.js";
 
 export default function EngagementPanel() {
   const [likes, setLikes] = useState(0);

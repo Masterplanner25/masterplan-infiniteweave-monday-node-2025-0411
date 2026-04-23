@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 
-import { bootIdentity } from "../api";
+import { ApiError, bootIdentity } from "../api";
 import { useAuth } from "./AuthContext";
 
 const SystemContext = createContext(null);
@@ -71,7 +71,7 @@ export function SystemProvider({ children }) {
         error instanceof Error ? error.message : "Failed to boot identity context.";
       setBootError(message);
       setBooted(false);
-      if (String(message).includes("401")) {
+      if (error instanceof ApiError && error.status === 401) {
         logout();
       }
       throw error;

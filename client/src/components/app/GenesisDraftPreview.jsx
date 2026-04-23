@@ -4,7 +4,8 @@
  * Receives a draft object, sessionId, onLock callback from Genesis.jsx.
  */
 import { useState } from "react";
-import { auditGenesisDraft } from "../../api";import { safeMap } from "../../utils/safe";
+import { auditGenesisDraft } from "../../api/masterplan.js";
+import { safeMap } from "../../utils/safe";
 
 const SEVERITY_COLORS = {
   critical: "#f87171",

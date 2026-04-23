@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -86,7 +87,16 @@ def _try_redis_lock(name: str, owner_id: str, ttl_seconds: int) -> bool | None:
         client = _redis.from_url(settings.REDIS_URL, socket_connect_timeout=1)
         lock_key = f"aindy:lease:{name}"
         acquired = client.set(lock_key, owner_id, nx=True, ex=ttl_seconds)
-        return bool(acquired)
+        if acquired:
+            return True
+
+        current_owner = client.get(lock_key)
+        if isinstance(current_owner, bytes):
+            current_owner = current_owner.decode("utf-8", errors="ignore")
+        if current_owner == owner_id:
+            client.expire(lock_key, ttl_seconds)
+            return True
+        return False
     except Exception:
         return None
 
@@ -113,6 +123,94 @@ def _release_redis_lock(name: str, owner_id: str) -> None:
         client.eval(_LUA_RELEASE, 1, lock_key, owner_id)
     except Exception:
         pass
+
+
+def _release_db_lease(
+    db: Session,
+    *,
+    name: str,
+    owner_id: str,
+) -> None:
+    lease = (
+        db.query(BackgroundTaskLease)
+        .filter(
+            BackgroundTaskLease.name == name,
+            BackgroundTaskLease.owner_id == owner_id,
+        )
+        .first()
+    )
+    if lease is None:
+        return
+    db.delete(lease)
+    db.flush()
+
+
+def release_execution_lease(
+    db: Session,
+    *,
+    name: str,
+    owner_id: str,
+) -> None:
+    _release_redis_lock(name, owner_id)
+    try:
+        _release_db_lease(db, name=name, owner_id=owner_id)
+    except Exception:
+        rollback = getattr(db, "rollback", None)
+        if callable(rollback):
+            try:
+                rollback()
+            except Exception:
+                pass
+        raise
+
+
+class LeaseHeartbeat:
+    """Extends a held lease in the background while work is in progress."""
+
+    def __init__(
+        self,
+        db_factory,
+        *,
+        name: str,
+        owner_id: str,
+        ttl_seconds: int,
+        interval_seconds: int = 30,
+    ):
+        self._name = name
+        self._owner_id = owner_id
+        self._ttl_seconds = ttl_seconds
+        self._interval = interval_seconds
+        self._db_factory = db_factory
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self):
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _run(self):
+        while not self._stop.wait(self._interval):
+            try:
+                db = self._db_factory()
+                try:
+                    acquire_execution_lease(
+                        db,
+                        name=self._name,
+                        owner_id=self._owner_id,
+                        ttl_seconds=self._ttl_seconds,
+                    )
+                    commit = getattr(db, "commit", None)
+                    if callable(commit):
+                        commit()
+                finally:
+                    close = getattr(db, "close", None)
+                    if callable(close):
+                        close()
+            except Exception:
+                pass
 
 
 def _acquire_db_lease(

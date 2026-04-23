@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateImpactScore } from "../../api";
+import { calculateImpactScore } from "../../api/analytics.js";
 
 export default function ImpactPanel() {
   const [reach, setReach] = useState(0);

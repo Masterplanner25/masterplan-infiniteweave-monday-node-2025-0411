@@ -8,6 +8,7 @@ from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.services.search_service import (
     analyze_seo_content,
+    execute_durable_search,
     generate_meta as generate_meta_result,
     suggest_seo_improvements,
 )
@@ -15,7 +16,14 @@ from apps.search.services.search_service import (
 router = APIRouter(prefix="/seo", tags=["SEO"], dependencies=[Depends(get_current_user)])
 
 
-def _execute_seo(request: Request, route_name: str, handler, *, db: Session | None = None):
+def _execute_seo(
+    request: Request,
+    route_name: str,
+    handler,
+    *,
+    db: Session | None = None,
+    user_id: str | None = None,
+):
     metadata = {"source": "seo_routes"}
     if db is not None:
         metadata["db"] = db
@@ -23,6 +31,7 @@ def _execute_seo(request: Request, route_name: str, handler, *, db: Session | No
         request=request,
         route_name=route_name,
         handler=handler,
+        user_id=user_id,
         metadata=metadata,
     )
 
@@ -40,8 +49,9 @@ def analyze_seo(
     current_user: dict = Depends(get_current_user),
 ):
     from apps.analytics.services.calculation_services import save_calculation
+    user_id = str(current_user["sub"])
 
-    results = analyze_seo_content(data.text, data.top_n, db=db, user_id=str(current_user["sub"]))
+    results = analyze_seo_content(data.text, data.top_n, db=db, user_id=user_id)
 
     # Save key SEO metrics
     save_calculation(db, "seo_readability", results["readability"])
@@ -55,14 +65,35 @@ def analyze_seo(
 
     def handler(_ctx):
         return results
-    return _execute_seo(request, "seo.analyze", handler, db=db)
+    return _execute_seo(request, "seo.analyze", handler, db=db, user_id=user_id)
 
 @router.post("/meta")
 @limiter.limit("30/minute")
-def generate_meta(request: Request, data: MetaInput):
+def generate_meta(
+    request: Request,
+    data: MetaInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return generate_meta_result(data.text, data.limit)
-    return _execute_seo(request, "seo.meta", handler)
+        def _build(memory: dict):
+            result = generate_meta_result(data.text, data.limit)
+            result["memory"] = memory
+            return result
+
+        return execute_durable_search(
+            db=db,
+            user_id=user_id,
+            query=data.text[:200],
+            search_type="seo_meta",
+            memory_tags=["seo", "search", "meta"],
+            builder=_build,
+            memory_limit=1,
+        )
+
+    return _execute_seo(request, "seo.meta", handler, db=db, user_id=user_id)
 
 
 @router.post("/suggest")
@@ -73,31 +104,71 @@ def suggest_improvements(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return suggest_seo_improvements(data.text, data.top_n, db=db, user_id=str(current_user["sub"]))
-    return _execute_seo(request, "seo.suggest", handler, db=db)
+        return suggest_seo_improvements(data.text, data.top_n, db=db, user_id=user_id)
+
+    return _execute_seo(request, "seo.suggest", handler, db=db, user_id=user_id)
 
 
 @router.post("/analyze_seo/")
 @limiter.limit("30/minute")
-def analyze_seo_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
+def analyze_seo_compat(
+    request: Request,
+    data: LegacyContentInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return analyze_seo_content(data.content, 10, db=db)
-    return _execute_seo(request, "seo.analyze.compat", handler, db=db)
+        return analyze_seo_content(data.content, 10, db=db, user_id=user_id)
+
+    return _execute_seo(request, "seo.analyze.compat", handler, db=db, user_id=user_id)
 
 
 @router.post("/generate_meta/")
 @limiter.limit("30/minute")
-def generate_meta_compat(request: Request, data: LegacyContentInput):
+def generate_meta_compat(
+    request: Request,
+    data: LegacyContentInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return generate_meta_result(data.content, 160)
-    return _execute_seo(request, "seo.meta.compat", handler)
+        def _build(memory: dict):
+            result = generate_meta_result(data.content, 160)
+            result["memory"] = memory
+            return result
+
+        return execute_durable_search(
+            db=db,
+            user_id=user_id,
+            query=data.content[:200],
+            search_type="seo_meta",
+            memory_tags=["seo", "search", "meta"],
+            builder=_build,
+            memory_limit=1,
+        )
+
+    return _execute_seo(request, "seo.meta.compat", handler, db=db, user_id=user_id)
 
 
 @router.post("/suggest_improvements/")
 @limiter.limit("30/minute")
-def suggest_improvements_compat(request: Request, data: LegacyContentInput, db: Session = Depends(get_db)):
+def suggest_improvements_compat(
+    request: Request,
+    data: LegacyContentInput,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
     def handler(_ctx):
-        return suggest_seo_improvements(data.content, db=db)
-    return _execute_seo(request, "seo.suggest.compat", handler, db=db)
+        return suggest_seo_improvements(data.content, db=db, user_id=user_id)
+
+    return _execute_seo(request, "seo.suggest.compat", handler, db=db, user_id=user_id)
 

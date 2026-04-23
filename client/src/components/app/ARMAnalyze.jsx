@@ -1,6 +1,8 @@
 // src/components/ARMAnalyze.jsx
 import React, { useState } from "react";
-import { postScoreFeedback, runARMAnalysis } from "../../api";import { safeMap } from "../../utils/safe";
+import { runARMAnalysis } from "../../api/arm.js";
+import { postScoreFeedback } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 const SEVERITY_COLORS = {
   critical: "#ff4444",

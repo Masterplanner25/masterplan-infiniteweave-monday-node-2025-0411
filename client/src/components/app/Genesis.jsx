@@ -3,7 +3,11 @@ import {
   startGenesisSession,
   sendGenesisMessage,
   synthesizeGenesisDraft,
-  lockMasterPlan } from "../../api";import { safeMap } from "../../utils/safe";
+  lockMasterPlan,
+} from "../../api/masterplan.js";
+import { Toast } from "../shared/Toast";
+import { safeMap } from "../../utils/safe";
+import { useToast } from "../../utils/useToast";
 
 export default function Genesis() {
   const [started, setStarted] = useState(false);
@@ -16,6 +20,7 @@ export default function Genesis() {
   const [draft, setDraft] = useState(null);
   const [locking, setLocking] = useState(false);
   const [lockedPlan, setLockedPlan] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   const bottomRef = useRef(null);
 
@@ -34,7 +39,7 @@ export default function Genesis() {
       );
     } catch (err) {
       console.error("Failed to start session:", err);
-      alert("A.I.N.D.Y. Connection Error: Ensure backend is running and you are logged in.");
+      showToast(err?.message || "A.I.N.D.Y. connection error. Ensure the backend is running and you are logged in.");
     } finally {
       setLoading(false);
     }
@@ -93,7 +98,7 @@ export default function Genesis() {
       );
     } catch (err) {
       console.error(err);
-      alert("Synthesis failed: " + err.message);
+      showToast(err?.message || "Synthesis failed.");
     } finally {
       setSynthesizing(false);
     }
@@ -114,7 +119,7 @@ export default function Genesis() {
       );
     } catch (err) {
       console.error(err);
-      alert("Lock failed: " + err.message);
+      showToast(err?.message || "Lock failed.");
     } finally {
       setLocking(false);
     }
@@ -253,6 +258,7 @@ export default function Genesis() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
       `}</style>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

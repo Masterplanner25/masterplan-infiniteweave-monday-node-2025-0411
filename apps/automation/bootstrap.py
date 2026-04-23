@@ -32,12 +32,7 @@ BOOTSTRAP_DEPENDS_ON: list[str] = [
     "agent",
     "analytics",
     "arm",
-    "autonomy",
-    "dashboard",
-    "freelance",
     "masterplan",
-    "rippletrace",
-    "search",
     "tasks",
 ]
 APP_DEPENDS_ON: list[str] = [

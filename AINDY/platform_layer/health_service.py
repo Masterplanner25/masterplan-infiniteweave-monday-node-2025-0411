@@ -367,6 +367,38 @@ def check_schema() -> DependencyStatus:
                 pass
 
 
+def check_ai_providers() -> DependencyStatus:
+    from AINDY.kernel.circuit_breaker import (
+        CircuitState,
+        get_deepseek_circuit_breaker,
+        get_openai_circuit_breaker,
+    )
+
+    def _summarize(cb) -> dict[str, Any]:
+        state = cb.state
+        result: dict[str, Any] = {
+            "circuit": state.value,
+            "failure_count": cb.failure_count,
+        }
+        if state != CircuitState.CLOSED:
+            opened = cb.opened_at
+            result["opened_at"] = opened.isoformat() if opened else None
+        return result
+
+    openai = _summarize(get_openai_circuit_breaker())
+    deepseek = _summarize(get_deepseek_circuit_breaker())
+    any_open = any(provider["circuit"] == "open" for provider in (openai, deepseek))
+    return DependencyStatus(
+        name="ai_providers",
+        status="degraded" if any_open else "ok",
+        critical=False,
+        metadata={
+            "openai": openai,
+            "deepseek": deepseek,
+        },
+    )
+
+
 def get_system_health(*, force: bool = False) -> SystemHealth:
     global _health_cache, _health_cache_checked_at
 
@@ -382,6 +414,7 @@ def get_system_health(*, force: bool = False) -> SystemHealth:
         check_queue(),
         check_mongo(),
         check_schema(),
+        check_ai_providers(),
     ]
 
     critical_down = any(dep.status == "unavailable" and dep.critical for dep in deps)

@@ -1,6 +1,7 @@
 // src/components/ARMLogs.jsx
 import React, { useEffect, useState } from "react";
-import { getARMLogs } from "../../api";import { safeMap } from "../../utils/safe";
+import { getARMLogs } from "../../api/arm.js";
+import { safeMap } from "../../utils/safe";
 
 function MetricPill({ label, value, color }) {
   return (

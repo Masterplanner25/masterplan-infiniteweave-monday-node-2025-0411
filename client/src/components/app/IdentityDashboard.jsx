@@ -4,7 +4,8 @@ import {
   getIdentityProfile,
   updateIdentityProfile,
   getIdentityEvolution,
-  getIdentityContext } from "../../api";
+  getIdentityContext,
+} from "../../api/identity.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";

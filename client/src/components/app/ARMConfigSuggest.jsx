@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { getARMConfigSuggestions, updateARMConfig } from "../../api";
+import { getARMConfigSuggestions, updateARMConfig } from "../../api/arm.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";

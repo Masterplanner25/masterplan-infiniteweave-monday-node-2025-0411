@@ -13,6 +13,8 @@ def freelance_order_create_node(state, context):
         return {"status": "SUCCESS", "output_patch": {"freelance_order_create_result": {
             "data": FreelanceOrderResponse.model_validate(created).model_dump(mode="json"),
         }}}
+    except ValueError as e:
+        return {"status": "FAILURE", "error": f"HTTP_422:{e}"}
     except Exception as e:
         return {"status": "FAILURE", "error": f"HTTP_500:Failed to create order: {e}"}
 

@@ -14,6 +14,7 @@ def _assert_execution_envelope(payload: dict) -> None:
         "attempt_count",
     ):
         assert key in envelope
+    assert envelope["eu_id"] is not None
     assert envelope["status"] == "SUCCESS"
 
 

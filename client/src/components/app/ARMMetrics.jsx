@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getARMMetrics } from "../../api";
+import { getARMMetrics } from "../../api/arm.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";

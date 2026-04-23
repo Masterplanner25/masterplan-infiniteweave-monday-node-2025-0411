@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { getTasks, createTask, completeTask, startTask } from "../../api";import { safeMap } from "../../utils/safe";
+import { getTasks, createTask, completeTask, startTask } from "../../api/tasks.js";
+import { Toast } from "../shared/Toast";
+import { safeMap } from "../../utils/safe";
+import { useToast } from "../../utils/useToast";
 
 export default function TaskDashboard() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
   const [loading, setLoading] = useState(true);
   const [velocityMessage, setVelocityMessage] = useState("");
+  const { toast, showToast, clearToast } = useToast();
 
   const fetchTasks = async () => {
     try {
@@ -33,7 +37,7 @@ export default function TaskDashboard() {
       setNewTask("");
       fetchTasks();
     } catch (err) {
-      alert("Failed to create task");
+      showToast(err?.message || "Failed to create task. Please try again.");
     }
   };
 
@@ -47,7 +51,7 @@ export default function TaskDashboard() {
       // Clear message after 3s
       setTimeout(() => setVelocityMessage(""), 5000);
     } catch (err) {
-      alert("Failed to complete task");
+      showToast(err?.message || "Failed to complete task. Please try again.");
     }
   };
 
@@ -111,6 +115,7 @@ export default function TaskDashboard() {
         <p style={{ color: "#666", textAlign: "center" }}>No active directives.</p>
         }
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

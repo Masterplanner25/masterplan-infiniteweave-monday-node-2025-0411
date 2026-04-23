@@ -1,4 +1,12 @@
-import { Component } from "react";
+import { Component, Suspense } from "react";
+
+function RouteSpinner() {
+  return (
+    <div className="flex h-full min-h-[200px] items-center justify-center">
+      <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-300" />
+    </div>
+  );
+}
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -37,4 +45,26 @@ export default class ErrorBoundary extends Component {
 
     return this.props.children;
   }
+}
+
+export function RouteErrorBoundary({ children, name }) {
+  return (
+    <ErrorBoundary
+      fallback={
+        <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-zinc-400">
+          <span>{name || "This page"} encountered an error.</span>
+          <button
+            className="ml-2 text-xs text-zinc-500 underline"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      }
+    >
+      <Suspense fallback={<RouteSpinner />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  );
 }

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateRevenueScaling } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateRevenueScaling } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function RevenueScalingPanel() {
   const [aiLeverage, setAiLeverage] = useState(0);

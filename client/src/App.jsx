@@ -1,8 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
-import ErrorBoundary from "./components/shared/ErrorBoundary";
+import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import LoginPage from "./components/shared/LoginPage";
 import RegisterPage from "./pages/Register";
 import { useAuth } from "./context/AuthContext";
@@ -38,14 +38,6 @@ const MemoryBrowser = lazy(() => import("./components/app/MemoryBrowser"));
 const IdentityDashboard = lazy(() => import("./components/app/IdentityDashboard"));
 const AgentRegistry = lazy(() => import("./components/platform/AgentRegistry"));
 
-function PageLoadingSpinner() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#09090b]">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-zinc-300" />
-    </div>
-  );
-}
-
 function ProtectedRoute() {
   const location = useLocation();
   const { isAuthenticated } = useAuth();
@@ -58,18 +50,26 @@ function ProtectedRoute() {
 }
 
 function PlatformRoute() {
-  const location = useLocation();
-  const { isAuthenticated, user } = useAuth();
+  const { isAdmin } = useSystem();
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
-  if (!user?.is_admin) {
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Outlet />;
+  return (
+    <ErrorBoundary
+      fallback={(
+        <div className="p-8 text-sm text-zinc-400">
+          Platform tool encountered an error.{" "}
+          <button className="text-zinc-500 underline" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </div>
+      )}
+    >
+      <Outlet />
+    </ErrorBoundary>
+  );
 }
 
 function BootGate() {
@@ -131,53 +131,57 @@ function AppShell() {
 }
 
 export default function App() {
+  const routeElement = (name, element) => (
+    <RouteErrorBoundary name={name}>
+      {element}
+    </RouteErrorBoundary>
+  );
+
   return (
     <TooltipProvider>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ErrorBoundary>
-          <Suspense fallback={<PageLoadingSpinner />}>
-            <Routes>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route element={<ProtectedRoute />}>
-                <Route element={<BootGate />}>
-                  <Route element={<AppShell />}>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/dashboard/graph" element={<Dashboard />} />
-                    <Route path="/genesis" element={<Genesis />} />
-                    <Route path="/health" element={<HealthDashboard />} />
-                    <Route path="/research" element={<ResearchEngine />} />
-                    <Route path="/seo" element={<AiSeoTool />} />
-                    <Route path="/leadgen" element={<LeadGen />} />
-                    <Route path="/analytics" element={<AnalyticsPanel />} />
-                    <Route path="/freelance/dashboard" element={<FreelanceDashboard />} />
-                    <Route path="/tasks" element={<TaskDashboard />} />
-                    <Route path="/masterplan" element={<MasterPlanDashboard />} />
-                    <Route path="/arm/analyze" element={<ARMAnalyze />} />
-                    <Route path="/arm/generate" element={<ARMGenerate />} />
-                    <Route path="/arm/logs" element={<ARMLogs />} />
-                    <Route path="/arm/config" element={<ARMConfig />} />
-                    <Route path="/network" element={<InfiniteNetwork />} />
-                    <Route path="/network/feed" element={<Feed />} />
-                    <Route path="/social/profile/:username?" element={<ProfileView />} />
-                    <Route path="/memory" element={<MemoryBrowser />} />
-                    <Route path="/identity" element={<IdentityDashboard />} />
-                    <Route path="/agent" element={<AgentConsole />} />
-                    <Route element={<PlatformRoute />}>
-                      <Route path="/console" element={<ExecutionConsole />} />
-                      <Route path="/flow-console" element={<FlowEngineConsole />} />
-                      <Route path="/agents" element={<AgentRegistry />} />
-                      <Route path="/agent/approvals" element={<AgentApprovalInbox />} />
-                      <Route path="/observability" element={<ObservabilityDashboard />} />
-                      <Route path="/rippletrace" element={<RippleTraceViewer />} />
-                    </Route>
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route element={<BootGate />}>
+                <Route element={routeElement("Application Shell", <AppShell />)}>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
+                  <Route path="/dashboard/graph" element={routeElement("Dashboard", <Dashboard />)} />
+                  <Route path="/genesis" element={routeElement("Genesis", <Genesis />)} />
+                  <Route path="/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
+                  <Route path="/research" element={routeElement("Research", <ResearchEngine />)} />
+                  <Route path="/seo" element={routeElement("SEO", <AiSeoTool />)} />
+                  <Route path="/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
+                  <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
+                  <Route path="/freelance/dashboard" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
+                  <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
+                  <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
+                  <Route path="/arm/analyze" element={routeElement("ARM Analyze", <ARMAnalyze />)} />
+                  <Route path="/arm/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
+                  <Route path="/arm/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
+                  <Route path="/arm/config" element={routeElement("ARM Config", <ARMConfig />)} />
+                  <Route path="/network" element={routeElement("Network", <InfiniteNetwork />)} />
+                  <Route path="/network/feed" element={routeElement("Feed", <Feed />)} />
+                  <Route path="/social/profile/:username?" element={routeElement("Profile", <ProfileView />)} />
+                  <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
+                  <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
+                  <Route path="/agent" element={routeElement("Agent Console", <AgentConsole />)} />
+                  <Route element={<PlatformRoute />}>
+                    <Route path="/console" element={routeElement("Execution Console", <ExecutionConsole />)} />
+                    <Route path="/flow-console" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
+                    <Route path="/agents" element={routeElement("Agent Registry", <AgentRegistry />)} />
+                    <Route path="/agent/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
+                    <Route path="/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
+                    <Route path="/rippletrace" element={routeElement("RippleTrace", <RippleTraceViewer />)} />
                   </Route>
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Route>
               </Route>
-            </Routes>
-          </Suspense>
+            </Route>
+          </Routes>
         </ErrorBoundary>
       </BrowserRouter>
     </TooltipProvider>

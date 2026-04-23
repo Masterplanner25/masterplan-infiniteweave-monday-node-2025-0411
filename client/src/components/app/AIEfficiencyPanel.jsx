@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateAiEfficiency } from "../../api";
+import { calculateAiEfficiency } from "../../api/analytics.js";
 
 export default function AIEfficiencyPanel() {
   const [aiContributions, setAiContributions] = useState(0);

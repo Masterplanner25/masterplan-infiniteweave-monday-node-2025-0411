@@ -83,6 +83,8 @@ class TestRegisterAllDomainHandlers:
             "sys.v1.goal.create",
             "sys.v1.research.query",
             "sys.v1.agent.suggest_tools",
+            "sys.v1.authorship.list_authors",
+            "sys.v1.rippletrace.list_recent_pings",
         ]
         for name in expected:
             assert name in SYSCALL_REGISTRY, f"Missing: {name}"
@@ -171,6 +173,106 @@ class TestTaskHandlers:
             result = _handle_task_create({"name": "Review PR"}, _ctx())
 
         assert result["task_name"] == "Review PR"
+
+
+class TestCrossDomainReadHandlers:
+    def test_authorship_list_returns_serialized_authors(self):
+        from AINDY.kernel.syscall_handlers import _handle_authorship_list
+
+        mock_db = MagicMock()
+        author = MagicMock()
+        author.id = "author-1"
+        author.name = "Alice"
+        author.platform = "x"
+        author.last_seen = None
+        author.notes = "active"
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [author]
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.authorship.models": MagicMock(AuthorDB=type("AuthorDB", (), {"user_id": object(), "joined_at": MagicMock(desc=MagicMock(return_value="desc"))})()),
+        }):
+            result = _handle_authorship_list({"user_id": _TEST_UUID, "limit": 5}, _ctx())
+
+        assert result["authors"][0]["id"] == "author-1"
+        assert result["authors"][0]["name"] == "Alice"
+        assert result["authors"][0]["platform"] == "x"
+
+    def test_dispatcher_returns_authorship_data_envelope(self):
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
+
+        mock_db = MagicMock()
+        author = MagicMock()
+        author.id = "author-1"
+        author.name = "Alice"
+        author.platform = "x"
+        author.last_seen = None
+        author.notes = "active"
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [author]
+
+        register_all_domain_handlers()
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.authorship.models": MagicMock(AuthorDB=type("AuthorDB", (), {"user_id": object(), "joined_at": MagicMock(desc=MagicMock(return_value="desc"))})()),
+        }):
+            result = get_dispatcher().dispatch(
+                "sys.v1.authorship.list_authors",
+                {"user_id": _TEST_UUID, "limit": 5},
+                _ctx(capabilities=["authorship.read"]),
+            )
+
+        assert result["status"] == "success"
+        assert result["data"]["authors"][0]["id"] == "author-1"
+
+    def test_rippletrace_list_returns_serialized_pings(self):
+        from AINDY.kernel.syscall_handlers import _handle_rippletrace_list_pings
+
+        mock_db = MagicMock()
+        ping = MagicMock()
+        ping.ping_type = "mention"
+        ping.source_platform = "x"
+        ping.connection_summary = "close"
+        ping.date_detected = None
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [ping]
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.rippletrace.models": MagicMock(PingDB=type("PingDB", (), {"user_id": object(), "date_detected": MagicMock(desc=MagicMock(return_value="desc"))})()),
+        }):
+            result = _handle_rippletrace_list_pings({"user_id": _TEST_UUID, "limit": 5}, _ctx())
+
+        assert result["pings"][0]["ping_type"] == "mention"
+        assert result["pings"][0]["source_platform"] == "x"
+        assert result["pings"][0]["summary"] == "close"
+
+    def test_dispatcher_returns_rippletrace_data_envelope(self):
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
+
+        mock_db = MagicMock()
+        ping = MagicMock()
+        ping.ping_type = "mention"
+        ping.source_platform = "x"
+        ping.connection_summary = "close"
+        ping.date_detected = None
+        mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = [ping]
+
+        register_all_domain_handlers()
+
+        with patch.dict("sys.modules", {
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "apps.rippletrace.models": MagicMock(PingDB=type("PingDB", (), {"user_id": object(), "date_detected": MagicMock(desc=MagicMock(return_value="desc"))})()),
+        }):
+            result = get_dispatcher().dispatch(
+                "sys.v1.rippletrace.list_recent_pings",
+                {"user_id": _TEST_UUID, "limit": 5},
+                _ctx(capabilities=["rippletrace.read"]),
+            )
+
+        assert result["status"] == "success"
+        assert result["data"]["pings"][0]["summary"] == "close"
 
     def test_task_complete_returns_task_result(self):
         from AINDY.kernel.syscall_handlers import _handle_task_complete

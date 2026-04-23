@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { runResearch } from "../../api";
+import { runResearch } from "../../api/search.js";
 import SearchHistory from "./SearchHistory";
 
 export default function ResearchEngine() {

@@ -55,6 +55,17 @@ def _make_isolated_openai_metrics():
     return retries, errors, reg
 
 
+def _make_isolated_circuit_breaker_metric():
+    reg = CollectorRegistry(auto_describe=True)
+    gauge = Gauge(
+        "aindy_ai_circuit_breaker_state",
+        "Circuit breaker state (0=closed, 1=half_open, 2=open)",
+        ["provider"],
+        registry=reg,
+    )
+    return gauge, reg
+
+
 def _fresh_openai_breaker() -> CircuitBreaker:
     return CircuitBreaker("openai-test", failure_threshold=3, recovery_timeout_secs=60)
 
@@ -216,6 +227,34 @@ def test_openai_errors_increment_on_terminal_failure():
     assert val == 1.0
 
 
+def test_circuit_breaker_state_metric_updates_on_transitions():
+    from AINDY.kernel.circuit_breaker import CircuitState
+
+    gauge, reg = _make_isolated_circuit_breaker_metric()
+    breaker = CircuitBreaker("openai-test", failure_threshold=1, recovery_timeout_secs=60)
+
+    base_now = breaker._now()
+    timeline = {"now": base_now}
+    breaker._now = lambda: timeline["now"]  # type: ignore[method-assign]
+
+    with patch("AINDY.platform_layer.metrics.ai_circuit_breaker_state", gauge):
+        breaker.reset()
+        assert _sample_value(reg, "aindy_ai_circuit_breaker_state", {"provider": "openai-test"}) == 0.0
+
+        with pytest.raises(RuntimeError):
+            breaker.call(lambda: (_ for _ in ()).throw(RuntimeError("down")))
+
+        assert breaker.state == CircuitState.OPEN
+        assert _sample_value(reg, "aindy_ai_circuit_breaker_state", {"provider": "openai-test"}) == 2.0
+
+        from datetime import timedelta
+
+        timeline["now"] = base_now + timedelta(seconds=61)
+        assert breaker.call(lambda: "ok") == "ok"
+        assert breaker.state == CircuitState.CLOSED
+        assert _sample_value(reg, "aindy_ai_circuit_breaker_state", {"provider": "openai-test"}) == 0.0
+
+
 def test_metrics_endpoint_accessible():
     """GET /metrics returns 200 and body contains aindy_execution_total."""
     from AINDY.main import app
@@ -224,6 +263,18 @@ def test_metrics_endpoint_accessible():
     response = client.get("/metrics")
     assert response.status_code == 200
     assert b"aindy_execution_total" in response.content
+
+
+def test_metrics_endpoint_exposes_infinity_score_write_failures_counter():
+    from AINDY.main import app
+    from AINDY.platform_layer.metrics import infinity_score_write_failures_total
+
+    infinity_score_write_failures_total.labels(reason="concurrent_write").inc()
+
+    client = TestClient(app, raise_server_exceptions=False)
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert b"aindy_infinity_score_write_failures_total" in response.content
 
 
 def test_metrics_endpoint_blocked_without_auth():

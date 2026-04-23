@@ -1,50 +1,26 @@
-def test_research_query_uses_ai_analyze(monkeypatch, persisted_user):
-    from apps.search.routes.research_results_router import run_research_query
-    from apps.search.schemas.research_results_schema import ResearchResultCreate
-
-    def _fake_web_search(query: str) -> str:
-        return "Raw search content"
-
-    def _fake_ai_analyze(content: str) -> str:
-        return "Summarized content"
-
-    monkeypatch.setattr("apps.search.routes.research_results_router.web_search", _fake_web_search)
-    monkeypatch.setattr("apps.search.routes.research_results_router.ai_analyze", _fake_ai_analyze)
-    monkeypatch.setattr("AINDY.db.dao.memory_node_dao.MemoryNodeDAO.recall", lambda *args, **kwargs: [])
-
-    class _DB:
-        def add(self, _):
-            pass
-
-        def commit(self):
-            pass
-
-        def refresh(self, _):
-            pass
-
-    class _Result:
-        def __init__(self, query, summary, source=None, data=None):
-            self.id = 1
-            self.query = query
-            self.summary = summary
-            self.source = source
-            self.data = data
-            from datetime import datetime, timezone
-            self.created_at = datetime.now(timezone.utc)
-
-    def _fake_create(db, result, user_id=None, data=None, source=None):
-        return _Result(result.query, result.summary, source=source, data=data)
-
+def test_research_query_uses_execution_pipeline(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
-        "apps.search.services.research_results_service.create_research_result",
-        _fake_create,
+        "AINDY.runtime.flow_engine.run_flow",
+        lambda *args, **kwargs: {
+            "status": "SUCCESS",
+            "data": {
+                "query": "test",
+                "summary": "Summarized content",
+                "source": "web_search",
+                "search_score": 1.0,
+            },
+        },
     )
 
-    result = run_research_query(
-        request=ResearchResultCreate(query="test", summary="fallback"),
-        db=_DB(),
-        current_user={"sub": str(persisted_user.id)},
+    response = client.post(
+        "/research/query",
+        json={"query": "test", "summary": "fallback"},
+        headers=auth_headers,
     )
-    assert result["summary"] == "Summarized content"
-    assert "search_score" in result
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == "Summarized content"
+    assert "search_score" in payload
+    assert payload["execution_envelope"]["eu_id"] is not None
 

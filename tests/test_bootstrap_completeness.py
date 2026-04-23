@@ -254,3 +254,40 @@ def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
         assert get_degraded_domains() == ["bridge", "automation"]
     finally:
         _reset_bootstrap()
+
+
+def test_social_bootstrap_failure_does_not_block_core_analytics(monkeypatch):
+    _reset_bootstrap()
+    import apps.bootstrap as bs
+    from AINDY.platform_layer.registry import get_degraded_domains
+
+    calls: list[str] = []
+
+    def _ok(name: str):
+        return lambda: calls.append(name)
+
+    def _social_fail():
+        calls.append("social")
+        raise ValueError("social down")
+
+    app_bootstraps = {
+        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("tasks")),
+        "identity": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("identity")),
+        "social": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_social_fail),
+        "analytics": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=["identity", "tasks"],
+            register=_ok("analytics"),
+        ),
+    }
+
+    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
+    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "identity", "social", "analytics"])
+
+    try:
+        bs.bootstrap()
+        assert calls == ["tasks", "identity", "social", "analytics"]
+        assert bs.get_degraded_domains() == ["social"]
+        assert get_degraded_domains() == ["social"]
+        assert bs._BOOTSTRAPPED is True
+    finally:
+        _reset_bootstrap()

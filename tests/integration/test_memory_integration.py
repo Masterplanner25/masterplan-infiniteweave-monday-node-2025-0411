@@ -70,6 +70,8 @@ class FakeRuntime:
 async def test_nodus_execution_injects_memory_context(monkeypatch, persisted_user):
     from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
+    monkeypatch.setenv("NODUS_SOURCE_PATH", "/tmp/nodus-src")
+
     def fake_get_context(*args, **kwargs):
         return MemoryContext(
             items=[
@@ -124,7 +126,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch, persisted_use
 
     body = NodusTaskRequest(
         task_name="test",
-        task_code="task test { }",
+        task_code="set_state('test', True)",
         session_tags=["unit"],
     )
 
@@ -153,7 +155,7 @@ async def test_nodus_execution_blocks_restricted_source(monkeypatch, persisted_u
 
     body = NodusTaskRequest(
         task_name="blocked",
-        task_code="import os\n task blocked { }",
+        task_code="import os\nset_state('blocked', True)",
         session_tags=["unit"],
     )
 

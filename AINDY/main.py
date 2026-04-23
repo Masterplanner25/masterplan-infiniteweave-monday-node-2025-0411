@@ -306,6 +306,37 @@ def _check_worker_presence(log) -> None:
         )
 
 
+def _check_nodus_available() -> bool:
+    """Return True if the Nodus VM is importable from NODUS_SOURCE_PATH."""
+    nodus_path = os.environ.get("NODUS_SOURCE_PATH")
+    if not nodus_path:
+        logger.warning(
+            "[startup] NODUS_SOURCE_PATH is not set. "
+            "Nodus script execution will fail at runtime. "
+            "Set NODUS_SOURCE_PATH to the Nodus VM source directory."
+        )
+        return False
+
+    import sys as _sys
+
+    if nodus_path not in _sys.path:
+        _sys.path.insert(0, nodus_path)
+    try:
+        import importlib
+
+        importlib.import_module("nodus.runtime.embedding")
+        logger.info("[startup] Nodus VM available at %s", nodus_path)
+        return True
+    except ImportError as exc:
+        logger.warning(
+            "[startup] Nodus VM not importable from NODUS_SOURCE_PATH=%s: %s. "
+            "Nodus script execution will fail at runtime.",
+            nodus_path,
+            exc,
+        )
+        return False
+
+
 def _cache_behavior_mode() -> str:
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         return "testing"
@@ -558,6 +589,15 @@ async def lifespan(app: FastAPI):
     # Register Flow Engine flows and nodes (static startup definitions)
     from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
+    from AINDY.runtime import (
+        flow_definitions_engine,
+        flow_definitions_memory,
+        flow_definitions_observability,
+    )
+    flow_definitions_memory.register()
+    flow_definitions_engine.register()
+    flow_definitions_observability.register()
+    _check_nodus_available()
 
     # Verify that domain-declared required flow nodes were actually registered —
     # silent failures in flow modules can otherwise produce a running server with

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateDecisionEfficiency } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateDecisionEfficiency } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function DecisionEfficiencyPanel() {
   const [automatedDecisions, setAutomatedDecisions] = useState(0);

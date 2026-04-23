@@ -129,6 +129,7 @@ class Settings(BaseSettings):
     # "thread"      — ThreadPoolExecutor (default; single-process only).
     # "distributed" — DistributedQueue via Redis (multi-process / multi-host).
     EXECUTION_MODE: str = "thread"
+    NODUS_SOURCE_PATH: str | None = None
     AINDY_QUEUE_NAME: str = "aindy:jobs"
     AINDY_ASYNC_JOB_WORKERS: int = 4
     AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection

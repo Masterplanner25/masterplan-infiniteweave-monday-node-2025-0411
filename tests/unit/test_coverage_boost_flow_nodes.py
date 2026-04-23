@@ -519,8 +519,6 @@ def test_query_backed_extended_flow_nodes_smoke(monkeypatch):
 def test_score_get_health_and_dashboard_nodes(monkeypatch):
     import apps.analytics.services.infinity_loop as infinity_loop
     import apps.analytics.services.infinity_orchestrator as infinity_orchestrator
-    from apps.rippletrace.models import PingDB
-    from apps.authorship.models import AuthorDB
     from AINDY.db.models.system_health_log import SystemHealthLog
     from apps.analytics.models import UserScore
     from AINDY.runtime.flow_definitions_extended import (
@@ -571,16 +569,6 @@ def test_score_get_health_and_dashboard_nodes(monkeypatch):
             api_endpoints={"/health": 200},
         )
     ]
-    author_rows = [SimpleNamespace(id=1, name="Alice", platform="x", last_seen=now, notes="active")]
-    ripple_rows = [
-        SimpleNamespace(
-            ping_type="mention",
-            source_platform="x",
-            connection_summary="close",
-            date_detected=now,
-        )
-    ]
-
     db_empty = MagicMock()
     db_empty.query.return_value = _ListQuery([])
     empty_result = score_get_node({}, {"db": db_empty, "user_id": user_id})
@@ -590,13 +578,18 @@ def test_score_get_health_and_dashboard_nodes(monkeypatch):
         mapping = {
             UserScore: _ListQuery([score_row]),
             SystemHealthLog: _ListQuery(health_rows),
-            AuthorDB: _ListQuery(author_rows),
-            PingDB: _ListQuery(ripple_rows),
         }
         return mapping[model]
 
     db = MagicMock()
     db.query.side_effect = query_side_effect
+
+    dispatcher = MagicMock()
+    dispatcher.dispatch.side_effect = [
+        {"status": "success", "data": {"authors": [{"id": 1, "name": "Alice", "platform": "x", "last_seen": now.isoformat(), "notes": "active"}]}},
+        {"status": "success", "data": {"pings": [{"ping_type": "mention", "source_platform": "x", "summary": "close", "date_detected": now.isoformat()}]}},
+    ]
+    monkeypatch.setattr("AINDY.kernel.syscall_dispatcher.get_dispatcher", lambda: dispatcher)
 
     score_payload = score_get_node({}, {"db": db, "user_id": user_id})["output_patch"]["score_get_result"]
     assert score_payload["metadata"]["memory_context_count"] == 2
@@ -606,6 +599,7 @@ def test_score_get_health_and_dashboard_nodes(monkeypatch):
     assert health_payload["count"] == 1
     overview_payload = dashboard_overview_node({}, {"db": db, "user_id": user_id})["output_patch"]["dashboard_overview_result"]
     assert overview_payload["overview"]["author_count"] == 1
+    assert overview_payload["overview"]["recent_ripples"][0]["summary"] == "close"
 
 
 def test_analytics_and_watcher_nodes_smoke():

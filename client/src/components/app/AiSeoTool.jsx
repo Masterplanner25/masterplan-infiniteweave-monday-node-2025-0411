@@ -2,7 +2,9 @@ import { useState } from "react";
 import {
   analyzeSeo as apiAnalyzeSeo,
   generateMeta as apiGenerateMeta,
-  suggestSeoImprovements as apiSuggestSeoImprovements } from "../../api";import { safeMap } from "../../utils/safe";
+  suggestSeoImprovements as apiSuggestSeoImprovements,
+} from "../../api/search.js";
+import { safeMap } from "../../utils/safe";
 
 export default function AiSeoTool() {
   const [content, setContent] = useState("");

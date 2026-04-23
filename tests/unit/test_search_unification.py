@@ -1,13 +1,6 @@
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
-
-from starlette.requests import Request
-
-
-def _request(path: str, method: str = "GET") -> Request:
-    return Request({"type": "http", "method": method, "path": path, "headers": []})
 
 
 def test_execute_durable_search_reuses_cached_result(monkeypatch, persisted_user):
@@ -34,61 +27,41 @@ def test_execute_durable_search_reuses_cached_result(monkeypatch, persisted_user
     assert result is cached
 
 
-def test_research_query_direct_path_uses_unified_search_contract(monkeypatch, persisted_user):
-    from apps.search.routes.research_results_router import run_research_query
-    from apps.search.schemas.research_results_schema import ResearchResultCreate
-
-    captured: dict[str, object] = {}
-
-    def _fake_unified(query: str, **kwargs):
-        captured["query"] = query
-        captured["kwargs"] = kwargs
-        return {
-            "query": query,
-            "summary": "Shared summary",
-            "source": "external_search",
-            "raw_excerpt": "raw body",
-            "search_score": 0.87,
-            "learning_context": {
-                "search_type": "research",
-                "history_id": "hist-1",
+def test_research_query_route_uses_execution_pipeline(client, auth_headers, monkeypatch):
+    monkeypatch.setattr(
+        "AINDY.runtime.flow_engine.run_flow",
+        lambda *args, **kwargs: {
+            "status": "SUCCESS",
+            "data": {
+                "query": "durable search",
+                "summary": "Shared summary",
+                "source": "external_search",
                 "search_score": 0.87,
-                "memory_count": 2,
-                "memory_ids": ["mem-1", "mem-2"],
-                "recalled_memory": True,
+                "learning_context": {
+                    "search_type": "research",
+                    "history_id": "hist-1",
+                    "search_score": 0.87,
+                    "memory_count": 2,
+                    "memory_ids": ["mem-1", "mem-2"],
+                    "recalled_memory": True,
+                },
             },
-        }
-
-    class _Record:
-        def __init__(self, query: str, summary: str, source: str, data: dict | None = None):
-            self.id = 7
-            self.query = query
-            self.summary = summary
-            self.source = source
-            self.data = data
-            self.created_at = datetime.now(timezone.utc)
-
-    def _fake_create(db, result, user_id=None, data=None, source=None):
-        captured["user_id"] = user_id
-        captured["data"] = data
-        captured["source"] = source
-        return _Record(result.query, result.summary, source=source, data=data)
-
-    monkeypatch.setattr("apps.search.routes.research_results_router.unified_query", _fake_unified)
-    monkeypatch.setattr("apps.search.services.research_results_service.create_research_result", _fake_create)
-
-    result = run_research_query(
-        request=ResearchResultCreate(query="durable search", summary="fallback"),
-        db=object(),
-        current_user={"sub": str(persisted_user.id)},
+        },
     )
 
-    assert result["summary"] == "Shared summary"
-    assert result["search_score"] == 0.87
-    assert result["learning_context"]["search_type"] == "research"
-    assert result["learning_context"]["memory_count"] == 2
-    assert captured["query"] == "durable search"
-    assert captured["user_id"] == str(persisted_user.id)
+    response = client.post(
+        "/research/query",
+        json={"query": "durable search", "summary": "fallback"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["summary"] == "Shared summary"
+    assert payload["search_score"] == 0.87
+    assert payload["learning_context"]["search_type"] == "research"
+    assert payload["learning_context"]["memory_count"] == 2
+    assert payload["execution_envelope"]["eu_id"] is not None
 
 
 def test_preview_lead_search_route_uses_shared_search_service(client, auth_headers, monkeypatch):
@@ -170,9 +143,42 @@ def test_seo_analyze_route_uses_shared_search_contract(client, auth_headers, mon
     assert payload["search_score"] == 0.91
     assert payload["learning_context"]["search_type"] == "seo_analysis"
     assert payload["learning_context"]["history_id"] == "seo-1"
+    assert payload["execution_envelope"]["eu_id"] is not None
     assert captured["text"] == "search friendly content"
     assert captured["top_n"] == 4
     assert captured["user_id"]
+
+
+def test_seo_meta_route_persists_history_and_uses_execution_pipeline(
+    client,
+    auth_headers,
+    db_session,
+    test_user,
+):
+    from apps.search.models import SearchHistory
+
+    response = client.post(
+        "/seo/meta",
+        json={"text": "search friendly content", "limit": 140},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["meta_description"]
+    assert payload["learning_context"]["search_type"] == "seo_meta"
+    assert payload["execution_envelope"]["eu_id"] is not None
+
+    history = (
+        db_session.query(SearchHistory)
+        .filter(SearchHistory.user_id == test_user.id)
+        .order_by(SearchHistory.created_at.desc())
+        .first()
+    )
+    assert history is not None
+    assert history.query == "search friendly content"
+    assert (history.result or {}).get("search_type") == "seo_meta"
+    assert (history.result or {}).get("meta_description") == payload["meta_description"]
 
 
 def test_legacy_twr_response_exposes_memory_learning_context():

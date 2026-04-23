@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { calculateExecutionSpeed } from "../../api";
+import { calculateExecutionSpeed } from "../../api/analytics.js";
 
 export default function ExecutionSpeedPanel() {
   const [aiAutomations, setAiAutomations] = useState(0);

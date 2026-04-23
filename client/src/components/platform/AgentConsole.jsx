@@ -10,7 +10,8 @@ import {
   updateAgentTrust,
   getAgentSuggestions,
   fetchRunEvents,
-  postScoreFeedback } from "../../api";
+} from "../../api/agent.js";
+import { postScoreFeedback } from "../../api/analytics.js";
 import { useSystem } from "../../context/SystemContext";
 
 // ── Risk badge ────────────────────────────────────────────────────────────────

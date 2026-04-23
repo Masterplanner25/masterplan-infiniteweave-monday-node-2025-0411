@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getFeed, getSocialAnalytics, recordSocialInteraction } from "../../api";
+import { getFeed, getSocialAnalytics, recordSocialInteraction } from "../../api/social.js";
 import PostComposer from "./PostComposer";
 import { safeMap } from "../../utils/safe";
 

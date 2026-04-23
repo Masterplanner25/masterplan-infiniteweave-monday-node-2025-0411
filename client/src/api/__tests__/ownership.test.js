@@ -86,4 +86,17 @@ describe("client API ownership boundaries", () => {
     expect(observabilitySource).toContain('from "../../api/operator.js"');
     expect(healthSource).toContain('from "../../api/legacy.js"');
   });
+
+  it("uses explicit API categories in core data-fetching components", () => {
+    const taskSource = readFileSync(resolve(__dirname, "../../components/app/TaskDashboard.jsx"), "utf8");
+    const armSource = readFileSync(resolve(__dirname, "../../components/app/ARMAnalyze.jsx"), "utf8");
+    const agentSource = readFileSync(resolve(__dirname, "../../components/platform/AgentConsole.jsx"), "utf8");
+
+    expect(taskSource).not.toContain('from "../../api"');
+    expect(taskSource).toContain('from "../../api/tasks.js"');
+    expect(armSource).not.toContain('from "../../api"');
+    expect(armSource).toContain('from "../../api/arm.js"');
+    expect(agentSource).not.toContain('from "../../api"');
+    expect(agentSource).toContain('from "../../api/agent.js"');
+  });
 });

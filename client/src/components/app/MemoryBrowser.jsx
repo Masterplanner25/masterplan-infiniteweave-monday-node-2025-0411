@@ -9,7 +9,8 @@ import {
   traverseMemory,
   getFederatedRecall,
   shareMemoryNode,
-  getMemoryNodes } from "../../api";
+  getMemoryNodes,
+} from "../../api/memory.js";
 import { useSystem } from "../../context/SystemContext";
 
 // ── Color helpers ──────────────────────────────────────────────────────────
