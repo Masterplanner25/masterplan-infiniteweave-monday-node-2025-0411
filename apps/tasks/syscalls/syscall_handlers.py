@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
 
 from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
+from AINDY.platform_layer.user_ids import require_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +43,17 @@ def _session_from_context(ctx: SyscallContext):
     return SessionLocal(), True
 
 
+def _context_user_id(ctx: SyscallContext):
+    user_id = require_user_id(ctx.user_id)
+    logger.debug("[task_syscall] using user_id=%s", user_id)
+    return user_id
+
+
 def _handle_task_create(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import create_task
 
     name = _task_name(payload, "sys.v1.task.create")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
         task = create_task(
@@ -64,7 +71,7 @@ def _handle_task_create(payload: dict, ctx: SyscallContext) -> dict:
             scheduled_time=payload.get("scheduled_time"),
             reminder_time=payload.get("reminder_time"),
             recurrence=payload.get("recurrence"),
-            user_id=ctx.user_id,
+            user_id=user_id,
         )
         return {
             "task_id": str(task.id) if task.id else None,
@@ -89,9 +96,10 @@ def _handle_task_complete(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import complete_task
 
     name = _task_name(payload, "sys.v1.task.complete")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
-        return {"task_result": complete_task(db=db, name=name, user_id=ctx.user_id)}
+        return {"task_result": complete_task(db=db, name=name, user_id=user_id)}
     finally:
         if owns_session:
             db.close()
@@ -101,9 +109,10 @@ def _handle_task_complete_full(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import execute_task_completion
 
     name = _task_name(payload, "sys.v1.task.complete_full")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
-        result = execute_task_completion(db=db, name=name, user_id=ctx.user_id)
+        result = execute_task_completion(db=db, name=name, user_id=user_id)
         return result if isinstance(result, dict) else {"result": result}
     finally:
         if owns_session:
@@ -114,9 +123,10 @@ def _handle_task_start(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import start_task
 
     name = _task_name(payload, "sys.v1.task.start")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
-        return {"task_start_result": {"message": start_task(db, name, user_id=ctx.user_id)}}
+        return {"task_start_result": {"message": start_task(db, name, user_id=user_id)}}
     finally:
         if owns_session:
             db.close()
@@ -126,9 +136,10 @@ def _handle_task_pause(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import pause_task
 
     name = _task_name(payload, "sys.v1.task.pause")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
-        return {"task_pause_result": {"message": pause_task(db, name, user_id=ctx.user_id)}}
+        return {"task_pause_result": {"message": pause_task(db, name, user_id=user_id)}}
     finally:
         if owns_session:
             db.close()
@@ -138,13 +149,14 @@ def _handle_task_orchestrate(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.services.task_service import orchestrate_task_completion
 
     name = _task_name(payload, "sys.v1.task.orchestrate")
+    user_id = _context_user_id(ctx)
     db, owns_session = _session_from_context(ctx)
     try:
         return {
             "task_orchestration": orchestrate_task_completion(
                 db=db,
                 name=name,
-                user_id=ctx.user_id,
+                user_id=user_id,
             )
         }
     finally:
@@ -163,12 +175,13 @@ def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
     signals: list = payload.get("signals") or []
     if not isinstance(signals, list) or not signals:
         raise ValueError("sys.v1.watcher.ingest requires non-empty 'signals' list")
+    user_id = _context_user_id(ctx)
 
     db, owns_session = _session_from_context(ctx)
     try:
         persisted = 0
         session_ended_count = 0
-        batch_user_id = None
+        batch_user_id = str(user_id)
 
         for idx, sig in enumerate(signals):
             signal_type = sig.get("signal_type")
@@ -180,15 +193,11 @@ def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
 
             ts = parse_signal_timestamp(sig.get("timestamp"))
             meta = sig.get("metadata") or {}
-            signal_user_id = sig.get("user_id")
-            if signal_user_id and not batch_user_id:
-                batch_user_id = signal_user_id
-
             db.add(
                 WatcherSignal(
                     signal_type=signal_type,
                     session_id=sig.get("session_id"),
-                    user_id=UUID(str(signal_user_id)) if signal_user_id else None,
+                    user_id=user_id,
                     app_name=sig.get("app_name"),
                     window_title=sig.get("window_title") or None,
                     activity_type=activity_type,
@@ -227,12 +236,13 @@ def _handle_task_get(payload: dict, ctx: SyscallContext) -> dict:
     task_id = payload.get("task_id")
     if task_id is None:
         raise ValueError("sys.v1.task.get requires 'task_id'")
+    user_id = _context_user_id(ctx)
 
     external_db = ctx.metadata.get("_db")
     owns_session = external_db is None
     db = external_db if external_db is not None else SessionLocal()
     try:
-        task = get_task_by_id(db, task_id, payload.get("user_id") or ctx.user_id)
+        task = get_task_by_id(db, task_id, user_id)
         if not task:
             raise ValueError("HTTP_404:Task not found")
         return {"task": _serialize_task(task)}
@@ -248,12 +258,12 @@ def _handle_task_queue_automation(payload: dict, ctx: SyscallContext) -> dict:
     task_id = payload.get("task_id")
     if task_id is None:
         raise ValueError("sys.v1.task.queue_automation requires 'task_id'")
+    user_id = _context_user_id(ctx)
 
     external_db = ctx.metadata.get("_db")
     owns_session = external_db is None
     db = external_db if external_db is not None else SessionLocal()
     try:
-        user_id = payload.get("user_id") or ctx.user_id
         task = get_task_by_id(db, task_id, user_id)
         if not task:
             raise ValueError("HTTP_404:Task not found")
@@ -288,8 +298,7 @@ def _handle_task_get_user_tasks(payload: dict, ctx: SyscallContext) -> dict:
     from apps.tasks.models import Task
     from apps.tasks.services.task_service import _user_uuid
 
-    user_id = payload.get("user_id") or ctx.user_id
-    owner_user_id = _user_uuid(user_id)
+    owner_user_id = _user_uuid(_context_user_id(ctx))
     if owner_user_id is None:
         return {"tasks": []}
 
