@@ -177,47 +177,51 @@ def test_cross_instance_claim_is_exclusive(db_session):
     assert engine_b.dequeue_next() is None
 
 
-def test_cross_instance_skips_locally_owned_runs(db_session):
+def test_cross_instance_skips_locally_owned_runs(testing_session_factory):
     engine = _ready_engine()
     fake_redis = _FakeRedis()
     spec = _spec("run-owned", eu_id="eu-owned")
     RedisWaitRegistry(fake_redis).register("run-owned", spec)
+    db = testing_session_factory()
     _seed_waiting_row(
-        db_session,
+        db,
         run_id="run-owned",
         event_type="task.completed",
         correlation_id="trace-owned",
         eu_id="eu-owned",
     )
     local_calls: list[str] = []
-    engine.register_wait(
-        run_id="run-owned",
-        wait_for_event="task.completed",
-        tenant_id="tenant-owned",
-        eu_id="eu-owned",
-        resume_callback=lambda: local_calls.append("run-owned"),
-        correlation_id="trace-owned",
-    )
-
-    with patch("AINDY.kernel.event_bus.get_redis_client", return_value=fake_redis), patch(
-        "AINDY.kernel.scheduler_engine._load_wait_entry_from_db",
-        side_effect=lambda run_id: (
-            db_session.query(WaitingFlowRun)
-            .filter(WaitingFlowRun.run_id == run_id)
-            .first()
-        ),
-    ):
-        count = engine.notify_event(
-            "task.completed",
+    try:
+        engine.register_wait(
+            run_id="run-owned",
+            wait_for_event="task.completed",
+            tenant_id="tenant-owned",
+            eu_id="eu-owned",
+            resume_callback=lambda: local_calls.append("run-owned"),
             correlation_id="trace-owned",
-            broadcast=False,
         )
 
-    assert count == 1
-    item = engine.dequeue_next()
-    assert item is not None
-    assert item.run_id == "run-owned"
-    assert engine.dequeue_next() is None
+        with patch("AINDY.kernel.event_bus.get_redis_client", return_value=fake_redis), patch(
+            "AINDY.kernel.scheduler_engine._load_wait_entry_from_db",
+            side_effect=lambda run_id: (
+                db.query(WaitingFlowRun)
+                .filter(WaitingFlowRun.run_id == run_id)
+                .first()
+            ),
+        ):
+            count = engine.notify_event(
+                "task.completed",
+                correlation_id="trace-owned",
+                broadcast=False,
+            )
+
+        assert count == 1
+        item = engine.dequeue_next()
+        assert item is not None
+        assert item.run_id == "run-owned"
+        assert engine.dequeue_next() is None
+    finally:
+        db.close()
 
 
 def test_cross_instance_noop_when_redis_none():
