@@ -581,11 +581,12 @@ def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
     from uuid import UUID
 
     from AINDY.db.database import SessionLocal
+    from AINDY.platform_layer.user_ids import require_user_id
     from apps.automation.models import LoopAdjustment, UserFeedback
 
     db = SessionLocal()
     try:
-        user_id = UUID(str(context.user_id))
+        user_id = require_user_id(context.user_id)
         feedback = UserFeedback(
             user_id=user_id,
             source_type=payload.get("source_type"),

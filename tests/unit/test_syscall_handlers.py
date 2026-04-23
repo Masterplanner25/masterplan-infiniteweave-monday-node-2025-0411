@@ -593,6 +593,33 @@ class TestScoreHandlers:
         assert result["score_feedback_result"]["id"] == "fb-123"
         mock_db.add.assert_called_once_with(mock_feedback_obj)
         mock_db.commit.assert_called_once()
+        assert str(mock_user_feedback_cls.call_args.kwargs["user_id"]) == _TEST_UUID
+
+    def test_score_feedback_ignores_payload_user_id(self):
+        from AINDY.kernel.syscall_handlers import _handle_score_feedback
+
+        mock_feedback_obj = MagicMock()
+        mock_feedback_obj.id = "fb-123"
+        mock_db = MagicMock()
+        mock_user_feedback_cls = MagicMock(return_value=mock_feedback_obj)
+        mock_infinity_loop = MagicMock(UserFeedback=mock_user_feedback_cls, LoopAdjustment=MagicMock())
+
+        with patch.dict("sys.modules", {
+            "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
+            "db.models.infinity_loop": mock_infinity_loop,
+            "apps.automation.models": mock_infinity_loop,
+        }):
+            _handle_score_feedback(
+                {
+                    "source_type": "manual",
+                    "feedback_value": 1.0,
+                    "user_id": "00000000-0000-0000-0000-000000000001",
+                },
+                _ctx(user_id=_TEST_UUID),
+            )
+
+        assert str(mock_user_feedback_cls.call_args.kwargs["user_id"]) == _TEST_UUID
 
     def test_score_feedback_rolls_back_on_error(self):
         from AINDY.kernel.syscall_handlers import _handle_score_feedback
