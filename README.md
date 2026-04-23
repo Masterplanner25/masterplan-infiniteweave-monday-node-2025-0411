@@ -96,6 +96,14 @@ Prerequisites:
 - MongoDB if you need Mongo-backed features
 - Redis if you need distributed execution, shared cache semantics, or limited multi-instance deployment
 
+Docker quickstart:
+
+```bash
+docker compose up
+```
+
+This quickstart runs the API in `EXECUTION_MODE=thread`, so no worker is required. If you want distributed execution, Redis, and a worker process, use the full Compose profile and the production/deployment guidance in [docs/deployment/RUNNING_IN_PRODUCTION.md](docs/deployment/RUNNING_IN_PRODUCTION.md).
+
 Backend:
 
 ```powershell
@@ -113,6 +121,8 @@ npm run dev
 Default local URLs:
 - backend: `http://127.0.0.1:8000`
 - frontend: `http://localhost:5173`
+
+For production deployment, environment requirements, worker setup, and multi-instance checks, use [docs/deployment/RUNNING_IN_PRODUCTION.md](docs/deployment/RUNNING_IN_PRODUCTION.md).
 
 ## Repository layout
 

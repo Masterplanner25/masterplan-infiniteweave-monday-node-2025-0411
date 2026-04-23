@@ -118,7 +118,7 @@ class TestValidateNodusSource:
         _validate_nodus_source(source, field)
 
     def test_clean_source_passes(self):
-        self._validate("let x = 1\nset_state(\"x\", x)")  # no exception
+        self._validate("memory.recall(['task'], 5)")  # no exception
 
     def test_import_raises_422(self):
         from fastapi import HTTPException

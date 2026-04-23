@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { approveAgentRun, getAgentRuns, rejectAgentRun } from "../../api";
+import { approveAgentRun, getAgentRuns, rejectAgentRun } from "../../api/agent.js";
 import {
   ActionButton,
   EmptyState,

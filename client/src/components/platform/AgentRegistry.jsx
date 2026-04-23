@@ -3,7 +3,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   getAgents,
   recallFromAgent,
-  getFederatedMemory } from "../../api";
+  getFederatedMemory,
+} from "../../api/agent.js";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";

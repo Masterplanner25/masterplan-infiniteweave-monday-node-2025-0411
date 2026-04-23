@@ -13,17 +13,46 @@ logger = logging.getLogger(__name__)
 
 def dashboard_overview_node(state, context):
     try:
-        import uuid
         from datetime import datetime, timezone
-        from apps.authorship.models import AuthorDB
-        from apps.rippletrace.models import PingDB
 
-        db = context.get("db")
-        user_id = uuid.UUID(str(context.get("user_id")))
-        authors = db.query(AuthorDB).filter(AuthorDB.user_id == user_id).order_by(AuthorDB.joined_at.desc()).limit(10).all()
-        author_list = [{"id": a.id, "name": a.name, "platform": a.platform, "last_seen": a.last_seen.isoformat() if a.last_seen else None, "notes": a.notes} for a in authors]
-        ripples = db.query(PingDB).filter(PingDB.user_id == user_id).order_by(PingDB.date_detected.desc()).limit(10).all()
-        ripple_list = [{"ping_type": r.ping_type, "source_platform": r.source_platform, "summary": r.connection_summary, "date_detected": r.date_detected.isoformat() if r.date_detected else None} for r in ripples]
+        from AINDY.kernel.syscall_dispatcher import (
+            SyscallContext,
+            get_dispatcher,
+            make_syscall_ctx_from_flow,
+        )
+
+        user_id = str(context.get("user_id") or "")
+        base_ctx = make_syscall_ctx_from_flow(
+            context,
+            capabilities=["authorship.read", "rippletrace.read"],
+        )
+        ctx = SyscallContext(
+            execution_unit_id=base_ctx.execution_unit_id,
+            user_id=base_ctx.user_id,
+            capabilities=base_ctx.capabilities,
+            trace_id=base_ctx.trace_id,
+            memory_context=base_ctx.memory_context,
+            metadata={
+                **(base_ctx.metadata or {}),
+                "_db": context.get("db"),
+            },
+        )
+        dispatcher = get_dispatcher()
+
+        authors_result = dispatcher.dispatch(
+            "sys.v1.authorship.list_authors",
+            {"user_id": user_id, "limit": 10},
+            ctx,
+        )
+        author_list = authors_result.get("data", {}).get("authors", []) if authors_result.get("status") == "success" else []
+
+        pings_result = dispatcher.dispatch(
+            "sys.v1.rippletrace.list_recent_pings",
+            {"user_id": user_id, "limit": 10},
+            ctx,
+        )
+        ripple_list = pings_result.get("data", {}).get("pings", []) if pings_result.get("status") == "success" else []
+
         result = {"status": "ok", "overview": {"system_timestamp": datetime.now(timezone.utc).isoformat(), "author_count": len(author_list), "recent_authors": author_list, "recent_ripples": ripple_list}}
         return {"status": "SUCCESS", "output_patch": {"dashboard_overview_result": result}}
     except Exception as e:

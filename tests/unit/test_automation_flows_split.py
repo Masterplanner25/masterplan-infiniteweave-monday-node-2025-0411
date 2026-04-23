@@ -15,14 +15,14 @@ def test_automation_flows_register_all_nodes():
 
 
 def test_each_group_file_has_register():
-    # Platform-wide files that remain in apps/automation/flows/
+    # Platform-wide files split between runtime-owned and automation-owned modules.
     automation_files = [
-        "apps.automation.flows.memory_flows",
-        "apps.automation.flows.flow_engine_flows",
         "apps.automation.flows.automation_system_flows",
-        "apps.automation.flows.observability_flows",
         "apps.automation.flows.watcher_flows",
         "apps.automation.flows.dashboard_autonomy_flows",
+        "AINDY.runtime.flow_definitions_memory",
+        "AINDY.runtime.flow_definitions_engine",
+        "AINDY.runtime.flow_definitions_observability",
     ]
     # Domain files migrated to their own apps
     domain_files = [

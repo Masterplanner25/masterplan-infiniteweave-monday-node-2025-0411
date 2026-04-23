@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { createPost } from "../../api";
+import { createPost } from "../../api/social.js";
 
 export default function PostComposer({ onPostCreated }) {
   const [content, setContent] = useState("");

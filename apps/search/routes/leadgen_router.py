@@ -41,13 +41,16 @@ def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session,
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,
         )
+    eu_id = result.metadata.get("eu_id")
+    if eu_id is None:
+        raise HTTPException(status_code=500, detail="Execution pipeline did not attach eu_id")
     data = result.data
     if isinstance(data, dict):
         data = dict(data)
         data.setdefault(
             "execution_envelope",
             to_envelope(
-                eu_id=result.metadata.get("eu_id"),
+                eu_id=eu_id,
                 trace_id=result.metadata.get("trace_id"),
                 status="SUCCESS",
                 output=None,

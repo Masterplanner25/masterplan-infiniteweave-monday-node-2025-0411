@@ -864,6 +864,91 @@ def _mas_memory_trace(payload: dict, context) -> dict:
     return trace_memory_chain(payload, context)
 
 
+def _handle_authorship_list(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.authorship.list_authors — list recent authors for a user.
+
+    Payload keys:
+        user_id  (str) — required
+        limit    (int) — default 10
+    """
+    import uuid
+
+    from AINDY.db.database import SessionLocal
+    from apps.authorship.models import AuthorDB
+
+    user_id = payload.get("user_id") or context.user_id
+    limit = int(payload.get("limit") or 10)
+
+    external_db = context.metadata.get("_db") or context.metadata.get("db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        authors = (
+            db.query(AuthorDB)
+            .filter(AuthorDB.user_id == uuid.UUID(str(user_id)))
+            .order_by(AuthorDB.joined_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return {
+            "authors": [
+                {
+                    "id": a.id,
+                    "name": a.name,
+                    "platform": a.platform,
+                    "last_seen": a.last_seen.isoformat() if a.last_seen else None,
+                    "notes": a.notes,
+                }
+                for a in authors
+            ]
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_rippletrace_list_pings(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.rippletrace.list_recent_pings — list recent pings for a user.
+
+    Payload keys:
+        user_id  (str) — required
+        limit    (int) — default 10
+    """
+    import uuid
+
+    from AINDY.db.database import SessionLocal
+    from apps.rippletrace.models import PingDB
+
+    user_id = payload.get("user_id") or context.user_id
+    limit = int(payload.get("limit") or 10)
+
+    external_db = context.metadata.get("_db") or context.metadata.get("db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        ripples = (
+            db.query(PingDB)
+            .filter(PingDB.user_id == uuid.UUID(str(user_id)))
+            .order_by(PingDB.date_detected.desc())
+            .limit(limit)
+            .all()
+        )
+        return {
+            "pings": [
+                {
+                    "ping_type": r.ping_type,
+                    "source_platform": r.source_platform,
+                    "summary": r.connection_summary,
+                    "date_detected": r.date_detected.isoformat() if r.date_detected else None,
+                }
+                for r in ripples
+            ]
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # REGISTRATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -902,6 +987,9 @@ def register_all_domain_handlers() -> None:
         ("sys.v1.research.query",          _handle_research_query,        "research.query",        "Web research query",                                     False),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False),
+        # Authorship / RippleTrace reads
+        ("sys.v1.authorship.list_authors", _handle_authorship_list,       "authorship.read",       "List recent authors for a user",                        False),
+        ("sys.v1.rippletrace.list_recent_pings", _handle_rippletrace_list_pings, "rippletrace.read", "List recent pings for a user",                        False),
         # Memory Address Space (path-based — experimental extensions)
         ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False),
         ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False),

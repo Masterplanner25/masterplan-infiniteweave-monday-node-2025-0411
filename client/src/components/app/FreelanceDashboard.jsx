@@ -3,7 +3,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer 
 import {
   getFreelanceOrders,
   getFreelanceFeedback,
-  getFreelanceMetricsLatest } from "../../api";import { safeMap } from "../../utils/safe";
+  getFreelanceMetricsLatest,
+} from "../../api/freelance.js";
+import { safeMap } from "../../utils/safe";
 
 export default function FreelanceDashboard() {
   const [orders, setOrders] = useState([]);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { authRequestExternal } from "../../api";import { safeMap } from "../../utils/safe";
+import { authRequestExternal } from "../../api/_core.js";
+import { safeMap } from "../../utils/safe";
 
 const NETWORK_API_URL =
 import.meta.env.VITE_NETWORK_API_URL || "/api/users";

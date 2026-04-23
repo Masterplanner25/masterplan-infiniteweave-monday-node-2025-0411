@@ -15,6 +15,7 @@ import * as operatorApi from "./api/operator.js";
 import * as legacyApi from "./api/legacy.js";
 
 export * from "./api/index.js";
+export { ApiError } from "./api/_core.js";
 
 export { productApi, operatorApi, legacyApi };
 

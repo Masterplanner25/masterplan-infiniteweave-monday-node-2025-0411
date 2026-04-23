@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { ingestLinkedInManual, getMasterplanSummary } from "../../api";
+import { ingestLinkedInManual, getMasterplanSummary } from "../../api/analytics.js";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function AnalyticsPanel() {
   const [masterplanId, setMasterplanId] = useState("");
@@ -13,6 +15,8 @@ export default function AnalyticsPanel() {
   const [periodEnd, setPeriodEnd] = useState("2026-02-16");
   
   const [summary, setSummary] = useState(null);
+  const [validationError, setValidationError] = useState("");
+  const { toast, showToast, clearToast } = useToast();
 
   // --- Styles ---
   const panelStyle = { 
@@ -56,19 +60,25 @@ export default function AnalyticsPanel() {
         interactions: parseInt(interactions),
         followers: parseInt(followers)
       });
-      alert("Metrics Synchronized");
+      showToast("Metrics synchronized.", "success");
     } catch (err) {
       console.error("Submission error:", err);
+      showToast(err?.message || "Failed to synchronize metrics.");
     }
   };
 
   const fetchSummary = async () => {
-    if (!masterplanId) return alert("Enter a MasterPlan ID first");
+    if (!masterplanId) {
+      setValidationError("Enter a MasterPlan ID first.");
+      return;
+    }
+    setValidationError("");
     try {
       const data = await getMasterplanSummary(masterplanId);
       setSummary(data);
     } catch (err) {
       console.error("Fetch error:", err);
+      showToast(err?.message || "Failed to fetch summary.");
     }
   };
 
@@ -82,7 +92,11 @@ export default function AnalyticsPanel() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "15px", marginBottom: "15px" }}>
         <div>
           <label style={labelStyle}>MasterPlan ID</label>
-          <input style={inputStyle} placeholder="ID" value={masterplanId} onChange={(e) => setMasterplanId(e.target.value)} />
+          <input style={inputStyle} placeholder="ID" value={masterplanId} onChange={(e) => {
+            setMasterplanId(e.target.value);
+            setValidationError("");
+          }} />
+          {validationError && <div style={{ color: "#f87171", fontSize: "12px", marginTop: "6px" }}>{validationError}</div>}
         </div>
         <div>
           <label style={labelStyle}>Start Date</label>
@@ -114,6 +128,7 @@ export default function AnalyticsPanel() {
           </pre>
         </div>
       )}
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>
   );
 }

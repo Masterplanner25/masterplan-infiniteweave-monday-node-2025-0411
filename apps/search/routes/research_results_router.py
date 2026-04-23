@@ -10,9 +10,6 @@ from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.schemas.research_results_schema import ResearchResultCreate
-from apps.search.services.search_service import build_learning_context, unified_query
-from apps.search.services import research_results_service
-from apps.search.services.research_engine import ai_analyze, web_search
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
@@ -52,13 +49,16 @@ def _execute_research(request: Request, route_name: str, handler, *, db: Session
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,
         )
+    eu_id = result.metadata.get("eu_id")
+    if eu_id is None:
+        raise HTTPException(status_code=500, detail="Execution pipeline did not attach eu_id")
     data = result.data
     if isinstance(data, dict):
         data = dict(data)
         data.setdefault(
             "execution_envelope",
             to_envelope(
-                eu_id=result.metadata.get("eu_id"),
+                eu_id=eu_id,
                 trace_id=result.metadata.get("trace_id"),
                 status="SUCCESS",
                 output=None,
@@ -127,41 +127,12 @@ def list_results(
 @router.post("/query")
 @limiter.limit("30/minute")
 def run_research_query(
+    http_request: Request,
     request: ResearchResultCreate,
-    http_request: Request = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    if http_request is None:
-        unified = unified_query(
-            request.query,
-            db=db,
-            user_id=user_id,
-            web_search_fn=web_search,
-            ai_analyze_fn=ai_analyze,
-        )
-        raw = unified.get("raw_excerpt") or ""
-        summary = unified.get("summary") or request.summary or ""
-        record = research_results_service.create_research_result(
-            db=db,
-            result=ResearchResultCreate(query=request.query, summary=summary),
-            user_id=user_id,
-            data={"raw_content": raw},
-            source=unified.get("source") or "web_search",
-        )
-        return {
-            "id": getattr(record, "id", None),
-            "query": record.query,
-            "summary": record.summary,
-            "source": getattr(record, "source", "web_search"),
-            "data": getattr(record, "data", None),
-            "search_score": unified.get("search_score") or 1.0,
-            "learning_context": unified.get("learning_context")
-            or build_learning_context(unified, default_search_type="research"),
-            "created_at": record.created_at.isoformat() if getattr(record, "created_at", None) else None,
-        }
-
     def handler(_ctx):
         return _do_run_research_query(db, request, user_id)
     return _execute_research(

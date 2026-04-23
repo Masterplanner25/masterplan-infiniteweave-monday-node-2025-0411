@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateLostPotential } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateLostPotential } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function LostPotentialPanel() {
   const [missedOpportunities, setMissedOpportunities] = useState(0);

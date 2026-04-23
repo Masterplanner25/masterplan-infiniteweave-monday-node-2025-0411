@@ -240,7 +240,9 @@ def _local_disassemble(script: str, filename: str) -> str | None:
     """
     try:
         import os as _os
-        nodus_path = _os.environ.get("NODUS_SOURCE_PATH", r"C:\dev\Coding Language\src")
+        nodus_path = _os.environ.get("NODUS_SOURCE_PATH")
+        if not nodus_path:
+            return None
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
         from AINDY.nodus.tooling.runner import disassemble_source, format_disassembly_with_locs

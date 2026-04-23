@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { deleteSearchHistoryItem, getSearchHistory } from "../../api";
+import { deleteSearchHistoryItem, getSearchHistory } from "../../api/search.js";
 
 export default function SearchHistory({ searchType = null, title = "Search History", onSelect }) {
   const [items, setItems] = useState([]);

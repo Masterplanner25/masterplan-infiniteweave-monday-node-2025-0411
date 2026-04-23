@@ -35,6 +35,8 @@ from AINDY.memory.memory_scoring_service import get_relevant_memories
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook"}
+
 # -----------------------------------------------------
 # Core Freelance Order Logic
 # -----------------------------------------------------
@@ -45,6 +47,12 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
     """
     try:
         user_uuid = uuid.UUID(str(user_id)) if user_id else None
+        delivery_type = str(order_data.delivery_type or "manual").strip().lower()
+        if delivery_type not in _SUPPORTED_DELIVERY_TYPES:
+            raise ValueError(
+                f"delivery_type '{delivery_type}' is not supported. "
+                f"Supported types: {sorted(_SUPPORTED_DELIVERY_TYPES)}"
+            )
         order = FreelanceOrder(
             client_name=order_data.client_name,
             client_email=order_data.client_email,
@@ -56,7 +64,7 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
             task_id=order_data.task_id,
             automation_type=order_data.automation_type,
             automation_config=order_data.automation_config,
-            delivery_type=order_data.delivery_type or "manual",
+            delivery_type=delivery_type,
             delivery_config=order_data.delivery_config,
             delivery_status="pending",
             started_at=datetime.now(timezone.utc),
@@ -435,7 +443,7 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
         result = _dispatch_delivery(order, db=db)
         order.external_response = result
         order.delivery_status = str(result.get("status") or "success")
-        order.status = "delivered" if order.delivery_status in {"success", "completed", "stubbed", "manual"} else "delivery_failed"
+        order.status = "delivered" if order.delivery_status in {"success", "completed", "manual"} else "delivery_failed"
         order.delivered_at = datetime.now(timezone.utc)
         order.time_to_completion_seconds = _calculate_time_to_completion(order)
         order.income_efficiency = _calculate_income_efficiency(order)

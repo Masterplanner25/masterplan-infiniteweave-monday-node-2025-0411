@@ -107,31 +107,32 @@ def get_recent_agent_runs(
 
 
 def get_user_metrics(user_id: str | UUID, db: Session) -> dict[str, Any] | None:
-    from apps.analytics.models import UserScore
+    from AINDY.platform_layer.registry import get_job
 
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
-    score = db.query(UserScore).filter(UserScore.user_id == normalized_user_id).first()
+    get_snapshot = get_job("analytics.kpi_snapshot")
+    if get_snapshot is None:
+        return None
+    score = get_snapshot(user_id=normalized_user_id, db=db)
     if not score:
         return None
     return {
         "user_id": str(user_id),
-        "score": score.master_score,
-        "trajectory": score.confidence or "baseline",
-        "master_score": score.master_score,
+        "score": score.get("master_score"),
+        "trajectory": score.get("confidence") or "baseline",
+        "master_score": score.get("master_score"),
         "kpis": {
-            "execution_speed": score.execution_speed_score,
-            "decision_efficiency": score.decision_efficiency_score,
-            "ai_productivity_boost": score.ai_productivity_boost_score,
-            "focus_quality": score.focus_quality_score,
-            "masterplan_progress": score.masterplan_progress_score,
+            "execution_speed": score.get("execution_speed"),
+            "decision_efficiency": score.get("decision_efficiency"),
+            "ai_productivity_boost": score.get("ai_productivity_boost"),
+            "focus_quality": score.get("focus_quality"),
+            "masterplan_progress": score.get("masterplan_progress"),
         },
         "metadata": {
-            "confidence": score.confidence,
-            "data_points_used": score.data_points_used,
-            "trigger_event": score.trigger_event,
-            "calculated_at": score.calculated_at.isoformat()
-            if score.calculated_at
-            else None,
+            "confidence": score.get("confidence"),
+            "data_points_used": score.get("data_points_used"),
+            "trigger_event": score.get("trigger_event"),
+            "calculated_at": score.get("calculated_at"),
         },
     }
 

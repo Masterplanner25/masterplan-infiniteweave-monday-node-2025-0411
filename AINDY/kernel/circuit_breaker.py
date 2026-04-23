@@ -55,6 +55,13 @@ class CircuitBreaker:
         elif new_state == CircuitState.OPEN:
             self._opened_at = now
             self._half_open_in_flight = False
+        try:
+            from AINDY.platform_layer.metrics import ai_circuit_breaker_state
+
+            state_value = {"closed": 0, "half_open": 1, "open": 2}.get(new_state.value, -1)
+            ai_circuit_breaker_state.labels(provider=self.name).set(state_value)
+        except Exception:
+            pass
 
     def _enter_call(self) -> str:
         with self._lock:

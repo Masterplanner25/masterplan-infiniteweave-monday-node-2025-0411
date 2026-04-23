@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listMasterPlans, activateMasterPlan, setMasterplanAnchor, getMasterplanProjection } from "../../api";import { safeMap } from "../../utils/safe";
+import {
+  listMasterPlans,
+  activateMasterPlan,
+  setMasterplanAnchor,
+  getMasterplanProjection,
+} from "../../api/masterplan.js";
+import { Toast } from "../shared/Toast";
+import { safeMap } from "../../utils/safe";
+import { useToast } from "../../utils/useToast";
 
 const STATUS_BADGE = {
   active: { label: "ACTIVE", color: "#00ffaa" },
@@ -208,6 +216,7 @@ export default function MasterPlanDashboard() {
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(null);
   const [anchorModalPlanId, setAnchorModalPlanId] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   const fetchPlans = async () => {
     setLoading(true);
@@ -231,7 +240,7 @@ export default function MasterPlanDashboard() {
       await activateMasterPlan(planId);
       await fetchPlans();
     } catch (err) {
-      alert("Activation failed: " + err.message);
+      showToast(err?.message || "Activation failed.");
     } finally {
       setActivating(null);
     }
@@ -388,6 +397,7 @@ export default function MasterPlanDashboard() {
         onSaved={fetchPlans} />
 
       }
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

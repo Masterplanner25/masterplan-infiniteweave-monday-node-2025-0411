@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getProfile, upsertProfile } from "../../api";import { safeMap } from "../../utils/safe";
+import { getProfile, upsertProfile } from "../../api/social.js";
+import { Toast } from "../shared/Toast";
+import { safeMap } from "../../utils/safe";
+import { useToast } from "../../utils/useToast";
 
 export default function ProfileView() {
   const { username } = useParams();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false); // New state for edit mode
+  const { toast, showToast, clearToast } = useToast();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -42,7 +46,7 @@ export default function ProfileView() {
       await upsertProfile(formData);
       await fetchProfile(); // Refresh after save
     } catch (err) {
-      alert("Failed to save profile.");
+      showToast(err?.message || "Failed to save profile.");
     }
   };
 
@@ -82,6 +86,7 @@ export default function ProfileView() {
             {profile ? "Save Changes" : "Create Identity Node"}
           </button>
         </div>
+        <Toast toast={toast} onDismiss={clearToast} />
       </div>);
 
   }
@@ -123,6 +128,7 @@ export default function ProfileView() {
         <h4 style={{ color: "#888", marginBottom: "8px" }}>About</h4>
         <p style={{ lineHeight: "1.6" }}>{profile.bio}</p>
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

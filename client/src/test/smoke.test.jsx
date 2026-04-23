@@ -32,6 +32,12 @@ function ThrowingComponent() {
   throw new Error("test error");
 }
 
+function makeJwt(payload) {
+  const header = window.btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const body = window.btoa(JSON.stringify(payload));
+  return `${header}.${body}.signature`;
+}
+
 describe("frontend smoke tests", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -73,5 +79,26 @@ describe("frontend smoke tests", () => {
     expect(screen.getByTestId("is-authenticated")).toHaveTextContent("false");
     expect(screen.getByTestId("has-user")).toHaveTextContent("false");
     expect(screen.getByTestId("token")).toHaveTextContent("");
+  });
+
+  it("clears an expired stored token on mount", () => {
+    const expired = makeJwt({
+      sub: "user-1",
+      exp: Math.floor(Date.now() / 1000) - 60,
+    });
+    window.localStorage.setItem("token", expired);
+    window.localStorage.setItem("aindy_token", expired);
+
+    render(
+      <AuthProvider>
+        <AuthStateProbe />
+      </AuthProvider>,
+    );
+
+    expect(screen.getByTestId("is-authenticated")).toHaveTextContent("false");
+    expect(screen.getByTestId("has-user")).toHaveTextContent("false");
+    expect(screen.getByTestId("token")).toHaveTextContent("");
+    expect(window.localStorage.getItem("token")).toBeNull();
+    expect(window.localStorage.getItem("aindy_token")).toBeNull();
   });
 });

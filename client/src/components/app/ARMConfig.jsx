@@ -1,11 +1,15 @@
 // src/components/ARMConfig.jsx
 import React, { useEffect, useState } from "react";
-import { getARMConfig, updateARMConfig } from "../../api";
+import { getARMConfig, updateARMConfig } from "../../api/arm.js";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function ARMConfig() {
   const [config, setConfig] = useState({});
   const [param, setParam] = useState("");
   const [value, setValue] = useState("");
+  const [validationError, setValidationError] = useState("");
+  const { toast, showToast, clearToast } = useToast();
 
   // Reusable style for the configuration inputs
   const inputStyle = {
@@ -30,7 +34,10 @@ export default function ARMConfig() {
   }, []);
 
   const save = async () => {
-    if (!param) return alert("Please enter a parameter name");
+    if (!param) {
+      setValidationError("Please enter a parameter name.");
+      return;
+    }
     try {
       // Parse numeric values; leave strings as strings
       const parsedValue = value === "" ? value : isNaN(Number(value)) ? value : Number(value);
@@ -39,9 +46,10 @@ export default function ARMConfig() {
       setConfig(res.config ?? res.runtime_config ?? res);
       setParam("");
       setValue("");
-      alert("Config updated successfully");
+      setValidationError("");
+      showToast("Config updated successfully.", "success");
     } catch (e) {
-      alert("Update failed: " + e);
+      showToast(e?.message || String(e) || "Update failed.");
     }
   };
 
@@ -79,7 +87,10 @@ export default function ARMConfig() {
             style={inputStyle}
             placeholder="parameter (e.g. max_tokens)" 
             value={param} 
-            onChange={(e) => setParam(e.target.value)} 
+            onChange={(e) => {
+              setParam(e.target.value);
+              setValidationError("");
+            }} 
           />
           <input 
             style={inputStyle}
@@ -105,7 +116,9 @@ export default function ARMConfig() {
             Update
           </button>
         </div>
+        {validationError && <div style={{ color: "#f87171", fontSize: "12px", marginTop: "10px" }}>{validationError}</div>}
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>
   );
 }

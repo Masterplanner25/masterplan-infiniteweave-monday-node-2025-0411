@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from AINDY.agents.tool_registry import register_tool, register_tool_suggestion_provider
+from AINDY.agents.tool_registry import TOOL_REGISTRY, register_tool, register_tool_suggestion_provider
 from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 from apps.agent.agents.tool_helpers import dispatch_tool_syscall
 
@@ -80,7 +80,6 @@ def suggest_tools_for_kpi(kpi_snapshot: dict, user_id: str = None, db=None) -> l
         return []
 
     try:
-        suggestions: list[dict] = []
         focus = float(kpi_snapshot.get("focus_quality", 50.0) or 50.0)
         speed = float(kpi_snapshot.get("execution_speed", 50.0) or 50.0)
         ai_boost = float(kpi_snapshot.get("ai_productivity_boost", 50.0) or 50.0)
@@ -88,38 +87,53 @@ def suggest_tools_for_kpi(kpi_snapshot: dict, user_id: str = None, db=None) -> l
     except (TypeError, ValueError):
         return []
 
-    if focus < 40:
-        suggestions.append({
-            "tool": "memory.recall",
-            "reason": f"Focus quality is low ({focus:.0f}/100) - recall past context before starting new work",
-            "suggested_goal": "Recall recent memories and notes to regain context on current priorities",
-        })
+    def _first_tool_by_category(category: str) -> str | None:
+        for name, entry in TOOL_REGISTRY.items():
+            if entry.get("category") == category:
+                return name
+        return None
 
-    if speed < 40:
-        suggestions.append({
-            "tool": "task.create",
-            "reason": f"Execution speed is low ({speed:.0f}/100) - create a concrete next action to rebuild momentum",
-            "suggested_goal": "Create a focused task for the most important thing I need to do today",
-        })
-    elif speed < 55:
-        suggestions.append({
-            "tool": "task.create",
-            "reason": f"Execution pace is below average ({speed:.0f}/100) - a new task could help",
-            "suggested_goal": "Create a small, completable task to get back on track",
-        })
+    suggestions: list[dict] = []
+
+    if focus < 40:
+        tool = _first_tool_by_category("memory")
+        if tool:
+            suggestions.append({
+                "tool": tool,
+                "reason": f"Focus quality is low ({focus:.0f}/100) - recall past context before starting new work",
+                "suggested_goal": "Recall recent memories and notes to regain context on current priorities",
+            })
+
+    if speed < 55 and len(suggestions) < 3:
+        tool = _first_tool_by_category("task")
+        if tool:
+            reason = (
+                f"Execution speed is low ({speed:.0f}/100) - create a concrete next action to rebuild momentum"
+                if speed < 40
+                else f"Execution pace is below average ({speed:.0f}/100) - a new task could help"
+            )
+            suggestions.append({
+                "tool": tool,
+                "reason": reason,
+                "suggested_goal": "Create a focused task for the most important thing I need to do today",
+            })
 
     if ai_boost < 40 and len(suggestions) < 3:
-        suggestions.append({
-            "tool": "arm.analyze",
-            "reason": f"ARM usage is low ({ai_boost:.0f}/100) - analyzing code could boost quality scores",
-            "suggested_goal": "Analyze the current codebase for architecture and integrity improvements",
-        })
+        tool = _first_tool_by_category("analysis")
+        if tool:
+            suggestions.append({
+                "tool": tool,
+                "reason": f"ARM usage is low ({ai_boost:.0f}/100) - analyzing code could boost quality scores",
+                "suggested_goal": "Analyze the current codebase for architecture and integrity improvements",
+            })
 
     if master >= 70 and len(suggestions) < 3:
-        suggestions.append({
-            "tool": "genesis.message",
-            "reason": f"Strong overall performance ({master:.0f}/100) - review strategic direction with Genesis",
-            "suggested_goal": "Review my current MasterPlan progress and refine next priorities with Genesis",
-        })
+        tool = _first_tool_by_category("planning")
+        if tool:
+            suggestions.append({
+                "tool": tool,
+                "reason": f"Strong overall performance ({master:.0f}/100) - review strategic direction",
+                "suggested_goal": "Review current MasterPlan progress and refine next priorities",
+            })
 
     return suggestions[:3]

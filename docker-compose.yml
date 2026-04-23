@@ -5,6 +5,12 @@
 #   docker compose --profile social up # adds MongoDB for social features
 
 services:
+  # Deployment modes:
+  #   docker compose up                         — quickstart: Postgres only, thread-mode execution (no Redis, no worker needed)
+  #   REDIS_URL=redis://redis:6379/0 \
+  #   EXECUTION_MODE=distributed \
+  #   docker compose --profile full up         — full stack: Redis + worker for distributed job processing
+  #   docker compose --profile social up       — adds MongoDB for social/memory features
   api:
     build:
       context: .
@@ -24,7 +30,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
       REDIS_URL: ${REDIS_URL:-}
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
-      EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
+      EXECUTION_MODE: ${EXECUTION_MODE:-thread}
       AINDY_ENABLE_BACKGROUND_TASKS: "false"
       AINDY_ENABLE_LEGACY_SURFACE: "false"
       AINDY_ASYNC_HEAVY_EXECUTION: ${AINDY_ASYNC_HEAVY_EXECUTION:-true}

@@ -695,8 +695,51 @@ def calculate_infinity_score(
             },
         }
 
+    except _ConcurrentScoreWrite as e:
+        reason = "concurrent_write"
+        logger.error(
+            "Infinity score write failed for user %s after %d attempts: %s",
+            user_id,
+            _SCORE_WRITE_RETRY_LIMIT,
+            e,
+        )
+        try:
+            from AINDY.platform_layer.metrics import infinity_score_write_failures_total
+
+            infinity_score_write_failures_total.labels(reason=reason).inc()
+        except Exception:
+            pass
+        try:
+            from AINDY.core.system_event_service import emit_error_event
+            from AINDY.db.database import SessionLocal
+
+            _err_db = SessionLocal()
+            try:
+                emit_error_event(
+                    db=_err_db,
+                    error_type="infinity_score.concurrent_write_failure",
+                    message=f"Score write failed after {_SCORE_WRITE_RETRY_LIMIT} retries",
+                    user_id=_db_user_id(user_id) if user_id else None,
+                    payload={
+                        "retry_limit": _SCORE_WRITE_RETRY_LIMIT,
+                        "trigger_event": trigger_event,
+                    },
+                    required=False,
+                )
+                _err_db.commit()
+            finally:
+                _err_db.close()
+        except Exception:
+            pass
+        return None
     except Exception as e:
         logger.warning("Infinity score calculation failed for %s: %s", user_id, e)
+        try:
+            from AINDY.platform_layer.metrics import infinity_score_write_failures_total
+
+            infinity_score_write_failures_total.labels(reason="unknown").inc()
+        except Exception:
+            pass
         return None
 
 

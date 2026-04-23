@@ -207,6 +207,13 @@ system_health_tier = Gauge(
     registry=REGISTRY,
 )
 
+ai_circuit_breaker_state = Gauge(
+    "aindy_ai_circuit_breaker_state",
+    "Circuit breaker state (0=closed, 1=half_open, 2=open)",
+    ["provider"],
+    registry=REGISTRY,
+)
+
 deferred_boundary_violations_total = Gauge(
     "aindy_deferred_boundary_violations_total",
     "Number of deferred cross-domain imports detected in router files "
@@ -232,5 +239,12 @@ event_handler_duration_seconds = Histogram(
     "Wall-clock time per event handler invocation",
     ["event_type", "handler_name", "result"],
     buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
+    registry=REGISTRY,
+)
+
+infinity_score_write_failures_total = Counter(
+    "aindy_infinity_score_write_failures_total",
+    "Total number of Infinity score write failures",
+    ["reason"],
     registry=REGISTRY,
 )

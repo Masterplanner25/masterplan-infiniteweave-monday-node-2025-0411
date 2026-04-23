@@ -25,8 +25,23 @@ function parseJwtPayload(token) {
   }
 }
 
+function isTokenExpired(token) {
+  const payload = parseJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") {
+    return false;
+  }
+  return Date.now() / 1000 > payload.exp - 30;
+}
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => getStoredToken());
+  const [token, setToken] = useState(() => {
+    const stored = getStoredToken();
+    if (stored && isTokenExpired(stored)) {
+      clearStoredToken();
+      return null;
+    }
+    return stored || null;
+  });
   const user = useMemo(() => {
     const payload = parseJwtPayload(token);
     if (!payload) {
@@ -40,7 +55,35 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.is_admin === true;
 
   useEffect(() => {
-    setToken(getStoredToken());
+    const stored = getStoredToken();
+    if (stored && isTokenExpired(stored)) {
+      clearStoredToken();
+      setToken(null);
+      return;
+    }
+    setToken(stored || null);
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      return undefined;
+    }
+    const interval = setInterval(() => {
+      if (isTokenExpired(token)) {
+        clearStoredToken();
+        setToken(null);
+      }
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  useEffect(() => {
+    const handleExpiry = () => {
+      clearStoredToken();
+      setToken(null);
+    };
+    window.addEventListener("aindy:session-expired", handleExpiry);
+    return () => window.removeEventListener("aindy:session-expired", handleExpiry);
   }, []);
 
   const login = async (email, password) => {

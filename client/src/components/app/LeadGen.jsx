@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { runLeadGen } from "../../api";
+import { runLeadGen } from "../../api/search.js";
 import SearchHistory from "./SearchHistory";
 import { safeMap } from "../../utils/safe";
 

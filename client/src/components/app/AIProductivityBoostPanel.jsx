@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateAiProductivityBoost } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateAiProductivityBoost } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function AIProductivityBoostPanel() {
   const [tasksWithAI, setTasksWithAI] = useState(0);

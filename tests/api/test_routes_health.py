@@ -55,5 +55,36 @@ class TestHealthEndpoint:
         assert "checks" in data
         assert all(
             key in data["checks"]
-            for key in ("database", "redis", "mongo", "scheduler", "flow_registry", "worker")
+            for key in ("database", "redis", "mongo", "scheduler", "flow_registry", "worker", "nodus", "ai_providers")
         )
+        assert "circuit" in data["checks"]["ai_providers"]["openai"]
+        assert "circuit" in data["checks"]["ai_providers"]["deepseek"]
+
+    def test_deep_health_reports_nodus_not_configured_when_env_unset(self, client, monkeypatch):
+        monkeypatch.delenv("NODUS_SOURCE_PATH", raising=False)
+        response = client.get("/health/deep")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["checks"]["nodus"]["status"] == "not_configured"
+        assert data["checks"]["nodus"]["detail"] == "NODUS_SOURCE_PATH not set"
+
+    def test_deep_health_reports_openai_circuit_as_degraded(self, client):
+        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+
+        breaker = get_openai_circuit_breaker()
+
+        def _fail():
+            raise RuntimeError("down")
+
+        breaker.reset()
+        for _ in range(breaker.failure_threshold):
+            try:
+                breaker.call(_fail)
+            except RuntimeError:
+                pass
+
+        response = client.get("/health/deep")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["checks"]["ai_providers"]["status"] == "degraded"
+        assert data["checks"]["ai_providers"]["openai"]["circuit"] == "open"

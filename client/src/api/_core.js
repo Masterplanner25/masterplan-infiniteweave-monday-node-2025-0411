@@ -41,6 +41,15 @@ const NORMALIZED_ARRAY_KEYS = new Set([
   "tools",
 ]);
 
+export class ApiError extends Error {
+  constructor(status, message, body) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 function normalizeArrayFields(value) {
   if (Array.isArray(value)) {
     return safeMap(value, (item) => normalizeArrayFields(item));
@@ -86,6 +95,13 @@ export function buildApiUrl(path) {
   return API_BASE ? `${API_BASE}${path}` : path;
 }
 
+function dispatchSessionExpired() {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent("aindy:session-expired"));
+}
+
 async function request(path, opts = {}) {
   const url = buildApiUrl(path);
   const token = getStoredToken();
@@ -101,7 +117,15 @@ async function request(path, opts = {}) {
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`API Error (${res.status}): ${errText}`);
+    const err = new ApiError(
+      res.status,
+      `API Error (${res.status}): ${errText}`,
+      errText,
+    );
+    if (res.status === 401) {
+      dispatchSessionExpired();
+    }
+    throw err;
   }
 
   const text = await res.text();
@@ -131,7 +155,15 @@ async function requestAbsolute(url, opts = {}) {
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`API Error (${res.status}): ${errText}`);
+    const err = new ApiError(
+      res.status,
+      `API Error (${res.status}): ${errText}`,
+      errText,
+    );
+    if (res.status === 401) {
+      dispatchSessionExpired();
+    }
+    throw err;
   }
 
   const text = await res.text();

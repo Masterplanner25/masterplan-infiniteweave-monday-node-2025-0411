@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateMonetizationEfficiency } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateMonetizationEfficiency } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function MonetizationEfficiencyPanel() {
   const [totalRevenue, setTotalRevenue] = useState(0);

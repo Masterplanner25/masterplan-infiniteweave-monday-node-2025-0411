@@ -424,6 +424,108 @@ class TestMasterScoreCalculation:
 
         assert calculate_infinity_score("u1", MagicMock()) is None
 
+    def test_calculate_infinity_score_increments_concurrent_write_metric_and_logs_error(self, mocker):
+        from prometheus_client import CollectorRegistry, Counter
+
+        from apps.analytics.services.infinity_service import (
+            _SCORE_WRITE_RETRY_LIMIT,
+            calculate_infinity_score,
+            orchestrator_score_context,
+        )
+
+        for kpi in [
+            "calculate_execution_speed",
+            "calculate_decision_efficiency",
+            "calculate_ai_productivity_boost",
+            "calculate_focus_quality",
+            "calculate_masterplan_progress",
+        ]:
+            mocker.patch(f"apps.analytics.services.infinity_service.{kpi}", return_value=(50.0, 1))
+
+        mocker.patch("apps.analytics.services.infinity_service.supports_managed_transactions", return_value=True)
+        mocker.patch("apps.analytics.services.infinity_service.transaction_scope")
+
+        metric_registry = CollectorRegistry(auto_describe=True)
+        failure_counter = Counter(
+            "aindy_infinity_score_write_failures_total",
+            "Total number of Infinity score write failures",
+            ["reason"],
+            registry=metric_registry,
+        )
+
+        err_db = MagicMock()
+        session_factory = MagicMock(return_value=err_db)
+        emit_error_event = mocker.patch("AINDY.core.system_event_service.emit_error_event")
+        logger_error = mocker.patch("apps.analytics.services.infinity_service.logger.error")
+
+        mock_db = MagicMock()
+        existing = MagicMock()
+        existing.id = "score-1"
+        existing.master_score = 10.0
+        existing.lock_version = 1
+        mock_db.execute.return_value.scalar_one_or_none.return_value = existing
+        mock_db.query.return_value.filter.return_value.update.return_value = 0
+
+        mocker.patch("AINDY.platform_layer.metrics.infinity_score_write_failures_total", failure_counter)
+        mocker.patch("AINDY.db.database.SessionLocal", session_factory)
+
+        with orchestrator_score_context():
+            result = calculate_infinity_score("test-user", mock_db, trigger_event="manual")
+
+        assert result is None
+        assert mock_db.rollback.call_count == _SCORE_WRITE_RETRY_LIMIT
+        logger_error.assert_called_once()
+        assert "after %d attempts" in logger_error.call_args.args[0]
+        emit_error_event.assert_called_once()
+        assert emit_error_event.call_args.kwargs["error_type"] == "infinity_score.concurrent_write_failure"
+        assert emit_error_event.call_args.kwargs["payload"]["retry_limit"] == _SCORE_WRITE_RETRY_LIMIT
+        assert err_db.commit.called
+
+        samples = list(metric_registry.collect())
+        sample = next(
+            s
+            for metric in samples
+            for s in metric.samples
+            if s.name == "aindy_infinity_score_write_failures_total" and s.labels.get("reason") == "concurrent_write"
+        )
+        assert sample.value == 1.0
+
+    def test_calculate_infinity_score_increments_unknown_failure_metric(self, mocker):
+        from prometheus_client import CollectorRegistry, Counter
+
+        from apps.analytics.services.infinity_service import calculate_infinity_score, orchestrator_score_context
+
+        metric_registry = CollectorRegistry(auto_describe=True)
+        failure_counter = Counter(
+            "aindy_infinity_score_write_failures_total",
+            "Total number of Infinity score write failures",
+            ["reason"],
+            registry=metric_registry,
+        )
+
+        mocker.patch(
+            "apps.analytics.services.infinity_service.calculate_execution_speed",
+            side_effect=RuntimeError("boom"),
+        )
+        logger_warning = mocker.patch("apps.analytics.services.infinity_service.logger.warning")
+
+        mocker.patch("AINDY.platform_layer.metrics.infinity_score_write_failures_total", failure_counter)
+
+        with orchestrator_score_context():
+            result = calculate_infinity_score("test-user", MagicMock(), trigger_event="manual")
+
+        assert result is None
+        logger_warning.assert_called()
+
+        samples = list(metric_registry.collect())
+        sample = next(
+            s
+            for metric in samples
+            for s in metric.samples
+            if s.name == "aindy_infinity_score_write_failures_total" and s.labels.get("reason") == "unknown"
+        )
+        assert sample.value == 1.0
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Score Endpoints

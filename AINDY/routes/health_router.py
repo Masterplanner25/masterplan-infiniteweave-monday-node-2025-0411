@@ -171,14 +171,66 @@ def _check_worker_health() -> dict:
         return {"status": "error", "detail": str(exc)}
 
 
+def _check_nodus_status() -> dict:
+    nodus_path = os.environ.get("NODUS_SOURCE_PATH")
+    if not nodus_path:
+        return {"status": "not_configured", "detail": "NODUS_SOURCE_PATH not set"}
+
+    import sys as _sys
+
+    if nodus_path not in _sys.path:
+        _sys.path.insert(0, nodus_path)
+    try:
+        import importlib
+
+        importlib.import_module("nodus.runtime.embedding")
+        return {"status": "ok", "path": nodus_path}
+    except ImportError as exc:
+        return {"status": "unavailable", "detail": str(exc), "path": nodus_path}
+
+
+def _check_ai_providers_status() -> dict:
+    from AINDY.kernel.circuit_breaker import (
+        CircuitState,
+        get_deepseek_circuit_breaker,
+        get_openai_circuit_breaker,
+    )
+
+    def _summarize(cb) -> dict:
+        state = cb.state
+        result = {
+            "circuit": state.value,
+            "failure_count": cb.failure_count,
+        }
+        if state != CircuitState.CLOSED:
+            opened = cb.opened_at
+            result["opened_at"] = opened.isoformat() if opened else None
+        return result
+
+    openai_status = _summarize(get_openai_circuit_breaker())
+    deepseek_status = _summarize(get_deepseek_circuit_breaker())
+    any_open = any(
+        status["circuit"] == "open"
+        for status in (openai_status, deepseek_status)
+    )
+    aggregate = "degraded" if any_open else "ok"
+    return {
+        "status": aggregate,
+        "openai": openai_status,
+        "deepseek": deepseek_status,
+    }
+
+
 async def _build_deep_health_payload() -> dict:
-    database, redis, mongo, scheduler, flow_registry, worker = await gather(
+    database, redis, mongo, scheduler, flow_registry, worker, nodus, ai_providers = await gather(
         _run_deep_check(_check_database_status, timeout=0.5),
         _run_deep_check(_check_redis_status, timeout=1.0),
         _run_deep_check(_check_mongo_status, timeout=1.0),
         _run_deep_check(_check_scheduler_status, timeout=0.5),
         _run_deep_check(_check_flow_registry_status, timeout=0.5),
         _run_deep_check(_check_worker_health, timeout=1.0),
+        _run_deep_check(_check_nodus_status, timeout=1.0),
+        _run_deep_check(_check_ai_providers_status, timeout=0.5),
     )
 
     checks = {
@@ -188,6 +240,8 @@ async def _build_deep_health_payload() -> dict:
         "scheduler": scheduler if scheduler.get("status") != "error" else {"status": "not_running", "detail": scheduler.get("detail")},
         "flow_registry": flow_registry if flow_registry.get("status") != "error" else {"status": "empty", "node_count": 0, "flow_count": 0},
         "worker": worker if worker.get("status") != "error" else {"status": "error", "detail": worker.get("detail")},
+        "nodus": nodus if nodus.get("status") != "error" else {"status": "unavailable", "detail": nodus.get("detail")},
+        "ai_providers": ai_providers if ai_providers.get("status") != "error" else {"status": "unavailable", "detail": ai_providers.get("detail")},
     }
     overall_status = "degraded" if any(
         check.get("status") not in {"ok", "not_configured", "not_applicable"} for check in checks.values()

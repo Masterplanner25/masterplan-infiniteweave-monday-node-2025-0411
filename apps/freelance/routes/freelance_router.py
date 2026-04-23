@@ -17,7 +17,18 @@ router = APIRouter(prefix="/freelance", tags=["Freelance"], dependencies=[Depend
 
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str, *, return_full: bool = False):
     from AINDY.runtime.flow_engine import run_flow
-    result = run_flow(flow_name, payload, db=db, user_id=user_id)
+    try:
+        result = run_flow(flow_name, payload, db=db, user_id=user_id)
+    except RuntimeError as exc:
+        error = str(exc or "")
+        marker = error.find("HTTP_")
+        if marker != -1:
+            error = error[marker:]
+            parts = error.split(":", 1)
+            code = int(parts[0].replace("HTTP_", ""))
+            msg = parts[1] if len(parts) > 1 else error
+            raise HTTPException(status_code=code, detail=msg) from exc
+        raise
     if result.get("status") == "FAILED":
         error = result.get("error", "")
         if error.startswith("HTTP_"):
@@ -47,13 +58,16 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,
         )
+    eu_id = result.metadata.get("eu_id")
+    if eu_id is None:
+        raise HTTPException(status_code=500, detail="Execution pipeline did not attach eu_id")
     data = result.data
     if isinstance(data, dict):
         data = dict(data)
         data.setdefault(
             "execution_envelope",
             to_envelope(
-                eu_id=result.metadata.get("eu_id"),
+                eu_id=eu_id,
                 trace_id=result.metadata.get("trace_id"),
                 status="SUCCESS",
                 output=None,
@@ -119,6 +133,16 @@ def create_freelance_order(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    delivery_type = str(order.delivery_type or "manual").strip().lower()
+    supported_delivery_types = ["email", "manual", "webhook"]
+    if delivery_type not in {"manual", "email", "webhook"}:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"delivery_type '{delivery_type}' is not supported. "
+                f"Supported types: {supported_delivery_types}"
+            ),
+        )
     user_id = str(current_user["sub"])
     def handler(_ctx):
         return _do_create_freelance_order(db, order, user_id)

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateTwr } from "../../api";
+import { calculateTwr } from "../../api/analytics.js";
+import { Toast } from "../shared/Toast";
 // Import all panels from the same directory
 import EngagementPanel from "../app/EngagementPanel";
 import AIEfficiencyPanel from "../app/AIEfficiencyPanel";
@@ -14,6 +15,7 @@ import EngagementRatePanel from "../app/EngagementRatePanel";
 import AIProductivityBoostPanel from "../app/AIProductivityBoostPanel";
 import DecisionEfficiencyPanel from "../app/DecisionEfficiencyPanel";
 import LostPotentialPanel from "../app/LostPotentialPanel";
+import { useToast } from "../../utils/useToast";
 
 export default function ExecutionConsole() {
   // 1. Tab State
@@ -27,6 +29,7 @@ export default function ExecutionConsole() {
   const [aiUse, setAiUse] = useState(3);
   const [difficulty, setDifficulty] = useState(3);
   const [result, setResult] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   // --- Styles ---
   const containerStyle = {
@@ -101,7 +104,7 @@ export default function ExecutionConsole() {
         task_difficulty: parseInt(difficulty)
       });
       setResult(data);
-    } catch (err) { alert("TWR failed."); }
+    } catch (err) {showToast(err?.message || "TWR failed.");}
   };
 
   return (
@@ -181,6 +184,7 @@ export default function ExecutionConsole() {
           </div>
         )}
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>
   );
 }

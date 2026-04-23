@@ -546,10 +546,9 @@ def execute_nodus_task_payload(
             user_id=normalized_user_id,
         )
 
-        nodus_path = os.environ.get(
-            "NODUS_SOURCE_PATH",
-            r"C:\dev\Coding Language\src",
-        )
+        nodus_path = os.environ.get("NODUS_SOURCE_PATH")
+        if not nodus_path:
+            raise ImportError("NODUS_SOURCE_PATH is not set. Nodus VM cannot be loaded.")
         if nodus_path not in sys.path:
             sys.path.insert(0, nodus_path)
 
@@ -669,14 +668,15 @@ def execute_nodus_task_payload(
             "result": result,
         }
 
-    except ImportError:
+    except ImportError as exc:
         return {
             "task_name": task_name,
             "status": "bridge_ready",
             "message": (
-                "Nodus runtime not found. Memory Bridge is available for "
-                "direct API calls."
+                "Nodus runtime unavailable. Configure NODUS_SOURCE_PATH to enable "
+                "Nodus script execution. Memory Bridge is available for direct API calls."
             ),
+            "detail": str(exc),
             "allowed_operations": allowed_operations or sorted(ALLOWED_OPERATION_CAPABILITIES.keys()),
             "available_operations": [
                 "POST /memory/recall/v3",

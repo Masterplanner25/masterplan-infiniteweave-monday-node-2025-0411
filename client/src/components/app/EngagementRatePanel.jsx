@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateEngagementRate } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateEngagementRate } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function EngagementRatePanel() {
   const [totalInteractions, setTotalInteractions] = useState(0);

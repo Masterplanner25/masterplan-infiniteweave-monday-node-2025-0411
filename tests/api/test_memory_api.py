@@ -267,7 +267,7 @@ def test_memory_nodus_async_route_emits_system_events(
             headers=auth_headers,
             json={
                 "task_name": "memory async smoke",
-                "task_code": "task smoke { }",
+                "task_code": "set_state('smoke', True)",
                 "session_tags": ["pytest"],
             },
         )

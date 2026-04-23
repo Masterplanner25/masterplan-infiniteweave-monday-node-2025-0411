@@ -12,7 +12,7 @@ def register() -> None:
         description="Send a message to the Genesis strategic planning session (modifies MasterPlan state)",
         capability="tool:genesis.message",
         required_capability="strategic_planning",
-        category="genesis",
+        category="planning",
         egress_scope="external_llm",
     )(genesis_message)
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { calculateBusinessGrowth } from "../../api";import { safeMap } from "../../utils/safe";
+import { calculateBusinessGrowth } from "../../api/analytics.js";
+import { safeMap } from "../../utils/safe";
 
 export default function BusinessGrowthPanel() {
   const [revenue, setRevenue] = useState(0);
