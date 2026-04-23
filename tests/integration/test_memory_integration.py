@@ -67,7 +67,7 @@ class FakeRuntime:
 
 
 @pytest.mark.asyncio
-async def test_nodus_execution_injects_memory_context(monkeypatch):
+async def test_nodus_execution_injects_memory_context(monkeypatch, persisted_user):
     from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
     def fake_get_context(*args, **kwargs):
@@ -131,7 +131,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
     result = await execute_nodus_task(
         body=body,
         db=SimpleNamespace(),
-        current_user={"sub": "00000000-0000-0000-0000-000000000003"},
+        current_user={"sub": str(persisted_user.id)},
     )
 
     assert result["status"] == "executed"
@@ -147,7 +147,7 @@ async def test_nodus_execution_injects_memory_context(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_nodus_execution_blocks_restricted_source(monkeypatch):
+async def test_nodus_execution_blocks_restricted_source(monkeypatch, persisted_user):
     from fastapi import HTTPException
     from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
@@ -161,7 +161,7 @@ async def test_nodus_execution_blocks_restricted_source(monkeypatch):
         await execute_nodus_task(
             body=body,
             db=SimpleNamespace(),
-            current_user={"sub": "00000000-0000-0000-0000-000000000003"},
+            current_user={"sub": str(persisted_user.id)},
         )
 
     assert exc.value.status_code == 403
@@ -169,7 +169,7 @@ async def test_nodus_execution_blocks_restricted_source(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_nodus_execution_blocks_write_ops_without_token(monkeypatch):
+async def test_nodus_execution_blocks_write_ops_without_token(monkeypatch, persisted_user):
     from fastapi import HTTPException
     from AINDY.routes.memory_router import NodusTaskRequest, execute_nodus_task
 
@@ -184,7 +184,7 @@ async def test_nodus_execution_blocks_write_ops_without_token(monkeypatch):
         await execute_nodus_task(
             body=body,
             db=SimpleNamespace(),
-            current_user={"sub": "00000000-0000-0000-0000-000000000003"},
+            current_user={"sub": str(persisted_user.id)},
         )
 
     assert exc.value.status_code == 403
@@ -204,7 +204,7 @@ def test_memory_feedback_updates_counts():
     assert db.committed is True
 
 
-def test_memory_loop_runs_and_feedback(monkeypatch):
+def test_memory_loop_runs_and_feedback(monkeypatch, persisted_user):
     orchestrator = MemoryOrchestrator(FakeDAO)
 
     def executor(task, context):
@@ -223,7 +223,7 @@ def test_memory_loop_runs_and_feedback(monkeypatch):
     task = SimpleNamespace(type="analysis", input="alpha", tags=["t"])
     result = loop.run(
         task,
-        user_id="00000000-0000-0000-0000-000000000001",
+        user_id=str(persisted_user.id),
         db=object(),
     )
 

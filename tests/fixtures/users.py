@@ -27,6 +27,11 @@ def test_user(db_session):
 
 
 @pytest.fixture
+def persisted_user(create_test_user):
+    return create_test_user()
+
+
+@pytest.fixture
 def create_test_user(db_session):
     def _create(*, user_id: uuid.UUID | None = None, email: str | None = None, username: str | None = None) -> User:
         resolved_user_id = user_id or uuid.uuid4()
