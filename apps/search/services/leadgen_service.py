@@ -11,6 +11,7 @@ import logging
 import json
 import re
 
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 from apps.search.services.search_scoring import score_lead_result
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -196,6 +197,8 @@ Each score must be a number between 0 and 100.
         result = json.loads(text_output)
         return result
 
+    except CircuitOpenError:
+        raise
     except Exception as e:
         logger.warning("[LeadGen] Scoring failed for %s: %s", lead_data["company"], e)
         return {

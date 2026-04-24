@@ -14,7 +14,6 @@ emit_system_event = queue_system_event
 from AINDY.db.database import SessionLocal
 from AINDY.platform_layer.registry import get_job
 from AINDY.platform_layer.trace_context import get_current_trace_id
-from apps.analytics.services import dependency_adapter
 
 logger = logging.getLogger(__name__)
 
@@ -82,26 +81,38 @@ def orchestrator_score_context(*args, **kwargs):
 
 
 def fetch_recent_memory(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_recent_memory(*args, **kwargs)
 
 
 def fetch_user_metrics(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_user_metrics(*args, **kwargs)
 
 
 def fetch_memory_signals(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_memory_signals(*args, **kwargs)
 
 
 def fetch_system_state(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_system_state(*args, **kwargs)
 
 
 def fetch_task_graph_context(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_task_graph_context(*args, **kwargs)
 
 
 def fetch_social_performance_signals(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_social_performance_signals(*args, **kwargs)
 
 
@@ -114,6 +125,8 @@ def get_user_metrics(*args, **kwargs):
 
 
 def get_relevant_memories(payload: dict, *, db):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_memory_signals(
         user_id=payload.get("user_id"),
         trigger_event=str(payload.get("trigger_event") or "manual"),
@@ -134,6 +147,7 @@ def get_social_performance_signals(*args, **kwargs):
 
 
 def execute(user_id: str, trigger_event: str, db):
+    from apps.analytics.services import dependency_adapter
     from apps.analytics.services.concurrency import LeaseHeartbeat, release_execution_lease
 
     rank_goals = get_job("goals.rank")

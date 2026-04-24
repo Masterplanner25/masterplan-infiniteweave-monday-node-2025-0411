@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from pymongo.database import Database
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.db.mongo_setup import get_mongo_db
@@ -144,6 +145,26 @@ def _compute_infinity_ranked_score(
     )
 
 
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
+
+
 @router.post("/profile")
 @limiter.limit("30/minute")
 def upsert_profile(
@@ -187,12 +208,13 @@ def upsert_profile(
         db["profiles"].insert_one(new_profile)
         return new_profile
 
-    return execute_with_pipeline_sync(
+    result = execute_with_pipeline_sync(
         request=None,
         route_name="social.profile.upsert",
         handler=handler,
         user_id=str(current_user["sub"]),
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/profile/{username}")
@@ -248,13 +270,14 @@ def create_post(
             },
         }
 
-    return execute_with_pipeline_sync(
+    result = execute_with_pipeline_sync(
         request=None,
         route_name="social.post.create",
         handler=handler,
         user_id=str(current_user["sub"]),
         metadata={"db": sql_db},
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/feed")
@@ -386,13 +409,14 @@ def record_post_interaction(
             "execution_hints": {"memory": memory_hints},
         }
 
-    return execute_with_pipeline_sync(
+    result = execute_with_pipeline_sync(
         request=None,
         route_name="social.post.interact",
         handler=handler,
         user_id=str(current_user["sub"]),
         metadata={"db": sql_db},
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/analytics")

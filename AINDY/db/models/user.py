@@ -4,7 +4,7 @@ db/models/user.py — Persisted User model for A.I.N.D.Y. authentication.
 Phase 3 replacement for the in-memory _USERS dict in auth_router.py.
 """
 import uuid
-from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -21,5 +21,6 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    token_version = Column(Integer, default=0, nullable=False, server_default="0")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     api_keys = relationship("PlatformAPIKey", back_populates="user", cascade="all, delete-orphan")

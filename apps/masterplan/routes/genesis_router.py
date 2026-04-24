@@ -33,6 +33,55 @@ _GENESIS_COMPAT_EXPORTS = (
 router = APIRouter(prefix="/genesis", tags=["Genesis"])
 
 
+def _extract_flow_error(result: dict) -> str:
+    if not isinstance(result, dict):
+        return str(result or "")
+    nested_data = result.get("data")
+    nested_result = result.get("result")
+    for candidate in (
+        result.get("error"),
+        nested_data.get("error") if isinstance(nested_data, dict) else None,
+        nested_result.get("error") if isinstance(nested_result, dict) else None,
+        nested_data.get("message") if isinstance(nested_data, dict) else None,
+        nested_result.get("message") if isinstance(nested_result, dict) else None,
+    ):
+        if candidate:
+            return str(candidate)
+    return ""
+
+
+def _is_circuit_open_error(detail) -> bool:
+    if isinstance(detail, dict):
+        if detail.get("error") == "ai_provider_unavailable":
+            return True
+        text = str(detail.get("detail") or detail.get("details") or detail.get("message") or "")
+    else:
+        text = str(detail or "")
+    lowered = text.lower()
+    if "http_503" in lowered:
+        return True
+    return "circuit" in lowered and (
+        "rejecting call" in lowered
+        or " is open" in lowered
+        or "half-open" in lowered
+        or "circuit open" in lowered
+    )
+
+
+def _ai_provider_unavailable_response(detail) -> JSONResponse:
+    payload = {
+        "error": "ai_provider_unavailable",
+        "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
+        "detail": str(detail),
+        "retryable": True,
+    }
+    if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
+        payload = dict(detail)
+        payload.setdefault("message", "An AI provider is temporarily unavailable. Please retry in a moment.")
+        payload.setdefault("retryable", True)
+    return JSONResponse(status_code=503, content=payload, headers={"Retry-After": "60"})
+
+
 def _genesis_flow_envelope(result: dict) -> dict:
     """Embed execution_envelope into flow result data. Returns the data dict."""
     data = result.get("data")
@@ -59,7 +108,9 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
         return JSONResponse(status_code=202, content=data.get("_http_response", {}))
 
     if result.get("status") == "FAILED":
-        error = result.get("error", "")
+        error = _extract_flow_error(result)
+        if _is_circuit_open_error(error):
+            return _ai_provider_unavailable_response(error)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -151,6 +202,7 @@ def genesis_message(
     def handler(_ctx):
         result = run_flow("genesis_message", {"session_id": session_id, "message": user_message}, db=db, user_id=user_id)
         if result.get("status") != "SUCCESS":
+            error = _extract_flow_error(result)
             try:
                 emit_observability_event(
                     event_type=SystemEventTypes.GENESIS_MESSAGE_FAILED,
@@ -160,6 +212,8 @@ def genesis_message(
                 )
             except Exception as _obs_exc:
                 logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
+            if _is_circuit_open_error(error):
+                return _ai_provider_unavailable_response(error)
             raise HTTPException(status_code=500, detail="Genesis message execution failed")
 
         from apps.masterplan.services.genesis_service import restore_synthesis_ready

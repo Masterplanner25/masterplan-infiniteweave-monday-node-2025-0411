@@ -4,6 +4,7 @@ from datetime import datetime
 from fastapi import Depends, APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -109,6 +110,26 @@ def _legacy_twr_response(*, task: TaskInput, infinity_result: dict) -> dict:
         },
     }
 
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
+
 @router.post("/calculate_twr")
 @limiter.limit("30/minute")
 @cache(expire=60)
@@ -148,7 +169,7 @@ async def process_task(
 
         return _legacy_twr_response(task=task, infinity_result=result)
 
-    return await _execute_main(
+    result = await _execute_main(
         request,
         "main.calculate_twr",
         handler,
@@ -156,6 +177,7 @@ async def process_task(
         current_user=current_user,
         input_payload=task.model_dump(),
     )
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_effort")
 @limiter.limit("30/minute")
@@ -166,7 +188,7 @@ async def process_effort(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await _execute_main(
+    result = await _execute_main(
         request,
         "main.calculate_effort",
         lambda ctx: (
@@ -179,6 +201,7 @@ async def process_effort(
         current_user=current_user,
         input_payload=task.model_dump(),
     )
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_productivity")
 @limiter.limit("30/minute")
@@ -189,7 +212,7 @@ async def process_productivity(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return await _execute_main(
+    result = await _execute_main(
         request,
         "main.calculate_productivity",
         lambda ctx: (
@@ -202,6 +225,7 @@ async def process_productivity(
         current_user=current_user,
         input_payload=task.model_dump(),
     )
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_virality")
 @limiter.limit("30/minute")
@@ -221,7 +245,8 @@ async def process_virality(
         save_calculation(db, "Virality Score", virality_score, user_id=str(current_user["sub"]))
         return {"Virality Score": virality_score}
 
-    return await _execute_main(request, "main.calculate_virality", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.calculate_virality", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_engagement")
 @limiter.limit("30/minute")
@@ -237,7 +262,8 @@ async def process_engagement(
         save_calculation(db, "Engagement Score", engagement_score, user_id=str(current_user["sub"]))
         return {"Engagement Score": engagement_score}
 
-    return await _execute_main(request, "main.calculate_engagement", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.calculate_engagement", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_ai_efficiency")
 @limiter.limit("30/minute")
@@ -253,7 +279,8 @@ async def process_ai_efficiency(
         save_calculation(db, "AI Efficiency Score", efficiency, user_id=str(current_user["sub"]))
         return {"AI Efficiency Score": efficiency}
 
-    return await _execute_main(request, "main.calculate_ai_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.calculate_ai_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/calculate_impact_score")
 @limiter.limit("30/minute")
@@ -269,7 +296,8 @@ async def process_impact_score(
         save_calculation(db, "Impact Score", impact_score, user_id=str(current_user["sub"]))
         return {"Impact Score": impact_score}
 
-    return await _execute_main(request, "main.calculate_impact_score", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.calculate_impact_score", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/income_efficiency")
 @limiter.limit("30/minute")
@@ -285,7 +313,8 @@ async def process_income_efficiency(
         save_calculation(db, "Income Efficiency", result, user_id=str(current_user["sub"]))
         return {"Income Efficiency": result}
 
-    return await _execute_main(request, "main.income_efficiency", handler, db=db, current_user=current_user, input_payload=eff.model_dump())
+    result = await _execute_main(request, "main.income_efficiency", handler, db=db, current_user=current_user, input_payload=eff.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/revenue_scaling")
 @limiter.limit("30/minute")
@@ -301,7 +330,8 @@ async def process_revenue_scaling(
         save_calculation(db, "Revenue Scaling", result, user_id=str(current_user["sub"]))
         return {"Revenue Scaling": result}
 
-    return await _execute_main(request, "main.revenue_scaling", handler, db=db, current_user=current_user, input_payload=rs.model_dump())
+    result = await _execute_main(request, "main.revenue_scaling", handler, db=db, current_user=current_user, input_payload=rs.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/execution_speed")
 @limiter.limit("30/minute")
@@ -317,7 +347,8 @@ async def process_execution_speed(
         save_calculation(db, "Execution Speed", result, user_id=str(current_user["sub"]))
         return {"Execution Speed": result}
 
-    return await _execute_main(request, "main.execution_speed", handler, db=db, current_user=current_user, input_payload=es.model_dump())
+    result = await _execute_main(request, "main.execution_speed", handler, db=db, current_user=current_user, input_payload=es.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/attention_value")
 @limiter.limit("30/minute")
@@ -333,7 +364,8 @@ async def process_attention_value(
         save_calculation(db, "Attention Value", result, user_id=str(current_user["sub"]))
         return {"Attention Value": result}
 
-    return await _execute_main(request, "main.attention_value", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.attention_value", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/engagement_rate")
 @limiter.limit("30/minute")
@@ -349,7 +381,8 @@ async def process_engagement_rate(
         save_calculation(db, "Engagement Rate", result, user_id=str(current_user["sub"]))
         return {"Engagement Rate": result}
 
-    return await _execute_main(request, "main.engagement_rate", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.engagement_rate", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/business_growth")
 @limiter.limit("30/minute")
@@ -365,7 +398,8 @@ async def process_business_growth(
         save_calculation(db, "Business Growth", result, user_id=str(current_user["sub"]))
         return {"Business Growth": result}
 
-    return await _execute_main(request, "main.business_growth", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.business_growth", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/monetization_efficiency")
 @limiter.limit("30/minute")
@@ -381,7 +415,8 @@ async def process_monetization_efficiency(
         save_calculation(db, "Monetization Efficiency", result, user_id=str(current_user["sub"]))
         return {"Monetization Efficiency": result}
 
-    return await _execute_main(request, "main.monetization_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.monetization_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/ai_productivity_boost")
 @limiter.limit("30/minute")
@@ -402,7 +437,8 @@ async def process_ai_productivity_boost(
         )
         return {"AI Productivity Boost": saved_result.result_value}
 
-    return await _execute_main(request, "main.ai_productivity_boost", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.ai_productivity_boost", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/lost_potential")
 @limiter.limit("30/minute")
@@ -418,7 +454,8 @@ async def process_lost_potential(
         save_calculation(db, "Lost Potential", result, user_id=str(current_user["sub"]))
         return {"Lost Potential": result}
 
-    return await _execute_main(request, "main.lost_potential", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.lost_potential", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/decision_efficiency")
 @limiter.limit("30/minute")
@@ -434,7 +471,8 @@ async def process_decision_efficiency(
         save_calculation(db, "Decision Efficiency", result, user_id=str(current_user["sub"]))
         return {"Decision Efficiency": result}
 
-    return await _execute_main(request, "main.decision_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.decision_efficiency", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 @router.post("/batch_calculations")
 @limiter.limit("30/minute")
@@ -450,7 +488,8 @@ async def process_batch_calculations(
             save_calculation(db, metric_name, value, user_id=str(current_user["sub"]))
         return result
 
-    return await _execute_main(request, "main.batch_calculations", handler, db=db, current_user=current_user, input_payload=batch_data.model_dump())
+    result = await _execute_main(request, "main.batch_calculations", handler, db=db, current_user=current_user, input_payload=batch_data.model_dump())
+    return _with_execution_envelope(result)
 
 
 @router.get("/results")
@@ -491,7 +530,8 @@ async def create_masterplan(
         from apps.analytics.services.compute_service import create_masterplan_compute
         return create_masterplan_compute(db, data=data.dict(), user_id=str(current_user["sub"]))
 
-    return await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    result = await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())
+    return _with_execution_envelope(result)
 
 
 for _route in list(router.routes):

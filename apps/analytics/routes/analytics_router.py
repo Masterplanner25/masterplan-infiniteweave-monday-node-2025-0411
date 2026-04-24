@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -7,6 +8,26 @@ from apps.analytics.schemas.analytics import LinkedInRawInput
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 def _analytics_http_error(data):
@@ -49,10 +70,11 @@ async def ingest_linkedin_manual(
             raise HTTPException(status_code=500, detail="Analytics ingest failed")
         return result.get("data")
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request, route_name="analytics.linkedin.manual", handler=handler,
         user_id=user_id, metadata={"db": db}, input_payload=data.model_dump(),
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/masterplan/{masterplan_id}")

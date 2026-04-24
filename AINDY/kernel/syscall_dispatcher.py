@@ -55,6 +55,7 @@ import uuid as _uuid
 from contextvars import ContextVar
 from typing import Any
 
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 # Re-export SyscallContext so callers only need one import.
 from AINDY.kernel.syscall_registry import (  # noqa: F401
     DEFAULT_NODUS_CAPABILITIES,
@@ -317,7 +318,10 @@ class SyscallDispatcher:
                 "[SyscallDispatcher] handler error '%s': %s", name, exc, exc_info=True,
             )
             self._emit_syscall_event(name, context, "error")
-            return self._error_envelope(name, context, str(exc), t_start,
+            message = str(exc)
+            if isinstance(exc, CircuitOpenError):
+                message = f"HTTP_503:{message}"
+            return self._error_envelope(name, context, message, t_start,
                                         version=parsed_version)
 
         # Step 3b — output validation (non-fatal: log warning, never fail execution)

@@ -567,8 +567,10 @@ class ResourceManager:
         if settings.is_testing:
             return True, None
 
+        eid = str(eu_id)
+
         with self._lock:
-            snap = self._usage.get(str(eu_id))
+            snap = self._usage.get(eid)
             if snap is None:
                 return True, None
 
@@ -577,25 +579,35 @@ class ResourceManager:
             return False, concurrency_reason
 
         with self._lock:
-            snap = self._usage.get(str(eu_id))
+            snap = self._usage.get(eid)
             if snap is None:
                 return True, None
+            local_cpu_time_ms = snap.cpu_time_ms
+            local_syscall_count = snap.syscall_count
 
-            if snap.cpu_time_ms > MAX_CPU_TIME_MS:
-                reason = (
-                    f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"cpu_time_ms limit ({snap.cpu_time_ms} > {MAX_CPU_TIME_MS})"
-                )
-                logger.warning("[ResourceManager] %s", reason)
-                return False, reason
+        redis_cpu_time_ms = self._backend_get_cpu_ms(eid)
+        if redis_cpu_time_ms is None:
+            redis_cpu_time_ms = local_cpu_time_ms
 
-            if snap.syscall_count > MAX_SYSCALLS_PER_EXECUTION:
-                reason = (
-                    f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
-                    f"syscall_count limit ({snap.syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
-                )
-                logger.warning("[ResourceManager] %s", reason)
-                return False, reason
+        redis_syscall_count = self._backend_get_syscalls(eid)
+        if redis_syscall_count is None:
+            redis_syscall_count = local_syscall_count
+
+        if redis_cpu_time_ms > MAX_CPU_TIME_MS:
+            reason = (
+                f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
+                f"cpu_time_ms limit ({redis_cpu_time_ms} > {MAX_CPU_TIME_MS})"
+            )
+            logger.warning("[ResourceManager] %s", reason)
+            return False, reason
+
+        if redis_syscall_count > MAX_SYSCALLS_PER_EXECUTION:
+            reason = (
+                f"{RESOURCE_LIMIT_EXCEEDED}: eu {eu_id!r} exceeded "
+                f"syscall_count limit ({redis_syscall_count} > {MAX_SYSCALLS_PER_EXECUTION})"
+            )
+            logger.warning("[ResourceManager] %s", reason)
+            return False, reason
 
         return True, None
 
@@ -746,6 +758,7 @@ class ResourceManager:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
             self._usage[eid].cpu_time_ms += delta
+        self._backend_add_cpu_ms(eid, delta)
 
     def record_memory(self, eu_id: str, bytes_used: int) -> None:
         eid = str(eu_id)
@@ -754,6 +767,7 @@ class ResourceManager:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
             self._usage[eid].memory_bytes = max(self._usage[eid].memory_bytes, value)
+        self._backend_set_memory_if_greater(eid, value)
 
     def record_syscall(self, eu_id: str, count: int = 1) -> None:
         eid = str(eu_id)
@@ -764,6 +778,8 @@ class ResourceManager:
             if eid not in self._usage:
                 self._usage[eid] = UsageSnapshot(eu_id=eid, tenant_id="")
             self._usage[eid].syscall_count += steps
+        for _ in range(steps):
+            self._backend_increment_syscalls(eid)
 
     def record_usage(self, eu_id: str, usage: dict) -> None:
         """Accumulate resource usage for an ExecutionUnit.
@@ -838,9 +854,11 @@ class ResourceManager:
 
         Safe to call at any point after ``mark_completed()``.
         """
+        eid = str(eu_id)
         with self._lock:
-            self._usage.pop(str(eu_id), None)
-            self._eu_tenant.pop(str(eu_id), None)
+            self._usage.pop(eid, None)
+            self._eu_tenant.pop(eid, None)
+        self._backend_delete_eu(eid)
 
     def reset(self) -> None:
         """Clear ALL in-memory state.

@@ -115,13 +115,6 @@ function BootGate() {
 function AppShell() {
   return (
     <div className="flex min-h-screen bg-[#09090b] text-[#fafafa] font-sans selection:bg-[#00ffaa]/30">
-      <style dangerouslySetInnerHTML={{ __html: `
-            body { margin: 0; padding: 0; background: #09090b; overflow: hidden; }
-            * { box-sizing: border-box; }
-            .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-            .custom-scrollbar::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
-            .main-content-gradient { background: linear-gradient(135deg, #09090b 0%, #0c0c0e 100%); }
-          `}} />
       <Sidebar />
       <main className="flex-1 h-screen overflow-y-auto p-10 main-content-gradient custom-scrollbar">
         <Outlet />

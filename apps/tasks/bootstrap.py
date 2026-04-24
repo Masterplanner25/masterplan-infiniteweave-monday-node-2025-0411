@@ -244,9 +244,22 @@ def _register_flow_plans() -> None:
 
 
 def _register_required_flow_nodes() -> None:
-    from AINDY.platform_layer.registry import register_required_flow_node
+    from AINDY.platform_layer.registry import register_required_flow_node, register_symbols
+    from apps.tasks.services.task_service import _BACKGROUND_LEASE_NAME
 
     register_required_flow_node("task_complete")
+    register_symbols(
+        {
+            "task_background_lease_name": _BACKGROUND_LEASE_NAME,
+            "task_is_background_leader": _task_is_background_leader,
+        }
+    )
+
+
+def _task_is_background_leader() -> bool:
+    from apps.tasks.services.task_service import is_background_leader
+
+    return is_background_leader()
 
 
 def _job_watcher_ingest(payload: dict, db):

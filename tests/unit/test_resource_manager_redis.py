@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock, call, patch
 
 import pytest
+import redis
 
 from AINDY.kernel.resource_manager import RedisResourceBackend, ResourceManager
 
@@ -191,3 +192,55 @@ def test_can_execute_falls_back_to_local_on_redis_error(monkeypatch):
 
     assert ok is True
     assert reason is None
+
+
+def test_record_cpu_calls_backend_add_cpu_ms(monkeypatch):
+    rm = ResourceManager()
+    backend = MagicMock()
+    rm._backend = backend
+
+    rm.record_cpu("eu-1", 25)
+
+    backend.add_cpu_ms.assert_called_once_with("eu-1", 25)
+    assert rm.get_usage("eu-1")["cpu_time_ms"] == 25
+
+
+def test_check_quota_prefers_backend_cpu_usage_over_local_snapshot(monkeypatch):
+    rm = ResourceManager()
+    backend = MagicMock()
+    rm._backend = backend
+    rm.mark_started("tenant-a", "eu-1")
+    rm.record_cpu("eu-1", 10)
+    backend.get_cpu_ms.return_value = 30_001
+    backend.get_syscalls.return_value = 0
+    monkeypatch.setattr(rm, "_get_redis", lambda: None)
+
+    with _production_quota():
+        ok, reason = rm.check_quota("eu-1")
+
+    assert ok is False
+    assert reason is not None
+    assert "cpu_time_ms limit" in reason
+
+
+def test_purge_eu_calls_backend_delete(monkeypatch):
+    rm = ResourceManager()
+    backend = MagicMock()
+    rm._backend = backend
+    rm.mark_started("tenant-a", "eu-1")
+
+    rm.purge_eu("eu-1")
+
+    backend.delete_eu.assert_called_once_with("eu-1")
+    assert "eu-1" not in rm._usage
+
+
+def test_record_cpu_swallows_backend_redis_error_and_keeps_local_snapshot(monkeypatch):
+    rm = ResourceManager()
+    backend = MagicMock()
+    backend.add_cpu_ms.side_effect = redis.RedisError("redis down")
+    rm._backend = backend
+
+    rm.record_cpu("eu-1", 7)
+
+    assert rm.get_usage("eu-1")["cpu_time_ms"] == 7

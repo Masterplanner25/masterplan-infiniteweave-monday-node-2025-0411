@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
@@ -17,11 +18,60 @@ search_history_router = APIRouter(prefix="/search", tags=["Search History"], dep
 logger = logging.getLogger(__name__)
 
 
+def _extract_flow_error(result: dict) -> str:
+    if not isinstance(result, dict):
+        return str(result or "")
+    nested_data = result.get("data")
+    nested_result = result.get("result")
+    for candidate in (
+        result.get("error"),
+        nested_data.get("error") if isinstance(nested_data, dict) else None,
+        nested_result.get("error") if isinstance(nested_result, dict) else None,
+        nested_data.get("message") if isinstance(nested_data, dict) else None,
+        nested_result.get("message") if isinstance(nested_result, dict) else None,
+    ):
+        if candidate:
+            return str(candidate)
+    return ""
+
+
+def _is_circuit_open_detail(detail) -> bool:
+    if isinstance(detail, dict):
+        if detail.get("error") == "ai_provider_unavailable":
+            return True
+        text = str(detail.get("detail") or detail.get("details") or detail.get("message") or "")
+    else:
+        text = str(detail or "")
+    lowered = text.lower()
+    if "http_503" in lowered:
+        return True
+    return "circuit" in lowered and (
+        "rejecting call" in lowered
+        or " is open" in lowered
+        or "half-open" in lowered
+        or "circuit open" in lowered
+    )
+
+
+def _ai_provider_unavailable_response(detail) -> JSONResponse:
+    payload = {
+        "error": "ai_provider_unavailable",
+        "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
+        "detail": str(detail),
+        "retryable": True,
+    }
+    if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
+        payload = dict(detail)
+        payload.setdefault("message", "An AI provider is temporarily unavailable. Please retry in a moment.")
+        payload.setdefault("retryable", True)
+    return JSONResponse(status_code=503, content=payload, headers={"Retry-After": "60"})
+
+
 def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str):
     from AINDY.runtime.flow_engine import run_flow
     result = run_flow(flow_name, payload, db=db, user_id=user_id)
     if result.get("status") == "FAILED":
-        error = result.get("error", "")
+        error = _extract_flow_error(result)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -45,6 +95,8 @@ def _execute_research(request: Request, route_name: str, handler, *, db: Session
     )
     if not result.success:
         detail = result.metadata.get("detail") or result.error or "Execution failed"
+        if _is_circuit_open_detail(detail):
+            return _ai_provider_unavailable_response(detail)
         raise HTTPException(
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,

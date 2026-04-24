@@ -7,8 +7,8 @@ import {
   getFlowRegistry,
   getAutomationLogs,
   replayAutomationLog,
-  getSchedulerStatus } from "../../api/operator.js";
-import { buildApiUrl } from "../../api/_core.js";
+  getSchedulerStatus,
+  getFlowStrategies } from "../../api/operator.js";
 
 // ── Design tokens (A.I.N.D.Y. dark theme) ────────────────────────────────────
 import { safeMap } from "../../utils/safe";const C = {
@@ -1468,26 +1468,17 @@ function StrategiesPanel({ triggerRefresh }) {
     setLoading(true);
     setError(null);
     // Attempt to call strategies endpoint; gracefully handle 404/not-implemented
-    fetch(buildApiUrl("/flows/strategies"), {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("aindy_token") || ""}`
-      }
-    }).
-    then(async (res) => {
-      if (res.status === 404 || res.status === 405) {
-        setStrategies({ strategies: [], count: 0 });
-        return;
-      }
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`API Error (${res.status}): ${t}`);
-      }
-      const data = await res.json();
+    getFlowStrategies().
+    then((data) => {
       setStrategies(data);
     }).
-    catch(() => {
+    catch((err) => {
       // Endpoint doesn't exist yet — show empty state
-      setStrategies({ strategies: [], count: 0 });
+      if (err && (err.status === 404 || err.status === 405)) {
+        setStrategies({ strategies: [], count: 0 });
+      } else {
+        setError(err?.message || "Failed to load strategies");
+      }
     }).
     finally(() => {
       setLastRefreshed(new Date());

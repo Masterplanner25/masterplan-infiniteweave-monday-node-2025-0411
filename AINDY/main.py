@@ -51,6 +51,7 @@ from AINDY.routes import (
 from AINDY.config import settings
 from AINDY.core.distributed_queue import QueueSaturatedError, validate_queue_backend
 from AINDY.core.observability_events import emit_recovery_failure
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.health_service import check_redis_available
 from AINDY.platform_layer.trace_context import (
     _trace_id_ctx,
@@ -879,6 +880,25 @@ async def queue_saturated_exception_handler(request: Request, exc: QueueSaturate
             "error": "queue_saturated",
             "message": str(exc),
         },
+    )
+
+
+@app.exception_handler(CircuitOpenError)
+async def circuit_open_exception_handler(request: Request, exc: CircuitOpenError):
+    logger.warning(
+        "[CircuitBreaker] open circuit rejected request path=%s error=%s",
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "ai_provider_unavailable",
+            "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
+            "detail": str(exc),
+            "retryable": True,
+        },
+        headers={"Retry-After": "60"},
     )
 
 

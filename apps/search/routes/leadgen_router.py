@@ -10,6 +10,7 @@ import logging
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
@@ -25,6 +26,55 @@ legacy_router = APIRouter(tags=["Lead Generation"])
 logger = logging.getLogger(__name__)
 
 
+def _extract_flow_error(result: dict) -> str:
+    if not isinstance(result, dict):
+        return str(result or "")
+    nested_data = result.get("data")
+    nested_result = result.get("result")
+    for candidate in (
+        result.get("error"),
+        nested_data.get("error") if isinstance(nested_data, dict) else None,
+        nested_result.get("error") if isinstance(nested_result, dict) else None,
+        nested_data.get("message") if isinstance(nested_data, dict) else None,
+        nested_result.get("message") if isinstance(nested_result, dict) else None,
+    ):
+        if candidate:
+            return str(candidate)
+    return ""
+
+
+def _is_circuit_open_detail(detail) -> bool:
+    if isinstance(detail, dict):
+        if detail.get("error") == "ai_provider_unavailable":
+            return True
+        text = str(detail.get("detail") or detail.get("details") or detail.get("message") or "")
+    else:
+        text = str(detail or "")
+    lowered = text.lower()
+    if "http_503" in lowered:
+        return True
+    return "circuit" in lowered and (
+        "rejecting call" in lowered
+        or " is open" in lowered
+        or "half-open" in lowered
+        or "circuit open" in lowered
+    )
+
+
+def _ai_provider_unavailable_response(detail) -> JSONResponse:
+    payload = {
+        "error": "ai_provider_unavailable",
+        "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
+        "detail": str(detail),
+        "retryable": True,
+    }
+    if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
+        payload = dict(detail)
+        payload.setdefault("message", "An AI provider is temporarily unavailable. Please retry in a moment.")
+        payload.setdefault("retryable", True)
+    return JSONResponse(status_code=503, content=payload, headers={"Retry-After": "60"})
+
+
 def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
     result = execute_with_pipeline_sync(
         request=request,
@@ -37,6 +87,8 @@ def _execute_leadgen(request: Request, route_name: str, handler, *, db: Session,
     )
     if not result.success:
         detail = result.metadata.get("detail") or result.error or "Execution failed"
+        if _is_circuit_open_detail(detail):
+            return _ai_provider_unavailable_response(detail)
         raise HTTPException(
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,
@@ -91,12 +143,26 @@ def _do_generate_b2b_leads(db: Session, user_id: str, query: str):
         db=db,
         user_id=user_id,
     )
-    if result.get("status") == "error":
-        raise RuntimeError(
-            (result.get("data") or {}).get("message", "LeadGen flow failed")
-        )
+    status = str(result.get("status") or "").upper()
+    if status != "SUCCESS":
+        error = _extract_flow_error(result) or "LeadGen flow failed"
+        if _is_circuit_open_detail(error):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "ai_provider_unavailable",
+                    "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
+                    "detail": str(error),
+                    "retryable": True,
+                },
+            )
+        raise RuntimeError(str(error))
 
-    search_results = result.get("data") or []
+    flow_data = result.get("data") or []
+    if isinstance(flow_data, dict):
+        search_results = flow_data.get("search_results") or []
+    else:
+        search_results = flow_data
     duration_ms = (time.perf_counter() - start) * 1000
     logger.info("LeadGen generated %s results in %.2fms", len(search_results), duration_ms)
     results_payload = [LeadGenItem(**item).model_dump() for item in search_results]

@@ -101,4 +101,67 @@ describe("frontend smoke tests", () => {
     expect(window.localStorage.getItem("token")).toBeNull();
     expect(window.localStorage.getItem("aindy_token")).toBeNull();
   });
+
+  it("AppShell renders without dangerouslySetInnerHTML", async () => {
+    vi.resetModules();
+    vi.doMock("../context/AuthContext", () => ({
+      useAuth: () => ({ isAuthenticated: true }),
+      AuthProvider: ({ children }) => children,
+    }));
+    vi.doMock("../context/SystemContext", () => ({
+      useSystem: () => ({
+        booting: false,
+        booted: true,
+        bootError: "",
+        bootSystem: vi.fn(),
+        isAdmin: false,
+      }),
+      SystemProvider: ({ children }) => children,
+    }));
+
+    const { default: App } = await import("../App.jsx");
+    const { container } = render(<App />);
+
+    const injectedStyles = container.querySelectorAll("style");
+    expect(injectedStyles.length).toBe(0);
+
+    vi.resetModules();
+    vi.doUnmock("../context/AuthContext");
+    vi.doUnmock("../context/SystemContext");
+  });
+
+  it("ErrorBoundary reports errors to the backend", async () => {
+    vi.resetModules();
+    const reportSpy = vi.fn();
+    vi.doMock("../api/operator.js", async () => ({
+      reportClientError: reportSpy,
+    }));
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    function Bomb() { throw new Error("test explosion"); }
+
+    const { default: EB } = await import("../components/shared/ErrorBoundary.jsx");
+    render(<EB><Bomb /></EB>);
+
+    expect(reportSpy).toHaveBeenCalledOnce();
+    const [payload] = reportSpy.mock.calls[0];
+    expect(payload.error_message).toContain("test explosion");
+    expect(payload.error_type).toBe("boundary");
+
+    spy.mockRestore();
+    vi.resetModules();
+    vi.doUnmock("../api/operator.js");
+  });
+
+  it("reportClientError does not throw when fetch fails", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { reportClientError } = await import("../api/operator.js");
+
+    await expect(reportClientError({ error_message: "test" })).resolves.toBeUndefined();
+
+    vi.unstubAllGlobals();
+  });
 });

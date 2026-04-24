@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 from uuid import UUID
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 
 from AINDY.db.database import get_db
@@ -26,6 +27,26 @@ router = APIRouter(
     tags=["RippleTrace"],
     dependencies=[Depends(get_current_user)],
 )
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 # === Schemas ===
@@ -76,7 +97,8 @@ async def create_drop_point(
             db, dp, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_create_drop_point", handler)
+    result = await execute_with_pipeline(request, "rippletrace_create_drop_point", handler)
+    return _with_execution_envelope(result)
 
 
 @router.post("/ping")
@@ -92,7 +114,8 @@ async def create_ping(
             db, pg, user_id=str(current_user["sub"])
         )
 
-    return await execute_with_pipeline(request, "rippletrace_create_ping", handler)
+    result = await execute_with_pipeline(request, "rippletrace_create_ping", handler)
+    return _with_execution_envelope(result)
 
 
 @router.get("/ripples/{drop_point_id}")
@@ -182,7 +205,8 @@ async def log_ripple_event(
             },
         }
 
-    return await execute_with_pipeline(request, "rippletrace_log_event", handler)
+    result = await execute_with_pipeline(request, "rippletrace_log_event", handler)
+    return _with_execution_envelope(result)
 
 
 @router.get("/{trace_id}")

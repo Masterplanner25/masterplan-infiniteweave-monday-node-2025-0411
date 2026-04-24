@@ -27,6 +27,10 @@ export function getFlowRegistry() {
   return authRequest("/flows/registry", { method: "GET" });
 }
 
+export function getFlowStrategies() {
+  return authRequest("/flows/strategies", { method: "GET" });
+}
+
 export function getAutomationLogs(status = null, source = null, limit = 50) {
   const params = new URLSearchParams();
   if (status) params.append("status", status);
@@ -61,4 +65,18 @@ export function getObservabilityDashboard(windowHours = 24) {
     window_hours: String(windowHours),
   });
   return authRequest(`/observability/dashboard?${params.toString()}`, { method: "GET" });
+}
+
+export async function reportClientError(payload) {
+  await authRequest("/client/error", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
+export async function reportClientVitals(payload) {
+  await authRequest("/client/vitals", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }

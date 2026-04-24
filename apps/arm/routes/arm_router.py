@@ -19,6 +19,7 @@ from typing import Optional
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
+from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.db.database import get_db
 from AINDY.services.auth_service import get_current_user
 from AINDY.platform_layer.rate_limiter import limiter
@@ -240,6 +241,17 @@ async def update_config(
             current.update(filtered)
             updated = arm_config_dao.upsert_config(db, **current)
             config_payload = _arm_config_to_dict(updated)
+            queue_system_event(
+                db=db,
+                event_type="arm.config.updated",
+                user_id=str(current_user["sub"]),
+                source="arm",
+                payload={
+                    "updated_keys": list(filtered.keys()),
+                    "config": config_payload,
+                },
+                required=False,
+            )
         else:
             config_payload = current
         data = {"status": "updated", "config": config_payload}

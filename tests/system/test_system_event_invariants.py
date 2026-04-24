@@ -345,7 +345,7 @@ def test_auth_success_routes_emit_system_events(monkeypatch):
 
     monkeypatch.setattr(auth_router, "register_user", lambda **kwargs: user)
     monkeypatch.setattr(auth_router, "authenticate_user", lambda **kwargs: user)
-    monkeypatch.setattr(auth_router, "create_access_token", lambda payload: "token")
+    monkeypatch.setattr(auth_router, "create_access_token", lambda payload, **kwargs: "token")
     monkeypatch.setattr(auth_router, "emit_system_event", lambda **kwargs: events.append(kwargs["event_type"]))
 
     monkeypatch.setattr(auth_router, "initialize_signup_state", lambda **kwargs: None)

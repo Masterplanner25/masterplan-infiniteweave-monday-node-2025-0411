@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -21,6 +22,26 @@ from AINDY.core.system_event_service import (
 from AINDY.platform_layer.user_ids import require_user_id
 
 router = APIRouter(prefix="/identity", tags=["Identity Layer"])
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 class UpdateIdentityRequest(BaseModel):
@@ -121,7 +142,7 @@ async def update_identity(
         service = IdentityService(db=db, user_id=user_id)
         return service.update_explicit(**body.model_dump(exclude_none=True))
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="identity.update",
         handler=handler,
@@ -129,6 +150,7 @@ async def update_identity(
         metadata={"db": db},
         input_payload=body.model_dump(exclude_none=True),
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/evolution")

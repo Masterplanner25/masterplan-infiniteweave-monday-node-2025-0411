@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "dev-secret-change-in-production"
     AINDY_API_KEY: str | None = None
     AINDY_SERVICE_KEY: str | None = None
+    STRIPE_SECRET_KEY: str | None = None
 
     @field_validator("SECRET_KEY")
     @classmethod
