@@ -8,8 +8,6 @@ from AINDY.core.system_event_service import emit_error_event
 from AINDY.platform_layer.registry import get_job
 from AINDY.platform_layer.trace_context import get_current_trace_id
 from AINDY.platform_layer.user_ids import parse_user_id
-from apps.analytics.services.concurrency import supports_managed_transactions, transaction_scope
-from apps.analytics.services import dependency_adapter
 
 THRASH_GUARD_MINUTES = 60
 TASK_REPRIORITIZATION_LIMIT = 5
@@ -35,34 +33,50 @@ def _normalize_user_id(user_id: str | uuid.UUID | None):
 
 
 def get_latest_adjustment_record(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.get_latest_loop_adjustment(*args, **kwargs)
 
 
 def list_strategy_accuracy_adjustments(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.list_strategy_accuracy_adjustments(*args, **kwargs)
 
 
 def get_pending_adjustment_record(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.get_pending_loop_adjustment(*args, **kwargs)
 
 
 def list_recent_feedback_rows(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.list_recent_feedback_rows(*args, **kwargs)
 
 
 def fetch_next_ready_task(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.fetch_next_ready_task(*args, **kwargs)
 
 
 def list_incomplete_tasks(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.list_incomplete_tasks(*args, **kwargs)
 
 
 def create_loop_adjustment_record(**kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.create_loop_adjustment(**kwargs)
 
 
 def get_latest_adjustment_for_update(*args, **kwargs):
+    from apps.analytics.services import dependency_adapter
+
     return dependency_adapter.get_latest_loop_adjustment_for_update(*args, **kwargs)
 
 
@@ -169,6 +183,11 @@ def evaluate_pending_adjustment(
     actual_score: float | None,
     db,
 ) -> dict | None:
+    from apps.analytics.services.concurrency import (
+        supports_managed_transactions,
+        transaction_scope,
+    )
+
     try:
         adjustment = None
         if _normalize_user_id(user_id) is None:
@@ -694,6 +713,8 @@ def _decide(
 
 
 def _reprioritize_tasks(user_id: str, db) -> dict:
+    from apps.analytics.services.concurrency import transaction_scope
+
     if _normalize_user_id(user_id) is None:
         return {"reason": "invalid_user_id", "task_ids": []}
     tasks = list_incomplete_tasks(user_id=user_id, db=db, limit=TASK_REPRIORITIZATION_LIMIT)
@@ -727,6 +748,11 @@ def run_loop(
     feedback_context: dict | None = None,
     loop_context: dict | None = None,
 ):
+    from apps.analytics.services.concurrency import (
+        supports_managed_transactions,
+        transaction_scope,
+    )
+
     try:
         with transaction_scope(db):
             normalized_trigger = _normalize_trigger_event(trigger_event)

@@ -9,6 +9,7 @@ reclaimed, watermarked version with a visible + invisible authorship signature.
 
 # /routes/authorship_router.py
 from fastapi import APIRouter, Depends, Request
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from apps.authorship.services.authorship_services import reclaim_authorship
 from AINDY.services.auth_service import get_current_user
@@ -21,6 +22,26 @@ router = APIRouter(prefix="/authorship", tags=["Authorship"], dependencies=[Depe
 def _execute_authorship(request: Request, route_name: str, handler):
     return execute_with_pipeline_sync(request=request, route_name=route_name, handler=handler)
 
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
+
 @router.post("/reclaim")
 @limiter.limit("30/minute")
 def reclaim_authorship_endpoint(request: Request, content: str, author: str = "Last name, First name", motto: str = "Yourmottohere"):
@@ -30,6 +51,6 @@ def reclaim_authorship_endpoint(request: Request, content: str, author: str = "L
     """
     def handler(_ctx):
         return reclaim_authorship(content, author, motto)
-    return _execute_authorship(request, "authorship.reclaim", handler)
+    return _with_execution_envelope(_execute_authorship(request, "authorship.reclaim", handler))
 
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -47,6 +48,26 @@ router = APIRouter(
     tags=["Legacy Compatibility"],
     dependencies=[Depends(verify_api_key)],
 )
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 # ------------------------------
@@ -211,7 +232,9 @@ def strategy_match_view(request: Request, drop_point_id: str, db: Session = Depe
 @router.post("/build_playbook/{strategy_id}")
 @limiter.limit("30/minute")
 def build_playbook_view(request: Request, strategy_id: str, db: Session = Depends(get_db)):
-    return wrap(request, "build_playbook", lambda: build_playbook(strategy_id, db))
+    return _with_execution_envelope(
+        wrap(request, "build_playbook", lambda: build_playbook(strategy_id, db))
+    )
 
 
 @router.get("/playbooks")
@@ -246,7 +269,13 @@ def generate_content_view(request: Request, playbook_id: str, db: Session = Depe
 @router.post("/generate_content_for_drop/{drop_point_id}")
 @limiter.limit("30/minute")
 def generate_content_for_drop_view(request: Request, drop_point_id: str, db: Session = Depends(get_db)):
-    return wrap(request, "generate_content_for_drop", lambda: generate_content_for_drop(drop_point_id, db))
+    return _with_execution_envelope(
+        wrap(
+            request,
+            "generate_content_for_drop",
+            lambda: generate_content_for_drop(drop_point_id, db),
+        )
+    )
 
 
 @router.get("/generate_variations/{playbook_id}")
@@ -268,5 +297,5 @@ def evaluate_drop_point(request: Request, drop_point_id: str, db: Session = Depe
         result = evaluate_outcome(drop_point_id, db)
         adjust_thresholds(db)
         return result
-    return wrap(request, "evaluate", fn)
+    return _with_execution_envelope(wrap(request, "evaluate", fn))
 

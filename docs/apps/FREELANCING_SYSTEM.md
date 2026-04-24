@@ -27,7 +27,7 @@ That makes it a business application layer, not core infrastructure.
 - `services/freelance_service.py`
   - order creation
   - AI-generated delivery and manual delivery updates via `ai_output`
-  - external delivery dispatch through configured email, webhook, or payment-trigger channels
+  - external delivery dispatch through configured email, webhook, or Stripe payment-link channels
   - feedback capture
   - revenue aggregation
   - execution/income metric calculation
@@ -59,7 +59,8 @@ That makes it a business application layer, not core infrastructure.
   - orders support generated `ai_output`
   - delivery generation can run through the automation system
   - external delivery can run through email and webhook connectors
-  - payment triggering exists as a supervised Stripe stub
+  - Stripe payment link mode is implemented through hosted checkout URLs
+  - fulfillment confirmation is still manual unless a Stripe webhook is added
 
 - Metrics
   - total delivered revenue is stored
@@ -73,12 +74,19 @@ That makes it a business application layer, not core infrastructure.
 #### Not implemented
 
 - client/project workflow automation
-- proposal generation, outreach, quoting, invoicing, and fully live payment-provider integration
+- proposal generation, outreach, quoting, invoicing, webhook-based payment fulfillment, refunds, and subscription billing
 - freelance-specific agent execution flows
 - Nodus-backed freelance workflows
 - autonomous client prioritization or pricing decisions
 - full event-level observability for freelance operations through `SystemEvent`
 - a closed feedback loop that changes execution based on freelance outcomes
+
+### Payment Links
+
+- Stripe support is implemented in payment-link mode only.
+- A.I.N.D.Y. creates a hosted Stripe Payment Link and stores the returned URL on the order.
+- The system does not yet confirm payment completion automatically.
+- To automate fulfillment after payment, add a Stripe webhook handler or use manual confirmation.
 
 ## 2. Correct Classification
 

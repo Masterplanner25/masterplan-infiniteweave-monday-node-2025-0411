@@ -14,8 +14,15 @@ logger = logging.getLogger(__name__)
 def observability_scheduler_status_node(state, context):
     try:
         import AINDY.platform_layer.scheduler_service as _sched_svc
-        import apps.tasks.services.task_service as _task_svc
+        from AINDY.platform_layer.registry import get_symbol
         from AINDY.db.models.background_task_lease import BackgroundTaskLease
+
+        _background_lease_name = (
+            get_symbol("task_background_lease_name") or "task_background_runner"
+        )
+        _is_leader_fn = get_symbol("task_is_background_leader")
+        if _is_leader_fn is None:
+            return {"status": "FAILURE", "error": "tasks domain not available"}
 
         db = context.get("db")
         try:
@@ -23,7 +30,9 @@ def observability_scheduler_status_node(state, context):
             scheduler_running = sched.running
         except RuntimeError:
             scheduler_running = False
-        lease_row = db.query(BackgroundTaskLease).filter(BackgroundTaskLease.name == _task_svc._BACKGROUND_LEASE_NAME).first()
+        lease_row = db.query(BackgroundTaskLease).filter(
+            BackgroundTaskLease.name == _background_lease_name
+        ).first()
         lease = None
         if lease_row:
             lease = {
@@ -32,7 +41,16 @@ def observability_scheduler_status_node(state, context):
                 "heartbeat_at": lease_row.heartbeat_at.isoformat() if lease_row.heartbeat_at else None,
                 "expires_at": lease_row.expires_at.isoformat() if lease_row.expires_at else None,
             }
-        return {"status": "SUCCESS", "output_patch": {"observability_scheduler_status_result": {"scheduler_running": scheduler_running, "is_leader": _task_svc.is_background_leader(), "lease": lease}}}
+        return {
+            "status": "SUCCESS",
+            "output_patch": {
+                "observability_scheduler_status_result": {
+                    "scheduler_running": scheduler_running,
+                    "is_leader": _is_leader_fn(),
+                    "lease": lease,
+                }
+            },
+        }
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
 
@@ -132,7 +150,23 @@ def observability_rippletrace_node(state, context):
     try:
         import uuid as _uuid
         from AINDY.db.models.system_event import SystemEvent
-        from apps.rippletrace.services.rippletrace_service import build_trace_graph, calculate_ripple_span, detect_root_event, detect_terminal_events, generate_trace_insights
+        from AINDY.platform_layer.registry import get_symbol
+
+        _build_trace_graph = get_symbol("rippletrace_build_trace_graph")
+        _calculate_ripple_span = get_symbol("rippletrace_calculate_ripple_span")
+        _detect_root_event = get_symbol("rippletrace_detect_root_event")
+        _detect_terminal_events = get_symbol("rippletrace_detect_terminal_events")
+        _generate_trace_insights = get_symbol("rippletrace_generate_trace_insights")
+        if not all(
+            (
+                _build_trace_graph,
+                _calculate_ripple_span,
+                _detect_root_event,
+                _detect_terminal_events,
+                _generate_trace_insights,
+            )
+        ):
+            return {"status": "FAILURE", "error": "rippletrace domain not available"}
 
         db = context.get("db")
         user_id = _uuid.UUID(str(context.get("user_id")))
@@ -141,8 +175,8 @@ def observability_rippletrace_node(state, context):
         if event_count == 0:
             result = {"trace_id": trace_id, "nodes": [], "edges": [], "root_event": None, "terminal_events": [], "ripple_span": {"node_count": 0, "edge_count": 0, "depth": 0, "terminal_count": 0}}
         else:
-            graph = build_trace_graph(db, trace_id)
-            result = {"trace_id": trace_id, "nodes": graph["nodes"], "edges": graph["edges"], "root_event": detect_root_event(db, trace_id), "terminal_events": detect_terminal_events(db, trace_id), "ripple_span": calculate_ripple_span(db, trace_id), "insights": generate_trace_insights(db, trace_id)}
+            graph = _build_trace_graph(db, trace_id)
+            result = {"trace_id": trace_id, "nodes": graph["nodes"], "edges": graph["edges"], "root_event": _detect_root_event(db, trace_id), "terminal_events": _detect_terminal_events(db, trace_id), "ripple_span": _calculate_ripple_span(db, trace_id), "insights": _generate_trace_insights(db, trace_id)}
         return {"status": "SUCCESS", "output_patch": {"observability_rippletrace_result": result}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

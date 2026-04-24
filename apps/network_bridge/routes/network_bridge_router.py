@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request
 import logging
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
@@ -22,6 +23,26 @@ def _execute_network_bridge(request: Request, route_name: str, handler, *, db: S
         handler=handler,
         metadata={"db": db, "source": "network_bridge_router"},
     )
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +85,9 @@ async def connect_external_author(
         logger.info("Bridge connect: %s via %s", handshake.author_name, handshake.platform)
         return result
 
-    return _execute_network_bridge(request, "network_bridge.connect", handler, db=db)
+    return _with_execution_envelope(
+        _execute_network_bridge(request, "network_bridge.connect", handler, db=db)
+    )
 
 @router.post("/user_event")
 @limiter.limit("30/minute")
@@ -86,7 +109,9 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
             "record_id": result.id if result else str(uuid.uuid4()),
         }
 
-    return _execute_network_bridge(request, "network_bridge.user_event", handler, db=db)
+    return _with_execution_envelope(
+        _execute_network_bridge(request, "network_bridge.user_event", handler, db=db)
+    )
 
 
 @router.get("/authors")

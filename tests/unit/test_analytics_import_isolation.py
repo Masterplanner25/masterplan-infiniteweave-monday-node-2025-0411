@@ -81,3 +81,20 @@ def test_analytics_dependency_adapter_imports_without_cross_domain_modules(monke
     mod = importlib.import_module(module_name)
     assert mod is not None
     sys.modules.pop(module_name, None)
+
+
+def test_infinity_modules_import_without_memory_scoring_service(monkeypatch):
+    module_names = [
+        "apps.analytics.services.infinity_orchestrator",
+        "apps.analytics.services.infinity_loop",
+    ]
+
+    for module_name in module_names:
+        sys.modules.pop(module_name, None)
+
+    with monkeypatch.context() as m:
+        m.setitem(sys.modules, "AINDY.memory.memory_scoring_service", None)
+        for module_name in module_names:
+            mod = importlib.import_module(module_name)
+            assert mod is not None
+            sys.modules.pop(module_name, None)

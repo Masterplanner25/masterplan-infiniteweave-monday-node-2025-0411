@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.core.execution_signal_helper import queue_memory_capture
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
@@ -77,6 +78,26 @@ class LinkResponse(BaseModel):
 router = APIRouter(prefix="/bridge", tags=["Bridge"])
 
 
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
+
+
 # --------------------------------------------------------------------------
 # CREATE NODE
 # --------------------------------------------------------------------------
@@ -134,12 +155,13 @@ async def create_node(
             },
         }
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="bridge.create_node",
         handler=handler,
         success_status_code=status.HTTP_201_CREATED,
     )
+    return _with_execution_envelope(result)
 
 
 # --------------------------------------------------------------------------
@@ -239,12 +261,13 @@ async def create_link(
             )
         }
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="bridge.create_link",
         handler=handler,
         success_status_code=status.HTTP_201_CREATED,
     )
+    return _with_execution_envelope(result)
 
 
 # --------------------------------------------------------------------------
@@ -298,9 +321,10 @@ async def bridge_user_event(
             "timestamp": timestamp,
         }
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="bridge.user_event",
         handler=handler,
         metadata={"db": db},
     )
+    return _with_execution_envelope(result)

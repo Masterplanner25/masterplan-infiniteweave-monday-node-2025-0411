@@ -5,6 +5,7 @@ import json
 import smtplib
 from email.message import EmailMessage
 from typing import Any
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from AINDY.db.mongo_setup import get_mongo_client
@@ -37,7 +38,7 @@ def execute_automation_action(payload: dict[str, Any], db) -> dict[str, Any]:
     if automation_type == "webhook":
         return _execute_webhook_action(payload, config, db=db)
     if automation_type == "stripe":
-        return _execute_stripe_action(payload, config)
+        return _execute_stripe_action(payload, config, db=db)
     return _execute_content_generation(payload, config)
 
 
@@ -215,12 +216,111 @@ def _execute_webhook_action(payload: dict[str, Any], config: dict[str, Any], *, 
     }
 
 
-def _execute_stripe_action(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    raise NotImplementedError(
-        "Stripe payment delivery is not yet implemented. "
-        "Set delivery_type to 'email', 'webhook', or 'manual' until Stripe integration is complete. "
-        "See docs/apps/FREELANCING_SYSTEM.md for the integration roadmap."
+def _execute_stripe_action(payload: dict[str, Any], config: dict[str, Any], *, db=None) -> dict[str, Any]:
+    from AINDY.config import settings
+
+    stripe_key = config.get("stripe_secret_key") or settings.STRIPE_SECRET_KEY
+    if not stripe_key:
+        raise ValueError(
+            "stripe_secret_key not configured. Set STRIPE_SECRET_KEY in environment "
+            "or provide stripe_secret_key in delivery_config."
+        )
+
+    amount_raw = config.get("amount") or (payload.get("automation_config") or {}).get("amount")
+    if amount_raw is None:
+        metadata = config.get("metadata") or {}
+        price_float = float(metadata.get("price") or config.get("price") or 0.0)
+        amount_cents = int(round(price_float * 100))
+    else:
+        amount_cents = int(amount_raw)
+
+    if amount_cents <= 0:
+        raise ValueError("stripe_payment_amount_required: amount must be > 0 cents")
+
+    currency = str(config.get("currency") or "usd").lower()
+    product_name = str(
+        config.get("product_name")
+        or payload.get("task_name")
+        or "Freelance Service"
     )
+    customer_email = config.get("customer_email") or config.get("recipient")
+
+    def _stripe_post(path: str, form_data: dict[str, Any]) -> dict[str, Any]:
+        encoded = urllib_parse.urlencode(form_data).encode("utf-8")
+        req = urllib_request.Request(
+            f"https://api.stripe.com{path}",
+            data=encoded,
+            headers={
+                "Authorization": f"Bearer {stripe_key}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def _create_payment_link() -> dict[str, Any]:
+        product = _stripe_post(
+            "/v1/products",
+            {
+                "name": product_name,
+                "description": str(config.get("description") or product_name)[:500],
+            },
+        )
+        product_id = product["id"]
+
+        price = _stripe_post(
+            "/v1/prices",
+            {
+                "product": product_id,
+                "unit_amount": str(amount_cents),
+                "currency": currency,
+            },
+        )
+        price_id = price["id"]
+
+        link_data = {
+            "line_items[0][price]": price_id,
+            "line_items[0][quantity]": "1",
+        }
+        if customer_email:
+            link_data["customer_creation"] = "always"
+            link_data["customer_email"] = str(customer_email)
+
+        link = _stripe_post("/v1/payment_links", link_data)
+        return {
+            "product_id": product_id,
+            "price_id": price_id,
+            "payment_link_id": link["id"],
+            "payment_link_url": link["url"],
+        }
+
+    response = perform_external_call(
+        service_name="stripe",
+        db=db,
+        user_id=payload.get("user_id"),
+        endpoint="/v1/payment_links",
+        method="stripe.payment_links.create",
+        extra={
+            "purpose": "freelance_payment_link",
+            "customer_email": customer_email,
+            "amount_cents": amount_cents,
+            "currency": currency,
+        },
+        operation=_create_payment_link,
+    )
+
+    return {
+        "automation_type": "stripe",
+        "status": "completed",
+        "payment_link_id": response["payment_link_id"],
+        "payment_link_url": response["payment_link_url"],
+        "product_id": response["product_id"],
+        "price_id": response["price_id"],
+        "amount_cents": amount_cents,
+        "currency": currency,
+        "customer_email": customer_email,
+    }
 
 
 def _execute_content_generation(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:

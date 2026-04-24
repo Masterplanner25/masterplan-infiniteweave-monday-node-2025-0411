@@ -5,11 +5,12 @@ from asyncio import TimeoutError as AsyncTimeoutError
 from asyncio import gather, to_thread, wait_for
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from AINDY.config import settings
+from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal
 from AINDY.platform_layer.registry import get_degraded_domains
@@ -221,6 +222,73 @@ def _check_ai_providers_status() -> dict:
     }
 
 
+@router.post("/client/error", status_code=204)
+@limiter.limit("30/minute")
+async def report_client_error(
+    request: Request,
+    payload: dict = Body(default={}),
+):
+    """
+    Receive a frontend error report and write it as a SystemEvent.
+    Returns 204 (no content) - the client does not need a response body.
+    Authentication is optional: unauthenticated reports are accepted so
+    errors during login/boot can be captured.
+    """
+    db = SessionLocal()
+    try:
+        queue_system_event(
+            db=db,
+            event_type="client.error.reported",
+            user_id=payload.get("user_id"),
+            trace_id=payload.get("trace_id") or str(_uuid.uuid4()),
+            source="frontend",
+            payload={
+                "error_message": str(payload.get("error_message") or "")[:1000],
+                "component_stack": str(payload.get("component_stack") or "")[:3000],
+                "route": str(payload.get("route") or "")[:200],
+                "user_agent": str(payload.get("user_agent") or "")[:300],
+                "error_type": str(payload.get("error_type") or "boundary"),
+            },
+            required=False,
+        )
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
+@router.post("/client/vitals", status_code=204)
+@limiter.limit("30/minute")
+async def report_client_vitals(
+    request: Request,
+    payload: dict = Body(default={}),
+):
+    """
+    Receive Web Vitals measurements from the frontend.
+    Returns 204 - no response body needed.
+    """
+    db = SessionLocal()
+    try:
+        queue_system_event(
+            db=db,
+            event_type="client.vitals.reported",
+            user_id=payload.get("user_id"),
+            trace_id=payload.get("session_id") or str(_uuid.uuid4()),
+            source="frontend",
+            payload={
+                "lcp_ms": payload.get("lcp_ms"),
+                "cls_score": payload.get("cls_score"),
+                "inp_ms": payload.get("inp_ms"),
+                "route": str(payload.get("route") or "")[:200],
+            },
+            required=False,
+        )
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 async def _build_deep_health_payload() -> dict:
     database, redis, mongo, scheduler, flow_registry, worker, nodus, ai_providers = await gather(
         _run_deep_check(_check_database_status, timeout=0.5),
@@ -288,6 +356,15 @@ async def health_check_deep(request: Request):
 @router.get("/ready", summary="Check Readiness")
 @limiter.limit("120/minute")
 def readiness(request: Request):
+    from AINDY.platform_layer.health_service import get_readiness_report
+
+    status_code, payload = get_readiness_report()
+    return JSONResponse(status_code=status_code, content=payload)
+
+
+@router.get("/readiness", summary="Check Readiness (Kubernetes alias)")
+@limiter.limit("120/minute")
+def readiness_alias(request: Request):
     from AINDY.platform_layer.health_service import get_readiness_report
 
     status_code, payload = get_readiness_report()

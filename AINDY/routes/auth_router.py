@@ -7,14 +7,20 @@ Public endpoints (no auth required):
 
 Phase 3: Uses PostgreSQL User model via DB session (replaced in-memory store).
 """
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from AINDY.core.execution_signal_helper import queue_system_event
 from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
+from AINDY.platform_layer.user_ids import parse_user_id
 from AINDY.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse
-from AINDY.services.auth_service import create_access_token, register_user, authenticate_user
+from AINDY.services.auth_service import (
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    register_user,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 emit_system_event = queue_system_event
@@ -49,7 +55,10 @@ def register(
             },
             required=True,
         )
-        token = create_access_token({"sub": str(user.id), "email": user.email, "is_admin": bool(getattr(user, "is_admin", False))})
+        token = create_access_token(
+            {"sub": str(user.id), "email": user.email, "is_admin": bool(getattr(user, "is_admin", False))},
+            token_version=int(getattr(user, "token_version", 0)),
+        )
         return {"access_token": token, "token_type": "bearer"}
 
     if request is None:
@@ -86,7 +95,10 @@ def login(
             },
             required=True,
         )
-        token = create_access_token({"sub": str(user.id), "email": user.email, "is_admin": bool(getattr(user, "is_admin", False))})
+        token = create_access_token(
+            {"sub": str(user.id), "email": user.email, "is_admin": bool(getattr(user, "is_admin", False))},
+            token_version=int(getattr(user, "token_version", 0)),
+        )
         return {"access_token": token, "token_type": "bearer"}
 
     if request is None:
@@ -99,4 +111,55 @@ def login(
         metadata={"db": db},
         input_payload=body.model_dump(),
     )
+
+
+@router.post("/logout", status_code=200)
+@limiter.limit("10/minute")
+def logout(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.db.models.user import User
+
+    if current_user.get("auth_type") == "api_key":
+        raise HTTPException(status_code=401, detail="Bearer token required")
+
+    user_id = parse_user_id(current_user["sub"])
+    if user_id:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
+            db.commit()
+    return {"status": "logged_out"}
+
+
+@router.post("/admin/invalidate-sessions/{user_id}")
+@limiter.limit("20/minute")
+def admin_invalidate_sessions(
+    user_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.db.models.user import User
+
+    if current_user.get("auth_type") == "api_key":
+        scopes = set(current_user.get("api_key_scopes") or [])
+        if "platform.admin" not in scopes:
+            raise HTTPException(status_code=403, detail="Admin required")
+    elif not current_user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin required")
+
+    target_id = parse_user_id(user_id)
+    if not target_id:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+
+    user = db.query(User).filter(User.id == target_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
+    db.commit()
+    return {"status": "sessions_invalidated", "user_id": str(target_id)}
 

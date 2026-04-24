@@ -11,6 +11,7 @@ def register() -> None:
     _register_response_adapters()
     _register_flow_strategy()
     _register_flow_results()
+    _register_required_flow_nodes()
 
 
 def _register_models() -> None:
@@ -68,3 +69,24 @@ def _register_flow_results() -> None:
     }
     for flow_name, result_key in result_keys.items():
         register_flow_result(flow_name, result_key=result_key)
+
+
+def _register_required_flow_nodes() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.rippletrace.services.rippletrace_service import (
+        build_trace_graph,
+        calculate_ripple_span,
+        detect_root_event,
+        detect_terminal_events,
+        generate_trace_insights,
+    )
+
+    register_symbols(
+        {
+            "rippletrace_build_trace_graph": build_trace_graph,
+            "rippletrace_calculate_ripple_span": calculate_ripple_span,
+            "rippletrace_detect_root_event": detect_root_event,
+            "rippletrace_detect_terminal_events": detect_terminal_events,
+            "rippletrace_generate_trace_insights": generate_trace_insights,
+        }
+    )

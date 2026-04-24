@@ -35,7 +35,7 @@ from AINDY.memory.memory_scoring_service import get_relevant_memories
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook"}
+_SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook", "payment"}
 
 # -----------------------------------------------------
 # Core Freelance Order Logic
@@ -520,7 +520,18 @@ def _dispatch_delivery(order: FreelanceOrder, *, db: Session) -> dict:
     config.setdefault("body", order.ai_output)
     config.setdefault("recipient", order.client_email)
     config.setdefault("customer_email", order.client_email)
-    config.setdefault("metadata", {"order_id": order.id, "service_type": order.service_type})
+    config.setdefault("product_name", order.service_type or "Freelance Service")
+    config.setdefault("price", order.price)
+    config.setdefault(
+        "metadata",
+        {
+            "order_id": order.id,
+            "service_type": order.service_type,
+            "price": order.price,
+            "client_email": order.client_email,
+            "client_name": order.client_name,
+        },
+    )
     payload = {
         "automation_type": automation_type,
         "automation_config": config,

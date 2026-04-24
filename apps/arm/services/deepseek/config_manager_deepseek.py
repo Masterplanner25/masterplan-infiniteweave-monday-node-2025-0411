@@ -43,10 +43,21 @@ class ConfigManager:
     """
     Loads, reads, and persists ARM configuration.
 
-    Default runtime storage is a DB-backed singleton row.
-    Passing ``config_path`` preserves the legacy JSON file mode used by tests.
-    Runtime values override defaults.
-    Only keys present in DEFAULT_CONFIG are accepted for updates.
+    Multi-instance propagation contract:
+      Config is stored in the arm_config table (single 'default' row).
+      ConfigManager.get() and get_all() re-read from the DB on every call.
+      DeepSeekCodeAnalyzer._refresh_runtime_config() is called at the start
+      of every run_analysis() and generate_code() request, so config changes
+      written by any instance propagate to all other instances on the next
+      analysis or generation request - with no restart required.
+
+      The only window of stale config is between server startup and the first
+      analysis/generate call on a freshly initialized _ANALYZER singleton.
+      This window is bounded by the time from process start to first request
+      and is not a practical concern.
+
+    Default runtime storage: DB-backed singleton row (id='default').
+    Test/legacy mode: pass config_path to use a JSON file instead.
     """
 
     def __init__(self, config_path: str = None, db=None):

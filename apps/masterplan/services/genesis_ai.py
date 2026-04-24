@@ -2,6 +2,7 @@ import json
 import logging
 from AINDY.core.execution_signal_helper import queue_memory_capture
 # Genesis memory capture is routed through a MemoryCaptureEngine-backed helper.
+from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.platform_layer.external_call_service import perform_external_call
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.platform_layer.openai_client import get_openai_client, chat_completion
@@ -119,22 +120,23 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     system_content = (
         GENESIS_SYSTEM_PROMPT + prior_context + arm_context + identity_context
     )
-    response = perform_external_call(
-        service_name="openai",
-        db=db,
-        user_id=user_id,
-        endpoint="chat.completions.create",
-        model=MODEL,
-        method="openai.chat",
-        extra={"purpose": "genesis_message"},
-        operation=lambda: chat_completion(
-            get_openai_client(),
+    try:
+        response = perform_external_call(
+            service_name="openai",
+            db=db,
+            user_id=user_id,
+            endpoint="chat.completions.create",
             model=MODEL,
-            messages=[
-                {"role": "system", "content": system_content},
-                {
-                    "role": "user",
-                    "content": f"""
+            method="openai.chat",
+            extra={"purpose": "genesis_message"},
+            operation=lambda: chat_completion(
+                get_openai_client(),
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": system_content},
+                    {
+                        "role": "user",
+                        "content": f"""
 Current Structured State:
 {json.dumps(current_state)}
 
@@ -144,12 +146,15 @@ New User Message:
 Update the structured state incrementally.
 Return only valid JSON.
 """
-                }
-            ],
-            temperature=0.4,
-            timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
-        ),
-    )
+                    }
+                ],
+                temperature=0.4,
+                timeout=settings.OPENAI_CHAT_TIMEOUT_SECONDS,
+            ),
+        )
+    except CircuitOpenError as exc:
+        logger.warning("[Genesis] OpenAI circuit open — cannot generate response: %s", exc)
+        raise
 
     content = response.choices[0].message.content
 

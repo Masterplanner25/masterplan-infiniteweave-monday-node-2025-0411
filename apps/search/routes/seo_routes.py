@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from apps.search.schemas.seo import SEOInput, MetaInput
 from AINDY.services.auth_service import get_current_user
@@ -36,6 +37,26 @@ def _execute_seo(
     )
 
 
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
+
+
 class LegacyContentInput(BaseModel):
     content: str
 
@@ -65,7 +86,9 @@ def analyze_seo(
 
     def handler(_ctx):
         return results
-    return _execute_seo(request, "seo.analyze", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.analyze", handler, db=db, user_id=user_id)
+    )
 
 @router.post("/meta")
 @limiter.limit("30/minute")
@@ -93,7 +116,9 @@ def generate_meta(
             memory_limit=1,
         )
 
-    return _execute_seo(request, "seo.meta", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.meta", handler, db=db, user_id=user_id)
+    )
 
 
 @router.post("/suggest")
@@ -109,7 +134,9 @@ def suggest_improvements(
     def handler(_ctx):
         return suggest_seo_improvements(data.text, data.top_n, db=db, user_id=user_id)
 
-    return _execute_seo(request, "seo.suggest", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.suggest", handler, db=db, user_id=user_id)
+    )
 
 
 @router.post("/analyze_seo/")
@@ -125,7 +152,9 @@ def analyze_seo_compat(
     def handler(_ctx):
         return analyze_seo_content(data.content, 10, db=db, user_id=user_id)
 
-    return _execute_seo(request, "seo.analyze.compat", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.analyze.compat", handler, db=db, user_id=user_id)
+    )
 
 
 @router.post("/generate_meta/")
@@ -154,7 +183,9 @@ def generate_meta_compat(
             memory_limit=1,
         )
 
-    return _execute_seo(request, "seo.meta.compat", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.meta.compat", handler, db=db, user_id=user_id)
+    )
 
 
 @router.post("/suggest_improvements/")
@@ -170,5 +201,7 @@ def suggest_improvements_compat(
     def handler(_ctx):
         return suggest_seo_improvements(data.content, db=db, user_id=user_id)
 
-    return _execute_seo(request, "seo.suggest.compat", handler, db=db, user_id=user_id)
+    return _with_execution_envelope(
+        _execute_seo(request, "seo.suggest.compat", handler, db=db, user_id=user_id)
+    )
 

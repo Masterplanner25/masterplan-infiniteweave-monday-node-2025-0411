@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -404,3 +405,95 @@ class TestMongoSkipMode:
             result = next(gen)
 
         assert result is mock_db
+
+
+# ===========================================================================
+# 5. Circuit open routes -> structured 503
+# ===========================================================================
+
+class TestCircuitOpenErrorHttpResponse:
+
+    def test_genesis_message_returns_503_when_circuit_is_open(self, client, auth_headers):
+        with patch(
+            "apps.masterplan.routes.genesis_router._get_owned_session",
+            return_value=SimpleNamespace(synthesis_ready=False),
+        ), patch(
+            "apps.masterplan.routes.genesis_router.run_flow",
+            return_value={"status": "FAILED", "error": "Circuit open rejecting call"},
+        ):
+            response = client.post(
+                "/genesis/message",
+                json={"session_id": 1, "message": "help me define the plan"},
+                headers=auth_headers,
+            )
+
+        assert response.status_code == 503
+        assert response.json()["error"] == "ai_provider_unavailable"
+        assert "Retry-After" in response.headers
+
+    def test_leadgen_returns_503_when_circuit_is_open(self, client, auth_headers):
+        from AINDY.kernel.circuit_breaker import CircuitOpenError
+
+        with patch(
+            "apps.search.services.leadgen_service.search_leads",
+            return_value={
+                "results": [
+                    {
+                        "company": "Acme AI",
+                        "url": "https://acme.example",
+                        "context": "Acme is evaluating automation partners.",
+                    }
+                ]
+            },
+        ), patch(
+            "apps.search.services.leadgen_service.chat_completion",
+            side_effect=CircuitOpenError("circuit open"),
+        ), patch(
+            "apps.search.services.leadgen_service.create_memory_node",
+            return_value=None,
+        ):
+            response = client.post("/leadgen/?query=acme", headers=auth_headers)
+
+        assert response.status_code == 503
+        assert response.json()["retryable"] is True
+
+    def test_non_ai_routes_still_work_when_openai_circuit_is_open(self, client, auth_headers):
+        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+
+        cb = get_openai_circuit_breaker()
+        cb.reset()
+        try:
+            cb._record_failure("closed")
+            cb._record_failure("closed")
+            cb._record_failure("closed")
+
+            with patch(
+                "apps.tasks.services.task_service.list_tasks",
+                return_value=[],
+            ):
+                health_response = client.get("/health")
+                tasks_response = client.get("/tasks/list", headers=auth_headers)
+
+            assert health_response.status_code == 200
+            assert tasks_response.status_code == 200
+        finally:
+            cb.reset()
+
+    def test_health_deep_reports_degraded_when_circuit_is_open(self, client):
+        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+
+        cb = get_openai_circuit_breaker()
+        cb.reset()
+        try:
+            cb._record_failure("closed")
+            cb._record_failure("closed")
+            cb._record_failure("closed")
+
+            response = client.get("/health/deep")
+            payload = response.json()
+
+            assert response.status_code == 200
+            assert payload["status"] == "degraded"
+            assert payload["checks"]["ai_providers"]["openai"]["circuit"] == "open"
+        finally:
+            cb.reset()

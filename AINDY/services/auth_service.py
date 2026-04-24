@@ -54,8 +54,10 @@ def verify_password(plain: str, hashed: str) -> bool:
 def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
+    token_version: int = 0,
 ) -> str:
     to_encode = data.copy()
+    to_encode["tv"] = token_version
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
@@ -121,7 +123,21 @@ def _resolve_authenticated_jwt_user(payload: dict, db: Session | None) -> dict:
         if settings.TEST_MODE:
             return resolved
         raise
-    if user is None or not user.is_active:
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user_tv = int(getattr(user, "token_version", 0))
+    token_tv = int(payload.get("tv", 0))
+    if token_tv != user_tv:
+        raise HTTPException(
+            status_code=401,
+            detail="Token has been invalidated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not user.is_active:
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired token",
@@ -130,8 +146,9 @@ def _resolve_authenticated_jwt_user(payload: dict, db: Session | None) -> dict:
 
     resolved["sub"] = str(user.id)
     resolved["user_id"] = str(user.id)
-    resolved.setdefault("email", user.email)
-    resolved.setdefault("username", user.username)
+    resolved["email"] = user.email
+    resolved["username"] = user.username
+    resolved["is_admin"] = bool(getattr(user, "is_admin", False))
     return resolved
 
 

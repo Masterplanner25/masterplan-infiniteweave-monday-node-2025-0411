@@ -106,6 +106,8 @@ def leadgen_validate(state, context):
 def leadgen_search_node(state, context):
     """Run leadgen search via sys.v1.leadgen.search syscall."""
     result = _syscall_node("sys.v1.leadgen.search", state, context, "leadgen.search")
+    if result.get("status") == "RETRY" and "HTTP_503:" in (result.get("error") or ""):
+        return {"status": "FAILURE", "error": result["error"]}
     # Rename data key to match expected state key
     if result.get("status") == "SUCCESS":
         data = result.get("output_patch", {})
@@ -195,6 +197,8 @@ def genesis_message_validate(state, context):
 def genesis_message_execute(state, context):
     """Call Genesis LLM and update session via sys.v1.genesis.execute_llm syscall."""
     result = _syscall_node("sys.v1.genesis.execute_llm", state, context, "genesis.execute_llm")
+    if result.get("status") == "RETRY" and "HTTP_503:" in (result.get("error") or ""):
+        return {"status": "FAILURE", "error": result["error"]}
     # Handler failure for "not found" should be FAILURE not RETRY
     if result.get("status") == "RETRY" and "not found" in (result.get("error") or "").lower():
         return {"status": "FAILURE", "error": result["error"]}

@@ -3,6 +3,7 @@ from typing import Optional, Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 
 from AINDY.db.database import get_db
@@ -11,6 +12,26 @@ from AINDY.services.auth_service import get_current_user
 
 
 router = APIRouter(prefix="/scores", tags=["Infinity Score"])
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 # Compatibility note: manual score recalculation is orchestrated via infinity_orchestrator.
 
@@ -86,12 +107,13 @@ async def recalculate_my_score(
             raise HTTPException(status_code=500, detail="Score recalculation flow failed")
         return result.get("data")
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request,
         "scores_recalculate",
         handler,
         user_id=str(current_user["sub"]),
     )
+    return _with_execution_envelope(result)
 
 
 # ------------------------------
@@ -149,12 +171,13 @@ async def record_score_feedback(
             raise HTTPException(status_code=500, detail="Score feedback flow failed")
         return result.get("data")
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request,
         "scores_feedback",
         handler,
         user_id=str(current_user["sub"]),
     )
+    return _with_execution_envelope(result)
 
 
 @router.get("/feedback")

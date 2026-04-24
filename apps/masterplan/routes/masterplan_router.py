@@ -4,12 +4,33 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/masterplans", tags=["MasterPlans"])
+
+
+def _with_execution_envelope(payload):
+    envelope = to_envelope(
+        eu_id=None,
+        trace_id=None,
+        status="SUCCESS",
+        output=None,
+        error=None,
+        duration_ms=None,
+        attempt_count=1,
+    )
+    if hasattr(payload, "status_code") and hasattr(payload, "body"):
+        return payload
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        result = dict(data) if isinstance(data, dict) else dict(payload)
+        result.setdefault("execution_envelope", envelope)
+        return result
+    return {"data": payload, "execution_envelope": envelope}
 
 
 def _flow_failure(result: dict) -> str:
@@ -71,7 +92,7 @@ async def lock_from_genesis(
             draft=payload.get("draft", {}),
         )
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="masterplan.lock_from_genesis",
         handler=handler,
@@ -79,6 +100,7 @@ async def lock_from_genesis(
         input_payload=payload,
         metadata={"db": db},
     )
+    return _with_execution_envelope(result)
 
 
 # ------------------------------
@@ -92,7 +114,7 @@ def lock_plan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _run_flow_masterplan("masterplan_lock", {"plan_id": plan_id}, db, str(current_user["sub"]))
+    return _with_execution_envelope(_run_flow_masterplan("masterplan_lock", {"plan_id": plan_id}, db, str(current_user["sub"])))
 
 
 # ------------------------------
@@ -167,7 +189,7 @@ async def set_masterplan_anchor(
             goal_description=body.goal_description,
         )
 
-    return await execute_with_pipeline(
+    result = await execute_with_pipeline(
         request=request,
         route_name="masterplan.set_anchor",
         handler=handler,
@@ -175,6 +197,7 @@ async def set_masterplan_anchor(
         input_payload=body.model_dump(),
         metadata={"db": db},
     )
+    return _with_execution_envelope(result)
 
 
 # ------------------------------
@@ -215,4 +238,4 @@ def activate_masterplan(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    return _run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"]))
+    return _with_execution_envelope(_run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"])))

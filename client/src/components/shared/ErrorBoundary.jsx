@@ -1,4 +1,6 @@
 import { Component, Suspense } from "react";
+import { getStoredToken } from "../../api/_core.js";
+import { reportClientError } from "../../api/operator.js";
 
 function RouteSpinner() {
   return (
@@ -20,6 +22,25 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    try {
+      const token = getStoredToken();
+      let userId = null;
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          userId = payload.sub || null;
+        } catch {}
+      }
+      reportClientError({
+        error_message: error?.message || String(error),
+        component_stack: info?.componentStack || "",
+        route: typeof window !== "undefined" ? window.location.pathname : "",
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        error_type: "boundary",
+        user_id: userId,
+        trace_id: null,
+      });
+    } catch {}
   }
 
   render() {
