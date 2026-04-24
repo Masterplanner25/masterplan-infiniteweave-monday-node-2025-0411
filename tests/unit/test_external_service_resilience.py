@@ -422,6 +422,8 @@ class TestCircuitOpenErrorHttpResponse:
             session_payload.get("session_id")
             or (session_payload.get("data") or {}).get("session_id")
             or (session_payload.get("result") or {}).get("session_id")
+            or ((session_payload.get("data") or {}).get("genesis_session_create_result") or {}).get("session_id")
+            or ((session_payload.get("result") or {}).get("genesis_session_create_result") or {}).get("session_id")
         )
         assert session_id is not None
 

@@ -21,9 +21,12 @@ def _health(*deps):
 def test_get_readiness_report_ready_in_testing_mode(monkeypatch):
     from AINDY.platform_layer import health_service
 
-    monkeypatch.setattr(health_service.settings, "TESTING", True)
-    monkeypatch.setattr(health_service.settings, "TEST_MODE", False)
-    monkeypatch.setattr(health_service.settings, "ENV", "development")
+    monkeypatch.setattr(
+        type(health_service.settings),
+        "is_testing",
+        property(lambda self: True),
+        raising=False,
+    )
 
     status_code, payload = health_service.get_readiness_report()
 
@@ -35,8 +38,12 @@ def test_get_readiness_report_ready_in_testing_mode(monkeypatch):
 def test_get_readiness_report_startup_incomplete_returns_503(monkeypatch):
     from AINDY.platform_layer import health_service
 
-    monkeypatch.setattr(health_service.settings, "TESTING", False)
-    monkeypatch.setattr(health_service.settings, "TEST_MODE", False)
+    monkeypatch.setattr(
+        type(health_service.settings),
+        "is_testing",
+        property(lambda self: False),
+        raising=False,
+    )
     monkeypatch.setattr(
         health_service,
         "get_api_runtime_state",
@@ -54,8 +61,12 @@ def test_get_readiness_report_startup_incomplete_returns_503(monkeypatch):
 def test_get_readiness_report_postgres_down_returns_503(monkeypatch):
     from AINDY.platform_layer import health_service
 
-    monkeypatch.setattr(health_service.settings, "TESTING", False)
-    monkeypatch.setattr(health_service.settings, "TEST_MODE", False)
+    monkeypatch.setattr(
+        type(health_service.settings),
+        "is_testing",
+        property(lambda self: False),
+        raising=False,
+    )
     monkeypatch.setattr(
         health_service,
         "get_api_runtime_state",
@@ -82,8 +93,12 @@ def test_get_readiness_report_postgres_down_returns_503(monkeypatch):
 def test_get_readiness_report_allows_peripheral_domain_degradation(monkeypatch):
     from AINDY.platform_layer import health_service
 
-    monkeypatch.setattr(health_service.settings, "TESTING", False)
-    monkeypatch.setattr(health_service.settings, "TEST_MODE", False)
+    monkeypatch.setattr(
+        type(health_service.settings),
+        "is_testing",
+        property(lambda self: False),
+        raising=False,
+    )
     monkeypatch.setattr(health_service.settings, "ENV", "development")
     monkeypatch.setattr(health_service.settings, "EXECUTION_MODE", "thread")
     monkeypatch.setattr(health_service.settings, "AINDY_REQUIRE_REDIS", False)
