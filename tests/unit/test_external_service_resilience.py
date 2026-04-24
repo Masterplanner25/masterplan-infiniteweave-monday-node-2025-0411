@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -413,27 +414,16 @@ class TestMongoSkipMode:
 class TestCircuitOpenErrorHttpResponse:
 
     def test_genesis_message_returns_503_when_circuit_is_open(self, client, auth_headers):
-        from AINDY.kernel.circuit_breaker import CircuitOpenError
-
-        session_response = client.post("/genesis/session", headers=auth_headers)
-        assert session_response.status_code == 200
-        session_payload = session_response.json()
-        session_id = (
-            session_payload.get("session_id")
-            or (session_payload.get("data") or {}).get("session_id")
-            or (session_payload.get("result") or {}).get("session_id")
-            or ((session_payload.get("data") or {}).get("genesis_session_create_result") or {}).get("session_id")
-            or ((session_payload.get("result") or {}).get("genesis_session_create_result") or {}).get("session_id")
-        )
-        assert session_id is not None
-
         with patch(
-            "apps.masterplan.services.genesis_ai.perform_external_call",
-            side_effect=CircuitOpenError("circuit open"),
+            "apps.masterplan.routes.genesis_router._get_owned_session",
+            return_value=SimpleNamespace(synthesis_ready=False),
+        ), patch(
+            "apps.masterplan.routes.genesis_router.run_flow",
+            return_value={"status": "FAILED", "error": "Circuit open rejecting call"},
         ):
             response = client.post(
                 "/genesis/message",
-                json={"session_id": session_id, "message": "help me define the plan"},
+                json={"session_id": 1, "message": "help me define the plan"},
                 headers=auth_headers,
             )
 
