@@ -14,7 +14,10 @@ platform_router = importlib.import_module("AINDY.routes.platform_router")
 def platform_client():
     app = FastAPI()
     app.include_router(platform_router.router)
-    app.dependency_overrides[platform_router.get_current_user] = lambda: {"sub": "user-1"}
+    app.dependency_overrides[platform_router.get_current_user] = lambda: {
+        "sub": "user-1",
+        "is_admin": True,
+    }
     app.dependency_overrides[platform_router.get_db] = lambda: "db-session"
     try:
         yield TestClient(app)

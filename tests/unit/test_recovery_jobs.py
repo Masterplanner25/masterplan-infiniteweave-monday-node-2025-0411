@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+from AINDY.config import settings
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.platform_layer.recovery_jobs import (
     expire_timed_out_waits,
@@ -84,7 +85,8 @@ def test_recover_stuck_runs_marks_old_running_run_failed(db_session):
     run = _seed_flow_run(
         db_session,
         status="running",
-        updated_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        updated_at=datetime.now(timezone.utc)
+        - timedelta(minutes=settings.STUCK_RUN_THRESHOLD_MINUTES + 5),
     )
 
     count = asyncio.run(recover_stuck_runs(db_session))

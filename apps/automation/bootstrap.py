@@ -35,15 +35,7 @@ BOOTSTRAP_DEPENDS_ON: list[str] = [
     "masterplan",
     "tasks",
 ]
-APP_DEPENDS_ON: list[str] = [
-    "analytics",
-    "arm",
-    "authorship",
-    "masterplan",
-    "rippletrace",
-    "search",
-    "tasks",
-]
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:

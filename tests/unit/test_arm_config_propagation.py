@@ -43,8 +43,11 @@ def test_analyzer_refresh_picks_up_db_change(db_session, monkeypatch):
 
     ConfigManager(db=db_session).update({"temperature": 0.1})
 
-    analyzer = DeepSeekCodeAnalyzer()
-    analyzer.config_manager.db = db_session
+    analyzer = DeepSeekCodeAnalyzer.__new__(DeepSeekCodeAnalyzer)
+    analyzer.config_manager = ConfigManager(db=db_session)
+    analyzer.config = {}
+    analyzer.validator = None
+    analyzer.file_processor = None
     analyzer._refresh_runtime_config(db_session)
     assert analyzer.config.get("temperature") == 0.1
 

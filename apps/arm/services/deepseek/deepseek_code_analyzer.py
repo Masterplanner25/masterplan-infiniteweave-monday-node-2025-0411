@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from apps.arm.services.deepseek.security_deepseek import SecurityValidator
 from apps.arm.services.deepseek.file_processor_deepseek import FileProcessor
-from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
+from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager, DEFAULT_CONFIG
 from apps.arm.models import AnalysisResult, CodeGeneration
 from AINDY.config import settings
 from AINDY.platform_layer.external_call_service import perform_external_call
@@ -111,8 +111,21 @@ class DeepSeekCodeAnalyzer:
         self.client = _build_deepseek_client()
 
     def _refresh_runtime_config(self, db: Session | None = None) -> None:
-        self.config_manager.db = db
-        self.config = self.config_manager.get_all()
+        if db is not None:
+            # Prefer the caller's active DB session so config updates committed
+            # in the same request/session are visible immediately.
+            from apps.arm.dao.arm_config_dao import get_config
+
+            self.config_manager = ConfigManager(db=db)
+            config_row = get_config(db)
+            self.config = (
+                {**DEFAULT_CONFIG, **self.config_manager._model_to_dict(config_row)}
+                if config_row is not None
+                else DEFAULT_CONFIG.copy()
+            )
+        else:
+            self.config_manager.db = db
+            self.config = self.config_manager.get_all()
         validator = getattr(self, "validator", None)
         file_processor = getattr(self, "file_processor", None)
         if isinstance(validator, SecurityValidator):

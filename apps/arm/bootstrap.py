@@ -10,7 +10,7 @@ _ANALYZER = None
 _ANALYZER_LOCK = Lock()
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "analytics", "identity"]
+APP_DEPENDS_ON: list[str] = ["agent", "analytics"]
 
 
 def register() -> None:

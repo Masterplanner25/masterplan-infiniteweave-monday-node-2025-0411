@@ -392,7 +392,7 @@ class TestNodusTraceEndpoint:
 
     def test_returns_200_with_trace(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         trace_result = {
             "trace_id": "exec-1",
             "execution_unit_id": "exec-1",
@@ -419,7 +419,7 @@ class TestNodusTraceEndpoint:
 
     def test_returns_404_when_empty(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         empty = {
             "trace_id": "missing",
             "execution_unit_id": "missing",
@@ -453,7 +453,7 @@ class TestNodusTraceEndpoint:
 
     def test_passes_trace_id_to_service(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         result = {
             "trace_id": "my-trace",
             "execution_unit_id": "my-trace",
@@ -479,7 +479,7 @@ class TestNodusTraceEndpoint:
 
     def test_default_limit_applied(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         result = {
             "trace_id": "exec-1",
             "execution_unit_id": "exec-1",
@@ -504,7 +504,7 @@ class TestNodusTraceEndpoint:
 
     def test_summary_in_response(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         result = {
             "trace_id": "exec-1",
             "execution_unit_id": "exec-1",
@@ -530,7 +530,7 @@ class TestNodusTraceEndpoint:
 
     def test_custom_limit_forwarded(self):
         db = MagicMock()
-        user = {"sub": str(uuid.uuid4())}
+        user = {"sub": str(uuid.uuid4()), "is_admin": True}
         result = {
             "trace_id": "exec-1",
             "execution_unit_id": "exec-1",

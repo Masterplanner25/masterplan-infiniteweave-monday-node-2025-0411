@@ -7,7 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "analytics", "masterplan"]
+APP_DEPENDS_ON: list[str] = ["agent"]
 
 
 def register() -> None:

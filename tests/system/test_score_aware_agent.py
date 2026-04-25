@@ -537,7 +537,7 @@ class TestSuggestionsEndpoint:
         mock_db = MagicMock()
 
         with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.services.infinity_service.get_user_kpi_snapshot", return_value=None):
+             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert isinstance(result, list)
@@ -558,7 +558,7 @@ class TestSuggestionsEndpoint:
         }
 
         with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.services.infinity_service.get_user_kpi_snapshot", return_value=snap):
+             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=snap):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert len(result) >= 1
@@ -571,7 +571,7 @@ class TestSuggestionsEndpoint:
         mock_db = MagicMock()
 
         with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.services.infinity_service.get_user_kpi_snapshot", return_value=None):
+             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=None):
             result = get_tool_suggestions(current_user=mock_user, db=mock_db)
 
         assert result == []

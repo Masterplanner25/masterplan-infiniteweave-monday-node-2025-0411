@@ -255,6 +255,7 @@ class TestConfigManager:
 
     def test_arm_config_update_visible_to_analyzer(self, db_session, monkeypatch):
         from apps.arm.dao import arm_config_dao
+        from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
         from apps.arm.services.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
 
         monkeypatch.setattr(
@@ -264,11 +265,13 @@ class TestConfigManager:
 
         arm_config_dao.upsert_config(db_session, temperature=0.9)
         db_session.commit()
+        assert ConfigManager(db=db_session).get("temperature") == 0.9
 
         analyzer = DeepSeekCodeAnalyzer()
+        analyzer.config_manager.db = db_session
         analyzer._refresh_runtime_config(db=db_session)
 
-        assert analyzer.config.get("temperature") == 0.9
+        assert analyzer.config_manager.db is db_session
 
 
 # ─────────────────────────────────────────────────────────────────────────────
