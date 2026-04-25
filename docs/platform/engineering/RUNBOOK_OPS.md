@@ -437,3 +437,217 @@ Additional note:
 - `docs/platform/engineering/RUNBOOK_SECRET_ROTATION.md` — secret key rotation companion runbook if present in your checkout
 - `docs/architecture/MULTI_INSTANCE_RESUME.md` — cross-instance resume internals
 - `docs/runtime/RUNTIME_BEHAVIOR.md` — runtime behavior and invariants
+---
+
+## 5. Syscall Handler Registration Failure
+
+### 5.1 What it means
+
+AINDY's cross-domain runtime capabilities are exposed through the syscall registry. Domain apps register syscall handlers during startup via `register_all_domain_handlers()`. If a domain bootstrap module fails to import because of a syntax error, missing dependency, or cross-domain import problem, its syscall handlers are not registered.
+
+From the startup-guard hardening onward, the server warns in development or raises in production when declared required syscalls are missing after bootstrap. Without that guard, the failure mode is a partially booted server whose flows and agents fail later with syscall lookup errors.
+
+### 5.2 Symptoms
+
+- Startup in production aborts with `RuntimeError: Required syscalls not registered after bootstrap: [...]`.
+- Startup in development logs `[startup] Required syscalls missing after bootstrap: [...]`.
+- Runtime flow or agent execution fails with `syscall not found`, `unregistered syscall`, or a missing syscall name in the error payload.
+
+### 5.3 Diagnose registered syscalls
+
+1. Review the startup log for the exact missing syscall names.
+
+2. Load plugins and print the registered syscall list.
+   Command:
+   ```bash
+   python -c "from AINDY.platform_layer.registry import load_plugins; load_plugins(); from AINDY.kernel.syscall_registry import get_registered_syscalls; syscalls = get_registered_syscalls(); print(f'Registered syscalls ({len(syscalls)}):'); [print(f'  {name}') for name in syscalls]"
+   ```
+   Passing result: prints the currently registered syscall names. Critical families such as `sys.v1.task.*`, `sys.v1.masterplan.*`, `sys.v1.analytics.*`, and `sys.v1.identity.*` appear when their owning domains loaded correctly.
+   If it fails: the traceback identifies the import path or bootstrap module that broke during registration.
+
+3. Import the affected domain bootstrap directly.
+   Command:
+   ```bash
+   python -c "import apps.<domain>.bootstrap"
+   ```
+   Replace `<domain>` with the missing syscall owner from step 2.
+   Passing result: the import exits cleanly with no output.
+   If it fails: the exception usually identifies a missing dependency, syntax error, or cross-domain import cycle.
+
+4. Inspect for module-level cross-domain imports in the failing area.
+   Command:
+   ```bash
+   rg "from apps\\.|import apps\\." apps/<domain>
+   ```
+   Passing result: imports of other domains are either absent or intentionally scoped inside function bodies.
+   If it fails: a module-level cross-domain import can cascade and prevent the owning domain's bootstrap from loading at all.
+
+### 5.4 Recovery
+
+1. Fix the import or bootstrap error in the failing domain.
+2. If the failure is caused by a module-level cross-domain import, move the import into the function that uses it so bootstrap can load independently.
+3. Restart the server.
+4. Re-run the registration command from §5.3 and confirm the missing syscall names now appear.
+
+### 5.5 Prevention
+
+- Keep cross-domain imports out of module scope in syscall handler files.
+- Declare critical syscall names with `register_required_syscall()` so the startup guard can detect missing registrations before traffic reaches the server.
+- Treat new startup warnings about required syscalls as deployment blockers even in development, because the runtime failures surface later and are harder to diagnose.
+
+---
+
+## 6. Async Job Queue Saturation (503 Errors on AI Endpoints)
+
+### 6.1 What it means
+
+When `EXECUTION_MODE=thread`, async jobs are executed by a shared thread pool sized by `AINDY_ASYNC_JOB_WORKERS`. AI-heavy jobs such as ARM analysis, DeepSeek/OpenAI calls, and automation-triggered work usually take 10 to 30 seconds each. If requests arrive faster than the pool can drain them, new submissions are rejected with HTTP 503 queue saturation errors.
+
+The runtime now logs a startup advisory when the thread pool is clearly undersized for AI workloads and a second warning when there is no per-user concurrency cap.
+
+### 6.2 Symptoms
+
+- AI endpoints return HTTP `503`.
+- The response body contains a queue saturation error such as `{"error":"queue_saturated", ...}`.
+- The response includes a `Retry-After` header.
+- Startup logs include `[startup] Thread pool is small for AI workloads` when `AINDY_ASYNC_JOB_WORKERS < 8`.
+- Startup logs include `[startup] AINDY_ASYNC_MAX_CONCURRENT_PER_USER=0` when a single user can exhaust the pool.
+
+### 6.3 Diagnose current capacity
+
+1. Print the configured async job limits.
+   Command:
+   ```bash
+   python -c "from AINDY.config import settings; print(f'mode={settings.EXECUTION_MODE}'); print(f'workers={settings.AINDY_ASYNC_JOB_WORKERS}'); print(f'queue_max={settings.AINDY_ASYNC_QUEUE_MAXSIZE}'); print(f'per_user_cap={settings.AINDY_ASYNC_MAX_CONCURRENT_PER_USER}'); print(f'global_cap={settings.AINDY_ASYNC_MAX_CONCURRENT_GLOBAL}')"
+   ```
+   Passing result: prints the current execution mode and queue limits. In thread mode the default worker count is `10`.
+   If it fails: the Python environment is not loading the application settings correctly; resolve that before continuing.
+
+2. Inspect the live health payload.
+   Command:
+   ```bash
+   curl -s http://localhost:8000/health | python -m json.tool
+   ```
+   Passing result: the payload includes an `async_jobs` object with `execution_mode`, `thread_pool_workers`, `queue_max`, `per_user_cap`, and `global_cap`.
+   If it fails: the server is not responding locally, or the health endpoint is blocked by a broader startup failure.
+
+3. Estimate sustainable throughput.
+   At roughly 15 seconds per AI job, a pool of `N` workers sustains about `N / 15` jobs per second.
+   - `4` workers: about `0.27` jobs per second
+   - `10` workers: about `0.67` jobs per second
+   - `20` workers: about `1.33` jobs per second
+
+### 6.4 Recovery for immediate saturation
+
+1. Increase the worker pool size in the deployment environment.
+   Command:
+   ```bash
+   export AINDY_ASYNC_JOB_WORKERS=20
+   ```
+   Passing result: the next process start uses the larger thread pool.
+   If it fails: update the equivalent environment mechanism for your supervisor, container, or service manager instead of a shell export.
+
+2. Set a per-user cap so one caller cannot consume the entire pool.
+   Command:
+   ```bash
+   export AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2
+   ```
+   Passing result: each user is limited to two concurrent async jobs after restart.
+   If it fails: apply the setting through your deployment environment and restart the service.
+
+3. Restart the API process so the new limits take effect.
+
+### 6.5 Recovery for sustained load
+
+If thread mode saturates regularly, move AI workloads to distributed execution.
+
+1. Configure distributed mode and Redis.
+   Command:
+   ```bash
+   export EXECUTION_MODE=distributed
+   export REDIS_URL=redis://your-redis-host:6379
+   ```
+   Passing result: the API enqueues jobs to Redis instead of relying only on the in-process thread pool.
+   If it fails: verify Redis connectivity and the deployment's Redis requirement settings before restart.
+
+2. Start worker capacity separately from the API server.
+   Command:
+   ```bash
+   WORKER_CONCURRENCY=4 python -m AINDY.worker.worker_loop
+   ```
+   Passing result: the worker loop starts and can be scaled independently on one or more instances.
+   If it fails: inspect Redis connectivity, worker logs, and scheduler leadership state.
+
+### 6.6 Prevention
+
+- Keep `AINDY_ASYNC_JOB_WORKERS` at `8` or higher for thread-mode AI workloads unless the host is intentionally resource-constrained.
+- Set `AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2` to improve fairness.
+- Monitor `503` rates on AI endpoints and treat a rising saturation rate as the signal to increase capacity or switch to distributed execution.
+
+---
+
+## 7. Cache Backend Misconfiguration
+
+### 7.1 What it means
+
+When `AINDY_CACHE_BACKEND=memory` is used in a deployment that requires Redis, cache behavior becomes incoherent across instances because each process keeps its own isolated in-memory cache. In production-style environments this is now treated as a startup error; in development it is downgraded to a warning so operators can still test locally.
+
+Redis is considered required when `AINDY_REQUIRE_REDIS=true` or when `ENV` is anything other than `dev`, `development`, or `test`.
+
+### 7.2 Symptoms
+
+- Startup in production aborts with `RuntimeError: AINDY_CACHE_BACKEND=memory is not permitted when Redis is required ...`.
+- Startup in development logs `[startup] Cache backend misconfiguration: ...`.
+- Older deployments without the coherence guard may appear healthy while caching is effectively disabled or inconsistent across instances.
+
+### 7.3 Diagnose cache coherence
+
+1. Print the active cache settings.
+   Command:
+   ```bash
+   python -c "from AINDY.config import settings; print(f'cache_backend={settings.AINDY_CACHE_BACKEND!r}'); print(f'requires_redis={settings.requires_redis}'); print(f'redis_url_set={bool(settings.REDIS_URL)}'); print(f'env={settings.ENV!r}')"
+   ```
+   Passing result: production-like environments show `requires_redis=True`, and a coherent deployment uses either `AINDY_CACHE_BACKEND='redis'` with `redis_url_set=True` or `AINDY_CACHE_BACKEND='off'`.
+   If it fails: the application settings are not loading correctly; fix that before relying on any cache diagnosis.
+
+2. Inspect the live health payload.
+   Command:
+   ```bash
+   curl -s http://localhost:8000/health | python -m json.tool
+   ```
+   Passing result: the payload includes a `cache` object with `backend`, `redis_configured`, and `requires_redis`.
+   If it fails: the server is unavailable locally or another startup guard prevented a healthy boot.
+
+### 7.4 Recovery
+
+1. Use Redis-backed caching for production or multi-instance deployments.
+   Command:
+   ```bash
+   export AINDY_CACHE_BACKEND=redis
+   export REDIS_URL=redis://your-redis-host:6379
+   ```
+   Passing result: cache state is shared across instances once the server restarts and Redis is reachable.
+   If it fails: resolve the Redis dependency first; a required-Redis deployment cannot safely use memory caching as a substitute.
+
+2. If Redis is intentionally unavailable, disable caching explicitly instead of falling back to memory.
+   Command:
+   ```bash
+   export AINDY_CACHE_BACKEND=off
+   ```
+   Passing result: caching is disabled in a predictable way and all reads hit the underlying store.
+   If it fails: update the setting through the deployment environment and restart.
+
+3. Use memory caching only for local single-instance development.
+   Command:
+   ```bash
+   export ENV=development
+   export AINDY_CACHE_BACKEND=memory
+   ```
+   Passing result: a single local process can use memory caching without cross-instance incoherence.
+   If it fails: do not use this configuration in production or in any multi-instance environment.
+
+### 7.5 Prevention
+
+- Never deploy `AINDY_CACHE_BACKEND=memory` when `requires_redis` is true.
+- Prefer `AINDY_CACHE_BACKEND=off` over `memory` when Redis is unavailable but the service must still start safely.
+- Use the `/health` cache payload during deployment validation to confirm that cache backend, Redis configuration, and Redis requirement state agree before putting an instance in rotation.
