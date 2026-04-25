@@ -6,6 +6,7 @@ import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoun
 import AppShell from "./components/shared/AppShell";
 import KPIDashboard from "./components/shared/KPIDashboard";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
+import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
 import { useSystem } from "./context/SystemContext";
@@ -39,6 +40,7 @@ const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceVi
 
 function BootGate() {
   const { booting, booted, bootError, bootSystem } = useSystem();
+  const { logout } = useAuth();
 
   if (booting && !booted) {
     return (
@@ -63,12 +65,23 @@ function BootGate() {
             Identity Boot Failed
           </p>
           <p className="mt-3 text-sm text-zinc-300">{bootError}</p>
-          <button
-            onClick={() => bootSystem().catch(() => {})}
-            className="mt-6 rounded-2xl bg-[#00ffaa] px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-black"
-          >
-            Retry Boot
-          </button>
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={() => bootSystem().catch(() => {})}
+              className="rounded-2xl bg-[#00ffaa] px-4 py-3 text-sm font-black uppercase tracking-[0.18em] text-black"
+            >
+              Retry
+            </button>
+            <button
+              onClick={logout}
+              className="rounded-2xl border border-zinc-700 px-4 py-3 text-sm font-medium text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+            >
+              Sign Out
+            </button>
+          </div>
+          <p className="mt-4 text-[10px] text-zinc-600">
+            If the problem persists, sign out and log back in.
+          </p>
         </div>
       </div>
     );

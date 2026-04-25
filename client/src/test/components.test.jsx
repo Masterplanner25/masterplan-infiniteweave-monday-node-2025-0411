@@ -103,7 +103,7 @@ describe("BootGate", () => {
     expect(screen.getByText(/identity boot failed/i)).toBeInTheDocument();
     expect(screen.getByText(/boot failed badly/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /retry boot/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^retry$/i }));
 
     await waitFor(() => {
       expect(bootSystem).toHaveBeenCalledOnce();
