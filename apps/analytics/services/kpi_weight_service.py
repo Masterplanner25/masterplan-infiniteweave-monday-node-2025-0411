@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import logging
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ def get_or_create_user_weights(db: Session, user_id):
     uid = parse_user_id(user_id)
     row = db.query(UserKpiWeights).filter(UserKpiWeights.user_id == uid).first()
     if row is None:
-        row = UserKpiWeights(
+        candidate = UserKpiWeights(
             user_id=uid,
             execution_speed_weight=KPI_WEIGHTS["execution_speed"],
             decision_efficiency_weight=KPI_WEIGHTS["decision_efficiency"],
@@ -54,8 +55,13 @@ def get_or_create_user_weights(db: Session, user_id):
             masterplan_progress_weight=KPI_WEIGHTS["masterplan_progress"],
             adapted_count=0,
         )
-        db.add(row)
-        db.flush()
+        try:
+            with db.begin_nested():
+                db.add(candidate)
+                db.flush()
+            row = candidate
+        except IntegrityError:
+            row = db.query(UserKpiWeights).filter(UserKpiWeights.user_id == uid).first()
     return row
 
 

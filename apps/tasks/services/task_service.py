@@ -14,6 +14,7 @@ from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.core.system_event_service import emit_system_event
+from apps.analytics.services.calculation_services import calculate_twr, save_calculation
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
 from apps.tasks.services.analytics_bridge import (
     get_kpi_snapshot_via_syscall,
