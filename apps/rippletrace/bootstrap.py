@@ -44,7 +44,7 @@ def _register_routers() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
 
     for prefix in ("rippletrace", "legacy_surface", "observability", "db", "flow"):
         register_response_adapter(prefix, raw_json_adapter)

@@ -19,7 +19,7 @@ def _register_router() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import legacy_envelope_adapter
+    from AINDY.platform_layer.response_adapters import legacy_envelope_adapter
 
     for prefix in ("autonomy", "system", "coordination"):
         register_response_adapter(prefix, legacy_envelope_adapter)
