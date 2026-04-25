@@ -9,6 +9,7 @@ def register() -> None:
     _register_models()
     _register_routers()
     _register_response_adapters()
+    _register_syscalls()
     _register_flow_strategy()
     _register_flow_results()
     _register_required_flow_nodes()
@@ -47,6 +48,12 @@ def _register_response_adapters() -> None:
 
     for prefix in ("rippletrace", "legacy_surface", "observability", "db", "flow"):
         register_response_adapter(prefix, raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.rippletrace.syscalls import register_rippletrace_syscall_handlers
+
+    register_rippletrace_syscall_handlers()
 
 
 def _register_flow_strategy() -> None:

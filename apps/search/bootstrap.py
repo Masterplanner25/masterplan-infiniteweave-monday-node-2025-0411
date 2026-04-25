@@ -10,6 +10,7 @@ def register() -> None:
     _register_routers()
     _register_route_prefixes()
     _register_response_adapters()
+    _register_syscalls()
     _register_agent_tools()
     _register_agent_capabilities()
     _register_capture_rules()
@@ -57,6 +58,12 @@ def _register_response_adapters() -> None:
 
     register_response_adapter("leadgen", raw_json_adapter)
     register_response_adapter("seo", raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.search.syscalls import register_search_syscall_handlers
+
+    register_search_syscall_handlers()
 
 
 def _register_agent_tools() -> None:

@@ -27,13 +27,31 @@ def _syscall_node(name: str, state: dict, context: dict, capability: str) -> dic
 
     This is the standard thin-wrapper pattern for all refactored flow nodes.
     """
-    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
+    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher, make_syscall_ctx_from_flow
 
-    ctx = make_syscall_ctx_from_flow(context, capabilities=[capability])
+    base_ctx = make_syscall_ctx_from_flow(context, capabilities=[capability])
+    ctx = SyscallContext(
+        execution_unit_id=base_ctx.execution_unit_id,
+        user_id=base_ctx.user_id,
+        capabilities=base_ctx.capabilities,
+        trace_id=base_ctx.trace_id,
+        memory_context=base_ctx.memory_context,
+        metadata={
+            **(base_ctx.metadata or {}),
+            "_db": context.get("db"),
+        },
+    )
     result = get_dispatcher().dispatch(name, state, ctx)
     if result["status"] == "error":
         return {"status": "RETRY", "error": result["error"]}
     return {"status": "SUCCESS", "output_patch": result["data"]}
+
+
+def _syscall_data(name: str, state: dict, context: dict, capability: str) -> dict:
+    result = _syscall_node(name, state, context, capability)
+    if result.get("status") != "SUCCESS":
+        raise RuntimeError(result.get("error") or f"{name} failed")
+    return result.get("output_patch") or {}
 
 
 # ── ARM Analysis Flow ──────────────────────────────────────────────────────────
@@ -208,14 +226,11 @@ def genesis_message_execute(state, context):
 @register_node("genesis_message_orchestrate")
 def genesis_message_orchestrate(state, context):
     try:
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-        db = context.get("db")
-        user_id = context.get("user_id")
-        orchestration = execute_infinity_orchestrator(
-            user_id=user_id,
-            trigger_event="genesis_message",
-            db=db,
+        orchestration = _syscall_data(
+            "sys.v1.analytics.execute_infinity",
+            {"user_id": context.get("user_id"), "trigger_event": "genesis_message"},
+            context,
+            "score.recalculate",
         )
         response = dict(state.get("genesis_response") or {})
         response["orchestration"] = orchestration
@@ -239,11 +254,9 @@ def memory_execution_run(state, context):
         from types import SimpleNamespace
 
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
-        from AINDY.runtime.memory_loop import ExecutionLoop
         from AINDY.runtime.execution_registry import REGISTRY
         from AINDY.runtime.memory import MemoryOrchestrator, memory_items_to_dicts
-        from apps.masterplan.services.genesis_ai import call_genesis_llm
-        from apps.search.services.leadgen_service import create_lead_results
+        from AINDY.runtime.memory_loop import ExecutionLoop
 
         db = context.get("db")
         user_id = context.get("user_id")
@@ -258,14 +271,26 @@ def memory_execution_run(state, context):
             query = payload.get("query") or payload.get("input") or payload.get("message")
             if not query:
                 return {"error": "missing_query", "message": "missing query"}
-            return create_lead_results(db=owner_db, query=str(query), user_id=owner_user_id)
+            return _syscall_data(
+                "sys.v1.leadgen.search",
+                {"query": str(query)},
+                {**context, "db": owner_db, "user_id": owner_user_id},
+                "leadgen.search",
+            )
 
         def genesis_handler(payload, owner_user_id, owner_db):
             message = payload.get("message") or payload.get("query") or payload.get("input")
-            current_state = payload.get("current_state") or payload.get("state") or {}
             if not message:
                 return {"error": "missing_message", "message": "missing message"}
-            return call_genesis_llm(message=str(message), current_state=current_state, user_id=owner_user_id, db=owner_db)
+            return _syscall_data(
+                "sys.v1.genesis.call_llm",
+                {
+                    "message": str(message),
+                    "current_state": payload.get("current_state") or payload.get("state") or {},
+                },
+                {**context, "db": owner_db, "user_id": owner_user_id},
+                "genesis.execute_llm",
+            )
 
         REGISTRY.register("leadgen", leadgen_handler)
         REGISTRY.register("genesis_message", genesis_handler)
@@ -317,15 +342,12 @@ def memory_execution_run(state, context):
 def memory_execution_orchestrate(state, context):
     response = dict(state.get("memory_execution_response") or {})
     try:
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-        db = context.get("db")
-        user_id = context.get("user_id")
         workflow = state.get("original_workflow")
-        orchestration = execute_infinity_orchestrator(
-            user_id=user_id,
-            trigger_event=f"memory_{workflow}",
-            db=db,
+        orchestration = _syscall_data(
+            "sys.v1.analytics.execute_infinity",
+            {"user_id": context.get("user_id"), "trigger_event": f"memory_{workflow}"},
+            context,
+            "score.recalculate",
         )
         response["orchestration"] = orchestration
         return {"status": "SUCCESS", "output_patch": {"memory_execution_response": response}}
@@ -455,7 +477,6 @@ def watcher_ingest_orchestrate(state, context):
         from uuid import UUID
 
         from AINDY.core.system_event_service import emit_system_event
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         db = context.get("db")
         session_ended_count = state.get("watcher_session_ended_count") or 0
@@ -501,10 +522,11 @@ def watcher_ingest_orchestrate(state, context):
             )
             eta_recalculated = True
             if batch_user_id:
-                orchestration = execute_infinity_orchestrator(
-                    user_id=event_user_id,
-                    db=db,
-                    trigger_event="session_ended",
+                orchestration = _syscall_data(
+                    "sys.v1.analytics.execute_infinity",
+                    {"user_id": str(event_user_id), "trigger_event": "session_ended"},
+                    context,
+                    "score.recalculate",
                 )
                 score_orchestrated = True
                 next_action = orchestration["next_action"]

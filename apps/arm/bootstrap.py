@@ -18,6 +18,7 @@ def register() -> None:
     _register_router()
     _register_route_prefixes()
     _register_response_adapters()
+    _register_syscalls()
     _register_jobs()
     _register_async_jobs()
     _register_agent_tools()
@@ -59,6 +60,12 @@ def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
     from apps._adapters import raw_json_adapter
     register_response_adapter("arm", raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.arm.syscalls import register_arm_syscall_handlers
+
+    register_arm_syscall_handlers()
 
 
 def _register_jobs() -> None:

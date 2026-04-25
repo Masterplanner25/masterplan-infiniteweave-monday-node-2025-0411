@@ -29,9 +29,31 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from AINDY.kernel.syscall_dispatcher import child_context, get_dispatcher
 from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
 
 logger = logging.getLogger(__name__)
+
+
+def _dispatch_owner_syscall(
+    name: str,
+    payload: dict[str, Any],
+    context: SyscallContext,
+    *,
+    capability: str,
+) -> dict[str, Any]:
+    nested_context = child_context(
+        context,
+        capabilities=[capability],
+        metadata={
+            **(context.metadata or {}),
+            "source": "automation",
+        },
+    )
+    result = get_dispatcher().dispatch(name, payload, nested_context)
+    if result.get("status") != "success":
+        raise ValueError(result.get("error") or f"{name} failed")
+    return result.get("data") or {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -56,48 +78,12 @@ def _handle_task_create(payload: dict, context: SyscallContext) -> dict:
         reminder_time     (str | None)
         recurrence        (str | None)
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import create_task
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.create requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        task = create_task(
-            db=db,
-            name=name,
-            category=payload.get("category"),
-            priority=payload.get("priority"),
-            due_date=payload.get("due_date"),
-            masterplan_id=payload.get("masterplan_id"),
-            parent_task_id=payload.get("parent_task_id"),
-            dependency_type=payload.get("dependency_type"),
-            dependencies=payload.get("dependencies"),
-            automation_type=payload.get("automation_type"),
-            automation_config=payload.get("automation_config"),
-            scheduled_time=payload.get("scheduled_time"),
-            reminder_time=payload.get("reminder_time"),
-            recurrence=payload.get("recurrence"),
-            user_id=context.user_id,
-        )
-        return {
-            "task_id": str(task.id) if task.id else None,
-            "task_name": task.name,
-            "category": task.category,
-            "priority": task.priority,
-            "status": getattr(task, "status", "unknown"),
-            "time_spent": getattr(task, "time_spent", 0),
-            "masterplan_id": getattr(task, "masterplan_id", None),
-            "parent_task_id": getattr(task, "parent_task_id", None),
-            "depends_on": getattr(task, "depends_on", []) or [],
-            "dependency_type": getattr(task, "dependency_type", "hard"),
-            "automation_type": getattr(task, "automation_type", None),
-            "automation_config": getattr(task, "automation_config", None),
-        }
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.create",
+        payload,
+        context,
+        capability="task.create",
+    )
 
 
 def _handle_task_complete(payload: dict, context: SyscallContext) -> dict:
@@ -106,19 +92,12 @@ def _handle_task_complete(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import complete_task
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.complete requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        result = complete_task(db=db, name=name, user_id=context.user_id)
-        return {"task_result": result}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.complete",
+        payload,
+        context,
+        capability="task.complete",
+    )
 
 
 def _handle_task_complete_full(payload: dict, context: SyscallContext) -> dict:
@@ -127,19 +106,12 @@ def _handle_task_complete_full(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import execute_task_completion
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.complete_full requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        result = execute_task_completion(db=db, name=name, user_id=context.user_id)
-        return result if isinstance(result, dict) else {"result": result}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.complete_full",
+        payload,
+        context,
+        capability="task.complete_full",
+    )
 
 
 def _handle_task_start(payload: dict, context: SyscallContext) -> dict:
@@ -148,19 +120,12 @@ def _handle_task_start(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import start_task
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.start requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        message = start_task(db, name, user_id=context.user_id)
-        return {"task_start_result": {"message": message}}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.start",
+        payload,
+        context,
+        capability="task.start",
+    )
 
 
 def _handle_task_pause(payload: dict, context: SyscallContext) -> dict:
@@ -169,19 +134,12 @@ def _handle_task_pause(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import pause_task
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.pause requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        message = pause_task(db, name, user_id=context.user_id)
-        return {"task_pause_result": {"message": message}}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.pause",
+        payload,
+        context,
+        capability="task.pause",
+    )
 
 
 def _handle_task_orchestrate(payload: dict, context: SyscallContext) -> dict:
@@ -190,19 +148,12 @@ def _handle_task_orchestrate(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         task_name / name  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.tasks.services.task_service import orchestrate_task_completion
-
-    name = payload.get("task_name") or payload.get("name")
-    if not name:
-        raise ValueError("sys.v1.task.orchestrate requires 'task_name' or 'name'")
-
-    db = SessionLocal()
-    try:
-        orchestration = orchestrate_task_completion(db=db, name=name, user_id=context.user_id)
-        return {"task_orchestration": orchestration}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.task.orchestrate",
+        payload,
+        context,
+        capability="task.orchestrate",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -215,37 +166,14 @@ def _handle_leadgen_search(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.search.services.leadgen_service import create_lead_results
-
-    query = payload.get("query", "")
-    if not query:
+    if not payload.get("query"):
         raise ValueError("sys.v1.leadgen.search requires 'query'")
-
-    db = SessionLocal()
-    try:
-        raw = create_lead_results(db, query, user_id=context.user_id)
-        serialized = [
-            {
-                "company": r.company,
-                "url": r.url,
-                "fit_score": r.fit_score,
-                "intent_score": r.intent_score,
-                "data_quality_score": r.data_quality_score,
-                "overall_score": r.overall_score,
-                "reasoning": r.reasoning,
-                "search_score": search_score,
-                "created_at": (
-                    r.created_at.isoformat()
-                    if hasattr(r.created_at, "isoformat")
-                    else str(r.created_at or "")
-                ),
-            }
-            for r, search_score in raw
-        ]
-        return {"search_results": serialized, "count": len(serialized)}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.leadgen.search",
+        payload,
+        context,
+        capability="leadgen.search",
+    )
 
 
 def _handle_leadgen_search_ai(payload: dict, context: SyscallContext) -> dict:
@@ -254,19 +182,14 @@ def _handle_leadgen_search_ai(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from AINDY.db.database import SessionLocal
-    from apps.search.services.leadgen_service import run_ai_search
-
-    query = payload.get("query", "")
-    if not query:
+    if not payload.get("query"):
         raise ValueError("sys.v1.leadgen.search_ai requires 'query'")
-
-    db = SessionLocal()
-    try:
-        leads = run_ai_search(query=query, user_id=context.user_id, db=db)
-        return {"leads": leads, "count": len(leads)}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.leadgen.search_ai",
+        payload,
+        context,
+        capability="leadgen.search_ai",
+    )
 
 
 def _handle_leadgen_store(payload: dict, context: SyscallContext) -> dict:
@@ -276,43 +199,14 @@ def _handle_leadgen_store(payload: dict, context: SyscallContext) -> dict:
         query    (str)        — required
         results  (list[dict]) — required; serialized lead result dicts
     """
-    from AINDY.core.execution_signal_helper import queue_memory_capture
-    from AINDY.db.database import SessionLocal
-
-    query: str = payload.get("query", "")
-    results: list = payload.get("results") or []
-
-    db = SessionLocal()
-    try:
-        if context.user_id and results:
-            queue_memory_capture(
-                db=db,
-                user_id=context.user_id,
-                agent_namespace="leadgen",
-                event_type="leadgen_search",
-                content=f"LeadGen '{query[:80]}': {len(results)} results",
-                source="flow_engine:leadgen",
-                tags=["leadgen", "search", "outcome"],
-            )
-
-        if context.user_id and query and results:
-            try:
-                from apps.search.services.search_service import persist_search_result
-                persist_search_result(
-                    db=db,
-                    user_id=context.user_id,
-                    query=query,
-                    result={"query": query, "count": len(results), "results": results},
-                    search_type="leadgen",
-                )
-            except Exception as cache_exc:
-                logger.warning("[sys.v1.leadgen.store] cache persist failed (non-fatal): %s", cache_exc)
-
-        return {"stored": True, "count": len(results)}
-    except Exception:
-        raise
-    finally:
-        db.close()
+    if not context.user_id:
+        return {"stored": True, "count": len(payload.get("results") or [])}
+    return _dispatch_owner_syscall(
+        "sys.v1.leadgen.store",
+        payload,
+        context,
+        capability="leadgen.store",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -326,32 +220,14 @@ def _handle_arm_analyze(payload: dict, context: SyscallContext) -> dict:
         file_path           (str) — required
         additional_context  (str) — optional
     """
-    from AINDY.db.database import SessionLocal
-    from apps.arm.services.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-    file_path = payload.get("file_path")
-    if not file_path:
+    if not payload.get("file_path"):
         raise ValueError("sys.v1.arm.analyze requires 'file_path'")
-
-    db = SessionLocal()
-    try:
-        analyzer = DeepSeekCodeAnalyzer()
-        result = analyzer.run_analysis(
-            file_path=file_path,
-            user_id=context.user_id,
-            db=db,
-            additional_context=payload.get("additional_context", ""),
-        )
-        return {
-            "analysis_result": result,
-            "summary": result.get("summary", ""),
-            "architecture_score": result.get("architecture_score"),
-            "integrity_score": result.get("integrity_score"),
-            "analysis_score": result.get("architecture_score", 5),
-            "analysis_id": result.get("analysis_id"),
-        }
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.arm.analyze",
+        payload,
+        context,
+        capability="arm.analyze",
+    )
 
 
 def _handle_arm_generate(payload: dict, context: SyscallContext) -> dict:
@@ -366,35 +242,14 @@ def _handle_arm_generate(payload: dict, context: SyscallContext) -> dict:
         complexity      (str) — optional
         urgency         (str) — optional
     """
-    from AINDY.db.database import SessionLocal
-    from apps.arm.services.deepseek.deepseek_code_analyzer import DeepSeekCodeAnalyzer
-
-    prompt = payload.get("prompt")
-    if not prompt:
+    if not payload.get("prompt"):
         raise ValueError("sys.v1.arm.generate requires 'prompt'")
-
-    db = SessionLocal()
-    try:
-        analyzer = DeepSeekCodeAnalyzer()
-        result = analyzer.generate_code(
-            prompt=prompt,
-            user_id=context.user_id,
-            db=db,
-            language=payload.get("language", "python"),
-            original_code=payload.get("original_code", ""),
-            generation_type=payload.get("generation_type", "generate"),
-            analysis_id=payload.get("analysis_id"),
-            complexity=payload.get("complexity"),
-            urgency=payload.get("urgency"),
-        )
-        return {
-            "generation_result": result,
-            "generated_code": result.get("generated_code", ""),
-            "explanation": result.get("explanation", ""),
-            "generation_id": result.get("generation_id"),
-        }
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.arm.generate",
+        payload,
+        context,
+        capability="arm.generate",
+    )
 
 
 def _handle_arm_store(payload: dict, context: SyscallContext) -> dict:
@@ -405,31 +260,12 @@ def _handle_arm_store(payload: dict, context: SyscallContext) -> dict:
         event_type   (str)        — default "arm_analysis_complete"
         score        (int | float) — optional; for context metadata
     """
-    from AINDY.core.execution_signal_helper import queue_memory_capture
-    from AINDY.db.database import SessionLocal
-
-    result = payload.get("result", {})
-    event_type = payload.get("event_type", "arm_analysis_complete")
-    score = payload.get("score", 5)
-
-    db = SessionLocal()
-    try:
-        if context.user_id:
-            queue_memory_capture(
-                db=db,
-                user_id=context.user_id,
-                agent_namespace="arm",
-                event_type=event_type,
-                content=str(result)[:500],
-                source="syscall:arm_store",
-                context={"score": score},
-            )
-        return {"stored": True}
-    except Exception as exc:
-        logger.warning("[sys.v1.arm.store] non-fatal: %s", exc)
-        return {"stored": False}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.arm.store",
+        payload,
+        context,
+        capability="arm.store",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -443,65 +279,16 @@ def _handle_genesis_execute_llm(payload: dict, context: SyscallContext) -> dict:
         session_id  (str) — required
         message     (str) — required
     """
-    import uuid
-
-    from AINDY.db.database import SessionLocal
-    from apps.masterplan.models import GenesisSessionDB
-    from apps.masterplan.services.genesis_ai import call_genesis_llm
-
-    session_id = payload.get("session_id")
-    message = payload.get("message")
-    if not session_id:
+    if not payload.get("session_id"):
         raise ValueError("sys.v1.genesis.execute_llm requires 'session_id'")
-    if not message:
+    if not payload.get("message"):
         raise ValueError("sys.v1.genesis.execute_llm requires 'message'")
-
-    db = SessionLocal()
-    try:
-        user_id = uuid.UUID(str(context.user_id))
-        session = (
-            db.query(GenesisSessionDB)
-            .filter(
-                GenesisSessionDB.id == session_id,
-                GenesisSessionDB.user_id == user_id,
-            )
-            .first()
-        )
-        if not session:
-            raise ValueError("GenesisSession not found")
-
-        current_state = session.summarized_state or {}
-        llm_output = call_genesis_llm(
-            message=message,
-            current_state=current_state,
-            user_id=str(user_id),
-            db=db,
-        )
-
-        state_update = llm_output.get("state_update", {})
-        for key, value in state_update.items():
-            if key in current_state and value is not None:
-                current_state[key] = value
-
-        if "confidence" in current_state:
-            current_state["confidence"] = max(0.0, min(current_state["confidence"], 1.0))
-
-        session.summarized_state = current_state
-        if llm_output.get("synthesis_ready", False) and not session.synthesis_ready:
-            session.synthesis_ready = True
-        db.commit()
-
-        return {
-            "genesis_response": {
-                "reply": llm_output.get("reply", ""),
-                "synthesis_ready": session.synthesis_ready,
-            }
-        }
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.genesis.execute_llm",
+        payload,
+        context,
+        capability="genesis.execute_llm",
+    )
 
 
 def _handle_genesis_message(payload: dict, context: SyscallContext) -> dict:
@@ -547,24 +334,12 @@ def _handle_score_recalculate(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         trigger_event  (str) — default "manual"
     """
-    from AINDY.db.database import SessionLocal
-    from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
-
-    trigger = payload.get("trigger_event", "manual")
-
-    db = SessionLocal()
-    try:
-        result = execute_infinity_orchestrator(
-            user_id=context.user_id,
-            db=db,
-            trigger_event=trigger,
-        )
-        if not result:
-            raise ValueError("score calculation returned empty result")
-        score_data = result.get("score") or result
-        return {"score_recalculate_result": score_data}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.score.recalculate",
+        payload,
+        context,
+        capability="score.recalculate",
+    )
 
 
 def _handle_score_feedback(payload: dict, context: SyscallContext) -> dict:
@@ -713,28 +488,14 @@ def _handle_goal_create(payload: dict, context: SyscallContext) -> dict:
         status          (str)   — default "active"
         success_metric  (dict)  — optional
     """
-    from AINDY.db.database import SessionLocal
-    from apps.masterplan.services.goal_service import create_goal
-
-    name = payload.get("name")
-    if not name:
+    if not payload.get("name"):
         raise ValueError("sys.v1.goal.create requires 'name'")
-
-    db = SessionLocal()
-    try:
-        goal = create_goal(
-            db,
-            user_id=context.user_id,
-            name=name,
-            description=payload.get("description"),
-            goal_type=payload.get("goal_type", "strategic"),
-            priority=payload.get("priority", 0.5),
-            status=payload.get("status", "active"),
-            success_metric=payload.get("success_metric", {}),
-        )
-        return {"goal_create_result": goal}
-    finally:
-        db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.goal.create",
+        payload,
+        context,
+        capability="goal.create",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -747,14 +508,14 @@ def _handle_research_query(payload: dict, context: SyscallContext) -> dict:
     Payload keys:
         query  (str) — required
     """
-    from apps.search.services.research_engine import web_search
-
-    query = payload.get("query", "")
-    if not query:
+    if not payload.get("query"):
         raise ValueError("sys.v1.research.query requires 'query'")
-
-    raw = web_search(query)
-    return {"raw_result": raw[:2000] if raw else ""}
+    return _dispatch_owner_syscall(
+        "sys.v1.research.query",
+        payload,
+        context,
+        capability="research.query",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -768,25 +529,22 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
         kpi_snapshot  (dict) — required; keys: focus_quality, execution_speed,
                                ai_productivity_boost, master_score
     """
-    from AINDY.db.database import SessionLocal
-
     kpi_snapshot: dict = payload.get("kpi_snapshot") or {}
 
-    # Try persisted suggestions first
-    db = SessionLocal()
-    try:
-        if context.user_id:
-            try:
-                from apps.analytics.services.infinity_loop import get_latest_adjustment
-                latest = get_latest_adjustment(user_id=context.user_id, db=db)
-                if latest and latest.adjustment_payload:
-                    persisted = latest.adjustment_payload.get("suggestions")
-                    if isinstance(persisted, list):
-                        return {"suggestions": persisted[:3]}
-            except Exception as exc:
-                logger.warning("[sys.v1.agent.suggest_tools] persisted lookup failed: %s", exc)
-    finally:
-        db.close()
+    if context.user_id:
+        try:
+            latest_result = _dispatch_owner_syscall(
+                "sys.v1.analytics.get_latest_adjustment",
+                {"user_id": context.user_id},
+                context,
+                capability="analytics.read",
+            )
+            latest = latest_result.get("adjustment") or {}
+            persisted = (latest.get("adjustment_payload") or {}).get("suggestions")
+            if isinstance(persisted, list):
+                return {"suggestions": persisted[:3]}
+        except Exception as exc:
+            logger.warning("[sys.v1.agent.suggest_tools] persisted lookup failed: %s", exc)
 
     if not kpi_snapshot:
         return {"suggestions": []}
@@ -871,40 +629,12 @@ def _handle_authorship_list(payload: dict, context: SyscallContext) -> dict:
         user_id  (str) — required
         limit    (int) — default 10
     """
-    import uuid
-
-    from AINDY.db.database import SessionLocal
-    from apps.authorship.models import AuthorDB
-
-    user_id = payload.get("user_id") or context.user_id
-    limit = int(payload.get("limit") or 10)
-
-    external_db = context.metadata.get("_db") or context.metadata.get("db")
-    owns_session = external_db is None
-    db = external_db if external_db is not None else SessionLocal()
-    try:
-        authors = (
-            db.query(AuthorDB)
-            .filter(AuthorDB.user_id == uuid.UUID(str(user_id)))
-            .order_by(AuthorDB.joined_at.desc())
-            .limit(limit)
-            .all()
-        )
-        return {
-            "authors": [
-                {
-                    "id": a.id,
-                    "name": a.name,
-                    "platform": a.platform,
-                    "last_seen": a.last_seen.isoformat() if a.last_seen else None,
-                    "notes": a.notes,
-                }
-                for a in authors
-            ]
-        }
-    finally:
-        if owns_session:
-            db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.authorship.list_authors",
+        payload,
+        context,
+        capability="authorship.read",
+    )
 
 
 def _handle_rippletrace_list_pings(payload: dict, context: SyscallContext) -> dict:
@@ -914,39 +644,12 @@ def _handle_rippletrace_list_pings(payload: dict, context: SyscallContext) -> di
         user_id  (str) — required
         limit    (int) — default 10
     """
-    import uuid
-
-    from AINDY.db.database import SessionLocal
-    from apps.rippletrace.models import PingDB
-
-    user_id = payload.get("user_id") or context.user_id
-    limit = int(payload.get("limit") or 10)
-
-    external_db = context.metadata.get("_db") or context.metadata.get("db")
-    owns_session = external_db is None
-    db = external_db if external_db is not None else SessionLocal()
-    try:
-        ripples = (
-            db.query(PingDB)
-            .filter(PingDB.user_id == uuid.UUID(str(user_id)))
-            .order_by(PingDB.date_detected.desc())
-            .limit(limit)
-            .all()
-        )
-        return {
-            "pings": [
-                {
-                    "ping_type": r.ping_type,
-                    "source_platform": r.source_platform,
-                    "summary": r.connection_summary,
-                    "date_detected": r.date_detected.isoformat() if r.date_detected else None,
-                }
-                for r in ripples
-            ]
-        }
-    finally:
-        if owns_session:
-            db.close()
+    return _dispatch_owner_syscall(
+        "sys.v1.rippletrace.list_recent_pings",
+        payload,
+        context,
+        capability="rippletrace.read",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -959,37 +662,13 @@ def register_all_domain_handlers() -> None:
     Called once at application startup. Safe to call multiple times
     (subsequent calls overwrite with the same values — idempotent).
     """
-    from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
-
-    register_task_syscall_handlers()
-
     # Tuples: (name, handler, capability, description, stable)
     # Domain-specific handlers are stable=False — they wrap application logic
     # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
-        # LeadGen
-        ("sys.v1.leadgen.search",          _handle_leadgen_search,        "leadgen.search",        "B2B lead search via create_lead_results",                False),
-        ("sys.v1.leadgen.search_ai",       _handle_leadgen_search_ai,     "leadgen.search_ai",     "AI-powered B2B lead search",                            False),
-        ("sys.v1.leadgen.store",           _handle_leadgen_store,         "leadgen.store",         "Persist leadgen results to memory bridge",               False),
-        # ARM
-        ("sys.v1.arm.analyze",             _handle_arm_analyze,           "arm.analyze",           "ARM code analysis",                                      False),
-        ("sys.v1.arm.generate",            _handle_arm_generate,          "arm.generate",          "ARM code generation",                                    False),
-        ("sys.v1.arm.store",               _handle_arm_store,             "arm.store",             "Persist ARM result to memory bridge",                    False),
-        # Genesis
-        ("sys.v1.genesis.execute_llm",     _handle_genesis_execute_llm,   "genesis.execute_llm",   "Call Genesis LLM and update session (flow nodes)",      False),
-        ("sys.v1.genesis.message",         _handle_genesis_message,       "genesis.message",       "Full genesis message flow (agent tools)",                False),
-        # Score
-        ("sys.v1.score.recalculate",       _handle_score_recalculate,     "score.recalculate",     "Recalculate Infinity Score",                             False),
         ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False),
-        # Goal
-        ("sys.v1.goal.create",             _handle_goal_create,           "goal.create",           "Create a goal",                                          False),
-        # Research
-        ("sys.v1.research.query",          _handle_research_query,        "research.query",        "Web research query",                                     False),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False),
-        # Authorship / RippleTrace reads
-        ("sys.v1.authorship.list_authors", _handle_authorship_list,       "authorship.read",       "List recent authors for a user",                        False),
-        ("sys.v1.rippletrace.list_recent_pings", _handle_rippletrace_list_pings, "rippletrace.read", "List recent pings for a user",                        False),
         # Memory Address Space (path-based — experimental extensions)
         ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False),
         ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False),
