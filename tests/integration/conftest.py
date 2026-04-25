@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
@@ -140,7 +141,11 @@ def mongo_client() -> Iterator[MongoClient]:
         serverSelectionTimeoutMS=5000,
         uuidRepresentation="standard",
     )
-    client.admin.command("ping")
+    try:
+        client.admin.command("ping")
+    except PyMongoError as exc:
+        client.close()
+        pytest.skip(f"MongoDB not reachable for integration tests: {exc}")
     try:
         yield client
     finally:
