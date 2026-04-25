@@ -326,9 +326,9 @@ class DeepSeekCodeAnalyzer:
             # Trigger Infinity score recalculation (fire-and-forget)
             try:
                 if user_id and db:
-                    from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+                    from apps.analytics.public import run_infinity_orchestrator
 
-                    execute_infinity_orchestrator(
+                    run_infinity_orchestrator(
                         user_id=str(user_id),
                         db=db,
                         trigger_event="arm_analysis",

@@ -18,7 +18,7 @@ def _session_from_context(ctx: SyscallContext):
 
 
 def _handle_get_kpi_snapshot(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+    from apps.analytics.public import get_user_kpi_snapshot
 
     user_id = str(payload["user_id"])
     db, owns_session = _session_from_context(ctx)
@@ -30,7 +30,7 @@ def _handle_get_kpi_snapshot(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_save_calculation(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.calculation_services import save_calculation
+    from apps.analytics.public import save_calculation
 
     db, owns_session = _session_from_context(ctx)
     try:
@@ -86,11 +86,11 @@ def _handle_init_user_score(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_orchestrator import execute
+    from apps.analytics.public import run_infinity_orchestrator
 
     db, owns_session = _session_from_context(ctx)
     try:
-        result = execute(
+        result = run_infinity_orchestrator(
             user_id=ctx.user_id,
             db=db,
             trigger_event=payload.get("trigger_event", "manual"),
@@ -105,11 +105,11 @@ def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_orchestrator import execute
+    from apps.analytics.public import run_infinity_orchestrator
 
     db, owns_session = _session_from_context(ctx)
     try:
-        result = execute(
+        result = run_infinity_orchestrator(
             user_id=payload.get("user_id") or ctx.user_id,
             db=db,
             trigger_event=payload.get("trigger_event", "manual"),
@@ -123,7 +123,8 @@ def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_get_latest_adjustment(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_loop import get_latest_adjustment, serialize_adjustment
+    from apps.analytics.public import get_latest_adjustment
+    from apps.analytics.services.infinity_orchestrator import serialize_adjustment
 
     user_id = str(payload.get("user_id") or ctx.user_id or "")
     if not user_id:
