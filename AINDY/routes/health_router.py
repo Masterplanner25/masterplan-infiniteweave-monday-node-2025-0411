@@ -47,6 +47,26 @@ def _cache_payload() -> dict:
     }
 
 
+def _get_wait_resume_status() -> dict:
+    try:
+        from AINDY.kernel.event_bus import get_event_bus as _get_event_bus
+
+        bus_status = _get_event_bus().get_status()
+    except Exception:
+        bus_status = {"mode": "unknown", "enabled": False}
+
+    mode = bus_status.get("mode", "unknown")
+    safe_for_multi_instance = mode == "cross-instance"
+    return {
+        "propagation_mode": mode,
+        "safe_for_multi_instance": safe_for_multi_instance,
+        "event_bus_enabled": bus_status.get("enabled", False),
+        "redis_connected": bus_status.get("redis_connected", False),
+        "subscriber_running": bus_status.get("subscriber_running", False),
+        "wait_timeout_minutes": settings.FLOW_WAIT_TIMEOUT_MINUTES,
+    }
+
+
 def _testing_health_payload() -> dict:
     from AINDY.runtime import get_engine_status
 
@@ -61,6 +81,7 @@ def _testing_health_payload() -> dict:
         "flow_engines": get_engine_status(),
         "async_jobs": _async_jobs_payload(),
         "cache": _cache_payload(),
+        "wait_resume": _get_wait_resume_status(),
     }
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
@@ -111,6 +132,7 @@ def _build_health_response(*, force: bool) -> JSONResponse:
     payload["flow_engines"] = get_engine_status()
     payload["async_jobs"] = _async_jobs_payload()
     payload["cache"] = _cache_payload()
+    payload["wait_resume"] = _get_wait_resume_status()
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")

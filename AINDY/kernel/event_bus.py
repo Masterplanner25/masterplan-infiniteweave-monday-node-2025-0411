@@ -75,6 +75,7 @@ ENABLED: bool = os.getenv("AINDY_EVENT_BUS_ENABLED", "true").lower() not in {
 _RECONNECT_BASE_DELAY: float = 1.0    # seconds before first reconnect attempt
 _RECONNECT_MAX_DELAY: float = 30.0   # cap for exponential back-off
 _MAX_BUFFER_SIZE: int = 1000         # max events to buffer before rehydration
+_STATUS_REDIS_TIMEOUT: float = 0.5
 
 
 def _get_instance_id() -> str:
@@ -186,12 +187,68 @@ class EventBus:
                     )
                 else:
                     logger.warning(
-                        "[EventBus] publish failed for event=%r (non-fatal): %s",
-                        event_type, exc,
+                        "[EventBus] WAIT/RESUME event %r could NOT be propagated to other "
+                        "instances (Redis unavailable). Flows waiting on other instances "
+                        "will not be resumed. correlation_id=%s error=%s",
+                        event_type, correlation_id, exc,
                     )
                 # Reset client so the next call gets a fresh connection.
                 self._pub_client = None
                 return False
+
+    def _is_subscriber_running(self) -> bool:
+        thread = self._subscriber_thread
+        return bool(thread is not None and thread.is_alive())
+
+    def _is_redis_connected(self) -> bool:
+        if not self._enabled:
+            return False
+        try:
+            if self._pub_client is not None:
+                self._pub_client.ping()
+                return True
+
+            import redis as _redis  # noqa: PLC0415
+
+            client = _redis.from_url(
+                REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=_STATUS_REDIS_TIMEOUT,
+                socket_timeout=_STATUS_REDIS_TIMEOUT,
+            )
+            client.ping()
+            return True
+        except Exception:
+            return False
+
+    def _get_propagation_mode(self) -> str:
+        """Return the current event propagation mode."""
+        if not self._enabled:
+            return "disabled"
+        if self._is_redis_connected() and self._is_subscriber_running():
+            return "cross-instance"
+        return "local-only"
+
+    def get_status(self) -> dict:
+        """Return the current operational status of the event bus."""
+        try:
+            enabled = bool(self._enabled)
+            subscriber_running = self._is_subscriber_running()
+            redis_connected = self._is_redis_connected()
+            mode = self._get_propagation_mode()
+            return {
+                "enabled": enabled,
+                "subscriber_running": subscriber_running,
+                "redis_connected": redis_connected,
+                "mode": mode,
+            }
+        except Exception:
+            return {
+                "enabled": False,
+                "subscriber_running": False,
+                "redis_connected": False,
+                "mode": "unknown",
+            }
 
     # ── Subscriber ────────────────────────────────────────────────────────────
 

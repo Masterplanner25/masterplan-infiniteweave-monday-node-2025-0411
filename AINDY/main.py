@@ -866,6 +866,25 @@ async def lifespan(app: FastAPI):
             logger.warning(
                 "[startup] Event bus subscriber failed to start (non-fatal): %s", _bus_exc
             )
+        try:
+            from AINDY.kernel.event_bus import get_event_bus
+
+            _bus = get_event_bus()
+            _bus_status = _bus.get_status()
+            if _bus_status.get("mode") == "local-only" and not settings.requires_redis:
+                logger.warning(
+                    "[startup] WAIT/RESUME is operating in LOCAL-ONLY mode. "
+                    "Flows that enter WAIT on one instance CANNOT be resumed by "
+                    "events received on a different instance. "
+                    "For multi-instance deployments, set REDIS_URL and ensure "
+                    "the event bus subscriber is running (AINDY_EVENT_BUS_ENABLED=true)."
+                )
+            elif _bus_status.get("mode") == "cross-instance":
+                logger.info(
+                    "[startup] WAIT/RESUME propagation: cross-instance (Redis pub/sub active)."
+                )
+        except Exception as _status_exc:
+            logger.debug("[startup] Could not check event bus propagation mode: %s", _status_exc)
 
     # WAIT rehydration: re-register all waiting EUs with the SchedulerEngine.
     # Must run after SchedulerEngine is initialised (above) and after the
