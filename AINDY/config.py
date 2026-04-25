@@ -8,7 +8,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     OPENAI_RETRY_BACKOFF_BASE_SECONDS: float = 1.0
     AINDY_EVENT_HANDLER_TIMEOUT_SECONDS: float = 5.0
     FLOW_WAIT_TIMEOUT_MINUTES: int = 30
-    STUCK_RUN_THRESHOLD_MINUTES: int = 15
+    STUCK_RUN_THRESHOLD_MINUTES: int = 45
     AINDY_WATCHDOG_INTERVAL_MINUTES: int = 2
 
     # --- Auth ---
@@ -192,6 +192,18 @@ class Settings(BaseSettings):
                 return ""
             raise ValueError("MONGO_URL is required when MONGO_REQUIRED=true")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_stuck_run_threshold(self) -> "Settings":
+        if self.STUCK_RUN_THRESHOLD_MINUTES <= self.FLOW_WAIT_TIMEOUT_MINUTES:
+            raise ValueError(
+                f"STUCK_RUN_THRESHOLD_MINUTES ({self.STUCK_RUN_THRESHOLD_MINUTES}) "
+                f"must be greater than FLOW_WAIT_TIMEOUT_MINUTES "
+                f"({self.FLOW_WAIT_TIMEOUT_MINUTES}). "
+                "A run that is legitimately waiting will be incorrectly marked stuck. "
+                f"Set STUCK_RUN_THRESHOLD_MINUTES > {self.FLOW_WAIT_TIMEOUT_MINUTES}."
+            )
+        return self
 
     # --- Helper properties ---
     @property

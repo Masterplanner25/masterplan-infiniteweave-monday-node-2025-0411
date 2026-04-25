@@ -16,15 +16,14 @@ The function never raises — startup must not be blocked by recovery errors.
 Each stuck run is wrapped in its own try/except so one bad row cannot abort
 the rest of the scan.
 
-Env variable
-============
-AINDY_STUCK_RUN_THRESHOLD_MINUTES  (default: 10)
+Configuration
+=============
+STUCK_RUN_THRESHOLD_MINUTES
   Runs whose FlowRun.updated_at is older than this many minutes are
-  considered stuck.  Exposed as a function parameter so tests can
-  override it without patching env.
+  considered stuck. Exposed as a function parameter so tests and callers
+  can override it explicitly.
 """
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
@@ -44,10 +43,9 @@ def _recovery_error_detail(*, detected_at: datetime) -> dict[str, str]:
 
 
 def _default_threshold_minutes() -> int:
-    try:
-        return int(os.getenv("AINDY_STUCK_RUN_THRESHOLD_MINUTES", "10"))
-    except (ValueError, TypeError):
-        return 10
+    from AINDY.config import settings
+
+    return settings.STUCK_RUN_THRESHOLD_MINUTES
 
 
 # ── Agent-execution recovery ──────────────────────────────────────────────────

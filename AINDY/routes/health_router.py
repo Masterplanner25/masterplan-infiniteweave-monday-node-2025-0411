@@ -67,6 +67,17 @@ def _get_wait_resume_status() -> dict:
     }
 
 
+def _stuck_run_payload() -> dict:
+    return {
+        "threshold_minutes": settings.STUCK_RUN_THRESHOLD_MINUTES,
+        "wait_timeout_minutes": settings.FLOW_WAIT_TIMEOUT_MINUTES,
+        "watchdog_interval_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+        "margin_minutes": (
+            settings.STUCK_RUN_THRESHOLD_MINUTES - settings.FLOW_WAIT_TIMEOUT_MINUTES
+        ),
+    }
+
+
 def _testing_health_payload() -> dict:
     from AINDY.runtime import get_engine_status
 
@@ -82,6 +93,7 @@ def _testing_health_payload() -> dict:
         "async_jobs": _async_jobs_payload(),
         "cache": _cache_payload(),
         "wait_resume": _get_wait_resume_status(),
+        "stuck_run": _stuck_run_payload(),
     }
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
@@ -133,6 +145,7 @@ def _build_health_response(*, force: bool) -> JSONResponse:
     payload["async_jobs"] = _async_jobs_payload()
     payload["cache"] = _cache_payload()
     payload["wait_resume"] = _get_wait_resume_status()
+    payload["stuck_run"] = _stuck_run_payload()
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")

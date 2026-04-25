@@ -46,3 +46,13 @@ def test_health_reports_cache_configuration(client):
     assert "backend" in data["cache"]
     assert "redis_configured" in data["cache"]
     assert "requires_redis" in data["cache"]
+
+
+def test_health_reports_stuck_run_configuration(client):
+    response = client.get("/health/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "stuck_run" in data
+    assert "threshold_minutes" in data["stuck_run"]
+    assert "wait_timeout_minutes" in data["stuck_run"]
+    assert "margin_minutes" in data["stuck_run"]

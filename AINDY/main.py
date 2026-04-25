@@ -831,7 +831,10 @@ async def lifespan(app: FastAPI):
         from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
         _scan_db = SessionLocal()
         try:
-            _recovered = scan_and_recover_stuck_runs(_scan_db)
+            _recovered = scan_and_recover_stuck_runs(
+                _scan_db,
+                staleness_minutes=settings.STUCK_RUN_THRESHOLD_MINUTES,
+            )
             if _recovered:
                 logger.info("[startup] Stuck-run scan recovered %d run(s)", _recovered)
                 try:
