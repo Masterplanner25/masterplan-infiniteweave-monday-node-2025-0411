@@ -131,6 +131,14 @@ def resolve_request_db_override(request, db: Session):
 
     override = overrides.get(get_db)
     if override is None:
+        for original_dep, candidate_override in overrides.items():
+            if (
+                getattr(original_dep, "__name__", None) == "get_db"
+                and getattr(original_dep, "__module__", None) == "AINDY.db.database"
+            ):
+                override = candidate_override
+                break
+    if override is None:
         return db
 
     try:
