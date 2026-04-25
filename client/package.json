@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/validate-env.js && vite build",
+    "build:check": "node scripts/validate-env.js && vite build --mode production",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",

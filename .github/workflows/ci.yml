@@ -322,6 +322,12 @@ jobs:
 
       - run: npm test
 
+      - name: Client build smoke (validate env script)
+        working-directory: client
+        run: node scripts/validate-env.js
+        env:
+          VITE_API_BASE_URL: "https://ci-placeholder.aindy.dev"
+
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest

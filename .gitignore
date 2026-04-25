@@ -23,6 +23,7 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+!/client/.env.production.example
 /AINDY/.env
 /AINDY/.env.*
 !/AINDY/.env.example
