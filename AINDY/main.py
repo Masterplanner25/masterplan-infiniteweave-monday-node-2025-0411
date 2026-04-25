@@ -372,6 +372,38 @@ def _verify_flow_engines_started() -> None:
     )
 
 
+def _verify_required_syscalls_registered() -> None:
+    """Verify that required syscalls are present after bootstrap."""
+    from AINDY.kernel.syscall_registry import get_registered_syscalls
+    from AINDY.platform_layer.registry import get_required_syscalls
+
+    _required_syscalls = get_required_syscalls()
+    if not _required_syscalls:
+        return
+
+    _registered_syscalls = set(get_registered_syscalls())
+    _missing_syscalls = [
+        name for name in _required_syscalls if name not in _registered_syscalls
+    ]
+    if _missing_syscalls:
+        _syscall_message = (
+            "[startup] Required syscalls missing after bootstrap: %s. "
+            "Syscall-dependent flows will fail at runtime. "
+            "Check that domain bootstrap modules loaded without errors."
+        )
+        if settings.is_prod and not settings.is_testing:
+            logger.error(_syscall_message, _missing_syscalls)
+            raise RuntimeError(
+                f"Required syscalls not registered after bootstrap: {_missing_syscalls}"
+            )
+        logger.warning(_syscall_message, _missing_syscalls)
+    else:
+        logger.info(
+            "[startup] Syscall registration verified: %d required syscall(s) present.",
+            len(_required_syscalls),
+        )
+
+
 def _cache_behavior_mode() -> str:
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         return "testing"
@@ -649,6 +681,7 @@ async def lifespan(app: FastAPI):
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
+    _verify_required_syscalls_registered()
 
     # Register Flow Engine flows and nodes (static startup definitions)
     from AINDY.runtime.flow_definitions import register_all_flows

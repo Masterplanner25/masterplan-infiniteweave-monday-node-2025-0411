@@ -18,6 +18,7 @@ def register() -> None:
     _register_jobs()
     _register_scheduled_jobs()
     _register_syscalls()
+    _register_required_syscalls()
     _register_flow_results()
 
 
@@ -111,6 +112,18 @@ def _register_syscalls() -> None:
     from apps.analytics.syscalls import register_analytics_syscall_handlers
 
     register_analytics_syscall_handlers()
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.analytics.get_kpi_snapshot",
+        "sys.v1.analytics.execute_infinity",
+        "sys.v1.analytics.get_latest_adjustment",
+        "sys.v1.score.recalculate",
+    ):
+        register_required_syscall(name)
 
 
 def _register_flow_results() -> None:

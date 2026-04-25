@@ -86,11 +86,11 @@ def _handle_init_user_score(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.public import run_infinity_orchestrator
+    from apps.analytics.services.infinity_orchestrator import execute
 
     db, owns_session = _session_from_context(ctx)
     try:
-        result = run_infinity_orchestrator(
+        result = execute(
             user_id=ctx.user_id,
             db=db,
             trigger_event=payload.get("trigger_event", "manual"),
@@ -105,11 +105,11 @@ def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.public import run_infinity_orchestrator
+    from apps.analytics.services.infinity_orchestrator import execute
 
     db, owns_session = _session_from_context(ctx)
     try:
-        result = run_infinity_orchestrator(
+        result = execute(
             user_id=payload.get("user_id") or ctx.user_id,
             db=db,
             trigger_event=payload.get("trigger_event", "manual"),

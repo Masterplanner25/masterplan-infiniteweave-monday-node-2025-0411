@@ -1002,3 +1002,11 @@ def register_syscall(
     )
 
 
+def get_registered_syscalls() -> list[str]:
+    """Return the names of all currently registered syscalls."""
+    try:
+        return sorted(SYSCALL_REGISTRY.keys())
+    except Exception:
+        return []
+
+

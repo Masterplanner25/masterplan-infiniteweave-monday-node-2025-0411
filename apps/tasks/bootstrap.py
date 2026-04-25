@@ -27,6 +27,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
+    _register_required_syscalls()
 
 
 def _register_models() -> None:
@@ -254,6 +255,17 @@ def _register_required_flow_nodes() -> None:
             "task_is_background_leader": _task_is_background_leader,
         }
     )
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.task.create",
+        "sys.v1.task.complete",
+        "sys.v1.task.complete_full",
+    ):
+        register_required_syscall(name)
 
 
 def _task_is_background_leader() -> bool:

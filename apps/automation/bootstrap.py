@@ -59,6 +59,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
+    _register_required_syscalls()
 
 
 def _register_models() -> None:
@@ -190,6 +191,16 @@ def _register_required_flow_nodes() -> None:
     from AINDY.platform_layer.registry import register_required_flow_node
 
     register_required_flow_node("memory_execution_validate")
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.score.feedback",
+        "sys.v1.agent.suggest_tools",
+    ):
+        register_required_syscall(name)
 
 
 def _automation_execute(payload, db):
