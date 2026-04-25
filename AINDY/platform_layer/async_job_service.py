@@ -867,6 +867,7 @@ def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
 
 
 def _emit_job_log_written(log_id: str) -> None:
+    skip_registry_bridge = False
     try:
         from apps.automation.services.job_log_sync_service import (
             sync_job_log_to_automation_log,
@@ -874,6 +875,11 @@ def _emit_job_log_written(log_id: str) -> None:
 
         db = SessionLocal()
         try:
+            env_name = os.getenv("ENV", "").lower()
+            skip_registry_bridge = bool(
+                _session_dialect_name(db) == "postgresql"
+                and (settings.is_testing or env_name == "test" or os.getenv("PYTEST_CURRENT_TEST"))
+            )
             row = db.query(JobLog).filter(JobLog.id == str(log_id)).first()
             if row is not None:
                 sync_job_log_to_automation_log(db, row)
@@ -885,8 +891,7 @@ def _emit_job_log_written(log_id: str) -> None:
             log_id,
             exc,
         )
-    env_name = os.getenv("ENV", "").lower()
-    if settings.is_testing or env_name == "test" or os.getenv("PYTEST_CURRENT_TEST"):
+    if skip_registry_bridge:
         return
     try:
         from AINDY.platform_layer.registry import emit_event
