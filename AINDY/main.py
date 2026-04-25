@@ -359,6 +359,19 @@ def _enforce_nodus_gate() -> None:
     logger.warning(message)
 
 
+def _verify_flow_engines_started() -> None:
+    """Log and validate the dual-engine runtime registration state."""
+    from AINDY.runtime import get_engine_status, verify_engine_registration
+
+    status = verify_engine_registration()
+    logger.info(
+        "[startup] Flow engines ready: dag_nodes=%d nodus_nodes=%d nodus_available=%s",
+        status["dag_engine"]["registered_nodes"],
+        status["nodus_engine"]["registered_nodes"],
+        status["nodus_engine"]["available"],
+    )
+
+
 def _cache_behavior_mode() -> str:
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         return "testing"
@@ -649,6 +662,7 @@ async def lifespan(app: FastAPI):
     flow_definitions_engine.register()
     flow_definitions_observability.register()
     _enforce_nodus_gate()
+    _verify_flow_engines_started()
 
     # Verify that domain-declared required flow nodes were actually registered —
     # silent failures in flow modules can otherwise produce a running server with

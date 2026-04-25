@@ -26,6 +26,8 @@ def _get_degraded_domains() -> list[str]:
 
 
 def _testing_health_payload() -> dict:
+    from AINDY.runtime import get_engine_status
+
     db_pool = get_pool_status()
     payload = {
         "status": "healthy",
@@ -34,6 +36,7 @@ def _testing_health_payload() -> dict:
         "degraded_domains": _get_degraded_domains(),
         "dependencies": {},
         "db_pool": db_pool,
+        "flow_engines": get_engine_status(),
     }
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
@@ -75,11 +78,13 @@ def _build_health_response(*, force: bool) -> JSONResponse:
         return JSONResponse(status_code=200, content=payload)
 
     from AINDY.platform_layer.health_service import get_system_health
+    from AINDY.runtime import get_engine_status
 
     health = get_system_health(force=force)
     payload = health.to_dict()
     db_pool = get_pool_status()
     payload["db_pool"] = db_pool
+    payload["flow_engines"] = get_engine_status()
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")
