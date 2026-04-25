@@ -240,15 +240,32 @@ class DeepSeekCodeAnalyzer:
             # Step 2c — Inject identity context (non-blocking)
             identity_context = ""
             try:
-                from apps.identity.services.identity_service import IdentityService
-                id_service = IdentityService(db=db, user_id=user_id)
-                identity_context = id_service.get_context_for_prompt()
-                id_service.observe(
-                    event_type="arm_analysis_complete",
-                    context={
-                        "language": path.suffix.lstrip("."),
-                        "file_type": path.suffix,
+                from AINDY.kernel.syscall_dispatcher import get_dispatcher
+                from AINDY.kernel.syscall_registry import SyscallContext
+
+                _identity_ctx = SyscallContext(
+                    execution_unit_id=str(uuid.uuid4()),
+                    user_id=str(user_id) if user_id else "",
+                    capabilities=["identity.read", "identity.write"],
+                    trace_id=str(uuid.uuid4()),
+                )
+                _ctx_result = get_dispatcher().dispatch(
+                    "sys.v1.identity.get_context",
+                    {"user_id": str(user_id) if user_id else ""},
+                    _identity_ctx,
+                )
+                identity_context = (_ctx_result.get("data") or {}).get("context", "")
+                get_dispatcher().dispatch(
+                    "sys.v1.identity.observe",
+                    {
+                        "user_id": str(user_id) if user_id else "",
+                        "event_type": "arm_analysis_complete",
+                        "context": {
+                            "language": path.suffix.lstrip("."),
+                            "file_type": path.suffix,
+                        },
                     },
+                    _identity_ctx,
                 )
             except Exception:
                 logger.warning("[ARM] Identity context injection failed")
