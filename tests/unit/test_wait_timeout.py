@@ -130,17 +130,23 @@ def test_expired_after_deadline(db_session):
 
 def test_returns_count_of_expired_flows(db_session):
     now = datetime.now(timezone.utc)
+    run_ids = []
+    trace_ids = []
     for idx in range(3):
+        run_ids.append(f"expired-{idx}")
+        trace_ids.append(f"trace-expired-{idx}")
         _seed_waiting_flow(
             db_session,
-            run_id=f"expired-{idx}",
+            run_id=run_ids[-1],
             max_wait_seconds=300,
             waited_since=now - timedelta(seconds=400 + idx),
         )
     for idx in range(2):
+        run_ids.append(f"active-{idx}")
+        trace_ids.append(f"trace-active-{idx}")
         _seed_waiting_flow(
             db_session,
-            run_id=f"active-{idx}",
+            run_id=run_ids[-1],
             max_wait_seconds=300,
             waited_since=now - timedelta(seconds=100 + idx),
         )
@@ -149,13 +155,20 @@ def test_returns_count_of_expired_flows(db_session):
 
     failed_runs = (
         db_session.query(FlowRun)
-        .filter(FlowRun.status == "failed")
+        .filter(FlowRun.id.in_(run_ids), FlowRun.status == "failed")
         .count()
     )
-    remaining_wait_rows = db_session.query(WaitingFlowRun).count()
+    remaining_wait_rows = (
+        db_session.query(WaitingFlowRun)
+        .filter(WaitingFlowRun.run_id.in_(run_ids))
+        .count()
+    )
     timeout_events = (
         db_session.query(SystemEvent)
-        .filter(SystemEvent.type == "WAIT_TIMEOUT")
+        .filter(
+            SystemEvent.type == "WAIT_TIMEOUT",
+            SystemEvent.trace_id.in_(trace_ids),
+        )
         .count()
     )
 
