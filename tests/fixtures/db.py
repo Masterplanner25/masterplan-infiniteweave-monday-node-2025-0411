@@ -202,13 +202,22 @@ def deterministic_random():
 
 @pytest.fixture(autouse=True)
 def cleanup_committed_test_state(test_engine):
-    if test_engine.dialect.name == "postgresql":
-        yield
-        return
     yield
     from AINDY.db.database import Base
 
     with test_engine.begin() as connection:
+        if test_engine.dialect.name == "postgresql":
+            table_names = [
+                table.fullname
+                for table in reversed(Base.metadata.sorted_tables)
+            ]
+            if table_names:
+                quoted = ", ".join(table_names)
+                connection.execute(
+                    text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+                )
+            return
+
         for table in reversed(Base.metadata.sorted_tables):
             try:
                 connection.execute(table.delete())

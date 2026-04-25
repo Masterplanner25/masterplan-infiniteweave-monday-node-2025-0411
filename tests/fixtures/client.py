@@ -15,6 +15,11 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
     for module_name, module in list(sys.modules.items()):
         if not module_name:
             continue
+        if module_name == "AINDY.platform_layer.async_job_service":
+            # Async job polling tests expect JobLog writes to be visible from a
+            # separate committed session. Keeping this module on its original
+            # engine-bound SessionLocal preserves that behavior on PostgreSQL.
+            continue
         if not (
             module_name == "main"
             or module_name == "AINDY.main"
