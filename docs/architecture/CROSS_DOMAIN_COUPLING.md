@@ -1,10 +1,10 @@
 # Cross-Domain Coupling
 
-This document describes the two largest cross-domain coupling sites in the
-`apps/` layer: the Infinity Algorithm service cluster and the automation flow
-layer. Both are intentional architectural choices given the current monolith
-reality. Both carry specific risks that engineers must understand before
-modifying either area.
+This document describes the three largest cross-domain coupling sites in the
+`apps/` layer: the Infinity Algorithm service cluster, the automation flow
+layer, and the automation syscall handler layer. All three are products of the
+current monolith reality. Each carries specific risks that engineers must
+understand before modifying the area.
 
 ---
 
@@ -25,7 +25,7 @@ transition. It becomes a structural risk when:
 - It prevents a domain from being separated later without major rewrites
 - It couples unrelated failure modes (a bug in domain A crashes domain B)
 
-The two sites documented here meet at least one of these criteria.
+The three sites documented here meet at least one of these criteria.
 
 ---
 
@@ -351,7 +351,145 @@ When working in `apps/automation/flows/`:
 
 ---
 
-## 4. Coupling Direction Summary
+## 4. The Automation Syscall Handler
+
+### 4.1 What It Is
+
+`apps/automation/syscalls/syscall_handlers.py` is the automation domain's
+syscall registration module. Unlike the flow layer in `apps/automation/flows/`,
+which is intentionally cross-domain by design, this file became dangerous
+because it was imported during startup to register business-domain syscall
+handlers.
+
+The audit that triggered Prompt 2 identified this file as the most dangerous
+coupling site in the automation domain: it had grown into a cross-domain
+integration bus and also re-registered task syscall handlers owned by
+`apps/tasks`.
+
+The current workspace no longer has that direct import fan-out. The module now
+imports dispatcher helpers at module level, forwards cross-domain work through
+owner syscalls via `_dispatch_owner_syscall()`, and keeps its only direct
+domain-model import inside `_handle_score_feedback()` for
+`apps.automation.models`.
+
+### 4.2 The Dependency Map
+
+The current dependency map is:
+
+```
+apps/automation/syscalls/syscall_handlers.py
+â”‚
+â”œâ”€ module-level platform imports
+â”‚   â”œâ”€ AINDY.kernel.syscall_dispatcher.child_context
+â”‚   â”œâ”€ AINDY.kernel.syscall_dispatcher.get_dispatcher
+â”‚   â””â”€ AINDY.kernel.syscall_registry.register_syscall
+â”‚
+â”œâ”€ cross-domain operations via syscall dispatch wrappers
+â”‚   â”œâ”€ sys.v1.task.*
+â”‚   â”œâ”€ sys.v1.leadgen.*
+â”‚   â”œâ”€ sys.v1.arm.*
+â”‚   â”œâ”€ sys.v1.genesis.execute_llm
+â”‚   â”œâ”€ sys.v1.score.recalculate
+â”‚   â”œâ”€ sys.v1.analytics.get_latest_adjustment
+â”‚   â”œâ”€ sys.v1.authorship.list_authors
+â”‚   â”œâ”€ sys.v1.rippletrace.list_recent_pings
+â”‚   â”œâ”€ sys.v1.goal.create
+â”‚   â””â”€ sys.v1.research.query
+â”‚
+â”œâ”€ direct local-domain import (deferred)
+â”‚   â””â”€ apps.automation.models
+â”‚       â”œâ”€ LoopAdjustment
+â”‚       â””â”€ UserFeedback
+â”‚
+â””â”€ direct platform/runtime imports (deferred)
+    â”œâ”€ AINDY.runtime.flow_engine.execute_intent
+    â”œâ”€ AINDY.platform_layer.memory_runtime
+    â”œâ”€ AINDY.db.models.watcher_signal
+    â””â”€ AINDY.db.database / platform helpers
+```
+
+The important difference from the audit snapshot: the current file does not
+directly import `apps.tasks`, `apps.search`, `apps.arm`, `apps.masterplan`,
+`apps.analytics`, `apps.authorship`, or `apps.rippletrace`. Those cross-domain
+calls now cross the syscall boundary instead of the Python import boundary.
+
+### 4.3 Why The Original Shape Was Dangerous
+
+The automation flow layer in `apps/automation/flows/` uses deferred imports
+inside node function bodies. If one domain fails, the blast radius is limited
+to the nodes that depend on it.
+
+The historical version of `apps/automation/syscalls/syscall_handlers.py` was
+different. It was imported during startup as part of domain handler bootstrap,
+and the audit snapshot that triggered Prompt 2 showed broad direct imports into
+other app domains plus duplicate task-handler registration. That created this
+failure model:
+
+```
+one cross-domain import in automation syscall bootstrap fails
+    â†’ automation syscall handler import fails or truncates registration
+        â†’ register_all_domain_handlers() completes with missing syscalls
+            â†’ flows and agents that depend on those syscalls fail later
+                â†’ pre-Prompt 5: startup could look healthy
+                â†’ post-Prompt 5: startup guard warns or raises
+```
+
+That is a fundamentally worse cascade model than the flow layer. In the flow
+layer, one node can fail while other nodes still register. In the syscall
+bootstrap path, one import problem could remove a whole family of runtime
+capabilities.
+
+Prompt 2 removed the import fan-out by converting cross-domain work to
+dispatcher calls, and Prompt 5 added startup verification so missing required
+syscalls no longer fail silently.
+
+### 4.4 The Dual Ownership Problem
+
+The audit snapshot also identified a second failure mode: task syscall
+registration was owned by both `apps/tasks/bootstrap.py` and the automation
+syscall handler path. That meant two modules could register the same syscall
+names, and the registry would accept the last writer.
+
+This is different from intentionally idempotent re-registration with the same
+handler. Here the problem was structural ownership: automation was co-owning a
+tasks-domain registration contract. In the current workspace that duplicate
+registration is gone, `apps/tasks/bootstrap.py` is the canonical owner, and the
+registry now logs a warning when a syscall name is re-registered with a
+different handler.
+
+### 4.5 The Fix Direction (Prompt 2)
+
+Prompt 2 completed the core boundary correction for this file:
+
+- cross-domain operations now go through `get_dispatcher().dispatch(...)`
+- each owning domain keeps its own handler implementation in its own
+  `syscall_handlers.py`
+- automation no longer re-registers task syscalls
+- the automation syscall module is now primarily a dispatcher facade rather
+  than a cross-domain import hub
+
+This does not make the file unimportant. It is still a high-churn integration
+surface because it brokers many business-domain operations. But its most
+dangerous failure mode is no longer Python import fan-out.
+
+### 4.6 Safe Modification Rules
+
+When working in `apps/automation/syscalls/syscall_handlers.py`:
+
+1. **Do not add new direct cross-domain imports.** Cross-domain work must go
+   through syscall dispatch, not through `from apps.<other_domain>...`.
+2. **Do not re-register another domain's syscalls here.** Each domain owns its
+   own bootstrap and syscall registration path.
+3. **Keep direct imports local to automation or platform code.** The current
+   file's direct domain-model import is `apps.automation.models` inside
+   `_handle_score_feedback()`. That is acceptable because it stays inside the
+   owning domain.
+4. **Preserve the child context pattern** in `_dispatch_owner_syscall()` so
+   source metadata and least-privilege capability scoping continue to work.
+
+---
+
+## 5. Coupling Direction Summary
 
 The table below shows which domains import from which others, across both
 coupling sites.
@@ -364,6 +502,9 @@ coupling sites.
 | `identity/identity_boot_service` | `analytics.kpi_snapshot` job | registry-job dispatch | none |
 | `masterplan/services` | `tasks.models`, `tasks.services` | deferred | acceptable |
 | `masterplan/services` | `automation.models` (AutomationLog) | deferred | acceptable |
+| `automation/syscalls/syscall_handlers` | `task`, `leadgen`, `arm`, `genesis`, `analytics`, `authorship`, `rippletrace`, `goal`, `research` | syscall dispatch wrappers | boundary restored (Prompt 2) |
+| `automation/syscalls/syscall_handlers` | `automation.models` | deferred | acceptable |
+| `automation/syscalls/syscall_handlers` | `tasks.syscalls.register_task_syscall_handlers` | explicit re-registration call (removed) | RESOLVED (Prompt 12) |
 | `automation/flows/automation_flows` | `AINDY.agents.agent_runtime._run_to_dict` | deferred | private API (Prompt 3) |
 | `automation/flows/analytics_flows` | `analytics.services` | deferred | acceptable |
 
@@ -372,7 +513,7 @@ coupling sites.
 
 ---
 
-## 5. The Correct Boundary for New Work
+## 6. The Correct Boundary for New Work
 
 When adding new cross-domain reads:
 
