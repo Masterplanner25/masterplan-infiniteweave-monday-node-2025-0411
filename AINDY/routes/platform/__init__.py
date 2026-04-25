@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import require_platform_admin_access
 from AINDY.routes.platform.flows_router import (
     create_flow,
     delete_flow,
@@ -46,7 +46,11 @@ from AINDY.routes.platform.webhooks_router import (
     router as webhooks_router,
 )
 
-router = APIRouter(prefix="/platform", tags=["Platform"], dependencies=[Depends(get_current_user)])
+router = APIRouter(
+    prefix="/platform",
+    tags=["Platform"],
+    dependencies=[Depends(require_platform_admin_access)],
+)
 for child in (
     flows_router,
     nodes_router,

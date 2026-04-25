@@ -32,18 +32,35 @@ def build_access_token(
     *,
     user_id: uuid.UUID = TEST_USER_ID,
     email: str = TEST_USER_EMAIL,
+    is_admin: bool = False,
 ) -> str:
     return create_access_token(
         {
             "sub": str(user_id),
             "email": email,
+            "is_admin": is_admin,
         }
     )
 
 
 @pytest.fixture
 def auth_headers(test_user):
-    return {"Authorization": f"Bearer {build_access_token(user_id=test_user.id, email=test_user.email)}"}
+    return {
+        "Authorization": (
+            "Bearer "
+            f"{build_access_token(user_id=test_user.id, email=test_user.email, is_admin=bool(getattr(test_user, 'is_admin', False)))}"
+        )
+    }
+
+
+@pytest.fixture
+def non_admin_auth_headers(non_admin_user):
+    return {
+        "Authorization": (
+            "Bearer "
+            f"{build_access_token(user_id=non_admin_user.id, email=non_admin_user.email, is_admin=False)}"
+        )
+    }
 
 
 @pytest.fixture

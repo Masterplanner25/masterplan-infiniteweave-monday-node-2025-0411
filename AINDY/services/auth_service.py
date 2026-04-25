@@ -193,6 +193,20 @@ def get_current_user(
     )
 
 
+def require_platform_admin_access(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """Allow platform API keys, but require admin privilege for JWT users."""
+    if current_user.get("auth_type") == "api_key":
+        return current_user
+    if not current_user.get("is_admin", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin privileges required for this endpoint.",
+        )
+    return current_user
+
+
 def _resolve_platform_key_as_user(raw_key: str, db: Session) -> dict:
     """Validate a platform API key and return a user dict compatible with get_current_user."""
     import hashlib
