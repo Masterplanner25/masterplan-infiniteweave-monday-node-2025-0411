@@ -7,6 +7,8 @@ import {
   getMasterplanProjection,
 } from "../../api/masterplan.js";
 import { Toast } from "../shared/Toast";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
 import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
 
@@ -225,6 +227,7 @@ export default function MasterPlanDashboard() {
       setPlans(data.plans || []);
     } catch (err) {
       console.error("Error fetching plans:", err);
+      showToast(err?.message || "Failed to load master plans.");
     } finally {
       setLoading(false);
     }
@@ -291,19 +294,14 @@ export default function MasterPlanDashboard() {
           Deployment Log
         </h3>
         {loading ?
-        <p style={{ color: "#52525b" }}>Loading plans...</p> :
+        <LoadingPanel label="Loading master plans..." /> :
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
             {plans.length === 0 &&
-          <div style={{
-            gridColumn: "1/-1",
-            padding: "40px",
-            border: "2px dashed #27272a",
-            borderRadius: "12px",
-            textAlign: "center",
-            color: "#52525b"
-          }}>
-                No master plans found. Start by initializing Genesis.
+          <div style={{ gridColumn: "1/-1" }}>
+                <EmptyState
+              message="No master plans yet."
+              hint="Create your first plan to begin tracking objectives." />
               </div>
           }
 

@@ -229,6 +229,9 @@ class PersistentFlowRunner:
         if claim_response is not None:
             return claim_response
 
+        def _reload_run() -> FlowRun | None:
+            return self.db.query(FlowRun).filter(FlowRun.id == db_run_id).first()
+
         state = run.state or {}
         if isinstance(state, dict) and not state.get("trace_id"):
             state["trace_id"] = run.trace_id or get_trace_id() or str(run.id)
@@ -260,6 +263,16 @@ class PersistentFlowRunner:
 
         try:
             while True:
+                run = _reload_run()
+                if not run:
+                    return _format_execution_response(
+                        status="FAILED",
+                        trace_id=db_run_id,
+                        result={"error": f"FlowRun {db_run_id} disappeared during execution"},
+                        events=[],
+                        next_action=None,
+                        run_id=db_run_id,
+                    )
                 input_snapshot = dict(state)
                 node_started_event_id = queue_system_event(
                     db=self.db,
@@ -285,6 +298,17 @@ class PersistentFlowRunner:
                 )
                 if execute_response.get("final_response") is not None:
                     return execute_response["final_response"]
+
+                run = _reload_run()
+                if not run:
+                    return _format_execution_response(
+                        status="FAILED",
+                        trace_id=db_run_id,
+                        result={"error": f"FlowRun {db_run_id} disappeared after node execution"},
+                        events=[],
+                        next_action=None,
+                        run_id=db_run_id,
+                    )
 
                 result = execute_response["result"]
                 node_status = result["status"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 import sys
 from datetime import datetime, timezone
@@ -43,32 +44,37 @@ def _import_model_registry():
     apps.bootstrap.bootstrap_models()
 
 
-@pytest.fixture(scope="session")
-def test_engine():
-    import os
-    from sqlalchemy import create_engine
+@pytest.fixture(scope="session", autouse=True)
+def _setup_postgres_schema():
+    database_url = os.getenv("DATABASE_URL", "")
+    if not database_url.startswith("postgresql"):
+        yield
+        return
 
     _import_model_registry()
 
-    if os.environ.get("AINDY_TEST_DB") == "postgres":
-        engine = create_engine(
-            os.environ["DATABASE_URL"],
-            poolclass=NullPool,
-            connect_args={
-                "connect_timeout": 10,
-                "options": "-c statement_timeout=10000 -c idle_in_transaction_session_timeout=10000",
-            },
-        )
+    from AINDY.db.database import Base, engine
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
 
-        @event.listens_for(engine, "connect")
-        def _set_postgres_test_guards(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            try:
-                cursor.execute("SET TIME ZONE 'UTC';")
-                cursor.execute("SET statement_timeout = '10s';")
-                cursor.execute("SET idle_in_transaction_session_timeout = '10s';")
-            finally:
-                cursor.close()
+    Base.metadata.drop_all(bind=engine, checkfirst=True)
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine, checkfirst=True)
+
+
+@pytest.fixture(scope="session")
+def test_engine():
+    from sqlalchemy import create_engine
+
+    _import_model_registry()
+    database_url = os.getenv("DATABASE_URL", "")
+
+    if database_url.startswith("postgresql"):
+        from AINDY.db.database import engine
+
+        yield engine
+        engine.dispose()
     else:
         engine = create_engine(
             "sqlite://",
@@ -88,12 +94,12 @@ def test_engine():
             finally:
                 cursor.close()
 
-    from AINDY.db.database import Base
+        from AINDY.db.database import Base
 
-    Base.metadata.create_all(bind=engine)
-    yield engine
-    Base.metadata.drop_all(bind=engine)
-    engine.dispose()
+        Base.metadata.create_all(bind=engine)
+        yield engine
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -133,9 +139,25 @@ def db_session_factory(db_connection):
 @pytest.fixture
 def db_session(db_session_factory):
     session = db_session_factory()
+    restart_savepoint = None
+
+    if session.bind is not None and session.bind.dialect.name == "postgresql":
+        session.begin_nested()
+
+        def restart_savepoint(session_, transaction):
+            parent = getattr(transaction, "_parent", None)
+            if transaction.nested and (parent is None or not parent.nested):
+                session_.begin_nested()
+
+        event.listen(session, "after_transaction_end", restart_savepoint)
+
     try:
         yield session
     finally:
+        if restart_savepoint is not None:
+            event.remove(session, "after_transaction_end", restart_savepoint)
+        if session.is_active:
+            session.rollback()
         session.close()
 
 
@@ -184,6 +206,18 @@ def cleanup_committed_test_state(test_engine):
     from AINDY.db.database import Base
 
     with test_engine.begin() as connection:
+        if test_engine.dialect.name == "postgresql":
+            table_names = [
+                table.fullname
+                for table in reversed(Base.metadata.sorted_tables)
+            ]
+            if table_names:
+                quoted = ", ".join(table_names)
+                connection.execute(
+                    text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+                )
+            return
+
         for table in reversed(Base.metadata.sorted_tables):
             try:
                 connection.execute(table.delete())

@@ -9,6 +9,8 @@ import {
   replayAutomationLog,
   getSchedulerStatus,
   getFlowStrategies } from "../../api/operator.js";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
 
 // ── Design tokens (A.I.N.D.Y. dark theme) ────────────────────────────────────
 import { safeMap } from "../../utils/safe";const C = {
@@ -167,24 +169,6 @@ function ErrorState({ error, onRetry }) {
           Retry
         </button>
       }
-    </div>);
-
-}
-
-function EmptyState({ message, sub }) {
-  return (
-    <div
-      style={{
-        padding: "32px 20px",
-        textAlign: "center",
-        color: C.text1,
-        background: C.bg1,
-        borderRadius: 8,
-        border: `1px solid ${C.border0}`
-      }}>
-
-      <div style={{ fontSize: 14, color: C.text0, marginBottom: 8 }}>{message}</div>
-      {sub && <div style={{ fontSize: 12 }}>{sub}</div>}
     </div>);
 
 }
@@ -724,13 +708,13 @@ function FlowRunsPanel({ triggerRefresh }) {
 
       }
 
-      {loading && <LoadingState />}
+      {loading && <LoadingPanel label="Loading..." />}
       {error && <ErrorState error={error} onRetry={load} />}
 
       {!loading && runs && displayed.length === 0 &&
       <EmptyState
         message="No flow runs yet."
-        sub="Executions appear here when you use ARM, Genesis, Tasks, or LeadGen." />
+        hint="Executions appear here when you use ARM, Genesis, Tasks, or LeadGen." />
 
       }
 
@@ -1124,13 +1108,13 @@ function AutomationPanel({ triggerRefresh }) {
         </div>
       }
 
-      {loading && <LoadingState />}
+      {loading && <LoadingPanel label="Loading..." />}
       {error && <ErrorState error={error} onRetry={load} />}
 
       {!loading && logs && displayed.length === 0 &&
       <EmptyState
         message="No automation logs yet."
-        sub="Background task executions will appear here." />
+        hint="Background task executions will appear here." />
 
       }
 
@@ -1278,13 +1262,13 @@ function RegistryPanel({ triggerRefresh }) {
         }
       </PanelHeader>
 
-      {loading && <LoadingState />}
+      {loading && <LoadingPanel label="Loading flow registry..." />}
       {error && <ErrorState error={error} onRetry={load} />}
 
       {!loading && registry && Object.keys(registry.flows).length === 0 &&
       <EmptyState
-        message="No flows registered yet."
-        sub="Flows appear here when the flow engine is initialized." />
+        message="No flows registered."
+        hint="Flows are registered at server startup." />
 
       }
 
@@ -1497,13 +1481,13 @@ function StrategiesPanel({ triggerRefresh }) {
         </span>
       </PanelHeader>
 
-      {loading && <LoadingState />}
+      {loading && <LoadingPanel label="Loading..." />}
       {error && <ErrorState error={error} onRetry={load} />}
 
       {!loading && strategies && strategies.strategies.length === 0 &&
       <EmptyState
         message="No learned strategies yet."
-        sub={
+        hint={
         "Strategies are created automatically as A.I.N.D.Y. learns which execution flows work best for each workflow type.\n\nRun ARM analysis, Genesis sessions, and task completions to build the strategy library."
         } />
 

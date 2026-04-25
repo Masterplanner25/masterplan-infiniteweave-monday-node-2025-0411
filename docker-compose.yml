@@ -32,10 +32,19 @@ services:
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
       EXECUTION_MODE: ${EXECUTION_MODE:-thread}
       AINDY_ENABLE_BACKGROUND_TASKS: "false"
+      AINDY_EVENT_BUS_ENABLED: ${AINDY_EVENT_BUS_ENABLED:-true}
       AINDY_ENABLE_LEGACY_SURFACE: "false"
       AINDY_ASYNC_HEAVY_EXECUTION: ${AINDY_ASYNC_HEAVY_EXECUTION:-true}
       AINDY_ASYNC_JOB_WORKERS: ${AINDY_ASYNC_JOB_WORKERS:-4}
+      # Nodus VM source path. Must point to a directory containing an
+      # importable nodus.runtime.embedding module. Leave empty to disable
+      # Nodus script execution (server will warn or fail depending on whether
+      # nodus.* flow nodes are registered). See docs/ops/RUNBOOK.md §6.
+      NODUS_SOURCE_PATH: ${NODUS_SOURCE_PATH:-}
       AINDY_ENFORCE_SCHEMA: "true"
+    # volumes:
+    #   # Uncomment and set NODUS_SOURCE_PATH to mount an external Nodus VM:
+    #   # - ${NODUS_SOURCE_PATH:-/dev/null}:/nodus-vm:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,22 +77,36 @@ services:
       AINDY_CACHE_BACKEND: ${AINDY_CACHE_BACKEND:-redis}
       EXECUTION_MODE: ${EXECUTION_MODE:-distributed}
       AINDY_ENABLE_BACKGROUND_TASKS: "true"
+      AINDY_EVENT_BUS_ENABLED: ${AINDY_EVENT_BUS_ENABLED:-true}
       AINDY_ENABLE_LEGACY_SURFACE: "false"
       AINDY_ASYNC_HEAVY_EXECUTION: "false"
+      # Worker queue tuning — see AINDY/worker/worker_loop.py for semantics
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-1}
+      WORKER_MAX_CONCURRENT_JOBS: ${WORKER_MAX_CONCURRENT_JOBS:-0}
+      WORKER_VISIBILITY_TIMEOUT_SECS: ${WORKER_VISIBILITY_TIMEOUT_SECS:-300}
+      WORKER_STALE_CHECK_INTERVAL_SECS: ${WORKER_STALE_CHECK_INTERVAL_SECS:-60}
+      WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-8001}
+      # Nodus VM source path. Must point to a directory containing an
+      # importable nodus.runtime.embedding module. Leave empty to disable
+      # Nodus script execution (server will warn or fail depending on whether
+      # nodus.* flow nodes are registered). See docs/ops/RUNBOOK.md §6.
+      NODUS_SOURCE_PATH: ${NODUS_SOURCE_PATH:-}
       AINDY_ENFORCE_SCHEMA: "false"
+    # volumes:
+    #   # Uncomment and set NODUS_SOURCE_PATH to mount an external Nodus VM:
+    #   # - ${NODUS_SOURCE_PATH:-/dev/null}:/nodus-vm:ro
     depends_on:
+      # mongo omitted: worker does not connect to Mongo at startup; add if a registered plugin does
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
-      mongo:
-        condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8001/healthz || exit 1"]
-      interval: 30s
+      test: ["CMD-SHELL", "curl -sf http://localhost:${WORKER_HEALTH_PORT:-8001}/readyz || exit 1"]
+      interval: 15s
       timeout: 5s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:

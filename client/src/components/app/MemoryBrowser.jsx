@@ -12,6 +12,10 @@ import {
   getMemoryNodes,
 } from "../../api/memory.js";
 import { useSystem } from "../../context/SystemContext";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 // ── Color helpers ──────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";const resonanceColor = (score) => {
@@ -357,6 +361,7 @@ const AGENTS = ["all", "arm", "genesis", "nodus", "leadgen", "user"];
 
 export default function MemoryBrowser() {
   const { system } = useSystem();
+  const { toast, showToast, clearToast } = useToast();
   const [query, setQuery] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
@@ -394,6 +399,7 @@ export default function MemoryBrowser() {
     } catch (e) {
       setError(String(e));
       setNodes([]);
+      showToast(e?.message || "Failed to load memory.");
     } finally {
       setLoading(false);
     }
@@ -416,6 +422,7 @@ export default function MemoryBrowser() {
     } catch (e) {
       setError(String(e));
       setNodes([]);
+      showToast(e?.message || "Memory search failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -443,6 +450,7 @@ export default function MemoryBrowser() {
 
   return (
     <div style={{ maxWidth: 860, margin: "0 auto", padding: "2rem", color: "#e4e4e7", fontFamily: "sans-serif" }}>
+      <Toast toast={toast} onDismiss={clearToast} />
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#fff", letterSpacing: -0.5 }}>
@@ -560,6 +568,11 @@ export default function MemoryBrowser() {
 
       {/* Results */}
       {!loading && visibleNodes.length === 0 &&
+      <EmptyState
+        message="No memory nodes found."
+        hint="Memory nodes are written automatically as the system runs." />
+      }
+      {false && !loading && visibleNodes.length === 0 &&
       <div style={{ textAlign: "center", padding: "48px 24px", background: "#111113", border: "1px solid #27272a", borderRadius: 12 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div>
           <div style={{ fontSize: 16, fontWeight: 700, color: "#e4e4e7", marginBottom: 8 }}>
@@ -585,7 +598,8 @@ export default function MemoryBrowser() {
         </div>
       }
 
-      {loading &&
+      {loading && <LoadingPanel label="Reading memory..." />}
+      {false && loading &&
       <div style={{ textAlign: "center", padding: 40, color: "#52525b", fontSize: 13 }}>
           Scanning memory…
         </div>

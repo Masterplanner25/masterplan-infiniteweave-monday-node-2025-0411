@@ -75,6 +75,7 @@ export default function Genesis() {
       }, 600);
     } catch (err) {
       console.error(err);
+      showToast(err?.message || "Genesis message failed. Please try again.");
       setMessages((prev) => [
       ...prev,
       { role: "ai", content: "Protocol error. Sync failed. Please try again." }]

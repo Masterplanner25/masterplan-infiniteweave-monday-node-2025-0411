@@ -2,6 +2,10 @@ import React, { useEffect, useState } from "react";
 import { getFeed, getSocialAnalytics, recordSocialInteraction } from "../../api/social.js";
 import PostComposer from "./PostComposer";
 import { safeMap } from "../../utils/safe";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function Feed() {
   const [posts, setPosts] = useState([]);
@@ -9,6 +13,7 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   const fetchPosts = async (showSilently = false) => {
     if (!showSilently) setLoading(true);
@@ -23,6 +28,7 @@ export default function Feed() {
     } catch (err) {
       console.error("Feed Error:", err);
       setError("Could not load the network feed. Check backend connectivity.");
+      showToast(err?.message || "Could not load the network feed. Check backend connectivity.");
     } finally {
       setLoading(false);
     }
@@ -58,17 +64,17 @@ export default function Feed() {
       {error ? <div style={styles.errorBox}>{error}</div> : null}
 
       <div style={styles.stream}>
-        {loading ? <p style={styles.syncingText}>Synchronizing Trust Graph...</p> : null}
-        {safeMap(posts, (item) => (
-          <PostCard key={item.post.id} item={item} onInteraction={() => fetchPosts(true)} />
+        {loading ? <LoadingPanel lines={5} label="Loading trust feed..." /> : null}
+        {!loading && safeMap(posts, (item) => (
+          <PostCard key={item.post.id} item={item} onInteraction={() => fetchPosts(true)} showToast={showToast} />
         ))}
         {!loading && posts.length === 0 ? (
-          <div style={styles.emptyState}>
-            <p style={{ margin: 0, fontSize: "1.2rem" }}>No signal detected.</p>
-            <small style={{ color: "#666" }}>Expand your network or be the first to broadcast.</small>
-          </div>
+          <EmptyState
+            message="Your trust feed is empty."
+            hint="Posts from your network will appear here." />
         ) : null}
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>
   );
 }
@@ -118,7 +124,7 @@ function AnalyticsCard({ label, value }) {
   );
 }
 
-function PostCard({ item, onInteraction }) {
+function PostCard({ item, onInteraction, showToast }) {
   const { post, reason } = item;
 
   const getTierMeta = (tier) => {
@@ -140,6 +146,7 @@ function PostCard({ item, onInteraction }) {
       if (onInteraction) onInteraction();
     } catch (err) {
       console.error("Social interaction failed", err);
+      showToast(err?.message || "Social interaction failed. Please try again.");
     }
   };
 

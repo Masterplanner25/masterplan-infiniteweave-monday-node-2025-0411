@@ -329,6 +329,18 @@ def _handle_task_get_user_tasks(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_task_get_graph_context(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.tasks.services.task_service import get_task_graph_context
+
+    user_id = payload.get("user_id") or _context_user_id(ctx)
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return get_task_graph_context(db=db, user_id=user_id) or {}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_task_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.task.create",
@@ -428,6 +440,28 @@ def register_task_syscall_handlers() -> None:
         stable=False,
     )
     register_syscall(
+        name="sys.v1.tasks.get_graph_context",
+        handler=_handle_task_get_graph_context,
+        capability="task.read",
+        description="Return the task graph context for the current user.",
+        input_schema={
+            "required": ["user_id"],
+            "properties": {
+                "user_id": {"type": "string"},
+            },
+        },
+        output_schema={
+            "properties": {
+                "nodes": {"type": "dict"},
+                "ready": {"type": "array"},
+                "blocked": {"type": "array"},
+                "critical_path": {"type": "array"},
+                "critical_weight": {"type": "dict"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
         name="sys.v1.watcher.ingest",
         handler=_handle_watcher_ingest,
         capability="watcher.ingest",
@@ -435,5 +469,5 @@ def register_task_syscall_handlers() -> None:
         stable=False,
     )
     logger.info(
-        "[task_syscalls] registered task lifecycle, watcher ingest, and task read automation syscalls"
+        "[task_syscalls] registered task lifecycle, graph, watcher ingest, and task read automation syscalls"
     )

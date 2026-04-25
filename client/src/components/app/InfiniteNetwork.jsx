@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { authRequestExternal } from "../../api/_core.js";
 import { safeMap } from "../../utils/safe";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 const NETWORK_API_URL =
 import.meta.env.VITE_NETWORK_API_URL || "/api/users";
@@ -11,6 +13,7 @@ function App() {
   const [form, setForm] = useState({ name: "", tagline: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { toast, showToast, clearToast } = useToast();
 
   useEffect(() => {
     authRequestExternal(NETWORK_API_URL).
@@ -18,6 +21,7 @@ function App() {
     catch((err) => {
       console.error("⚠️ Error fetching users:", err);
       setError("Could not load users.");
+      showToast(err?.message || "Could not load users.");
     });
   }, []);
 
@@ -36,6 +40,7 @@ function App() {
     } catch (err) {
       console.error("⚠️ Error creating user:", err);
       setError("Failed to create user.");
+      showToast(err?.message || "Failed to create user.");
     } finally {
       setLoading(false);
     }
@@ -106,6 +111,7 @@ function App() {
           </div>)
         }
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

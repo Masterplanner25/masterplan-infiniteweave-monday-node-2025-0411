@@ -1,6 +1,23 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
+import { EmptyState } from "../components/shared/EmptyState";
+import { LoadingPanel } from "../components/shared/LoadingPanel";
 import { Toast } from "../components/shared/Toast";
+
+describe("LoadingPanel", () => {
+  it("renders the requested number of skeleton lines", () => {
+    render(<LoadingPanel lines={5} label="Loading..." />);
+    expect(screen.getAllByTestId("loading-panel-line")).toHaveLength(5);
+  });
+});
+
+describe("EmptyState", () => {
+  it("renders the message and optional hint", () => {
+    render(<EmptyState message="Nothing here" hint="Try again later" />);
+    expect(screen.getByText("Nothing here")).toBeInTheDocument();
+    expect(screen.getByText("Try again later")).toBeInTheDocument();
+  });
+});
 
 describe("Toast", () => {
   it("renders nothing when toast is null", () => {
@@ -126,5 +143,161 @@ describe("TaskDashboard error handling", () => {
     expect(alertSpy).not.toHaveBeenCalled();
 
     alertSpy.mockRestore();
+  });
+});
+
+describe("RippleTraceViewer insight tabs", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it("renders tab bar when trace data is loaded", async () => {
+    vi.doMock("../api/rippletrace.js", () => ({
+      getRippleTraceGraph: vi.fn().mockResolvedValue({
+        nodes: [
+          {
+            id: "node-1",
+            type: "execution.started",
+            node_kind: "system_event",
+            payload: {},
+            timestamp: "2026-01-01T00:00:00Z",
+            source: "test",
+          },
+        ],
+        edges: [],
+        root_event: { id: "node-1", type: "execution.started" },
+        terminal_events: [],
+        ripple_span: { node_count: 1, edge_count: 0, depth: 0, terminal_count: 0 },
+        insights: {
+          summary: "Loaded",
+          root_cause: null,
+          dominant_path: [],
+          failure_clusters: [],
+          recommendations: [],
+        },
+      }),
+      getDropPointNarrative: vi.fn(),
+      getDropPointPrediction: vi.fn(),
+      getDropPointRecommendation: vi.fn(),
+      getCausalChain: vi.fn(),
+      getLearningStats: vi.fn(),
+    }));
+
+    const { default: RippleTraceViewer } = await import("../components/platform/RippleTraceViewer.jsx");
+
+    render(<RippleTraceViewer />);
+
+    fireEvent.change(screen.getByPlaceholderText(/enter trace_id/i), {
+      target: { value: "trace-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /load trace/i }));
+
+    expect(await screen.findByRole("button", { name: "Graph" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Narrative" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Predictions" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recommendations" })).toBeInTheDocument();
+  });
+
+  it("shows EmptyState in Narrative tab when no drop_point_id", async () => {
+    vi.doMock("../api/rippletrace.js", () => ({
+      getRippleTraceGraph: vi.fn().mockResolvedValue({
+        nodes: [
+          {
+            id: "node-1",
+            type: "execution.started",
+            node_kind: "system_event",
+            payload: {},
+            timestamp: "2026-01-01T00:00:00Z",
+            source: "test",
+          },
+        ],
+        edges: [],
+        root_event: { id: "node-1", type: "execution.started" },
+        terminal_events: [],
+        ripple_span: { node_count: 1, edge_count: 0, depth: 0, terminal_count: 0 },
+        insights: {
+          summary: "Loaded",
+          root_cause: null,
+          dominant_path: [],
+          failure_clusters: [],
+          recommendations: [],
+        },
+      }),
+      getDropPointNarrative: vi.fn(),
+      getDropPointPrediction: vi.fn(),
+      getDropPointRecommendation: vi.fn(),
+      getCausalChain: vi.fn(),
+      getLearningStats: vi.fn(),
+    }));
+
+    const { default: RippleTraceViewer } = await import("../components/platform/RippleTraceViewer.jsx");
+
+    render(<RippleTraceViewer />);
+
+    fireEvent.change(screen.getByPlaceholderText(/enter trace_id/i), {
+      target: { value: "trace-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /load trace/i }));
+    await screen.findByRole("button", { name: "Narrative" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Narrative" }));
+
+    expect(
+      await screen.findByText("No drop point linked to this trace.")
+    ).toBeInTheDocument();
+  });
+
+  it("shows EmptyState in Predictions tab when no drop_point_id", async () => {
+    vi.doMock("../api/rippletrace.js", () => ({
+      getRippleTraceGraph: vi.fn().mockResolvedValue({
+        nodes: [
+          {
+            id: "node-1",
+            type: "execution.started",
+            node_kind: "system_event",
+            payload: {},
+            timestamp: "2026-01-01T00:00:00Z",
+            source: "test",
+          },
+        ],
+        edges: [],
+        root_event: { id: "node-1", type: "execution.started" },
+        terminal_events: [],
+        ripple_span: { node_count: 1, edge_count: 0, depth: 0, terminal_count: 0 },
+        insights: {
+          summary: "Loaded",
+          root_cause: null,
+          dominant_path: [],
+          failure_clusters: [],
+          recommendations: [],
+        },
+      }),
+      getDropPointNarrative: vi.fn(),
+      getDropPointPrediction: vi.fn(),
+      getDropPointRecommendation: vi.fn(),
+      getCausalChain: vi.fn(),
+      getLearningStats: vi.fn().mockResolvedValue({
+        accuracy: 0,
+        total_predictions: 0,
+        false_positive_rate: 0,
+      }),
+    }));
+
+    const { default: RippleTraceViewer } = await import("../components/platform/RippleTraceViewer.jsx");
+
+    render(<RippleTraceViewer />);
+
+    fireEvent.change(screen.getByPlaceholderText(/enter trace_id/i), {
+      target: { value: "trace-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /load trace/i }));
+    await screen.findByRole("button", { name: "Predictions" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Predictions" }));
+
+    expect(
+      await screen.findByText("No drop point linked to this trace.")
+    ).toBeInTheDocument();
   });
 });

@@ -5,6 +5,8 @@ import { getMyScore, recalculateScore, getScoreHistory } from "../../api/product
 import { useSystem } from "../../context/SystemContext";
 import FlowEngineConsole from "../platform/FlowEngineConsole";
 import GraphView from "./GraphView";import { safeMap } from "../../utils/safe";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 const C = {
   bg1: "#161b22",
@@ -58,6 +60,7 @@ function InfinityScorePanel() {
   const [score, setScore] = useState(system.metrics);
   const [history, setHistory] = useState([]);
   const [recalculating, setRecalculating] = useState(false);
+  const { toast, showToast, clearToast } = useToast();
 
   const loadScore = () => {
     getMyScore().then(setScore).catch(() => setScore(null));
@@ -79,6 +82,7 @@ function InfinityScorePanel() {
       getScoreHistory(14).then((d) => setHistory(d?.history || [])).catch(() => {});
     } catch (e) {
       console.error("Recalculate failed", e);
+      showToast(e?.message || "Recalculate failed. Please try again.");
     } finally {
       setRecalculating(false);
     }
@@ -196,6 +200,7 @@ function InfinityScorePanel() {
           </div>
         </div>
       }
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

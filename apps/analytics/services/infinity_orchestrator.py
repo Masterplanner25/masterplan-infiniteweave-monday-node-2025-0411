@@ -301,6 +301,13 @@ def execute(user_id: str, trigger_event: str, db):
         if not adjustment:
             raise RuntimeError("Infinity orchestrator failed to create loop adjustment")
 
+        try:
+            from apps.analytics.services.policy_adaptation_service import adapt_policy_thresholds
+
+            adapt_policy_thresholds(db, user_id)
+        except Exception as _thresh_exc:
+            logger.debug("[Orchestrator] threshold adaptation skipped: %s", _thresh_exc)
+
         serialized = serialize_adjustment(adjustment)
         if not serialized:
             raise RuntimeError("Infinity orchestrator failed to serialize loop adjustment")

@@ -1,76 +1,41 @@
 import { lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
 import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
-import LoginPage from "./components/shared/LoginPage";
+import AppShell from "./components/shared/AppShell";
+import KPIDashboard from "./components/shared/KPIDashboard";
+import ProtectedRoute from "./components/shared/ProtectedRoute";
+import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
-import { useAuth } from "./context/AuthContext";
 import { useSystem } from "./context/SystemContext";
 
 import "./App.css";
 
-const Sidebar = lazy(() => import("./components/shared/Sidebar"));
 const Dashboard = lazy(() => import("./components/app/Dashboard"));
-const HealthDashboard = lazy(() => import("./components/platform/HealthDashboard"));
-const ResearchEngine = lazy(() => import("./components/app/ResearchEngine"));
-const AiSeoTool = lazy(() => import("./components/app/AiSeoTool"));
-const InfiniteNetwork = lazy(() => import("./components/app/InfiniteNetwork"));
-const LeadGen = lazy(() => import("./components/app/LeadGen"));
-const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
 const TaskDashboard = lazy(() => import("./components/app/TaskDashboard"));
 const MasterPlanDashboard = lazy(() => import("./components/app/MasterPlanDashboard"));
-const ExecutionConsole = lazy(() => import("./components/platform/ExecutionConsole"));
-const FlowEngineConsole = lazy(() => import("./components/platform/FlowEngineConsole"));
 const AnalyticsPanel = lazy(() => import("./components/app/AnalyticsPanel"));
-const Genesis = lazy(() => import("./components/app/Genesis"));
-const AgentApprovalInbox = lazy(() => import("./components/platform/AgentApprovalInbox"));
-const ObservabilityDashboard = lazy(() => import("./components/platform/ObservabilityDashboard"));
-const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceViewer"));
+const ResearchEngine = lazy(() => import("./components/app/ResearchEngine"));
+const LeadGen = lazy(() => import("./components/app/LeadGen"));
+const Feed = lazy(() => import("./components/app/Feed"));
+const FreelanceDashboard = lazy(() => import("./components/app/FreelanceDashboard"));
 const ARMAnalyze = lazy(() => import("./components/app/ARMAnalyze"));
+const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
+const ARMConfigSuggest = lazy(() => import("./components/app/ARMConfigSuggest"));
 const ARMGenerate = lazy(() => import("./components/app/ARMGenerate"));
 const ARMLogs = lazy(() => import("./components/app/ARMLogs"));
-const ARMConfig = lazy(() => import("./components/app/ARMConfig"));
-const ProfileView = lazy(() => import("./components/app/ProfileView"));
-const Feed = lazy(() => import("./components/app/Feed"));
-const AgentConsole = lazy(() => import("./components/platform/AgentConsole"));
+const ARMMetrics = lazy(() => import("./components/app/ARMMetrics"));
 const MemoryBrowser = lazy(() => import("./components/app/MemoryBrowser"));
 const IdentityDashboard = lazy(() => import("./components/app/IdentityDashboard"));
+const AgentConsole = lazy(() => import("./components/platform/AgentConsole"));
+const FlowEngineConsole = lazy(() => import("./components/platform/FlowEngineConsole"));
+const ObservabilityDashboard = lazy(() => import("./components/platform/ObservabilityDashboard"));
+const HealthDashboard = lazy(() => import("./components/platform/HealthDashboard"));
+const ExecutionConsole = lazy(() => import("./components/platform/ExecutionConsole"));
+const AgentApprovalInbox = lazy(() => import("./components/platform/AgentApprovalInbox"));
 const AgentRegistry = lazy(() => import("./components/platform/AgentRegistry"));
-
-function ProtectedRoute() {
-  const location = useLocation();
-  const { isAuthenticated } = useAuth();
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
-  return <Outlet />;
-}
-
-function PlatformRoute() {
-  const { isAdmin } = useSystem();
-
-  if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return (
-    <ErrorBoundary
-      fallback={(
-        <div className="p-8 text-sm text-zinc-400">
-          Platform tool encountered an error.{" "}
-          <button className="text-zinc-500 underline" onClick={() => window.location.reload()}>
-            Reload
-          </button>
-        </div>
-      )}
-    >
-      <Outlet />
-    </ErrorBoundary>
-  );
-}
+const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceViewer"));
 
 function BootGate() {
   const { booting, booted, bootError, bootSystem } = useSystem();
@@ -112,17 +77,6 @@ function BootGate() {
   return <Outlet />;
 }
 
-function AppShell() {
-  return (
-    <div className="flex min-h-screen bg-[#09090b] text-[#fafafa] font-sans selection:bg-[#00ffaa]/30">
-      <Sidebar />
-      <main className="flex-1 h-screen overflow-y-auto p-10 main-content-gradient custom-scrollbar">
-        <Outlet />
-      </main>
-    </div>
-  );
-}
-
 export default function App() {
   const routeElement = (name, element) => (
     <RouteErrorBoundary name={name}>
@@ -142,33 +96,31 @@ export default function App() {
                 <Route element={routeElement("Application Shell", <AppShell />)}>
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
-                  <Route path="/dashboard/graph" element={routeElement("Dashboard", <Dashboard />)} />
-                  <Route path="/genesis" element={routeElement("Genesis", <Genesis />)} />
-                  <Route path="/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
-                  <Route path="/research" element={routeElement("Research", <ResearchEngine />)} />
-                  <Route path="/seo" element={routeElement("SEO", <AiSeoTool />)} />
-                  <Route path="/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
-                  <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
-                  <Route path="/freelance/dashboard" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
                   <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
                   <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
+                  <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
+                  <Route path="/kpi" element={routeElement("KPI Snapshot", <KPIDashboard />)} />
+                  <Route path="/search/research" element={routeElement("Research", <ResearchEngine />)} />
+                  <Route path="/search/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
+                  <Route path="/social" element={routeElement("Social Feed", <Feed />)} />
+                  <Route path="/freelance" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
                   <Route path="/arm/analyze" element={routeElement("ARM Analyze", <ARMAnalyze />)} />
-                  <Route path="/arm/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
-                  <Route path="/arm/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
                   <Route path="/arm/config" element={routeElement("ARM Config", <ARMConfig />)} />
-                  <Route path="/network" element={routeElement("Network", <InfiniteNetwork />)} />
-                  <Route path="/network/feed" element={routeElement("Feed", <Feed />)} />
-                  <Route path="/social/profile/:username?" element={routeElement("Profile", <ProfileView />)} />
+                  <Route path="/arm/config/suggest" element={routeElement("ARM Suggest", <ARMConfigSuggest />)} />
+                  <Route path="/arm/config/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
+                  <Route path="/arm/config/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
+                  <Route path="/arm/config/metrics" element={routeElement("ARM Metrics", <ARMMetrics />)} />
                   <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
                   <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
-                  <Route path="/agent" element={routeElement("Agent Console", <AgentConsole />)} />
-                  <Route element={<PlatformRoute />}>
-                    <Route path="/console" element={routeElement("Execution Console", <ExecutionConsole />)} />
-                    <Route path="/flow-console" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
-                    <Route path="/agents" element={routeElement("Agent Registry", <AgentRegistry />)} />
-                    <Route path="/agent/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
-                    <Route path="/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
-                    <Route path="/rippletrace" element={routeElement("RippleTrace", <RippleTraceViewer />)} />
+                  <Route element={<ProtectedRoute requireAdmin />}>
+                    <Route path="/platform/agent" element={routeElement("Agent Console", <AgentConsole />)} />
+                    <Route path="/platform/flows" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
+                    <Route path="/platform/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
+                    <Route path="/platform/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
+                    <Route path="/platform/executions" element={routeElement("Execution Console", <ExecutionConsole />)} />
+                    <Route path="/platform/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
+                    <Route path="/platform/registry" element={routeElement("Agent Registry", <AgentRegistry />)} />
+                    <Route path="/platform/trace" element={routeElement("Ripple Trace", <RippleTraceViewer />)} />
                   </Route>
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Route>

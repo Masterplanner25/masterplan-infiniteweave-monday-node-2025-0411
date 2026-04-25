@@ -32,6 +32,14 @@ KPI_WEIGHTS = {
 assert abs(sum(KPI_WEIGHTS.values()) - 1.0) < 1e-9, \
     "KPI weights must sum to 1.0"
 
+# Per-weight bounds. Prevents degenerate weights.
+KPI_WEIGHT_MIN = 0.05
+KPI_WEIGHT_MAX = 0.50
+# Learning step: fraction of the weight to nudge per adaptation.
+KPI_WEIGHT_LEARNING_RATE = 0.02
+# Minimum evaluated adjustments before any adaptation runs.
+KPI_WEIGHT_MIN_SAMPLES = 10
+
 
 class UserScore(Base):
     __tablename__ = "user_scores"
@@ -74,3 +82,58 @@ class ScoreHistory(Base):
     score_delta = Column(Float, nullable=True)
 
     calculated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserKpiWeights(Base):
+    """
+    Per-user learned KPI weights.
+
+    Starts at the global defaults, then adapts over time once enough
+    evaluated loop adjustments exist for the user.
+    """
+
+    __tablename__ = "user_kpi_weights"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+
+    execution_speed_weight = Column(Float, nullable=False, default=0.25)
+    decision_efficiency_weight = Column(Float, nullable=False, default=0.25)
+    ai_productivity_boost_weight = Column(Float, nullable=False, default=0.20)
+    focus_quality_weight = Column(Float, nullable=False, default=0.15)
+    masterplan_progress_weight = Column(Float, nullable=False, default=0.15)
+
+    adapted_count = Column(Integer, nullable=False, default=0)
+    last_adapted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class UserPolicyThresholds(Base):
+    """
+    Per-user adaptive Infinity loop thresholds and expected offsets.
+
+    Low thresholds default to the historic hardcoded 40.0 behavior until
+    enough history exists to personalize them for the user.
+    """
+
+    __tablename__ = "user_policy_thresholds"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+
+    execution_speed_low_threshold = Column(Float, nullable=False, default=40.0)
+    decision_efficiency_low_threshold = Column(Float, nullable=False, default=40.0)
+    ai_productivity_boost_low_threshold = Column(Float, nullable=False, default=40.0)
+    focus_quality_low_threshold = Column(Float, nullable=False, default=40.0)
+    masterplan_progress_low_threshold = Column(Float, nullable=False, default=40.0)
+
+    offset_continue_highest_priority_task = Column(Float, nullable=False, default=3.0)
+    offset_create_new_task = Column(Float, nullable=False, default=2.0)
+    offset_reprioritize_tasks = Column(Float, nullable=False, default=1.5)
+    offset_review_plan = Column(Float, nullable=False, default=1.0)
+
+    adapted_count = Column(Integer, nullable=False, default=0)
+    last_adapted_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())

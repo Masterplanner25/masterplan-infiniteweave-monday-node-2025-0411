@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 def score_get_node(state, context):
     try:
         import uuid
-        from apps.analytics.models import UserScore, KPI_WEIGHTS
+        from apps.analytics.models import UserScore
+        from apps.analytics.services.kpi_weight_service import get_effective_weights
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -55,7 +56,7 @@ def score_get_node(state, context):
                 "focus_quality": score.focus_quality_score,
                 "masterplan_progress": score.masterplan_progress_score,
             },
-            "weights": KPI_WEIGHTS,
+            "weights": get_effective_weights(db, str(user_id)),
             "metadata": {
                 "confidence": score.confidence,
                 "data_points_used": score.data_points_used,

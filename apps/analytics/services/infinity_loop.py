@@ -123,9 +123,14 @@ def _derive_actual_outcome(trigger_event: str) -> str:
     return "plan_adjustment"
 
 
-def _build_expectation(decision_type: str, score_snapshot: dict | None) -> tuple[str, int]:
+def _build_expectation(
+    decision_type: str,
+    score_snapshot: dict | None,
+    offsets: dict | None = None,
+) -> tuple[str, int]:
     baseline = float((score_snapshot or {}).get("master_score", 50.0) or 50.0)
-    expected_score = int(round(min(100.0, baseline + EXPECTED_SCORE_OFFSETS.get(decision_type, 1.0))))
+    use_offsets = offsets if offsets else EXPECTED_SCORE_OFFSETS
+    expected_score = int(round(min(100.0, baseline + use_offsets.get(decision_type, 1.0))))
     return _derive_expected_outcome(decision_type), expected_score
 
 
@@ -230,6 +235,14 @@ def evaluate_pending_adjustment(
             adjustment.adjustment_payload = payload
             db.add(adjustment)
             db.flush()
+
+        try:
+            from apps.analytics.services.kpi_weight_service import adapt_kpi_weights
+
+            adapt_kpi_weights(db, user_id)
+        except Exception as _adapt_exc:
+            logger.debug("[InfinityLoop] weight adaptation skipped: %s", _adapt_exc)
+
         return {
             "adjustment_id": str(adjustment.id),
             "prediction_accuracy": prediction_accuracy,
@@ -585,6 +598,7 @@ def _decide(
     system_state: dict | None = None,
     goals: list[dict] | None = None,
     social_signals: list[dict] | None = None,
+    kpi_low: dict | None = None,
 ) -> tuple[str, dict]:
     feedback_context = feedback_context or {}
     if feedback_context.get("negative", 0) > feedback_context.get("positive", 0):
@@ -647,13 +661,21 @@ def _decide(
         decision_type, payload = _apply_goal_weighting(decision_type, payload, goals)
         return _apply_social_weighting(decision_type, payload, social_signals)
 
-    if execution_speed < 40 or decision_efficiency < 40:
+    _low = kpi_low or {}
+    _exec_low = float(_low.get("execution_speed", 40.0))
+    _dec_low = float(_low.get("decision_efficiency", 40.0))
+    _focus_low = float(_low.get("focus_quality", 40.0))
+    _ai_low = float(_low.get("ai_productivity_boost", 40.0))
+
+    if execution_speed < _exec_low or decision_efficiency < _dec_low:
         decision_type = "reprioritize_tasks"
         payload = {
             "reason": "execution_or_decision_below_threshold",
             "thresholds": {
                 "execution_speed": execution_speed,
                 "decision_efficiency": decision_efficiency,
+                "execution_speed_low": _exec_low,
+                "decision_efficiency_low": _dec_low,
             },
             "next_action": {
                 "type": "reprioritize_tasks",
@@ -664,7 +686,7 @@ def _decide(
         decision_type, payload = _apply_system_state_weighting(decision_type, payload, system_state)
         decision_type, payload = _apply_goal_weighting(decision_type, payload, goals)
         return _apply_social_weighting(decision_type, payload, social_signals)
-    if focus_quality < 40:
+    if focus_quality < _focus_low:
         suggestions = _build_focus_suggestions(score_snapshot)
         decision_type = "review_plan"
         payload = {
@@ -681,7 +703,7 @@ def _decide(
         decision_type, payload = _apply_system_state_weighting(decision_type, payload, system_state)
         decision_type, payload = _apply_goal_weighting(decision_type, payload, goals)
         return _apply_social_weighting(decision_type, payload, social_signals)
-    if ai_boost < 40:
+    if ai_boost < _ai_low:
         suggestions = _build_ai_suggestions(score_snapshot)
         decision_type = "review_plan"
         payload = {
@@ -767,14 +789,38 @@ def run_loop(
             system_state = dict((loop_context or {}).get("system_state") or {})
             goals = list((loop_context or {}).get("goals") or [])
             social_signals = list((loop_context or {}).get("social_signals") or [])
-            decision_type, payload = _decide(
-                score_snapshot,
-                feedback_context=feedback_context,
-                memory_signals=memory_signals,
-                system_state=system_state,
-                goals=goals,
-                social_signals=social_signals,
-            )
+            try:
+                from apps.analytics.services.policy_adaptation_service import get_effective_thresholds
+
+                policy = get_effective_thresholds(db, owner_user_id)
+            except Exception as exc:
+                logger.debug("[InfinityLoop] policy lookup failed for %s: %s", owner_user_id, exc)
+                policy = {"kpi_low": {}, "offsets": dict(EXPECTED_SCORE_OFFSETS)}
+
+            kpi_low = dict(policy.get("kpi_low") or {})
+            adapted_offsets = dict(policy.get("offsets") or EXPECTED_SCORE_OFFSETS)
+
+            try:
+                decision_type, payload = _decide(
+                    score_snapshot,
+                    feedback_context=feedback_context,
+                    memory_signals=memory_signals,
+                    system_state=system_state,
+                    goals=goals,
+                    social_signals=social_signals,
+                    kpi_low=kpi_low,
+                )
+            except TypeError as exc:
+                if "kpi_low" not in str(exc):
+                    raise
+                decision_type, payload = _decide(
+                    score_snapshot,
+                    feedback_context=feedback_context,
+                    memory_signals=memory_signals,
+                    system_state=system_state,
+                    goals=goals,
+                    social_signals=social_signals,
+                )
             decision_type, payload = _apply_strategy_accuracy_weighting(
                 user_id=owner_user_id,
                 decision_type=decision_type,
@@ -846,7 +892,11 @@ def run_loop(
             if not payload.get("next_action"):
                 raise RuntimeError("Infinity loop invariant violated: next_action is required")
 
-            expected_outcome, expected_score = _build_expectation(decision_type, score_snapshot)
+            expected_outcome, expected_score = _build_expectation(
+                decision_type,
+                score_snapshot,
+                offsets=adapted_offsets,
+            )
 
             adjustment = create_loop_adjustment_record(
                 user_id=persisted_user_id,

@@ -18,6 +18,7 @@ SUPPORTED_AUTOMATION_TYPES = {
     "email",
     "webhook",
     "stripe",
+    "subscription",
     "content_generation",
 }
 
@@ -39,6 +40,8 @@ def execute_automation_action(payload: dict[str, Any], db) -> dict[str, Any]:
         return _execute_webhook_action(payload, config, db=db)
     if automation_type == "stripe":
         return _execute_stripe_action(payload, config, db=db)
+    if automation_type == "subscription":
+        return _execute_stripe_subscription(payload, config, db=db)
     return _execute_content_generation(payload, config)
 
 
@@ -319,6 +322,142 @@ def _execute_stripe_action(payload: dict[str, Any], config: dict[str, Any], *, d
         "price_id": response["price_id"],
         "amount_cents": amount_cents,
         "currency": currency,
+        "customer_email": customer_email,
+    }
+
+
+def _execute_stripe_subscription(
+    payload: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    db=None,
+) -> dict[str, Any]:
+    """
+    Create a Stripe customer + recurring subscription.
+    """
+    from AINDY.config import settings as _settings
+
+    stripe_key = config.get("stripe_secret_key") or _settings.STRIPE_SECRET_KEY
+    if not stripe_key:
+        raise ValueError(
+            "stripe_secret_key not configured. Set STRIPE_SECRET_KEY "
+            "or provide stripe_secret_key in delivery_config."
+        )
+    customer_email = config.get("customer_email") or config.get("recipient")
+    if not customer_email:
+        raise ValueError("customer_email required for subscription billing")
+
+    amount_raw = config.get("amount")
+    if amount_raw is None:
+        meta = config.get("metadata") or {}
+        price_float = float(meta.get("price") or config.get("price") or 0.0)
+        amount_cents = int(round(price_float * 100))
+    else:
+        amount_cents = int(amount_raw)
+    if amount_cents <= 0:
+        raise ValueError("stripe_subscription_amount_required: amount must be > 0 cents")
+
+    currency = str(config.get("currency") or "usd").lower()
+    interval = str(config.get("interval") or "month").lower()
+    if interval not in {"month", "year", "week", "day"}:
+        raise ValueError(
+            f"Invalid billing interval '{interval}'. Use: month, year, week, day"
+        )
+    product_name = str(
+        config.get("product_name")
+        or payload.get("task_name")
+        or "Freelance Subscription"
+    )
+    metadata = config.get("metadata") or {}
+
+    def _stripe_post_sub(path, form_data, *, stripe_key):
+        encoded = urllib_parse.urlencode(form_data).encode("utf-8")
+        req = urllib_request.Request(
+            f"https://api.stripe.com{path}",
+            data=encoded,
+            headers={
+                "Authorization": f"Bearer {stripe_key}",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            method="POST",
+        )
+        with urllib_request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def _do_create() -> dict[str, Any]:
+        customer = _stripe_post_sub(
+            "/v1/customers",
+            {
+                "email": customer_email,
+                "metadata[order_id]": str(metadata.get("order_id") or ""),
+            },
+            stripe_key=stripe_key,
+        )
+        customer_id = customer["id"]
+
+        product = _stripe_post_sub(
+            "/v1/products",
+            {"name": product_name},
+            stripe_key=stripe_key,
+        )
+        product_id = product["id"]
+
+        price = _stripe_post_sub(
+            "/v1/prices",
+            {
+                "product": product_id,
+                "unit_amount": str(amount_cents),
+                "currency": currency,
+                "recurring[interval]": interval,
+            },
+            stripe_key=stripe_key,
+        )
+        price_id = price["id"]
+
+        sub_data = {
+            "customer": customer_id,
+            "items[0][price]": price_id,
+            "payment_behavior": "default_incomplete",
+            "expand[]": "latest_invoice.payment_intent",
+        }
+        if metadata:
+            for key, value in metadata.items():
+                sub_data[f"metadata[{key}]"] = str(value)
+        subscription = _stripe_post_sub(
+            "/v1/subscriptions",
+            sub_data,
+            stripe_key=stripe_key,
+        )
+        period_end = subscription.get("current_period_end")
+        return {
+            "customer_id": customer_id,
+            "subscription_id": subscription["id"],
+            "subscription_status": subscription.get("status", "incomplete"),
+            "price_id": price_id,
+            "current_period_end": period_end,
+        }
+
+    response = perform_external_call(
+        service_name="stripe",
+        db=db,
+        user_id=payload.get("user_id"),
+        endpoint="/v1/subscriptions",
+        method="stripe.subscriptions.create",
+        extra={
+            "purpose": "freelance_subscription",
+            "customer_email": customer_email,
+            "amount_cents": amount_cents,
+            "interval": interval,
+        },
+        operation=_do_create,
+    )
+    return {
+        "automation_type": "subscription",
+        "status": "completed",
+        **response,
+        "amount_cents": amount_cents,
+        "currency": currency,
+        "interval": interval,
         "customer_email": customer_email,
     }
 

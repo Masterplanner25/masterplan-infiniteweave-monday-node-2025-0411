@@ -128,7 +128,6 @@ def _ensure_orchestrated() -> None:
         )
 
 # ── KPI Weights ──────────────────────────────────────────────────────────────
-from apps.analytics.models import KPI_WEIGHTS
 
 # ── Scoring window ───────────────────────────────────────────────────────────
 SCORING_WINDOW_DAYS = 14
@@ -525,6 +524,7 @@ def calculate_infinity_score(
     try:
         _ensure_orchestrated()
         from apps.analytics.models import UserScore, ScoreHistory
+        from apps.analytics.services.kpi_weight_service import get_effective_weights
         user_db_id = _db_user_id(user_id)
         for attempt in range(_SCORE_WRITE_RETRY_LIMIT):
             try:
@@ -571,13 +571,14 @@ def calculate_infinity_score(
                     focus_qual, dp4 = calculate_focus_quality(user_id, db)
                     plan_progress, dp5 = calculate_masterplan_progress(user_id, db)
                     total_data_points = dp1 + dp2 + dp3 + dp4 + dp5
+                    effective_weights = get_effective_weights(db, user_id)
 
                     master = round(
-                        exec_speed * KPI_WEIGHTS["execution_speed"] +
-                        decision_eff * KPI_WEIGHTS["decision_efficiency"] +
-                        ai_boost * KPI_WEIGHTS["ai_productivity_boost"] +
-                        focus_qual * KPI_WEIGHTS["focus_quality"] +
-                        plan_progress * KPI_WEIGHTS["masterplan_progress"],
+                        exec_speed * effective_weights["execution_speed"] +
+                        decision_eff * effective_weights["decision_efficiency"] +
+                        ai_boost * effective_weights["ai_productivity_boost"] +
+                        focus_qual * effective_weights["focus_quality"] +
+                        plan_progress * effective_weights["masterplan_progress"],
                         2,
                     )
 
@@ -684,7 +685,7 @@ def calculate_infinity_score(
                 "focus_quality": focus_qual,
                 "masterplan_progress": plan_progress,
             },
-            "weights": KPI_WEIGHTS,
+            "weights": effective_weights,
             "metadata": {
                 "confidence": confidence,
                 "data_points_used": total_data_points,

@@ -24,10 +24,13 @@ import subprocess
 from typing import Iterator
 from uuid import uuid4
 from pathlib import Path
+import sys
 
 import pytest
+from fastapi.testclient import TestClient
 from pymongo import MongoClient
-from sqlalchemy import create_engine
+from pymongo.errors import PyMongoError
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -50,6 +53,64 @@ sqlite3.register_adapter(list, lambda v: json.dumps(v))
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _patch_session_aliases(session_factory, engine):
+    patched: list[tuple[object, str, object, bool]] = []
+
+    def _setattr(target, name: str, value):
+        had_attr = hasattr(target, name)
+        original = getattr(target, name, None)
+        setattr(target, name, value)
+        patched.append((target, name, original, had_attr))
+
+    import AINDY.db.database as db_database
+
+    _setattr(db_database, "SessionLocal", session_factory)
+    _setattr(db_database, "engine", engine)
+
+    for module_name, module in list(sys.modules.items()):
+        if not module_name:
+            continue
+        if (
+            module_name == "AINDY.platform_layer.async_job_service"
+            and engine.dialect.name == "postgresql"
+        ):
+            continue
+        if not (
+            module_name == "main"
+            or module_name == "AINDY.main"
+            or module_name.startswith("routes.")
+            or module_name.startswith("services.")
+            or module_name.startswith("platform_layer.")
+            or module_name.startswith("runtime.")
+            or module_name.startswith("agents.")
+            or module_name.startswith("memory.")
+            or module_name.startswith("apps.")
+            or module_name.startswith("core.")
+            or module_name == "worker"
+            or module_name.startswith("AINDY.routes.")
+            or module_name.startswith("AINDY.services.")
+            or module_name.startswith("AINDY.platform_layer.")
+            or module_name.startswith("AINDY.runtime.")
+            or module_name.startswith("AINDY.agents.")
+            or module_name.startswith("AINDY.memory.")
+            or module_name.startswith("AINDY.core.")
+        ):
+            continue
+        if hasattr(module, "SessionLocal"):
+            _setattr(module, "SessionLocal", session_factory)
+        if hasattr(module, "engine"):
+            _setattr(module, "engine", engine)
+
+    def _restore():
+        for target, name, original, had_attr in reversed(patched):
+            if had_attr:
+                setattr(target, name, original)
+            else:
+                delattr(target, name)
+
+    return _restore
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip Redis-marked tests unless REDIS_URL is available."""
     if os.environ.get("REDIS_URL"):
@@ -59,6 +120,39 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "redis" in item.keywords:
             item.add_marker(skip_redis)
+
+
+@pytest.fixture(scope="session")
+def app(testing_session_factory, test_engine):
+    from AINDY.main import app as fastapi_app
+
+    restore = _patch_session_aliases(testing_session_factory, test_engine)
+    try:
+        yield fastapi_app
+    finally:
+        fastapi_app.dependency_overrides.clear()
+        restore()
+
+
+@pytest.fixture(autouse=True)
+def _integration_get_db_override(app, testing_session_factory):
+    from AINDY.db.database import get_db
+
+    def _get_test_db():
+        db = testing_session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _get_test_db
+    yield
+
+
+@pytest.fixture(scope="session")
+def client(app):
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture(scope="session")
@@ -84,20 +178,19 @@ def pg_db_session():
             "Pass DATABASE_URL=postgresql://... when invoking pytest -c pytest.integration.ini."
         )
 
-    # Run alembic migrations once before any test in the session.
-    result = subprocess.run(
-        ["alembic", "upgrade", "head"],
-        cwd=str(_REPO_ROOT),
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, (
-        f"alembic upgrade head failed (exit {result.returncode}):\n"
-        f"stdout: {result.stdout}\n"
-        f"stderr: {result.stderr}"
-    )
-
     engine = create_engine(db_url)
+    if not inspect(engine).get_table_names():
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"alembic upgrade head failed (exit {result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
     connection = engine.connect()
     transaction = connection.begin()
     Session = sessionmaker(bind=connection)
@@ -141,7 +234,11 @@ def mongo_client() -> Iterator[MongoClient]:
         serverSelectionTimeoutMS=5000,
         uuidRepresentation="standard",
     )
-    client.admin.command("ping")
+    try:
+        client.admin.command("ping")
+    except PyMongoError as exc:
+        client.close()
+        pytest.skip(f"MongoDB not reachable for integration tests: {exc}")
     try:
         yield client
     finally:

@@ -49,6 +49,24 @@ active_executions_total = Gauge(
     registry=REGISTRY,
 )
 
+db_pool_checkedout = Gauge(
+    "aindy_db_pool_checkedout",
+    "Number of connections currently checked out from the pool",
+    registry=REGISTRY,
+)
+
+db_pool_overflow = Gauge(
+    "aindy_db_pool_overflow",
+    "Number of overflow connections currently in use",
+    registry=REGISTRY,
+)
+
+db_pool_size = Gauge(
+    "aindy_db_pool_size",
+    "Configured pool size",
+    registry=REGISTRY,
+)
+
 # ── OpenAI client ─────────────────────────────────────────────────────────────
 
 openai_retries_total = Counter(

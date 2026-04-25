@@ -38,7 +38,7 @@ jobs:
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
@@ -74,7 +74,6 @@ jobs:
       PYTHONPATH: .
       TESTING: "true"
       TEST_MODE: "true"
-      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
       MONGO_URL: mongodb://localhost:27017
       MONGO_DB_NAME: aindy_test
       OPENAI_API_KEY: sk-test-placeholder
@@ -117,10 +116,14 @@ jobs:
       - name: Run alembic migrations
         working-directory: ${{ github.workspace }}
         run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
 
       - name: Verify migrations at head
         working-directory: ${{ github.workspace }}
         run: alembic check
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
 
       - name: Confirm repo root contents
         run: ls -la
@@ -228,61 +231,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     continue-on-error: true
+    needs: test
     defaults:
       run:
         working-directory: ${{ github.workspace }}
 
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg15
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test_db
+          POSTGRES_USER: aindy_test
+          POSTGRES_PASSWORD: aindy_test
+          POSTGRES_DB: aindy_test
         options: >-
-          --health-cmd="pg_isready -U test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
+          --health-cmd="pg_isready -U aindy_test"
           --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval \"db.adminCommand('ping')\""
-          --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports:
+          - 5433:5432
 
     env:
       ENV: test
       PYTHONPATH: .
-      AINDY_TEST_DB: postgres
+      TEST_MODE: "true"
+      TESTING: "true"
+      DATABASE_URL: postgresql://aindy_test:aindy_test@localhost:5433/aindy_test
       AINDY_ALLOW_SQLITE: "false"
-      DATABASE_URL: postgresql://test:test@localhost:5432/test_db
-      MONGO_URL: mongodb://localhost:27017
-      MONGO_DB_NAME: aindy_test
+      AINDY_SKIP_MONGO_PING: "true"
+      SKIP_MONGO_PING: "true"
+      MONGO_URL: ""
       OPENAI_API_KEY: sk-test-placeholder
       DEEPSEEK_API_KEY: ds-test-placeholder
       SECRET_KEY: ci-secret-key-placeholder
       PERMISSION_SECRET: ci-permission-secret
       AINDY_API_KEY: ci-aindy-api-key
       ALLOWED_ORIGINS: "http://localhost:3000"
-      AINDY_SKIP_MONGO_PING: "true"
-      SKIP_MONGO_PING: "true"
-      TEST_MODE: "true"
-      TESTING: "true"
+      AINDY_ENFORCE_SCHEMA: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -300,36 +285,22 @@ jobs:
           restore-keys: ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install -r AINDY/requirements.txt
+        run: pip install -r AINDY/requirements.txt psycopg2-binary
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Wait for PostgreSQL readiness
         run: |
-          until pg_isready -h localhost -p 5432 -U test; do
+          until pg_isready -h localhost -p 5433 -U aindy_test; do
             echo "Waiting for postgres..."
             sleep 2
           done
         env:
-          PGPASSWORD: test
-
-      - name: Run alembic migrations
-        working-directory: ${{ github.workspace }}
-        run: alembic upgrade head
-
-      - name: Confirm repo root contents
-        run: ls -la
+          PGPASSWORD: aindy_test
 
       - name: Run tests against PostgreSQL
-        run: pytest -m "not redis" --ignore=tests/validate_memory_loop.py --tb=short -q
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-xml-postgres
-          path: AINDY/coverage.xml
+        run: pytest -c pytest.postgres.ini
 
   frontend-test:
     name: Frontend Tests

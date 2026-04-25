@@ -23,6 +23,14 @@ class FreelanceDeliveryConfigUpdate(BaseModel):
     delivery_config: Optional[dict] = None
 
 
+class RefundRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class SubscriptionCancelRequest(BaseModel):
+    reason: Optional[str] = None
+
+
 class FreelanceOrderResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -49,6 +57,26 @@ class FreelanceOrderResponse(BaseModel):
     started_at: Optional[datetime] = None
     delivered_at: Optional[datetime] = None
     created_at: datetime
+
+
+class RefundResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    order_id: int
+    refund_id: str
+    status: str
+    payment_status: str
+    refunded_at: datetime
+    reason: Optional[str] = None
+    amount_cents: Optional[int] = None
+
+
+class SubscriptionStatusResponse(BaseModel):
+    order_id: int
+    status: str
+    subscription_status: Optional[str] = None
+    subscription_period_end: Optional[datetime] = None
+    reason: Optional[str] = None
 
 
 class FeedbackCreate(BaseModel):

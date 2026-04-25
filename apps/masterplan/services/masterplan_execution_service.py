@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from types import SimpleNamespace
 
 from apps.masterplan.models import MasterPlan
 
@@ -10,9 +11,52 @@ _CHILD_KEYS = ("phases", "milestones", "steps", "tasks", "actions", "initiatives
 
 
 def create_task(*args, **kwargs):
-    from apps.tasks.services.task_service import create_task as _create_task
+    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
 
-    return _create_task(*args, **kwargs)
+    db = kwargs["db"]
+    user_id = kwargs["user_id"]
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=["task.create"],
+        trace_id="",
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(
+        "sys.v1.task.create",
+        {
+            "name": kwargs["name"],
+            "category": kwargs.get("category"),
+            "priority": kwargs.get("priority"),
+            "due_date": kwargs.get("due_date"),
+            "masterplan_id": kwargs.get("masterplan_id"),
+            "parent_task_id": kwargs.get("parent_task_id"),
+            "dependency_type": kwargs.get("dependency_type"),
+            "dependencies": kwargs.get("dependencies"),
+            "automation_type": kwargs.get("automation_type"),
+            "automation_config": kwargs.get("automation_config"),
+            "scheduled_time": kwargs.get("scheduled_time"),
+            "reminder_time": kwargs.get("reminder_time"),
+            "recurrence": kwargs.get("recurrence"),
+        },
+        ctx,
+    )
+    if result["status"] != "success":
+        raise RuntimeError(result.get("error", "task creation syscall failed"))
+    data = result.get("data") or {}
+    return SimpleNamespace(
+        id=int(data["task_id"]) if data.get("task_id") is not None else None,
+        name=data.get("task_name"),
+        category=data.get("category"),
+        priority=data.get("priority"),
+        status=data.get("status"),
+        masterplan_id=data.get("masterplan_id"),
+        parent_task_id=data.get("parent_task_id"),
+        depends_on=data.get("depends_on"),
+        dependency_type=data.get("dependency_type"),
+        automation_type=data.get("automation_type"),
+        automation_config=data.get("automation_config"),
+    )
 
 
 def sync_masterplan_tasks(

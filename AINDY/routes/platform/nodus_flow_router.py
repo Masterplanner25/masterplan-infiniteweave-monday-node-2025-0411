@@ -6,7 +6,10 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.routes.platform.nodus_shared import _validate_nodus_source
+from AINDY.routes.platform.nodus_shared import (
+    _validate_nodus_source,
+    resolve_request_db_override,
+)
 from AINDY.routes.platform.schemas import NodusFlowRequest
 from AINDY.services.auth_service import get_current_user
 
@@ -17,6 +20,7 @@ router = APIRouter()
 @limiter.limit("30/minute")
 def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["sub"])
+    effective_db = resolve_request_db_override(request, db)
     _validate_nodus_source(body.script, field="script")
 
     def handler(_ctx):
@@ -48,7 +52,7 @@ def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Ses
             uid = require_user_id(user_id)
             correlation = str(_uuid.uuid4())
             pre_eu = require_execution_unit(
-                db=db,
+                db=effective_db,
                 eu_type="flow",
                 user_id=str(uid),
                 source_type="nodus_flow_run",
@@ -56,12 +60,12 @@ def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Ses
                 correlation_id=correlation,
                 extra={"flow_name": body.flow_name, "workflow_type": "nodus_flow"},
             )
-            result = PersistentFlowRunner(flow=compiled_flow, db=db, user_id=uid, workflow_type="nodus_flow").start(initial_state=dict(body.input), flow_name=body.flow_name)
+            result = PersistentFlowRunner(flow=compiled_flow, db=effective_db, user_id=uid, workflow_type="nodus_flow").start(initial_state=dict(body.input), flow_name=body.flow_name)
             try:
                 if pre_eu is not None:
                     from AINDY.core.execution_unit_service import ExecutionUnitService
 
-                    eus = ExecutionUnitService(db)
+                    eus = ExecutionUnitService(effective_db)
                     if result.get("run_id"):
                         eus.link_flow_run(pre_eu.id, result["run_id"])
                     eus.update_status(pre_eu.id, "completed" if result.get("status") == "SUCCESS" else "failed")
@@ -76,5 +80,5 @@ def compile_and_run_nodus_flow(request: Request, body: NodusFlowRequest, db: Ses
         handler=handler,
         user_id=user_id,
         input_payload={"flow_name": body.flow_name, "run": body.run, "register": body.register},
-        metadata={"db": db},
+        metadata={"db": effective_db},
     )

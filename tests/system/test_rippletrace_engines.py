@@ -1,9 +1,12 @@
 import json
 import importlib
+import uuid
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
+from AINDY.db.models.system_event import SystemEvent
 from apps.rippletrace.models import DropPointDB
 from apps.analytics.models import ScoreSnapshotDB
 from AINDY.db.models.learning import LearningRecordDB, LearningThresholdDB
@@ -525,3 +528,27 @@ def test_endpoints_return_success(client, monkeypatch, endpoint, patches, api_ke
         monkeypatch.setattr(legacy_surface_module, attr_name, fn)
     response = client.get(endpoint, headers=api_key_headers)
     assert response.status_code == 200
+
+
+def test_generate_trace_insights_tolerates_prediction_engine_failure(db_session, test_user):
+    from apps.rippletrace.services.rippletrace_service import generate_trace_insights
+
+    event = SystemEvent(
+        id=uuid.uuid4(),
+        type="rippletrace.drop_point.finalized",
+        user_id=test_user.id,
+        trace_id="trace-prediction-failure",
+        payload={"drop_point_id": "dp-prediction"},
+        timestamp=datetime.now(timezone.utc),
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    with patch(
+        "apps.rippletrace.services.prediction_engine.predict_drop_point",
+        side_effect=RuntimeError("engine down"),
+    ):
+        result = generate_trace_insights(db_session, "trace-prediction-failure")
+
+    assert "summary" in result
+    assert isinstance(result["recommendations"], list)

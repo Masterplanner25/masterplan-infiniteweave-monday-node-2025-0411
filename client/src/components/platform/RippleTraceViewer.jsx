@@ -12,7 +12,14 @@ import {
   formatDateTime,
   surfacePalette,
 } from "./SurfacePrimitives";
-import { getRippleTraceGraph } from "../../api/rippletrace.js";
+import {
+  getCausalChain,
+  getDropPointNarrative,
+  getDropPointPrediction,
+  getDropPointRecommendation,
+  getLearningStats,
+  getRippleTraceGraph,
+} from "../../api/rippletrace.js";
 import { safeMap } from "../../utils/safe";
 
 function nodeTone(node) {
@@ -157,6 +164,23 @@ export default function RippleTraceViewer() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [activeTab, setActiveTab] = useState("graph");
+  const [narrativeData, setNarrativeData] = useState(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const [narrativeError, setNarrativeError] = useState("");
+  const [predictionData, setPredictionData] = useState(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [predictionError, setPredictionError] = useState("");
+  const [learningStats, setLearningStats] = useState(null);
+  const [learningLoading, setLearningLoading] = useState(false);
+  const [learningError, setLearningError] = useState("");
+  const [recommendationData, setRecommendationData] = useState(null);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [recommendationError, setRecommendationError] = useState("");
+  const [causalChainData, setCausalChainData] = useState(null);
+  const [causalChainOpen, setCausalChainOpen] = useState(false);
+  const [causalChainLoading, setCausalChainLoading] = useState(false);
+  const [causalChainError, setCausalChainError] = useState("");
 
   const loadTrace = useCallback(async (value) => {
     if (!value) return;
@@ -167,6 +191,12 @@ export default function RippleTraceViewer() {
       setData(graph);
       setSubmittedTraceId(value);
       setSelectedNodeId(graph.root_event?.id || graph.nodes?.[0]?.id || "");
+      setActiveTab("graph");
+      setNarrativeData(null);
+      setPredictionData(null);
+      setRecommendationData(null);
+      setCausalChainData(null);
+      setCausalChainOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ripple trace.");
       setData(null);
@@ -192,6 +222,128 @@ export default function RippleTraceViewer() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const insights = data?.insights || {};
+  const dropPointId = useMemo(() => {
+    const nodes = data?.nodes || [];
+    const match = nodes.find((node) => node?.payload?.drop_point_id);
+    return match?.payload?.drop_point_id || "";
+  }, [data]);
+
+  const loadNarrative = useCallback(async () => {
+    if (!dropPointId) return;
+    setNarrativeLoading(true);
+    setNarrativeError("");
+    try {
+      const narrative = await getDropPointNarrative(dropPointId);
+      setNarrativeData(narrative);
+    } catch (err) {
+      setNarrativeError(err instanceof Error ? err.message : "Failed to load narrative.");
+      setNarrativeData(null);
+    } finally {
+      setNarrativeLoading(false);
+    }
+  }, [dropPointId]);
+
+  const loadPrediction = useCallback(async () => {
+    if (!dropPointId) return;
+    setPredictionLoading(true);
+    setPredictionError("");
+    try {
+      const prediction = await getDropPointPrediction(dropPointId, false);
+      setPredictionData(prediction);
+    } catch (err) {
+      setPredictionError(err instanceof Error ? err.message : "Failed to load predictions.");
+      setPredictionData(null);
+    } finally {
+      setPredictionLoading(false);
+    }
+  }, [dropPointId]);
+
+  const loadLearning = useCallback(async () => {
+    setLearningLoading(true);
+    setLearningError("");
+    try {
+      const stats = await getLearningStats();
+      setLearningStats(stats);
+    } catch (err) {
+      setLearningError(err instanceof Error ? err.message : "Failed to load learning stats.");
+      setLearningStats(null);
+    } finally {
+      setLearningLoading(false);
+    }
+  }, []);
+
+  const loadRecommendation = useCallback(async () => {
+    if (!dropPointId) return;
+    setRecommendationLoading(true);
+    setRecommendationError("");
+    try {
+      const recommendation = await getDropPointRecommendation(dropPointId);
+      setRecommendationData(recommendation);
+    } catch (err) {
+      setRecommendationError(err instanceof Error ? err.message : "Failed to load recommendations.");
+      setRecommendationData(null);
+    } finally {
+      setRecommendationLoading(false);
+    }
+  }, [dropPointId]);
+
+  const loadCausalChain = useCallback(async () => {
+    if (!dropPointId) return;
+    setCausalChainLoading(true);
+    setCausalChainError("");
+    try {
+      const chain = await getCausalChain(dropPointId);
+      setCausalChainData(chain);
+      setCausalChainOpen(true);
+    } catch (err) {
+      setCausalChainError(err instanceof Error ? err.message : "Failed to load causal chain.");
+      setCausalChainData(null);
+      setCausalChainOpen(true);
+    } finally {
+      setCausalChainLoading(false);
+    }
+  }, [dropPointId]);
+
+  useEffect(() => {
+    if (activeTab === "narrative" && dropPointId && !narrativeData && !narrativeLoading) {
+      loadNarrative();
+    }
+  }, [activeTab, dropPointId, narrativeData, narrativeLoading, loadNarrative]);
+
+  useEffect(() => {
+    if (activeTab === "predictions") {
+      if (dropPointId && !predictionData && !predictionLoading) {
+        loadPrediction();
+      }
+      if (!learningStats && !learningLoading) {
+        loadLearning();
+      }
+    }
+  }, [
+    activeTab,
+    dropPointId,
+    predictionData,
+    predictionLoading,
+    learningStats,
+    learningLoading,
+    loadPrediction,
+    loadLearning,
+  ]);
+
+  useEffect(() => {
+    if (activeTab === "recommendations" && dropPointId && !recommendationData && !recommendationLoading) {
+      loadRecommendation();
+    }
+  }, [activeTab, dropPointId, recommendationData, recommendationLoading, loadRecommendation]);
+
+  const tabButtonStyle = (tab) => ({
+    color: activeTab === tab ? "#04110d" : surfacePalette.text,
+    background: activeTab === tab ? surfacePalette.accent : "rgba(255,255,255,0.03)",
+    borderColor: activeTab === tab ? "rgba(0,255,170,0.5)" : surfacePalette.border,
+  });
+
+  const narrativeTimeline = narrativeData?.timeline || [];
+  const hiddenTimelineCount = Math.max(0, narrativeTimeline.length - 15);
 
   return (
     <PageShell
@@ -235,9 +387,280 @@ export default function RippleTraceViewer() {
               />
             ) : null}
           </SurfacePanel>
+
+          {!loading && !error && data ? (
+            <div className="mt-5">
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                {[
+                  ["graph", "Graph"],
+                  ["narrative", "Narrative"],
+                  ["predictions", "Predictions"],
+                  ["recommendations", "Recommendations"],
+                ].map(([tab, label]) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setActiveTab(tab)}
+                    className="rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] transition-all"
+                    style={tabButtonStyle(tab)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {activeTab === "narrative" ? (
+                <div className="space-y-5">
+                  {!dropPointId ? (
+                    <EmptyState
+                      title="No drop point linked to this trace."
+                      description="Narrative data is available for traces linked to a drop point."
+                    />
+                  ) : narrativeLoading ? (
+                    <LoadingState label="Loading narrative..." />
+                  ) : narrativeError ? (
+                    <ErrorState message="Failed to load narrative." onRetry={loadNarrative} />
+                  ) : narrativeData ? (
+                    <>
+                      <SurfacePanel title="Narrative Summary">
+                        <p className="text-sm text-zinc-300">{narrativeData.summary}</p>
+                      </SurfacePanel>
+                      <SurfacePanel title="Timeline">
+                        <ol className="space-y-3">
+                          {safeMap(narrativeTimeline.slice(0, 15), (event, index) => (
+                            <li key={`${event.timestamp || event.event}-${index}`} className="rounded-2xl border p-3" style={{ borderColor: surfacePalette.border }}>
+                              <div className="text-sm text-zinc-300">
+                                {formatDateTime(event.timestamp)} {"—"} {event.event}
+                              </div>
+                              {event.summary ? <div className="mt-1 text-sm text-zinc-400">{event.summary}</div> : null}
+                            </li>
+                          ))}
+                        </ol>
+                        {hiddenTimelineCount ? (
+                          <div className="mt-3 text-sm text-zinc-500">[{hiddenTimelineCount} more events not shown]</div>
+                        ) : null}
+                      </SurfacePanel>
+                      <SurfacePanel title="Inflection Points">
+                        <div className="space-y-3">
+                          {safeMap(narrativeData.inflection_points || [], (point, index) => (
+                            <div key={`${point.type}-${index}`} className="flex flex-wrap items-center gap-3 text-sm text-zinc-300">
+                              <InlineBadge>{point.type}</InlineBadge>
+                              <span>{formatDateTime(point.timestamp)}</span>
+                              <span>value: {String(point.value ?? "—")}</span>
+                            </div>
+                          ))}
+                          {!(narrativeData.inflection_points || []).length ? (
+                            <EmptyState title="No inflection points" description="This narrative does not yet have recorded inflection points." />
+                          ) : null}
+                        </div>
+                      </SurfacePanel>
+                      <SurfacePanel title="Causal Story">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: surfacePalette.muted }}>
+                              Influenced By
+                            </div>
+                            <div className="space-y-3">
+                              {safeMap(narrativeData.causal_story?.influenced_by || [], (entry) => (
+                                <div key={`in-${entry.drop_point_id}`} className="rounded-2xl border p-3 text-sm text-zinc-300" style={{ borderColor: surfacePalette.border }}>
+                                  {entry.drop_point_id} {"—"} {(Number(entry.confidence || 0) * 100).toFixed(0)}%
+                                </div>
+                              ))}
+                              {!(narrativeData.causal_story?.influenced_by || []).length ? (
+                                <div className="text-sm text-zinc-500">No upstream influences.</div>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: surfacePalette.muted }}>
+                              Led To
+                            </div>
+                            <div className="space-y-3">
+                              {safeMap(narrativeData.causal_story?.led_to || [], (entry) => (
+                                <div key={`out-${entry.drop_point_id}`} className="rounded-2xl border p-3 text-sm text-zinc-300" style={{ borderColor: surfacePalette.border }}>
+                                  {entry.drop_point_id} {"—"} {(Number(entry.confidence || 0) * 100).toFixed(0)}%
+                                </div>
+                              ))}
+                              {!(narrativeData.causal_story?.led_to || []).length ? (
+                                <div className="text-sm text-zinc-500">No downstream effects.</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </SurfacePanel>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {activeTab === "predictions" ? (
+                <div className="space-y-5">
+                  {!dropPointId ? (
+                    <EmptyState
+                      title="No drop point linked to this trace."
+                      description="Prediction data is available for traces linked to a drop point."
+                    />
+                  ) : predictionLoading ? (
+                    <LoadingState label="Loading prediction..." />
+                  ) : predictionError ? (
+                    <ErrorState message="Failed to load predictions." onRetry={loadPrediction} />
+                  ) : predictionData?.status === "insufficient_data" ? (
+                    <EmptyState
+                      title="Not enough historical data for this drop point."
+                      description="Predictions require at least 3 score snapshots."
+                    />
+                  ) : (
+                    <>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <MetricCard
+                          label="Prediction"
+                          value={predictionData?.prediction || predictionData?.status || "—"}
+                          tone="info"
+                        />
+                        <MetricCard
+                          label="Confidence"
+                          value={
+                            predictionData?.confidence != null
+                              ? `${(predictionData.confidence * 100).toFixed(0)}%`
+                              : "—"
+                          }
+                          tone="warning"
+                        />
+                      </div>
+                      <SurfacePanel title="Learning Stats">
+                        {learningLoading ? (
+                          <LoadingState label="Loading learning stats..." />
+                        ) : learningError ? (
+                          <ErrorState message="Failed to load learning stats." onRetry={loadLearning} />
+                        ) : (
+                          <div className="grid gap-4 md:grid-cols-3">
+                            <MetricCard
+                              label="Accuracy"
+                              value={`${(Number(learningStats?.accuracy || 0) * 100).toFixed(0)}%`}
+                              tone="success"
+                            />
+                            <MetricCard
+                              label="Total Predictions"
+                              value={learningStats?.total_predictions ?? 0}
+                              tone="info"
+                            />
+                            <MetricCard
+                              label="False Positives"
+                              value={`${(Number(learningStats?.false_positive_rate || 0) * 100).toFixed(1)}%`}
+                              tone="danger"
+                            />
+                          </div>
+                        )}
+                      </SurfacePanel>
+                    </>
+                  )}
+                </div>
+              ) : null}
+
+              {activeTab === "recommendations" ? (
+                <div className="space-y-5">
+                  {!dropPointId ? (
+                    <EmptyState
+                      title="No drop point linked to this trace."
+                      description="Recommendations are available for traces linked to a drop point."
+                    />
+                  ) : recommendationLoading ? (
+                    <LoadingState label="Loading recommendations..." />
+                  ) : recommendationError ? (
+                    <ErrorState message="Failed to load recommendations." onRetry={loadRecommendation} />
+                  ) : recommendationData ? (
+                    <>
+                      <SurfacePanel title="Recommended Action">
+                        <InlineBadge
+                          tone={
+                            recommendationData.priority === "high"
+                              ? "danger"
+                              : recommendationData.priority === "medium"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {recommendationData.action}
+                        </InlineBadge>
+                      </SurfacePanel>
+                      <SurfacePanel
+                        title="Action Items"
+                        actions={
+                          <ActionButton tone="ghost" onClick={() => {
+                            if (causalChainOpen) {
+                              setCausalChainOpen(false);
+                              return;
+                            }
+                            loadCausalChain();
+                          }}
+                          >
+                            Get Causal Chain
+                          </ActionButton>
+                        }
+                      >
+                        <ul className="list-disc space-y-2 pl-5">
+                          {safeMap(recommendationData.recommendations || [], (item, index) => (
+                            <li key={`${item}-${index}`} className="text-sm text-zinc-300">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                        {!(recommendationData.recommendations || []).length ? (
+                          <EmptyState title="No actions available" description="No recommendation action items were returned." />
+                        ) : null}
+
+                        {causalChainOpen ? (
+                          <div className="mt-5 border-t pt-5" style={{ borderColor: surfacePalette.border }}>
+                            {causalChainLoading ? (
+                              <LoadingState label="Loading causal chain..." />
+                            ) : causalChainError ? (
+                              <ErrorState message="Failed to load causal chain." onRetry={loadCausalChain} />
+                            ) : causalChainData ? (
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                  <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: surfacePalette.muted }}>
+                                    Upstream causes
+                                  </div>
+                                  <div className="space-y-3">
+                                    {safeMap(causalChainData.upstream_causes || [], (entry) => (
+                                      <div key={`up-${entry.drop_point_id}`} className="rounded-2xl border p-3 text-sm text-zinc-300" style={{ borderColor: surfacePalette.border }}>
+                                        {entry.drop_point_id} {"—"} {(Number(entry.confidence || 0) * 100).toFixed(0)}%
+                                      </div>
+                                    ))}
+                                    {!(causalChainData.upstream_causes || []).length ? (
+                                      <div className="text-sm text-zinc-500">No upstream causes found.</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="mb-3 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: surfacePalette.muted }}>
+                                    Downstream effects
+                                  </div>
+                                  <div className="space-y-3">
+                                    {safeMap(causalChainData.downstream_effects || [], (entry) => (
+                                      <div key={`down-${entry.drop_point_id}`} className="rounded-2xl border p-3 text-sm text-zinc-300" style={{ borderColor: surfacePalette.border }}>
+                                        {entry.drop_point_id} {"—"} {(Number(entry.confidence || 0) * 100).toFixed(0)}%
+                                      </div>
+                                    ))}
+                                    {!(causalChainData.downstream_effects || []).length ? (
+                                      <div className="text-sm text-zinc-500">No downstream effects found.</div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </SurfacePanel>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-4" style={{ display: activeTab === "graph" ? undefined : "none" }}>
           <SurfacePanel title="Trace Summary" subtitle="Proofboard summary built from the current graph and causal analysis.">
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
               <MetricCard label="Nodes" value={data?.ripple_span?.node_count || 0} tone="info" />

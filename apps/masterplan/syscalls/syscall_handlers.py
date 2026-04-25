@@ -57,6 +57,23 @@ def _handle_assert_masterplan_owned(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_get_masterplan_eta(payload: dict, ctx: SyscallContext) -> dict:
+    from AINDY.db.database import SessionLocal
+    from apps.masterplan.services.eta_service import calculate_eta
+
+    masterplan_id = payload["masterplan_id"]
+    user_id = payload["user_id"]
+
+    external_db = ctx.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        return {"eta": calculate_eta(db=db, masterplan_id=masterplan_id, user_id=user_id)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_masterplan_syscall_handlers() -> None:
     """Register all masterplan domain syscall handlers.
 
@@ -84,4 +101,26 @@ def register_masterplan_syscall_handlers() -> None:
         },
         stable=False,
     )
-    logger.info("[masterplan_syscalls] registered sys.v1.masterplan.assert_owned")
+    register_syscall(
+        name="sys.v1.masterplan.get_eta",
+        handler=_handle_get_masterplan_eta,
+        capability="masterplan.read",
+        description="Calculate and return the ETA projection for a masterplan.",
+        input_schema={
+            "required": ["masterplan_id", "user_id"],
+            "properties": {
+                "masterplan_id": {"type": "string"},
+                "user_id": {"type": "string"},
+            },
+        },
+        output_schema={
+            "required": ["eta"],
+            "properties": {
+                "eta": {"type": "dict"},
+            },
+        },
+        stable=False,
+    )
+    logger.info(
+        "[masterplan_syscalls] registered sys.v1.masterplan.assert_owned and sys.v1.masterplan.get_eta"
+    )

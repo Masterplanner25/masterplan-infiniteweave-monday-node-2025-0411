@@ -13,6 +13,10 @@ import {
 } from "../../api/agent.js";
 import { postScoreFeedback } from "../../api/analytics.js";
 import { useSystem } from "../../context/SystemContext";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 // ── Risk badge ────────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";
@@ -459,13 +463,19 @@ export default function AgentConsole() {
   const [error, setError] = useState(null);
   const [runEvents, setRunEvents] = useState([]);
   const [activeDetailTab, setActiveDetailTab] = useState("steps"); // "steps" | "timeline"
+  const [runsLoading, setRunsLoading] = useState(true);
+  const { toast, showToast, clearToast } = useToast();
 
   const loadRuns = useCallback(async () => {
+    setRunsLoading(true);
     try {
       const data = await getAgentRuns();
       setRuns(data || []);
     } catch (e) {
       console.error("Failed to load runs", e);
+      showToast(e?.message || "Failed to load agent runs.");
+    } finally {
+      setRunsLoading(false);
     }
   }, []);
 
@@ -475,6 +485,7 @@ export default function AgentConsole() {
       setTools(data || []);
     } catch (e) {
       console.error("Failed to load tools", e);
+      showToast(e?.message || "Failed to load agent tools.");
     }
   }, []);
 
@@ -484,6 +495,7 @@ export default function AgentConsole() {
       setTrust(data);
     } catch (e) {
       console.error("Failed to load trust", e);
+      showToast(e?.message || "Failed to load trust settings.");
     }
   }, []);
 
@@ -521,6 +533,7 @@ export default function AgentConsole() {
         setSelectedSteps(steps || []);
       } catch (e) {
         console.error("Failed to load steps", e);
+        showToast(e?.message || "Failed to load run steps.");
       } finally {
         setStepsLoading(false);
       }
@@ -671,10 +684,11 @@ export default function AgentConsole() {
           {/* Run list */}
           {activeTab === "runs" &&
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
-              {runs.length === 0 ?
-            <p className="text-xs text-zinc-500 text-center py-8">
-                  No agent runs yet. Submit a goal above.
-                </p> : safeMap(
+              {runsLoading ? <LoadingPanel label="Loading agent runs..." /> :
+            runs.length === 0 ?
+            <EmptyState
+              message="No agent runs yet."
+              hint="Submit an objective above to start an agent run." /> : safeMap(
 
               runs, (run) =>
               <RunCard
@@ -823,6 +837,7 @@ export default function AgentConsole() {
           }
         </div>
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

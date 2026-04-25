@@ -18,7 +18,17 @@ from apps.analytics.metrics_models import (
     RevenueScaling,
 )
 from apps.analytics.score_snapshot import ScoreSnapshotDB
-from apps.analytics.user_score import KPI_WEIGHTS, ScoreHistory, UserScore
+from apps.analytics.user_score import (
+    KPI_WEIGHTS,
+    KPI_WEIGHT_LEARNING_RATE,
+    KPI_WEIGHT_MAX,
+    KPI_WEIGHT_MIN,
+    KPI_WEIGHT_MIN_SAMPLES,
+    ScoreHistory,
+    UserKpiWeights,
+    UserPolicyThresholds,
+    UserScore,
+)
 
 __all__ = [
     "AIEfficiency",
@@ -34,11 +44,17 @@ __all__ = [
     "ExecutionSpeed",
     "Impact",
     "KPI_WEIGHTS",
+    "KPI_WEIGHT_LEARNING_RATE",
+    "KPI_WEIGHT_MAX",
+    "KPI_WEIGHT_MIN",
+    "KPI_WEIGHT_MIN_SAMPLES",
     "LostPotential",
     "MonetizationEfficiency",
     "RevenueScaling",
     "ScoreHistory",
     "ScoreSnapshotDB",
+    "UserKpiWeights",
+    "UserPolicyThresholds",
     "UserScore",
 ]
 

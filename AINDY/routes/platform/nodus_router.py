@@ -14,6 +14,7 @@ from AINDY.routes.platform.nodus_shared import (
     list_nodus_script_summaries,
     load_named_nodus_script_or_404,
     nodus_script_exists,
+    resolve_request_db_override,
     _run_nodus_script,
     save_nodus_script,
     _validate_nodus_source,
@@ -28,6 +29,7 @@ router = APIRouter()
 @limiter.limit("30/minute")
 def run_nodus_script(request: Request, body: NodusRunRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["sub"])
+    effective_db = resolve_request_db_override(request, db)
     if body.script:
         script_source = body.script
         _validate_nodus_source(script_source, field="script")
@@ -41,7 +43,7 @@ def run_nodus_script(request: Request, body: NodusRunRequest, db: Session = Depe
             script=script_source,
             input_payload=body.input,
             error_policy=body.error_policy,
-            db=db,
+            db=effective_db,
             user_id=user_id,
         )
         formatted = _format_nodus_response(flow_result)
@@ -54,7 +56,7 @@ def run_nodus_script(request: Request, body: NodusRunRequest, db: Session = Depe
         handler=handler,
         user_id=user_id,
         input_payload={"script_name": body.script_name, "has_inline_script": bool(body.script), "error_policy": body.error_policy, **body.input},
-        metadata={"db": db},
+        metadata={"db": effective_db},
     )
 
 

@@ -5,7 +5,11 @@ import {
   getFreelanceFeedback,
   getFreelanceMetricsLatest,
 } from "../../api/freelance.js";
+import { LoadingPanel } from "../shared/LoadingPanel";
+import { EmptyState } from "../shared/EmptyState";
 import { safeMap } from "../../utils/safe";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function FreelanceDashboard() {
   const [orders, setOrders] = useState([]);
@@ -13,6 +17,7 @@ export default function FreelanceDashboard() {
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { toast, showToast, clearToast } = useToast();
 
   async function fetchOrders() {
     return getFreelanceOrders();
@@ -44,6 +49,7 @@ export default function FreelanceDashboard() {
     catch((err) => {
       console.error(err);
       if (mounted) setError(err.message);
+      showToast(err?.message || "Failed to load freelance data.");
     }).
     finally(() => mounted && setLoading(false));
     return () => mounted = false;
@@ -116,7 +122,13 @@ export default function FreelanceDashboard() {
         <section className="lg:col-span-2">
           <div className={cardClass}>
             <h2 className="text-lg font-semibold mb-4 border-b border-zinc-800 pb-2">Recent Stream</h2>
-            <div className="overflow-x-auto">
+            {loading ? <LoadingPanel label="Loading freelance workspace..." /> : null}
+            {!loading && orders.length === 0 ? (
+              <EmptyState
+                message="No active orders."
+                hint="New orders will appear here once submitted." />
+            ) : null}
+            {!loading && orders.length > 0 ? <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-zinc-500 text-xs uppercase border-b border-zinc-800">
@@ -143,7 +155,7 @@ export default function FreelanceDashboard() {
                   }
                 </tbody>
               </table>
-            </div>
+            </div> : null}
           </div>
         </section>
 
@@ -182,6 +194,7 @@ export default function FreelanceDashboard() {
           </div>
         </aside>
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

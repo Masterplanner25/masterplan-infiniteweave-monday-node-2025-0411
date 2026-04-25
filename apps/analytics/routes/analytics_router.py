@@ -147,3 +147,115 @@ async def get_masterplan_summary(
         request=request, route_name="analytics.masterplan.summary", handler=handler,
         user_id=user_id, metadata={"db": db},
     )
+
+
+@router.get("/kpi-weights")
+@limiter.limit("60/minute")
+async def get_kpi_weights(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.kpi_weight_service import (
+            get_effective_weights,
+            get_or_create_user_weights,
+        )
+
+        row = get_or_create_user_weights(db, user_id)
+        return {
+            "weights": get_effective_weights(db, user_id),
+            "adapted_count": int(row.adapted_count or 0),
+            "last_adapted_at": row.last_adapted_at.isoformat() if row.last_adapted_at else None,
+            "is_personalized": bool((row.adapted_count or 0) > 0),
+        }
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="analytics.kpi_weights.get",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/kpi-weights/adapt")
+@limiter.limit("5/minute")
+async def adapt_kpi_weights_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.kpi_weight_service import adapt_kpi_weights
+
+        return adapt_kpi_weights(db, user_id)
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="analytics.kpi_weights.adapt",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.get("/policy-thresholds")
+@limiter.limit("30/minute")
+async def get_policy_thresholds(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.policy_adaptation_service import (
+            get_effective_thresholds,
+            get_or_create_thresholds,
+        )
+
+        result = dict(get_effective_thresholds(db, user_id))
+        row = get_or_create_thresholds(db, user_id)
+        result["adapted_count"] = int(row.adapted_count or 0)
+        result["last_adapted_at"] = row.last_adapted_at.isoformat() if row.last_adapted_at else None
+        return result
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="analytics.policy_thresholds.get",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)
+
+
+@router.post("/policy-thresholds/adapt")
+@limiter.limit("5/minute")
+async def adapt_policy_thresholds_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.analytics.services.policy_adaptation_service import adapt_policy_thresholds
+
+        return adapt_policy_thresholds(db, user_id)
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="analytics.policy_thresholds.adapt",
+        handler=handler,
+        user_id=user_id,
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)

@@ -107,7 +107,7 @@ def watcher_ingest_orchestrate(state, context):
         from uuid import UUID
 
         from AINDY.core.system_event_service import emit_system_event
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.platform_layer.registry import get_job
 
         db = context.get("db")
         session_ended_count = state.get("watcher_session_ended_count") or 0
@@ -153,6 +153,9 @@ def watcher_ingest_orchestrate(state, context):
             )
             eta_recalculated = True
             if batch_user_id:
+                execute_infinity_orchestrator = get_job("analytics.infinity_execute")
+                if execute_infinity_orchestrator is None:
+                    raise RuntimeError("analytics.infinity_execute job is not registered")
                 orchestration = execute_infinity_orchestrator(
                     user_id=event_user_id,
                     db=db,

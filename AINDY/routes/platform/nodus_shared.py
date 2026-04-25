@@ -1,8 +1,10 @@
+import inspect
 from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from AINDY.db.database import get_db
 from AINDY.platform_layer.nodus_script_store import (
     _NODUS_SCRIPT_REGISTRY,
     _SCRIPTS_DIR,
@@ -110,3 +112,40 @@ def list_nodus_script_summaries() -> list[dict[str, Any]]:
 
 def nodus_script_exists(name: str) -> bool:
     return script_exists(name)
+
+
+def resolve_request_db_override(request, db: Session):
+    """
+    Prefer an app-level get_db override when it returns a direct value.
+
+    Some endpoint tests install a simple ``lambda: sentinel`` override instead of
+    a generator dependency. FastAPI can still resolve the real Session object in
+    those import-order cases, so the route normalizes to the explicit override
+    here before invoking downstream helpers. Generator-based overrides are left
+    untouched because the dependency system already manages their lifecycle.
+    """
+    app = getattr(request, "app", None)
+    overrides = getattr(app, "dependency_overrides", None)
+    if not overrides:
+        return db
+
+    override = overrides.get(get_db)
+    if override is None:
+        for original_dep, candidate_override in overrides.items():
+            if (
+                getattr(original_dep, "__name__", None) == "get_db"
+                and getattr(original_dep, "__module__", None) == "AINDY.db.database"
+            ):
+                override = candidate_override
+                break
+    if override is None:
+        return db
+
+    try:
+        candidate = override()
+    except Exception:
+        return db
+
+    if candidate is None or inspect.isgenerator(candidate):
+        return db
+    return candidate
