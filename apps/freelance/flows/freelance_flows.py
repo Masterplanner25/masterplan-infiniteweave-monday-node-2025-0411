@@ -169,6 +169,85 @@ def freelance_delivery_generate_node(state, context):
         return {"status": "FAILURE", "error": f"HTTP_500:Failed to queue freelance delivery generation: {e}"}
 
 
+def freelance_refund_node(state, context):
+    try:
+        from apps.freelance.schemas.freelance import RefundResponse
+        from apps.freelance.services import freelance_service
+
+        db = context.get("db")
+        user_id = str(context.get("user_id"))
+        order_id = state.get("order_id")
+        reason = state.get("reason")
+        try:
+            order = freelance_service.issue_refund(
+                db,
+                order_id,
+                user_id=user_id,
+                reason=reason,
+            )
+        except ValueError as e:
+            return {"status": "FAILURE", "error": f"HTTP_422:{e}"}
+        amount_cents = int(round(float(order.price or 0.0) * 100)) if order.price is not None else None
+        return {
+            "status": "SUCCESS",
+            "output_patch": {
+                "freelance_refund_result": {
+                    "data": RefundResponse(
+                        order_id=order.id,
+                        refund_id=str(order.refund_id or ""),
+                        status=str(order.status or "refunded"),
+                        payment_status=str(order.payment_status or "refunded"),
+                        refunded_at=order.refunded_at,
+                        reason=order.refund_reason,
+                        amount_cents=amount_cents,
+                    ).model_dump(mode="json"),
+                }
+            },
+        }
+    except RuntimeError as e:
+        return {"status": "FAILURE", "error": f"HTTP_500:{e}"}
+    except Exception as e:
+        return {"status": "FAILURE", "error": f"HTTP_500:Refund failed: {e}"}
+
+
+def freelance_subscription_cancel_node(state, context):
+    try:
+        from apps.freelance.schemas.freelance import SubscriptionStatusResponse
+        from apps.freelance.services import freelance_service
+
+        db = context.get("db")
+        user_id = str(context.get("user_id"))
+        order_id = state.get("order_id")
+        reason = state.get("reason")
+        try:
+            order = freelance_service.cancel_subscription(
+                db,
+                order_id,
+                user_id=user_id,
+                reason=reason,
+            )
+        except ValueError as e:
+            return {"status": "FAILURE", "error": f"HTTP_422:{e}"}
+        return {
+            "status": "SUCCESS",
+            "output_patch": {
+                "freelance_subscription_cancel_result": {
+                    "data": SubscriptionStatusResponse(
+                        order_id=order.id,
+                        status=str(order.status or "subscription_cancelled"),
+                        subscription_status=order.subscription_status,
+                        subscription_period_end=order.subscription_period_end,
+                        reason=reason,
+                    ).model_dump(mode="json"),
+                }
+            },
+        }
+    except RuntimeError as e:
+        return {"status": "FAILURE", "error": f"HTTP_500:{e}"}
+    except Exception as e:
+        return {"status": "FAILURE", "error": f"HTTP_500:Subscription cancel failed: {e}"}
+
+
 def register() -> None:
     register_nodes(
         {
@@ -181,6 +260,8 @@ def register() -> None:
             "freelance_metrics_latest_node": freelance_metrics_latest_node,
             "freelance_metrics_update_node": freelance_metrics_update_node,
             "freelance_delivery_generate_node": freelance_delivery_generate_node,
+            "freelance_refund_node": freelance_refund_node,
+            "freelance_subscription_cancel_node": freelance_subscription_cancel_node,
         }
     )
     register_single_node_flows(
@@ -194,5 +275,7 @@ def register() -> None:
             "freelance_metrics_latest": "freelance_metrics_latest_node",
             "freelance_metrics_update": "freelance_metrics_update_node",
             "freelance_delivery_generate": "freelance_delivery_generate_node",
+            "freelance_refund": "freelance_refund_node",
+            "freelance_subscription_cancel": "freelance_subscription_cancel_node",
         }
     )

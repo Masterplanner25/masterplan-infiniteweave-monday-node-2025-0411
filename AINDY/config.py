@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     AINDY_API_KEY: str | None = None
     AINDY_SERVICE_KEY: str | None = None
     STRIPE_SECRET_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
 
     @field_validator("SECRET_KEY")
     @classmethod
@@ -120,7 +121,7 @@ class Settings(BaseSettings):
     AINDY_REQUIRE_REDIS: bool = False
     AINDY_CACHE_BACKEND: str = "redis"
 
-    # --- Database connection pool ---
+    # --- Database connection pool defaults (non-SQLite only) ---
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30       # seconds to wait for a connection

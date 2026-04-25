@@ -3,6 +3,12 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Nodus VM: set NODUS_SOURCE_PATH at runtime (docker run -e or compose
+# environment block) to point to a compiled nodus.runtime.embedding module.
+# This image cannot bundle the Nodus VM — it must be volume-mounted or
+# provided in a derived image. See docs/ops/RUNBOOK.md §6.
+ENV NODUS_SOURCE_PATH=""
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

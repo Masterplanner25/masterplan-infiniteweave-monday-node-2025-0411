@@ -47,7 +47,12 @@ def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
     from AINDY.db.database import get_db
     from AINDY.main import app as fastapi_app
 
-    _patch_session_aliases(monkeypatch, testing_session_factory, test_engine)
+    session_factory = (
+        db_session_factory
+        if test_engine.dialect.name == "postgresql"
+        else testing_session_factory
+    )
+    _patch_session_aliases(monkeypatch, session_factory, test_engine)
 
     def _get_test_db():
         db = db_session_factory()

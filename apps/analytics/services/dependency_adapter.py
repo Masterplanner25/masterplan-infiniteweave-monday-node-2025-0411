@@ -5,26 +5,28 @@ from typing import Any
 from sqlalchemy import case, select
 
 from AINDY.memory.memory_scoring_service import get_relevant_memories
+from AINDY.platform_layer.registry import get_symbol
 from AINDY.platform_layer.system_state_service import compute_current_state
 from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
+from apps.analytics.services.tasks_bridge import get_task_graph_context_via_syscall
 
 
 def fetch_recent_memory(user_id: str, db, *, context: str = "infinity_loop") -> list[dict]:
+    # TODO: replace identity_boot_service imports with an identity-owned syscall when that ABI is defined.
     from apps.identity.services.identity_boot_service import get_recent_memory
 
     return list(get_recent_memory(user_id, db, context=context) or [])
 
 
 def fetch_user_metrics(user_id: str, db) -> dict[str, Any]:
+    # TODO: replace identity_boot_service imports with an identity-owned syscall when that ABI is defined.
     from apps.identity.services.identity_boot_service import get_user_metrics
 
     return dict(get_user_metrics(user_id, db) or {})
 
 
 def fetch_task_graph_context(db, user_id: str) -> dict[str, Any]:
-    from apps.tasks.services.task_service import get_task_graph_context
-
-    return dict(get_task_graph_context(db, user_id) or {})
+    return dict(get_task_graph_context_via_syscall(user_id, db) or {})
 
 
 def fetch_social_performance_signals(*, user_id: str) -> list[dict[str, Any]]:
@@ -141,13 +143,26 @@ def list_recent_feedback_rows(*, user_id: str, db, limit: int = 5) -> list[Any]:
 
 
 def fetch_next_ready_task(*, db, user_id: str) -> dict[str, Any] | None:
-    from apps.tasks.services.task_service import get_next_ready_task
-
-    return get_next_ready_task(db=db, user_id=user_id)
+    context = fetch_task_graph_context(db=db, user_id=user_id)
+    task_id = next(iter(context.get("critical_path") or []), None)
+    if task_id is None:
+        return None
+    node = (context.get("nodes") or {}).get(task_id) or (context.get("nodes") or {}).get(int(task_id))
+    if not node:
+        return None
+    return {
+        "task_id": task_id,
+        "name": node.get("name"),
+        "priority": node.get("priority"),
+        "status": node.get("status"),
+        "critical_weight": (context.get("critical_weight") or {}).get(task_id, 1),
+    }
 
 
 def list_incomplete_tasks(*, user_id: str, db, limit: int | None = None) -> list[Any]:
-    from apps.tasks.models import Task
+    Task = get_symbol("Task")
+    if Task is None:
+        return []
 
     user_uuid = parse_user_id(user_id)
     if user_uuid is None:

@@ -12,7 +12,7 @@ from sqlalchemy import text
 from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.system_event_service import emit_system_event
-from AINDY.db.database import SessionLocal
+from AINDY.db.database import SessionLocal, get_pool_status
 from AINDY.platform_layer.registry import get_degraded_domains
 from AINDY.platform_layer.rate_limiter import limiter
 
@@ -26,13 +26,21 @@ def _get_degraded_domains() -> list[str]:
 
 
 def _testing_health_payload() -> dict:
-    return {
+    db_pool = get_pool_status()
+    payload = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": settings.VERSION,
         "degraded_domains": _get_degraded_domains(),
         "dependencies": {},
+        "db_pool": db_pool,
     }
+    warnings: list[str] = []
+    if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
+        warnings.append("db_pool_near_exhaustion")
+    if warnings:
+        payload["warnings"] = warnings
+    return payload
 
 
 def _emit_health_event(payload: dict) -> None:
@@ -70,6 +78,12 @@ def _build_health_response(*, force: bool) -> JSONResponse:
 
     health = get_system_health(force=force)
     payload = health.to_dict()
+    db_pool = get_pool_status()
+    payload["db_pool"] = db_pool
+    if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
+        warnings = list(payload.get("warnings") or [])
+        warnings.append("db_pool_near_exhaustion")
+        payload["warnings"] = warnings
     _emit_health_event(payload)
     return JSONResponse(status_code=health.http_status, content=payload)
 

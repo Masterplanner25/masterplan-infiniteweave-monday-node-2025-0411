@@ -68,6 +68,8 @@ def _register_flow_results() -> None:
         "freelance_metrics_latest": "freelance_metrics_latest_result",
         "freelance_metrics_update": "freelance_metrics_update_result",
         "freelance_delivery_generate": "freelance_delivery_generate_result",
+        "freelance_refund": "freelance_refund_result",
+        "freelance_subscription_cancel": "freelance_subscription_cancel_result",
     }
     for flow_name, result_key in result_keys.items():
         register_flow_result(flow_name, result_key=result_key)

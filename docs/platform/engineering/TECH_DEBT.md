@@ -38,7 +38,7 @@ This section is the canonical current-state view. Historical notes below are ret
 
 - **PARTIAL:** Cache backend is configurable for Redis, but in-memory remains the default and multi-instance correctness still depends on explicit deployment configuration. Primary files: `config.py`, `routes/health_router.py`.
 - **COMPATIBILITY DEBT (2026-04-18):** Platform/runtime vocabulary has been normalized to neutral `objective`, `operation`, and `job` wording, but compatibility aliases remain for legacy clients and storage. `AgentRun.goal` remains the storage column behind the `objective` property; response payloads still emit `goal` beside `objective`; queued job payloads still serialize `task_name`; and legacy `task` operation labels remain accepted in execution gate/dispatcher paths. Remove these aliases only after an explicit API/DB migration window confirms no legacy clients depend on them. Primary files: `AINDY/db/models/agent_run.py`, `AINDY/core/execution_unit_service.py`, `AINDY/platform_layer/async_job_service.py`, `AINDY/core/execution_gate.py`, `AINDY/core/execution_dispatcher.py`, `AINDY/runtime/memory_loop.py`.
-- **UNRESOLVED:** No documented secret rotation policy. Primary files: `config.py`, bridge/auth deployment settings.
+- **RESOLVED (2026-04-24):** Secret rotation policy documented in `docs/ops/SECRET_ROTATION.md`. Primary files: `config.py`, bridge/auth deployment settings.
 - **RESOLVED (2026-04-23):** Legacy/archive residue under `archive/legacy/` and `AINDY/bridge/archive/` removed from the codebase.
 
 ### Stale Historical Entries Corrected By This Audit

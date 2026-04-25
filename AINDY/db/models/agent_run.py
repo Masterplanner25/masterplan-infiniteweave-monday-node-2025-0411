@@ -67,6 +67,20 @@ class AgentRun(Base):
     execution_token = Column(String(128), nullable=True)
     capability_token = Column(JSONB, nullable=True)
 
+    # Delegation tracking
+    parent_run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    spawned_by_agent_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_registry.agent_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    coordination_role = Column(String(16), nullable=True)
+
     # Timestamps
     created_at = Column(
         DateTime(timezone=True),
@@ -80,6 +94,7 @@ class AgentRun(Base):
     __table_args__ = (
         Index("ix_agent_runs_user_status", "user_id", "status"),
         Index("ix_agent_runs_created_at", "created_at"),
+        Index("ix_agent_runs_parent_run_id", "parent_run_id"),
     )
 
     @property

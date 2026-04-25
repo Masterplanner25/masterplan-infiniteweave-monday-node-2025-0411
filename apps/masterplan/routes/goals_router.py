@@ -35,16 +35,25 @@ def _execute_goals(request: Request, route_name: str, handler, *, db: Session, u
     data = result.data
     if isinstance(data, dict):
         data = dict(data)
+        _envelope_status = "SUCCESS"
+        if hasattr(result, "data") and isinstance(result.data, dict):
+            _raw_status = str(result.data.get("status") or "").upper()
+            if _raw_status in {"SUCCESS", "FAILURE", "FAILED", "WAITING", "QUEUED", "ERROR", "UNKNOWN"}:
+                _envelope_status = _raw_status
         data.setdefault(
             "execution_envelope",
             to_envelope(
                 eu_id=eu_id,
                 trace_id=result.metadata.get("trace_id"),
-                status="SUCCESS",
+                status=_envelope_status,
                 output=None,
-                error=None,
+                error=result.metadata.get("error") or (
+                    result.data.get("error") if isinstance(
+                        getattr(result, "data", None), dict
+                    ) else None
+                ),
                 duration_ms=None,
-                attempt_count=1,
+                attempt_count=None,
             ),
         )
     return data

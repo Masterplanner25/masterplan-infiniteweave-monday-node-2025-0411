@@ -307,35 +307,56 @@ def _check_worker_presence(log) -> None:
         )
 
 
-def _check_nodus_available() -> bool:
-    """Return True if the Nodus VM is importable from NODUS_SOURCE_PATH."""
+def _check_nodus_importable() -> tuple[bool, str]:
+    """Return whether the Nodus VM is importable plus a detail string."""
     nodus_path = os.environ.get("NODUS_SOURCE_PATH")
     if not nodus_path:
-        logger.warning(
-            "[startup] NODUS_SOURCE_PATH is not set. "
-            "Nodus script execution will fail at runtime. "
-            "Set NODUS_SOURCE_PATH to the Nodus VM source directory."
-        )
-        return False
+        return False, "NODUS_SOURCE_PATH is not set"
 
-    import sys as _sys
-
-    if nodus_path not in _sys.path:
-        _sys.path.insert(0, nodus_path)
+    if nodus_path not in sys.path:
+        sys.path.insert(0, nodus_path)
     try:
         import importlib
 
         importlib.import_module("nodus.runtime.embedding")
-        logger.info("[startup] Nodus VM available at %s", nodus_path)
-        return True
+        return True, nodus_path
     except ImportError as exc:
-        logger.warning(
-            "[startup] Nodus VM not importable from NODUS_SOURCE_PATH=%s: %s. "
-            "Nodus script execution will fail at runtime.",
-            nodus_path,
-            exc,
+        return False, f"Nodus VM not importable from NODUS_SOURCE_PATH={nodus_path}: {exc}"
+
+
+def _enforce_nodus_gate() -> None:
+    """Enforce Nodus availability when any registered flow node requires it."""
+    nodus_available, nodus_detail = _check_nodus_importable()
+
+    from AINDY.runtime.flow_engine import NODE_REGISTRY as _NODE_REGISTRY
+
+    registered_nodus_nodes = sorted(
+        name
+        for name in _NODE_REGISTRY
+        if name == "nodus.execute" or name.startswith("nodus.")
+    )
+
+    if not registered_nodus_nodes:
+        if not nodus_available:
+            logger.info("[startup] Nodus VM not available; no Nodus nodes registered, skipping.")
+        return
+
+    if nodus_available:
+        logger.info(
+            "[startup] Nodus VM verified for %d registered nodus.* node(s).",
+            len(registered_nodus_nodes),
         )
-        return False
+        return
+
+    message = (
+        "[startup] Registered Nodus nodes require the Nodus VM, but it is unavailable. "
+        f"Registered nodes: {registered_nodus_nodes}. "
+        f"{nodus_detail}. "
+        "Set NODUS_SOURCE_PATH to the Nodus VM source directory."
+    )
+    if settings.is_prod:
+        raise RuntimeError(message)
+    logger.warning(message)
 
 
 def _cache_behavior_mode() -> str:
@@ -344,6 +365,24 @@ def _cache_behavior_mode() -> str:
     if settings.is_dev:
         return "development"
     return "production"
+
+
+def _update_db_pool_metrics() -> None:
+    """Scrape SQLAlchemy pool stats into Prometheus gauges."""
+    try:
+        from AINDY.db.database import get_pool_status
+        from AINDY.platform_layer.metrics import (
+            db_pool_checkedout,
+            db_pool_overflow,
+            db_pool_size,
+        )
+
+        status = get_pool_status()
+        db_pool_size.set(status.get("pool_size", 0))
+        db_pool_checkedout.set(status.get("checkedout", 0))
+        db_pool_overflow.set(status.get("overflow", 0))
+    except Exception as exc:
+        logger.warning("DB pool metrics scrape failed (non-fatal): %s", exc)
 
 
 def _initialize_cache_backend() -> str:
@@ -573,6 +612,17 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 "APScheduler failed to start. Check apscheduler installation."
             )
+        _update_db_pool_metrics()
+        _sched.add_job(
+            _update_db_pool_metrics,
+            trigger="interval",
+            seconds=30,
+            id="db_pool_metrics_tick",
+            name="DB pool metrics tick",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
         scheduler_role = "leader"
     elif enable_background:
         scheduler_role = "follower"
@@ -598,7 +648,7 @@ async def lifespan(app: FastAPI):
     flow_definitions_memory.register()
     flow_definitions_engine.register()
     flow_definitions_observability.register()
-    _check_nodus_available()
+    _enforce_nodus_gate()
 
     # Verify that domain-declared required flow nodes were actually registered —
     # silent failures in flow modules can otherwise produce a running server with

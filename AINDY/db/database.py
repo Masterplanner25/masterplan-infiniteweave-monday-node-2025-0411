@@ -32,22 +32,18 @@ if DATABASE_URL.startswith("sqlite"):
     pool_kwargs = {"poolclass": StaticPool}
 else:
     connect_args = {"connect_timeout": 10}
+    pool_kwargs = {
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_timeout": settings.DB_POOL_TIMEOUT,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": True,
+    }
     if settings.is_testing:
-        # Tests create many short-lived sessions across app imports and fixtures.
-        # NullPool avoids cross-test pool exhaustion and stale pooled connections.
-        pool_kwargs = {"poolclass": NullPool}
         connect_args["options"] = (
             "-c statement_timeout=10000 "
             "-c idle_in_transaction_session_timeout=10000"
         )
-    else:
-        pool_kwargs = {
-            "pool_size": settings.DB_POOL_SIZE,
-            "max_overflow": settings.DB_MAX_OVERFLOW,
-            "pool_timeout": settings.DB_POOL_TIMEOUT,
-            "pool_recycle": settings.DB_POOL_RECYCLE,
-            "pool_pre_ping": True,
-        }
 
 engine = create_engine(DATABASE_URL, connect_args=connect_args, **pool_kwargs)
 
@@ -122,6 +118,41 @@ def get_db():
         with _session_guard_lock:
             _active_sessions.discard(session_id)
         db.close()
+
+
+def get_pool_status() -> dict[str, int]:
+    """Return the current SQLAlchemy pool status for observability endpoints."""
+    if DATABASE_URL.startswith("sqlite") or isinstance(getattr(engine, "pool", None), (NullPool, StaticPool)):
+        return {
+            "pool_size": 0,
+            "checkedout": 0,
+            "overflow": 0,
+            "checked_in": 0,
+        }
+
+    pool = getattr(engine, "pool", None)
+    if pool is None:
+        return {
+            "pool_size": 0,
+            "checkedout": 0,
+            "overflow": 0,
+            "checked_in": 0,
+        }
+
+    try:
+        return {
+            "pool_size": int(pool.size()),
+            "checkedout": int(pool.checkedout()),
+            "overflow": int(pool.overflow()),
+            "checked_in": int(pool.checkedin()),
+        }
+    except Exception:
+        return {
+            "pool_size": 0,
+            "checkedout": 0,
+            "overflow": 0,
+            "checked_in": 0,
+        }
 
 # --------------------------------------------------------------------
 # Utility

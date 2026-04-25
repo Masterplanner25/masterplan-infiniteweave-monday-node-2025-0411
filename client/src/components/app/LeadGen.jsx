@@ -2,11 +2,14 @@ import { useState } from "react";
 import { runLeadGen } from "../../api/search.js";
 import SearchHistory from "./SearchHistory";
 import { safeMap } from "../../utils/safe";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function LeadGen() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState([]);
+  const { toast, showToast, clearToast } = useToast();
 
   function handleHistorySelect(item) {
     setQuery(item.query || "");
@@ -22,6 +25,7 @@ export default function LeadGen() {
       setResults(response.results || []);
     } catch (err) {
       console.error("LeadGen error:", err);
+      showToast(err?.message || "Lead generation failed. Please try again.");
     }
     setLoading(false);
   }
@@ -114,6 +118,7 @@ export default function LeadGen() {
           </div>)
         }
       </div>
+      <Toast toast={toast} onDismiss={clearToast} />
     </div>);
 
 }

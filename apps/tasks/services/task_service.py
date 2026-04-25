@@ -15,20 +15,13 @@ from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.core.system_event_service import emit_system_event
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
+from apps.tasks.services.analytics_bridge import (
+    get_kpi_snapshot_via_syscall,
+    save_calculation_via_syscall,
+)
+from apps.tasks.services.masterplan_bridge import get_eta_via_syscall
 
 logger = logging.getLogger(__name__)
-
-
-def calculate_twr(*args, **kwargs):
-    from apps.analytics.services.calculation_services import calculate_twr as _calculate_twr
-
-    return _calculate_twr(*args, **kwargs)
-
-
-def save_calculation(*args, **kwargs):
-    from apps.analytics.services.calculation_services import save_calculation as _save_calculation
-
-    return _save_calculation(*args, **kwargs)
 
 
 def _now_utc() -> datetime:
@@ -581,7 +574,12 @@ def complete_task(db: Session, name: str, user_id: str = None):
     except Exception as _eu_exc:
         logger.warning("[EU] task complete hook — non-fatal | error=%s", _eu_exc)
 
-    save_calculation(db, "Execution Speed", task.time_spent, user_id=str(owner_user_id))
+    save_calculation_via_syscall(
+        db,
+        "Execution Speed",
+        task.time_spent,
+        user_id=str(owner_user_id),
+    )
 
     unlocked_names = ", ".join(item["name"] for item in unlocked_tasks)
     if unlocked_names:
@@ -640,6 +638,7 @@ def queue_task_automation(
 
 def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
     from apps.masterplan.models import MasterPlan
+    # TODO: replace MasterPlan model reads with a syscall once the masterplan read surface is defined.
 
     owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
@@ -713,9 +712,7 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         mongo = get_mongo_client()
         db_mongo = mongo["aindy_social_layer"]
         profiles = db_mongo["profiles"]
-        from apps.analytics.services.infinity_service import get_user_kpi_snapshot
-
-        kpi_snapshot = get_user_kpi_snapshot(str(owner_user_id), db) or {}
+        kpi_snapshot = get_kpi_snapshot_via_syscall(str(owner_user_id), db) or {}
         master_score = float(kpi_snapshot.get("master_score", 0.0) or 0.0)
         execution_speed_score = float(kpi_snapshot.get("execution_speed", 0.0) or 0.0)
         profiles.update_one(
@@ -736,22 +733,24 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", exc)
 
     try:
-        from apps.masterplan.services.eta_service import calculate_eta
-
         active_plan = (
             db.query(MasterPlan)
             .filter(MasterPlan.user_id == owner_user_id, MasterPlan.is_active.is_(True))
             .first()
         )
         if active_plan and active_plan.anchor_date:
-            calculate_eta(db=db, masterplan_id=active_plan.id, user_id=str(owner_user_id))
+            get_eta_via_syscall(active_plan.id, str(owner_user_id), db)
             eta_recalculated = True
     except Exception as exc:
         logger.warning("Task completion ETA recalculation failed: %s", exc)
 
     orchestration = {"next_action": None}
     try:
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from AINDY.platform_layer.registry import get_job
+
+        execute_infinity_orchestrator = get_job("analytics.infinity_execute")
+        if execute_infinity_orchestrator is None:
+            raise RuntimeError("analytics.infinity_execute job is not registered")
 
         orchestration = execute_infinity_orchestrator(
             user_id=owner_user_id,

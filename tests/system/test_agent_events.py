@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+
 from AINDY.db.models.agent_event import AgentEvent
 from AINDY.db.models.agent_run import AgentRun, AgentStep
 from AINDY.db.models.system_event import SystemEvent
@@ -58,6 +60,7 @@ def _make_other_user(db_session) -> User:
     return other
 
 
+@pytest.mark.postgres
 def test_emit_event_persists_agent_and_system_event(db_session, test_user):
     run = _make_run(db_session, test_user)
 
@@ -161,6 +164,7 @@ def test_events_endpoint_forbids_cross_user_access(client, db_session, test_user
     assert response.status_code == 403
 
 
+@pytest.mark.postgres
 def test_replay_run_persists_replay_event(db_session, test_user):
     original = _make_run(db_session, test_user, status="completed")
 

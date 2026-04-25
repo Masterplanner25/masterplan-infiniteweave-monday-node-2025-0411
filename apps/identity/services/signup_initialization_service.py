@@ -6,8 +6,29 @@ from AINDY.db.models.user_identity import UserIdentity
 from AINDY.core.execution_signal_helper import queue_system_event
 
 
+def _ensure_user_score_via_syscall(*, db, user_id) -> dict:
+    import uuid
+
+    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=["analytics.write"],
+        trace_id="",
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(
+        "sys.v1.analytics.init_user_score",
+        {"user_id": str(user_id)},
+        ctx,
+    )
+    if result["status"] != "success":
+        raise RuntimeError(result.get("error", "analytics.init_user_score failed"))
+    return dict(result.get("data") or {})
+
+
 def initialize_signup_state(*, db, user) -> dict:
-    from apps.analytics.models import UserScore
     identity = (
         db.query(UserIdentity)
         .filter(UserIdentity.user_id == user.id)
@@ -38,23 +59,7 @@ def initialize_signup_state(*, db, user) -> dict:
         },
     )
 
-    score = db.query(UserScore).filter(UserScore.user_id == user.id).first()
-    if score is None:
-        score = UserScore(
-            user_id=user.id,
-            master_score=0.0,
-            execution_speed_score=0.0,
-            decision_efficiency_score=0.0,
-            ai_productivity_boost_score=0.0,
-            focus_quality_score=0.0,
-            masterplan_progress_score=0.0,
-            confidence="baseline",
-            data_points_used=0,
-            trigger_event="identity_created",
-        )
-        db.add(score)
-        db.commit()
-        db.refresh(score)
+    score = _ensure_user_score_via_syscall(db=db, user_id=user.id)
 
     agent_run = (
         db.query(AgentRun)
@@ -103,7 +108,7 @@ def initialize_signup_state(*, db, user) -> dict:
     return {
         "memory": initial_memory,
         "metrics": {
-            "score": score.master_score,
+            "score": score.get("master_score", 0.0),
             "trajectory": "baseline",
         },
         "agent_context": {

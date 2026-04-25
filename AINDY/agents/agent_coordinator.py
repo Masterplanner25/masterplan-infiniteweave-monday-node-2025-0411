@@ -275,3 +275,180 @@ def serialize_agent_registry(row: AgentRegistry) -> dict[str, Any]:
     }
 
 
+def dispatch_delegated_run(
+    db,
+    *,
+    parent_run,
+    selected_agent: dict,
+    delegation_mode: str,
+    user_id: str,
+    trace_id: str | None = None,
+) -> dict[str, Any] | None:
+    try:
+        import uuid as _uuid
+
+        from AINDY.agents.agent_runtime.shared import _OBJECTIVE_ATTR, _run_objective
+        from AINDY.agents.agent_runtime.shared import LOCAL_AGENT_ID
+        from AINDY.agents.capability_service import mint_token
+        from AINDY.db.models.agent_run import AgentRun
+
+        objective = _run_objective(parent_run)
+        if not objective or getattr(parent_run, "user_id", None) is None:
+            return None
+
+        child_run_id = _uuid.uuid4()
+        child_correlation_id = f"run_{_uuid.uuid4()}"
+        selected_agent_id = normalize_uuid(selected_agent.get("agent_id"))
+
+        child_run = AgentRun(
+            id=child_run_id,
+            user_id=parent_run.user_id,
+            agent_type=str(selected_agent.get("agent_id", "default"))[:64],
+            plan=parent_run.plan,
+            executive_summary=parent_run.executive_summary,
+            overall_risk=parent_run.overall_risk or "high",
+            status="approved",
+            steps_total=parent_run.steps_total,
+            correlation_id=child_correlation_id,
+            trace_id=trace_id or parent_run.trace_id,
+            parent_run_id=parent_run.id,
+            spawned_by_agent_id=selected_agent_id,
+            coordination_role=delegation_mode,
+        )
+        setattr(child_run, _OBJECTIVE_ATTR, objective)
+
+        child_token = mint_token(
+            run_id=str(child_run_id),
+            user_id=str(parent_run.user_id),
+            plan=child_run.plan,
+            db=db,
+            approval_mode="manual",
+            agent_type=getattr(parent_run, "agent_type", "default") or "default",
+        )
+        if child_token:
+            child_run.capability_token = child_token
+            child_run.execution_token = child_token.get("execution_token")
+
+        db.add(child_run)
+        parent_run.status = "delegated"
+        parent_run.completed_at = None
+        db.flush()
+        db.refresh(child_run)
+
+        assign_operation(
+            db,
+            operation={
+                "name": objective,
+                "description": parent_run.executive_summary or objective,
+                "request": objective,
+                "required_capabilities": list(
+                    (child_token or {}).get("allowed_capabilities") or []
+                ),
+                "child_run_id": str(child_run.id),
+                "parent_run_id": str(parent_run.id),
+            },
+            user_id=user_id,
+            trace_id=trace_id or parent_run.trace_id,
+            sender_agent_id=str(getattr(parent_run, "spawned_by_agent_id", None) or LOCAL_AGENT_ID),
+        )
+        return _serialize_delegated_run(child_run)
+    except Exception as exc:
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "[AgentCoordinator] dispatch_delegated_run failed: %s", exc
+        )
+        return None
+
+
+def _serialize_delegated_run(run) -> dict[str, Any]:
+    return {
+        "run_id": str(run.id),
+        "parent_run_id": str(run.parent_run_id) if run.parent_run_id else None,
+        "spawned_by_agent_id": str(run.spawned_by_agent_id) if run.spawned_by_agent_id else None,
+        "status": run.status,
+        "coordination_role": run.coordination_role,
+        "correlation_id": run.correlation_id,
+    }
+
+
+def detect_run_conflict(
+    db,
+    *,
+    user_id: str,
+    objective: str,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    from AINDY.agents.agent_runtime.shared import _run_objective
+    from AINDY.db.models.agent_run import AgentRun
+
+    uid = normalize_uuid(user_id)
+    active_runs = (
+        db.query(AgentRun)
+        .filter(
+            AgentRun.user_id == uid,
+            AgentRun.status.in_(["approved", "executing", "delegated"]),
+        )
+        .order_by(AgentRun.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    normalized_objective = str(objective or "").strip().lower()
+    for run in active_runs:
+        run_obj = str(_run_objective(run) or "").strip().lower()
+        if run_obj == normalized_objective:
+            if agent_id and getattr(run, "correlation_id", None) == agent_id:
+                continue
+            return {
+                "conflict": True,
+                "conflicting_run_id": str(run.id),
+                "conflicting_status": run.status,
+            }
+    return {
+        "conflict": False,
+        "conflicting_run_id": None,
+        "conflicting_status": None,
+    }
+
+
+def detect_memory_write_conflict(
+    db,
+    *,
+    user_id: str,
+    memory_path: str,
+    agent_id: str | None = None,
+) -> dict[str, Any]:
+    uid = normalize_uuid(user_id)
+    window = datetime.now(timezone.utc) - timedelta(seconds=30)
+    recent = (
+        db.query(SystemEvent)
+        .filter(
+            SystemEvent.user_id == uid,
+            SystemEvent.type == "agent.message.memory_share",
+            SystemEvent.timestamp >= window,
+        )
+        .order_by(SystemEvent.timestamp.desc())
+        .limit(10)
+        .all()
+    )
+    for event in recent:
+        payload = event.payload or {}
+        if payload.get("memory_path") == memory_path:
+            conflicting_agent = str(event.agent_id) if event.agent_id else None
+            if agent_id and conflicting_agent == agent_id:
+                continue
+            return {
+                "conflict": True,
+                "conflicting_agent_id": conflicting_agent,
+                "message": (
+                    f"Memory path '{memory_path}' was written by agent "
+                    f"{conflicting_agent} within the last 30 seconds."
+                ),
+            }
+    return {
+        "conflict": False,
+        "conflicting_agent_id": None,
+        "message": "No conflict detected.",
+    }
+
+

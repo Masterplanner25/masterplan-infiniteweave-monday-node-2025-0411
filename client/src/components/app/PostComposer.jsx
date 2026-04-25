@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import { createPost } from "../../api/social.js";
+import { Toast } from "../shared/Toast";
+import { useToast } from "../../utils/useToast";
 
 export default function PostComposer({ onPostCreated }) {
   const [content, setContent] = useState("");
   const [trustTier, setTrustTier] = useState("observer"); // Default: Public
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const { toast, showToast, clearToast } = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,6 +39,7 @@ export default function PostComposer({ onPostCreated }) {
     } catch (err) {
       setError("Failed to post. System might be offline.");
       console.error(err);
+      showToast(err?.message || "Failed to post. System might be offline.");
     } finally {
       setLoading(false);
     }
@@ -75,6 +79,7 @@ export default function PostComposer({ onPostCreated }) {
         </div>
         
         {error && <p style={{color: "#ff4444", marginTop: "8px", fontSize: "12px"}}>{error}</p>}
+        <Toast toast={toast} onDismiss={clearToast} />
       </form>
     </div>
   );

@@ -17,6 +17,7 @@ def register() -> None:
     _register_events()
     _register_jobs()
     _register_scheduled_jobs()
+    _register_syscalls()
     _register_flow_results()
 
 
@@ -104,6 +105,12 @@ def _register_scheduled_jobs() -> None:
         trigger="cron",
         trigger_kwargs={"hour": 7},
     )
+
+
+def _register_syscalls() -> None:
+    from apps.analytics.syscalls import register_analytics_syscall_handlers
+
+    register_analytics_syscall_handlers()
 
 
 def _register_flow_results() -> None:

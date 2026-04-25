@@ -4,6 +4,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 import logging
+import hashlib
+import hmac as _hmac
+import json as _json
+import time as _time
+from urllib import parse as _parse
+from urllib import request as _req
+
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -35,7 +43,7 @@ from AINDY.memory.memory_scoring_service import get_relevant_memories
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook", "payment"}
+_SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook", "payment", "subscription"}
 
 # -----------------------------------------------------
 # Core Freelance Order Logic
@@ -441,6 +449,25 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
 
     try:
         result = _dispatch_delivery(order, db=db)
+        if order.delivery_type == "payment":
+            plid = (result or {}).get("payment_link_id")
+            if plid and not order.stripe_payment_link_id:
+                order.stripe_payment_link_id = plid
+        if order.delivery_type == "subscription":
+            sub_id = (result or {}).get("subscription_id")
+            cust_id = (result or {}).get("customer_id")
+            sub_status = (result or {}).get("subscription_status")
+            period_end_ts = (result or {}).get("current_period_end")
+            if sub_id:
+                order.stripe_subscription_id = sub_id
+            if cust_id:
+                order.stripe_customer_id = cust_id
+            if sub_status:
+                order.subscription_status = sub_status
+            if period_end_ts:
+                order.subscription_period_end = datetime.fromtimestamp(
+                    int(period_end_ts), tz=timezone.utc
+                )
         order.external_response = result
         order.delivery_status = str(result.get("status") or "success")
         order.status = "delivered" if order.delivery_status in {"success", "completed", "manual"} else "delivery_failed"
@@ -449,6 +476,21 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
         order.income_efficiency = _calculate_income_efficiency(order)
         db.commit()
         db.refresh(order)
+        if order.delivery_type == "subscription" and order.stripe_subscription_id:
+            queue_system_event(
+                db=db,
+                event_type=SystemEventTypes.FREELANCE_SUBSCRIPTION_CREATED,
+                user_id=order.user_id,
+                trace_id=f"stripe-subscription-created-{order.id}",
+                source="freelance",
+                payload={
+                    "order_id": order.id,
+                    "subscription_id": order.stripe_subscription_id,
+                    "customer_id": order.stripe_customer_id,
+                    "subscription_status": order.subscription_status,
+                },
+                required=True,
+            )
         queue_system_event(
             db=db,
             event_type=SystemEventTypes.FREELANCE_DELIVERY_COMPLETED,
@@ -513,6 +555,8 @@ def _dispatch_delivery(order: FreelanceOrder, *, db: Session) -> dict:
     automation_type = delivery_type
     if delivery_type == "payment":
         automation_type = "stripe"
+    elif delivery_type == "subscription":
+        automation_type = "subscription"
     elif delivery_type not in {"email", "webhook", "stripe"}:
         raise ValueError(f"unsupported_delivery_type:{delivery_type}")
 
@@ -541,6 +585,517 @@ def _dispatch_delivery(order: FreelanceOrder, *, db: Session) -> dict:
         "user_id": str(order.user_id) if order.user_id else None,
     }
     return execute_automation_action(payload, db)
+
+
+def _stripe_api_post(
+    path: str,
+    form_data: dict,
+    *,
+    stripe_key: str,
+) -> dict:
+    """
+    POST form-encoded data to the Stripe API.
+    Raises RuntimeError on non-2xx response.
+    Uses the same urllib pattern as automation_execution_service.py.
+    """
+    encoded = _parse.urlencode(form_data).encode("utf-8")
+    http_req = _req.Request(
+        f"https://api.stripe.com{path}",
+        data=encoded,
+        headers={
+            "Authorization": f"Bearer {stripe_key}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with _req.urlopen(http_req, timeout=15) as resp:
+            body = _json.loads(resp.read().decode("utf-8"))
+            return body
+    except Exception as exc:
+        raise RuntimeError(f"stripe_api_error:{path}:{exc}") from exc
+
+
+def _stripe_api_delete(path, *, stripe_key):
+    req = _req.Request(
+        f"https://api.stripe.com{path}",
+        headers={"Authorization": f"Bearer {stripe_key}"},
+        method="DELETE",
+    )
+    with _req.urlopen(req, timeout=15) as resp:
+        return _json.loads(resp.read().decode("utf-8"))
+
+
+def verify_stripe_signature(
+    payload_bytes: bytes,
+    sig_header: str,
+    webhook_secret: str,
+    *,
+    tolerance_seconds: int = 300,
+) -> bool:
+    """
+    Verify Stripe-Signature header using HMAC-SHA256.
+    """
+    try:
+        timestamp: int | None = None
+        v1_sigs: list[str] = []
+        for item in str(sig_header or "").split(","):
+            if "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            if key == "t":
+                timestamp = int(value)
+            elif key == "v1":
+                v1_sigs.append(value)
+        if not timestamp or not v1_sigs:
+            return False
+        if abs(_time.time() - timestamp) > tolerance_seconds:
+            return False
+        signed_payload = f"{timestamp}.".encode("utf-8") + payload_bytes
+        expected = _hmac.new(
+            webhook_secret.encode("utf-8"),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return any(_hmac.compare_digest(expected, sig) for sig in v1_sigs)
+    except Exception:
+        return False
+
+
+def process_stripe_webhook(
+    db: Session,
+    event_type: str,
+    event_data: dict,
+) -> dict:
+    """
+    Process a verified Stripe webhook event.
+    """
+    object_data = event_data.get("object") or {}
+
+    if event_type == "checkout.session.completed":
+        payment_intent_id = object_data.get("payment_intent")
+        payment_link_id = object_data.get("payment_link")
+        customer_email = object_data.get("customer_details", {}).get("email")
+        _confirm_payment(
+            db,
+            payment_intent_id=payment_intent_id,
+            payment_link_id=payment_link_id,
+            customer_email=customer_email,
+        )
+        return {"processed": True, "action": "payment_confirmed"}
+
+    if event_type == "payment_intent.succeeded":
+        payment_intent_id = object_data.get("id")
+        _confirm_payment(db, payment_intent_id=payment_intent_id)
+        return {"processed": True, "action": "payment_confirmed"}
+
+    if event_type == "payment_intent.payment_failed":
+        payment_intent_id = object_data.get("id")
+        _fail_payment(db, payment_intent_id=payment_intent_id)
+        return {"processed": True, "action": "payment_failed"}
+
+    if event_type == "customer.subscription.updated":
+        sub_id = object_data.get("id")
+        _update_subscription_status(
+            db,
+            subscription_id=sub_id,
+            event_data=object_data,
+        )
+        return {"processed": True, "action": "subscription_updated"}
+
+    if event_type == "customer.subscription.deleted":
+        sub_id = object_data.get("id")
+        _cancel_subscription_from_webhook(db, subscription_id=sub_id)
+        return {"processed": True, "action": "subscription_cancelled"}
+
+    if event_type == "invoice.payment_succeeded":
+        sub_id = object_data.get("subscription")
+        period_end = (object_data.get("lines", {}) or {}).get("data", [{}])[0].get("period", {}).get("end")
+        _renew_subscription(db, subscription_id=sub_id, period_end=period_end)
+        return {"processed": True, "action": "subscription_renewed"}
+
+    if event_type == "invoice.payment_failed":
+        sub_id = object_data.get("subscription")
+        _subscription_payment_failed(db, subscription_id=sub_id)
+        return {"processed": True, "action": "subscription_payment_failed"}
+
+    return {"processed": False}
+
+
+def issue_refund(
+    db: Session,
+    order_id: int,
+    *,
+    user_id: str,
+    reason: str | None = None,
+) -> FreelanceOrder:
+    """
+    Issue a Stripe refund for a confirmed payment order.
+    """
+    import uuid as _uuid
+
+    order = (
+        db.query(FreelanceOrder)
+        .filter(
+            FreelanceOrder.id == order_id,
+            FreelanceOrder.user_id == _uuid.UUID(str(user_id)),
+        )
+        .first()
+    )
+    if not order:
+        raise ValueError(f"Order {order_id} not found")
+
+    if order.delivery_type != "payment":
+        raise ValueError(
+            f"Order {order_id} delivery_type is '{order.delivery_type}', "
+            "not 'payment'. Only payment orders can be refunded."
+        )
+    if order.payment_status == "refunded":
+        raise ValueError(f"Order {order_id} has already been refunded.")
+    if order.payment_status != "confirmed":
+        raise ValueError(
+            f"Order {order_id} payment_status is '{order.payment_status}'. "
+            "Refunds can only be issued for confirmed payments."
+        )
+    if not order.stripe_payment_intent_id:
+        raise ValueError(
+            f"Order {order_id} has no stripe_payment_intent_id. "
+            "The payment may have been confirmed before webhook tracking "
+            "was enabled. Contact support to issue a manual refund."
+        )
+
+    stripe_key = settings.STRIPE_SECRET_KEY
+    if not stripe_key:
+        raise RuntimeError("STRIPE_SECRET_KEY not configured. Cannot issue refund.")
+
+    trace_id = f"freelance-refund-{order.id}"
+    refund_data: dict[str, str] = {"payment_intent": order.stripe_payment_intent_id}
+    if reason:
+        refund_data["reason"] = "requested_by_customer"
+        refund_data["metadata[reason_text]"] = reason[:500]
+
+    try:
+        response = _stripe_api_post(
+            "/v1/refunds",
+            refund_data,
+            stripe_key=stripe_key,
+        )
+        refund_id = response.get("id") or ""
+    except Exception as exc:
+        queue_system_event(
+            db=db,
+            event_type=SystemEventTypes.FREELANCE_REFUND_FAILED,
+            user_id=order.user_id,
+            trace_id=trace_id,
+            source="freelance",
+            payload={
+                "order_id": order.id,
+                "error": str(exc),
+            },
+            required=True,
+        )
+        raise RuntimeError(f"Stripe refund failed: {exc}") from exc
+
+    order.refund_id = refund_id
+    order.refund_reason = reason
+    order.refunded_at = datetime.now(timezone.utc)
+    order.payment_status = "refunded"
+    order.status = "refunded"
+    db.commit()
+    db.refresh(order)
+
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_REFUND_ISSUED,
+        user_id=order.user_id,
+        trace_id=trace_id,
+        source="freelance",
+        payload={
+            "order_id": order.id,
+            "refund_id": refund_id,
+            "payment_intent_id": order.stripe_payment_intent_id,
+            "service_type": order.service_type,
+            "reason": reason,
+        },
+        required=True,
+    )
+    logger.info("[Stripe] Refund issued order #%s refund_id=%s", order.id, refund_id)
+    return order
+
+
+def cancel_subscription(
+    db: Session,
+    order_id: int,
+    *,
+    user_id: str,
+    reason: str | None = None,
+) -> FreelanceOrder:
+    import uuid as _uuid
+
+    order = (
+        db.query(FreelanceOrder)
+        .filter(
+            FreelanceOrder.id == order_id,
+            FreelanceOrder.user_id == _uuid.UUID(str(user_id)),
+        )
+        .first()
+    )
+    if not order:
+        raise ValueError(f"Order {order_id} not found")
+    if order.delivery_type != "subscription":
+        raise ValueError(
+            f"Order {order_id} delivery_type is '{order.delivery_type}', "
+            "not 'subscription'. Only subscription orders can be cancelled."
+        )
+    if not order.stripe_subscription_id:
+        raise ValueError(f"Order {order_id} has no stripe_subscription_id.")
+    if order.subscription_status == "cancelled":
+        raise ValueError(f"Order {order_id} subscription is already cancelled.")
+
+    stripe_key = settings.STRIPE_SECRET_KEY
+    if not stripe_key:
+        raise RuntimeError("STRIPE_SECRET_KEY not configured. Cannot cancel subscription.")
+
+    response = _stripe_api_delete(
+        f"/v1/subscriptions/{order.stripe_subscription_id}",
+        stripe_key=stripe_key,
+    )
+    order.subscription_status = "cancelled"
+    order.status = "subscription_cancelled"
+    order.refund_reason = reason or order.refund_reason
+    db.commit()
+    db.refresh(order)
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_SUBSCRIPTION_CANCELLED,
+        user_id=order.user_id,
+        trace_id=f"stripe-subscription-cancel-{order.id}",
+        source="freelance",
+        payload={
+            "order_id": order.id,
+            "subscription_id": order.stripe_subscription_id,
+            "reason": reason,
+            "stripe_response_status": response.get("status"),
+        },
+        required=True,
+    )
+    return order
+
+
+def _find_order_by_stripe_ids(
+    db: Session,
+    *,
+    payment_intent_id: str | None = None,
+    payment_link_id: str | None = None,
+    customer_email: str | None = None,
+) -> FreelanceOrder | None:
+    """
+    Locate the FreelanceOrder for a Stripe event.
+    """
+    del customer_email
+
+    if payment_intent_id:
+        order = (
+            db.query(FreelanceOrder)
+            .filter(FreelanceOrder.stripe_payment_intent_id == payment_intent_id)
+            .first()
+        )
+        if order:
+            return order
+    if payment_link_id:
+        order = (
+            db.query(FreelanceOrder)
+            .filter(FreelanceOrder.stripe_payment_link_id == payment_link_id)
+            .first()
+        )
+        if order:
+            return order
+        if db.bind is not None and db.bind.dialect.name == "sqlite":
+            candidates = (
+                db.query(FreelanceOrder)
+                .filter(FreelanceOrder.delivery_type == "payment")
+                .all()
+            )
+            for candidate in candidates:
+                external = candidate.external_response or {}
+                if isinstance(external, dict) and external.get("payment_link_id") == payment_link_id:
+                    return candidate
+        else:
+            order = (
+                db.query(FreelanceOrder)
+                .filter(FreelanceOrder.delivery_type == "payment")
+                .filter(
+                    cast(FreelanceOrder.external_response, String).is_not(None)
+                )
+                .filter(FreelanceOrder.external_response.op("->>")("payment_link_id") == payment_link_id)
+                .first()
+            )
+            if order:
+                return order
+    return None
+
+
+def _find_order_by_subscription_id(db, subscription_id):
+    if not subscription_id:
+        return None
+    return (
+        db.query(FreelanceOrder)
+        .filter(FreelanceOrder.stripe_subscription_id == subscription_id)
+        .first()
+    )
+
+
+def _confirm_payment(
+    db: Session,
+    *,
+    payment_intent_id: str | None = None,
+    payment_link_id: str | None = None,
+    customer_email: str | None = None,
+) -> FreelanceOrder | None:
+    order = _find_order_by_stripe_ids(
+        db,
+        payment_intent_id=payment_intent_id,
+        payment_link_id=payment_link_id,
+        customer_email=customer_email,
+    )
+    if not order:
+        logger.warning(
+            "[Stripe] Payment confirmed but no order found payment_intent_id=%s payment_link_id=%s",
+            payment_intent_id,
+            payment_link_id,
+        )
+        return None
+    if order.payment_status == "confirmed":
+        return order
+    order.payment_status = "confirmed"
+    order.status = "payment_confirmed"
+    order.payment_confirmed_at = datetime.now(timezone.utc)
+    if payment_intent_id and not order.stripe_payment_intent_id:
+        order.stripe_payment_intent_id = payment_intent_id
+    if payment_link_id and not order.stripe_payment_link_id:
+        order.stripe_payment_link_id = payment_link_id
+    db.commit()
+    db.refresh(order)
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_PAYMENT_CONFIRMED,
+        user_id=order.user_id,
+        trace_id=f"stripe-payment-{order.id}",
+        source="stripe_webhook",
+        payload={
+            "order_id": order.id,
+            "payment_intent_id": payment_intent_id,
+            "payment_link_id": payment_link_id,
+            "service_type": order.service_type,
+        },
+        required=True,
+    )
+    logger.info("[Stripe] Payment confirmed for order #%s", order.id)
+    return order
+
+
+def _fail_payment(
+    db: Session,
+    *,
+    payment_intent_id: str | None,
+) -> FreelanceOrder | None:
+    order = _find_order_by_stripe_ids(db, payment_intent_id=payment_intent_id)
+    if not order:
+        return None
+    if order.payment_status in {"confirmed", "refunded"}:
+        return order
+    order.payment_status = "failed"
+    order.status = "payment_failed"
+    order.delivery_status = "payment_failed"
+    if payment_intent_id and not order.stripe_payment_intent_id:
+        order.stripe_payment_intent_id = payment_intent_id
+    db.commit()
+    db.refresh(order)
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_PAYMENT_FAILED,
+        user_id=order.user_id,
+        trace_id=f"stripe-payment-failed-{order.id}",
+        source="stripe_webhook",
+        payload={
+            "order_id": order.id,
+            "payment_intent_id": payment_intent_id,
+        },
+        required=True,
+    )
+    logger.warning("[Stripe] Payment failed for order #%s", order.id)
+    return order
+
+
+def _update_subscription_status(db, *, subscription_id, event_data):
+    order = _find_order_by_subscription_id(db, subscription_id)
+    if not order:
+        return
+    new_status = event_data.get("status")
+    period_end = event_data.get("current_period_end")
+    if new_status:
+        order.subscription_status = new_status
+    if period_end:
+        order.subscription_period_end = datetime.fromtimestamp(
+            int(period_end), tz=timezone.utc
+        )
+    db.commit()
+
+
+def _cancel_subscription_from_webhook(db, *, subscription_id):
+    order = _find_order_by_subscription_id(db, subscription_id)
+    if not order:
+        return
+    order.subscription_status = "cancelled"
+    order.status = "subscription_cancelled"
+    db.commit()
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_SUBSCRIPTION_CANCELLED,
+        user_id=order.user_id,
+        trace_id=f"stripe-sub-cancelled-{order.id}",
+        source="stripe_webhook",
+        payload={"order_id": order.id, "subscription_id": subscription_id},
+        required=True,
+    )
+
+
+def _renew_subscription(db, *, subscription_id, period_end):
+    order = _find_order_by_subscription_id(db, subscription_id)
+    if not order:
+        return
+    order.subscription_status = "active"
+    if period_end:
+        order.subscription_period_end = datetime.fromtimestamp(
+            int(period_end), tz=timezone.utc
+        )
+    db.commit()
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_SUBSCRIPTION_RENEWED,
+        user_id=order.user_id,
+        trace_id=f"stripe-sub-renewed-{order.id}",
+        source="stripe_webhook",
+        payload={"order_id": order.id, "subscription_id": subscription_id},
+        required=True,
+    )
+
+
+def _subscription_payment_failed(db, *, subscription_id):
+    order = _find_order_by_subscription_id(db, subscription_id)
+    if not order:
+        return
+    order.subscription_status = "past_due"
+    db.commit()
+    queue_system_event(
+        db=db,
+        event_type=SystemEventTypes.FREELANCE_SUBSCRIPTION_PAYMENT_FAILED,
+        user_id=order.user_id,
+        trace_id=f"stripe-sub-failed-{order.id}",
+        source="stripe_webhook",
+        payload={"order_id": order.id, "subscription_id": subscription_id},
+        required=True,
+    )
 
 
 def _average(values: list[float]) -> float | None:

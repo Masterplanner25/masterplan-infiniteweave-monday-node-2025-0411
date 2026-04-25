@@ -79,22 +79,43 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
             user_id=str(user_db_id),
         )
         if coordination["mode"] in {"delegate", "collaborate"}:
+            from AINDY.agents.agent_coordinator import dispatch_delegated_run
+
+            child_run = dispatch_delegated_run(
+                db,
+                parent_run=run,
+                selected_agent=coordination["selected_agent"],
+                delegation_mode=coordination["mode"],
+                user_id=str(user_db_id),
+                trace_id=run.trace_id or get_trace_id(),
+            )
             run.result = {
                 "coordination_mode": coordination["mode"],
                 "selected_agent": coordination["selected_agent"],
                 "candidates": coordination["candidates"],
-                "next_action": {"type": coordination["mode"], "selected_agent": coordination["selected_agent"]},
+                "child_run_id": child_run["run_id"] if child_run else None,
+                "child_dispatched": child_run is not None,
+                "next_action": {
+                    "type": coordination["mode"],
+                    "selected_agent": coordination["selected_agent"],
+                    "child_run_id": child_run["run_id"] if child_run else None,
+                },
             }
-            run.status = "completed"
-            run.completed_at = datetime.now(timezone.utc)
+            run.status = "delegated"
+            run.completed_at = None
             db.commit()
             record_agent_event(
                 run_id=str(run.id),
                 user_id=user_db_id,
-                event_type="COMPLETED",
+                event_type="DELEGATION_DISPATCHED"
+                if coordination["mode"] == "delegate"
+                else "COLLABORATION_STARTED",
                 db=db,
                 correlation_id=getattr(run, "correlation_id", None),
-                payload={"coordination": coordination},
+                payload={
+                    "coordination": coordination,
+                    "child_run_id": child_run["run_id"] if child_run else None,
+                },
                 required=True,
             )
             return compat._run_to_dict(run)

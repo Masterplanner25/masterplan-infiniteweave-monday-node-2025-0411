@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 from pymongo import MongoClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -84,20 +84,19 @@ def pg_db_session():
             "Pass DATABASE_URL=postgresql://... when invoking pytest -c pytest.integration.ini."
         )
 
-    # Run alembic migrations once before any test in the session.
-    result = subprocess.run(
-        ["alembic", "upgrade", "head"],
-        cwd=str(_REPO_ROOT),
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, (
-        f"alembic upgrade head failed (exit {result.returncode}):\n"
-        f"stdout: {result.stdout}\n"
-        f"stderr: {result.stderr}"
-    )
-
     engine = create_engine(db_url)
+    if not inspect(engine).get_table_names():
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"alembic upgrade head failed (exit {result.returncode}):\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
+        )
     connection = engine.connect()
     transaction = connection.begin()
     Session = sessionmaker(bind=connection)

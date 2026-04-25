@@ -3,7 +3,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
@@ -11,61 +10,16 @@ from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.search.schemas.research_results_schema import ResearchResultCreate
+from apps.search.routes._route_helpers import (
+    _ai_provider_unavailable_response,
+    _extract_flow_error,
+    _is_circuit_open_detail,
+)
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter(prefix="/research", tags=["Research"], dependencies=[Depends(get_current_user)])
 search_history_router = APIRouter(prefix="/search", tags=["Search History"], dependencies=[Depends(get_current_user)])
 logger = logging.getLogger(__name__)
-
-
-def _extract_flow_error(result: dict) -> str:
-    if not isinstance(result, dict):
-        return str(result or "")
-    nested_data = result.get("data")
-    nested_result = result.get("result")
-    for candidate in (
-        result.get("error"),
-        nested_data.get("error") if isinstance(nested_data, dict) else None,
-        nested_result.get("error") if isinstance(nested_result, dict) else None,
-        nested_data.get("message") if isinstance(nested_data, dict) else None,
-        nested_result.get("message") if isinstance(nested_result, dict) else None,
-    ):
-        if candidate:
-            return str(candidate)
-    return ""
-
-
-def _is_circuit_open_detail(detail) -> bool:
-    if isinstance(detail, dict):
-        if detail.get("error") == "ai_provider_unavailable":
-            return True
-        text = str(detail.get("detail") or detail.get("details") or detail.get("message") or "")
-    else:
-        text = str(detail or "")
-    lowered = text.lower()
-    if "http_503" in lowered:
-        return True
-    return "circuit" in lowered and (
-        "rejecting call" in lowered
-        or " is open" in lowered
-        or "half-open" in lowered
-        or "circuit open" in lowered
-    )
-
-
-def _ai_provider_unavailable_response(detail) -> JSONResponse:
-    payload = {
-        "error": "ai_provider_unavailable",
-        "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
-        "detail": str(detail),
-        "retryable": True,
-    }
-    if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
-        payload = dict(detail)
-        payload.setdefault("message", "An AI provider is temporarily unavailable. Please retry in a moment.")
-        payload.setdefault("retryable", True)
-    return JSONResponse(status_code=503, content=payload, headers={"Retry-After": "60"})
-
 
 def _run_flow_research(flow_name: str, payload: dict, db: Session, user_id: str):
     from AINDY.runtime.flow_engine import run_flow
@@ -107,16 +61,25 @@ def _execute_research(request: Request, route_name: str, handler, *, db: Session
     data = result.data
     if isinstance(data, dict):
         data = dict(data)
+        _envelope_status = "SUCCESS"
+        if hasattr(result, "data") and isinstance(result.data, dict):
+            _raw_status = str(result.data.get("status") or "").upper()
+            if _raw_status in {"SUCCESS", "FAILURE", "FAILED", "WAITING", "QUEUED", "ERROR", "UNKNOWN"}:
+                _envelope_status = _raw_status
         data.setdefault(
             "execution_envelope",
             to_envelope(
                 eu_id=eu_id,
                 trace_id=result.metadata.get("trace_id"),
-                status="SUCCESS",
+                status=_envelope_status,
                 output=None,
-                error=None,
+                error=result.metadata.get("error") or (
+                    result.data.get("error") if isinstance(
+                        getattr(result, "data", None), dict
+                    ) else None
+                ),
                 duration_ms=None,
-                attempt_count=1,
+                attempt_count=None,
             ),
         )
     return data
