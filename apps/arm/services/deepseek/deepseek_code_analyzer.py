@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from apps.arm.services.deepseek.security_deepseek import SecurityValidator
 from apps.arm.services.deepseek.file_processor_deepseek import FileProcessor
-from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager
+from apps.arm.services.deepseek.config_manager_deepseek import ConfigManager, DEFAULT_CONFIG
 from apps.arm.models import AnalysisResult, CodeGeneration
 from AINDY.config import settings
 from AINDY.platform_layer.external_call_service import perform_external_call
@@ -111,8 +111,21 @@ class DeepSeekCodeAnalyzer:
         self.client = _build_deepseek_client()
 
     def _refresh_runtime_config(self, db: Session | None = None) -> None:
-        self.config_manager.db = db
-        self.config = self.config_manager.get_all()
+        if db is not None:
+            # Prefer the caller's active DB session so config updates committed
+            # in the same request/session are visible immediately.
+            from apps.arm.dao.arm_config_dao import get_config
+
+            self.config_manager = ConfigManager(db=db)
+            config_row = get_config(db)
+            self.config = (
+                {**DEFAULT_CONFIG, **self.config_manager._model_to_dict(config_row)}
+                if config_row is not None
+                else DEFAULT_CONFIG.copy()
+            )
+        else:
+            self.config_manager.db = db
+            self.config = self.config_manager.get_all()
         validator = getattr(self, "validator", None)
         file_processor = getattr(self, "file_processor", None)
         if isinstance(validator, SecurityValidator):
@@ -240,15 +253,32 @@ class DeepSeekCodeAnalyzer:
             # Step 2c — Inject identity context (non-blocking)
             identity_context = ""
             try:
-                from apps.identity.services.identity_service import IdentityService
-                id_service = IdentityService(db=db, user_id=user_id)
-                identity_context = id_service.get_context_for_prompt()
-                id_service.observe(
-                    event_type="arm_analysis_complete",
-                    context={
-                        "language": path.suffix.lstrip("."),
-                        "file_type": path.suffix,
+                from AINDY.kernel.syscall_dispatcher import get_dispatcher
+                from AINDY.kernel.syscall_registry import SyscallContext
+
+                _identity_ctx = SyscallContext(
+                    execution_unit_id=str(uuid.uuid4()),
+                    user_id=str(user_id) if user_id else "",
+                    capabilities=["identity.read", "identity.write"],
+                    trace_id=str(uuid.uuid4()),
+                )
+                _ctx_result = get_dispatcher().dispatch(
+                    "sys.v1.identity.get_context",
+                    {"user_id": str(user_id) if user_id else ""},
+                    _identity_ctx,
+                )
+                identity_context = (_ctx_result.get("data") or {}).get("context", "")
+                get_dispatcher().dispatch(
+                    "sys.v1.identity.observe",
+                    {
+                        "user_id": str(user_id) if user_id else "",
+                        "event_type": "arm_analysis_complete",
+                        "context": {
+                            "language": path.suffix.lstrip("."),
+                            "file_type": path.suffix,
+                        },
                     },
+                    _identity_ctx,
                 )
             except Exception:
                 logger.warning("[ARM] Identity context injection failed")
@@ -326,9 +356,9 @@ class DeepSeekCodeAnalyzer:
             # Trigger Infinity score recalculation (fire-and-forget)
             try:
                 if user_id and db:
-                    from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+                    from apps.analytics.public import run_infinity_orchestrator
 
-                    execute_infinity_orchestrator(
+                    run_infinity_orchestrator(
                         user_id=str(user_id),
                         db=db,
                         trigger_event="arm_analysis",

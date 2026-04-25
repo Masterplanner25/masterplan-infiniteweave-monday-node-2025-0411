@@ -105,34 +105,58 @@ function dispatchSessionExpired() {
 async function request(path, opts = {}) {
   const url = buildApiUrl(path);
   const token = getStoredToken();
+  const controller = new AbortController();
+  const timeoutId = typeof window !== "undefined"
+    ? setTimeout(() => controller.abort(), 30_000)
+    : null;
 
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    const err = new ApiError(
-      res.status,
-      `API Error (${res.status}): ${errText}`,
-      errText,
-    );
-    if (res.status === 401) {
-      dispatchSessionExpired();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      controller.abort();
+    } else {
+      opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
     }
-    throw err;
   }
 
-  const text = await res.text();
   try {
-    return normalizeArrayFields(JSON.parse(text));
-  } catch {
-    return text;
+    const res = await fetch(url, {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const err = new ApiError(
+        res.status,
+        `API Error (${res.status}): ${errText}`,
+        errText,
+      );
+      if (res.status === 401) {
+        dispatchSessionExpired();
+      }
+      throw err;
+    }
+
+    const text = await res.text();
+    try {
+      return normalizeArrayFields(JSON.parse(text));
+    } catch {
+      return text;
+    }
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new ApiError(408, "Request timed out after 30 seconds.", null);
+    }
+    throw err;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -144,33 +168,58 @@ function authRequest(path, opts = {}) {
 
 async function requestAbsolute(url, opts = {}) {
   const token = getStoredToken();
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeoutId = typeof window !== "undefined"
+    ? setTimeout(() => controller.abort(), 30_000)
+    : null;
 
-  if (!res.ok) {
-    const errText = await res.text();
-    const err = new ApiError(
-      res.status,
-      `API Error (${res.status}): ${errText}`,
-      errText,
-    );
-    if (res.status === 401) {
-      dispatchSessionExpired();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      controller.abort();
+    } else {
+      opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
     }
-    throw err;
   }
 
-  const text = await res.text();
   try {
-    return normalizeArrayFields(JSON.parse(text));
-  } catch {
-    return text;
+    const res = await fetch(url, {
+      ...opts,
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const err = new ApiError(
+        res.status,
+        `API Error (${res.status}): ${errText}`,
+        errText,
+      );
+      if (res.status === 401) {
+        dispatchSessionExpired();
+      }
+      throw err;
+    }
+
+    const text = await res.text();
+    try {
+      return normalizeArrayFields(JSON.parse(text));
+    } catch {
+      return text;
+    }
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      throw new ApiError(408, "Request timed out after 30 seconds.", null);
+    }
+    throw err;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 

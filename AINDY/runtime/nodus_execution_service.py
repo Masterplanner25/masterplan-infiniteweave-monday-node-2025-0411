@@ -131,9 +131,14 @@ def _run_nodus_via_flow_direct(
 
         None (default) → the flow-engine default (3 attempts) applies unchanged.
     """
+    from AINDY.runtime import enforce_engine_boundary
     from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
     from AINDY.utils.uuid_utils import normalize_uuid
 
+    enforce_engine_boundary(
+        entrypoint="nodus.run",
+        workflow_type=workflow_type,
+    )
     ensure_nodus_script_flow_registered()
 
     # Build a per-run flow dict.  When node_max_retries is supplied we inject
@@ -186,6 +191,12 @@ def run_nodus_script_via_flow(
     quota tracking, and observability. Falls back to _run_nodus_via_flow_direct()
     for anonymous/system calls (user_id absent).
     """
+    from AINDY.runtime import enforce_engine_boundary
+
+    enforce_engine_boundary(
+        entrypoint="nodus.run",
+        workflow_type=workflow_type,
+    )
     if not user_id:
         logger.debug(
             "[run_nodus_script_via_flow] no user_id — executing directly "

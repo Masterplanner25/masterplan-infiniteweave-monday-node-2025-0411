@@ -75,7 +75,10 @@ def test_failure_rate_alert_fires():
 def test_queue_metrics_endpoint():
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[get_current_user] = lambda: {"sub": "user-1"}
+    app.dependency_overrides[get_current_user] = lambda: {
+        "sub": "user-1",
+        "is_admin": True,
+    }
     app.dependency_overrides[get_db] = lambda: MagicMock()
 
     backend = InMemoryQueueBackend()

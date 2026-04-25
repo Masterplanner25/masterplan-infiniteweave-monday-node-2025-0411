@@ -208,7 +208,7 @@ jobs:
           DEEPSEEK_API_KEY: ds-test-placeholder
           AINDY_API_KEY: ci-aindy-api-key
           ALLOWED_ORIGINS: "http://localhost:3000"
-        run: pytest -c pytest.integration.ini
+        run: pytest -c pytest.integration.ini -vv --durations=25 -ra
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -321,6 +321,12 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+      - name: Client build smoke (validate env script)
+        working-directory: client
+        run: node scripts/validate-env.js
+        env:
+          VITE_API_BASE_URL: "https://ci-placeholder.aindy.dev"
 
   docker-build:
     name: Docker Build

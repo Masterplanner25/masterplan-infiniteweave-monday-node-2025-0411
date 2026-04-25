@@ -11,6 +11,7 @@ def register() -> None:
     _register_models()
     _register_router()
     _register_response_adapters()
+    _register_syscalls()
     _register_startup_hooks()
 
 
@@ -38,8 +39,14 @@ def _register_router() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
     register_response_adapter("authorship", raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.authorship.syscalls import register_authorship_syscall_handlers
+
+    register_authorship_syscall_handlers()
 
 
 def _register_startup_hooks() -> None:

@@ -28,7 +28,7 @@ def _register_route_prefixes() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
     register_response_adapter("health", raw_json_adapter)
 
 

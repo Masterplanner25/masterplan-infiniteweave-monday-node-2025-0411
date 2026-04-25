@@ -14,13 +14,16 @@ from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from apps.tasks.models import Task
 from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.core.system_event_service import emit_system_event
-from apps.analytics.services.calculation_services import calculate_twr, save_calculation
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
 from apps.tasks.services.analytics_bridge import (
     get_kpi_snapshot_via_syscall,
     save_calculation_via_syscall,
 )
-from apps.tasks.services.masterplan_bridge import get_eta_via_syscall
+from apps.tasks.services.masterplan_bridge import (
+    assert_masterplan_owned_via_syscall,
+    get_active_masterplan_via_syscall,
+    get_eta_via_syscall,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -407,19 +410,11 @@ def create_task(
     user_id: str | uuid.UUID | None = None,
 ):
     """Creates a new task entry in the database."""
-    from apps.masterplan.models import MasterPlan
-
     owner_user_id = _user_uuid(user_id)
     if not owner_user_id:
         raise ValueError("user_id is required to create a task")
     if masterplan_id is not None:
-        plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.id == masterplan_id, MasterPlan.user_id == owner_user_id)
-            .first()
-        )
-        if not plan:
-            raise ValueError(f"masterplan_not_found:{masterplan_id}")
+        assert_masterplan_owned_via_syscall(masterplan_id, str(owner_user_id), db)
     normalized_dependencies = _normalize_dependencies(dependencies)
     _validate_dependencies(db, owner_user_id, normalized_dependencies, parent_task_id)
     task = Task(
@@ -638,9 +633,6 @@ def queue_task_automation(
 
 
 def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID | None) -> dict:
-    from apps.masterplan.models import MasterPlan
-    # TODO: replace MasterPlan model reads with a syscall once the masterplan read surface is defined.
-
     owner_user_id = _user_uuid(user_id)
     task = find_task(db, name, user_id=user_id)
     if not task or not owner_user_id:
@@ -734,13 +726,9 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("[Velocity Engine] Failed to sync with Social Layer: %s", exc)
 
     try:
-        active_plan = (
-            db.query(MasterPlan)
-            .filter(MasterPlan.user_id == owner_user_id, MasterPlan.is_active.is_(True))
-            .first()
-        )
-        if active_plan and active_plan.anchor_date:
-            get_eta_via_syscall(active_plan.id, str(owner_user_id), db)
+        active_plan = get_active_masterplan_via_syscall(str(owner_user_id), db)
+        if active_plan and active_plan.get("anchor_date"):
+            get_eta_via_syscall(active_plan["id"], str(owner_user_id), db)
             eta_recalculated = True
     except Exception as exc:
         logger.warning("Task completion ETA recalculation failed: %s", exc)

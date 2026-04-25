@@ -524,7 +524,10 @@ def nodus_platform_client():
 
     app = FastAPI()
     app.include_router(platform_router)
-    app.dependency_overrides[get_current_user] = lambda: {"sub": "user-1"}
+    app.dependency_overrides[get_current_user] = lambda: {
+        "sub": "user-1",
+        "is_admin": True,
+    }
     app.dependency_overrides[get_db] = lambda: "db-session"
     try:
         yield TestClient(app)
@@ -611,7 +614,10 @@ class TestNodusFlowRouterHttpBranches:
         test_user_id = str(uuid.uuid4())
         mock_request = SimpleNamespace(state=SimpleNamespace(user_id=test_user_id))
         from AINDY.services.auth_service import get_current_user
-        nodus_platform_client.app.dependency_overrides[get_current_user] = lambda: {"sub": test_user_id}
+        nodus_platform_client.app.dependency_overrides[get_current_user] = lambda: {
+            "sub": test_user_id,
+            "is_admin": True,
+        }
 
         with patch.object(nodus_flow_module, "_validate_nodus_source"), \
              patch.object(nodus_flow_module, "execute_with_pipeline_sync", side_effect=lambda **kw: kw["handler"](mock_request)), \
@@ -633,7 +639,10 @@ class TestNodusFlowRouterHttpBranches:
         test_user_id = str(uuid.uuid4())
         mock_request = SimpleNamespace(state=SimpleNamespace(user_id=test_user_id))
         from AINDY.services.auth_service import get_current_user
-        nodus_platform_client.app.dependency_overrides[get_current_user] = lambda: {"sub": test_user_id}
+        nodus_platform_client.app.dependency_overrides[get_current_user] = lambda: {
+            "sub": test_user_id,
+            "is_admin": True,
+        }
 
         compiled_flow = {
             "start": "start-node",

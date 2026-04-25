@@ -74,7 +74,7 @@ def _get_executor() -> ThreadPoolExecutor:
     if _EXECUTOR is None:
         with _EXECUTOR_LOCK:
             if _EXECUTOR is None:
-                max_workers = int(os.getenv("AINDY_ASYNC_JOB_WORKERS", "4"))
+                max_workers = settings.AINDY_ASYNC_JOB_WORKERS
                 _EXECUTOR = ThreadPoolExecutor(
                     max_workers=max_workers,
                     thread_name_prefix="aindy-async-job",
@@ -867,32 +867,6 @@ def _ensure_root_execution_event_id(db, trace_id: str) -> str | None:
 
 
 def _emit_job_log_written(log_id: str) -> None:
-    skip_registry_bridge = False
-    try:
-        from apps.automation.services.job_log_sync_service import (
-            sync_job_log_to_automation_log,
-        )
-
-        db = SessionLocal()
-        try:
-            env_name = os.getenv("ENV", "").lower()
-            skip_registry_bridge = bool(
-                _session_dialect_name(db) == "postgresql"
-                and (settings.is_testing or env_name == "test" or os.getenv("PYTEST_CURRENT_TEST"))
-            )
-            row = db.query(JobLog).filter(JobLog.id == str(log_id)).first()
-            if row is not None:
-                sync_job_log_to_automation_log(db, row)
-        finally:
-            db.close()
-    except Exception as exc:
-        logger.debug(
-            "[AsyncJobService] direct AutomationLog sync failed for %s: %s",
-            log_id,
-            exc,
-        )
-    if skip_registry_bridge:
-        return
     try:
         from AINDY.platform_layer.registry import emit_event
 

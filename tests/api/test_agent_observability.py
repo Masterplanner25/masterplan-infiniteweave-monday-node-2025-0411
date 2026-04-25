@@ -372,23 +372,13 @@ class TestScanOuterException:
 
 
 class TestScanThresholdDefault:
-    """Default threshold is read from AINDY_STUCK_RUN_THRESHOLD_MINUTES."""
+    """Default threshold is read from settings, not raw env."""
 
-    def test_uses_env_var_when_no_param(self):
+    def test_uses_settings_when_no_param(self):
         from AINDY.agents import stuck_run_service
-        with patch.dict(os.environ, {"AINDY_STUCK_RUN_THRESHOLD_MINUTES": "5"}):
-            assert stuck_run_service._default_threshold_minutes() == 5
+        from AINDY.config import settings
 
-    def test_falls_back_to_10_on_invalid_env(self):
-        from AINDY.agents import stuck_run_service
-        with patch.dict(os.environ, {"AINDY_STUCK_RUN_THRESHOLD_MINUTES": "not_a_number"}):
-            assert stuck_run_service._default_threshold_minutes() == 10
-
-    def test_falls_back_to_10_when_env_absent(self):
-        from AINDY.agents import stuck_run_service
-        env = {k: v for k, v in os.environ.items() if k != "AINDY_STUCK_RUN_THRESHOLD_MINUTES"}
-        with patch.dict(os.environ, env, clear=True):
-            assert stuck_run_service._default_threshold_minutes() == 10
+        assert stuck_run_service._default_threshold_minutes() == settings.STUCK_RUN_THRESHOLD_MINUTES
 
 
 class TestScanRecentRunSkipped:
@@ -443,7 +433,7 @@ def _executing_run(
     run_id=None,
     user_id=TEST_USER_ID,
     flow_run_id=None,
-    started_minutes_ago=20,
+    started_minutes_ago=50,
 ):
     """AgentRun mock in 'executing' state."""
     ar = MagicMock()
@@ -536,7 +526,7 @@ class TestRecoverSuccess:
     def _run_recover(self):
         from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
-        ar = _executing_run(started_minutes_ago=20)
+        ar = _executing_run(started_minutes_ago=50)
         step = _agent_step(step_index=0)
         db = _make_recover_db(agent_run=ar, agent_steps=[step])
         result = recover_stuck_agent_run(str(ar.id), ar.user_id, db)
@@ -571,7 +561,7 @@ class TestRecoverLinksFlowRun:
 
         fr = _flow_run(workflow_type="agent_execution")
         fr.status = "running"
-        ar = _executing_run(started_minutes_ago=20, flow_run_id=str(fr.id))
+        ar = _executing_run(started_minutes_ago=50, flow_run_id=str(fr.id))
         db = _make_recover_db(agent_run=ar, flow_run=fr)
         recover_stuck_agent_run(str(ar.id), ar.user_id, db)
         assert fr.status == "failed"
@@ -579,7 +569,7 @@ class TestRecoverLinksFlowRun:
     def test_no_error_when_no_flow_run(self):
         from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 
-        ar = _executing_run(started_minutes_ago=20, flow_run_id=None)
+        ar = _executing_run(started_minutes_ago=50, flow_run_id=None)
         db = _make_recover_db(agent_run=ar, flow_run=None)
         result = recover_stuck_agent_run(str(ar.id), ar.user_id, db)
         assert result["ok"] is True

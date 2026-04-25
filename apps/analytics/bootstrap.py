@@ -18,6 +18,7 @@ def register() -> None:
     _register_jobs()
     _register_scheduled_jobs()
     _register_syscalls()
+    _register_required_syscalls()
     _register_flow_results()
 
 
@@ -50,7 +51,7 @@ def _register_routers() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
 
     register_response_adapter("analytics", raw_json_adapter)
     register_response_adapter("main", raw_json_adapter)
@@ -111,6 +112,18 @@ def _register_syscalls() -> None:
     from apps.analytics.syscalls import register_analytics_syscall_handlers
 
     register_analytics_syscall_handlers()
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.analytics.get_kpi_snapshot",
+        "sys.v1.analytics.execute_infinity",
+        "sys.v1.analytics.get_latest_adjustment",
+        "sys.v1.score.recalculate",
+    ):
+        register_required_syscall(name)
 
 
 def _register_flow_results() -> None:

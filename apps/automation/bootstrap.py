@@ -35,15 +35,7 @@ BOOTSTRAP_DEPENDS_ON: list[str] = [
     "masterplan",
     "tasks",
 ]
-APP_DEPENDS_ON: list[str] = [
-    "analytics",
-    "arm",
-    "authorship",
-    "masterplan",
-    "rippletrace",
-    "search",
-    "tasks",
-]
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
@@ -59,6 +51,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
+    _register_required_syscalls()
 
 
 def _register_models() -> None:
@@ -90,7 +83,7 @@ def _register_route_prefixes() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
     register_response_adapter("automation", raw_json_adapter)
 
 
@@ -100,8 +93,8 @@ def _register_events() -> None:
 
 
 def _handle_job_log_written(context: dict) -> None:
-    job_log_id = context.get("job_log_id")
-    if not job_log_id:
+    log_id = context.get("job_log_id")
+    if not log_id:
         return
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.job_log import JobLog
@@ -109,11 +102,15 @@ def _handle_job_log_written(context: dict) -> None:
 
     db = SessionLocal()
     try:
-        row = db.query(JobLog).filter(JobLog.id == str(job_log_id)).first()
+        row = db.query(JobLog).filter(JobLog.id == str(log_id)).first()
         if row is not None:
             sync_job_log_to_automation_log(db, row)
     except Exception as exc:
-        logger.warning("[Automation] job_log.written handler failed for %s: %s", job_log_id, exc)
+        logger.debug(
+            "[AutomationBridge] job_log sync failed for %s: %s",
+            log_id,
+            exc,
+        )
     finally:
         db.close()
 
@@ -186,6 +183,16 @@ def _register_required_flow_nodes() -> None:
     from AINDY.platform_layer.registry import register_required_flow_node
 
     register_required_flow_node("memory_execution_validate")
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.score.feedback",
+        "sys.v1.agent.suggest_tools",
+    ):
+        register_required_syscall(name)
 
 
 def _automation_execute(payload, db):

@@ -156,13 +156,17 @@ class TestFlowRunsEndpoints:
                     username="flow_caller",
                     hashed_password=hash_password("Passw0rd!123"),
                     is_active=True,
+                    is_admin=True,
                 ),
             ]
         )
         db_session.commit()
         run = _seed_flow_run(db_session, user_id=owner_id, status="waiting", waiting_for="approval")
         caller_headers = {
-            "Authorization": f"Bearer {create_access_token({'sub': str(caller_id), 'email': 'flow-caller@aindy.test'})}"
+            "Authorization": (
+                "Bearer "
+                f"{create_access_token({'sub': str(caller_id), 'email': 'flow-caller@aindy.test', 'is_admin': True})}"
+            )
         }
 
         response = client.get(f"/platform/flows/runs/{run.id}", headers=caller_headers)

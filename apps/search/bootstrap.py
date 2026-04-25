@@ -10,6 +10,7 @@ def register() -> None:
     _register_routers()
     _register_route_prefixes()
     _register_response_adapters()
+    _register_syscalls()
     _register_agent_tools()
     _register_agent_capabilities()
     _register_capture_rules()
@@ -53,10 +54,16 @@ def _register_route_prefixes() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
 
     register_response_adapter("leadgen", raw_json_adapter)
     register_response_adapter("seo", raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.search.syscalls import register_search_syscall_handlers
+
+    register_search_syscall_handlers()
 
 
 def _register_agent_tools() -> None:

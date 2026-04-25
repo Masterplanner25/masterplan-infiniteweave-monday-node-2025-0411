@@ -354,7 +354,7 @@ def agent_trust_update_node(state, context):
 def agent_suggestions_get_node(state, context):
     try:
         from AINDY.agents.agent_tools import suggest_tools
-        from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+        from apps.analytics.public import get_user_kpi_snapshot
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")

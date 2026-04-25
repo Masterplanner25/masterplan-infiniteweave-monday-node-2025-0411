@@ -49,8 +49,7 @@ const NavSection = ({ title, icon, isOpen, toggle, children, isAnyChildActive })
 
 export default function Sidebar() {
   const location = useLocation();
-  const { user } = useAuth();
-  const isAdmin = user?.is_admin === true;
+  const { isAdmin } = useAuth();
   const [openSection, setOpenSection] = useState("System");
   const [pendingApprovals, setPendingApprovals] = useState(0);
 
@@ -196,9 +195,15 @@ export default function Sidebar() {
       </nav>
 
       <div className="mt-auto border-t border-zinc-800/50 pt-4">
-        <Link to="/health" className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
-          🟢 System Online
-        </Link>
+        {isAdmin ? (
+          <Link to="/platform/health" className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
+            🟢 System Online
+          </Link>
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
+            🟢 System Online
+          </div>
+        )}
       </div>
     </aside>
   );

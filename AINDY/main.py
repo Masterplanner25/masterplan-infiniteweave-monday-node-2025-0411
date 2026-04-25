@@ -265,6 +265,41 @@ def _enforce_event_bus_startup_guard() -> None:
         )
 
 
+def _enforce_cache_backend_coherence() -> None:
+    """
+    Reject configurations where requires_redis=True but the cache backend
+    is set to memory. Two instances cannot share a memory cache; one would
+    silently serve stale data to the other's clients.
+    """
+    if settings.is_testing:
+        return
+    if not settings.requires_redis:
+        return
+
+    cache_backend = settings.AINDY_CACHE_BACKEND.lower()
+
+    if cache_backend == "memory":
+        message = (
+            "AINDY_CACHE_BACKEND=memory is not permitted when Redis is required "
+            f"(ENV={settings.ENV!r}, AINDY_REQUIRE_REDIS={settings.AINDY_REQUIRE_REDIS}). "
+            "Multiple instances cannot share an in-memory cache — each instance would "
+            "serve inconsistent data. "
+            "Set AINDY_CACHE_BACKEND=redis and provide REDIS_URL, "
+            "or set AINDY_CACHE_BACKEND=off to explicitly disable caching."
+        )
+        if settings.is_prod:
+            raise RuntimeError(message)
+        logger.warning("[startup] Cache backend misconfiguration: %s", message)
+
+    if cache_backend == "redis" and not settings.REDIS_URL:
+        if not settings.is_prod:
+            logger.warning(
+                "[startup] AINDY_CACHE_BACKEND=redis but REDIS_URL is not set. "
+                "Caching will be disabled. Set REDIS_URL or change "
+                "AINDY_CACHE_BACKEND=off to suppress this warning."
+            )
+
+
 def _check_worker_presence(log) -> None:
     """
     Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
@@ -359,6 +394,94 @@ def _enforce_nodus_gate() -> None:
     logger.warning(message)
 
 
+def _verify_flow_engines_started() -> None:
+    """Log and validate the dual-engine runtime registration state."""
+    from AINDY.runtime import get_engine_status, verify_engine_registration
+
+    status = verify_engine_registration()
+    logger.info(
+        "[startup] Flow engines ready: dag_nodes=%d nodus_nodes=%d nodus_available=%s",
+        status["dag_engine"]["registered_nodes"],
+        status["nodus_engine"]["registered_nodes"],
+        status["nodus_engine"]["available"],
+    )
+
+
+def _verify_required_syscalls_registered() -> None:
+    """Verify that required syscalls are present after bootstrap."""
+    from AINDY.kernel.syscall_registry import get_registered_syscalls
+    from AINDY.platform_layer.registry import get_required_syscalls
+
+    _required_syscalls = get_required_syscalls()
+    if not _required_syscalls:
+        return
+
+    _registered_syscalls = set(get_registered_syscalls())
+    _missing_syscalls = [
+        name for name in _required_syscalls if name not in _registered_syscalls
+    ]
+    if _missing_syscalls:
+        _syscall_message = (
+            "[startup] Required syscalls missing after bootstrap: %s. "
+            "Syscall-dependent flows will fail at runtime. "
+            "Check that domain bootstrap modules loaded without errors."
+        )
+        if settings.is_prod and not settings.is_testing:
+            logger.error(_syscall_message, _missing_syscalls)
+            raise RuntimeError(
+                f"Required syscalls not registered after bootstrap: {_missing_syscalls}"
+            )
+        logger.warning(_syscall_message, _missing_syscalls)
+    else:
+        logger.info(
+            "[startup] Syscall registration verified: %d required syscall(s) present.",
+            len(_required_syscalls),
+        )
+
+
+def _log_async_job_capacity_advisory() -> None:
+    """Log startup guidance for async job capacity in thread mode."""
+    if settings.is_testing:
+        return
+    if not settings.AINDY_JOB_WARN_CAPACITY:
+        return
+    if settings.EXECUTION_MODE != "thread":
+        return
+
+    _pool_size = settings.AINDY_ASYNC_JOB_WORKERS
+    _queue_max = settings.AINDY_ASYNC_QUEUE_MAXSIZE
+    _ai_job_duration_s = 15
+    _throughput = _pool_size / _ai_job_duration_s
+
+    if _pool_size < 8:
+        logger.warning(
+            "[startup] Thread pool is small for AI workloads: "
+            "AINDY_ASYNC_JOB_WORKERS=%d. At ~%ds/job this sustains "
+            "%.1f jobs/second. Recommend at least 8 workers, or switch "
+            "to EXECUTION_MODE=distributed for multi-user deployments.",
+            _pool_size,
+            _ai_job_duration_s,
+            _throughput,
+        )
+    else:
+        logger.info(
+            "[startup] Thread pool configured: workers=%d queue_max=%d "
+            "(estimated throughput=%.1f jobs/s at 15s/job). "
+            "For multi-user or high-throughput deployments, consider "
+            "EXECUTION_MODE=distributed.",
+            _pool_size,
+            _queue_max,
+            _throughput,
+        )
+
+    if settings.AINDY_ASYNC_MAX_CONCURRENT_PER_USER == 0:
+        logger.warning(
+            "[startup] AINDY_ASYNC_MAX_CONCURRENT_PER_USER=0 (no per-user cap). "
+            "A single user can exhaust the full thread pool. "
+            "Set AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2 to enforce fairness."
+        )
+
+
 def _cache_behavior_mode() -> str:
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         return "testing"
@@ -419,8 +542,9 @@ def _initialize_cache_backend() -> str:
             if behavior_mode == "production":
                 FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
                 logger.warning(
-                    "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set in production; "
-                    "caching disabled to avoid instance-local divergence."
+                    "[cache] AINDY_CACHE_BACKEND=redis but REDIS_URL is not set in production: "
+                    "caching DISABLED. All cache misses will hit the database. "
+                    "Set REDIS_URL to enable distributed caching."
                 )
                 return "disabled"
             logger.warning(
@@ -459,8 +583,10 @@ def _initialize_cache_backend() -> str:
         if behavior_mode == "production":
             FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
             logger.warning(
-                "AINDY_CACHE_BACKEND=memory in production disables caching. "
-                "Instance-local cache semantics are not allowed in multi-instance-safe mode."
+                "[cache] AINDY_CACHE_BACKEND=memory in production: caching DISABLED. "
+                "In-memory caches are not safe for multi-instance deployments. "
+                "Use AINDY_CACHE_BACKEND=redis with REDIS_URL, or "
+                "AINDY_CACHE_BACKEND=off to silence this warning."
             )
             return "disabled"
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
@@ -517,6 +643,7 @@ async def lifespan(app: FastAPI):
     # Redis production guard
     _enforce_redis_startup_guard()
     _enforce_event_bus_startup_guard()
+    _enforce_cache_backend_coherence()
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not settings.REDIS_URL and not settings.requires_redis:
             logger.warning(
@@ -558,6 +685,7 @@ async def lifespan(app: FastAPI):
         and settings.EXECUTION_MODE == "distributed"
     ):
         _check_worker_presence(logger)
+    _log_async_job_capacity_advisory()
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if not enforce_schema and settings.is_prod:
@@ -636,6 +764,7 @@ async def lifespan(app: FastAPI):
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
+    _verify_required_syscalls_registered()
 
     # Register Flow Engine flows and nodes (static startup definitions)
     from AINDY.runtime.flow_definitions import register_all_flows
@@ -649,6 +778,7 @@ async def lifespan(app: FastAPI):
     flow_definitions_engine.register()
     flow_definitions_observability.register()
     _enforce_nodus_gate()
+    _verify_flow_engines_started()
 
     # Verify that domain-declared required flow nodes were actually registered —
     # silent failures in flow modules can otherwise produce a running server with
@@ -701,7 +831,10 @@ async def lifespan(app: FastAPI):
         from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
         _scan_db = SessionLocal()
         try:
-            _recovered = scan_and_recover_stuck_runs(_scan_db)
+            _recovered = scan_and_recover_stuck_runs(
+                _scan_db,
+                staleness_minutes=settings.STUCK_RUN_THRESHOLD_MINUTES,
+            )
             if _recovered:
                 logger.info("[startup] Stuck-run scan recovered %d run(s)", _recovered)
                 try:
@@ -736,6 +869,25 @@ async def lifespan(app: FastAPI):
             logger.warning(
                 "[startup] Event bus subscriber failed to start (non-fatal): %s", _bus_exc
             )
+        try:
+            from AINDY.kernel.event_bus import get_event_bus
+
+            _bus = get_event_bus()
+            _bus_status = _bus.get_status()
+            if _bus_status.get("mode") == "local-only" and not settings.requires_redis:
+                logger.warning(
+                    "[startup] WAIT/RESUME is operating in LOCAL-ONLY mode. "
+                    "Flows that enter WAIT on one instance CANNOT be resumed by "
+                    "events received on a different instance. "
+                    "For multi-instance deployments, set REDIS_URL and ensure "
+                    "the event bus subscriber is running (AINDY_EVENT_BUS_ENABLED=true)."
+                )
+            elif _bus_status.get("mode") == "cross-instance":
+                logger.info(
+                    "[startup] WAIT/RESUME propagation: cross-instance (Redis pub/sub active)."
+                )
+        except Exception as _status_exc:
+            logger.debug("[startup] Could not check event bus propagation mode: %s", _status_exc)
 
     # WAIT rehydration: re-register all waiting EUs with the SchedulerEngine.
     # Must run after SchedulerEngine is initialised (above) and after the

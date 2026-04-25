@@ -7,7 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "analytics", "masterplan"]
+APP_DEPENDS_ON: list[str] = ["agent"]
 
 
 def register() -> None:
@@ -27,6 +27,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
+    _register_required_syscalls()
 
 
 def _register_models() -> None:
@@ -64,7 +65,7 @@ def _register_route_prefixes() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
 
     register_response_adapter("watcher", raw_json_adapter)
 
@@ -254,6 +255,17 @@ def _register_required_flow_nodes() -> None:
             "task_is_background_leader": _task_is_background_leader,
         }
     )
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    for name in (
+        "sys.v1.task.create",
+        "sys.v1.task.complete",
+        "sys.v1.task.complete_full",
+    ):
+        register_required_syscall(name)
 
 
 def _task_is_background_leader() -> bool:

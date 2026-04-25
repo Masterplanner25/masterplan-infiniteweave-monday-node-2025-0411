@@ -25,7 +25,62 @@ def _get_degraded_domains() -> list[str]:
     return get_degraded_domains()
 
 
+def _async_jobs_payload() -> dict:
+    return {
+        "execution_mode": settings.EXECUTION_MODE,
+        "thread_pool_workers": (
+            settings.AINDY_ASYNC_JOB_WORKERS
+            if settings.EXECUTION_MODE == "thread"
+            else None
+        ),
+        "queue_max": settings.AINDY_ASYNC_QUEUE_MAXSIZE,
+        "per_user_cap": settings.AINDY_ASYNC_MAX_CONCURRENT_PER_USER or "none",
+        "global_cap": settings.AINDY_ASYNC_MAX_CONCURRENT_GLOBAL or "none",
+    }
+
+
+def _cache_payload() -> dict:
+    return {
+        "backend": settings.AINDY_CACHE_BACKEND,
+        "redis_configured": bool(settings.REDIS_URL),
+        "requires_redis": settings.requires_redis,
+    }
+
+
+def _get_wait_resume_status() -> dict:
+    try:
+        from AINDY.kernel.event_bus import get_event_bus as _get_event_bus
+
+        bus_status = _get_event_bus().get_status()
+    except Exception:
+        bus_status = {"mode": "unknown", "enabled": False}
+
+    mode = bus_status.get("mode", "unknown")
+    safe_for_multi_instance = mode == "cross-instance"
+    return {
+        "propagation_mode": mode,
+        "safe_for_multi_instance": safe_for_multi_instance,
+        "event_bus_enabled": bus_status.get("enabled", False),
+        "redis_connected": bus_status.get("redis_connected", False),
+        "subscriber_running": bus_status.get("subscriber_running", False),
+        "wait_timeout_minutes": settings.FLOW_WAIT_TIMEOUT_MINUTES,
+    }
+
+
+def _stuck_run_payload() -> dict:
+    return {
+        "threshold_minutes": settings.STUCK_RUN_THRESHOLD_MINUTES,
+        "wait_timeout_minutes": settings.FLOW_WAIT_TIMEOUT_MINUTES,
+        "watchdog_interval_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+        "margin_minutes": (
+            settings.STUCK_RUN_THRESHOLD_MINUTES - settings.FLOW_WAIT_TIMEOUT_MINUTES
+        ),
+    }
+
+
 def _testing_health_payload() -> dict:
+    from AINDY.runtime import get_engine_status
+
     db_pool = get_pool_status()
     payload = {
         "status": "healthy",
@@ -34,6 +89,11 @@ def _testing_health_payload() -> dict:
         "degraded_domains": _get_degraded_domains(),
         "dependencies": {},
         "db_pool": db_pool,
+        "flow_engines": get_engine_status(),
+        "async_jobs": _async_jobs_payload(),
+        "cache": _cache_payload(),
+        "wait_resume": _get_wait_resume_status(),
+        "stuck_run": _stuck_run_payload(),
     }
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
@@ -75,11 +135,17 @@ def _build_health_response(*, force: bool) -> JSONResponse:
         return JSONResponse(status_code=200, content=payload)
 
     from AINDY.platform_layer.health_service import get_system_health
+    from AINDY.runtime import get_engine_status
 
     health = get_system_health(force=force)
     payload = health.to_dict()
     db_pool = get_pool_status()
     payload["db_pool"] = db_pool
+    payload["flow_engines"] = get_engine_status()
+    payload["async_jobs"] = _async_jobs_payload()
+    payload["cache"] = _cache_payload()
+    payload["wait_resume"] = _get_wait_resume_status()
+    payload["stuck_run"] = _stuck_run_payload()
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")

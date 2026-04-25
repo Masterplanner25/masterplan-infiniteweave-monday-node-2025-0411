@@ -7,9 +7,13 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user, require_platform_admin_access
 
-router = APIRouter(prefix="/observability", tags=["Observability"])
+router = APIRouter(
+    prefix="/observability",
+    tags=["Observability"],
+    dependencies=[Depends(require_platform_admin_access)],
+)
 
 
 class DrainDlqRequest(BaseModel):

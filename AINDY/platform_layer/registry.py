@@ -84,6 +84,7 @@ _route_prefixes: dict[str, str] = {
     "platform": "job",
 }
 _required_flow_nodes: list[str] = []
+_required_syscalls: list[str] = []
 _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
 _degraded_domains: list[str] = []
@@ -502,6 +503,18 @@ def register_required_flow_node(node_name: str) -> str:
 
 def get_required_flow_nodes() -> list[str]:
     return list(_required_flow_nodes)
+
+
+def register_required_syscall(name: str) -> None:
+    """Declare that a syscall must be present after bootstrap."""
+    if not name or not isinstance(name, str):
+        raise ValueError(f"name must be a non-empty string, got {name!r}")
+    if name not in _required_syscalls:
+        _required_syscalls.append(name)
+
+
+def get_required_syscalls() -> list[str]:
+    return list(_required_syscalls)
 
 
 def register_symbol(name: str, value: Any) -> Any:

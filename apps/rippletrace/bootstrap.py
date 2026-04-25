@@ -9,6 +9,7 @@ def register() -> None:
     _register_models()
     _register_routers()
     _register_response_adapters()
+    _register_syscalls()
     _register_flow_strategy()
     _register_flow_results()
     _register_required_flow_nodes()
@@ -43,10 +44,16 @@ def _register_routers() -> None:
 
 def _register_response_adapters() -> None:
     from AINDY.platform_layer.registry import register_response_adapter
-    from apps._adapters import raw_json_adapter
+    from AINDY.platform_layer.response_adapters import raw_json_adapter
 
     for prefix in ("rippletrace", "legacy_surface", "observability", "db", "flow"):
         register_response_adapter(prefix, raw_json_adapter)
+
+
+def _register_syscalls() -> None:
+    from apps.rippletrace.syscalls import register_rippletrace_syscall_handlers
+
+    register_rippletrace_syscall_handlers()
 
 
 def _register_flow_strategy() -> None:

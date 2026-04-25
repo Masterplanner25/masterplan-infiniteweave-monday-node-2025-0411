@@ -15,11 +15,15 @@ from sqlalchemy.orm import Session
 from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.services.auth_service import get_current_user
+from AINDY.services.auth_service import get_current_user, require_platform_admin_access
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/flows", tags=["Flow Engine"])
+router = APIRouter(
+    prefix="/flows",
+    tags=["Flow Engine"],
+    dependencies=[Depends(require_platform_admin_access)],
+)
 
 
 def _flow_failure(result: dict) -> str:

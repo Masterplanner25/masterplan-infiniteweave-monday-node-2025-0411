@@ -26,7 +26,13 @@ def compile_plan_to_flow(plan: dict) -> dict:
 
 
 def _execute_intent_direct(intent_data: dict, db: Session, user_id: str = None) -> dict:
+    from AINDY.runtime import enforce_engine_boundary
+
     intent_type = intent_data.get("workflow_type", "generic")
+    enforce_engine_boundary(
+        entrypoint="flow.execute_intent",
+        workflow_type=str(intent_type),
+    )
     flow = _registry_flow_plan(intent_type, db, user_id)
     if not flow:
         plan = generate_plan_from_intent(intent_data)
@@ -47,6 +53,13 @@ def _execute_intent_direct(intent_data: dict, db: Session, user_id: str = None) 
 
 
 def execute_intent(intent_data: dict, db: Session, user_id: str = None) -> dict:
+    from AINDY.runtime import enforce_engine_boundary
+
+    intent_type = intent_data.get("workflow_type", "generic")
+    enforce_engine_boundary(
+        entrypoint="flow.execute_intent",
+        workflow_type=str(intent_type),
+    )
     if not user_id:
         logger.debug(
             "[execute_intent] no user_id - executing directly "
@@ -89,6 +102,9 @@ def _run_flow_direct(
     db: Session = None,
     user_id: str = None,
 ) -> dict:
+    from AINDY.runtime import enforce_engine_boundary
+
+    enforce_engine_boundary(entrypoint="flow.run", flow_name=str(flow_name))
     flow = FLOW_REGISTRY.get(flow_name)
     if not flow:
         raise KeyError(
@@ -106,6 +122,9 @@ def _run_flow_direct(
 
 
 def run_flow(flow_name: str, state: dict, db: Session = None, user_id: str = None) -> dict:
+    from AINDY.runtime import enforce_engine_boundary
+
+    enforce_engine_boundary(entrypoint="flow.run", flow_name=str(flow_name))
     if not user_id:
         logger.debug(
             "[run_flow] no user_id - executing '%s' directly "

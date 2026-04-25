@@ -18,7 +18,7 @@ def _session_from_context(ctx: SyscallContext):
 
 
 def _handle_get_kpi_snapshot(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+    from apps.analytics.public import get_user_kpi_snapshot
 
     user_id = str(payload["user_id"])
     db, owns_session = _session_from_context(ctx)
@@ -30,7 +30,7 @@ def _handle_get_kpi_snapshot(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_save_calculation(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.calculation_services import save_calculation
+    from apps.analytics.public import save_calculation
 
     db, owns_session = _session_from_context(ctx)
     try:
@@ -80,6 +80,60 @@ def _handle_init_user_score(payload: dict, ctx: SyscallContext) -> dict:
             "master_score": float(score.master_score or 0.0),
             "created": created,
         }
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.analytics.services.infinity_orchestrator import execute
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        result = execute(
+            user_id=ctx.user_id,
+            db=db,
+            trigger_event=payload.get("trigger_event", "manual"),
+        )
+        if not result:
+            raise ValueError("score calculation returned empty result")
+        score_data = result.get("score") or result
+        return {"score_recalculate_result": score_data}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.analytics.services.infinity_orchestrator import execute
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        result = execute(
+            user_id=payload.get("user_id") or ctx.user_id,
+            db=db,
+            trigger_event=payload.get("trigger_event", "manual"),
+        )
+        if not result:
+            raise ValueError("infinity orchestration returned empty result")
+        return result
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_get_latest_adjustment(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.analytics.public import get_latest_adjustment
+    from apps.analytics.services.infinity_orchestrator import serialize_adjustment
+
+    user_id = str(payload.get("user_id") or ctx.user_id or "")
+    if not user_id:
+        raise ValueError("sys.v1.analytics.get_latest_adjustment requires 'user_id'")
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        latest = get_latest_adjustment(user_id=user_id, db=db)
+        return {"adjustment": serialize_adjustment(latest)}
     finally:
         if owns_session:
             db.close()
@@ -149,6 +203,27 @@ def register_analytics_syscall_handlers() -> None:
                 "created": {"type": "bool"},
             },
         },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.score.recalculate",
+        handler=_handle_score_recalculate,
+        capability="score.recalculate",
+        description="Recalculate the Infinity Score.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.analytics.execute_infinity",
+        handler=_handle_execute_infinity,
+        capability="score.recalculate",
+        description="Run the full infinity orchestration result.",
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.analytics.get_latest_adjustment",
+        handler=_handle_get_latest_adjustment,
+        capability="analytics.read",
+        description="Return the latest serialized adjustment for the given user.",
         stable=False,
     )
     logger.info(

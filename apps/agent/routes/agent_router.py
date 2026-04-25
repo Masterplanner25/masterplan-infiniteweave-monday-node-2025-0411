@@ -325,7 +325,7 @@ def get_tool_suggestions(
     user_id = _current_user_id(current_user)
     if request is None:
         from AINDY.agents.agent_tools import suggest_tools
-        from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+        from apps.analytics.public import get_user_kpi_snapshot
 
         snapshot = get_user_kpi_snapshot(user_id, db)
         return suggest_tools(snapshot, user_id=user_id, db=db)
