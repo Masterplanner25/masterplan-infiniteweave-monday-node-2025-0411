@@ -36,3 +36,13 @@ def test_health_reports_async_job_capacity(client):
     assert "async_jobs" in data
     assert data["async_jobs"]["execution_mode"] in {"thread", "distributed"}
     assert "queue_max" in data["async_jobs"]
+
+
+def test_health_reports_cache_configuration(client):
+    response = client.get("/health/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "cache" in data
+    assert "backend" in data["cache"]
+    assert "redis_configured" in data["cache"]
+    assert "requires_redis" in data["cache"]

@@ -265,6 +265,41 @@ def _enforce_event_bus_startup_guard() -> None:
         )
 
 
+def _enforce_cache_backend_coherence() -> None:
+    """
+    Reject configurations where requires_redis=True but the cache backend
+    is set to memory. Two instances cannot share a memory cache; one would
+    silently serve stale data to the other's clients.
+    """
+    if settings.is_testing:
+        return
+    if not settings.requires_redis:
+        return
+
+    cache_backend = settings.AINDY_CACHE_BACKEND.lower()
+
+    if cache_backend == "memory":
+        message = (
+            "AINDY_CACHE_BACKEND=memory is not permitted when Redis is required "
+            f"(ENV={settings.ENV!r}, AINDY_REQUIRE_REDIS={settings.AINDY_REQUIRE_REDIS}). "
+            "Multiple instances cannot share an in-memory cache — each instance would "
+            "serve inconsistent data. "
+            "Set AINDY_CACHE_BACKEND=redis and provide REDIS_URL, "
+            "or set AINDY_CACHE_BACKEND=off to explicitly disable caching."
+        )
+        if settings.is_prod:
+            raise RuntimeError(message)
+        logger.warning("[startup] Cache backend misconfiguration: %s", message)
+
+    if cache_backend == "redis" and not settings.REDIS_URL:
+        if not settings.is_prod:
+            logger.warning(
+                "[startup] AINDY_CACHE_BACKEND=redis but REDIS_URL is not set. "
+                "Caching will be disabled. Set REDIS_URL or change "
+                "AINDY_CACHE_BACKEND=off to suppress this warning."
+            )
+
+
 def _check_worker_presence(log) -> None:
     """
     Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
@@ -507,8 +542,9 @@ def _initialize_cache_backend() -> str:
             if behavior_mode == "production":
                 FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
                 logger.warning(
-                    "AINDY_CACHE_BACKEND=redis but REDIS_URL is not set in production; "
-                    "caching disabled to avoid instance-local divergence."
+                    "[cache] AINDY_CACHE_BACKEND=redis but REDIS_URL is not set in production: "
+                    "caching DISABLED. All cache misses will hit the database. "
+                    "Set REDIS_URL to enable distributed caching."
                 )
                 return "disabled"
             logger.warning(
@@ -547,8 +583,10 @@ def _initialize_cache_backend() -> str:
         if behavior_mode == "production":
             FastAPICache.init(NoOpCacheBackend(), prefix="fastapi-cache")
             logger.warning(
-                "AINDY_CACHE_BACKEND=memory in production disables caching. "
-                "Instance-local cache semantics are not allowed in multi-instance-safe mode."
+                "[cache] AINDY_CACHE_BACKEND=memory in production: caching DISABLED. "
+                "In-memory caches are not safe for multi-instance deployments. "
+                "Use AINDY_CACHE_BACKEND=redis with REDIS_URL, or "
+                "AINDY_CACHE_BACKEND=off to silence this warning."
             )
             return "disabled"
         FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
@@ -605,6 +643,7 @@ async def lifespan(app: FastAPI):
     # Redis production guard
     _enforce_redis_startup_guard()
     _enforce_event_bus_startup_guard()
+    _enforce_cache_backend_coherence()
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         if not settings.REDIS_URL and not settings.requires_redis:
             logger.warning(
