@@ -100,8 +100,8 @@ def _register_events() -> None:
 
 
 def _handle_job_log_written(context: dict) -> None:
-    job_log_id = context.get("job_log_id")
-    if not job_log_id:
+    log_id = context.get("job_log_id")
+    if not log_id:
         return
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.job_log import JobLog
@@ -109,11 +109,15 @@ def _handle_job_log_written(context: dict) -> None:
 
     db = SessionLocal()
     try:
-        row = db.query(JobLog).filter(JobLog.id == str(job_log_id)).first()
+        row = db.query(JobLog).filter(JobLog.id == str(log_id)).first()
         if row is not None:
             sync_job_log_to_automation_log(db, row)
     except Exception as exc:
-        logger.warning("[Automation] job_log.written handler failed for %s: %s", job_log_id, exc)
+        logger.debug(
+            "[AutomationBridge] job_log sync failed for %s: %s",
+            log_id,
+            exc,
+        )
     finally:
         db.close()
 
