@@ -173,6 +173,15 @@ class VersionedSyscallRegistry(MutableMapping):
         return self._flat[key]
 
     def __setitem__(self, key: str, value: SyscallEntry) -> None:
+        if key in self._flat:
+            existing = self._flat[key]
+            if existing.handler is not value.handler:
+                logger.warning(
+                    "[SyscallRegistry] Syscall '%s' is being re-registered with a different handler. Previous: %r  New: %r. Each syscall should have exactly one registration point.",
+                    key,
+                    getattr(existing.handler, "__qualname__", repr(existing.handler)),
+                    getattr(value.handler, "__qualname__", repr(value.handler)),
+                )
         self._flat[key] = value
         version, action = self._split(key)
         if version and action:
