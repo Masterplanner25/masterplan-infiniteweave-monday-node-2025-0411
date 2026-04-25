@@ -1,32 +1,41 @@
-# Memory Bridge Native Build
+# memory_bridge_rs Build Quick Reference
 
-This crate provides the production native scorer used by `runtime/memory/native_scorer.py`.
+Canonical documentation lives at:
 
-## Requirements
+- `docs/runtime/NATIVE_MEMORY_BRIDGE.md`
 
-- Rust toolchain with `cargo`
-- Python environment matching the app runtime
-- `maturin` installed in that Python environment
+This file is only a quick-reference for local rebuilds.
 
-## Release Build
+## Correct paths
 
-From the repository root:
+- Crate root: `AINDY/memory/native/memory_bridge_rs/`
+- Manifest: `AINDY/memory/native/memory_bridge_rs/Cargo.toml`
+
+## Quick rebuild
+
+From the repo root:
 
 ```powershell
-cargo build --release --manifest-path bridge/memory_bridge_rs/Cargo.toml
-python -m maturin develop -m bridge/memory_bridge_rs/Cargo.toml --release
+.\AINDY\memory\native\memory_bridge_rs\rebuild_native.ps1
+```
+
+Or manually:
+
+```powershell
+cargo build --release --manifest-path AINDY\memory\native\memory_bridge_rs\Cargo.toml
+python -m maturin develop -m AINDY\memory\native\memory_bridge_rs\Cargo.toml --release
 ```
 
 ## Validation
 
-Run the focused scorer tests after rebuilding:
-
 ```powershell
-pytest tests/integration/test_memory_native_scorer.py -q
+pytest tests\integration\test_memory_native_scorer.py -q
+pytest tests\integration\test_memory_bridge.py -q
 ```
 
-## Runtime Control
+## Runtime control
 
-Set `USE_NATIVE_SCORER=true` to enable the native scorer.
+- `USE_NATIVE_SCORER=true` enables native scoring when the extension is available
+- `USE_NATIVE_SCORER=false` forces the Python fallback
 
-Set `USE_NATIVE_SCORER=false` to force the Python fallback without changing code.
+See `docs/runtime/NATIVE_MEMORY_BRIDGE.md` for architecture, Docker, deployment, and failure-mode details.
