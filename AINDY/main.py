@@ -404,6 +404,49 @@ def _verify_required_syscalls_registered() -> None:
         )
 
 
+def _log_async_job_capacity_advisory() -> None:
+    """Log startup guidance for async job capacity in thread mode."""
+    if settings.is_testing:
+        return
+    if not settings.AINDY_JOB_WARN_CAPACITY:
+        return
+    if settings.EXECUTION_MODE != "thread":
+        return
+
+    _pool_size = settings.AINDY_ASYNC_JOB_WORKERS
+    _queue_max = settings.AINDY_ASYNC_QUEUE_MAXSIZE
+    _ai_job_duration_s = 15
+    _throughput = _pool_size / _ai_job_duration_s
+
+    if _pool_size < 8:
+        logger.warning(
+            "[startup] Thread pool is small for AI workloads: "
+            "AINDY_ASYNC_JOB_WORKERS=%d. At ~%ds/job this sustains "
+            "%.1f jobs/second. Recommend at least 8 workers, or switch "
+            "to EXECUTION_MODE=distributed for multi-user deployments.",
+            _pool_size,
+            _ai_job_duration_s,
+            _throughput,
+        )
+    else:
+        logger.info(
+            "[startup] Thread pool configured: workers=%d queue_max=%d "
+            "(estimated throughput=%.1f jobs/s at 15s/job). "
+            "For multi-user or high-throughput deployments, consider "
+            "EXECUTION_MODE=distributed.",
+            _pool_size,
+            _queue_max,
+            _throughput,
+        )
+
+    if settings.AINDY_ASYNC_MAX_CONCURRENT_PER_USER == 0:
+        logger.warning(
+            "[startup] AINDY_ASYNC_MAX_CONCURRENT_PER_USER=0 (no per-user cap). "
+            "A single user can exhaust the full thread pool. "
+            "Set AINDY_ASYNC_MAX_CONCURRENT_PER_USER=2 to enforce fairness."
+        )
+
+
 def _cache_behavior_mode() -> str:
     if settings.is_testing or os.getenv("PYTEST_CURRENT_TEST"):
         return "testing"
@@ -603,6 +646,7 @@ async def lifespan(app: FastAPI):
         and settings.EXECUTION_MODE == "distributed"
     ):
         _check_worker_presence(logger)
+    _log_async_job_capacity_advisory()
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if not enforce_schema and settings.is_prod:

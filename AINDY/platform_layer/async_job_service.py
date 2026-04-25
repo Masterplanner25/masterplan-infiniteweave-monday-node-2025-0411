@@ -74,7 +74,7 @@ def _get_executor() -> ThreadPoolExecutor:
     if _EXECUTOR is None:
         with _EXECUTOR_LOCK:
             if _EXECUTOR is None:
-                max_workers = int(os.getenv("AINDY_ASYNC_JOB_WORKERS", "4"))
+                max_workers = settings.AINDY_ASYNC_JOB_WORKERS
                 _EXECUTOR = ThreadPoolExecutor(
                     max_workers=max_workers,
                     thread_name_prefix="aindy-async-job",

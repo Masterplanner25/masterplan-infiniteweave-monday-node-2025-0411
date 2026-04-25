@@ -27,3 +27,12 @@ def test_health_reports_flow_engine_status(client):
     assert "flow_engines" in data
     assert "dag_engine" in data["flow_engines"]
     assert "nodus_engine" in data["flow_engines"]
+
+
+def test_health_reports_async_job_capacity(client):
+    response = client.get("/health/")
+    assert response.status_code == 200
+    data = response.json()
+    assert "async_jobs" in data
+    assert data["async_jobs"]["execution_mode"] in {"thread", "distributed"}
+    assert "queue_max" in data["async_jobs"]

@@ -133,8 +133,9 @@ class Settings(BaseSettings):
     EXECUTION_MODE: str = "thread"
     NODUS_SOURCE_PATH: str | None = None
     AINDY_QUEUE_NAME: str = "aindy:jobs"
-    AINDY_ASYNC_JOB_WORKERS: int = 4
+    AINDY_ASYNC_JOB_WORKERS: int = 10
     AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection
+    AINDY_JOB_WARN_CAPACITY: bool = True
     MAX_QUEUE_SIZE: int = Field(
         default_factory=lambda: int(
             os.getenv("MAX_QUEUE_SIZE", os.getenv("AINDY_ASYNC_QUEUE_MAXSIZE", "100"))

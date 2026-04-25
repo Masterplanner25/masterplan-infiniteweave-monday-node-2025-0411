@@ -25,6 +25,20 @@ def _get_degraded_domains() -> list[str]:
     return get_degraded_domains()
 
 
+def _async_jobs_payload() -> dict:
+    return {
+        "execution_mode": settings.EXECUTION_MODE,
+        "thread_pool_workers": (
+            settings.AINDY_ASYNC_JOB_WORKERS
+            if settings.EXECUTION_MODE == "thread"
+            else None
+        ),
+        "queue_max": settings.AINDY_ASYNC_QUEUE_MAXSIZE,
+        "per_user_cap": settings.AINDY_ASYNC_MAX_CONCURRENT_PER_USER or "none",
+        "global_cap": settings.AINDY_ASYNC_MAX_CONCURRENT_GLOBAL or "none",
+    }
+
+
 def _testing_health_payload() -> dict:
     from AINDY.runtime import get_engine_status
 
@@ -37,6 +51,7 @@ def _testing_health_payload() -> dict:
         "dependencies": {},
         "db_pool": db_pool,
         "flow_engines": get_engine_status(),
+        "async_jobs": _async_jobs_payload(),
     }
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
@@ -85,6 +100,7 @@ def _build_health_response(*, force: bool) -> JSONResponse:
     db_pool = get_pool_status()
     payload["db_pool"] = db_pool
     payload["flow_engines"] = get_engine_status()
+    payload["async_jobs"] = _async_jobs_payload()
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")
