@@ -133,6 +133,13 @@ class TestRegisterMasterplanSyscallHandlers:
         entry = SYSCALL_REGISTRY["sys.v1.masterplan.assert_owned"]
         assert entry.capability == "masterplan.read"
 
+    def test_active_masterplan_syscall_is_registered_after_call(self):
+        from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
+        from apps.masterplan.syscalls.syscall_handlers import register_masterplan_syscall_handlers
+
+        register_masterplan_syscall_handlers()
+        assert "sys.v1.masterplan.get_active" in SYSCALL_REGISTRY
+
 
 # ── analytics router has no direct masterplan service import ──────────────────
 

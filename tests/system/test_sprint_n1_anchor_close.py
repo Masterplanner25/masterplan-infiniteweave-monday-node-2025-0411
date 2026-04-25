@@ -677,12 +677,12 @@ class TestCompleteTaskETAHook:
 
         with patch("apps.tasks.services.task_service.find_task", return_value=mock_task), \
              patch("apps.tasks.services.task_service.get_mongo_client", return_value=None), \
+             patch("apps.tasks.services.task_service.get_active_masterplan_via_syscall", return_value={"id": fake_plan.id, "anchor_date": fake_plan.anchor_date.isoformat()}), \
              patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
              patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \
              patch("apps.analytics.services.infinity_orchestrator.execute", return_value={"next_action": "review"}), \
-             patch("apps.masterplan.services.eta_service.calculate_eta") as mock_eta:
+             patch("apps.tasks.services.task_service.get_eta_via_syscall") as mock_eta:
             mock_context.return_value.ids = []
-            mock_db.query.return_value.filter.return_value.first.return_value = fake_plan
 
             task_services.orchestrate_task_completion(
                 mock_db,

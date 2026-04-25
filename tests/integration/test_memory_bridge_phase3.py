@@ -393,9 +393,8 @@ class TestTaskCompletionMemoryHook:
         mock_task = self._make_task()
 
         with patch("apps.tasks.services.task_service.find_task", return_value=mock_task), \
-             patch("apps.tasks.services.task_service.calculate_twr", return_value=8.5), \
-             patch("apps.tasks.services.task_service.save_calculation"), \
              patch("apps.tasks.services.task_service.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("apps.tasks.services.task_service.get_active_masterplan_via_syscall", return_value=None), \
              patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=MOCK_NODE_DICT) as mock_capture, \
              patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):
@@ -415,9 +414,8 @@ class TestTaskCompletionMemoryHook:
         mock_task = self._make_task()
 
         with patch("apps.tasks.services.task_service.find_task", return_value=mock_task), \
-             patch("apps.tasks.services.task_service.calculate_twr", return_value=5.0), \
-             patch("apps.tasks.services.task_service.save_calculation"), \
              patch("apps.tasks.services.task_service.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("apps.tasks.services.task_service.get_active_masterplan_via_syscall", return_value=None), \
              patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture") as mock_capture:
 
             from apps.tasks.services.task_service import orchestrate_task_completion
@@ -430,9 +428,8 @@ class TestTaskCompletionMemoryHook:
         mock_task = self._make_task()
 
         with patch("apps.tasks.services.task_service.find_task", return_value=mock_task), \
-             patch("apps.tasks.services.task_service.calculate_twr", return_value=5.0), \
-             patch("apps.tasks.services.task_service.save_calculation"), \
              patch("apps.tasks.services.task_service.get_mongo_client", side_effect=Exception("no mongo")), \
+             patch("apps.tasks.services.task_service.get_active_masterplan_via_syscall", return_value=None), \
              patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", side_effect=Exception("memory failure")), \
              patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context"), \
              patch(f"{_DAO_PATH}.record_feedback"):

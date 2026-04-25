@@ -24,6 +24,13 @@ from fastapi import HTTPException
             {"projected_completion_date": "2026-05-01"},
         ),
         (
+            "apps.tasks.services.masterplan_bridge",
+            "get_active_masterplan_via_syscall",
+            ("user-1", object()),
+            {"status": "success", "data": {"masterplan": {"id": 42, "anchor_date": "2026-05-01T00:00:00"}}},
+            {"id": 42, "anchor_date": "2026-05-01T00:00:00"},
+        ),
+        (
             "apps.analytics.services.tasks_bridge",
             "get_task_graph_context_via_syscall",
             ("user-1", object()),
@@ -47,6 +54,7 @@ def test_bridge_returns_expected_shape(module_path, func_name, args, dispatch_re
     [
         ("apps.tasks.services.analytics_bridge", "get_kpi_snapshot_via_syscall", ("user-1", object())),
         ("apps.tasks.services.masterplan_bridge", "get_eta_via_syscall", ("42", "user-1", object())),
+        ("apps.tasks.services.masterplan_bridge", "get_active_masterplan_via_syscall", ("user-1", object())),
         ("apps.analytics.services.tasks_bridge", "get_task_graph_context_via_syscall", ("user-1", object())),
     ],
 )
@@ -61,3 +69,16 @@ def test_bridge_raises_503_when_dispatcher_raises(module_path, func_name, args):
             fn(*args)
 
     assert exc_info.value.status_code == 503
+
+
+def test_assert_masterplan_owned_bridge_raises_value_error_on_missing_plan():
+    from apps.tasks.services.masterplan_bridge import assert_masterplan_owned_via_syscall
+
+    dispatcher = MagicMock()
+    dispatcher.dispatch.return_value = {"status": "error", "error": "NOT_FOUND:MasterPlan not found"}
+
+    with patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
+        with pytest.raises(ValueError) as exc_info:
+            assert_masterplan_owned_via_syscall("42", "user-1", object())
+
+    assert str(exc_info.value) == "masterplan_not_found:42"

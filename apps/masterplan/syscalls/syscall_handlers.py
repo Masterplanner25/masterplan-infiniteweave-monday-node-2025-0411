@@ -84,6 +84,30 @@ def _handle_get_masterplan_eta(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_get_active_masterplan(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.masterplan.models import MasterPlan
+
+    user_id = payload["user_id"]
+    db, owns_session = _session_from_context(ctx)
+    try:
+        plan = (
+            db.query(MasterPlan)
+            .filter(MasterPlan.user_id == user_id, MasterPlan.is_active.is_(True))
+            .first()
+        )
+        if plan is None:
+            return {"masterplan": None}
+        return {
+            "masterplan": {
+                "id": plan.id,
+                "anchor_date": plan.anchor_date.isoformat() if plan.anchor_date else None,
+            }
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_genesis_execute_llm(payload: dict, ctx: SyscallContext) -> dict:
     from apps.masterplan.models import GenesisSessionDB
     from apps.masterplan.services.genesis_ai import call_genesis_llm
@@ -260,6 +284,19 @@ def register_masterplan_syscall_handlers() -> None:
             "required": ["eta"],
             "properties": {
                 "eta": {"type": "dict"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.masterplan.get_active",
+        handler=_handle_get_active_masterplan,
+        capability="masterplan.read",
+        description="Return the active masterplan summary for the given user.",
+        input_schema={
+            "required": ["user_id"],
+            "properties": {
+                "user_id": {"type": "string"},
             },
         },
         stable=False,
