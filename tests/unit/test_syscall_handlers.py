@@ -83,6 +83,7 @@ class TestRegisterAllDomainHandlers:
             "sys.v1.goal.create",
             "sys.v1.research.query",
             "sys.v1.agent.suggest_tools",
+            "sys.v1.agent.dispatch_tool",
             "sys.v1.authorship.list_authors",
             "sys.v1.rippletrace.list_recent_pings",
         ]
@@ -1030,5 +1031,27 @@ class TestResearchAndAgentHandlers:
         suggestions = result["suggestions"]
         assert len(suggestions) >= 1
         assert suggestions[0]["tool"] == "memory.recall"
+
+    def test_agent_dispatch_tool_calls_helper(self):
+        from AINDY.kernel.syscall_handlers import _handle_agent_dispatch_tool
+
+        payload = {
+            "tool_name": "task.create",
+            "payload": {"task_name": "Write tests"},
+            "user_id": _TEST_UUID,
+            "syscall_name": "sys.v1.task.create",
+            "capability": "task.create",
+        }
+
+        with patch("apps.agent.agents.tool_helpers.dispatch_tool_syscall", return_value={"task_id": "t-1"}) as mock_dispatch:
+            result = _handle_agent_dispatch_tool(payload, _ctx())
+
+        assert result == {"task_id": "t-1"}
+        mock_dispatch.assert_called_once_with(
+            "sys.v1.task.create",
+            {"task_name": "Write tests"},
+            _TEST_UUID,
+            "task.create",
+        )
 
 

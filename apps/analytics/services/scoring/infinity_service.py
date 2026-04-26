@@ -54,6 +54,7 @@ from sqlalchemy.orm import Session
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.platform_layer.registry import emit_event, get_symbol
 from AINDY.platform_layer.user_ids import parse_user_id
+from apps.arm.public import list_analysis_results
 
 from ..orchestration.concurrency import supports_managed_transactions, transaction_scope
 
@@ -241,8 +242,6 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.arm.models import AnalysisResult
-
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
         tasks = _get_user_tasks_for_scoring(user_id, db)
@@ -258,11 +257,12 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
 
         # ARM quality trend — parse result_full JSON
         arm_score = 5.0
-        arm_results = db.query(AnalysisResult).filter(
-            AnalysisResult.user_id == user_id,
-            AnalysisResult.created_at >= window_start,
-            AnalysisResult.status == "success",
-        ).all()
+        arm_results = list_analysis_results(
+            user_id,
+            db,
+            created_at_gte=window_start,
+            status="success",
+        )
 
         data_points = len(arm_results)
 
@@ -270,7 +270,7 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
             scores = []
             for r in arm_results:
                 try:
-                    result_data = json.loads(r.result_full) if r.result_full else {}
+                    result_data = json.loads(r.get("result_full")) if r.get("result_full") else {}
                     arch = result_data.get("architecture_score", 5)
                     integrity = result_data.get("integrity_score", 5)
                     scores.append((arch + integrity) / 2)
@@ -303,16 +303,16 @@ def calculate_ai_productivity_boost(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.arm.models import AnalysisResult
-
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
 
-        arm_results = db.query(AnalysisResult).filter(
-            AnalysisResult.user_id == user_id,
-            AnalysisResult.created_at >= window_start,
-            AnalysisResult.status == "success",
-        ).order_by(AnalysisResult.created_at.asc()).all()
+        arm_results = list_analysis_results(
+            user_id,
+            db,
+            created_at_gte=window_start,
+            status="success",
+            ascending=True,
+        )
 
         usage_count = len(arm_results)
         usage_score = _sigmoid_score(usage_count, 5.0, steepness=0.5)
@@ -322,7 +322,7 @@ def calculate_ai_productivity_boost(user_id: str, db: Session) -> tuple:
         if len(arm_results) >= 2:
             def _extract_avg(r):
                 try:
-                    result_data = json.loads(r.result_full) if r.result_full else {}
+                    result_data = json.loads(r.get("result_full")) if r.get("result_full") else {}
                     arch = result_data.get("architecture_score", 5)
                     integ = result_data.get("integrity_score", 5)
                     return (arch + integ) / 2

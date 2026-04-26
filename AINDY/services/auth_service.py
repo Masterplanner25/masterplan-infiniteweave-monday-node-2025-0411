@@ -6,6 +6,9 @@ Provides:
 - API key validation (service-to-service auth)
 - Password hashing utilities
 """
+import os
+import signal
+import threading
 from datetime import datetime, timedelta, timezone
 import re
 from typing import Optional, TYPE_CHECKING
@@ -24,19 +27,93 @@ from AINDY.config import settings
 from AINDY.db.database import get_db
 from AINDY.platform_layer.user_ids import parse_user_id
 
+
+class KeyRing:
+    """
+    Two-slot JWT key ring supporting live rotation.
+
+    Signing always uses the active key.
+    Verification tries active first, then previous (grace period).
+    """
+
+    def __init__(
+        self,
+        active: str,
+        previous: Optional[str] = None,
+        grace_hours: int = 24,
+    ) -> None:
+        self._lock = threading.RLock()
+        self._active = active
+        self._previous = previous
+        self._previous_expires: Optional[datetime] = None
+        self._grace_hours = grace_hours
+        if previous:
+            self._previous_expires = datetime.now(timezone.utc) + timedelta(hours=grace_hours)
+
+    @property
+    def active_key(self) -> str:
+        with self._lock:
+            return self._active
+
+    def rotate(self, new_key: str) -> None:
+        """Promote active → previous (with expiry), set new active key."""
+        with self._lock:
+            if new_key == self._active:
+                return
+            self._previous = self._active
+            self._previous_expires = datetime.now(timezone.utc) + timedelta(
+                hours=self._grace_hours
+            )
+            self._active = new_key
+
+    def verify_keys(self) -> list[str]:
+        """Return keys to try for verification, most recent first."""
+        with self._lock:
+            keys = [self._active]
+            if self._previous and self._previous_expires:
+                if datetime.now(timezone.utc) < self._previous_expires:
+                    keys.append(self._previous)
+                else:
+                    self._previous = None
+                    self._previous_expires = None
+            return keys
+
+    def reload_from_env(self) -> bool:
+        """Reload active key from SECRET_KEY env var. Returns True if key changed."""
+        new_key = os.getenv("SECRET_KEY", "")
+        if not new_key or new_key == self._active:
+            return False
+        self.rotate(new_key)
+        return True
+
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT config
-SECRET_KEY: str = settings.SECRET_KEY
+SECRET_KEY: str = settings.SECRET_KEY  # backward compat — use _get_signing_key() in new code
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+_key_ring = KeyRing(active=settings.SECRET_KEY)
 
 # API key config
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)
 _platform_key_header = APIKeyHeader(name="X-Platform-Key", auto_error=False)
+
+
+def _get_signing_key() -> str:
+    return _key_ring.active_key
+
+
+def rotate_signing_key(new_key: str) -> bool:
+    global SECRET_KEY
+    if new_key == _key_ring.active_key:
+        return False
+    _key_ring.rotate(new_key)
+    SECRET_KEY = new_key
+    return True
 
 
 # ── Password utilities ──────────────────────────────────────────────────────
@@ -62,7 +139,7 @@ def create_access_token(
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, _get_signing_key(), algorithm=ALGORITHM)
 
 
 def _normalize_username_candidate(value: str | None) -> str:
@@ -84,15 +161,18 @@ def _resolve_username(*, email: str, username: str | None, db: Session) -> str:
 
 
 def decode_access_token(token: str) -> dict:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    last_exc = None
+    for key in _key_ring.verify_keys():
+        try:
+            payload = jwt.decode(token, key, algorithms=[ALGORITHM])
+            return payload
+        except JWTError as exc:
+            last_exc = exc
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid or expired token",
+        headers={"WWW-Authenticate": "Bearer"},
+    ) from last_exc
 
 
 def _resolve_authenticated_jwt_user(payload: dict, db: Session | None) -> dict:
@@ -337,3 +417,24 @@ def verify_api_key(
             detail="Invalid API key",
         )
     return api_key
+
+
+def _reload_key_on_sighup(signum, frame) -> None:
+    import logging as _log
+
+    global SECRET_KEY
+    logger = _log.getLogger(__name__)
+    changed = _key_ring.reload_from_env()
+    if changed:
+        SECRET_KEY = _key_ring.active_key
+        logger.warning(
+            "[auth_service] SECRET_KEY rotated via SIGHUP. "
+            "Previous key retained for %d-hour grace period.",
+            _key_ring._grace_hours,
+        )
+    else:
+        logger.info("[auth_service] SIGHUP received; SECRET_KEY unchanged.")
+
+
+if hasattr(signal, "SIGHUP"):
+    signal.signal(signal.SIGHUP, _reload_key_on_sighup)

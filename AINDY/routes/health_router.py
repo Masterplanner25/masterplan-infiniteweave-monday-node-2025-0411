@@ -13,6 +13,7 @@ from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal, get_pool_status
+from AINDY.platform_layer.domain_health import domain_health_registry
 from AINDY.platform_layer.registry import get_degraded_domains
 from AINDY.platform_layer.rate_limiter import limiter
 
@@ -116,6 +117,10 @@ def _testing_health_payload() -> dict:
     warnings: list[str] = []
     if db_pool.get("checkedout", 0) > (db_pool.get("pool_size", 0) + (settings.DB_MAX_OVERFLOW * 0.8)):
         warnings.append("db_pool_near_exhaustion")
+    db_pool["pressure_ratio"] = round(
+        db_pool.get("checkedout", 0) / max(settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW, 1),
+        3,
+    )
     if warnings:
         payload["warnings"] = warnings
     return payload
@@ -170,6 +175,10 @@ def _build_health_response(*, force: bool) -> JSONResponse:
         warnings = list(payload.get("warnings") or [])
         warnings.append("db_pool_near_exhaustion")
         payload["warnings"] = warnings
+    db_pool["pressure_ratio"] = round(
+        db_pool.get("checkedout", 0) / max(settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW, 1),
+        3,
+    )
     _emit_health_event(payload)
     status_code = 503 if payload.get("status") == "unhealthy" else 200
     return JSONResponse(status_code=status_code, content=payload)
@@ -323,6 +332,43 @@ def _check_ai_providers_status() -> dict:
     }
 
 
+def _check_quota_backend_status() -> dict:
+    from AINDY.kernel.resource_manager import get_resource_manager
+
+    rm = get_resource_manager()
+    redis_mode = rm.is_redis_mode()
+    is_distributed = settings.EXECUTION_MODE == "distributed"
+    if is_distributed and not redis_mode:
+        return {
+            "status": "degraded",
+            "detail": (
+                "EXECUTION_MODE=distributed but quota enforcement is in-process only. "
+                "Per-instance quotas may allow N * MAX_CONCURRENT_PER_TENANT total concurrency."
+            ),
+            "quota_mode": "in_memory",
+        }
+    return {
+        "status": "ok",
+        "quota_mode": "redis" if redis_mode else "in_memory",
+    }
+
+
+def _domain_health_payload() -> tuple[int, dict]:
+    statuses = domain_health_registry.check_all()
+    healthy = all(status.healthy for status in statuses.values())
+    payload = {
+        "domains": {
+            domain: {
+                "healthy": status.healthy,
+                "last_checked": status.last_checked.isoformat(),
+                "error": status.error,
+            }
+            for domain, status in statuses.items()
+        }
+    }
+    return (200 if healthy else 207), payload
+
+
 @router.post("/client/error", status_code=204)
 @limiter.limit("30/minute")
 async def report_client_error(
@@ -391,7 +437,7 @@ async def report_client_vitals(
 
 
 async def _build_deep_health_payload() -> dict:
-    database, redis, mongo, scheduler, flow_registry, worker, nodus, ai_providers = await gather(
+    database, redis, mongo, scheduler, flow_registry, worker, nodus, ai_providers, quota_backend = await gather(
         _run_deep_check(_check_database_status, timeout=0.5),
         _run_deep_check(_check_redis_status, timeout=1.0),
         _run_deep_check(_check_mongo_status, timeout=1.0),
@@ -400,6 +446,7 @@ async def _build_deep_health_payload() -> dict:
         _run_deep_check(_check_worker_health, timeout=1.0),
         _run_deep_check(_check_nodus_status, timeout=1.0),
         _run_deep_check(_check_ai_providers_status, timeout=0.5),
+        _run_deep_check(_check_quota_backend_status, timeout=0.5),
     )
 
     checks = {
@@ -411,6 +458,7 @@ async def _build_deep_health_payload() -> dict:
         "worker": worker if worker.get("status") != "error" else {"status": "error", "detail": worker.get("detail")},
         "nodus": nodus if nodus.get("status") != "error" else {"status": "unavailable", "detail": nodus.get("detail")},
         "ai_providers": ai_providers if ai_providers.get("status") != "error" else {"status": "unavailable", "detail": ai_providers.get("detail")},
+        "quota_backend": quota_backend,
     }
     overall_status = "degraded" if any(
         check.get("status") not in {"ok", "not_configured", "not_applicable"} for check in checks.values()
@@ -453,6 +501,14 @@ async def health_check_details_legacy(request: Request):
 async def health_check_deep(request: Request):
     payload = await _build_deep_health_payload()
     return JSONResponse(status_code=200, content=payload)
+
+
+@router.get("/health/domains", summary="Check Domain Health")
+@limiter.limit("60/minute")
+async def health_check_domains(request: Request):
+    """Return per-domain health for registered domain apps."""
+    status_code, payload = _domain_health_payload()
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 def _readiness_response() -> JSONResponse:

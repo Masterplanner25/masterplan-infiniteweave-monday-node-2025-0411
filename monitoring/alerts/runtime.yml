@@ -1,0 +1,57 @@
+groups:
+  - name: aindy-runtime
+    rules:
+      - alert: HighExecutionFailureRate
+        expr: rate(aindy_execution_total{status="failed"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High execution failure rate on route {{ $labels.route }}"
+          description: "Execution failures on route {{ $labels.route }} have exceeded 0.1 failures/sec over the last 5 minutes."
+
+      - alert: ExecutionPipelineSlow
+        expr: histogram_quantile(0.95, sum by (le, route) (rate(aindy_execution_duration_seconds_bucket[5m]))) > 5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Execution pipeline p95 latency is elevated"
+          description: "The p95 execution duration has remained above 5 seconds for route {{ $labels.route }}."
+
+      - alert: AICircuitBreakerOpen
+        expr: aindy_ai_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+          provider: '{{ $labels.provider }}'
+        annotations:
+          summary: "AI circuit breaker open for {{ $labels.provider }}"
+          description: "The {{ $labels.provider }} circuit breaker has been open for at least 1 minute."
+
+      - alert: SystemHealthDegraded
+        expr: aindy_system_health_tier == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "System health is degraded"
+          description: "AINDY system health tier has remained degraded for at least 5 minutes."
+
+      - alert: SystemHealthCritical
+        expr: aindy_system_health_tier >= 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "System health is critical"
+          description: "AINDY system health tier has remained critical for at least 5 minutes."
+
+      - alert: MemoryIngestQueueNearCapacity
+        expr: aindy_memory_ingest_queue_depth / aindy_memory_ingest_queue_capacity > 0.9
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory ingest queue near capacity"
+          description: "The memory ingest queue has exceeded 90% of configured capacity for at least 2 minutes."

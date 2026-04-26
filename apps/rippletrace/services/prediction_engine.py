@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from apps.analytics.public import list_score_snapshots
 from apps.rippletrace.models import PingDB
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.learning_engine import get_learning_thresholds, record_prediction
+
+HIGH_PING_THRESHOLD = 5
 
 
 def _normalize(value: Optional[float]) -> float:
@@ -21,28 +25,32 @@ def _minutes_between(oldest, latest):
     return max(delta_minutes, 1.0)
 
 
-def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = True) -> dict:
-    from apps.analytics.models import ScoreSnapshotDB
+def _datetime_from_iso(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
-    snapshots = (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .order_by(ScoreSnapshotDB.timestamp.desc())
-        .limit(5)
-        .all()
-    )
+
+def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = True) -> dict:
+    snapshots = list_score_snapshots(drop_point_id, db, limit=5)
     if len(snapshots) < 3:
         return {"drop_point_id": drop_point_id, "status": "insufficient_data"}
 
     latest = snapshots[0]
     oldest = snapshots[-1]
-    delta_minutes = _minutes_between(oldest.timestamp, latest.timestamp)
+    delta_minutes = _minutes_between(
+        _datetime_from_iso(oldest.get("timestamp")),
+        _datetime_from_iso(latest.get("timestamp")),
+    )
     velocity_trend = (
-        (_normalize(latest.velocity_score) - _normalize(oldest.velocity_score))
+        (_normalize(latest.get("velocity_score")) - _normalize(oldest.get("velocity_score")))
         / delta_minutes
     )
     narrative_trend = (
-        (_normalize(latest.narrative_score) - _normalize(oldest.narrative_score))
+        (_normalize(latest.get("narrative_score")) - _normalize(oldest.get("narrative_score")))
         / delta_minutes
     )
 
@@ -63,7 +71,7 @@ def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = 
         .scalar()
         or 0
     )
-    latest_narrative = _normalize(latest.narrative_score)
+    latest_narrative = _normalize(latest.get("narrative_score"))
 
     prediction = "stable"
     if (
@@ -88,7 +96,7 @@ def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = 
             db,
             drop_point_id,
             prediction,
-            _normalize(latest.velocity_score),
+            _normalize(latest.get("velocity_score")),
             latest_narrative,
         )
 
@@ -129,4 +137,3 @@ def prediction_summary(db: Session, limit: int = 50) -> dict:
         if prediction["prediction"] == "emerging_signal":
             summary["total_emerging_signals"] += 1
     return summary
-

@@ -9,6 +9,8 @@ import {
   replayAutomationLog,
   getSchedulerStatus,
   getFlowStrategies } from "../../api/operator.js";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import { LoadingPanel } from "../shared/LoadingPanel";
 import { EmptyState } from "../shared/EmptyState";
 
@@ -1514,6 +1516,8 @@ const TABS = [
 
 
 export default function FlowEngineConsole() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const [activeTab, setActiveTab] = useState("runs");
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);

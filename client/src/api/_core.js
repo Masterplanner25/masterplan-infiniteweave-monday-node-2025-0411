@@ -89,6 +89,11 @@ export function clearStoredToken() {
   localStorage.removeItem(LEGACY_TOKEN_STORAGE_KEY);
 }
 
+/**
+ * Build a full API URL from a path.
+ * Path should come from ROUTES in _routes.js.
+ * API_BASE provides the host (from VITE_API_BASE_URL).
+ */
 export function buildApiUrl(path) {
   if (/^https?:\/\//i.test(path)) {
     return path;
@@ -101,6 +106,15 @@ function dispatchSessionExpired() {
     return;
   }
   window.dispatchEvent(new CustomEvent("aindy:session-expired"));
+}
+
+function dispatchVersionWarning(message) {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("aindy:version-warning", { detail: { message } })
+  );
 }
 
 async function request(path, opts = {}) {
@@ -132,8 +146,9 @@ async function request(path, opts = {}) {
     });
 
     const versionWarning = res.headers?.get?.("X-Version-Warning");
-    if (versionWarning) {
+    if (versionWarning && typeof window !== "undefined") {
       console.warn("[API Version Warning]", versionWarning);
+      dispatchVersionWarning(versionWarning);
     }
 
     if (!res.ok) {
@@ -173,6 +188,33 @@ function authRequest(path, opts = {}) {
   });
 }
 
+/**
+ * Wraps authRequest with a client-side admin check.
+ * Throws ApiError(403) immediately if the stored token does not carry is_admin=true.
+ * Does NOT replace backend enforcement - it is defense-in-depth.
+ */
+export function adminRequest(path, opts = {}) {
+  const token = getStoredToken();
+  let isAdmin = false;
+  if (token) {
+    try {
+      const [, payload = ""] = token.split(".");
+      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      const parsed = JSON.parse(atob(padded));
+      isAdmin = parsed?.is_admin === true;
+    } catch {
+      isAdmin = false;
+    }
+  }
+  if (!isAdmin) {
+    return Promise.reject(
+      new ApiError(403, "Admin privileges required for this operation.", null)
+    );
+  }
+  return authRequest(path, opts);
+}
+
 async function requestAbsolute(url, opts = {}) {
   const token = getStoredToken();
   const controller = new AbortController();
@@ -201,8 +243,9 @@ async function requestAbsolute(url, opts = {}) {
     });
 
     const versionWarning = res.headers?.get?.("X-Version-Warning");
-    if (versionWarning) {
+    if (versionWarning && typeof window !== "undefined") {
       console.warn("[API Version Warning]", versionWarning);
+      dispatchVersionWarning(versionWarning);
     }
 
     if (!res.ok) {

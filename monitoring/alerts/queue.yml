@@ -1,0 +1,38 @@
+groups:
+  - name: aindy-queue
+    rules:
+      - alert: DLQDepthNonZero
+        expr: aindy_async_queue_dlq_depth > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dead-letter queue contains jobs"
+          description: "The async dead-letter queue depth is non-zero. Dead-letter jobs require manual intervention."
+
+      - alert: QueueBackendDegraded
+        expr: aindy_queue_backend_mode == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Queue backend degraded to in-memory"
+          description: "The Redis queue backend has fallen back to in-memory mode. Distributed execution is compromised."
+
+      - alert: QueueSaturation
+        expr: aindy_async_queue_depth / aindy_async_queue_capacity > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Async queue saturation high"
+          description: "The async queue depth has exceeded 85% of configured capacity for at least 2 minutes."
+
+      - alert: WorkerSyscallErrorRate
+        expr: rate(aindy_openai_errors_total[5m]) + rate(aindy_deepseek_errors_total[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI provider error rate elevated"
+          description: "Combined OpenAI and DeepSeek terminal error rate has exceeded 0.5 errors/sec for at least 5 minutes."

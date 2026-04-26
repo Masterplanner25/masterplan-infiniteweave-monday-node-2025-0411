@@ -55,7 +55,7 @@ class TestHealthEndpoint:
         assert "checks" in data
         assert all(
             key in data["checks"]
-            for key in ("database", "redis", "mongo", "scheduler", "flow_registry", "worker", "nodus", "ai_providers")
+            for key in ("database", "redis", "mongo", "scheduler", "flow_registry", "worker", "nodus", "ai_providers", "quota_backend")
         )
         assert "circuit" in data["checks"]["ai_providers"]["openai"]
         assert "circuit" in data["checks"]["ai_providers"]["deepseek"]

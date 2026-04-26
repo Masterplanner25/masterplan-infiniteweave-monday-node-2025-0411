@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from apps.analytics.public import create_score_snapshot
 from apps.rippletrace.models import DropPointDB, PingDB
 SEMANTIC_KEYWORDS = {"similar", "echo", "same idea"}
 INFERRED_KEYWORDS = {"unexpected", "random", "coincidence"}
@@ -47,8 +48,6 @@ def _map_drop_point_schema(drop_point: DropPointDB) -> dict:
 
 
 def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
-    from apps.analytics.models import ScoreSnapshotDB
-
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )
@@ -92,16 +91,16 @@ def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
     drop_point.spread_score = spread_score
     drop_point.narrative_score = narrative_score
 
-    snapshot = ScoreSnapshotDB(
-        id=str(uuid.uuid4()),
+    create_score_snapshot(
         drop_point_id=drop_point_id,
+        db=db,
         timestamp=datetime.now(timezone.utc),
         narrative_score=narrative_score,
         velocity_score=velocity_score,
         spread_score=spread_score,
+        snapshot_id=str(uuid.uuid4()),
     )
     db.add(drop_point)
-    db.add(snapshot)
     db.commit()
     db.refresh(drop_point)
 

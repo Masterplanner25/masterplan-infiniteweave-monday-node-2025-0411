@@ -11,6 +11,8 @@ def register() -> None:
     _register_events()
     _register_syscalls()
     _register_health_check()
+    # Expose public surface for cross-domain callers.
+    from apps.identity import public as identity_public  # noqa: F401
 
 
 def _register_router() -> None:
@@ -56,7 +58,29 @@ def _handle_auth_register_completed(event: dict) -> None:
     initialize_signup_state(db=db, user=user)
 
 
+def identity_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+    from sqlalchemy import text
+
+    try:
+        from AINDY.db.models.user_identity import UserIdentity
+        from apps.identity.services.identity_service import IdentityService
+    except Exception as exc:
+        raise RuntimeError(f"identity health import failed: {exc}") from exc
+
+    _ = IdentityService
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        db.query(UserIdentity.id).limit(1).all()
+        return True
+    finally:
+        db.close()
+
+
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("identity", identity_health_check)
     register_health_check("identity", lambda: {"status": "ok"})

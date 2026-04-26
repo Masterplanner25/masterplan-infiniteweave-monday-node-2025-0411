@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { getDashboardHealth } from "../../api/legacy.js";import { safeMap } from "../../utils/safe";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 
 export default function HealthDashboard() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

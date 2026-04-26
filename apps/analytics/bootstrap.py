@@ -4,6 +4,8 @@ from __future__ import annotations
 import logging
 import uuid
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = ["identity", "tasks"]
@@ -196,9 +198,24 @@ def _scheduler_recalculate_all_scores() -> None:
 
 
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("analytics", analytics_health_check)
     register_health_check("analytics", _check_health)
+
+
+def analytics_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+    from apps.analytics.models import UserScore
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        db.query(UserScore.id).limit(1).all()
+        return True
+    finally:
+        db.close()
 
 
 def _check_health() -> dict:

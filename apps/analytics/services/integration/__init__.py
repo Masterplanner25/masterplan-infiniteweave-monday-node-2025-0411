@@ -12,12 +12,11 @@ from .dependency_adapter import (
     fetch_user_metrics,
     get_latest_loop_adjustment,
     get_latest_loop_adjustment_for_update,
-    get_loop_adjustment_model,
     get_pending_loop_adjustment,
-    get_user_feedback_model,
     list_incomplete_tasks,
     list_recent_feedback_rows,
     list_strategy_accuracy_adjustments,
+    update_loop_adjustment,
 )
 from .masterplan_guard import assert_masterplan_owned_via_syscall
 from .tasks_bridge import get_task_graph_context_via_syscall
@@ -35,13 +34,12 @@ __all__ = [
     "fetch_user_metrics",
     "get_latest_loop_adjustment",
     "get_latest_loop_adjustment_for_update",
-    "get_loop_adjustment_model",
     "get_pending_loop_adjustment",
     "get_task_graph_context_via_syscall",
-    "get_user_feedback_model",
     "list_incomplete_tasks",
     "list_recent_feedback_rows",
     "list_strategy_accuracy_adjustments",
     "masterplan_guard",
     "tasks_bridge",
+    "update_loop_adjustment",
 ]

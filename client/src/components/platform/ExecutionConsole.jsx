@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { calculateTwr } from "../../api/analytics.js";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import { Toast } from "../shared/Toast";
 // Import all panels from the same directory
 import EngagementPanel from "../app/EngagementPanel";
@@ -18,6 +20,8 @@ import LostPotentialPanel from "../app/LostPotentialPanel";
 import { useToast } from "../../utils/useToast";
 
 export default function ExecutionConsole() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   // 1. Tab State
   const [activeTab, setActiveTab] = useState("core");
 

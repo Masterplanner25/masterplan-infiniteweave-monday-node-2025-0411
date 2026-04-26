@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from apps.analytics.public import list_score_snapshots
 from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.causal_engine import get_causal_chain
 from apps.rippletrace.services.delta_engine import compute_deltas
@@ -22,7 +23,7 @@ def _datetime_from_iso(value: Optional[str]) -> datetime:
     if not value:
         return datetime.min
     try:
-        return datetime.fromisoformat(value)
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return datetime.min
 
@@ -44,8 +45,6 @@ def generate_story_summary(narrative_data: Dict) -> str:
 
 
 def generate_narrative(drop_point_id: str, db: Session) -> Dict:
-    from apps.analytics.models import ScoreSnapshotDB
-
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )
@@ -58,12 +57,7 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
         .order_by(PingDB.date_detected.asc())
         .all()
     )
-    snapshots = (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .order_by(ScoreSnapshotDB.timestamp.asc())
-        .all()
-    )
+    snapshots = list_score_snapshots(drop_point_id, db, ascending=True)
 
     delta_info = compute_deltas(drop_point_id, db)
     prediction = predict_drop_point(drop_point_id, db, record_learning=False)
@@ -95,13 +89,11 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
     for snapshot in snapshots:
         timeline.append(
             {
-                "timestamp": snapshot.timestamp.isoformat()
-                if snapshot.timestamp
-                else None,
+                "timestamp": snapshot.get("timestamp"),
                 "event": "Score snapshot",
-                "narrative_score": snapshot.narrative_score,
-                "velocity_score": snapshot.velocity_score,
-                "spread_score": snapshot.spread_score,
+                "narrative_score": snapshot.get("narrative_score"),
+                "velocity_score": snapshot.get("velocity_score"),
+                "spread_score": snapshot.get("spread_score"),
             }
         )
 
@@ -130,9 +122,9 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
         )
 
     max_delta = 0.0
-    spike_snapshot: Optional[ScoreSnapshotDB] = None
+    spike_snapshot: Optional[dict] = None
     for prev, curr in zip(snapshots, snapshots[1:]):
-        delta = (curr.narrative_score or 0.0) - (prev.narrative_score or 0.0)
+        delta = (curr.get("narrative_score") or 0.0) - (prev.get("narrative_score") or 0.0)
         if delta > max_delta:
             max_delta = delta
             spike_snapshot = curr
@@ -140,9 +132,7 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
         inflection_points.append(
             {
                 "type": "narrative_spike",
-                "timestamp": spike_snapshot.timestamp.isoformat()
-                if spike_snapshot.timestamp
-                else None,
+                "timestamp": spike_snapshot.get("timestamp"),
                 "value": max_delta,
             }
         )
@@ -150,32 +140,28 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
     peak_velocity = None
     if snapshots:
         peak_velocity = max(
-            snapshots, key=lambda s: s.velocity_score or 0.0, default=None
+            snapshots, key=lambda s: s.get("velocity_score") or 0.0, default=None
         )
         if peak_velocity:
             inflection_points.append(
                 {
                     "type": "peak_velocity",
-                    "timestamp": peak_velocity.timestamp.isoformat()
-                    if peak_velocity.timestamp
-                    else None,
-                    "value": peak_velocity.velocity_score,
+                    "timestamp": peak_velocity.get("timestamp"),
+                    "value": peak_velocity.get("velocity_score"),
                 }
             )
 
     decline_snapshot = None
     for prev, curr in zip(snapshots, snapshots[1:]):
-        if (curr.velocity_score or 0.0) < (prev.velocity_score or 0.0):
+        if (curr.get("velocity_score") or 0.0) < (prev.get("velocity_score") or 0.0):
             decline_snapshot = curr
             break
     if decline_snapshot:
         inflection_points.append(
             {
                 "type": "decline_started",
-                "timestamp": decline_snapshot.timestamp.isoformat()
-                if decline_snapshot.timestamp
-                else None,
-                "value": decline_snapshot.velocity_score,
+                "timestamp": decline_snapshot.get("timestamp"),
+                "value": decline_snapshot.get("velocity_score"),
             }
         )
 
@@ -217,11 +203,9 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
         "recommendation": recommendation,
         "score_snapshots": [
             {
-                "timestamp": snapshot.timestamp.isoformat()
-                if snapshot.timestamp
-                else None,
-                "narrative_score": snapshot.narrative_score,
-                "velocity_score": snapshot.velocity_score,
+                "timestamp": snapshot.get("timestamp"),
+                "narrative_score": snapshot.get("narrative_score"),
+                "velocity_score": snapshot.get("velocity_score"),
             }
             for snapshot in snapshots
         ],
@@ -239,4 +223,3 @@ def narrative_summary(db: Session, limit: int = 3) -> List[Dict]:
         .all()
     )
     return [generate_narrative(dp.id, db) for dp in drop_points if dp]
-

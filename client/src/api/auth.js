@@ -1,21 +1,22 @@
 import { getStoredToken, request } from "./_core.js";
+import { ROUTES } from "./_routes.js";
 
 export function loginUser(credentials) {
-  return request("/auth/login", {
+  return request(ROUTES.AUTH.LOGIN, {
     method: "POST",
     body: JSON.stringify(credentials),
   });
 }
 
 export function registerUser(credentials) {
-  return request("/auth/register", {
+  return request(ROUTES.AUTH.REGISTER, {
     method: "POST",
     body: JSON.stringify(credentials),
   });
 }
 
 export function bootIdentity(token = getStoredToken()) {
-  return request("/identity/boot", {
+  return request(ROUTES.IDENTITY.BOOT, {
     method: "GET",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });

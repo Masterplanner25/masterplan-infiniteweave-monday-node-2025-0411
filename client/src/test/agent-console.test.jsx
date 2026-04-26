@@ -45,6 +45,23 @@ vi.mock("../api/analytics.js", () => ({
   postScoreFeedback: mockPostScoreFeedback,
 }));
 
+vi.mock("../context/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useAuth: () => ({
+      token: null,
+      user: { is_admin: true },
+      isAdmin: true,
+      isAuthenticated: true,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+    }),
+  };
+});
+
 import AgentConsole from "../components/platform/AgentConsole";
 
 describe("AgentConsole", () => {

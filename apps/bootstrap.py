@@ -12,8 +12,12 @@ import logging
 from pathlib import Path
 from types import SimpleNamespace
 
+from AINDY.config import CORE_DOMAINS
 from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
-from AINDY.platform_layer.registry import publish_degraded_domains
+from AINDY.platform_layer.registry import (
+    publish_bootstrap_registration,
+    publish_degraded_domains,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +25,7 @@ _BOOTSTRAPPED = False
 _DEGRADED_DOMAINS: list[str] = []
 _BOOTSTRAP_METADATA_CACHE: dict[str, dict[str, list[str]]] | None = None
 
-CORE_DOMAINS: frozenset[str] = frozenset({
-    "tasks",
-    "identity",
-    "agent",
-})
+CORE_DOMAINS_SET: frozenset[str] = frozenset(CORE_DOMAINS)
 
 APP_BOOTSTRAP_MODULES: dict[str, str] = {
     "tasks": "apps.tasks.bootstrap",
@@ -149,7 +149,7 @@ def bootstrap() -> None:
         depends_on = list(metadata[app_name]["BOOTSTRAP_DEPENDS_ON"])
         blocked_by = [dependency for dependency in depends_on if dependency in failed_domains]
 
-        if blocked_by and app_name in CORE_DOMAINS:
+        if blocked_by and app_name in CORE_DOMAINS_SET:
             _BOOTSTRAPPED = False
             _DEGRADED_DOMAINS = failed_peripheral
             publish_degraded_domains(_DEGRADED_DOMAINS)
@@ -167,10 +167,11 @@ def bootstrap() -> None:
         try:
             mod = _import_bootstrap_module(app_name)
             mod.register()
+            publish_bootstrap_registration(app_name, depends_on)
             logger.info("Bootstrap OK: %s", app_name)
         except Exception as exc:
             failed_domains.add(app_name)
-            if app_name in CORE_DOMAINS:
+            if app_name in CORE_DOMAINS_SET:
                 _BOOTSTRAPPED = False
                 _DEGRADED_DOMAINS = failed_peripheral
                 publish_degraded_domains(_DEGRADED_DOMAINS)

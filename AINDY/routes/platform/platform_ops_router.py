@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from AINDY.db.database import get_db
@@ -9,6 +10,10 @@ from AINDY.routes.platform.schemas import SyscallDispatchRequest
 from AINDY.services.auth_service import get_current_user
 
 router = APIRouter()
+
+
+class RotateSecretKeyRequest(BaseModel):
+    new_key: str
 
 
 @router.get("/nodus/trace/{trace_id}", response_model=None)
@@ -148,3 +153,37 @@ def dispatch_syscall(request: Request, body: SyscallDispatchRequest, current_use
         if "Unknown syscall" in msg:
             raise HTTPException(status_code=404, detail={"error": msg})
     return result
+
+
+@router.post("/ops/rotate-secret-key", response_model=None)
+@limiter.limit("10/minute")
+def rotate_secret_key(
+    request: Request,
+    body: RotateSecretKeyRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if len(body.new_key or "") < 32:
+        raise HTTPException(status_code=400, detail="new_key must be at least 32 characters")
+
+    from AINDY.core.system_event_service import emit_system_event
+    from AINDY.services import auth_service
+
+    if body.new_key == auth_service._key_ring.active_key:
+        raise HTTPException(status_code=400, detail="new_key is the same as the current active key")
+
+    auth_service.rotate_signing_key(body.new_key)
+    emit_system_event(
+        db=db,
+        event_type="platform.secret_key.rotated",
+        user_id=str(current_user.get("sub") or current_user.get("user_id") or ""),
+        payload={"message": "rotation completed"},
+        required=False,
+    )
+    return {
+        "rotated": True,
+        "grace_hours": auth_service._key_ring._grace_hours,
+        "message": (
+            f"New key active. Previous key valid for {auth_service._key_ring._grace_hours} hours."
+        ),
+    }

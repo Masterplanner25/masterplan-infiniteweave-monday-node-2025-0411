@@ -49,6 +49,8 @@ Use the deployment model and runtime docs as the source of truth, not older repo
 | [Architecture Map](architecture/ARCHITECTURE_MAP.md) | Verified codebase navigation map for runtime, apps, data, and boot boundaries |
 | [Plugin Registry Pattern](architecture/PLUGIN_REGISTRY_PATTERN.md) | How domain apps integrate with the AINDY runtime - the actual wiring mechanism |
 | [Cross-Domain Coupling](architecture/CROSS_DOMAIN_COUPLING.md) | Where analytics and automation intentionally cross domain boundaries, and the rules for doing so safely |
+| [Public Surface Contracts](architecture/PUBLIC_SURFACE_CONTRACTS.md) | Documented public API contracts for cross-domain app imports |
+| [Public Surface Migration Guide](architecture/PUBLIC_SURFACE_MIGRATION_GUIDE.md) | Breaking-change and migration guidance for public surface consumers |
 | [System Spec](architecture/SYSTEM_SPEC.md) | Top-level system specification |
 | [AINDY Internals](architecture/AINDY_INTERNALS.md) | Directory structure and runtime-oriented code map |
 

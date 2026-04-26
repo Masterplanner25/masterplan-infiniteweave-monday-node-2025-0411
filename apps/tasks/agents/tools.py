@@ -3,6 +3,25 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
+from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+
+
+def _dispatch_agent_tool(tool_name: str, syscall_name: str, args: dict, user_id: str) -> dict:
+    ctx = make_syscall_ctx_from_tool(user_id, capabilities=["agent.tool_dispatch"])
+    result = get_dispatcher().dispatch(
+        "sys.v1.agent.dispatch_tool",
+        {
+            "tool_name": tool_name,
+            "payload": args,
+            "user_id": user_id,
+            "syscall_name": syscall_name,
+            "capability": tool_name,
+        },
+        ctx,
+    )
+    if result["status"] == "error":
+        raise RuntimeError(result["error"])
+    return result["data"]
 
 
 def register() -> None:
@@ -27,13 +46,9 @@ def register() -> None:
 
 
 def task_create(args: dict, user_id: str, db) -> dict:
-    from apps.agent.agents.tool_helpers import dispatch_tool_syscall
-
-    data = dispatch_tool_syscall("sys.v1.task.create", args, user_id, "task.create")
+    data = _dispatch_agent_tool("task.create", "sys.v1.task.create", args, user_id)
     return {"task_id": data.get("task_id"), "name": data.get("task_name"), "status": data.get("status")}
 
 
 def task_complete(args: dict, user_id: str, db) -> dict:
-    from apps.agent.agents.tool_helpers import dispatch_tool_syscall
-
-    return dispatch_tool_syscall("sys.v1.task.complete_full", args, user_id, "task.complete_full")
+    return _dispatch_agent_tool("task.complete_full", "sys.v1.task.complete_full", args, user_id)

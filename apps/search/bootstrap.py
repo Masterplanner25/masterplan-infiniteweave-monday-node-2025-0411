@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "analytics"]
+APP_DEPENDS_ON: list[str] = ["analytics"]
 
 
 def register() -> None:

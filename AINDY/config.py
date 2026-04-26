@@ -12,6 +12,7 @@ from pydantic import Field, field_validator, model_validator
 from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
+CORE_DOMAINS: list[str] = ["tasks", "identity", "agent"]
 
 def _read_version() -> str:
     import json, pathlib
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY")
     @classmethod
     def reject_insecure_secret_key(cls, v: str) -> str:
-        env_name = os.getenv("ENV", "").lower()
+        env_name = os.getenv("ENV", "development").lower()
         is_test = env_name == "test" or os.getenv(
             "TEST_MODE", "0"
         ).lower() in {"1", "true", "yes"}
@@ -84,7 +85,7 @@ class Settings(BaseSettings):
     @field_validator("OPENAI_API_KEY")
     @classmethod
     def reject_placeholder_openai_api_key(cls, v: str) -> str:
-        env_name = os.getenv("ENV", "").lower()
+        env_name = os.getenv("ENV", "development").lower()
         is_test = env_name == "test" or os.getenv(
             "TEST_MODE", "0"
         ).lower() in {"1", "true", "yes"} or os.getenv(
@@ -103,7 +104,7 @@ class Settings(BaseSettings):
     def default_contract_enforcement_for_tests(cls, v: bool) -> bool:
         if "ENFORCE_EXECUTION_CONTRACT" in os.environ:
             return bool(v)
-        env_name = os.getenv("ENV", "").lower()
+        env_name = os.getenv("ENV", "development").lower()
         is_test = env_name == "test" or os.getenv(
             "TEST_MODE", "0"
         ).lower() in {"1", "true", "yes"} or os.getenv(

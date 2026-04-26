@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 _MOVED_SYSCALL_SYMBOLS = {
@@ -35,7 +37,7 @@ BOOTSTRAP_DEPENDS_ON: list[str] = [
     "masterplan",
     "tasks",
 ]
-APP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = ["agent"]
 
 
 def register() -> None:
@@ -192,6 +194,7 @@ def _register_required_syscalls() -> None:
     for name in (
         "sys.v1.score.feedback",
         "sys.v1.agent.suggest_tools",
+        "sys.v1.agent.dispatch_tool",
     ):
         register_required_syscall(name)
 
@@ -206,6 +209,21 @@ def _job_automation_execute(payload: dict, db):
 
 
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("automation", automation_health_check)
     register_health_check("automation", lambda: {"status": "ok"})
+
+
+def automation_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+    from apps.automation.models import AutomationLog
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        db.query(AutomationLog.id).limit(1).all()
+        return True
+    finally:
+        db.close()

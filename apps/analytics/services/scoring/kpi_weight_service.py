@@ -92,7 +92,7 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
         KPI_WEIGHT_MIN,
         KPI_WEIGHT_MIN_SAMPLES,
     )
-    from apps.automation.public import LoopAdjustment
+    from apps.automation.public import get_loop_adjustments
 
     try:
         uid = parse_user_id(user_id)
@@ -111,15 +111,14 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
                     "weights": _row_to_weights(row),
                 }
 
-        adjustments = (
-            db.query(LoopAdjustment)
-            .filter(
-                LoopAdjustment.user_id == uid,
-                LoopAdjustment.prediction_accuracy.isnot(None),
+        adjustments = list(
+            get_loop_adjustments(
+                uid,
+                db,
+                limit=LOOKBACK_WINDOW,
+                with_prediction_accuracy=True,
             )
-            .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
-            .limit(LOOKBACK_WINDOW)
-            .all()
+            or []
         )
 
         if len(adjustments) < KPI_WEIGHT_MIN_SAMPLES:
@@ -134,8 +133,8 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
         nudges: dict[str, float] = {k: 0.0 for k in _WEIGHT_COLS}
         nudges_applied = 0
         for adjustment in adjustments:
-            accuracy = int(adjustment.prediction_accuracy or 0)
-            kpis = _DECISION_TO_KPI.get(adjustment.decision_type or "", [])
+            accuracy = int(adjustment.get("prediction_accuracy") or 0)
+            kpis = _DECISION_TO_KPI.get(adjustment.get("decision_type") or "", [])
             if accuracy >= HIGH_ACCURACY_THRESHOLD:
                 for kpi in kpis:
                     nudges[kpi] += KPI_WEIGHT_LEARNING_RATE

@@ -67,6 +67,19 @@ db_pool_size = Gauge(
     registry=REGISTRY,
 )
 
+db_pool_pressure = Gauge(
+    "aindy_db_pool_pressure_ratio",
+    "Connection pool pressure: checkedout / (pool_size + max_overflow). "
+    "1.0 = fully saturated. Alert threshold recommended at 0.8.",
+    registry=REGISTRY,
+)
+
+db_pool_exhaustion_events_total = Counter(
+    "aindy_db_pool_exhaustion_events_total",
+    "Number of times the pool pressure threshold was crossed (rising edge only)",
+    registry=REGISTRY,
+)
+
 # ── OpenAI client ─────────────────────────────────────────────────────────────
 
 openai_retries_total = Counter(
@@ -190,6 +203,18 @@ queue_backend_mode = Gauge(
 queue_backend_fallback_total = Counter(
     "aindy_queue_backend_fallback_total",
     "Number of times the queue fell back from Redis to in-memory",
+    registry=REGISTRY,
+)
+
+quota_redis_mode = Gauge(
+    "aindy_quota_redis_mode",
+    "Active quota backend: 1=redis (cross-instance), 0=in_memory (per-instance only)",
+    registry=REGISTRY,
+)
+
+quota_redis_fallback_total = Counter(
+    "aindy_quota_redis_fallback_total",
+    "Number of times the quota backend fell back from Redis to in-memory",
     registry=REGISTRY,
 )
 

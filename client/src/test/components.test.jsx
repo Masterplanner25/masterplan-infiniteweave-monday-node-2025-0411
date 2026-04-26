@@ -4,6 +4,23 @@ import { EmptyState } from "../components/shared/EmptyState";
 import { LoadingPanel } from "../components/shared/LoadingPanel";
 import { Toast } from "../components/shared/Toast";
 
+vi.mock("../context/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useAuth: () => ({
+      token: null,
+      user: { is_admin: true },
+      isAdmin: true,
+      isAuthenticated: true,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+    }),
+  };
+});
+
 describe("LoadingPanel", () => {
   it("renders the requested number of skeleton lines", () => {
     render(<LoadingPanel lines={5} label="Loading..." />);
@@ -147,6 +164,21 @@ describe("TaskDashboard error handling", () => {
 });
 
 describe("RippleTraceViewer insight tabs", () => {
+  beforeEach(() => {
+    vi.doMock("../context/AuthContext", () => ({
+      useAuth: () => ({
+        token: null,
+        user: { is_admin: true },
+        isAdmin: true,
+        isAuthenticated: true,
+        login: vi.fn(),
+        register: vi.fn(),
+        logout: vi.fn(),
+        setToken: vi.fn(),
+      }),
+    }));
+  });
+
   afterEach(() => {
     vi.resetModules();
     vi.clearAllMocks();

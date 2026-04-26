@@ -80,6 +80,12 @@ def get_latest_adjustment_for_update(*args, **kwargs):
     return dependency_adapter.get_latest_loop_adjustment_for_update(*args, **kwargs)
 
 
+def update_loop_adjustment_record(*args, **kwargs):
+    from ..integration import dependency_adapter
+
+    return dependency_adapter.update_loop_adjustment(*args, **kwargs)
+
+
 def get_latest_adjustment(user_id: str, db):
     try:
         return get_latest_adjustment_record(user_id=user_id, db=db)
@@ -88,21 +94,33 @@ def get_latest_adjustment(user_id: str, db):
         return None
 
 
+def _adjustment_get(adjustment, key: str, default=None):
+    if adjustment is None:
+        return default
+    if isinstance(adjustment, dict):
+        return adjustment.get(key, default)
+    return getattr(adjustment, key, default)
+
+
 def serialize_adjustment(adjustment) -> dict | None:
     if not adjustment:
         return None
     return {
-        "id": str(adjustment.id),
-        "trace_id": getattr(adjustment, "trace_id", None),
-        "decision_type": adjustment.decision_type,
-        "expected_outcome": getattr(adjustment, "expected_outcome", None),
-        "expected_score": getattr(adjustment, "expected_score", None),
-        "actual_outcome": getattr(adjustment, "actual_outcome", None),
-        "actual_score": getattr(adjustment, "actual_score", None),
-        "prediction_accuracy": getattr(adjustment, "prediction_accuracy", None),
-        "deviation_score": getattr(adjustment, "deviation_score", None),
-        "applied_at": adjustment.applied_at.isoformat() if adjustment.applied_at else None,
-        "adjustment_payload": adjustment.adjustment_payload,
+        "id": str(_adjustment_get(adjustment, "id")),
+        "trace_id": _adjustment_get(adjustment, "trace_id"),
+        "decision_type": _adjustment_get(adjustment, "decision_type"),
+        "expected_outcome": _adjustment_get(adjustment, "expected_outcome"),
+        "expected_score": _adjustment_get(adjustment, "expected_score"),
+        "actual_outcome": _adjustment_get(adjustment, "actual_outcome"),
+        "actual_score": _adjustment_get(adjustment, "actual_score"),
+        "prediction_accuracy": _adjustment_get(adjustment, "prediction_accuracy"),
+        "deviation_score": _adjustment_get(adjustment, "deviation_score"),
+        "applied_at": (
+            _adjustment_get(adjustment, "applied_at").isoformat()
+            if getattr(_adjustment_get(adjustment, "applied_at"), "isoformat", None)
+            else _adjustment_get(adjustment, "applied_at")
+        ),
+        "adjustment_payload": _adjustment_get(adjustment, "adjustment_payload"),
     }
 
 
@@ -139,7 +157,11 @@ def _get_strategy_accuracy_context(user_id: str, db, limit: int = 20) -> dict[st
         rows = list_strategy_accuracy_adjustments(user_id=user_id, db=db, limit=limit)
         grouped: dict[str, list[float]] = {}
         for row in rows:
-            grouped.setdefault(row.decision_type, []).append(float(row.prediction_accuracy) / 100.0)
+            decision_type = _adjustment_get(row, "decision_type")
+            prediction_accuracy = _adjustment_get(row, "prediction_accuracy")
+            if decision_type is None or prediction_accuracy is None:
+                continue
+            grouped.setdefault(decision_type, []).append(float(prediction_accuracy) / 100.0)
         return {
             decision_type: round(sum(values) / len(values), 4)
             for decision_type, values in grouped.items()
@@ -207,22 +229,22 @@ def evaluate_pending_adjustment(
                 return None
 
             actual_outcome = _derive_actual_outcome(trigger_event)
-            expected_outcome = adjustment.expected_outcome or _derive_expected_outcome(adjustment.decision_type)
-            expected_score = float(adjustment.expected_score or 50.0)
-            actual_score_value = float(actual_score if actual_score is not None else adjustment.score_snapshot.get("master_score", 50.0))
+            expected_outcome = _adjustment_get(adjustment, "expected_outcome") or _derive_expected_outcome(
+                _adjustment_get(adjustment, "decision_type")
+            )
+            expected_score = float(_adjustment_get(adjustment, "expected_score") or 50.0)
+            actual_score_value = float(
+                actual_score
+                if actual_score is not None
+                else (_adjustment_get(adjustment, "score_snapshot") or {}).get("master_score", 50.0)
+            )
             score_delta = round(actual_score_value - expected_score, 2)
             deviation_score = int(round(abs(score_delta)))
             outcome_match = 1.0 if actual_outcome == expected_outcome else 0.5
             score_accuracy = max(0.0, 1.0 - min(1.0, abs(score_delta) / 25.0))
             prediction_accuracy = int(round(((outcome_match * 0.4) + (score_accuracy * 0.6)) * 100))
 
-            adjustment.actual_outcome = actual_outcome
-            adjustment.actual_score = int(round(actual_score_value))
-            adjustment.deviation_score = deviation_score
-            adjustment.prediction_accuracy = prediction_accuracy
-            adjustment.evaluated_at = datetime.now(timezone.utc)
-
-            payload = dict(adjustment.adjustment_payload or {})
+            payload = dict(_adjustment_get(adjustment, "adjustment_payload") or {})
             payload["expected_vs_actual"] = {
                 "expected_outcome": expected_outcome,
                 "actual_outcome": actual_outcome,
@@ -232,9 +254,16 @@ def evaluate_pending_adjustment(
                 "deviation_score": deviation_score,
                 "prediction_accuracy": prediction_accuracy,
             }
-            adjustment.adjustment_payload = payload
-            db.add(adjustment)
-            db.flush()
+            adjustment = update_loop_adjustment_record(
+                adjustment_id=_adjustment_get(adjustment, "id"),
+                db=db,
+                actual_outcome=actual_outcome,
+                actual_score=int(round(actual_score_value)),
+                deviation_score=deviation_score,
+                prediction_accuracy=prediction_accuracy,
+                evaluated_at=datetime.now(timezone.utc),
+                adjustment_payload=payload,
+            ) or adjustment
 
         try:
             from ..scoring.kpi_weight_service import adapt_kpi_weights
@@ -244,7 +273,7 @@ def evaluate_pending_adjustment(
             logger.debug("[InfinityLoop] weight adaptation skipped: %s", _adapt_exc)
 
         return {
-            "adjustment_id": str(adjustment.id),
+            "adjustment_id": str(_adjustment_get(adjustment, "id")),
             "prediction_accuracy": prediction_accuracy,
             "deviation_score": deviation_score,
             "score_delta": score_delta,
@@ -263,17 +292,17 @@ def _get_recent_feedback_context(user_id: str, db, limit: int = 5) -> dict:
         rows = list_recent_feedback_rows(user_id=user_id, db=db, limit=limit)
         if not rows:
             return {"count": 0, "positive": 0, "negative": 0, "latest_feedback_text": None}
-        positives = sum(1 for row in rows if getattr(row, "feedback_value", 0) > 0)
-        negatives = sum(1 for row in rows if getattr(row, "feedback_value", 0) < 0)
+        positives = sum(1 for row in rows if int(_adjustment_get(row, "feedback_value") or 0) > 0)
+        negatives = sum(1 for row in rows if int(_adjustment_get(row, "feedback_value") or 0) < 0)
         return {
             "count": len(rows),
             "positive": positives,
             "negative": negatives,
             "latest_feedback_text": next(
                 (
-                    getattr(row, "feedback_text", None)
+                    _adjustment_get(row, "feedback_text")
                     for row in rows
-                    if getattr(row, "feedback_text", None)
+                    if _adjustment_get(row, "feedback_text")
                 ),
                 None,
             ),
@@ -838,10 +867,15 @@ def run_loop(
                 last_adjustment = get_latest_adjustment(user_id=owner_user_id, db=db)
             if (
                 last_adjustment
-                and last_adjustment.decision_type == decision_type
-                and last_adjustment.applied_at
+                and _adjustment_get(last_adjustment, "decision_type") == decision_type
+                and _adjustment_get(last_adjustment, "applied_at")
             ):
-                applied_at = last_adjustment.applied_at
+                applied_at_raw = _adjustment_get(last_adjustment, "applied_at")
+                applied_at = (
+                    datetime.fromisoformat(applied_at_raw)
+                    if isinstance(applied_at_raw, str)
+                    else applied_at_raw
+                )
                 if applied_at.tzinfo is None:
                     applied_at = applied_at.replace(tzinfo=timezone.utc)
                 if now - applied_at < timedelta(minutes=THRASH_GUARD_MINUTES):
@@ -899,6 +933,7 @@ def run_loop(
             )
 
             adjustment = create_loop_adjustment_record(
+                db=db,
                 user_id=persisted_user_id,
                 trace_id=get_current_trace_id(),
                 trigger_event=normalized_trigger,
@@ -917,9 +952,6 @@ def run_loop(
                 },
                 applied_at=now,
             )
-            db.add(adjustment)
-            db.flush()
-            db.refresh(adjustment)
             return adjustment
     except Exception as exc:
         logger.warning("[InfinityLoop] run_loop failed for %s: %s", user_id, exc)

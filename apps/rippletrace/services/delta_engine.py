@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
+
+from apps.analytics.public import (
+    list_score_snapshot_drop_point_ids,
+    list_score_snapshots,
+)
 
 NARRATIVE_SPIKE_THRESHOLD = 5.0
 EMERGING_VELOCITY_THRESHOLD = 0.75
@@ -14,29 +19,59 @@ def _normalize(value: Optional[float]) -> float:
     return float(value) if value is not None else 0.0
 
 
-def _snapshot_to_dict(snapshot: ScoreSnapshotDB) -> dict:
+def _datetime_from_iso(value: str | None) -> datetime:
+    if not value:
+        return datetime.min
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.min
+
+
+def _value(snapshot, key: str):
+    if isinstance(snapshot, dict):
+        return snapshot.get(key)
+    return getattr(snapshot, key, None)
+
+
+def _snapshot_to_dict(snapshot: dict) -> dict:
     return {
-        "timestamp": snapshot.timestamp.isoformat() if snapshot.timestamp else None,
-        "narrative_score": _normalize(snapshot.narrative_score),
-        "velocity_score": _normalize(snapshot.velocity_score),
-        "spread_score": _normalize(snapshot.spread_score),
+        "timestamp": (
+            _value(snapshot, "timestamp").isoformat()
+            if isinstance(_value(snapshot, "timestamp"), datetime)
+            else _value(snapshot, "timestamp")
+        ),
+        "narrative_score": _normalize(_value(snapshot, "narrative_score")),
+        "velocity_score": _normalize(_value(snapshot, "velocity_score")),
+        "spread_score": _normalize(_value(snapshot, "spread_score")),
     }
 
 
-def _construct_delta_payload(
-    drop_point_id: str, previous: ScoreSnapshotDB, latest: ScoreSnapshotDB
-) -> dict:
-    narrative_delta = _normalize(latest.narrative_score) - _normalize(
-        previous.narrative_score
+def _construct_delta_payload(drop_point_id: str, previous: dict, latest: dict) -> dict:
+    narrative_delta = _normalize(_value(latest, "narrative_score")) - _normalize(
+        _value(previous, "narrative_score")
     )
-    velocity_delta = _normalize(latest.velocity_score) - _normalize(
-        previous.velocity_score
+    velocity_delta = _normalize(_value(latest, "velocity_score")) - _normalize(
+        _value(previous, "velocity_score")
     )
-    spread_delta = _normalize(latest.spread_score) - _normalize(
-        previous.spread_score
+    spread_delta = _normalize(_value(latest, "spread_score")) - _normalize(
+        _value(previous, "spread_score")
     )
     delta_minutes = max(
-        (latest.timestamp - previous.timestamp).total_seconds() / 60.0, 0.0
+        (
+            _datetime_from_iso(
+                _value(latest, "timestamp").isoformat()
+                if isinstance(_value(latest, "timestamp"), datetime)
+                else _value(latest, "timestamp")
+            )
+            - _datetime_from_iso(
+                _value(previous, "timestamp").isoformat()
+                if isinstance(_value(previous, "timestamp"), datetime)
+                else _value(previous, "timestamp")
+            )
+        ).total_seconds()
+        / 60.0,
+        0.0,
     )
     rate_base = max(delta_minutes, 1.0)
     narrative_rate = narrative_delta / rate_base
@@ -71,15 +106,7 @@ def _construct_delta_payload(
 
 
 def compute_deltas(drop_point_id: str, db: Session) -> dict:
-    from apps.analytics.models import ScoreSnapshotDB
-
-    snapshots = (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .order_by(ScoreSnapshotDB.timestamp.desc())
-        .limit(2)
-        .all()
-    )
+    snapshots = list_score_snapshots(drop_point_id, db, limit=2)
     if not snapshots:
         return {"drop_point_id": drop_point_id, "status": "no_snapshots"}
     if len(snapshots) == 1:
@@ -94,29 +121,13 @@ def compute_deltas(drop_point_id: str, db: Session) -> dict:
 
 
 def drop_point_ids_with_history(db: Session) -> List[str]:
-    from apps.analytics.models import ScoreSnapshotDB
-
-    rows = (
-        db.query(ScoreSnapshotDB.drop_point_id)
-        .group_by(ScoreSnapshotDB.drop_point_id)
-        .having(func.count(ScoreSnapshotDB.id) >= 2)
-        .all()
-    )
-    return [row[0] for row in rows]
+    return list_score_snapshot_drop_point_ids(db, min_count=2)
 
 
 def _delta_stats_for_drop(
     drop_point_id: str, db: Session
-) -> Optional[Tuple[ScoreSnapshotDB, ScoreSnapshotDB, Dict]]:
-    from apps.analytics.models import ScoreSnapshotDB
-
-    snapshots = (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .order_by(ScoreSnapshotDB.timestamp.desc())
-        .limit(2)
-        .all()
-    )
+) -> Optional[Tuple[dict, dict, Dict]]:
+    snapshots = list_score_snapshots(drop_point_id, db, limit=2)
     if len(snapshots) < 2:
         return None
     previous, latest = snapshots[1], snapshots[0]
@@ -171,4 +182,3 @@ def emerging_drops(
             if len(emerging) >= limit:
                 break
     return emerging
-

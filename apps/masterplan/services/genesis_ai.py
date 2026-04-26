@@ -106,9 +106,9 @@ def call_genesis_llm(message: str, current_state: dict, user_id: str = None, db=
     identity_context = ""
     try:
         if user_id and db:
-            from apps.identity.services.identity_service import IdentityService
-            id_service = IdentityService(db=db, user_id=user_id)
-            identity_context = id_service.get_context_for_prompt()
+            from apps.identity.public import get_context_for_prompt as _get_identity_context
+
+            identity_context = _get_identity_context(user_id, db)
     except Exception as exc:
         emit_observability_event(
             logger=logger,

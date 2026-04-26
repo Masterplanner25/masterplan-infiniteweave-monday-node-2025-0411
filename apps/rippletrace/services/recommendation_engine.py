@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from apps.analytics.public import get_score_snapshot
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.prediction_engine import predict_drop_point
 
@@ -51,16 +52,14 @@ def _normalize(value: Optional[float]) -> float:
     return float(value) if value is not None else 0.0
 
 
-def _latest_snapshot(drop_point_id: str, db: Session) -> Optional[ScoreSnapshotDB]:
-    from apps.analytics.models import ScoreSnapshotDB
+def _value(snapshot, key: str):
+    if isinstance(snapshot, dict):
+        return snapshot.get(key)
+    return getattr(snapshot, key, None)
 
-    return (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .order_by(ScoreSnapshotDB.timestamp.desc())
-        .limit(1)
-        .first()
-    )
+
+def _latest_snapshot(drop_point_id: str, db: Session) -> Optional[dict]:
+    return get_score_snapshot(drop_point_id, db)
 
 
 def recommend_for_drop_point(drop_point_id: str, db: Session, log_prediction: bool = True) -> Dict:
@@ -77,8 +76,8 @@ def recommend_for_drop_point(drop_point_id: str, db: Session, log_prediction: bo
 
     delta_payload = compute_deltas(drop_point_id, db)
     latest_snapshot = _latest_snapshot(drop_point_id, db)
-    velocity_score = _normalize(latest_snapshot.velocity_score if latest_snapshot else None)
-    narrative_score = _normalize(latest_snapshot.narrative_score if latest_snapshot else None)
+    velocity_score = _normalize(_value(latest_snapshot, "velocity_score") if latest_snapshot else None)
+    narrative_score = _normalize(_value(latest_snapshot, "narrative_score") if latest_snapshot else None)
 
     template = RECOMMENDATION_TEMPLATES.get(prediction["prediction"])
     next_best_action_score = round(
@@ -143,4 +142,3 @@ def system_recommendations(db: Session, limit: int = 20) -> List[Dict]:
         recommend_for_drop_point(dp_id, db, log_prediction=False)
         for dp_id in drop_point_ids_with_history(db)[:limit]
     ]
-

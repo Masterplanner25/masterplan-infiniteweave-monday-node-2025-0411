@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { approveAgentRun, getAgentRuns, rejectAgentRun } from "../../api/agent.js";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import {
   ActionButton,
   EmptyState,
@@ -162,6 +164,8 @@ function ApprovalRow({ run, pendingAction, onApprove, onReject }) {
 }
 
 export default function AgentApprovalInbox() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

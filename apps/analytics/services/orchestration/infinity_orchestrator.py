@@ -8,6 +8,7 @@ System invariant:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from AINDY.core.execution_signal_helper import queue_system_event
 emit_system_event = queue_system_event
@@ -18,6 +19,7 @@ from AINDY.platform_layer.trace_context import get_current_trace_id
 logger = logging.getLogger(__name__)
 
 _ANALYTICS_EXECUTION_LEASE_TTL_SECONDS = 90
+_ANALYTICS_DUPLICATE_DEBOUNCE_SECONDS = 1
 
 
 def acquire_execution_lease(*args, **kwargs):
@@ -78,6 +80,56 @@ def orchestrator_score_context(*args, **kwargs):
     from ..scoring.infinity_service import orchestrator_score_context as _orchestrator_score_context
 
     return _orchestrator_score_context(*args, **kwargs)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _was_recently_executed(*, db, user_id: str, trigger_event: str, window_seconds: int) -> bool:
+    try:
+        from AINDY.platform_layer.user_ids import parse_user_id
+        from apps.analytics.models import UserScore
+
+        normalized_user_id = parse_user_id(user_id)
+        if normalized_user_id is None:
+            return False
+        row = db.query(UserScore).filter(UserScore.user_id == normalized_user_id).first()
+        if row is None:
+            return False
+        if (row.trigger_event or "") != trigger_event:
+            return False
+        updated_at = getattr(row, "updated_at", None) or getattr(row, "calculated_at", None)
+        if not isinstance(updated_at, datetime):
+            return False
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        return updated_at >= (_utcnow() - timedelta(seconds=window_seconds))
+    except Exception:
+        return False
+
+
+def _duplicate_inflight_response(*, user_id: str, trigger_event: str, db) -> dict:
+    latest_snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+    latest_adjustment = serialize_adjustment(get_latest_adjustment(user_id=user_id, db=db))
+    next_action = ((latest_adjustment or {}).get("adjustment_payload") or {}).get("next_action")
+    return {
+        "score": {
+            "user_id": str(user_id),
+            "master_score": (latest_snapshot or {}).get("master_score", 0.0),
+            "kpis": latest_snapshot or {},
+            "metadata": {
+                "trigger_event": trigger_event,
+                "skipped": "duplicate_inflight",
+            },
+        },
+        "prior_evaluation": None,
+        "adjustment": latest_adjustment,
+        "next_action": next_action,
+        "memory_context_count": 0,
+        "memory_signal_count": 0,
+        "memory_influence": {},
+    }
 
 
 def fetch_recent_memory(*args, **kwargs):
@@ -163,26 +215,7 @@ def execute(user_id: str, trigger_event: str, db):
             ttl_seconds=_ANALYTICS_EXECUTION_LEASE_TTL_SECONDS,
         )
         if not acquired:
-            latest_snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
-            latest_adjustment = serialize_adjustment(get_latest_adjustment(user_id=user_id, db=db))
-            next_action = ((latest_adjustment or {}).get("adjustment_payload") or {}).get("next_action")
-            return {
-                "score": {
-                    "user_id": str(user_id),
-                    "master_score": (latest_snapshot or {}).get("master_score", 0.0),
-                    "kpis": latest_snapshot or {},
-                    "metadata": {
-                        "trigger_event": trigger_event,
-                        "skipped": "duplicate_inflight",
-                    },
-                },
-                "prior_evaluation": None,
-                "adjustment": latest_adjustment,
-                "next_action": next_action,
-                "memory_context_count": 0,
-                "memory_signal_count": 0,
-                "memory_influence": {},
-            }
+            return _duplicate_inflight_response(user_id=user_id, trigger_event=trigger_event, db=db)
 
     heartbeat = LeaseHeartbeat(
         SessionLocal,
@@ -193,6 +226,14 @@ def execute(user_id: str, trigger_event: str, db):
     )
     heartbeat.start()
     try:
+        if _was_recently_executed(
+            db=db,
+            user_id=str(user_id),
+            trigger_event=trigger_event,
+            window_seconds=_ANALYTICS_DUPLICATE_DEBOUNCE_SECONDS,
+        ):
+            return _duplicate_inflight_response(user_id=user_id, trigger_event=trigger_event, db=db)
+
         memory_nodes = get_recent_memory(user_id, db, context="infinity_loop")
         metrics = get_user_metrics(user_id, db)
         memory_signals = get_relevant_memories(
