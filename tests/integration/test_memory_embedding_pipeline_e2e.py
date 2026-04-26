@@ -80,10 +80,12 @@ def test_ingest_embed_retrieve_and_score_uses_embeddings(pg_db_session, monkeypa
     target_row = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(target["id"])).one()
     distractor_row = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(distractor["id"])).one()
     target_row.embedding = [1.0] + [0.0] * 1535
+    target_row.embedding_pending = False
     target_row.embedding_status = "complete"
     target_row.impact_score = 4.0
     target_row.usage_count = 6
     distractor_row.embedding = [0.0, 1.0] + [0.0] * 1534
+    distractor_row.embedding_pending = False
     distractor_row.embedding_status = "complete"
     distractor_row.impact_score = 0.5
     session.commit()
