@@ -13,6 +13,7 @@ def register() -> None:
     _register_response_adapters()
     _register_syscalls()
     _register_startup_hooks()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -93,3 +94,9 @@ def seed_authorship(context: dict) -> None:
             log.warning("System identity seed failed (non-fatal): %s", exc)
     finally:
         db.close()
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("authorship", lambda: {"status": "ok"})

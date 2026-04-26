@@ -293,6 +293,17 @@ class EventBus:
         """
         self._stop_event.set()
 
+    def stop(self, timeout: float | None = None) -> None:
+        """Stop the subscriber thread and close publish-side state."""
+        self._stop_event.set()
+        thread = self._subscriber_thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                logger.warning("[EventBus] subscriber did not stop within timeout")
+        self._subscriber_thread = None
+        self._pub_client = None
+
     def _subscriber_loop(self) -> None:
         """
         Daemon loop: connect → subscribe → dispatch messages → reconnect.

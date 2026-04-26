@@ -39,6 +39,7 @@ class MemoryNodeModel(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     extra = Column(JSONB, default=dict, nullable=False)
     embedding = Column(Vector(1536), nullable=True)
+    embedding_pending = Column(Boolean, nullable=False, default=True, index=True)
     embedding_status = Column(String(16), nullable=False, default="pending", index=True)
     success_count = Column(Integer, nullable=False, default=0)
     failure_count = Column(Integer, nullable=False, default=0)
@@ -128,6 +129,7 @@ class MemoryNodeDAO:
                 root_event_id=getattr(memory_node, "root_event_id", None),
                 causal_depth=getattr(memory_node, "causal_depth", 0),
                 impact_score=getattr(memory_node, "impact_score", 0.0),
+                embedding_pending=bool(getattr(memory_node, "embedding_pending", True)),
                 embedding_status=getattr(memory_node, "embedding_status", "pending"),
                 extra={
                     **(getattr(memory_node, "extra", {}) or {}),
@@ -167,6 +169,7 @@ class MemoryNodeDAO:
             "causal_depth": db_node.causal_depth,
             "impact_score": db_node.impact_score,
             "memory_type": db_node.memory_type,
+            "embedding_pending": db_node.embedding_pending,
             "embedding_status": db_node.embedding_status,
             "extra": db_node.extra,
             "created_at": db_node.created_at,
@@ -209,6 +212,7 @@ class MemoryNodeDAO:
                 "causal_depth": n.causal_depth,
                 "impact_score": n.impact_score,
                 "memory_type": n.memory_type,
+                "embedding_pending": n.embedding_pending,
                 "embedding_status": n.embedding_status,
                 "extra": n.extra,
                 "created_at": n.created_at,

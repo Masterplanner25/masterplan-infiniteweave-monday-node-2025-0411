@@ -135,6 +135,10 @@ class Settings(BaseSettings):
     AINDY_QUEUE_NAME: str = "aindy:jobs"
     AINDY_ASYNC_JOB_WORKERS: int = 10
     AINDY_ASYNC_QUEUE_MAXSIZE: int = 100    # max pending jobs before rejection
+    AINDY_MEMORY_INGEST_QUEUE_MAX: int = 500
+    AINDY_SHUTDOWN_TIMEOUT_SECONDS: int = 30
+    AINDY_WORKER_HEALTH_PORT: int = 8001
+    AINDY_WORKER_LIVENESS_TIMEOUT_SECONDS: int = 60
     AINDY_JOB_WARN_CAPACITY: bool = True
     MAX_QUEUE_SIZE: int = Field(
         default_factory=lambda: int(
@@ -156,6 +160,11 @@ class Settings(BaseSettings):
     SKIP_MONGO_PING: bool = False
     MONGO_REQUIRED: bool = False
     MONGO_HEALTH_TIMEOUT_MS: int = 5000
+    MONGO_CONNECT_TIMEOUT_MS: int = 3000
+    MONGO_SOCKET_TIMEOUT_MS: int = 5000
+    MONGO_SERVER_SELECTION_TIMEOUT_MS: int = 3000
+    MONGO_MAX_POOL_SIZE: int = 10
+    MONGO_MIN_POOL_SIZE: int = 1
 
     # --- Environment loading config ---
     model_config = SettingsConfigDict(
@@ -200,8 +209,7 @@ class Settings(BaseSettings):
                 f"STUCK_RUN_THRESHOLD_MINUTES ({self.STUCK_RUN_THRESHOLD_MINUTES}) "
                 f"must be greater than FLOW_WAIT_TIMEOUT_MINUTES "
                 f"({self.FLOW_WAIT_TIMEOUT_MINUTES}). "
-                "A run that is legitimately waiting will be incorrectly marked stuck. "
-                f"Set STUCK_RUN_THRESHOLD_MINUTES > {self.FLOW_WAIT_TIMEOUT_MINUTES}."
+                "Legitimately waiting flows would be incorrectly recovered."
             )
         return self
 

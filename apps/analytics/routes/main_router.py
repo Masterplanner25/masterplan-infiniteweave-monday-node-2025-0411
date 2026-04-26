@@ -29,7 +29,7 @@ from apps.analytics.schemas.analytics_inputs import (
 )
 from apps.analytics.schemas.batch import BatchInput
 from apps.analytics.services.calculations import process_batch
-from apps.analytics.services.calculation_services import (
+from apps.analytics.services.calculations.calculation_services import (
     calculate_effort,
     calculate_productivity,
     calculate_virality,
@@ -140,7 +140,7 @@ async def process_task(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+        from apps.analytics.services.orchestration.infinity_orchestrator import execute as execute_infinity_orchestrator
 
         try:
             result = execute_infinity_orchestrator(
@@ -500,7 +500,7 @@ async def get_results(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from apps.analytics.services.compute_service import list_calculation_results
+        from apps.analytics.services.calculations.compute_service import list_calculation_results
         return list_calculation_results(db, user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.results.list", handler, db=db, current_user=current_user)
@@ -513,7 +513,7 @@ async def get_masterplans(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from apps.analytics.services.compute_service import list_masterplans_compute
+        from apps.analytics.services.calculations.compute_service import list_masterplans_compute
         return list_masterplans_compute(db, user_id=str(current_user["sub"]))
 
     return await _execute_main(request, "main.masterplans.list", handler, db=db, current_user=current_user)
@@ -527,7 +527,7 @@ async def create_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from apps.analytics.services.compute_service import create_masterplan_compute
+        from apps.analytics.services.calculations.compute_service import create_masterplan_compute
         return create_masterplan_compute(db, data=data.dict(), user_id=str(current_user["sub"]))
 
     result = await _execute_main(request, "main.masterplan.create", handler, db=db, current_user=current_user, input_payload=data.model_dump())

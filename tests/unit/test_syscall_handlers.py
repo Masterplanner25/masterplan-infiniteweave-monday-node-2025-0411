@@ -703,8 +703,8 @@ class TestScoreHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
         }):
             result = _handle_score_recalculate({}, _ctx())
 
@@ -719,8 +719,8 @@ class TestScoreHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
         }):
             with pytest.raises(ValueError, match="empty result"):
                 _handle_score_recalculate({}, _ctx())
@@ -735,8 +735,8 @@ class TestScoreHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
-            "apps.analytics.services.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
+            "apps.analytics.services.orchestration.infinity_orchestrator": mock_orch,
         }):
             _handle_score_recalculate({}, _ctx())
 
@@ -1004,8 +1004,8 @@ class TestResearchAndAgentHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "apps.analytics.services.infinity_loop": mock_infinity,
-            "apps.analytics.services.infinity_loop": mock_infinity,
+            "apps.analytics.services.orchestration.infinity_loop": mock_infinity,
+            "apps.analytics.services.orchestration.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({}, _ctx())
 
@@ -1022,8 +1022,8 @@ class TestResearchAndAgentHandlers:
         with patch.dict("sys.modules", {
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "apps.analytics.services.infinity_loop": mock_infinity,
-            "apps.analytics.services.infinity_loop": mock_infinity,
+            "apps.analytics.services.orchestration.infinity_loop": mock_infinity,
+            "apps.analytics.services.orchestration.infinity_loop": mock_infinity,
         }):
             result = _handle_agent_suggest_tools({"kpi_snapshot": kpi}, _ctx())
 

@@ -18,6 +18,7 @@ Lifecycle:
 """
 import logging
 from datetime import datetime, timezone
+import threading
 from typing import Callable, Optional
 
 from AINDY.db.models.job_log import JobLog
@@ -143,14 +144,35 @@ def start() -> None:
     logger.info("APScheduler started â€” daemon threads replaced")
 
 
-def stop() -> None:
+def stop(*, timeout_seconds: float | None = None) -> None:
     """
     Stop the scheduler gracefully.
     Called from main.py lifespan on shutdown.
     """
     global _scheduler
     if _scheduler and _scheduler.running:
-        _scheduler.shutdown(wait=True)
+        if timeout_seconds is None:
+            _scheduler.shutdown(wait=True)
+        else:
+            shutdown_error: list[Exception] = []
+
+            def _shutdown() -> None:
+                try:
+                    _scheduler.shutdown(wait=True)
+                except Exception as exc:
+                    shutdown_error.append(exc)
+
+            thread = threading.Thread(target=_shutdown, name="apscheduler-shutdown", daemon=True)
+            thread.start()
+            thread.join(timeout=max(0.0, float(timeout_seconds)))
+            if thread.is_alive():
+                logger.warning("APScheduler shutdown exceeded timeout; proceeding with shutdown")
+                try:
+                    _scheduler.shutdown(wait=False)
+                except Exception:
+                    pass
+            elif shutdown_error:
+                raise shutdown_error[0]
         logger.info("APScheduler stopped")
     _scheduler = None
 
@@ -228,6 +250,16 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
         trigger=IntervalTrigger(minutes=5),
         id="recover_stuck_flow_runs",
         name="Recover stuck flow runs",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
+        _process_pending_memory_embeddings,
+        trigger=IntervalTrigger(minutes=1),
+        id="process_pending_memory_embeddings",
+        name="Process pending memory embeddings",
         replace_existing=True,
         coalesce=True,
         max_instances=1,
@@ -372,6 +404,23 @@ def _recover_stuck_flow_runs() -> None:
         run_recover_stuck_runs_job()
     except Exception as exc:
         logger.warning("Periodic stuck-run recovery dispatch failed: %s", exc)
+
+
+def _process_pending_memory_embeddings() -> None:
+    try:
+        from AINDY.memory.embedding_jobs import process_pending_embeddings
+
+        result = process_pending_embeddings()
+        processed = int(result.get("processed", 0))
+        if processed:
+            logger.info(
+                "Pending memory embeddings processed=%s completed=%s deferred=%s",
+                processed,
+                result.get("completed", 0),
+                result.get("deferred", 0),
+            )
+    except Exception as exc:
+        logger.warning("Pending memory embedding sweep failed: %s", exc)
 
 
 def run_task_now(

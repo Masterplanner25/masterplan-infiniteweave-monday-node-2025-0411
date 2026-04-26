@@ -14,10 +14,11 @@ def _payload(*, delivery_type: str) -> dict:
 
 
 def test_freelance_order_create_manual_succeeds(client, auth_headers):
+    headers = {**auth_headers, "Idempotency-Key": "order-manual-1"}
     response = client.post(
         "/freelance/order",
         json=_payload(delivery_type="manual"),
-        headers=auth_headers,
+        headers=headers,
     )
 
     assert response.status_code == 201
@@ -29,10 +30,11 @@ def test_freelance_order_create_manual_succeeds(client, auth_headers):
 
 
 def test_freelance_order_create_payment_succeeds(client, auth_headers):
+    headers = {**auth_headers, "Idempotency-Key": "order-payment-1"}
     response = client.post(
         "/freelance/order",
         json=_payload(delivery_type="payment"),
-        headers=auth_headers,
+        headers=headers,
     )
 
     assert response.status_code == 201
@@ -44,10 +46,11 @@ def test_freelance_order_create_payment_succeeds(client, auth_headers):
 
 
 def test_freelance_order_create_stripe_returns_422(client, auth_headers):
+    headers = {**auth_headers, "Idempotency-Key": "order-invalid-1"}
     response = client.post(
         "/freelance/order",
         json=_payload(delivery_type="stripe"),
-        headers=auth_headers,
+        headers=headers,
     )
 
     assert response.status_code == 422

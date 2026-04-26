@@ -16,6 +16,7 @@ def register() -> None:
     _register_capture_rules()
     _register_flow_results()
     _register_flow_plans()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -58,6 +59,12 @@ def _register_response_adapters() -> None:
 
     register_response_adapter("leadgen", raw_json_adapter)
     register_response_adapter("seo", raw_json_adapter)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("search", lambda: {"status": "ok"})
 
 
 def _register_syscalls() -> None:

@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from AINDY.db.database import Base
 from AINDY.db.models.user import User
 from apps.analytics.models import ScoreHistory, UserScore
-from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+from apps.analytics.services.orchestration.infinity_orchestrator import execute as execute_infinity_orchestrator
 from apps.analytics.services.infinity_service import calculate_infinity_score, orchestrator_score_context
 
 
@@ -59,7 +59,7 @@ def test_duplicate_trigger_is_suppressed_for_same_user(tmp_path, monkeypatch):
     engine, session_factory = _build_session_factory(tmp_path)
     user_id = _seed_user(session_factory)
 
-    import apps.analytics.services.infinity_orchestrator as orchestrator_module
+    import apps.analytics.services.orchestration.infinity_orchestrator as orchestrator_module
     import apps.identity.services.identity_boot_service as identity_boot_service
     import apps.masterplan.services.goal_service as goal_service
     import apps.social.services.social_performance_service as social_performance_service

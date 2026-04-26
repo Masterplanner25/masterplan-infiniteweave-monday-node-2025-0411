@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import time
 import uuid
 from typing import Any
 
@@ -12,7 +11,6 @@ from AINDY.config import settings
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.execution_dispatcher import dispatch_job
 from AINDY.db.database import SessionLocal
-from AINDY.core.system_event_service import emit_error_event
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.memory.embedding_service import generate_embedding
 from AINDY.platform_layer.async_job_service import _INLINE_ACTIVE, register_async_job
@@ -20,7 +18,8 @@ from AINDY.platform_layer.async_job_service import _INLINE_ACTIVE, register_asyn
 logger = logging.getLogger(__name__)
 
 EMBEDDING_JOB_NAME = "memory.generate_embedding"
-EMBEDDING_RETRY_DELAYS = (1, 2, 4)
+EMBEDDING_SWEEP_JOB_NAME = "memory.embedding_sweep"
+EMBEDDING_SWEEP_LIMIT = 25
 
 
 def enqueue_embedding(
@@ -75,10 +74,19 @@ def process_embedding_job(payload: dict[str, Any], db):
         .first()
     )
     if not memory_node:
-        raise RuntimeError(f"Memory node {payload['memory_id']} not found")
+        logger.warning("[EmbeddingJobs] memory node %s not found", payload["memory_id"])
+        return {"memory_id": str(payload["memory_id"]), "embedding_pending": True, "status": "missing"}
 
     trace_id = payload.get("trace_id") or (memory_node.extra or {}).get("trace_id") or str(memory_node.id)
     parent_event_id = str(memory_node.source_event_id) if memory_node.source_event_id else None
+
+    if not getattr(memory_node, "embedding_pending", True):
+        return {
+            "memory_id": str(memory_node.id),
+            "embedding_pending": False,
+            "embedding_status": memory_node.embedding_status,
+            "status": "already_processed",
+        }
 
     started_event_id = queue_system_event(
         db=db,
@@ -91,74 +99,89 @@ def process_embedding_job(payload: dict[str, Any], db):
         required=True,
     )
 
-    for attempt, delay_seconds in enumerate(EMBEDDING_RETRY_DELAYS, start=1):
-        try:
-            _set_embedding_status(db, memory_node, "pending")
-            embedding = generate_embedding(memory_node.content)
-            if not embedding or not any(float(value) != 0.0 for value in embedding):
-                raise RuntimeError("Embedding generation returned an empty or zero vector")
+    try:
+        embedding = generate_embedding(memory_node.content)
+        if not embedding or not any(float(value) != 0.0 for value in embedding):
+            raise RuntimeError("Embedding generation returned an empty or zero vector")
 
-            _set_embedding_status(db, memory_node, "complete", embedding=embedding)
-            queue_system_event(
-                db=db,
-                event_type=SystemEventTypes.EMBEDDING_COMPLETED,
-                user_id=memory_node.user_id,
-                trace_id=trace_id,
-                parent_event_id=str(started_event_id) if started_event_id else parent_event_id,
-                source="memory",
-                payload={
-                    "memory_id": str(memory_node.id),
-                    "attempt": attempt,
-                    "dimensions": len(embedding),
-                },
-                required=True,
-            )
-            return {
+        memory_node.embedding = embedding
+        memory_node.embedding_pending = False
+        memory_node.embedding_status = "complete"
+        db.add(memory_node)
+        db.commit()
+        db.refresh(memory_node)
+
+        queue_system_event(
+            db=db,
+            event_type=SystemEventTypes.EMBEDDING_COMPLETED,
+            user_id=memory_node.user_id,
+            trace_id=trace_id,
+            parent_event_id=str(started_event_id) if started_event_id else parent_event_id,
+            source="memory",
+            payload={
                 "memory_id": str(memory_node.id),
-                "embedding_status": memory_node.embedding_status,
-                "attempt": attempt,
-            }
-        except Exception as exc:
-            logger.warning("[EmbeddingJobs] embedding attempt %s failed for %s: %s", attempt, memory_node.id, exc)
-            if attempt == len(EMBEDDING_RETRY_DELAYS):
-                logger.error(
-                    "[EmbeddingJobs] embedding permanently failed for %s after %s attempts",
-                    memory_node.id,
-                    attempt,
-                )
-                _set_embedding_status(db, memory_node, "failed")
-                queue_system_event(
-                    db=db,
-                    event_type=SystemEventTypes.EMBEDDING_FAILED,
-                    user_id=memory_node.user_id,
-                    trace_id=trace_id,
-                    parent_event_id=str(started_event_id) if started_event_id else parent_event_id,
-                    source="memory",
-                    payload={
-                        "memory_id": str(memory_node.id),
-                        "attempt": attempt,
-                        "error": str(exc),
-                    },
-                    required=True,
-                )
-                emit_error_event(
-                    db=db,
-                    error_type="embedding_job",
-                    message=str(exc),
-                    user_id=memory_node.user_id,
-                    trace_id=trace_id,
-                    parent_event_id=str(started_event_id) if started_event_id else parent_event_id,
-                    source="memory",
-                    payload={"memory_id": str(memory_node.id), "attempt": attempt},
-                    required=True,
-                )
-                return {
-                    "memory_id": str(memory_node.id),
-                    "embedding_status": memory_node.embedding_status,
-                    "attempt": attempt,
-                    "error": str(exc),
-                }
-            time.sleep(delay_seconds)
+                "dimensions": len(embedding),
+            },
+            required=True,
+        )
+        return {
+            "memory_id": str(memory_node.id),
+            "embedding_pending": memory_node.embedding_pending,
+            "embedding_status": memory_node.embedding_status,
+        }
+    except Exception as exc:
+        logger.warning("[EmbeddingJobs] embedding deferred for %s: %s", memory_node.id, exc)
+        memory_node.embedding_pending = True
+        memory_node.embedding_status = "pending"
+        db.add(memory_node)
+        db.commit()
+        db.refresh(memory_node)
+        return {
+            "memory_id": str(memory_node.id),
+            "embedding_pending": memory_node.embedding_pending,
+            "embedding_status": memory_node.embedding_status,
+            "error": str(exc),
+        }
+
+
+def process_pending_embeddings(*, limit: int = EMBEDDING_SWEEP_LIMIT, db: Session | None = None) -> dict[str, Any]:
+    from AINDY.memory.memory_persistence import MemoryNodeModel
+
+    owns_session = db is None
+    session = db or SessionLocal()
+    try:
+        pending_rows = (
+            session.query(MemoryNodeModel)
+            .filter(MemoryNodeModel.embedding_pending.is_(True))
+            .order_by(MemoryNodeModel.created_at.asc(), MemoryNodeModel.id.asc())
+            .limit(max(1, int(limit)))
+            .all()
+        )
+        processed = 0
+        completed = 0
+        deferred = 0
+        for row in pending_rows:
+            result = process_embedding_job(
+                {
+                    "memory_id": str(row.id),
+                    "trace_id": (row.extra or {}).get("trace_id") or str(row.id),
+                },
+                session,
+            )
+            processed += 1
+            if result.get("embedding_pending"):
+                deferred += 1
+            else:
+                completed += 1
+        return {
+            "job": EMBEDDING_SWEEP_JOB_NAME,
+            "processed": processed,
+            "completed": completed,
+            "deferred": deferred,
+        }
+    finally:
+        if owns_session:
+            session.close()
 
 
 def process_pending_embedding(memory_id: str) -> dict[str, Any]:

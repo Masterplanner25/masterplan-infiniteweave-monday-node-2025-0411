@@ -24,7 +24,7 @@ def _create_user(session, *, email: str) -> User:
     return user
 
 
-def test_embedding_failure_keeps_raw_memory_and_marks_failed(pg_db_session, monkeypatch):
+def test_embedding_failure_keeps_raw_memory_and_remains_pending(pg_db_session, monkeypatch):
     session = pg_db_session()
     user = _create_user(session, email="embedding-failure@example.com")
     dao = MemoryNodeDAO(session)
@@ -47,10 +47,12 @@ def test_embedding_failure_keeps_raw_memory_and_marks_failed(pg_db_session, monk
 
     node = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(created["id"])).one()
 
-    assert result["embedding_status"] == "failed"
+    assert result["embedding_pending"] is True
+    assert result["embedding_status"] == "pending"
     assert node.content == "raw memory survives failed embedding"
     assert node.embedding is None
-    assert node.embedding_status == "failed"
+    assert node.embedding_pending is True
+    assert node.embedding_status == "pending"
 
 
 def test_ingest_embed_retrieve_and_score_uses_embeddings(pg_db_session, monkeypatch):

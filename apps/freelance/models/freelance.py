@@ -37,6 +37,7 @@ class FreelanceOrder(Base):
     stripe_customer_id = Column(String, nullable=True)
     subscription_status = Column(String, nullable=True)
     subscription_period_end = Column(DateTime, nullable=True)
+    idempotency_key = Column(String(255), nullable=True, unique=True, index=True)
     delivery_quality_score = Column(Float, nullable=True)
     time_to_completion_seconds = Column(Float, nullable=True)
     income_efficiency = Column(Float, nullable=True)
@@ -72,3 +73,52 @@ class RevenueMetrics(Base):
     income_efficiency = Column(Float, nullable=True)
     ai_productivity_boost = Column(Float, nullable=True)
     avg_delivery_quality = Column(Float, nullable=True)
+
+
+class PaymentRecord(Base):
+    __tablename__ = "freelance_payment_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("freelance_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    stripe_payment_intent_id = Column(String, nullable=True, index=True)
+    stripe_payment_link_id = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, default="pending")
+    confirmed_at = Column(DateTime, nullable=True)
+    idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    order = relationship("FreelanceOrder", backref="payment_records")
+
+
+class RefundRecord(Base):
+    __tablename__ = "freelance_refund_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("freelance_orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    stripe_payment_intent_id = Column(String, nullable=True, index=True)
+    stripe_refund_id = Column(String, nullable=True, index=True)
+    reason = Column(String, nullable=True)
+    amount_cents = Column(Integer, nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    processed_at = Column(DateTime, nullable=True)
+    idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    order = relationship("FreelanceOrder", backref="refund_records")
+
+
+class WebhookEvent(Base):
+    __tablename__ = "freelance_webhook_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String(100), nullable=True)
+    idempotency_key = Column(String(255), nullable=False, unique=True, index=True)
+    payload = Column(JSON, nullable=True)
+    processing_status = Column(String, nullable=False, default="pending")
+    processed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

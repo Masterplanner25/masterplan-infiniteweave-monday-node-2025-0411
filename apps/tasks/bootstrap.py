@@ -28,6 +28,7 @@ def register() -> None:
     _register_flow_plans()
     _register_required_flow_nodes()
     _register_required_syscalls()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -417,3 +418,25 @@ def _scheduler_check_task_recurrence() -> None:
 def _is_background_leader(*args, **kwargs):
     from apps.tasks.services.task_service import is_background_leader
     return is_background_leader(*args, **kwargs)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("tasks", _check_health)
+
+
+def _check_health() -> dict:
+    db = None
+    try:
+        from AINDY.db.database import SessionLocal
+        from apps.tasks.models import Task
+
+        db = SessionLocal()
+        db.query(Task.id).limit(1).all()
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "degraded", "reason": str(exc)}
+    finally:
+        if db is not None:
+            db.close()

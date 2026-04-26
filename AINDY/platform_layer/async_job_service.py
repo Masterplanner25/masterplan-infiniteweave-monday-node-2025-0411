@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
-from threading import Lock, Semaphore
+from threading import Event, Lock, Semaphore
 from typing import Any, Callable
 from uuid import UUID
 
@@ -48,6 +48,10 @@ _EXECUTOR: ThreadPoolExecutor | None = None
 _EXECUTOR_LOCK = Lock()
 _SUBMIT_SEMAPHORE: Semaphore | None = None
 _SEMAPHORE_LOCK = Lock()
+_ACTIVE_FUTURES: set[Future] = set()
+_ACTIVE_FUTURES_LOCK = Lock()
+_ASYNC_ACCEPTING = True
+_ASYNC_SHUTDOWN_EVENT = Event()
 _JOB_REGISTRY: dict[str, Callable[[dict[str, Any], Any], Any]] = {}
 _ASYNC_EXECUTION_CONTEXT: ContextVar[bool] = ContextVar("_ASYNC_EXECUTION_CONTEXT", default=False)
 _INLINE_ACTIVE = _ASYNC_EXECUTION_CONTEXT
@@ -61,12 +65,73 @@ _LEGACY_LOG_COLLECTION = "automation" + "_logs"
 from AINDY.core.execution_dispatcher import async_heavy_execution_enabled  # noqa: E402, F401
 
 
-def shutdown_async_jobs(*, wait: bool = True) -> None:
-    global _EXECUTOR
+def start_async_job_service() -> None:
+    global _ASYNC_ACCEPTING
+    _ASYNC_ACCEPTING = True
+    _ASYNC_SHUTDOWN_EVENT.clear()
+
+
+def _track_future(future: Future) -> Future:
+    with _ACTIVE_FUTURES_LOCK:
+        _ACTIVE_FUTURES.add(future)
+
+    def _remove(_future: Future) -> None:
+        with _ACTIVE_FUTURES_LOCK:
+            _ACTIVE_FUTURES.discard(_future)
+
+    future.add_done_callback(_remove)
+    return future
+
+
+def _snapshot_active_futures() -> list[Future]:
+    with _ACTIVE_FUTURES_LOCK:
+        return list(_ACTIVE_FUTURES)
+
+
+def stop_async_job_service(*, timeout_seconds: float | None = None, reopen: bool = False) -> None:
+    global _EXECUTOR, _ASYNC_ACCEPTING
+    _ASYNC_ACCEPTING = False
+    _ASYNC_SHUTDOWN_EVENT.set()
+
+    remaining = None if timeout_seconds is None else max(0.0, float(timeout_seconds))
+    active = _snapshot_active_futures()
+    if active and remaining != 0:
+        done, not_done = wait(active, timeout=remaining)
+        if not_done:
+            logger.warning(
+                "[AsyncJobService] Shutdown timed out with %d in-flight async job(s) still running",
+                len(not_done),
+            )
+        else:
+            logger.info(
+                "[AsyncJobService] Drained %d in-flight async job(s) before shutdown",
+                len(done),
+            )
+    elif active:
+        logger.warning(
+            "[AsyncJobService] Shutdown timeout exhausted before waiting on %d in-flight async job(s)",
+            len(active),
+        )
+
     with _EXECUTOR_LOCK:
         if _EXECUTOR is not None:
-            _EXECUTOR.shutdown(wait=wait, cancel_futures=True)
+            _EXECUTOR.shutdown(wait=False, cancel_futures=False)
             _EXECUTOR = None
+
+    if reopen:
+        start_async_job_service()
+
+
+def shutdown_async_jobs(*, wait: bool = True, timeout_seconds: float | None = None) -> None:
+    global _EXECUTOR
+    if wait:
+        stop_async_job_service(timeout_seconds=timeout_seconds, reopen=True)
+        return
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is not None:
+            _EXECUTOR.shutdown(wait=False, cancel_futures=True)
+            _EXECUTOR = None
+    start_async_job_service()
 
 
 def _get_executor() -> ThreadPoolExecutor:
@@ -79,6 +144,8 @@ def _get_executor() -> ThreadPoolExecutor:
                     max_workers=max_workers,
                     thread_name_prefix="aindy-async-job",
                 )
+    if _ASYNC_SHUTDOWN_EVENT.is_set():
+        _ASYNC_SHUTDOWN_EVENT.clear()
     return _EXECUTOR
 
 
@@ -374,6 +441,11 @@ def submit_async_job(
     execute_inline_in_test_mode: bool = True,
 ) -> str:
     JobLog = _job_log_model()
+    if not _ASYNC_ACCEPTING:
+        raise QueueSaturatedError(
+            "Async job service is shutting down. New jobs are temporarily rejected.",
+            status_code=503,
+        )
     user_uuid = parse_user_id(user_id)
     db = SessionLocal()
     log_id = None
@@ -530,7 +602,7 @@ def submit_async_job(
                 finally:
                     sem.release()
 
-            _get_executor().submit(_submit_and_release)
+            _track_future(_get_executor().submit(_submit_and_release))
         return log_id
     except Exception as exc:
         if log_id is not None:

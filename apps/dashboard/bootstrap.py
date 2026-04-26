@@ -10,6 +10,7 @@ def register() -> None:
     _register_route_prefixes()
     _register_response_adapters()
     _register_flow_results()
+    _register_health_check()
 
 
 def _register_routers() -> None:
@@ -41,3 +42,9 @@ def _register_flow_results() -> None:
     }
     for flow_name, result_key in result_keys.items():
         register_flow_result(flow_name, result_key=result_key)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("dashboard", lambda: {"status": "ok"})

@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -23,6 +24,7 @@ from AINDY.platform_layer.deployment_contract import (
     worker_required,
 )
 from AINDY.platform_layer.registry import get_degraded_domains
+from AINDY.platform_layer.registry import get_all_health_checks
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +48,19 @@ class SystemHealth:
     dependencies: list[DependencyStatus] = field(default_factory=list)
 
     def to_dict(self) -> dict:
+        domains = get_domain_health()
+        degraded_domains = _merge_degraded_domains(domains)
+        platform = build_platform_status(self.dependencies)
         return {
-            "status": self.tier,
+            "status": derive_public_status(self.tier, platform, domains),
+            "tier": self.tier,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": settings.VERSION,
-            "degraded_domains": get_degraded_domains(),
+            "degraded_domains": degraded_domains,
+            "degraded_apps": degraded_domains,
+            "platform": platform,
+            "domains": domains,
+            "memory_ingest_queue": get_memory_ingest_queue_status(),
             "deployment_contract": deployment_contract_summary(),
             "dependencies": {
                 dep.name: {
@@ -74,6 +84,148 @@ _redis_health_cached_result = False
 _health_cache_lock = threading.Lock()
 _health_cache: SystemHealth | None = None
 _health_cache_checked_at = 0.0
+
+
+def _normalize_domain_health_result(result: Any) -> dict[str, Any]:
+    if not isinstance(result, dict):
+        return {"status": "degraded", "reason": "health check returned a non-dict result"}
+    status = str(result.get("status") or "").lower()
+    if status == "ok":
+        return {"status": "ok"}
+    if status == "degraded":
+        normalized = {"status": "degraded"}
+        if result.get("reason"):
+            normalized["reason"] = str(result["reason"])
+        return normalized
+    if status:
+        return {
+            "status": "degraded",
+            "reason": str(result.get("reason") or f"invalid health status: {status}"),
+        }
+    return {"status": "degraded", "reason": "health check returned no status"}
+
+
+def get_domain_health(timeout_seconds: float = 2.0) -> dict[str, dict[str, Any]]:
+    checks = get_all_health_checks()
+    if not checks:
+        return {}
+
+    executor = ThreadPoolExecutor(max_workers=max(1, len(checks)))
+    futures = {
+        executor.submit(check_fn): app_name
+        for app_name, check_fn in checks.items()
+    }
+    results: dict[str, dict[str, Any]] = {}
+    try:
+        done, not_done = wait(tuple(futures.keys()), timeout=timeout_seconds)
+        for future in done:
+            app_name = futures[future]
+            try:
+                results[app_name] = _normalize_domain_health_result(future.result())
+            except Exception as exc:
+                results[app_name] = {"status": "degraded", "reason": str(exc)}
+        for future in not_done:
+            app_name = futures[future]
+            future.cancel()
+            results[app_name] = {"status": "degraded", "reason": "health check timed out"}
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return {
+        app_name: results[app_name]
+        for app_name in sorted(results)
+    }
+
+
+def _merge_degraded_domains(domains: dict[str, dict[str, Any]]) -> list[str]:
+    _ = domains
+    return list(get_degraded_domains())
+
+
+def build_platform_status(dependencies: list[DependencyStatus]) -> dict[str, str]:
+    dep_by_name = {dep.name: dep for dep in dependencies}
+    postgres = dep_by_name.get("postgres")
+    schema = dep_by_name.get("schema")
+    queue = dep_by_name.get("queue")
+    redis = dep_by_name.get("redis")
+    mongo = dep_by_name.get("mongo")
+
+    database_ok = (
+        postgres is not None
+        and postgres.status == "ok"
+        and (schema is None or schema.status == "ok" or not schema.critical)
+    )
+
+    execution_engine_ok = True
+    if queue is not None and queue.critical:
+        execution_engine_ok = queue.status == "ok"
+
+    cache_ok = True
+    if redis is not None:
+        if redis.critical:
+            cache_ok = redis.status == "ok"
+        else:
+            cache_ok = redis.status in {"ok", "degraded"}
+
+    mongo_ok = True
+    if mongo is not None:
+        mongo_ok = mongo.status == "ok"
+
+    scheduler_ok = True
+    try:
+        from AINDY.platform_layer import scheduler_service
+
+        background_enabled = get_api_runtime_state().get("background_enabled", True)
+        scheduler_role = get_api_runtime_state().get("scheduler_role", "disabled")
+        if background_enabled and scheduler_role == "leader":
+            scheduler = scheduler_service.get_scheduler()
+            scheduler_ok = bool(getattr(scheduler, "running", False))
+    except Exception:
+        scheduler_ok = False
+
+    return {
+        "execution_engine": "ok" if execution_engine_ok else "degraded",
+        "scheduler": "ok" if scheduler_ok else "degraded",
+        "database": "ok" if database_ok else "degraded",
+        "cache": "ok" if cache_ok else "degraded",
+        "mongodb": "ok" if mongo_ok else "degraded",
+    }
+
+
+def derive_public_status(
+    tier: Literal["healthy", "degraded", "critical"],
+    platform: dict[str, str],
+    domains: dict[str, dict[str, Any]],
+) -> Literal["ok", "degraded", "unhealthy"]:
+    if tier == "critical":
+        return "unhealthy"
+    if platform.get("database") == "degraded" or platform.get("execution_engine") == "degraded":
+        return "unhealthy"
+    if any(value == "degraded" for value in platform.values()):
+        return "degraded"
+    if any(result.get("status") != "ok" for result in domains.values()):
+        return "degraded"
+    return "ok"
+
+
+def get_memory_ingest_queue_status() -> dict[str, Any]:
+    try:
+        from AINDY.memory.memory_ingest_service import configure_memory_ingest_queue
+
+        snapshot = configure_memory_ingest_queue().snapshot()
+        return {
+            "depth": int(snapshot.get("depth", 0)),
+            "capacity": int(snapshot.get("capacity", settings.AINDY_MEMORY_INGEST_QUEUE_MAX)),
+            "dropped_total": int(snapshot.get("dropped_total", 0)),
+            "worker_running": bool(snapshot.get("worker_running", False)),
+        }
+    except Exception as exc:
+        return {
+            "depth": 0,
+            "capacity": int(settings.AINDY_MEMORY_INGEST_QUEUE_MAX),
+            "dropped_total": 0,
+            "worker_running": False,
+            "detail": str(exc),
+        }
 
 
 def check_db_connectivity(db: Session) -> bool:
@@ -294,14 +446,19 @@ def check_mongo(timeout: float = 2.0) -> DependencyStatus:
                 critical=False,
             )
 
-        from AINDY.db.mongo_setup import ensure_mongo_ready
+        from AINDY.db.mongo_setup import ensure_mongo_ready, ping_mongo
 
-        original_timeout = settings.MONGO_HEALTH_TIMEOUT_MS
-        try:
-            settings.MONGO_HEALTH_TIMEOUT_MS = max(1, int(timeout * 1000))
-            ensure_mongo_ready(required=True)
-        finally:
-            settings.MONGO_HEALTH_TIMEOUT_MS = original_timeout
+        ensure_mongo_ready(required=False)
+        ping = ping_mongo()
+        if ping.get("status") != "ok":
+            latency = round((time.monotonic() - start) * 1000, 2)
+            return DependencyStatus(
+                name="mongo",
+                status="unavailable",
+                latency_ms=latency,
+                detail=str(ping.get("reason") or "MongoDB ping failed"),
+                critical=False,
+            )
 
         latency = round((time.monotonic() - start) * 1000, 2)
         return DependencyStatus(
@@ -417,8 +574,11 @@ def get_system_health(*, force: bool = False) -> SystemHealth:
         check_ai_providers(),
     ]
 
+    degraded_domains = get_degraded_domains()
     critical_down = any(dep.status == "unavailable" and dep.critical for dep in deps)
-    any_degraded = any(dep.status in ("unavailable", "degraded") for dep in deps)
+    any_degraded = bool(degraded_domains) or any(
+        dep.status in ("unavailable", "degraded") for dep in deps
+    )
 
     if critical_down:
         tier = "critical"

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any
 
 from AINDY.db.mongo_setup import get_mongo_client
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
+
+logger = logging.getLogger(__name__)
 
 
 def compute_engagement_score(post: dict[str, Any]) -> float:
@@ -24,14 +28,25 @@ def compute_conversion_signal(post: dict[str, Any]) -> float:
 
 
 def summarize_social_performance(*, user_id: str | None = None, limit: int = 50) -> dict[str, Any]:
-    mongo = get_mongo_client()
-    social_db = mongo["aindy_social_layer"]
-    posts = social_db["posts"]
-    query: dict[str, Any] = {}
-    if user_id:
-        query["user_id"] = str(user_id)
+    try:
+        mongo = get_mongo_client()
+        if mongo is None:
+            logger.warning("MongoDB unavailable for social performance query — returning empty")
+            return {"status": "degraded", "data": [], "reason": "mongodb_unavailable"}
+        social_db = mongo["aindy_social_layer"]
+        posts = social_db["posts"]
+        query: dict[str, Any] = {}
+        if user_id:
+            query["user_id"] = str(user_id)
 
-    docs = list(posts.find(query).sort("created_at", -1).limit(limit))
+        docs = list(posts.find(query).sort("created_at", -1).limit(limit))
+    except ServerSelectionTimeoutError:
+        logger.warning("MongoDB unavailable for social performance query — returning empty")
+        return {"status": "degraded", "data": [], "reason": "mongodb_unavailable"}
+    except PyMongoError as exc:
+        logger.error("MongoDB error in social performance query: %s", exc)
+        return {"status": "degraded", "data": [], "reason": str(exc)}
+
     if not docs:
         return {
             "overview": {
@@ -82,6 +97,8 @@ def summarize_social_performance(*, user_id: str | None = None, limit: int = 50)
 
 def get_social_performance_signals(*, user_id: str | None = None, limit: int = 3) -> list[dict[str, Any]]:
     summary = summarize_social_performance(user_id=user_id, limit=50)
+    if summary.get("status") == "degraded":
+        return []
     return list(summary.get("signals") or [])[:limit]
 
 

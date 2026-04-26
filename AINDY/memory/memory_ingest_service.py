@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
+from AINDY.db.database import SessionLocal
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 from AINDY.db.dao.memory_trace_dao import MemoryTraceDAO
+from AINDY.memory.ingest_queue import get_memory_ingest_queue
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,70 @@ class IngestResult:
     node_id: Optional[str]
     status: str
     message: Optional[str] = None
+
+
+@dataclass
+class MemoryIngestPayload:
+    path: str
+    user_id: str
+    content: str
+    origin_kind: str
+    title: str
+    description: Optional[str]
+    extra: dict
+    tags: list[str]
+
+
+def persist_memory_ingest_payload(payload: MemoryIngestPayload) -> IngestResult:
+    db = SessionLocal()
+    try:
+        trace_dao = MemoryTraceDAO(db)
+        node_dao = MemoryNodeDAO(db)
+
+        trace = trace_dao.create_trace(
+            user_id=payload.user_id,
+            title=payload.title,
+            description=payload.description,
+            source=payload.origin_kind,
+            extra=payload.extra,
+        )
+
+        node = node_dao.save(
+            content=payload.content,
+            source=f"symbolic_ingest:{payload.origin_kind}",
+            tags=payload.tags,
+            user_id=payload.user_id,
+            node_type="insight",
+            extra=payload.extra,
+        )
+
+        trace_id = trace.get("id") if trace else None
+        node_id = node.get("id") if node else None
+
+        if trace_id and node_id:
+            try:
+                trace_dao.append_node(
+                    trace_id=trace_id,
+                    node_id=node_id,
+                    user_id=payload.user_id,
+                )
+            except Exception as exc:
+                logger.warning("[MemoryIngest] append failed for %s: %s", payload.path, exc)
+
+        return IngestResult(
+            path=payload.path,
+            trace_id=trace_id,
+            node_id=node_id,
+            status="ingested",
+        )
+    finally:
+        db.close()
+
+
+def configure_memory_ingest_queue():
+    ingest_queue = get_memory_ingest_queue()
+    ingest_queue.set_worker_handler(persist_memory_ingest_payload)
+    return ingest_queue
 
 
 class MemoryIngestService:
@@ -68,37 +134,40 @@ class MemoryIngestService:
         if dry_run:
             return IngestResult(path=str(path), trace_id="dry-run", node_id="dry-run", status="dry_run")
 
-        trace = self.trace_dao.create_trace(
+        payload = MemoryIngestPayload(
+            path=str(path),
             user_id=self.user_id,
+            content=content,
+            origin_kind=origin_kind,
             title=title,
             description=description,
-            source=origin_kind,
             extra=extra,
-        )
-
-        node = self.node_dao.save(
-            content=content,
-            source=f"symbolic_ingest:{origin_kind}",
             tags=tags,
-            user_id=self.user_id,
-            node_type="insight",
-            extra=extra,
         )
+        ingest_queue = configure_memory_ingest_queue()
+        accepted = ingest_queue.enqueue(payload)
+        if not accepted:
+            payload_size = len(content.encode("utf-8"))
+            logger.warning(
+                "[MemoryIngest] queue full; dropped ingest path=%s user_id=%s payload_bytes=%s",
+                path,
+                self.user_id,
+                payload_size,
+            )
+            return IngestResult(
+                path=str(path),
+                trace_id=None,
+                node_id=None,
+                status="dropped",
+                message="memory ingest queue full",
+            )
 
-        trace_id = trace.get("id") if trace else None
-        node_id = node.get("id") if node else None
-
-        if trace_id and node_id:
-            try:
-                self.trace_dao.append_node(
-                    trace_id=trace_id,
-                    node_id=node_id,
-                    user_id=self.user_id,
-                )
-            except Exception as exc:
-                logger.warning("[MemoryIngest] append failed: %s", exc)
-
-        return IngestResult(path=str(path), trace_id=trace_id, node_id=node_id, status="ingested")
+        return IngestResult(
+            path=str(path),
+            trace_id=None,
+            node_id=None,
+            status="queued",
+        )
 
     def _build_tags(self, origin_kind: str, stem: str) -> list[str]:
         tags = {"symbolic", origin_kind}

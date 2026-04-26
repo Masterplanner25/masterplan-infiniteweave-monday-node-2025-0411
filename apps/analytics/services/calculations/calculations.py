@@ -1,5 +1,5 @@
-from apps.analytics.schemas.batch import BatchInput
-from apps.analytics.services.calculation_services import (  
+from ...schemas.batch import BatchInput
+from .calculation_services import (
     calculate_twr,
     calculate_effort,
     calculate_productivity,

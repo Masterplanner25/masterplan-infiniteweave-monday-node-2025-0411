@@ -164,6 +164,7 @@ def get_queue_metrics(
     current_user: dict = Depends(get_current_user),
 ):
     from AINDY.core.distributed_queue import get_queue
+    from AINDY.platform_layer.health_service import get_memory_ingest_queue_status
     from AINDY.worker.worker_loop import get_failure_rate_stats
 
     user_id = str(current_user["sub"])
@@ -171,6 +172,7 @@ def get_queue_metrics(
     def handler(ctx):
         metrics = dict(get_queue().get_metrics())
         metrics.update(get_failure_rate_stats())
+        metrics["memory_ingest_queue"] = get_memory_ingest_queue_status()
         return metrics
 
     return _execute_observability(

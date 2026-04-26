@@ -162,7 +162,7 @@ class TestAgentPlanningFailure:
 
 
 # ===========================================================================
-# 2. Embedding failure → inspectable embedding_status='failed'
+# 2. Embedding failure → inspectable deferred pending state
 # ===========================================================================
 
 class TestEmbeddingFailureStatus:
@@ -200,10 +200,10 @@ class TestEmbeddingFailureStatus:
             "generate_query_embedding must return zero vector on failure, not raise"
         )
 
-    def test_process_embedding_job_sets_failed_status_on_api_error(self):
+    def test_process_embedding_job_leaves_pending_status_on_api_error(self):
         """
-        When generate_embedding() raises, process_embedding_job() must set
-        embedding_status='failed' on the memory node and emit EMBEDDING_FAILED.
+        When generate_embedding() raises, process_embedding_job() must leave
+        the memory node pending so a later background sweep can retry it.
         """
         from AINDY.memory.embedding_service import EmbeddingFailedError
 
@@ -216,6 +216,7 @@ class TestEmbeddingFailureStatus:
         mock_node.user_id = uuid.uuid4()
         mock_node.source_event_id = None
         mock_node.extra = {}
+        mock_node.embedding_pending = True
         mock_node.embedding_status = "pending"
 
         db.query.return_value.filter.return_value.first.return_value = mock_node
@@ -233,8 +234,6 @@ class TestEmbeddingFailureStatus:
         ), patch(
             "AINDY.memory.embedding_jobs.queue_system_event",
             return_value=str(uuid.uuid4()),
-        ), patch(
-            "AINDY.memory.embedding_jobs.emit_error_event",
         ):
             from AINDY.memory.embedding_jobs import process_embedding_job
 
@@ -244,11 +243,14 @@ class TestEmbeddingFailureStatus:
             )
 
         assert result is not None
-        assert result.get("embedding_status") == "failed", (
-            f"Expected embedding_status='failed', got: {result}"
+        assert result.get("embedding_pending") is True, (
+            f"Expected embedding_pending=True, got: {result}"
         )
-        assert "failed" in committed_statuses, (
-            "embedding_status='failed' must be committed to the DB"
+        assert result.get("embedding_status") == "pending", (
+            f"Expected embedding_status='pending', got: {result}"
+        )
+        assert "pending" in committed_statuses, (
+            "embedding_status='pending' must be committed to the DB"
         )
 
     def test_empty_text_returns_zero_vector_without_api_call(self):

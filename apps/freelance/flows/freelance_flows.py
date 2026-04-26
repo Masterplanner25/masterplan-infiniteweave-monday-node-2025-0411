@@ -9,9 +9,18 @@ def freelance_order_create_node(state, context):
         db = context.get("db")
         user_id = str(context.get("user_id"))
         order = FreelanceOrderCreate(**state.get("order", {}))
-        created = freelance_service.create_order(db, order, user_id=user_id)
+        created, was_created = freelance_service.create_order(
+            db,
+            order,
+            user_id=user_id,
+            idempotency_key=state.get("idempotency_key"),
+            return_created=True,
+        )
         return {"status": "SUCCESS", "output_patch": {"freelance_order_create_result": {
-            "data": FreelanceOrderResponse.model_validate(created).model_dump(mode="json"),
+            "data": {
+                **FreelanceOrderResponse.model_validate(created).model_dump(mode="json"),
+                "_idempotency": {"created": was_created},
+            },
         }}}
     except ValueError as e:
         return {"status": "FAILURE", "error": f"HTTP_422:{e}"}
@@ -179,11 +188,13 @@ def freelance_refund_node(state, context):
         order_id = state.get("order_id")
         reason = state.get("reason")
         try:
-            order = freelance_service.issue_refund(
+            order, was_created = freelance_service.issue_refund(
                 db,
                 order_id,
                 user_id=user_id,
                 reason=reason,
+                idempotency_key=state.get("idempotency_key"),
+                return_created=True,
             )
         except ValueError as e:
             return {"status": "FAILURE", "error": f"HTTP_422:{e}"}
@@ -200,7 +211,7 @@ def freelance_refund_node(state, context):
                         refunded_at=order.refunded_at,
                         reason=order.refund_reason,
                         amount_cents=amount_cents,
-                    ).model_dump(mode="json"),
+                    ).model_dump(mode="json") | {"_idempotency": {"created": was_created}},
                 }
             },
         }

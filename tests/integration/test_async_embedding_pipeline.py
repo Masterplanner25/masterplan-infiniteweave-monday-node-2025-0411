@@ -47,6 +47,7 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
     assert response.status_code == 201
     payload = response.json()
     data = payload.get("data", payload)
+    assert data["embedding_pending"] is True
     assert data["embedding_status"] == "pending"
 
     db_session.expire_all()
@@ -57,6 +58,7 @@ def test_memory_create_returns_pending_embedding_and_enqueues_job(
     )
     assert node is not None
     assert node.embedding is None
+    assert node.embedding_pending is True
     assert node.embedding_status == "pending"
 
     # Verify enqueue_embedding was called for the created memory node
@@ -121,6 +123,7 @@ def test_embedding_job_updates_memory_status_after_background_processing(
         db_session,
     )
 
+    assert result["embedding_pending"] is False
     assert result["embedding_status"] == "complete"
 
     db_session.expire_all()
@@ -130,5 +133,6 @@ def test_embedding_job_updates_memory_status_after_background_processing(
         .first()
     )
     assert node is not None
+    assert node.embedding_pending is False
     assert node.embedding_status == "complete"
     assert node.embedding is not None

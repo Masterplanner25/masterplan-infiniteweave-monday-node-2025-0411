@@ -5,13 +5,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 from pymongo.database import Database
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from AINDY.db.mongo_setup import get_mongo_db
+from AINDY.db.mongo_setup import get_optional_mongo_db
 from AINDY.platform_layer.app_runtime import execute_with_pipeline_sync
 from AINDY.services.auth_service import get_current_user
 from apps.social.models.social_models import FeedItem, SocialPost, SocialProfile, TrustTier
@@ -165,48 +166,62 @@ def _with_execution_envelope(payload):
     return {"data": payload, "execution_envelope": envelope}
 
 
+def _mongo_degraded_payload(reason: str, *, data=None):
+    return {
+        "status": "degraded",
+        "data": [] if data is None else data,
+        "reason": reason,
+    }
+
+
 @router.post("/profile")
 @limiter.limit("30/minute")
 def upsert_profile(
     request: Request,
     profile_data: SocialProfile,
-    db: Database = Depends(get_mongo_db),
+    db: Database | None = Depends(get_optional_mongo_db),
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        profiles = db["profiles"]
-        user_id = str(current_user["sub"])
-        existing_any = profiles.find_one({"username": profile_data.username})
-        if existing_any and existing_any.get("user_id") != user_id:
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "profile_forbidden",
-                    "message": "Cannot modify another user's profile",
-                },
+        if db is None:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        try:
+            profiles = db["profiles"]
+            user_id = str(current_user["sub"])
+            existing_any = profiles.find_one({"username": profile_data.username})
+            if existing_any and existing_any.get("user_id") != user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "profile_forbidden",
+                        "message": "Cannot modify another user's profile",
+                    },
+                )
+
+            existing = profiles.find_one(
+                {
+                    "username": profile_data.username,
+                    "user_id": user_id,
+                }
             )
+            if existing:
+                update_data = profile_data.dict(exclude={"id", "joined_at"})
+                update_data["updated_at"] = _now_utc()
+                update_data["user_id"] = user_id
+                profiles.update_one(
+                    {"username": profile_data.username, "user_id": user_id},
+                    {"$set": update_data},
+                )
+                return {**existing, **update_data}
 
-        existing = profiles.find_one(
-            {
-                "username": profile_data.username,
-                "user_id": user_id,
-            }
-        )
-
-        if existing:
-            update_data = profile_data.dict(exclude={"id", "joined_at"})
-            update_data["updated_at"] = _now_utc()
-            update_data["user_id"] = user_id
-            profiles.update_one(
-                {"username": profile_data.username, "user_id": user_id},
-                {"$set": update_data},
-            )
-            return {**existing, **update_data}
-
-        new_profile = profile_data.dict()
-        new_profile["user_id"] = user_id
-        db["profiles"].insert_one(new_profile)
-        return new_profile
+            new_profile = profile_data.dict()
+            new_profile["user_id"] = user_id
+            db["profiles"].insert_one(new_profile)
+            return new_profile
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
 
     result = execute_with_pipeline_sync(
         request=None,
@@ -219,21 +234,33 @@ def upsert_profile(
 
 @router.get("/profile/{username}")
 @limiter.limit("60/minute")
-def get_profile(request: Request, username: str, db: Database = Depends(get_mongo_db)):
+def get_profile(request: Request, username: str, db: Database | None = Depends(get_optional_mongo_db)):
     def handler(ctx):
-        profile = db["profiles"].find_one({"username": username})
-        if not profile:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "profile_not_found", "message": "Profile not found"},
-            )
-        return profile
+        if db is None:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        try:
+            profile = db["profiles"].find_one({"username": username})
+            if not profile:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"error": "profile_not_found", "message": "Profile not found"},
+                )
+            return profile
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
 
-    return execute_with_pipeline_sync(
-        request=None,
-        route_name="social.profile.get",
-        handler=handler,
-    )
+    try:
+        return execute_with_pipeline_sync(
+            request=None,
+            route_name="social.profile.get",
+            handler=handler,
+        )
+    except ServerSelectionTimeoutError:
+        return _mongo_degraded_payload("mongodb_unavailable")
+    except PyMongoError as exc:
+        return _mongo_degraded_payload(str(exc))
 
 
 @router.post("/post")
@@ -241,18 +268,25 @@ def get_profile(request: Request, username: str, db: Database = Depends(get_mong
 def create_post(
     request: Request,
     post: SocialPost,
-    db: Database = Depends(get_mongo_db),
+    db: Database | None = Depends(get_optional_mongo_db),
     sql_db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        if db is None:
+            return _mongo_degraded_payload("mongodb_unavailable")
         post_data = post.dict()
         post_data["user_id"] = str(current_user["sub"])
         post_data["impressions"] = int(post_data.get("impressions", 0) or 0)
         post_data["clicks"] = int(post_data.get("clicks", 0) or 0)
         post_data["engagement_score"] = float(post_data.get("engagement_score", 0.0) or 0.0)
         post_data["conversion_signal"] = float(post_data.get("conversion_signal", 0.0) or 0.0)
-        db["posts"].insert_one(post_data)
+        try:
+            db["posts"].insert_one(post_data)
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
         return {
             "data": post_data,
             "execution_hints": {
@@ -286,35 +320,47 @@ def get_feed(
     request: Request,
     limit: int = 20,
     trust_filter: Optional[str] = None,
-    db: Database = Depends(get_mongo_db),
+    db: Database | None = Depends(get_optional_mongo_db),
     sql_db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        if db is None:
+            return _mongo_degraded_payload("mongodb_unavailable")
         posts_collection = db["posts"]
         query = {}
         if trust_filter:
             query["trust_tier_required"] = trust_filter
 
-        cursor = posts_collection.find(query).sort("created_at", -1).limit(limit * 2)
-        post_docs = list(cursor)
+        try:
+            cursor = posts_collection.find(query).sort("created_at", -1).limit(limit * 2)
+            post_docs = list(cursor)
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
         memory_hints: list[dict] = []
 
         if post_docs:
             post_ids = [doc.get("id") for doc in post_docs if doc.get("id")]
             if post_ids:
-                posts_collection.update_many(
-                    {"id": {"$in": post_ids}},
-                    {"$inc": {"impressions": 1}},
-                )
-                refreshed_docs = [
-                    _maybe_capture_performance_signal(
-                        db=db,
-                        user_id=str(current_user["sub"]),
-                        post_doc=post_doc,
+                try:
+                    posts_collection.update_many(
+                        {"id": {"$in": post_ids}},
+                        {"$inc": {"impressions": 1}},
                     )
-                    for post_doc in posts_collection.find({"id": {"$in": post_ids}})
-                ]
+                    refreshed_docs = [
+                        _maybe_capture_performance_signal(
+                            db=db,
+                            user_id=str(current_user["sub"]),
+                            post_doc=post_doc,
+                        )
+                        for post_doc in posts_collection.find({"id": {"$in": post_ids}})
+                    ]
+                except ServerSelectionTimeoutError:
+                    return _mongo_degraded_payload("mongodb_unavailable")
+                except PyMongoError as exc:
+                    return _mongo_degraded_payload(str(exc))
                 post_docs = [item[0] for item in refreshed_docs]
                 for _, hints in refreshed_docs:
                     memory_hints.extend(hints)
@@ -360,11 +406,13 @@ def record_post_interaction(
     request: Request,
     post_id: str,
     body: SocialInteractionRequest,
-    db: Database = Depends(get_mongo_db),
+    db: Database | None = Depends(get_optional_mongo_db),
     sql_db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        if db is None:
+            return _mongo_degraded_payload("mongodb_unavailable")
         action = (body.action or "").strip().lower()
         if action not in {"view", "click", "like", "boost", "comment"}:
             raise HTTPException(
@@ -380,20 +428,35 @@ def record_post_interaction(
         }[action]
         amount = max(1, int(body.amount or 1))
         posts = db["posts"]
-        post_doc = posts.find_one({"id": post_id})
+        try:
+            post_doc = posts.find_one({"id": post_id})
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
         if not post_doc:
             raise HTTPException(
                 status_code=404,
                 detail={"error": "post_not_found", "message": "Post not found"},
             )
 
-        posts.update_one({"id": post_id}, {"$inc": {field: amount}})
-        updated = posts.find_one({"id": post_id}) or post_doc
-        updated, memory_hints = _maybe_capture_performance_signal(
-            db=db,
-            user_id=str(current_user["sub"]),
-            post_doc=updated,
-        )
+        try:
+            posts.update_one({"id": post_id}, {"$inc": {field: amount}})
+            updated = posts.find_one({"id": post_id}) or post_doc
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
+        try:
+            updated, memory_hints = _maybe_capture_performance_signal(
+                db=db,
+                user_id=str(current_user["sub"]),
+                post_doc=updated,
+            )
+        except ServerSelectionTimeoutError:
+            return _mongo_degraded_payload("mongodb_unavailable")
+        except PyMongoError as exc:
+            return _mongo_degraded_payload(str(exc))
         return {
             "data": {
                 "post_id": post_id,
@@ -425,10 +488,13 @@ def get_social_analytics(
     request: Request,
     current_user: dict = Depends(get_current_user),
 ):
-    return execute_with_pipeline_sync(
+    result = execute_with_pipeline_sync(
         request=None,
         route_name="social.analytics.get",
         handler=lambda ctx: summarize_social_performance(user_id=str(current_user["sub"])),
         user_id=str(current_user["sub"]),
     )
+    if isinstance(result, dict) and result.get("status") == "degraded":
+        return _with_execution_envelope(result)
+    return result
 

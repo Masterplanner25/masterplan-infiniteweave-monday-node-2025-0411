@@ -10,6 +10,7 @@ def register() -> None:
     _register_response_adapters()
     _register_events()
     _register_syscalls()
+    _register_health_check()
 
 
 def _register_router() -> None:
@@ -53,3 +54,9 @@ def _handle_auth_register_completed(event: dict) -> None:
     if user is None:
         return
     initialize_signup_state(db=db, user=user)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("identity", lambda: {"status": "ok"})

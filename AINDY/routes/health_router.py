@@ -79,18 +79,36 @@ def _stuck_run_payload() -> dict:
 
 
 def _testing_health_payload() -> dict:
+    from AINDY.platform_layer.health_service import (
+        derive_public_status,
+        get_domain_health,
+        get_memory_ingest_queue_status,
+    )
     from AINDY.runtime import get_engine_status
 
+    domains = get_domain_health()
+    degraded_domains = _get_degraded_domains()
     db_pool = get_pool_status()
+    platform = {
+        "execution_engine": "ok",
+        "scheduler": "ok",
+        "database": "ok",
+        "cache": "ok",
+        "mongodb": "ok",
+    }
     payload = {
-        "status": "healthy",
+        "status": derive_public_status("healthy", platform, domains),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": settings.VERSION,
-        "degraded_domains": _get_degraded_domains(),
+        "degraded_domains": degraded_domains,
+        "degraded_apps": degraded_domains,
+        "platform": platform,
+        "domains": domains,
         "dependencies": {},
         "db_pool": db_pool,
         "flow_engines": get_engine_status(),
         "async_jobs": _async_jobs_payload(),
+        "memory_ingest_queue": get_memory_ingest_queue_status(),
         "cache": _cache_payload(),
         "wait_resume": _get_wait_resume_status(),
         "stuck_run": _stuck_run_payload(),
@@ -117,13 +135,15 @@ def _emit_health_event(payload: dict) -> None:
 
 
 def liveness() -> dict:
-    payload = _testing_health_payload()
+    payload = dict(_testing_health_payload())
+    payload["status"] = "healthy"
     _emit_health_event(payload)
     return payload
 
 
 def liveness_legacy_alias() -> dict:
-    payload = _testing_health_payload()
+    payload = dict(_testing_health_payload())
+    payload["status"] = "healthy"
     _emit_health_event(payload)
     return payload
 
@@ -151,7 +171,8 @@ def _build_health_response(*, force: bool) -> JSONResponse:
         warnings.append("db_pool_near_exhaustion")
         payload["warnings"] = warnings
     _emit_health_event(payload)
-    return JSONResponse(status_code=health.http_status, content=payload)
+    status_code = 503 if payload.get("status") == "unhealthy" else 200
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 async def _run_deep_check(check_fn, *, timeout: float):
@@ -398,6 +419,7 @@ async def _build_deep_health_payload() -> dict:
         "status": overall_status,
         "instance_id": _INSTANCE_ID,
         "degraded_domains": _get_degraded_domains(),
+        "degraded_apps": _get_degraded_domains(),
         "checks": checks,
     }
 

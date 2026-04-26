@@ -51,7 +51,7 @@ def connect_external_author(
     All DB work (including the final commit) is owned here.
     """
     from apps.rippletrace.services import rippletrace_services
-    from apps.analytics.services.calculation_services import save_calculation
+    from apps.analytics.services.calculations.calculation_services import save_calculation
     from datetime import datetime
 
     author = register_author(db=db, name=author_name, platform=platform, notes=notes)

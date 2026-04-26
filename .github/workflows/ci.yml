@@ -210,6 +210,33 @@ jobs:
           ALLOWED_ORIGINS: "http://localhost:3000"
         run: pytest -c pytest.integration.ini -vv --durations=25 -ra
 
+      - name: Guard apps package imports
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path("apps")
+          pattern = re.compile(
+              r"^\s*(?:from\s+(runtime|services|kernel|core|db)\b|import\s+(runtime|services|kernel|core|db)\b|from\s+config\s+import\b)"
+          )
+
+          violations: list[str] = []
+          for path in root.rglob("*.py"):
+              for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                  if pattern.search(line):
+                      violations.append(f"{path}:{lineno}:{line.strip()}")
+
+          if violations:
+              print("VIOLATION: bare package-boundary import found in apps/")
+              for violation in violations:
+                  print(violation)
+              sys.exit(1)
+
+          print("apps import guard passed")
+          PY
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

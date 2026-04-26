@@ -50,6 +50,18 @@ def test_dev_lifespan_allows_local_bringup_without_redis(monkeypatch):
         asyncio.run(main.lifespan(main.app).__aenter__())
 
 
+def test_lifespan_continues_when_mongo_init_raises(monkeypatch):
+    from AINDY import main
+
+    _patch_minimal_lifespan(monkeypatch, main)
+    monkeypatch.setattr(main.settings, "ENV", "development")
+    monkeypatch.setattr(main, "ensure_mongo_ready", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("mongo down")))
+    monkeypatch.setattr(main, "ping_mongo", lambda: {"status": "degraded", "reason": "mongo down"})
+
+    with pytest.raises(_StopStartup):
+        asyncio.run(main.lifespan(main.app).__aenter__())
+
+
 def test_worker_main_fails_cleanly_when_schema_not_ready(monkeypatch):
     from AINDY.worker import __main__ as worker_main
 

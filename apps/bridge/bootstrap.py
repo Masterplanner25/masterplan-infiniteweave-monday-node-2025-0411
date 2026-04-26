@@ -10,6 +10,7 @@ def register() -> None:
     _register_response_adapters()
     _register_async_jobs()
     _register_flow_results()
+    _register_health_check()
 
 
 def _register_router() -> None:
@@ -79,3 +80,9 @@ def _job_memory_nodus_execute(payload: dict, db):
         execution_id=payload.get("execution_id"),
         capability_token=payload.get("capability_token"),
     )
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("bridge", lambda: {"status": "ok"})

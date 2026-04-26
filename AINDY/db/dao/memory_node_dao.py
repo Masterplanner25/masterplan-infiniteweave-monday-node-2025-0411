@@ -60,6 +60,7 @@ class MemoryNodeDAO:
             "causal_depth": getattr(n, "causal_depth", 0),
             "impact_score": getattr(n, "impact_score", 0.0),
             "memory_type": getattr(n, "memory_type", None),
+            "embedding_pending": getattr(n, "embedding_pending", True),
             "embedding_status": getattr(n, "embedding_status", "pending"),
             "extra": n.extra,
             "created_at": n.created_at.isoformat() if n.created_at else None,
@@ -137,6 +138,7 @@ class MemoryNodeDAO:
     def _count_complete_embeddings(self, *, user_id: str | None, node_type: str | None) -> int:
         query = self._embedded_query(user_id=user_id, node_type=node_type).filter(
             MemoryNodeModel.embedding.isnot(None),
+            MemoryNodeModel.embedding_pending.is_(False),
             MemoryNodeModel.embedding_status == "complete",
         )
         return int(query.count())
@@ -195,6 +197,7 @@ class MemoryNodeDAO:
             causal_depth=max(0, int(causal_depth or 0)),
             impact_score=max(0.0, float(impact_score or 0.0)),
             memory_type=self._normalize_memory_type(memory_type, node_type),
+            embedding_pending=True,
             embedding_status="pending",
             extra=node_extra,
             path=path,
@@ -270,6 +273,7 @@ class MemoryNodeDAO:
             is_shared=is_shared,
             visibility=visibility or ("shared" if is_shared else "private"),
             user_id=parse_user_id(user_id),
+            embedding_pending=True,
             embedding_status="pending",
             extra={"trace_id": get_current_trace_id()} if get_current_trace_id() else {},
         )
@@ -371,6 +375,7 @@ class MemoryNodeDAO:
         rows_before_filter = int(base_query.count())
         embedded_query = base_query.filter(
             MemoryNodeModel.embedding.isnot(None),
+            MemoryNodeModel.embedding_pending.is_(False),
             MemoryNodeModel.embedding_status == "complete",
         )
         rows_after_filter = int(embedded_query.count())
@@ -944,6 +949,7 @@ class MemoryNodeDAO:
 
         if "content" in changes and regenerate_embedding:
             node.embedding = None
+            node.embedding_pending = True
             node.embedding_status = "pending"
 
         self.db.add(history)
@@ -966,13 +972,6 @@ class MemoryNodeDAO:
             )
         except Exception as exc:
             logger.warning("[MemoryNodeDAO] embedding enqueue failed for %s: %s", node.id, exc)
-            try:
-                node.embedding_status = "failed"
-                self.db.add(node)
-                self.db.commit()
-                self.db.refresh(node)
-            except SQLAlchemyError:
-                self.db.rollback()
 
     def _find_text_matches(
         self,
@@ -1340,7 +1339,7 @@ class MemoryNodeDAO:
 
             if include_similar:
                 node = self._get_model_by_id(node_id, user_id=user_id)
-                if node and node.embedding is not None:
+                if node and node.embedding is not None and not getattr(node, "embedding_pending", True):
                     similar = self.find_similar(
                         query_embedding=node.embedding,
                         limit=limit_per_node + 1,

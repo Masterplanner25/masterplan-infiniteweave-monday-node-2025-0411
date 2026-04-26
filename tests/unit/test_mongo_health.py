@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from pymongo.errors import PyMongoError
+from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 
 
 def test_optional_mongo_degrades_gracefully_when_url_missing(monkeypatch):
@@ -62,6 +62,44 @@ def test_close_mongo_client_is_idempotent(monkeypatch):
     mongo_setup.close_mongo_client()
     mongo_client.close.assert_called_once()
     assert mongo_setup._client is None
+
+
+def test_ping_mongo_returns_degraded_when_not_configured(monkeypatch):
+    from AINDY.db import mongo_setup
+
+    monkeypatch.setattr(mongo_setup, "_client", None)
+    monkeypatch.setattr(mongo_setup.settings, "MONGO_URL", "")
+
+    assert mongo_setup.ping_mongo() == {
+        "status": "degraded",
+        "reason": "mongo not configured",
+    }
+
+
+def test_ping_mongo_returns_degraded_when_client_ping_times_out(monkeypatch):
+    from AINDY.db import mongo_setup
+
+    mongo_client = MagicMock()
+    mongo_client.admin.command.side_effect = ServerSelectionTimeoutError("timed out")
+
+    monkeypatch.setattr(mongo_setup, "_client", mongo_client)
+    monkeypatch.setattr(mongo_setup.settings, "MONGO_URL", "mongodb://localhost:27017")
+
+    result = mongo_setup.ping_mongo()
+
+    assert result["status"] == "degraded"
+    assert "timed out" in result["reason"]
+
+
+def test_ping_mongo_returns_ok_when_ping_succeeds(monkeypatch):
+    from AINDY.db import mongo_setup
+
+    mongo_client = MagicMock()
+    mongo_client.admin.command.return_value = {"ok": 1}
+
+    monkeypatch.setattr(mongo_setup, "_client", mongo_client)
+
+    assert mongo_setup.ping_mongo() == {"status": "ok"}
 
     mongo_setup.close_mongo_client()
     mongo_client.close.assert_called_once()
