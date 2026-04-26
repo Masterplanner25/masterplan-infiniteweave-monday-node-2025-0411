@@ -17,10 +17,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 # ORM models (database layer)
 from apps.freelance.models.freelance import (
-    FreelanceOrder,
     ClientFeedback,
+    FreelanceOrder,
+    PaymentRecord,
+    RefundRecord,
     RevenueMetrics,
+    WebhookEvent,
 )
+from apps.freelance.services.idempotency import check_or_create
 
 # Pydantic schemas (validation layer)
 from apps.freelance.schemas.freelance import (
@@ -49,7 +53,14 @@ _SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook", "payment", "subscript
 # Core Freelance Order Logic
 # -----------------------------------------------------
 
-def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = None):
+def create_order(
+    db: Session,
+    order_data: FreelanceOrderCreate,
+    user_id: str = None,
+    *,
+    idempotency_key: str | None = None,
+    return_created: bool = False,
+):
     """
     Creates a new freelance order and logs it to the Memory Bridge.
     """
@@ -61,6 +72,29 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
                 f"delivery_type '{delivery_type}' is not supported. "
                 f"Supported types: {sorted(_SUPPORTED_DELIVERY_TYPES)}"
             )
+        if idempotency_key:
+            order, was_created = check_or_create(
+                db,
+                FreelanceOrder,
+                idempotency_key,
+                lambda: _build_order_from_create(order_data, user_uuid, delivery_type),
+            )
+            if was_created:
+                _finalize_created_order(
+                    db,
+                    order,
+                    order_data=order_data,
+                    user_id=str(user_uuid) if user_uuid else None,
+                )
+            logger.info(
+                "Created freelance order #%s for %s%s",
+                order.id,
+                order.client_name,
+                "" if was_created else " (idempotent replay)",
+            )
+            if return_created:
+                return order, was_created
+            return order
         order = FreelanceOrder(
             client_name=order_data.client_name,
             client_email=order_data.client_email,
@@ -106,12 +140,67 @@ def create_order(db: Session, order_data: FreelanceOrderCreate, user_id: str = N
                 logger.warning("[MemoryBridge] Failed to log freelance order: %s", bridge_err)
 
         logger.info("Created freelance order #%s for %s", order.id, order.client_name)
+        if return_created:
+            return order, True
         return order
 
     except SQLAlchemyError as e:
         db.rollback()
         logger.warning("[DB Error] create_order: %s", e)
         raise
+
+
+def _build_order_from_create(
+    order_data: FreelanceOrderCreate,
+    user_uuid,
+    delivery_type: str,
+) -> FreelanceOrder:
+    return FreelanceOrder(
+        client_name=order_data.client_name,
+        client_email=order_data.client_email,
+        service_type=order_data.service_type,
+        project_details=order_data.project_details,
+        price=order_data.price,
+        status="pending",
+        masterplan_id=order_data.masterplan_id,
+        task_id=order_data.task_id,
+        automation_type=order_data.automation_type,
+        automation_config=order_data.automation_config,
+        delivery_type=delivery_type,
+        delivery_config=order_data.delivery_config,
+        delivery_status="pending",
+        started_at=datetime.now(timezone.utc),
+        user_id=user_uuid,
+    )
+
+
+def _finalize_created_order(
+    db: Session,
+    order: FreelanceOrder,
+    *,
+    order_data: FreelanceOrderCreate,
+    user_id: str | None,
+) -> None:
+    if order_data.auto_generate_delivery:
+        queue_delivery_generation(db, order.id, user_id=user_id)
+
+    try:
+        if is_pipeline_active():
+            raise RuntimeError("pipeline_active_memory_capture_disabled")
+        queue_memory_capture(
+            db=db,
+            user_id=user_id,
+            agent_namespace="freelance",
+            event_type="freelance_order",
+            content=f"New Freelance Order: {order.service_type} for {order.client_name}",
+            source="freelance_service",
+            tags=["freelance", "order", order.service_type],
+            node_type="outcome",
+            extra={"client_email": order.client_email, "price": order.price},
+        )
+    except Exception as bridge_err:
+        if str(bridge_err) != "pipeline_active_memory_capture_disabled":
+            logger.warning("[MemoryBridge] Failed to log freelance order: %s", bridge_err)
 
 
 def generate_deliverable(db: Session, order_id: int, user_id: str | None = None) -> FreelanceOrder:
@@ -662,36 +751,88 @@ def verify_stripe_signature(
         return False
 
 
+def _build_payment_idempotency_key(
+    *,
+    payment_intent_id: str | None = None,
+    payment_link_id: str | None = None,
+) -> str | None:
+    return payment_intent_id or payment_link_id
+
+
+def _mark_webhook_event(
+    db: Session,
+    event: WebhookEvent,
+    *,
+    status: str,
+) -> None:
+    event.processing_status = status
+    if status == "processed":
+        event.processed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(event)
+
+
 def process_stripe_webhook(
     db: Session,
     event_type: str,
     event_data: dict,
+    *,
+    event_id: str | None = None,
 ) -> dict:
     """
     Process a verified Stripe webhook event.
     """
+    webhook_event = None
+    if event_id:
+        webhook_event, event_created = check_or_create(
+            db,
+            WebhookEvent,
+            event_id,
+            lambda: WebhookEvent(
+                event_type=event_type,
+                payload=event_data,
+                processing_status="pending",
+            ),
+        )
+        if not event_created and webhook_event.processing_status == "processed":
+            return {"processed": False, "status": "already_processed"}
+
     object_data = event_data.get("object") or {}
 
     if event_type == "checkout.session.completed":
         payment_intent_id = object_data.get("payment_intent")
         payment_link_id = object_data.get("payment_link")
         customer_email = object_data.get("customer_details", {}).get("email")
-        _confirm_payment(
+        record_payment(
             db,
             payment_intent_id=payment_intent_id,
             payment_link_id=payment_link_id,
             customer_email=customer_email,
+            idempotency_key=_build_payment_idempotency_key(
+                payment_intent_id=payment_intent_id,
+                payment_link_id=payment_link_id,
+            ),
         )
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "payment_confirmed"}
 
     if event_type == "payment_intent.succeeded":
         payment_intent_id = object_data.get("id")
-        _confirm_payment(db, payment_intent_id=payment_intent_id)
+        record_payment(
+            db,
+            payment_intent_id=payment_intent_id,
+            idempotency_key=_build_payment_idempotency_key(payment_intent_id=payment_intent_id),
+        )
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "payment_confirmed"}
 
     if event_type == "payment_intent.payment_failed":
         payment_intent_id = object_data.get("id")
         _fail_payment(db, payment_intent_id=payment_intent_id)
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "payment_failed"}
 
     if event_type == "customer.subscription.updated":
@@ -701,25 +842,126 @@ def process_stripe_webhook(
             subscription_id=sub_id,
             event_data=object_data,
         )
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "subscription_updated"}
 
     if event_type == "customer.subscription.deleted":
         sub_id = object_data.get("id")
         _cancel_subscription_from_webhook(db, subscription_id=sub_id)
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "subscription_cancelled"}
 
     if event_type == "invoice.payment_succeeded":
         sub_id = object_data.get("subscription")
         period_end = (object_data.get("lines", {}) or {}).get("data", [{}])[0].get("period", {}).get("end")
         _renew_subscription(db, subscription_id=sub_id, period_end=period_end)
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "subscription_renewed"}
 
     if event_type == "invoice.payment_failed":
         sub_id = object_data.get("subscription")
         _subscription_payment_failed(db, subscription_id=sub_id)
+        if webhook_event is not None:
+            _mark_webhook_event(db, webhook_event, status="processed")
         return {"processed": True, "action": "subscription_payment_failed"}
 
+    if webhook_event is not None:
+        _mark_webhook_event(db, webhook_event, status="ignored")
     return {"processed": False}
+
+
+def record_payment(
+    db: Session,
+    *,
+    payment_intent_id: str | None = None,
+    payment_link_id: str | None = None,
+    customer_email: str | None = None,
+    idempotency_key: str | None = None,
+    return_created: bool = False,
+) -> FreelanceOrder | tuple[FreelanceOrder | None, bool] | None:
+    order = _find_order_by_stripe_ids(
+        db,
+        payment_intent_id=payment_intent_id,
+        payment_link_id=payment_link_id,
+        customer_email=customer_email,
+    )
+    if not order:
+        logger.warning(
+            "[Stripe] Payment confirmed but no order found payment_intent_id=%s payment_link_id=%s",
+            payment_intent_id,
+            payment_link_id,
+        )
+        if return_created:
+            return None, False
+        return None
+
+    payment_key = idempotency_key or _build_payment_idempotency_key(
+        payment_intent_id=payment_intent_id,
+        payment_link_id=payment_link_id,
+    )
+    was_created = True
+    if payment_key:
+        _, was_created = check_or_create(
+            db,
+            PaymentRecord,
+            payment_key,
+            lambda: PaymentRecord(
+                order_id=order.id,
+                stripe_payment_intent_id=payment_intent_id,
+                stripe_payment_link_id=payment_link_id,
+                status="pending",
+                user_id=order.user_id,
+            ),
+        )
+
+    if was_created and order.payment_status != "confirmed":
+        order.payment_status = "confirmed"
+        order.status = "payment_confirmed"
+        order.payment_confirmed_at = datetime.now(timezone.utc)
+        if payment_intent_id and not order.stripe_payment_intent_id:
+            order.stripe_payment_intent_id = payment_intent_id
+        if payment_link_id and not order.stripe_payment_link_id:
+            order.stripe_payment_link_id = payment_link_id
+        db.commit()
+        db.refresh(order)
+        if payment_key:
+            payment_record = db.query(PaymentRecord).filter(PaymentRecord.idempotency_key == payment_key).first()
+            if payment_record is not None:
+                payment_record.status = "confirmed"
+                payment_record.confirmed_at = order.payment_confirmed_at
+                payment_record.stripe_payment_intent_id = payment_intent_id or payment_record.stripe_payment_intent_id
+                payment_record.stripe_payment_link_id = payment_link_id or payment_record.stripe_payment_link_id
+                db.commit()
+        queue_system_event(
+            db=db,
+            event_type=SystemEventTypes.FREELANCE_PAYMENT_CONFIRMED,
+            user_id=order.user_id,
+            trace_id=f"stripe-payment-{order.id}",
+            source="stripe_webhook",
+            payload={
+                "order_id": order.id,
+                "payment_intent_id": payment_intent_id,
+                "payment_link_id": payment_link_id,
+                "service_type": order.service_type,
+            },
+            required=True,
+        )
+        logger.info("[Stripe] Payment confirmed for order #%s", order.id)
+    elif was_created and payment_key:
+        payment_record = db.query(PaymentRecord).filter(PaymentRecord.idempotency_key == payment_key).first()
+        if payment_record is not None:
+            payment_record.status = "confirmed"
+            payment_record.confirmed_at = order.payment_confirmed_at or datetime.now(timezone.utc)
+            payment_record.stripe_payment_intent_id = payment_intent_id or payment_record.stripe_payment_intent_id
+            payment_record.stripe_payment_link_id = payment_link_id or payment_record.stripe_payment_link_id
+            db.commit()
+
+    if return_created:
+        return order, was_created
+    return order
 
 
 def issue_refund(
@@ -728,7 +970,9 @@ def issue_refund(
     *,
     user_id: str,
     reason: str | None = None,
-) -> FreelanceOrder:
+    idempotency_key: str | None = None,
+    return_created: bool = False,
+) -> FreelanceOrder | tuple[FreelanceOrder, bool]:
     """
     Issue a Stripe refund for a confirmed payment order.
     """
@@ -750,6 +994,16 @@ def issue_refund(
             f"Order {order_id} delivery_type is '{order.delivery_type}', "
             "not 'payment'. Only payment orders can be refunded."
         )
+    if idempotency_key:
+        existing_refund = (
+            db.query(RefundRecord)
+            .filter(RefundRecord.idempotency_key == idempotency_key)
+            .first()
+        )
+        if existing_refund is not None:
+            if return_created:
+                return order, False
+            return order
     if order.payment_status == "refunded":
         raise ValueError(f"Order {order_id} has already been refunded.")
     if order.payment_status != "confirmed":
@@ -768,6 +1022,26 @@ def issue_refund(
     if not stripe_key:
         raise RuntimeError("STRIPE_SECRET_KEY not configured. Cannot issue refund.")
 
+    refund_record = None
+    if idempotency_key:
+        refund_record, was_created = check_or_create(
+            db,
+            RefundRecord,
+            idempotency_key,
+            lambda: RefundRecord(
+                order_id=order.id,
+                stripe_payment_intent_id=order.stripe_payment_intent_id,
+                reason=reason,
+                amount_cents=int(round(float(order.price or 0.0) * 100)) if order.price is not None else None,
+                status="pending",
+                user_id=order.user_id,
+            ),
+        )
+        if not was_created:
+            if return_created:
+                return order, False
+            return order
+
     trace_id = f"freelance-refund-{order.id}"
     refund_data: dict[str, str] = {"payment_intent": order.stripe_payment_intent_id}
     if reason:
@@ -782,6 +1056,10 @@ def issue_refund(
         )
         refund_id = response.get("id") or ""
     except Exception as exc:
+        if refund_record is not None:
+            refund_record.status = "failed"
+            refund_record.processed_at = datetime.now(timezone.utc)
+            db.commit()
         queue_system_event(
             db=db,
             event_type=SystemEventTypes.FREELANCE_REFUND_FAILED,
@@ -803,6 +1081,11 @@ def issue_refund(
     order.status = "refunded"
     db.commit()
     db.refresh(order)
+    if refund_record is not None:
+        refund_record.stripe_refund_id = refund_id
+        refund_record.status = "succeeded"
+        refund_record.processed_at = order.refunded_at
+        db.commit()
 
     queue_system_event(
         db=db,
@@ -820,6 +1103,8 @@ def issue_refund(
         required=True,
     )
     logger.info("[Stripe] Refund issued order #%s refund_id=%s", order.id, refund_id)
+    if return_created:
+        return order, True
     return order
 
 
@@ -952,46 +1237,12 @@ def _confirm_payment(
     payment_link_id: str | None = None,
     customer_email: str | None = None,
 ) -> FreelanceOrder | None:
-    order = _find_order_by_stripe_ids(
+    return record_payment(
         db,
         payment_intent_id=payment_intent_id,
         payment_link_id=payment_link_id,
         customer_email=customer_email,
     )
-    if not order:
-        logger.warning(
-            "[Stripe] Payment confirmed but no order found payment_intent_id=%s payment_link_id=%s",
-            payment_intent_id,
-            payment_link_id,
-        )
-        return None
-    if order.payment_status == "confirmed":
-        return order
-    order.payment_status = "confirmed"
-    order.status = "payment_confirmed"
-    order.payment_confirmed_at = datetime.now(timezone.utc)
-    if payment_intent_id and not order.stripe_payment_intent_id:
-        order.stripe_payment_intent_id = payment_intent_id
-    if payment_link_id and not order.stripe_payment_link_id:
-        order.stripe_payment_link_id = payment_link_id
-    db.commit()
-    db.refresh(order)
-    queue_system_event(
-        db=db,
-        event_type=SystemEventTypes.FREELANCE_PAYMENT_CONFIRMED,
-        user_id=order.user_id,
-        trace_id=f"stripe-payment-{order.id}",
-        source="stripe_webhook",
-        payload={
-            "order_id": order.id,
-            "payment_intent_id": payment_intent_id,
-            "payment_link_id": payment_link_id,
-            "service_type": order.service_type,
-        },
-        required=True,
-    )
-    logger.info("[Stripe] Payment confirmed for order #%s", order.id)
-    return order
 
 
 def _fail_payment(

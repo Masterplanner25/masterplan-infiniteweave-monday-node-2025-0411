@@ -42,7 +42,14 @@ def ensure_mongo_ready(*, required: bool | None = None) -> MongoClient | None:
         return _client
 
     try:
-        client = MongoClient(mongo_url, serverSelectionTimeoutMS=settings.MONGO_HEALTH_TIMEOUT_MS)
+        client = MongoClient(
+            mongo_url,
+            connectTimeoutMS=settings.MONGO_CONNECT_TIMEOUT_MS,
+            socketTimeoutMS=settings.MONGO_SOCKET_TIMEOUT_MS,
+            serverSelectionTimeoutMS=settings.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+            maxPoolSize=settings.MONGO_MAX_POOL_SIZE,
+            minPoolSize=settings.MONGO_MIN_POOL_SIZE,
+        )
         client.admin.command("ping")
         _client = client
         mongo_health_status.set(1)
@@ -93,6 +100,22 @@ def get_mongo_client():
         return init_mongo()
     return _client
 
+
+def ping_mongo() -> dict:
+    """
+    Returns MongoDB reachability without raising.
+    """
+    try:
+        if _client is None:
+            if not settings.MONGO_URL:
+                return {"status": "degraded", "reason": "mongo not configured"}
+            return {"status": "degraded", "reason": "mongo client not initialized"}
+        _client.admin.command("ping")
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "degraded", "reason": str(exc)}
+
+
 def get_mongo_db():
     """
     FastAPI Dependency to yield the specific database object.
@@ -116,3 +139,15 @@ def get_mongo_db():
             "or set SKIP_MONGO_PING=true only in non-production environments."
         ),
     )
+
+
+def get_optional_mongo_db():
+    """
+    Yield the configured Mongo database when available, otherwise yield None.
+    Intended for graceful-degradation routes that must not fail the request.
+    """
+    client = get_mongo_client()
+    if client:
+        yield client[MONGO_DB_NAME]
+        return
+    yield None

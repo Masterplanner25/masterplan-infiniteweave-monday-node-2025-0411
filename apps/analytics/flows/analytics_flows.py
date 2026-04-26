@@ -10,14 +10,14 @@ def score_get_node(state, context):
     try:
         import uuid
         from apps.analytics.models import UserScore
-        from apps.analytics.services.kpi_weight_service import get_effective_weights
+        from apps.analytics.services.scoring.kpi_weight_service import get_effective_weights
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
 
         score = db.query(UserScore).filter(UserScore.user_id == user_id).first()
         if not score:
-            from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+            from apps.analytics.services.orchestration.infinity_orchestrator import execute as execute_infinity_orchestrator
 
             result = execute_infinity_orchestrator(user_id=user_id, db=db, trigger_event="manual")
             if result:
@@ -26,7 +26,7 @@ def score_get_node(state, context):
                 "user_id": str(user_id), "master_score": 0.0, "kpis": {}, "message": "No score yet.",
             }}}
 
-        from apps.analytics.services.infinity_loop import get_latest_adjustment, serialize_adjustment
+        from apps.analytics.services.orchestration.infinity_loop import get_latest_adjustment, serialize_adjustment
 
         latest = get_latest_adjustment(user_id=str(user_id), db=db)
         serialized = serialize_adjustment(latest)

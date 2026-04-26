@@ -240,7 +240,6 @@ def test_memory_metrics_summary_and_dashboard_use_real_db(
 def test_memory_nodus_async_route_emits_system_events(
     client,
     db_session,
-    testing_session_factory,
     test_user,
     auth_headers,
     monkeypatch,
@@ -279,7 +278,7 @@ def test_memory_nodus_async_route_emits_system_events(
         log_id = result.get("automation_log_id") or data.get("automation_log_id")
         assert log_id
 
-        log = _wait_for_async_job(testing_session_factory, log_id)
+        log = _wait_for_async_job(db_session, log_id)
         assert log.status == "success"
         assert log.user_id == test_user.id
 

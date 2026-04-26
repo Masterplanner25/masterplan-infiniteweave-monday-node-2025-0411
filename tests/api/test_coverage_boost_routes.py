@@ -52,16 +52,16 @@ def test_freelance_orders_route_smoke(client, auth_headers, monkeypatch):
 
 
 def test_social_get_profile_route_smoke(client, app, auth_headers):
-    from AINDY.db.mongo_setup import get_mongo_db
+    from AINDY.db.mongo_setup import get_optional_mongo_db
 
     profiles = MagicMock()
     profiles.find_one.return_value = {"username": "alice", "bio": "hello"}
     fake_mongo = {"profiles": profiles}
 
-    app.dependency_overrides[get_mongo_db] = lambda: fake_mongo
+    app.dependency_overrides[get_optional_mongo_db] = lambda: fake_mongo
 
     response = client.get("/social/profile/alice", headers=auth_headers)
 
-    app.dependency_overrides.pop(get_mongo_db, None)
+    app.dependency_overrides.pop(get_optional_mongo_db, None)
     assert response.status_code == 200
     assert "alice" in response.text

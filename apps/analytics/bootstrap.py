@@ -20,6 +20,7 @@ def register() -> None:
     _register_syscalls()
     _register_required_syscalls()
     _register_flow_results()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -71,7 +72,7 @@ def _register_events() -> None:
 def _handle_execution_completed(context: dict):
     db = context.get("db")
     if db is not None and context.get("trigger_event") == "agent_completed" and context.get("user_id"):
-        from apps.analytics.services.infinity_orchestrator import execute
+        from apps.analytics.services.orchestration.infinity_orchestrator import execute
         return execute(
             user_id=context["user_id"],
             trigger_event=context["trigger_event"],
@@ -81,7 +82,7 @@ def _handle_execution_completed(context: dict):
 
 
 def _handle_goal_state_changed(context: dict):
-    from apps.analytics.services.infinity_orchestrator import handle_goal_state_changed
+    from apps.analytics.services.orchestration.infinity_orchestrator import handle_goal_state_changed
 
     return handle_goal_state_changed(context)
 
@@ -139,22 +140,22 @@ def _register_flow_results() -> None:
 
 
 def _get_user_kpi_snapshot(*args, **kwargs):
-    from apps.analytics.services.infinity_service import get_user_kpi_snapshot
+    from apps.analytics.services.scoring.infinity_service import get_user_kpi_snapshot
     return get_user_kpi_snapshot(*args, **kwargs)
 
 
 def _execute_infinity_orchestrator(*args, **kwargs):
-    from apps.analytics.services.infinity_orchestrator import execute
+    from apps.analytics.services.orchestration.infinity_orchestrator import execute
     return execute(*args, **kwargs)
 
 
 def _get_latest_adjustment(*args, **kwargs):
-    from apps.analytics.services.infinity_loop import get_latest_adjustment
+    from apps.analytics.services.orchestration.infinity_loop import get_latest_adjustment
     return get_latest_adjustment(*args, **kwargs)
 
 
 def _get_latest_adjustment_payload(*args, **kwargs):
-    from apps.analytics.services.infinity_loop import get_latest_adjustment, serialize_adjustment
+    from apps.analytics.services.orchestration.infinity_loop import get_latest_adjustment, serialize_adjustment
 
     latest = get_latest_adjustment(*args, **kwargs)
     if latest is None:
@@ -168,7 +169,7 @@ def _scheduler_recalculate_all_scores() -> None:
     from AINDY.agents.autonomous_controller import evaluate_live_trigger, record_decision
     from AINDY.db.database import SessionLocal
     from AINDY.db.models.user import User
-    from apps.analytics.services.infinity_orchestrator import execute as execute_infinity_orchestrator
+    from apps.analytics.services.orchestration.infinity_orchestrator import execute as execute_infinity_orchestrator
 
     try:
         db = SessionLocal()
@@ -192,3 +193,28 @@ def _scheduler_recalculate_all_scores() -> None:
         logger.info("[Infinity Scheduler] Recalculated scores for %d/%d users", updated, len(users))
     finally:
         db.close()
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("analytics", _check_health)
+
+
+def _check_health() -> dict:
+    try:
+        from AINDY.config import settings as runtime_settings
+        from apps.analytics.services.orchestration.infinity_orchestrator import execute
+        from apps.analytics.services.scoring.kpi_weight_service import get_effective_weights
+
+        _ = (
+            execute,
+            get_effective_weights,
+            runtime_settings.FLOW_WAIT_TIMEOUT_MINUTES,
+            runtime_settings.STUCK_RUN_THRESHOLD_MINUTES,
+        )
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "degraded", "reason": str(exc)}
+
+

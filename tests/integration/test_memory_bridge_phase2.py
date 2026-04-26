@@ -113,7 +113,7 @@ class TestEmbeddingService:
     def test_embedding_failure_raises_embedding_failed_error(self):
         """generate_embedding raises EmbeddingFailedError when all API attempts fail.
         The old behaviour (silently returning a zero vector) was changed so that
-        callers in the async-job path can set embedding_status='failed' on the node.
+        callers in the async-job path can keep the memory node pending for retry.
         Query-path callers (generate_query_embedding) still degrade gracefully.
         """
         from AINDY.memory.embedding_service import EmbeddingFailedError

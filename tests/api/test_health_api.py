@@ -5,10 +5,12 @@ def test_health_returns_ok_and_persists_event(client, db_session):
     from AINDY.db.models.system_event import SystemEvent
 
     response = client.get("/health")
+    payload = response.json()
 
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
-    assert "dependencies" in response.json()
+    assert payload["status"] in {"ok", "degraded"}
+    assert "dependencies" in payload
+    assert "domains" in payload
 
     events = db_session.query(SystemEvent).all()
     assert any(event.type == "health.liveness.completed" for event in events)

@@ -88,6 +88,7 @@ _required_syscalls: list[str] = []
 _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
 _degraded_domains: list[str] = []
+_health_checks: dict[str, Callable[[], dict[str, Any]]] = {}
 
 
 def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
@@ -553,6 +554,19 @@ def publish_degraded_domains(domains: Iterable[str]) -> list[str]:
 
 def get_degraded_domains() -> list[str]:
     return list(_degraded_domains)
+
+
+def register_health_check(app_name: str, check_fn: Callable[[], dict[str, Any]]) -> Callable[[], dict[str, Any]]:
+    if not isinstance(app_name, str) or not app_name.strip():
+        raise ValueError("app_name must be a non-empty string")
+    if not callable(check_fn):
+        raise ValueError("check_fn must be callable")
+    _health_checks[app_name.strip()] = check_fn
+    return check_fn
+
+
+def get_all_health_checks() -> dict[str, Callable[[], dict[str, Any]]]:
+    return dict(_health_checks)
 
 
 def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:

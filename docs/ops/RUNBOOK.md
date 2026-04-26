@@ -1,5 +1,14 @@
 # A.I.N.D.Y. Operations Runbook
 
+## Failure Mode Runbooks
+
+For the three most likely production failure modes, see `docs/ops/RUNBOOK_FAILURE_MODES.md`.
+
+Covers:
+- OpenAI degradation
+- Redis loss
+- Stuck job storm
+
 ## 1. Prerequisites
 - PostgreSQL: use PostgreSQL 16 with `pgvector` support; the repo quickstart uses `pgvector/pgvector:pg16`.
 - Redis: required when `AINDY_REQUIRE_REDIS=true` or `ENV` is not `dev`/`development`/`test`. Also required for `EXECUTION_MODE=distributed`.
@@ -30,6 +39,11 @@
 | `MONGO_REQUIRED` | `False` | Missing/unreachable Mongo becomes fatal | Production deployments that depend on Mongo |
 | `SKIP_MONGO_PING` | `False` | Skips startup ping | Dev only |
 | `MONGO_HEALTH_TIMEOUT_MS` | `5000` | Mongo ping timeout | Slow networks |
+| `MONGO_CONNECT_TIMEOUT_MS` | `3000` | Mongo connect timeout | Any deployment |
+| `MONGO_SOCKET_TIMEOUT_MS` | `5000` | Per-operation Mongo timeout | Any deployment |
+| `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `3000` | Mongo server discovery timeout | Any deployment |
+| `MONGO_MAX_POOL_SIZE` | `10` | Max Mongo connections | Tune for social traffic |
+| `MONGO_MIN_POOL_SIZE` | `1` | Min Mongo connections | Keep warm connection available |
 
 #### Nodus
 | Variable | Default | Effect | When to set |
@@ -223,3 +237,47 @@ docker compose logs -f api
 docker compose logs -f worker
 ```
 For `SECRET_KEY` rotation, use [docs/platform/engineering/RUNBOOK_SECRET_ROTATION.md](/C:/dev/masterplan-infiniteweave-monday-node-2025-0411/docs/platform/engineering/RUNBOOK_SECRET_ROTATION.md:1).
+
+## 9. MongoDB (Social App)
+
+### Configuration
+| Variable | Default | Purpose |
+|---|---|---|
+| `MONGO_URL` | required for social | MongoDB connection string |
+| `MONGO_CONNECT_TIMEOUT_MS` | `3000` | Connection timeout |
+| `MONGO_SOCKET_TIMEOUT_MS` | `5000` | Per-operation timeout |
+| `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `3000` | Server discovery timeout |
+| `MONGO_MAX_POOL_SIZE` | `10` | Max concurrent connections |
+| `MONGO_MIN_POOL_SIZE` | `1` | Min maintained connections |
+
+### Health Check
+`GET /health` -> `platform.mongodb`
+
+`ok`: MongoDB is reachable and responding to ping.
+
+`degraded`: MongoDB is unreachable, not configured, or timing out.
+
+### Impact of MongoDB Failure
+- Social app returns degraded responses with empty data and a reason.
+- All other apps continue normally on PostgreSQL.
+- Platform health returns top-level `degraded`, not `unhealthy`.
+
+### Recovery Steps
+1. Check MongoDB connectivity: `mongo $MONGO_URL --eval "db.adminCommand('ping')"`
+2. Check logs for Mongo timeout or pool messages.
+3. Restart the platform if the client needs to be re-established.
+4. If using Atlas, check cluster status in the Atlas dashboard.
+
+### Backup and Restore
+MongoDB data for the social app is separate from PostgreSQL.
+
+Backup: `mongodump --uri $MONGO_URL --out /backups/mongo/$(date +%Y%m%d)`
+
+Restore: `mongorestore --uri $MONGO_URL /backups/mongo/<date>/`
+
+Frequency: Daily. Social data is reconstructible from source platforms, but reconstruction is expensive.
+
+### Monitoring
+Alert when `platform.mongodb = degraded` for more than 5 minutes.
+
+Page severity: LOW. Social features are degraded, but the platform is still up.

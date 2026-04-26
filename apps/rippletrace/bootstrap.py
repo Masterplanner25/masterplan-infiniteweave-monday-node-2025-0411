@@ -13,6 +13,7 @@ def register() -> None:
     _register_flow_strategy()
     _register_flow_results()
     _register_required_flow_nodes()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -48,6 +49,12 @@ def _register_response_adapters() -> None:
 
     for prefix in ("rippletrace", "legacy_surface", "observability", "db", "flow"):
         register_response_adapter(prefix, raw_json_adapter)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("rippletrace", lambda: {"status": "ok"})
 
 
 def _register_syscalls() -> None:

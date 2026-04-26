@@ -27,6 +27,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_syscalls()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -313,3 +314,25 @@ def _scheduler_recalculate_all_etas() -> None:
         logger.info("[ETA Scheduler] Recalculated ETAs for %d plans", updated)
     finally:
         db.close()
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("masterplan", _check_health)
+
+
+def _check_health() -> dict:
+    db = None
+    try:
+        from AINDY.db.database import SessionLocal
+        from apps.masterplan.goals import Goal
+
+        db = SessionLocal()
+        db.query(Goal.id).limit(1).all()
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "degraded", "reason": str(exc)}
+    finally:
+        if db is not None:
+            db.close()

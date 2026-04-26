@@ -48,8 +48,8 @@ async def ingest_linkedin_manual(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
-        from runtime.flow_engine import run_flow
+        from apps.analytics.services.integration.masterplan_guard import assert_masterplan_owned_via_syscall
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned_via_syscall(data.masterplan_id, user_id, db)
 
@@ -91,8 +91,8 @@ async def get_masterplan_analytics(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
-        from runtime.flow_engine import run_flow
+        from apps.analytics.services.integration.masterplan_guard import assert_masterplan_owned_via_syscall
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned_via_syscall(masterplan_id, user_id, db)
 
@@ -126,8 +126,8 @@ async def get_masterplan_summary(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.masterplan_guard import assert_masterplan_owned_via_syscall
-        from runtime.flow_engine import run_flow
+        from apps.analytics.services.integration.masterplan_guard import assert_masterplan_owned_via_syscall
+        from AINDY.runtime.flow_engine import run_flow
 
         assert_masterplan_owned_via_syscall(masterplan_id, user_id, db)
 
@@ -159,7 +159,7 @@ async def get_kpi_weights(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.kpi_weight_service import (
+        from apps.analytics.services.scoring.kpi_weight_service import (
             get_effective_weights,
             get_or_create_user_weights,
         )
@@ -192,7 +192,7 @@ async def adapt_kpi_weights_endpoint(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.kpi_weight_service import adapt_kpi_weights
+        from apps.analytics.services.scoring.kpi_weight_service import adapt_kpi_weights
 
         return adapt_kpi_weights(db, user_id)
 
@@ -216,7 +216,7 @@ async def get_policy_thresholds(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.policy_adaptation_service import (
+        from apps.analytics.services.scoring.policy_adaptation_service import (
             get_effective_thresholds,
             get_or_create_thresholds,
         )
@@ -247,7 +247,7 @@ async def adapt_policy_thresholds_endpoint(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.analytics.services.policy_adaptation_service import adapt_policy_thresholds
+        from apps.analytics.services.scoring.policy_adaptation_service import adapt_policy_thresholds
 
         return adapt_policy_thresholds(db, user_id)
 

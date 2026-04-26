@@ -52,6 +52,7 @@ def register() -> None:
     _register_flow_plans()
     _register_required_flow_nodes()
     _register_required_syscalls()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -202,3 +203,9 @@ def _automation_execute(payload, db):
 
 def _job_automation_execute(payload: dict, db):
     return _automation_execute(payload, db)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("automation", lambda: {"status": "ok"})

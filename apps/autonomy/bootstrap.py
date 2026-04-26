@@ -9,6 +9,7 @@ def register() -> None:
     _register_router()
     _register_response_adapters()
     _register_flow_results()
+    _register_health_check()
 
 
 def _register_router() -> None:
@@ -28,3 +29,9 @@ def _register_response_adapters() -> None:
 def _register_flow_results() -> None:
     from AINDY.platform_layer.registry import register_flow_result
     register_flow_result("autonomy_decisions_list", result_key="autonomy_decisions_list_result")
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("autonomy", lambda: {"status": "ok"})

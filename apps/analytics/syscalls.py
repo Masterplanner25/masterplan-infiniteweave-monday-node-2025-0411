@@ -86,7 +86,7 @@ def _handle_init_user_score(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_orchestrator import execute
+    from apps.analytics.services.orchestration.infinity_orchestrator import execute
 
     db, owns_session = _session_from_context(ctx)
     try:
@@ -105,7 +105,7 @@ def _handle_score_recalculate(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.analytics.services.infinity_orchestrator import execute
+    from apps.analytics.services.orchestration.infinity_orchestrator import execute
 
     db, owns_session = _session_from_context(ctx)
     try:
@@ -124,7 +124,7 @@ def _handle_execute_infinity(payload: dict, ctx: SyscallContext) -> dict:
 
 def _handle_get_latest_adjustment(payload: dict, ctx: SyscallContext) -> dict:
     from apps.analytics.public import get_latest_adjustment
-    from apps.analytics.services.infinity_orchestrator import serialize_adjustment
+    from apps.analytics.services.orchestration.infinity_orchestrator import serialize_adjustment
 
     user_id = str(payload.get("user_id") or ctx.user_id or "")
     if not user_id:

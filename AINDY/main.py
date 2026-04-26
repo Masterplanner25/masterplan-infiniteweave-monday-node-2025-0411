@@ -36,7 +36,7 @@ from AINDY.platform_layer.registry import (
 )
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.db.database import SessionLocal
-from AINDY.db.mongo_setup import ensure_mongo_ready
+from AINDY.db.mongo_setup import ensure_mongo_ready, ping_mongo
 
 # Backward compatibility for tests that monkeypatch main.init_mongo directly.
 init_mongo = ensure_mongo_ready
@@ -508,6 +508,10 @@ def _update_db_pool_metrics() -> None:
         logger.warning("DB pool metrics scrape failed (non-fatal): %s", exc)
 
 
+def _remaining_shutdown_budget(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
+
+
 def _initialize_cache_backend() -> str:
     """Initialize FastAPICache with explicit multi-instance semantics.
 
@@ -667,7 +671,16 @@ async def lifespan(app: FastAPI):
     cache_mode = _initialize_cache_backend()
     logger.info("Cache behavior mode: %s", cache_mode)
 
-    ensure_mongo_ready(required=settings.MONGO_REQUIRED)
+    try:
+        ensure_mongo_ready(required=settings.MONGO_REQUIRED)
+        mongo_status = ping_mongo()
+        if mongo_status.get("status") != "ok":
+            logger.warning(
+                "MongoDB unavailable at startup — social features degraded: %s",
+                mongo_status.get("reason"),
+            )
+    except Exception as exc:
+        logger.warning("MongoDB init failed — social features degraded: %s", exc)
 
     if settings.ENV == "dev":
         _ensure_dev_api_key()
@@ -760,6 +773,14 @@ async def lifespan(app: FastAPI):
         from AINDY.core.request_metric_writer import get_writer as get_metric_writer
 
         get_metric_writer().start()
+    try:
+        from AINDY.platform_layer.async_job_service import start_async_job_service
+        from AINDY.memory.memory_ingest_service import configure_memory_ingest_queue
+
+        start_async_job_service()
+        configure_memory_ingest_queue().start()
+    except Exception as exc:
+        logger.warning("Async shutdown services startup failed: %s", exc)
 
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
@@ -933,6 +954,13 @@ async def lifespan(app: FastAPI):
             get_event_bus().drain_buffered_events()
         except Exception as _drain_exc:
             emit_recovery_failure("event_drain", _drain_exc, None, logger=logger)
+    else:
+        try:
+            from AINDY.kernel.scheduler_engine import get_scheduler_engine
+
+            get_scheduler_engine().mark_rehydration_complete()
+        except Exception as exc:
+            logger.debug("[startup] Test-mode scheduler rehydration mark skipped: %s", exc)
 
     run_startup_hooks(
         {
@@ -946,27 +974,66 @@ async def lifespan(app: FastAPI):
 
     yield
     # --- Shutdown ---
+    shutdown_deadline = time.monotonic() + float(settings.AINDY_SHUTDOWN_TIMEOUT_SECONDS)
     publish_api_runtime_state(startup_complete=False, event_bus_ready=False)
     emit_event("system.shutdown", {"log": logger, "source": "main"})
-    scheduler_service.stop()
+    try:
+        from AINDY.platform_layer.async_job_service import stop_async_job_service
+
+        stop_async_job_service(
+            timeout_seconds=_remaining_shutdown_budget(shutdown_deadline),
+            reopen=settings.is_testing,
+        )
+    except Exception as exc:
+        logger.warning("Async job shutdown failed (non-fatal): %s", exc)
+    try:
+        from AINDY.memory.memory_ingest_service import configure_memory_ingest_queue
+
+        configure_memory_ingest_queue().stop(
+            timeout=_remaining_shutdown_budget(shutdown_deadline),
+            drain=True,
+        )
+    except Exception as exc:
+        logger.warning("Memory ingest queue shutdown failed: %s", exc)
     try:
         from AINDY.core.request_metric_writer import get_writer as get_metric_writer
 
-        get_metric_writer().stop(timeout=10.0)
+        get_metric_writer().stop(timeout=_remaining_shutdown_budget(shutdown_deadline))
     except Exception as exc:
         logger.warning("Request metric writer shutdown failed: %s", exc)
     try:
-        from AINDY.platform_layer.async_job_service import shutdown_async_jobs
-
-        shutdown_async_jobs(wait=True)
+        scheduler_service.stop(
+            timeout_seconds=_remaining_shutdown_budget(shutdown_deadline)
+        )
     except Exception as exc:
-        logger.warning("Async job shutdown failed (non-fatal): %s", exc)
+        logger.warning("Scheduler shutdown failed (non-fatal): %s", exc)
+    try:
+        from AINDY.kernel.event_bus import get_event_bus
+
+        get_event_bus().stop(timeout=_remaining_shutdown_budget(shutdown_deadline))
+    except Exception as exc:
+        logger.warning("Event bus shutdown failed (non-fatal): %s", exc)
+    if settings.is_testing:
+        try:
+            from AINDY.kernel.scheduler_engine import get_scheduler_engine
+
+            get_scheduler_engine().reset()
+        except Exception as exc:
+            logger.debug("Scheduler engine reset skipped during test teardown: %s", exc)
     try:
         from AINDY.db.mongo_setup import close_mongo_client
 
         close_mongo_client()
     except Exception as exc:
         logger.warning("MongoDB shutdown failed (non-fatal): %s", exc)
+    try:
+        from AINDY.db.database import engine
+
+        if not settings.is_testing:
+            engine.dispose()
+    except Exception as exc:
+        logger.warning("Database engine disposal failed (non-fatal): %s", exc)
+    logger.info("shutdown complete")
 
 
 app = FastAPI(title="A.I.N.D.Y. Memory Bridge", lifespan=lifespan)

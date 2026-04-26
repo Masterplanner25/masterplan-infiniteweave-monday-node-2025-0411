@@ -199,6 +199,24 @@ request_metric_drops_total = Counter(
     registry=REGISTRY,
 )
 
+memory_ingest_dropped_total = Counter(
+    "aindy_memory_ingest_dropped_total",
+    "Number of memory ingest writes dropped due to bounded queue backpressure",
+    registry=REGISTRY,
+)
+
+memory_ingest_queue_depth = Gauge(
+    "aindy_memory_ingest_queue_depth",
+    "Current depth of the bounded memory ingest queue",
+    registry=REGISTRY,
+)
+
+memory_ingest_queue_capacity = Gauge(
+    "aindy_memory_ingest_queue_capacity",
+    "Configured capacity of the bounded memory ingest queue",
+    registry=REGISTRY,
+)
+
 startup_recovery_failure_total = Counter(
     "aindy_startup_recovery_failure_total",
     "Number of startup recovery scan failures",

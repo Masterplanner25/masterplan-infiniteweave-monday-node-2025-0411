@@ -15,6 +15,7 @@ def register() -> None:
     _register_trigger_evaluators()
     _register_flows()
     _register_flow_results()
+    _register_health_check()
 
 
 def _register_router() -> None:
@@ -101,3 +102,9 @@ def _job_agent_approve_run(payload: dict, db):
     if not run:
         raise RuntimeError("Run not found or not approvable")
     return to_execution_response(run, db)
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("agent", lambda: {"status": "ok"})

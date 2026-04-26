@@ -74,8 +74,10 @@ import signal
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
+from AINDY.config import settings
 from AINDY.db.models.job_log import JobLog
 
 if TYPE_CHECKING:
@@ -85,6 +87,81 @@ logger = logging.getLogger(__name__)
 
 # Module-level stop event shared across all worker threads in this process.
 _STOP = threading.Event()
+
+
+@dataclass
+class WorkerRuntimeHealth:
+    state: str = "STARTING"
+    started_at_monotonic: float = time.monotonic()
+    last_heartbeat_monotonic: float = time.monotonic()
+    first_iteration_complete: bool = False
+    active_jobs: int = 0
+    queue_depth: int = 0
+    queue_capacity: int = 0
+
+
+_HEALTH_LOCK = threading.Lock()
+_WORKER_HEALTH = WorkerRuntimeHealth()
+
+
+def _set_worker_state(state: str) -> None:
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH.state = state
+
+
+def _record_worker_heartbeat(*, iteration_completed: bool = False, queue_backend=None) -> None:
+    now = time.monotonic()
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH.last_heartbeat_monotonic = now
+        if iteration_completed and not _WORKER_HEALTH.first_iteration_complete:
+            _WORKER_HEALTH.first_iteration_complete = True
+            if _WORKER_HEALTH.state != "DRAINING":
+                _WORKER_HEALTH.state = "READY"
+    _update_worker_queue_snapshot(queue_backend)
+
+
+def _update_worker_queue_snapshot(queue_backend=None) -> None:
+    try:
+        if queue_backend is None:
+            from AINDY.core.distributed_queue import get_queue
+
+            queue_backend = get_queue()
+        metrics = queue_backend.get_metrics()
+    except Exception:
+        return
+
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH.queue_depth = int(
+            metrics.get("total_pending_jobs", metrics.get("queue_depth", 0))
+        )
+        _WORKER_HEALTH.queue_capacity = int(metrics.get("max_queue_size", 0))
+
+
+def _increment_active_jobs() -> None:
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH.active_jobs += 1
+
+
+def _decrement_active_jobs() -> None:
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH.active_jobs = max(0, _WORKER_HEALTH.active_jobs - 1)
+
+
+def get_worker_health_snapshot() -> dict[str, int | float | bool | str]:
+    with _HEALTH_LOCK:
+        snapshot = {
+            "state": _WORKER_HEALTH.state,
+            "uptime_seconds": max(0.0, time.monotonic() - _WORKER_HEALTH.started_at_monotonic),
+            "heartbeat_age_seconds": max(
+                0.0,
+                time.monotonic() - _WORKER_HEALTH.last_heartbeat_monotonic,
+            ),
+            "active_jobs": int(_WORKER_HEALTH.active_jobs),
+            "queue_depth": int(_WORKER_HEALTH.queue_depth),
+            "queue_capacity": int(_WORKER_HEALTH.queue_capacity),
+            "first_iteration_complete": bool(_WORKER_HEALTH.first_iteration_complete),
+        }
+    return snapshot
 
 # ---------------------------------------------------------------------------
 # Concurrency guard
@@ -124,11 +201,13 @@ def reset_worker_state() -> None:
 
     Call this in test teardown to get a clean worker state between tests.
     """
-    global _CONCURRENCY_SEM
+    global _CONCURRENCY_SEM, _WORKER_HEALTH
     _STOP.clear()
     _failure_window.clear()
     with _CONCURRENCY_SEM_LOCK:
         _CONCURRENCY_SEM = None
+    with _HEALTH_LOCK:
+        _WORKER_HEALTH = WorkerRuntimeHealth()
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +215,8 @@ def reset_worker_state() -> None:
 # ---------------------------------------------------------------------------
 
 def _handle_signal(signum: int, _frame) -> None:  # type: ignore[type-arg]
-    logger.info("[Worker] signal %s received â€” initiating graceful shutdown", signum)
+    logger.info("[Worker] signal %s received â€” draining queue", signum)
+    _set_worker_state("DRAINING")
     _STOP.set()
 
 
@@ -493,7 +573,9 @@ def process_one_job(
     from AINDY.core.distributed_queue import get_queue
 
     q = queue_backend or get_queue()
+    _update_worker_queue_snapshot(q)
     job: Optional["QueueJobPayload"] = q.dequeue(timeout=5)
+    _record_worker_heartbeat(iteration_completed=True, queue_backend=q)
     if job is None:
         return False  # Normal idle timeout.
 
@@ -529,6 +611,7 @@ def process_one_job(
         "[Worker] job_started job_id=%s operation=%s trace_id=%s idempotency_key=%s",
         job.job_id, operation_name, trace_id, job.idempotency_key,
     )
+    _increment_active_jobs()
 
     # Thread idempotency_key into context for downstream handlers.
     enriched_context = {**job.context, "idempotency_key": job.idempotency_key}
@@ -614,6 +697,8 @@ def process_one_job(
     finally:
         # Always reset trace context and release concurrency slot.
         _reset_trace_context(tokens)
+        _decrement_active_jobs()
+        _update_worker_queue_snapshot(q)
         if sem is not None:
             sem.release()
 
@@ -685,6 +770,7 @@ def _single_thread_loop(
     """Synchronous dequeue-execute loop. Runs until _STOP is set."""
     while not _STOP.is_set():
         try:
+            _record_worker_heartbeat(queue_backend=queue_backend)
             process_one_job(queue_backend)
         except Exception as exc:
             # Unexpected loop-level error â€” log and keep running.
@@ -711,12 +797,19 @@ def run_worker_loop(
     """
     # Reset stop event in case of restart / test re-use.
     _STOP.clear()
+    reset_worker_state()
+    _STOP.clear()
+    _set_worker_state("STARTING")
 
-    signal.signal(signal.SIGTERM, _handle_signal)
-    signal.signal(signal.SIGINT, _handle_signal)
+    if threading.current_thread() is threading.main_thread():
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+    else:
+        logger.debug("[Worker] signal handlers not installed outside the main thread")
 
     from AINDY.core.distributed_queue import get_queue, validate_queue_backend
     q = queue_backend or validate_queue_backend()
+    _update_worker_queue_snapshot(q)
 
     visibility_timeout = int(os.getenv("WORKER_VISIBILITY_TIMEOUT_SECS", "300"))
     check_interval = int(os.getenv("WORKER_STALE_CHECK_INTERVAL_SECS", "60"))
@@ -767,7 +860,8 @@ def run_worker_loop(
 
     stale_thread.join(timeout=5)
     heartbeat_thread.join(timeout=5)
-    logger.info("[Worker] stopped")
+    _set_worker_state("DRAINING")
+    logger.info("[Worker] shutdown complete")
 
 
 # ---------------------------------------------------------------------------
@@ -785,5 +879,6 @@ if __name__ == "__main__":
 
     _concurrency = int(os.getenv("WORKER_CONCURRENCY", "1"))
     run_worker_loop(concurrency=_concurrency)
+    sys.exit(0)
 
 

@@ -176,15 +176,19 @@ def test_core_domain_failure_raises(monkeypatch):
     _reset_bootstrap()
     import apps.bootstrap as bs
 
-    app_bootstraps = {
-        "tasks": SimpleNamespace(
-            BOOTSTRAP_DEPENDS_ON=[],
-            register=lambda: (_ for _ in ()).throw(ValueError("boom")),
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {"tasks": {"BOOTSTRAP_DEPENDS_ON": []}},
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks"])
+    monkeypatch.setattr(
+        bs,
+        "_import_bootstrap_module",
+        lambda app_name: SimpleNamespace(
+            register=lambda: (_ for _ in ()).throw(ValueError("boom"))
         ),
-    }
-
-    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
-    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks"])
+    )
 
     try:
         try:
@@ -202,16 +206,24 @@ def test_peripheral_domain_failure_skips(monkeypatch):
     import apps.bootstrap as bs
     from AINDY.platform_layer.registry import get_degraded_domains
 
-    app_bootstraps = {
-        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=lambda: None),
-        "bridge": SimpleNamespace(
-            BOOTSTRAP_DEPENDS_ON=[],
-            register=lambda: (_ for _ in ()).throw(ValueError("bridge down")),
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "bridge": {"BOOTSTRAP_DEPENDS_ON": []},
+        },
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "bridge"])
+    monkeypatch.setattr(
+        bs,
+        "_import_bootstrap_module",
+        lambda app_name: SimpleNamespace(
+            register=(lambda: None)
+            if app_name == "tasks"
+            else (lambda: (_ for _ in ()).throw(ValueError("bridge down")))
         ),
-    }
-
-    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
-    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "bridge"])
+    )
 
     try:
         bs.bootstrap()
@@ -221,7 +233,7 @@ def test_peripheral_domain_failure_skips(monkeypatch):
         _reset_bootstrap()
 
 
-def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
+def test_peripheral_domain_attempts_boot_even_when_dependency_failed(monkeypatch):
     _reset_bootstrap()
     import apps.bootstrap as bs
     from AINDY.platform_layer.registry import get_degraded_domains
@@ -235,28 +247,38 @@ def test_dependent_domain_skipped_when_dependency_fails(monkeypatch):
         calls.append("bridge")
         raise ValueError("bridge down")
 
-    app_bootstraps = {
-        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("tasks")),
-        "bridge": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_fail),
-        "automation": SimpleNamespace(
-            BOOTSTRAP_DEPENDS_ON=["bridge"],
-            register=_ok("automation"),
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "bridge": {"BOOTSTRAP_DEPENDS_ON": []},
+            "automation": {"BOOTSTRAP_DEPENDS_ON": ["bridge"]},
+        },
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "bridge", "automation"])
+    monkeypatch.setattr(
+        bs,
+        "_import_bootstrap_module",
+        lambda app_name: SimpleNamespace(
+            register={
+                "tasks": _ok("tasks"),
+                "bridge": _fail,
+                "automation": _ok("automation"),
+            }[app_name]
         ),
-    }
-
-    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
-    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "bridge", "automation"])
+    )
 
     try:
         bs.bootstrap()
-        assert calls == ["tasks", "bridge"]
-        assert bs.get_degraded_domains() == ["bridge", "automation"]
-        assert get_degraded_domains() == ["bridge", "automation"]
+        assert calls == ["tasks", "bridge", "automation"]
+        assert bs.get_degraded_domains() == ["bridge"]
+        assert get_degraded_domains() == ["bridge"]
     finally:
         _reset_bootstrap()
 
 
-def test_social_bootstrap_failure_does_not_block_core_analytics(monkeypatch):
+def test_social_bootstrap_failure_does_not_block_peripheral_analytics(monkeypatch):
     _reset_bootstrap()
     import apps.bootstrap as bs
     from AINDY.platform_layer.registry import get_degraded_domains
@@ -270,18 +292,29 @@ def test_social_bootstrap_failure_does_not_block_core_analytics(monkeypatch):
         calls.append("social")
         raise ValueError("social down")
 
-    app_bootstraps = {
-        "tasks": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("tasks")),
-        "identity": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_ok("identity")),
-        "social": SimpleNamespace(BOOTSTRAP_DEPENDS_ON=[], register=_social_fail),
-        "analytics": SimpleNamespace(
-            BOOTSTRAP_DEPENDS_ON=["identity", "tasks"],
-            register=_ok("analytics"),
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": []},
+            "social": {"BOOTSTRAP_DEPENDS_ON": []},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+        },
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "social", "analytics"])
+    monkeypatch.setattr(
+        bs,
+        "_import_bootstrap_module",
+        lambda app_name: SimpleNamespace(
+            register={
+                "tasks": _ok("tasks"),
+                "identity": _ok("identity"),
+                "social": _social_fail,
+                "analytics": _ok("analytics"),
+            }[app_name]
         ),
-    }
-
-    monkeypatch.setattr(bs, "discover_app_bootstraps", lambda: app_bootstraps)
-    monkeypatch.setattr(bs, "resolve_boot_order", lambda _: ["tasks", "identity", "social", "analytics"])
+    )
 
     try:
         bs.bootstrap()
@@ -289,5 +322,92 @@ def test_social_bootstrap_failure_does_not_block_core_analytics(monkeypatch):
         assert bs.get_degraded_domains() == ["social"]
         assert get_degraded_domains() == ["social"]
         assert bs._BOOTSTRAPPED is True
+    finally:
+        _reset_bootstrap()
+
+
+def test_analytics_bootstrap_import_failure_is_degraded_and_health_reports_it(monkeypatch):
+    _reset_bootstrap()
+    import importlib
+    import apps.bootstrap as bs
+    health_router = importlib.import_module("AINDY.routes.health_router")
+    from AINDY.platform_layer import health_service
+    from AINDY.platform_layer.health_service import DependencyStatus
+
+    calls: list[str] = []
+
+    def _ok(name: str):
+        return lambda: calls.append(name)
+
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": []},
+            "agent": {"BOOTSTRAP_DEPENDS_ON": []},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+        },
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "agent", "analytics"])
+
+    def _import_module(app_name: str):
+        if app_name == "analytics":
+            raise ImportError("broken analytics import")
+        return SimpleNamespace(
+            register={
+                "tasks": _ok("tasks"),
+                "identity": _ok("identity"),
+                "agent": _ok("agent"),
+            }[app_name]
+        )
+
+    monkeypatch.setattr(bs, "_import_bootstrap_module", _import_module)
+    monkeypatch.setattr(
+        health_service,
+        "check_postgres",
+        lambda: DependencyStatus(name="postgres", status="ok", critical=True),
+    )
+    monkeypatch.setattr(
+        health_service,
+        "check_redis",
+        lambda: DependencyStatus(name="redis", status="ok", critical=False),
+    )
+    monkeypatch.setattr(
+        health_service,
+        "check_queue",
+        lambda: DependencyStatus(name="queue", status="ok", critical=False),
+    )
+    monkeypatch.setattr(
+        health_service,
+        "check_mongo",
+        lambda: DependencyStatus(name="mongo", status="ok", critical=False),
+    )
+    monkeypatch.setattr(
+        health_service,
+        "check_schema",
+        lambda: DependencyStatus(name="schema", status="ok", critical=True),
+    )
+    monkeypatch.setattr(
+        health_service,
+        "check_ai_providers",
+        lambda: DependencyStatus(name="ai_providers", status="ok", critical=False),
+    )
+
+    try:
+        bs.bootstrap()
+        health_payload = health_router._testing_health_payload()
+        payload = health_service.get_system_health(force=True).to_dict()
+        assert calls == ["tasks", "identity", "agent"]
+        assert bs.get_degraded_domains() == ["analytics"]
+        assert health_payload["degraded_apps"] == ["analytics"]
+        assert health_payload["status"] == "degraded"
+        assert payload["degraded_apps"] == ["analytics"]
+        assert payload["degraded_domains"] == ["analytics"]
+        assert payload["status"] == "degraded"
+        assert health_service.get_system_health(force=True).http_status == 200
+        assert "tasks" not in payload["degraded_apps"]
+        assert "identity" not in payload["degraded_apps"]
+        assert "agent" not in payload["degraded_apps"]
     finally:
         _reset_bootstrap()

@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 class EmbeddingFailedError(RuntimeError):
     """
     Raised by generate_embedding() when the OpenAI API call fails after all
-    retry attempts.  Callers in the async-job path (embedding_jobs.py) let
-    this propagate so that process_embedding_job() can set
-    embedding_status='failed' on the node.  Query-path callers
+    retry attempts. Callers in the async-job path let this propagate so the
+    worker can leave the node deferred in a pending state for later retry.
+    Query-path callers
     (generate_query_embedding) catch this and return a zero vector so that
     similarity searches degrade gracefully rather than crashing.
     """
@@ -62,8 +62,7 @@ def generate_embedding(text: str) -> list:
 
     Raises EmbeddingFailedError when the OpenAI API call fails after all
     retry attempts, so callers (e.g. process_embedding_job) receive the
-    actual error and can set an inspectable embedding_status='failed' on
-    the memory node.
+    actual error and can keep the memory node pending for background retry.
     """
     if not text or not text.strip():
         return [0.0] * EMBEDDING_DIMENSIONS
@@ -122,6 +121,8 @@ def generate_embedding(text: str) -> list:
 
     # All 3 attempts failed — raise a typed error so callers can mark the
     # node as failed rather than silently storing a zero vector.
+    # All attempts failed: raise a typed error so callers can defer retry
+    # rather than silently storing a zero vector.
     if max_attempts > 1:
         embedding_generation_retries_total.inc(max_attempts - 1)
     embedding_generation_total.labels(outcome="failure").inc()

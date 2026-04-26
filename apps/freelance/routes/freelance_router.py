@@ -2,6 +2,8 @@ import json as _json
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
@@ -100,8 +102,18 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
     return data
 
 
-def _do_create_freelance_order(db: Session, order: FreelanceOrderCreate, user_id: str):
-    result = _run_flow_freelance("freelance_order_create", {"order": order.model_dump()}, db, user_id)
+def _do_create_freelance_order(
+    db: Session,
+    order: FreelanceOrderCreate,
+    user_id: str,
+    idempotency_key: str,
+):
+    result = _run_flow_freelance(
+        "freelance_order_create",
+        {"order": order.model_dump(), "idempotency_key": idempotency_key},
+        db,
+        user_id,
+    )
     return result.get("data") if isinstance(result, dict) and "data" in result else result
 
 
@@ -146,10 +158,16 @@ def _do_generate_delivery(db: Session, order_id: int, user_id: str):
     return _run_flow_freelance("freelance_delivery_generate", {"order_id": order_id}, db, user_id)
 
 
-def _do_issue_refund(db: Session, order_id: int, reason: str | None, user_id: str):
+def _do_issue_refund(
+    db: Session,
+    order_id: int,
+    reason: str | None,
+    user_id: str,
+    idempotency_key: str,
+):
     return _run_flow_freelance(
         "freelance_refund",
-        {"order_id": order_id, "reason": reason},
+        {"order_id": order_id, "reason": reason, "idempotency_key": idempotency_key},
         db,
         user_id,
     )
@@ -173,17 +191,26 @@ def create_freelance_order(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
     def handler(_ctx):
-        return _do_create_freelance_order(db, order, user_id)
-    return _execute_freelance(
+        return _do_create_freelance_order(db, order, user_id, idempotency_key)
+    result = _execute_freelance(
         request,
         "freelance.order.create",
         handler,
         db=db,
         user_id=user_id,
-        input_payload=order.model_dump(),
+        input_payload={**order.model_dump(), "idempotency_key": idempotency_key},
         success_status_code=201,
     )
+    if isinstance(result, dict):
+        result = dict(result)
+        idempotency = result.pop("_idempotency", {})
+        status_code = 201 if idempotency.get("created", True) else 200
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(result))
+    return result
 
 
 @router.post("/deliver/{order_id}")
@@ -351,18 +378,28 @@ def refund_order(
 ):
     user_id = str(current_user["sub"])
     reason = body.reason if body else None
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
 
     def handler(_ctx):
-        return _do_issue_refund(db, order_id, reason, user_id)
+        return _do_issue_refund(db, order_id, reason, user_id, idempotency_key)
 
-    return _execute_freelance(
+    result = _execute_freelance(
         request,
         "freelance.refund",
         handler,
         db=db,
         user_id=user_id,
-        input_payload={"order_id": order_id, "reason": reason},
+        input_payload={"order_id": order_id, "reason": reason, "idempotency_key": idempotency_key},
+        success_status_code=201,
     )
+    if isinstance(result, dict):
+        result = dict(result)
+        idempotency = result.pop("_idempotency", {})
+        status_code = 201 if idempotency.get("created", True) else 200
+        return JSONResponse(status_code=status_code, content=jsonable_encoder(result))
+    return result
 
 
 @router.post("/subscription/{order_id}/cancel")
@@ -428,6 +465,11 @@ async def stripe_webhook(
 
     event_type = str(event.get("type") or "")
     event_data = event.get("data") or {}
-    result = process_stripe_webhook(db, event_type, event_data)
+    result = process_stripe_webhook(
+        db,
+        event_type,
+        event_data,
+        event_id=str(event["id"]) if event.get("id") else None,
+    )
     return {"received": True, **result}
 

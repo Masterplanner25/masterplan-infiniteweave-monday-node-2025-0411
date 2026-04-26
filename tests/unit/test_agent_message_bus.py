@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from AINDY.agents.agent_coordinator import detect_memory_write_conflict, detect_run_conflict
 from AINDY.agents.agent_message_bus import acknowledge_message, get_inbox, publish_operation_request
+from AINDY.db.models.agent_registry import AgentRegistry
 from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.memory.memory_persistence import MemoryNodeModel
@@ -31,9 +32,23 @@ def _make_run(db_session, test_user, *, goal: str, status: str) -> AgentRun:
     return run
 
 
+def _register_agent(db_session, agent_id: str) -> None:
+    row = AgentRegistry(
+        agent_id=normalize_uuid(agent_id),
+        capabilities=[],
+        current_state={},
+        load=0.0,
+        health_status="healthy",
+    )
+    db_session.add(row)
+    db_session.commit()
+
+
 def test_publish_and_get_inbox(db_session, test_user):
     agent_a = str(uuid.uuid4())
     agent_b = str(uuid.uuid4())
+    _register_agent(db_session, agent_a)
+    _register_agent(db_session, agent_b)
 
     publish_operation_request(
         db=db_session,
@@ -54,6 +69,8 @@ def test_publish_and_get_inbox(db_session, test_user):
 def test_inbox_excludes_acknowledged_messages(db_session, test_user):
     agent_a = str(uuid.uuid4())
     agent_b = str(uuid.uuid4())
+    _register_agent(db_session, agent_a)
+    _register_agent(db_session, agent_b)
     message_id = publish_operation_request(
         db=db_session,
         sender_agent_id=agent_a,
@@ -77,6 +94,8 @@ def test_inbox_excludes_acknowledged_messages(db_session, test_user):
 def test_inbox_includes_acknowledged_when_requested(db_session, test_user):
     agent_a = str(uuid.uuid4())
     agent_b = str(uuid.uuid4())
+    _register_agent(db_session, agent_a)
+    _register_agent(db_session, agent_b)
     message_id = publish_operation_request(
         db=db_session,
         sender_agent_id=agent_a,
@@ -101,6 +120,8 @@ def test_inbox_includes_acknowledged_when_requested(db_session, test_user):
 def test_get_inbox_filters_by_recipient(db_session, test_user):
     agent_a = str(uuid.uuid4())
     agent_b = str(uuid.uuid4())
+    _register_agent(db_session, agent_a)
+    _register_agent(db_session, agent_b)
 
     publish_operation_request(
         db=db_session,
@@ -195,6 +216,8 @@ def test_coordination_conflict_run_route_200(client, auth_headers):
 def test_coordination_messages_acknowledge_route_hides_message(client, auth_headers, db_session, test_user):
     agent_a = str(uuid.uuid4())
     agent_b = str(uuid.uuid4())
+    _register_agent(db_session, agent_a)
+    _register_agent(db_session, agent_b)
     message_id = publish_operation_request(
         db=db_session,
         sender_agent_id=agent_a,
@@ -221,10 +244,12 @@ def test_coordination_messages_acknowledge_route_hides_message(client, auth_head
 
 
 def test_detect_memory_write_conflict_true_recent_event(db_session, test_user):
+    agent_id = str(uuid.uuid4())
+    _register_agent(db_session, agent_id)
     event = SystemEvent(
         type="agent.message.memory_share",
         user_id=normalize_uuid(test_user.id),
-        agent_id=normalize_uuid(uuid.uuid4()),
+        agent_id=normalize_uuid(agent_id),
         source="coordination",
         payload={"memory_path": "/shared/path"},
         timestamp=datetime.now(timezone.utc) - timedelta(seconds=5),

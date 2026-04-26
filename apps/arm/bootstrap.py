@@ -27,6 +27,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
+    _register_health_check()
 
 
 def _register_models() -> None:
@@ -172,3 +173,31 @@ def _job_arm_generate(payload: dict, db):
         complexity=payload.get("complexity"),
         urgency=payload.get("urgency"),
     )
+
+
+def _register_health_check() -> None:
+    from AINDY.platform_layer.registry import register_health_check
+
+    register_health_check("arm", _check_health)
+
+
+def _check_health() -> dict:
+    db = None
+    reasons: list[str] = []
+    try:
+        from AINDY.config import settings
+        from AINDY.db.database import SessionLocal
+        from apps.arm.models import ArmConfig
+
+        db = SessionLocal()
+        db.query(ArmConfig.id).limit(1).all()
+        if not settings.DEEPSEEK_API_KEY:
+            reasons.append("deepseek api key not configured")
+        if reasons:
+            return {"status": "degraded", "reason": "; ".join(reasons)}
+        return {"status": "ok"}
+    except Exception as exc:
+        return {"status": "degraded", "reason": str(exc)}
+    finally:
+        if db is not None:
+            db.close()

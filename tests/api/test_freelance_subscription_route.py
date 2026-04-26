@@ -44,7 +44,11 @@ def _seed_order(
 
 
 def test_freelance_order_create_subscription_succeeds(client, auth_headers):
-    response = client.post("/freelance/order", json=_payload(), headers=auth_headers)
+    response = client.post(
+        "/freelance/order",
+        json=_payload(),
+        headers={**auth_headers, "Idempotency-Key": "order-subscription-1"},
+    )
 
     assert response.status_code == 201
     payload = response.json()

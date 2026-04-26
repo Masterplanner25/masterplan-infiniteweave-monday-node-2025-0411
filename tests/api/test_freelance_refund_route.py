@@ -33,7 +33,11 @@ def _seed_order(
 def test_refund_route_returns_422_for_manual_order(client, auth_headers, db_session, test_user):
     order = _seed_order(db_session, test_user, delivery_type="manual", payment_status="confirmed", stripe_payment_intent_id="pi_test")
 
-    response = client.post(f"/freelance/refund/{order.id}", json={}, headers=auth_headers)
+    response = client.post(
+        f"/freelance/refund/{order.id}",
+        json={},
+        headers={**auth_headers, "Idempotency-Key": "refund-manual-1"},
+    )
 
     assert response.status_code == 422
     assert "not 'payment'" in response.text
@@ -42,7 +46,11 @@ def test_refund_route_returns_422_for_manual_order(client, auth_headers, db_sess
 def test_refund_route_returns_422_for_unconfirmed_payment(client, auth_headers, db_session, test_user):
     order = _seed_order(db_session, test_user, delivery_type="payment", payment_status="none")
 
-    response = client.post(f"/freelance/refund/{order.id}", json={}, headers=auth_headers)
+    response = client.post(
+        f"/freelance/refund/{order.id}",
+        json={},
+        headers={**auth_headers, "Idempotency-Key": "refund-unconfirmed-1"},
+    )
 
     assert response.status_code == 422
     assert "Refunds can only be issued for confirmed payments" in response.text

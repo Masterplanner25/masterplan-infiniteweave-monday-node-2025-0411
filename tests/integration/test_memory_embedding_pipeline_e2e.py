@@ -24,7 +24,7 @@ def _create_user(session, *, email: str) -> User:
     return user
 
 
-def test_embedding_failure_keeps_raw_memory_and_marks_failed(pg_db_session, monkeypatch):
+def test_embedding_failure_keeps_raw_memory_and_remains_pending(pg_db_session, monkeypatch):
     session = pg_db_session()
     user = _create_user(session, email="embedding-failure@example.com")
     dao = MemoryNodeDAO(session)
@@ -47,10 +47,12 @@ def test_embedding_failure_keeps_raw_memory_and_marks_failed(pg_db_session, monk
 
     node = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(created["id"])).one()
 
-    assert result["embedding_status"] == "failed"
+    assert result["embedding_pending"] is True
+    assert result["embedding_status"] == "pending"
     assert node.content == "raw memory survives failed embedding"
     assert node.embedding is None
-    assert node.embedding_status == "failed"
+    assert node.embedding_pending is True
+    assert node.embedding_status == "pending"
 
 
 def test_ingest_embed_retrieve_and_score_uses_embeddings(pg_db_session, monkeypatch):
@@ -78,10 +80,12 @@ def test_ingest_embed_retrieve_and_score_uses_embeddings(pg_db_session, monkeypa
     target_row = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(target["id"])).one()
     distractor_row = session.query(MemoryNodeModel).filter(MemoryNodeModel.id == uuid.UUID(distractor["id"])).one()
     target_row.embedding = [1.0] + [0.0] * 1535
+    target_row.embedding_pending = False
     target_row.embedding_status = "complete"
     target_row.impact_score = 4.0
     target_row.usage_count = 6
     distractor_row.embedding = [0.0, 1.0] + [0.0] * 1534
+    distractor_row.embedding_pending = False
     distractor_row.embedding_status = "complete"
     distractor_row.impact_score = 0.5
     session.commit()

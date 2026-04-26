@@ -46,6 +46,7 @@ Use the deployment model and runtime docs as the source of truth, not older repo
 
 | | |
 |---|---|
+| [Architecture Map](architecture/ARCHITECTURE_MAP.md) | Verified codebase navigation map for runtime, apps, data, and boot boundaries |
 | [Plugin Registry Pattern](architecture/PLUGIN_REGISTRY_PATTERN.md) | How domain apps integrate with the AINDY runtime - the actual wiring mechanism |
 | [Cross-Domain Coupling](architecture/CROSS_DOMAIN_COUPLING.md) | Where analytics and automation intentionally cross domain boundaries, and the rules for doing so safely |
 | [System Spec](architecture/SYSTEM_SPEC.md) | Top-level system specification |
@@ -67,6 +68,15 @@ Use the deployment model and runtime docs as the source of truth, not older repo
 | [Memory Bridge Contract](runtime/MEMORY_BRIDGE_CONTRACT.md) | Read/write contract for memory operations |
 | [Runtime Behavior](runtime/RUNTIME_BEHAVIOR.md) | Scheduler, event bus, execution modes |
 | [Execution Audit](runtime/EXECUTION_AUDIT.md) | Observability and audit trail |
+
+---
+
+## Operations
+
+| | |
+|---|---|
+| [Operations Runbook](ops/RUNBOOK.md) | Startup, deployment, and day-2 operator procedures |
+| [Failure Mode Runbooks](ops/RUNBOOK_FAILURE_MODES.md) | Step-by-step incident handling for OpenAI degradation, Redis loss, and stuck job storms |
 
 ---
 
