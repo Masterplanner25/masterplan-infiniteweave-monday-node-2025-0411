@@ -138,24 +138,14 @@ def db_session_factory(db_connection):
 
 @pytest.fixture
 def db_session(db_session_factory):
-    session = db_session_factory()
-    restart_savepoint = None
-
-    if session.bind is not None and session.bind.dialect.name == "postgresql":
-        session.begin_nested()
-
-        def restart_savepoint(session_, transaction):
-            parent = getattr(transaction, "_parent", None)
-            if transaction.nested and (parent is None or not parent.nested):
-                session_.begin_nested()
-
-        event.listen(session, "after_transaction_end", restart_savepoint)
+    if db_session_factory.kw.get("bind") is not None and db_session_factory.kw["bind"].dialect.name == "postgresql":
+        session = db_session_factory(join_transaction_mode="create_savepoint")
+    else:
+        session = db_session_factory()
 
     try:
         yield session
     finally:
-        if restart_savepoint is not None:
-            event.remove(session, "after_transaction_end", restart_savepoint)
         if session.is_active:
             session.rollback()
         session.close()
