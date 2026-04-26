@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
 
@@ -36,17 +37,44 @@ class _BootstrapManifestAdapter:
 
 
 def _manifest_from_apps_path(_apps_path: str | Path) -> _BootstrapManifestAdapter:
-    # Path is kept for backward compatibility with the legacy validator API.
-    import apps.bootstrap as app_bootstrap
+    apps_path = Path(_apps_path)
+    if not apps_path.is_absolute():
+        apps_path = Path(__file__).resolve().parent.parent / apps_path
+    if not apps_path.exists():
+        fallback = Path(__file__).resolve().parent
+        if fallback.exists():
+            apps_path = fallback
 
-    metadata = app_bootstrap._load_bootstrap_metadata()
+    registered_apps: list[str] = []
+    dependencies: dict[str, list[str]] = {}
+
+    for child in sorted(apps_path.iterdir(), key=lambda path: path.name):
+        if not child.is_dir() or child.name.startswith("_"):
+            continue
+        bootstrap_path = child / "bootstrap.py"
+        if not bootstrap_path.exists():
+            continue
+
+        registered_apps.append(child.name)
+        declared_deps: list[str] = []
+        try:
+            tree = ast.parse(bootstrap_path.read_text(encoding="utf-8", errors="ignore"))
+            for node in tree.body:
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if getattr(target, "id", None) == "BOOTSTRAP_DEPENDS_ON":
+                            declared_deps = list(ast.literal_eval(node.value) or [])
+                elif isinstance(node, ast.AnnAssign):
+                    if getattr(node.target, "id", None) == "BOOTSTRAP_DEPENDS_ON":
+                        declared_deps = list(ast.literal_eval(node.value) or [])
+        except (SyntaxError, ValueError, TypeError):
+            declared_deps = []
+        dependencies[child.name] = [str(dep) for dep in declared_deps]
+
     return _BootstrapManifestAdapter(
-        registered_apps=list(app_bootstrap.APP_BOOTSTRAP_MODULES),
-        dependencies={
-            app_name: list(data.get("BOOTSTRAP_DEPENDS_ON", []))
-            for app_name, data in metadata.items()
-        },
-        core_domains=list(app_bootstrap.CORE_DOMAINS_SET),
+        registered_apps=registered_apps,
+        dependencies=dependencies,
+        core_domains=["tasks", "identity", "agent"],
     )
 
 
