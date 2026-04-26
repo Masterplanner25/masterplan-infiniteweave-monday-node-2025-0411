@@ -27,7 +27,7 @@ CONFIDENCE_MEDIUM_MIN_TASKS = 2
 
 def _compute_velocity(db: Session, user_id: str) -> float:
     """Return tasks/day completed in the last VELOCITY_WINDOW_DAYS days."""
-    from apps.tasks.models import Task
+    from apps.tasks.public import Task
 
     owner_user_id = require_user_id(user_id)
     cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
@@ -54,13 +54,13 @@ def _confidence_label(velocity: float, completed_in_window: int) -> str:
 
 
 def _total_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.models import Task
+    from apps.tasks.public import Task
 
     return db.query(Task).filter(Task.user_id == require_user_id(user_id)).count()
 
 
 def _completed_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.models import Task
+    from apps.tasks.public import Task
 
     return (
         db.query(Task)
@@ -77,7 +77,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         dict with keys: velocity, projected_completion_date, days_ahead_behind,
         eta_confidence, anchor_date, total_tasks, completed_tasks, remaining_tasks
     """
-    from apps.tasks.models import Task
+    from apps.tasks.public import Task
 
     owner_user_id = require_user_id(user_id)
     plan = (

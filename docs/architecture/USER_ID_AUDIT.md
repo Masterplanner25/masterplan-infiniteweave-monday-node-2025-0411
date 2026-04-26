@@ -1,3 +1,10 @@
+---
+title: "User-ID Scoping Audit"
+last_verified: "2026-04-20"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # User-ID Scoping Audit
 
 **Date:** 2026-04-20  

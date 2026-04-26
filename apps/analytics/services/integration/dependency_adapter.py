@@ -58,13 +58,13 @@ def fetch_system_state(db) -> dict[str, Any]:
 
 
 def get_loop_adjustment_model():
-    from apps.automation.models import LoopAdjustment
+    from apps.automation.public import LoopAdjustment
 
     return LoopAdjustment
 
 
 def get_user_feedback_model():
-    from apps.automation.models import UserFeedback
+    from apps.automation.public import UserFeedback
 
     return UserFeedback
 

@@ -23,7 +23,20 @@ def test_health_detail_returns_dependency_map(client):
     assert "dependencies" in response.json()
 
 
-def test_ready_returns_ready(client, db_session):
+def test_ready_returns_ready(client, db_session, monkeypatch):
+    import importlib
+
+    platform_loader = importlib.import_module("AINDY.platform_layer.platform_loader")
+    monkeypatch.setattr(
+        platform_loader,
+        "_last_restore_result",
+        {
+            "flows": {"db_count": 1, "registry_count": 1, "ok": True},
+            "nodes": {"db_count": 1, "registry_count": 1, "ok": True},
+            "webhooks": {"db_count": 1, "registry_count": 1, "ok": True},
+            "all_ok": True,
+        },
+    )
     response = client.get("/ready")
 
     assert response.status_code == 200
@@ -48,6 +61,18 @@ def test_ready_returns_503_when_required_runtime_contract_not_met(client, monkey
     import importlib
 
     health_service = importlib.import_module("AINDY.platform_layer.health_service")
+    platform_loader = importlib.import_module("AINDY.platform_layer.platform_loader")
+
+    monkeypatch.setattr(
+        platform_loader,
+        "_last_restore_result",
+        {
+            "flows": {"db_count": 1, "registry_count": 1, "ok": True},
+            "nodes": {"db_count": 1, "registry_count": 1, "ok": True},
+            "webhooks": {"db_count": 1, "registry_count": 1, "ok": True},
+            "all_ok": True,
+        },
+    )
 
     monkeypatch.setattr(
         health_service,

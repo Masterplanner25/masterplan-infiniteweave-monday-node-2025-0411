@@ -1,3 +1,10 @@
+---
+title: "A.I.N.D.Y. Production Operations Runbook"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # A.I.N.D.Y. Production Operations Runbook
 
 This document covers startup sequencing, instance drain, and Redis failover. For secret key rotation see `RUNBOOK_SECRET_ROTATION.md`. For schema migrations see `MIGRATION_POLICY.md`. For deployment shapes see `DEPLOYMENT_MODEL.md`.

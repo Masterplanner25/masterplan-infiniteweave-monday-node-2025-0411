@@ -1,3 +1,10 @@
+---
+title: "Syscall API Changelog"
+last_verified: "2026-04-24"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Syscall API Changelog
 
 ## Purpose

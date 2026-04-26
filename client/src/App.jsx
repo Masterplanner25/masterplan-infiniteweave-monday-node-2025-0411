@@ -1,11 +1,13 @@
-import { lazy } from "react";
+import { lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
+import { checkApiCompatibility } from "./api/version";
 import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import AppShell from "./components/shared/AppShell";
 import KPIDashboard from "./components/shared/KPIDashboard";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
+import { VersionMismatchBanner } from "./components/shared/VersionMismatchBanner";
 import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/Login";
 import RegisterPage from "./pages/Register";
@@ -91,57 +93,72 @@ function BootGate() {
 }
 
 export default function App() {
+  const [versionStatus, setVersionStatus] = useState(null);
   const routeElement = (name, element) => (
     <RouteErrorBoundary name={name}>
       {element}
     </RouteErrorBoundary>
   );
+  const versionCheckBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+  const showVersionMismatch = !import.meta.env.DEV && versionStatus?.status === "major_mismatch";
+
+  useEffect(() => {
+    checkApiCompatibility(versionCheckBaseUrl).then(setVersionStatus);
+  }, [versionCheckBaseUrl]);
 
   return (
-    <TooltipProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ErrorBoundary>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route element={<ProtectedRoute />}>
-              <Route element={<BootGate />}>
-                <Route element={routeElement("Application Shell", <AppShell />)}>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
-                  <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
-                  <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
-                  <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
-                  <Route path="/kpi" element={routeElement("KPI Snapshot", <KPIDashboard />)} />
-                  <Route path="/search/research" element={routeElement("Research", <ResearchEngine />)} />
-                  <Route path="/search/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
-                  <Route path="/social" element={routeElement("Social Feed", <Feed />)} />
-                  <Route path="/freelance" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
-                  <Route path="/arm/analyze" element={routeElement("ARM Analyze", <ARMAnalyze />)} />
-                  <Route path="/arm/config" element={routeElement("ARM Config", <ARMConfig />)} />
-                  <Route path="/arm/config/suggest" element={routeElement("ARM Suggest", <ARMConfigSuggest />)} />
-                  <Route path="/arm/config/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
-                  <Route path="/arm/config/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
-                  <Route path="/arm/config/metrics" element={routeElement("ARM Metrics", <ARMMetrics />)} />
-                  <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
-                  <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
-                  <Route element={<ProtectedRoute requireAdmin />}>
-                    <Route path="/platform/agent" element={routeElement("Agent Console", <AgentConsole />)} />
-                    <Route path="/platform/flows" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
-                    <Route path="/platform/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
-                    <Route path="/platform/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
-                    <Route path="/platform/executions" element={routeElement("Execution Console", <ExecutionConsole />)} />
-                    <Route path="/platform/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
-                    <Route path="/platform/registry" element={routeElement("Agent Registry", <AgentRegistry />)} />
-                    <Route path="/platform/trace" element={routeElement("Ripple Trace", <RippleTraceViewer />)} />
+    <>
+      {showVersionMismatch ? (
+        <VersionMismatchBanner
+          apiVersion={versionStatus.apiVersion}
+          clientVersion={versionStatus.clientVersion}
+        />
+      ) : null}
+      <TooltipProvider>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<BootGate />}>
+                  <Route element={routeElement("Application Shell", <AppShell />)}>
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
+                    <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
+                    <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
+                    <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
+                    <Route path="/kpi" element={routeElement("KPI Snapshot", <KPIDashboard />)} />
+                    <Route path="/search/research" element={routeElement("Research", <ResearchEngine />)} />
+                    <Route path="/search/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
+                    <Route path="/social" element={routeElement("Social Feed", <Feed />)} />
+                    <Route path="/freelance" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
+                    <Route path="/arm/analyze" element={routeElement("ARM Analyze", <ARMAnalyze />)} />
+                    <Route path="/arm/config" element={routeElement("ARM Config", <ARMConfig />)} />
+                    <Route path="/arm/config/suggest" element={routeElement("ARM Suggest", <ARMConfigSuggest />)} />
+                    <Route path="/arm/config/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
+                    <Route path="/arm/config/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
+                    <Route path="/arm/config/metrics" element={routeElement("ARM Metrics", <ARMMetrics />)} />
+                    <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
+                    <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
+                    <Route element={<ProtectedRoute requireAdmin />}>
+                      <Route path="/platform/agent" element={routeElement("Agent Console", <AgentConsole />)} />
+                      <Route path="/platform/flows" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
+                      <Route path="/platform/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
+                      <Route path="/platform/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
+                      <Route path="/platform/executions" element={routeElement("Execution Console", <ExecutionConsole />)} />
+                      <Route path="/platform/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
+                      <Route path="/platform/registry" element={routeElement("Agent Registry", <AgentRegistry />)} />
+                      <Route path="/platform/trace" element={routeElement("Ripple Trace", <RippleTraceViewer />)} />
+                    </Route>
+                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Route>
               </Route>
-            </Route>
-          </Routes>
-        </ErrorBoundary>
-      </BrowserRouter>
-    </TooltipProvider>
+            </Routes>
+          </ErrorBoundary>
+        </BrowserRouter>
+      </TooltipProvider>
+    </>
   );
 }

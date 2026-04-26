@@ -1,3 +1,11 @@
+---
+title: "A.I.N.D.Y. Operations Runbook"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
 # A.I.N.D.Y. Operations Runbook
 
 ## Failure Mode Runbooks

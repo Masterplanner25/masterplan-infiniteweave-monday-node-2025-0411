@@ -1,3 +1,10 @@
+---
+title: "Runtime Behavior"
+last_verified: "2026-04-22"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Runtime Behavior
 
 This document describes the current runtime behavior of the FastAPI backend as implemented in `AINDY/main.py`.

@@ -1,3 +1,10 @@
+---
+title: "Scalability Readiness Audit (Multi-Instance Risks)"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Scalability Readiness Audit (Multi-Instance Risks)
 
 ## Summary
@@ -20,7 +27,7 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 3) ARM analyzer singleton (process-level)
 - Location: `AINDY/routes/arm_router.py`
 - Risk: Cached analyzer config is per-process; config updates require per-process reload.
-- Impact: Config update in one instance won’t affect others until they receive requests (or restart).
+- Impact: Config update in one instance wonâ€™t affect others until they receive requests (or restart).
 - Status: Open (multi-instance propagation).
 
 4) OpenAI embedding client singleton
@@ -31,7 +38,7 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 
 5) Background task runner isolation
 - Location: `AINDY/services/task_services.py` + `AINDY/services/scheduler_service.py` + `AINDY/main.py`
-- Risk: Previously — APScheduler started unconditionally on every instance regardless of DB lease; `start_background_tasks()` returned None and the lease check only gated a log message, not scheduler startup.
+- Risk: Previously â€” APScheduler started unconditionally on every instance regardless of DB lease; `start_background_tasks()` returned None and the lease check only gated a log message, not scheduler startup.
 - Resolution (Sprint N+9, 2026-03-25): `start_background_tasks()` now returns `bool` (True = lease acquired). `main.py` lifespan calls `start_background_tasks()` first; `scheduler_service.start()` is only called when it returns True. A `background_lease_heartbeat` APScheduler job (60s interval) keeps the lease alive so it does not expire (TTL=120s) while the leader is running. `is_background_leader()` public helper + `GET /observability/scheduler/status` endpoint expose current state.
 - Status: ? Resolved (Sprint N+9).
 
@@ -49,9 +56,9 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 
 8) SchedulerEngine._waiting (per-process WAIT registry)
 - Location: `kernel/scheduler_engine.py` ? `SchedulerEngine._waiting`
-- Risk: Previously — `_waiting` was in-memory only. A FlowRun entering WAIT on Instance A would never resume if the resume event arrived on Instance B.
-- Resolution (2026-04-07): `kernel/event_bus.py` introduces a Redis pub/sub distributed event bus. `notify_event(broadcast=True)` publishes to `aindy:scheduler_events` after the local scan. All instances subscribe and call `notify_event(broadcast=False)` on their own scheduler when a message arrives. Exactly-once execution is guaranteed by an atomic `UPDATE flow_runs SET status='executing' WHERE status='waiting'` DB claim — only the winning instance proceeds. All others return immediately. Startup rehydration re-registers all waiting FlowRun and EU callbacks on every instance so any instance can resume any waiting flow after a restart.
-- Status: ? Resolved (2026-04-07). Remaining known limitation: collective restart race window (all instances restart simultaneously during an in-flight event) — requires Redis Streams for full elimination.
+- Risk: Previously â€” `_waiting` was in-memory only. A FlowRun entering WAIT on Instance A would never resume if the resume event arrived on Instance B.
+- Resolution (2026-04-07): `kernel/event_bus.py` introduces a Redis pub/sub distributed event bus. `notify_event(broadcast=True)` publishes to `aindy:scheduler_events` after the local scan. All instances subscribe and call `notify_event(broadcast=False)` on their own scheduler when a message arrives. Exactly-once execution is guaranteed by an atomic `UPDATE flow_runs SET status='executing' WHERE status='waiting'` DB claim â€” only the winning instance proceeds. All others return immediately. Startup rehydration re-registers all waiting FlowRun and EU callbacks on every instance so any instance can resume any waiting flow after a restart.
+- Status: ? Resolved (2026-04-07). Remaining known limitation: collective restart race window (all instances restart simultaneously during an in-flight event) â€” requires Redis Streams for full elimination.
 
 ## Actionable Recommendations (No redesign)
 - Replace `InMemoryBackend` with Redis/DB cache if cache consistency is required.

@@ -1,3 +1,10 @@
+---
+title: "OS Isolation Layer"
+last_verified: "2026-04-22"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # OS Isolation Layer
 
 The OS Isolation Layer provides tenant isolation, resource quota enforcement, and priority-based execution scheduling for A.I.N.D.Y. execution units (AgentRuns, flow runs). It sits between the syscall dispatcher and raw handler execution.

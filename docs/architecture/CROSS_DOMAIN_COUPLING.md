@@ -1,3 +1,10 @@
+---
+title: "Cross-Domain Coupling"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Cross-Domain Coupling
 
 This document describes the three largest cross-domain coupling sites in the

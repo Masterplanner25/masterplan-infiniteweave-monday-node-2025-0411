@@ -1,3 +1,10 @@
+---
+title: "AINDY Architecture Map"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # AINDY Architecture Map
 
 ## System Overview
@@ -144,12 +151,12 @@ The syscall dispatcher enforces capability checks, payload validation, version p
 ## Data Layer
 
 ### PostgreSQL (Primary)
-PostgreSQL is the primary persistence layer. System models live in `AINDY/db/models/`, while app-specific ORM models live under each app. Alembic model discovery is aggregated through `apps/models.py`, which imports every app model module needed by migrations.
+PostgreSQL is the primary persistence layer. System models live in `AINDY/db/models/`, while app-specific ORM models live under each app and are registered through `apps.bootstrap.bootstrap_models()` during startup and migration loading.
 
 Key files:
 - `AINDY/db/models/`
 - `AINDY/db/database.py`
-- `apps/models.py`
+- `apps/bootstrap.py`
 - `alembic/versions/`
 
 ### MongoDB (Social App Only)

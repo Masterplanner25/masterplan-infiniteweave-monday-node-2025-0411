@@ -1,3 +1,10 @@
+---
+title: "Governance Index"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Governance Index
 Last updated: 2026-04-05 (RetryPolicy system unified; RETRY_POLICY.md created; RUNTIME_BEHAVIOR, EXECUTION_AUDIT, TECH_DEBT, CHANGELOG updated)
 Update rule: Change this date whenever any file under `docs/` is modified.

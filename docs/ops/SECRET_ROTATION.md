@@ -1,3 +1,11 @@
+---
+title: "Secret Rotation Policy"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
 # Secret Rotation Policy
 
 ## Secrets Inventory

@@ -631,7 +631,7 @@ def _perform_delivery(db: Session, order: FreelanceOrder, *, generated_by_ai: bo
 
 
 def _dispatch_delivery(order: FreelanceOrder, *, db: Session) -> dict:
-    from apps.automation.services.automation_execution_service import execute_automation_action
+    from apps.automation.public import execute_automation_action
 
     delivery_type = str(order.delivery_type or "manual").strip().lower() or "manual"
     config = dict(order.delivery_config or {})
@@ -1373,7 +1373,7 @@ def _update_linked_task_feedback(db: Session, order: FreelanceOrder, *, outcome:
     try:
         if not order.task_id or not order.user_id:
             return
-        from apps.tasks.services.task_service import get_task_by_id
+        from apps.tasks.public import get_task_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:
             return
@@ -1391,8 +1391,8 @@ def _sync_freelance_automation(db: Session, order: FreelanceOrder) -> None:
     try:
         if not order.task_id or not order.user_id:
             return
-        from apps.tasks.services.task_service import queue_task_automation
-        from apps.tasks.services.task_service import get_task_by_id
+        from apps.tasks.public import queue_task_automation
+        from apps.tasks.public import get_task_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:
             return

@@ -1,3 +1,10 @@
+---
+title: "SDK Reference"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # SDK Reference
 
 The A.I.N.D.Y. Python SDK gives you a clean client for everything the platform exposes — memory, flows, events, syscalls, and Nodus scripts. Zero external dependencies. Requires Python 3.10+.

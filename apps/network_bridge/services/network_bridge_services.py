@@ -50,8 +50,8 @@ def connect_external_author(
     Returns the result dict for the route handler.
     All DB work (including the final commit) is owned here.
     """
-    from apps.rippletrace.services import rippletrace_services
-    from apps.analytics.services.calculations.calculation_services import save_calculation
+    from apps.analytics.public import save_calculation
+    from apps.rippletrace.public import log_ripple_event
     from datetime import datetime
 
     author = register_author(db=db, name=author_name, platform=platform, notes=notes)
@@ -63,7 +63,7 @@ def connect_external_author(
         "notes": notes or "",
         "drop_point_id": "bridge",
     }
-    rippletrace_services.log_ripple_event(db, ripple_event)
+    log_ripple_event(db, ripple_event)
 
     metric_name = f"UserEvent::{platform}"
     save_calculation(db, metric_name, 1)

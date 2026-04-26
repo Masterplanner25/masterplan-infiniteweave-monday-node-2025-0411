@@ -1,3 +1,11 @@
+---
+title: "Worker Health Probes"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
 # Worker Health Probes
 
 The AINDY worker exposes health probes on port `AINDY_WORKER_HEALTH_PORT` (default `8001`).

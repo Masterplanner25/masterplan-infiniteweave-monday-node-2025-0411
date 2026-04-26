@@ -1,3 +1,10 @@
+---
+title: "Memory Bridge Contract"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 ﻿# Memory Bridge Contract
 
 This document defines the Memory Bridge API contract and its security boundary based strictly on current implementation.

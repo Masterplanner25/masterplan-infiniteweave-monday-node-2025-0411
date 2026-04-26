@@ -1,3 +1,10 @@
+---
+title: "Masterplan SaaS - Canonical Definition & Evolution Plan"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Masterplan SaaS - Canonical Definition & Evolution Plan
 
 ---

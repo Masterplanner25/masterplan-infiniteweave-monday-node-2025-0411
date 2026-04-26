@@ -1,3 +1,10 @@
+---
+title: "Syscall Reference — v1"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Syscall Reference — v1
 
 All syscalls follow the same pattern:

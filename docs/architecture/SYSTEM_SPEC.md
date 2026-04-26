@@ -1,3 +1,10 @@
+---
+title: "SYSTEM_SPEC"
+last_verified: "2026-04-22"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # SYSTEM_SPEC
 
 This document is the current high-level architectural specification for the repository.

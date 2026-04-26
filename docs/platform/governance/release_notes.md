@@ -1,3 +1,10 @@
+---
+title: "Release Notes"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 ## Sprint N+9 — Phase 4 Completion + Request Context
 
 - **Branch:** `feat/infinity-algorithm-loop`

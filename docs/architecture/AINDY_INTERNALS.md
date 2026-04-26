@@ -1,3 +1,10 @@
+---
+title: "A.I.N.D.Y. Internals"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # A.I.N.D.Y. Internals
 
 Developer reference for the AINDY/ directory — structure, runtime notes, and

@@ -1,3 +1,10 @@
+---
+title: "Evolution Plan"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Evolution Plan
 
 This plan defines controlled evolution aligned with current architecture and governance rules. It is phased, non-speculative, and derived from existing technical debt.

@@ -1,3 +1,10 @@
+---
+title: "Syscall Reference"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Syscall Reference
 
 Use `POST /platform/syscall` to execute a syscall and `GET /platform/syscalls?version=v1` to inspect the live ABI registry.
