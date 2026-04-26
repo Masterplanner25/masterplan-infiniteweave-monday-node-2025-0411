@@ -155,15 +155,17 @@ def client(app):
         yield test_client
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def pg_db_session():
     """
-    Session-scoped PostgreSQL fixture for integration tests.
+    Function-scoped PostgreSQL fixture for integration tests.
 
     Guards against accidental SQLite use, runs alembic migrations once, then
-    yields a sessionmaker bound to a connection that wraps all test DML in a
-    single transaction. The transaction is rolled back at teardown so no
-    test-created rows persist between runs.
+    yields a sessionmaker bound to a dedicated connection for the current test.
+    All DML for the test stays inside one outer transaction that is rolled back
+    before global cleanup fixtures run. This avoids holding table locks across
+    the full session, which can deadlock teardown when other fixtures truncate
+    tables after each test.
 
     Usage in tests:
         def test_something(pg_db_session):
@@ -193,13 +195,31 @@ def pg_db_session():
         )
     connection = engine.connect()
     transaction = connection.begin()
-    Session = sessionmaker(bind=connection)
+    Session = sessionmaker(
+        bind=connection,
+        autocommit=False,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+    opened_sessions = []
 
-    yield Session
+    def _session_factory():
+        session = Session()
+        opened_sessions.append(session)
+        return session
 
-    transaction.rollback()
-    connection.close()
-    engine.dispose()
+    try:
+        yield _session_factory
+    finally:
+        for session in reversed(opened_sessions):
+            try:
+                if session.is_active:
+                    session.rollback()
+            finally:
+                session.close()
+        transaction.rollback()
+        connection.close()
+        engine.dispose()
 
 
 @pytest.fixture
