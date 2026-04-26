@@ -7,7 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent"]
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
@@ -420,9 +420,27 @@ def _is_background_leader(*args, **kwargs):
     return is_background_leader(*args, **kwargs)
 
 
+def tasks_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+
+    try:
+        from apps.tasks.models import Task
+    except Exception as exc:
+        raise RuntimeError(f"tasks health import failed: {exc}") from exc
+
+    db = SessionLocal()
+    try:
+        db.query(Task.id).limit(1).all()
+        return True
+    finally:
+        db.close()
+
+
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("tasks", tasks_health_check)
     register_health_check("tasks", _check_health)
 
 

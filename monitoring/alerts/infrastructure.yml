@@ -1,0 +1,39 @@
+groups:
+  - name: aindy-infrastructure
+    rules:
+      - alert: DBPoolNearExhaustion
+        expr: aindy_db_pool_pressure_ratio > 0.8
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB pool near exhaustion"
+          description: "Database connection pool pressure has remained above 0.8 for at least 3 minutes."
+
+      - alert: DBPoolExhausted
+        expr: aindy_db_pool_pressure_ratio >= 1.0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DB pool exhausted"
+          description: "Database connection pool pressure has reached full saturation for at least 1 minute."
+
+      # Requires aindy_quota_redis_mode metric from Prompt 4
+      - alert: RedisQuotaDegraded
+        expr: aindy_quota_redis_mode == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis-backed quota tracking degraded"
+          description: "Quota Redis mode has fallen back from Redis-backed operation for at least 3 minutes."
+
+      - alert: SchedulerWaitBacklogHigh
+        expr: aindy_scheduler_waiting_count > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduler wait backlog high"
+          description: "Scheduler waiting count has remained above 50 for at least 5 minutes."

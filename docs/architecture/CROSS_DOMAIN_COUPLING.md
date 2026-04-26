@@ -532,3 +532,56 @@ When adding new cross-domain reads:
 - **Not acceptable**: module-level imports from another domain's services or
   models in any file that is imported at startup.
 - **Never**: bidirectional module-level imports between two domains.
+
+## 7. Remediation Status
+
+The table below tracks each coupling site's remediation state.
+Status values: OPEN | IN_PROGRESS | RESOLVED | ACCEPTED (intentional, not to be fixed)
+
+| Site | File | Violation Type | Status | Addressed By |
+|------|------|---------------|--------|--------------|
+| Infinity loop module-level imports | `apps/analytics/services/orchestration/infinity_orchestrator.py` | module-level cross-domain | RESOLVED | Prompt 11 |
+| Infinity loop module-level imports | `apps/analytics/services/orchestration/infinity_loop.py` | module-level cross-domain | RESOLVED | Prompt 11 |
+| LoopAdjustment ORM in analytics | `apps/analytics/services/scoring/kpi_weight_service.py` | ORM cross-import | RESOLVED | Apps Prompt 3 |
+| LoopAdjustment ORM in analytics | `apps/analytics/services/scoring/policy_adaptation_service.py` | ORM cross-import | RESOLVED | Apps Prompt 3 |
+| LoopAdjustment ORM in dependency_adapter | `apps/analytics/services/integration/dependency_adapter.py` | ORM cross-import | RESOLVED | Apps Prompt 3 |
+| dispatch_tool_syscall direct import | `apps/arm/agents/tools.py` | private API cross-import | RESOLVED | Priority Prompt 1 |
+| dispatch_tool_syscall direct import | `apps/masterplan/agents/tools.py` | private API cross-import | RESOLVED | Priority Prompt 1 |
+| dispatch_tool_syscall direct import | `apps/search/agents/tools.py` | private API cross-import | RESOLVED | Priority Prompt 1 |
+| dispatch_tool_syscall direct import | `apps/tasks/agents/tools.py` | private API cross-import | RESOLVED | Priority Prompt 1 |
+| masterplan → IdentityService direct | `apps/masterplan/services/genesis_ai.py` | service class cross-import | RESOLVED | Apps Prompt 2 |
+| masterplan → IdentityService direct | `apps/masterplan/services/masterplan_factory.py` | service class cross-import | RESOLVED | Apps Prompt 2 |
+| analytics → identity boot service | `apps/analytics/services/integration/dependency_adapter.py` | service cross-import | RESOLVED | Apps Prompt 2 |
+| social → analytics ORM | `apps/social/**/*.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
+| rippletrace → analytics ORM | `apps/rippletrace/**/*.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
+| analytics → arm ORM | `apps/analytics/services/scoring/infinity_service.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
+| _run_to_dict private import | `apps/automation/flows/automation_flows.py` | private API | RESOLVED | Prompt 3 |
+
+## 8. Coupling Governance Policy
+
+### Adding new cross-domain dependencies
+
+New cross-domain dependencies require:
+1. A row in the Remediation Status table (Section 7) before code is merged
+2. Status set to OPEN with a tracking reference
+3. The violation type classified as one of:
+   - `module-level cross-domain` — highest risk, cascade failure potential
+   - `ORM cross-import` — schema coupling risk
+   - `service class cross-import` — interface coupling risk
+   - `private API` — refactor coupling risk
+   - `deferred cross-domain` — acceptable in monolith context
+
+### Closing a coupling item
+
+When a coupling item is resolved:
+1. Update Status to RESOLVED
+2. Add a `Resolved Date` column entry
+3. Verify the enforcement test in `tests/unit/test_import_boundaries.py` passes
+4. Delete the resolved row after one release cycle (it belongs in git history)
+
+### The enforcement test
+
+All OPEN and IN_PROGRESS ORM cross-imports and private API imports must have
+a corresponding assertion in `tests/unit/test_import_boundaries.py`.
+Module-level cross-domain imports are enforced by source inspection in that
+same test file, and by the cascade risk documented above.

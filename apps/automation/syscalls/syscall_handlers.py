@@ -596,6 +596,21 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
         return {"suggestions": []}
 
 
+def _handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.dispatch_tool — proxy an approved agent tool syscall through the dispatcher.
+
+    Payload keys:
+        tool_name     (str)  — required; logical tool identifier
+        payload       (dict) — optional; forwarded syscall payload
+        user_id       (str)  — required; tool caller identity
+        syscall_name  (str)  — required; fully-qualified target syscall name
+        capability    (str)  — optional; defaults to tool_name
+    """
+    from apps.agent.syscalls.syscall_handlers import handle_agent_dispatch_tool
+
+    return handle_agent_dispatch_tool(payload, context)
+
+
 # ── MAS Memory Handlers ───────────────────────────────────────────────────────
 # Thin wrappers that delegate to syscall_registry handlers.
 # Registered via register_all_domain_handlers() so they override the base
@@ -662,21 +677,45 @@ def register_all_domain_handlers() -> None:
     Called once at application startup. Safe to call multiple times
     (subsequent calls overwrite with the same values — idempotent).
     """
-    # Tuples: (name, handler, capability, description, stable)
+    # Tuples: (name, handler, capability, description, stable, input_schema)
     # Domain-specific handlers are stable=False — they wrap application logic
     # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
-        ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False),
+        ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False, None),
         # Agent
-        ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False),
+        ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False, None),
+        (
+            "sys.v1.agent.dispatch_tool",
+            _handle_agent_dispatch_tool,
+            "agent.tool_dispatch",
+            "Dispatch an approved agent tool syscall through the agent boundary",
+            False,
+            {
+                "required": ["tool_name", "payload", "user_id", "syscall_name"],
+                "properties": {
+                    "tool_name": {"type": "string"},
+                    "payload": {"type": "dict"},
+                    "user_id": {"type": "string"},
+                    "syscall_name": {"type": "string"},
+                    "capability": {"type": "string"},
+                },
+            },
+        ),
         # Memory Address Space (path-based — experimental extensions)
-        ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False),
-        ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False),
-        ("sys.v1.memory.trace",            _mas_memory_trace,             "memory.trace",          "Causal trace from node at path",                         False),
+        ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False, None),
+        ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False, None),
+        ("sys.v1.memory.trace",            _mas_memory_trace,             "memory.trace",          "Causal trace from node at path",                         False, None),
     ]
 
-    for name, handler, capability, description, stable in _registrations:
-        register_syscall(name, handler, capability, description, stable=stable)
+    for name, handler, capability, description, stable, input_schema in _registrations:
+        register_syscall(
+            name,
+            handler,
+            capability,
+            description,
+            input_schema=input_schema,
+            stable=stable,
+        )
 
     logger.info(
         "[syscall_handlers] registered %d domain handlers", len(_registrations)

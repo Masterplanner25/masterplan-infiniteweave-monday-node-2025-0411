@@ -106,18 +106,12 @@ def score_history_node(state, context):
 def score_feedback_list_node(state, context):
     try:
         import uuid
-        from apps.automation.public import UserFeedback
+        from apps.automation.public import get_user_feedback
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         limit = state.get("limit", 50)
-        history = (
-            db.query(UserFeedback)
-            .filter(UserFeedback.user_id == user_id)
-            .order_by(UserFeedback.created_at.desc())
-            .limit(limit)
-            .all()
-        )
+        history = list(get_user_feedback(user_id, db, limit=limit) or [])
         return {"status": "SUCCESS", "output_patch": {"score_feedback_list_result": {
             "user_id": str(user_id),
             "count": len(history),

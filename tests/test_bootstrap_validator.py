@@ -1,56 +1,79 @@
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
 
 import pytest
 
-from apps._bootstrap_validator import (
-    BootstrapDependencyError,
+from apps._bootstrap_validator import validate_bootstrap_deps
+from AINDY.kernel.errors import BootstrapDependencyError
+from AINDY.platform_layer.bootstrap_contract import (
     compute_boot_order,
-    extract_actual_top_level_imports,
     find_circular_dependencies,
-    validate_bootstrap_deps,
+    validate_bootstrap_manifest,
 )
 
 
-def _write_bootstrap(tmp_path: Path, app_name: str, body: str) -> None:
-    app_dir = tmp_path / "apps" / app_name
-    app_dir.mkdir(parents=True, exist_ok=True)
-    (app_dir / "bootstrap.py").write_text(body, encoding="utf-8")
+class _Manifest:
+    def __init__(
+        self,
+        *,
+        registered_apps: list[str],
+        dependencies: dict[str, list[str]],
+        core_domains: list[str] | None = None,
+    ) -> None:
+        self._registered_apps = registered_apps
+        self._dependencies = dependencies
+        self._core_domains = core_domains or ["tasks", "identity", "agent"]
+
+    def get_registered_apps(self) -> list[str]:
+        return list(self._registered_apps)
+
+    def get_bootstrap_dependencies(self) -> dict[str, list[str]]:
+        return {name: list(deps) for name, deps in self._dependencies.items()}
+
+    def get_core_domains(self) -> list[str]:
+        return list(self._core_domains)
 
 
-def test_no_undeclared_deps_in_current_codebase() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
-    validate_bootstrap_deps(str(repo_root / "apps"))
+def test_current_registered_bootstrap_manifest_is_valid() -> None:
+    import AINDY.startup as startup
+
+    validate_bootstrap_manifest(startup.registry)
 
 
-def test_undeclared_dep_raises_bootstrap_error(tmp_path: Path) -> None:
-    _write_bootstrap(
-        tmp_path,
-        "tasks",
-        'APP_DEPENDS_ON = []\nfrom apps.analytics import public\n',
+def test_legacy_apps_path_validator_entry_point_is_valid() -> None:
+    validate_bootstrap_deps("apps")
+
+
+def test_missing_declared_dependency_raises_bootstrap_error() -> None:
+    manifest = _Manifest(
+        registered_apps=["tasks", "analytics", "identity", "agent"],
+        dependencies={
+            "tasks": [],
+            "analytics": ["identity", "missing_app"],
+            "identity": [],
+            "agent": [],
+        },
     )
-    _write_bootstrap(tmp_path, "analytics", "APP_DEPENDS_ON = []\n")
 
-    with pytest.raises(BootstrapDependencyError, match="analytics"):
-        validate_bootstrap_deps(str(tmp_path / "apps"))
+    with pytest.raises(BootstrapDependencyError, match="missing_app"):
+        validate_bootstrap_manifest(manifest)
+
+
+def test_missing_core_domain_raises_bootstrap_error() -> None:
+    manifest = _Manifest(
+        registered_apps=["tasks", "analytics"],
+        dependencies={"tasks": [], "analytics": []},
+        core_domains=["tasks", "identity", "agent"],
+    )
+
+    with pytest.raises(BootstrapDependencyError, match="identity"):
+        validate_bootstrap_manifest(manifest)
 
 
 def test_circular_dependency_detected() -> None:
     cycles = find_circular_dependencies({"A": ["B"], "B": ["A"]})
     assert ["A", "B", "A"] in cycles or ["B", "A", "B"] in cycles
-
-
-def test_no_false_positives_on_intra_app_imports(tmp_path: Path) -> None:
-    _write_bootstrap(
-        tmp_path,
-        "tasks",
-        'APP_DEPENDS_ON = []\nfrom apps.tasks import public\n',
-    )
-    actual = extract_actual_top_level_imports(str(tmp_path / "apps"))
-
-    assert actual["tasks"] == []
 
 
 def test_topological_sort_respects_deps() -> None:
@@ -64,19 +87,19 @@ def test_topological_sort_raises_on_cycle() -> None:
         compute_boot_order({"A": ["B"], "B": ["A"]})
 
 
-def test_startup_fails_if_undeclared_dep_introduced(monkeypatch: pytest.MonkeyPatch) -> None:
-    import apps._bootstrap_validator as validator
+def test_startup_fails_if_bootstrap_manifest_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     import AINDY.startup as startup
+    import AINDY.platform_layer.bootstrap_contract as bootstrap_contract
 
-    original = validator.validate_bootstrap_deps
+    original = bootstrap_contract.validate_bootstrap_manifest
 
-    def _raise(_bootstrap_dir: str) -> None:
-        raise BootstrapDependencyError("forced undeclared dependency")
+    def _raise(_manifest) -> None:
+        raise BootstrapDependencyError("forced bootstrap validation failure")
 
-    monkeypatch.setattr(validator, "validate_bootstrap_deps", _raise)
+    monkeypatch.setattr(bootstrap_contract, "validate_bootstrap_manifest", _raise)
     try:
-        with pytest.raises(RuntimeError, match="forced undeclared dependency"):
+        with pytest.raises(RuntimeError, match="forced bootstrap validation failure"):
             importlib.reload(startup)
     finally:
-        monkeypatch.setattr(validator, "validate_bootstrap_deps", original)
+        monkeypatch.setattr(bootstrap_contract, "validate_bootstrap_manifest", original)
         importlib.reload(startup)

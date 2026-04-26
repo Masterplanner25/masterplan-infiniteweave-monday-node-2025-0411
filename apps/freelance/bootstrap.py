@@ -89,9 +89,31 @@ def _job_freelance_generate_delivery(payload: dict, db):
     )
 
 
+def freelance_health_check() -> bool:
+    from AINDY.config import settings
+    from AINDY.db.database import SessionLocal
+
+    if not settings.STRIPE_SECRET_KEY:
+        raise RuntimeError("STRIPE_SECRET_KEY not configured - payment orders will fail")
+
+    try:
+        from apps.freelance.models import FreelanceOrder
+    except Exception as exc:
+        raise RuntimeError(f"freelance health import failed: {exc}") from exc
+
+    db = SessionLocal()
+    try:
+        db.query(FreelanceOrder.id).limit(1).all()
+        return True
+    finally:
+        db.close()
+
+
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("freelance", freelance_health_check)
     register_health_check("freelance", _check_health)
 
 

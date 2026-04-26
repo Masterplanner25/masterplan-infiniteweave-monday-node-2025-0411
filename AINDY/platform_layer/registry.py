@@ -14,6 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from AINDY.config import CORE_DOMAINS
 from AINDY.platform_layer.registry_contracts import (
     validate_agent_event,
     validate_agent_planner_context,
@@ -87,6 +88,8 @@ _required_flow_nodes: list[str] = []
 _required_syscalls: list[str] = []
 _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
+_registered_apps: list[str] = []
+_bootstrap_dependencies: dict[str, list[str]] = {}
 _degraded_domains: list[str] = []
 _health_checks: dict[str, Callable[[], dict[str, Any]]] = {}
 
@@ -567,6 +570,32 @@ def register_health_check(app_name: str, check_fn: Callable[[], dict[str, Any]])
 
 def get_all_health_checks() -> dict[str, Callable[[], dict[str, Any]]]:
     return dict(_health_checks)
+
+
+def publish_bootstrap_registration(app_name: str, dependencies: list[str] | None = None) -> str:
+    normalized = str(app_name or "").strip()
+    if not normalized:
+        raise ValueError("app_name must be a non-empty string")
+    if normalized not in _registered_apps:
+        _registered_apps.append(normalized)
+    _bootstrap_dependencies[normalized] = [
+        str(dependency).strip()
+        for dependency in (dependencies or [])
+        if str(dependency).strip()
+    ]
+    return normalized
+
+
+def get_registered_apps() -> list[str]:
+    return list(_registered_apps)
+
+
+def get_bootstrap_dependencies() -> dict[str, list[str]]:
+    return {name: list(deps) for name, deps in _bootstrap_dependencies.items()}
+
+
+def get_core_domains() -> list[str]:
+    return list(CORE_DOMAINS)
 
 
 def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:

@@ -317,6 +317,12 @@ class ResourceManager:
                 )
                 client.ping()
                 self._redis = client
+                try:
+                    from AINDY.platform_layer.metrics import quota_redis_mode
+
+                    quota_redis_mode.set(1)
+                except Exception:
+                    pass
                 if self._redis_mode_logged is False:
                     logger.warning("[resource_manager] Redis reconnected; using shared quota counters")
                 self._redis_mode_logged = True
@@ -324,6 +330,12 @@ class ResourceManager:
                 if self._redis_mode_logged is not False:
                     logger.warning("[resource_manager] Redis unavailable: %s", exc)
                 self._redis = None
+                try:
+                    from AINDY.platform_layer.metrics import quota_redis_mode
+
+                    quota_redis_mode.set(0)
+                except Exception:
+                    pass
                 self._redis_mode_logged = False
             return self._redis
 
@@ -333,6 +345,13 @@ class ResourceManager:
             self._redis = None
             self._redis_last_check = time.monotonic()
             self._redis_mode_logged = False
+        try:
+            from AINDY.platform_layer.metrics import quota_redis_fallback_total, quota_redis_mode
+
+            quota_redis_mode.set(0)
+            quota_redis_fallback_total.inc()
+        except Exception:
+            pass
 
     def is_redis_mode(self) -> bool:
         return self._get_redis() is not None

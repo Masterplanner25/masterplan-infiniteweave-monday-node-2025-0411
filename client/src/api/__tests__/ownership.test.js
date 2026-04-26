@@ -6,9 +6,10 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 
 vi.mock("../_core.js", () => ({
   authRequest: vi.fn(),
+  adminRequest: vi.fn(),
 }));
 
-import { authRequest } from "../_core.js";
+import { adminRequest, authRequest } from "../_core.js";
 import * as operatorApi from "../operator.js";
 import * as legacyApi from "../legacy.js";
 import * as platformApi from "../platform.js";
@@ -26,17 +27,17 @@ describe("client API ownership boundaries", () => {
     operatorApi.getSchedulerStatus();
     operatorApi.getObservabilityDashboard(12);
 
-    expect(authRequest).toHaveBeenNthCalledWith(
+    expect(adminRequest).toHaveBeenNthCalledWith(
       1,
       "/flows/runs?status=waiting&workflow_type=agent&limit=10",
       { method: "GET" },
     );
-    expect(authRequest).toHaveBeenNthCalledWith(
+    expect(adminRequest).toHaveBeenNthCalledWith(
       2,
       "/automation/scheduler/status",
       { method: "GET" },
     );
-    expect(authRequest).toHaveBeenNthCalledWith(
+    expect(adminRequest).toHaveBeenNthCalledWith(
       3,
       "/observability/dashboard?window_hours=12",
       { method: "GET" },

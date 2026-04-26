@@ -18,6 +18,8 @@ from sqlalchemy import create_engine
 from contextlib import asynccontextmanager
 
 from AINDY.platform_layer import scheduler_service
+from AINDY.platform_layer import registry
+from AINDY.platform_layer.bootstrap_contract import validate_bootstrap_manifest
 from AINDY.platform_layer.deployment_contract import (
     background_tasks_enabled,
     event_bus_required,
@@ -50,8 +52,9 @@ from AINDY.routes import (
 )
 from AINDY.config import settings
 from AINDY.core.distributed_queue import QueueSaturatedError, validate_queue_backend
-from AINDY.core.observability_events import emit_recovery_failure
+from AINDY.core.observability_events import emit_observability_event, emit_recovery_failure
 from AINDY.kernel.circuit_breaker import CircuitOpenError
+from AINDY.kernel.errors import BootstrapDependencyError
 from AINDY.platform_layer.health_service import check_redis_available
 from AINDY.platform_layer.trace_context import (
     _trace_id_ctx,
@@ -65,9 +68,6 @@ from AINDY.platform_layer.trace_context import (
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
-
-from apps._bootstrap_validator import BootstrapDependencyError, validate_bootstrap_deps
-
 
 def _import_installed_alembic():
     """
@@ -106,17 +106,17 @@ Config, ScriptDirectory, MigrationContext = _import_installed_alembic()
 
 logger = logging.getLogger("AINDY.main")
 _OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
-try:
-    validate_bootstrap_deps(os.path.join(ROOT_DIR, "apps"))
-except BootstrapDependencyError as exc:
-    logger.critical("Bootstrap dependency validation failed:\n%s", exc)
-    raise RuntimeError(str(exc)) from exc
+_pool_was_near_exhaustion: bool = False
 
 try:
     _resolved_boot_order = get_plugin_boot_order()
     if _resolved_boot_order:
         logger.info("Boot order resolved: %s", " -> ".join(_resolved_boot_order))
     load_plugins()
+    validate_bootstrap_manifest(registry)
+except BootstrapDependencyError as exc:
+    logger.critical("Bootstrap dependency validation failed:\n%s", exc)
+    raise RuntimeError(str(exc)) from exc
 except RuntimeError:
     raise
 except Exception as exc:
@@ -480,15 +480,66 @@ def _update_db_pool_metrics() -> None:
     try:
         from AINDY.db.database import get_pool_status
         from AINDY.platform_layer.metrics import (
+            db_pool_exhaustion_events_total,
             db_pool_checkedout,
             db_pool_overflow,
+            db_pool_pressure,
             db_pool_size,
         )
 
+        global _pool_was_near_exhaustion
+
         status = get_pool_status()
-        db_pool_size.set(status.get("pool_size", 0))
-        db_pool_checkedout.set(status.get("checkedout", 0))
-        db_pool_overflow.set(status.get("overflow", 0))
+        pool_size = status.get("pool_size", 0)
+        checkedout = status.get("checkedout", 0)
+        overflow = status.get("overflow", 0)
+        db_pool_size.set(pool_size)
+        db_pool_checkedout.set(checkedout)
+        db_pool_overflow.set(overflow)
+
+        capacity = settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW
+        pressure = checkedout / capacity if capacity > 0 else 0.0
+        db_pool_pressure.set(pressure)
+
+        threshold = 0.8
+        near_exhaustion = pressure >= threshold
+        if near_exhaustion and not _pool_was_near_exhaustion:
+            db_pool_exhaustion_events_total.inc()
+            logger.warning(
+                "DB pool near exhaustion: checkedout=%s pool_size=%s overflow=%s pressure=%.3f threshold=%.1f",
+                checkedout,
+                pool_size,
+                overflow,
+                pressure,
+                threshold,
+            )
+            emit_observability_event(
+                event_type="db_pool_near_exhaustion",
+                payload={
+                    "checkedout": checkedout,
+                    "pool_size": pool_size,
+                    "overflow": overflow,
+                    "pressure": round(pressure, 3),
+                    "threshold": threshold,
+                },
+            )
+            try:
+                from AINDY.db.database import SessionLocal as _SL
+                from AINDY.core.system_event_service import emit_system_event as _emit
+
+                _db = _SL()
+                try:
+                    _emit(
+                        db=_db,
+                        event_type="platform.db_pool.near_exhaustion",
+                        payload={"checkedout": checkedout, "pressure": round(pressure, 3)},
+                        required=False,
+                    )
+                finally:
+                    _db.close()
+            except Exception as _exc:
+                logger.debug("db_pool_exhaustion event emit failed (non-fatal): %s", _exc)
+        _pool_was_near_exhaustion = near_exhaustion
     except Exception as exc:
         logger.warning("DB pool metrics scrape failed (non-fatal): %s", exc)
 
@@ -683,6 +734,13 @@ async def lifespan(app: FastAPI):
         and settings.EXECUTION_MODE == "distributed"
     ):
         _check_worker_presence(logger)
+    try:
+        from AINDY.kernel.resource_manager import get_resource_manager as _get_rm
+        from AINDY.platform_layer.metrics import quota_redis_mode as _quota_mode
+
+        _quota_mode.set(1 if _get_rm().is_redis_mode() else 0)
+    except Exception as exc:
+        logger.debug("quota_redis_mode gauge init failed (non-fatal): %s", exc)
     _log_async_job_capacity_advisory()
 
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}

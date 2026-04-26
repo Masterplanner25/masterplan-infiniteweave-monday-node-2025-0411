@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict
 
 from sqlalchemy.orm import Session
+
+from apps.analytics.public import list_score_snapshots
 
 DEFAULT_VELOCITY_TREND = 0.35
 DEFAULT_NARRATIVE_TREND = 1.0
@@ -14,7 +16,7 @@ LEARNING_LOOKBACK = 20
 SPIKE_DELTA = 5.0
 
 
-def get_learning_thresholds(db: Session) -> LearningThresholdDB:
+def get_learning_thresholds(db: Session):
     from AINDY.db.models.learning import LearningThresholdDB
 
     record = db.query(LearningThresholdDB).first()
@@ -26,7 +28,6 @@ def get_learning_thresholds(db: Session) -> LearningThresholdDB:
         narrative_trend=DEFAULT_NARRATIVE_TREND,
         early_velocity_rate=DEFAULT_EARLY_VELOCITY_RATE,
         early_narrative_ceiling=DEFAULT_EARLY_NARRATIVE_CEILING,
-        # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
         last_updated=datetime.now(timezone.utc),
     )
     db.add(record)
@@ -48,7 +49,6 @@ def record_prediction(
         id=str(uuid.uuid4()),
         drop_point_id=drop_point_id,
         prediction=prediction,
-        # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
         predicted_at=datetime.now(timezone.utc),
         velocity_at_prediction=velocity_at_prediction,
         narrative_at_prediction=narrative_at_prediction,
@@ -60,7 +60,6 @@ def record_prediction(
 
 
 def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
-    from apps.analytics.models import ScoreSnapshotDB
     from AINDY.db.models.learning import LearningRecordDB
 
     record = (
@@ -75,19 +74,18 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
     if not record:
         return {"status": "no_prediction"}
 
-    future_snapshots = (
-        db.query(ScoreSnapshotDB)
-        .filter(ScoreSnapshotDB.drop_point_id == drop_point_id)
-        .filter(ScoreSnapshotDB.timestamp > record.predicted_at)
-        .order_by(ScoreSnapshotDB.timestamp.asc())
-        .all()
+    future_snapshots = list_score_snapshots(
+        drop_point_id,
+        db,
+        ascending=True,
+        after_timestamp=record.predicted_at,
     )
     if not future_snapshots:
         return {"status": "no_future_data"}
 
     latest = future_snapshots[-1]
-    delta = (latest.narrative_score or 0.0) - record.narrative_at_prediction
-    velocity_delta = (latest.velocity_score or 0.0) - record.velocity_at_prediction
+    delta = float(latest.get("narrative_score") or 0.0) - record.narrative_at_prediction
+    velocity_delta = float(latest.get("velocity_score") or 0.0) - record.velocity_at_prediction
 
     if delta > SPIKE_DELTA:
         actual = "spiked"
@@ -97,7 +95,6 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
         actual = "stable"
 
     record.actual_outcome = actual
-    # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
     record.evaluated_at = datetime.now(timezone.utc)
     record.was_correct = record.prediction == actual
     db.commit()
@@ -146,7 +143,6 @@ def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
         threshold.velocity_trend = max(0.05, threshold.velocity_trend - 0.05)
         threshold.narrative_trend = max(0.5, threshold.narrative_trend - 0.5)
 
-    # Learning threshold/prediction timestamps still use legacy naive DateTime columns in the ORM.
     threshold.last_updated = datetime.now(timezone.utc)
     db.commit()
     db.refresh(threshold)
@@ -182,4 +178,3 @@ def learning_stats(db: Session) -> Dict:
         "false_positive_rate": round(false_pos / len(evaluated), 3) if evaluated else 0.0,
         "false_negative_rate": round(false_neg / len(evaluated), 3) if evaluated else 0.0,
     }
-

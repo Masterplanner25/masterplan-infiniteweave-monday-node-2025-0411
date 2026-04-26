@@ -13,11 +13,10 @@ def get_user_scores(db: Session, user_ids: list[str | UUID]) -> dict[str, float]
     Accepts mixed str / UUID inputs and normalises them before querying.
     Returns an empty dict when user_ids is empty.
     """
-    from apps.analytics.models import UserScore
+    from apps.analytics.public import get_user_scores as get_analytics_user_scores
 
     if not user_ids:
         return {}
 
-    uuid_ids = [UUID(str(uid)) for uid in user_ids]
-    rows = db.query(UserScore).filter(UserScore.user_id.in_(uuid_ids)).all()
-    return {str(row.user_id): row.master_score for row in rows}
+    rows = get_analytics_user_scores(db=db, user_ids=[str(uid) for uid in user_ids])
+    return {user_id: float(row.get("master_score") or 0.0) for user_id, row in rows.items()}

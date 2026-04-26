@@ -67,4 +67,18 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Platform Page")).not.toBeInTheDocument();
   });
+
+  it("renders AdminAccessRequired when AgentConsole is reached with isAdmin=false", async () => {
+    vi.doMock("../context/AuthContext", () => ({
+      useAuth: () => ({ isAuthenticated: true, isAdmin: false }),
+    }));
+    vi.doMock("../context/SystemContext", () => ({
+      useSystem: () => ({ system: {} }),
+    }));
+
+    const { default: AgentConsole } = await import("../components/platform/AgentConsole.jsx");
+    render(<AgentConsole />);
+
+    expect(screen.getByText("Admin Access Required")).toBeInTheDocument();
+  });
 });

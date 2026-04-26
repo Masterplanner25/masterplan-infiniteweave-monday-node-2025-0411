@@ -1,129 +1,111 @@
 import { authRequest } from "./_core.js";
+import { ROUTES } from "./_routes.js";
 
 export function getRippleDropPoints() {
-  return authRequest("/rippletrace/drop_points", { method: "GET" });
+  return authRequest(ROUTES.RIPPLETRACE.DROP_POINTS, { method: "GET" });
 }
 
 export function getRipplePings() {
-  return authRequest("/rippletrace/pings", { method: "GET" });
+  return authRequest(ROUTES.RIPPLETRACE.PINGS, { method: "GET" });
 }
 
 export function getRecentRippleEvents(limit = 20) {
-  return authRequest(`/rippletrace/recent?limit=${limit}`, { method: "GET" });
+  return authRequest(`${ROUTES.RIPPLETRACE.RECENT}?limit=${limit}`, { method: "GET" });
 }
 
 export function getRippleTrace(dropPointId) {
-  return authRequest(`/rippletrace/ripples/${dropPointId}`, { method: "GET" });
+  return authRequest(ROUTES.RIPPLETRACE.TRACE(dropPointId), { method: "GET" });
 }
 
 export function getRippleTraceGraph(traceId) {
-  return authRequest(`/rippletrace/${encodeURIComponent(traceId)}`, { method: "GET" });
+  return authRequest(ROUTES.RIPPLETRACE.TRACE_GRAPH(traceId), { method: "GET" });
 }
 
 export function getCausalGraph() {
-  return authRequest("/rippletrace/causal/graph");
+  return authRequest(ROUTES.RIPPLETRACE.CAUSAL_GRAPH);
 }
 
 export function getCausalChain(dropPointId, depth = 3) {
-  return authRequest(
-    `/rippletrace/causal/chain/${encodeURIComponent(dropPointId)}?depth=${depth}`
-  );
+  return authRequest(`${ROUTES.RIPPLETRACE.CAUSAL_CHAIN(dropPointId)}?depth=${depth}`);
 }
 
 export function getNarrativeSummary(limit = 3) {
-  return authRequest(`/rippletrace/narrative/summary?limit=${limit}`);
+  return authRequest(`${ROUTES.RIPPLETRACE.NARRATIVE_SUMMARY}?limit=${limit}`);
 }
 
 export function getDropPointNarrative(dropPointId) {
-  return authRequest(
-    `/rippletrace/narrative/${encodeURIComponent(dropPointId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.DROP_POINT_NARRATIVE(dropPointId));
 }
 
 export function getPredictionsSummary(limit = 50) {
-  return authRequest(`/rippletrace/predictions/summary?limit=${limit}`);
+  return authRequest(`${ROUTES.RIPPLETRACE.PREDICTIONS_SUMMARY}?limit=${limit}`);
 }
 
 export function getDropPointPrediction(dropPointId, recordLearning = true) {
   return authRequest(
-    `/rippletrace/predictions/${encodeURIComponent(dropPointId)}` +
+    ROUTES.RIPPLETRACE.DROP_POINT_PREDICTION(dropPointId) +
       `?record_learning=${recordLearning}`
   );
 }
 
 export function getSystemRecommendations(limit = 20) {
-  return authRequest(`/rippletrace/recommendations/system?limit=${limit}`);
+  return authRequest(`${ROUTES.RIPPLETRACE.SYSTEM_RECOMMENDATIONS}?limit=${limit}`);
 }
 
 export function getRecommendationsSummary(limit = 20) {
-  return authRequest(`/rippletrace/recommendations/summary?limit=${limit}`);
+  return authRequest(`${ROUTES.RIPPLETRACE.RECOMMENDATIONS_SUMMARY}?limit=${limit}`);
 }
 
 export function getDropPointRecommendation(dropPointId) {
-  return authRequest(
-    `/rippletrace/recommendations/${encodeURIComponent(dropPointId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.DROP_POINT_RECOMMENDATION(dropPointId));
 }
 
 export function getLearningStats() {
-  return authRequest("/rippletrace/learning/stats");
+  return authRequest(ROUTES.RIPPLETRACE.LEARNING_STATS);
 }
 
 export function evaluateLearningOutcome(dropPointId) {
-  return authRequest(
-    `/rippletrace/learning/evaluate/${encodeURIComponent(dropPointId)}`,
-    { method: "POST" }
-  );
+  return authRequest(ROUTES.RIPPLETRACE.EVALUATE_LEARNING_OUTCOME(dropPointId), {
+    method: "POST",
+  });
 }
 
 export function adjustLearningThresholds() {
-  return authRequest("/rippletrace/learning/adjust", { method: "POST" });
+  return authRequest(ROUTES.RIPPLETRACE.ADJUST_LEARNING_THRESHOLDS, { method: "POST" });
 }
 
 export function getPlaybooks() {
-  return authRequest("/rippletrace/playbooks");
+  return authRequest(ROUTES.RIPPLETRACE.PLAYBOOKS);
 }
 
 export function getPlaybook(playbookId) {
-  return authRequest(
-    `/rippletrace/playbooks/${encodeURIComponent(playbookId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.PLAYBOOK(playbookId));
 }
 
 export function matchPlaybooks(dropPointId) {
-  return authRequest(
-    `/rippletrace/playbooks/match/${encodeURIComponent(dropPointId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.MATCH_PLAYBOOKS(dropPointId));
 }
 
 export function getStrategies() {
-  return authRequest("/rippletrace/strategies");
+  return authRequest(ROUTES.RIPPLETRACE.STRATEGIES);
 }
 
 export function buildStrategies() {
-  return authRequest("/rippletrace/strategies/build");
+  return authRequest(ROUTES.RIPPLETRACE.BUILD_STRATEGIES);
 }
 
 export function getStrategy(strategyId) {
-  return authRequest(
-    `/rippletrace/strategies/${encodeURIComponent(strategyId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.STRATEGY(strategyId));
 }
 
 export function matchStrategies(dropPointId) {
-  return authRequest(
-    `/rippletrace/strategies/match/${encodeURIComponent(dropPointId)}`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.MATCH_STRATEGIES(dropPointId));
 }
 
 export function getEventDownstream(eventId) {
-  return authRequest(
-    `/rippletrace/event/${encodeURIComponent(eventId)}/downstream`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.EVENT_DOWNSTREAM(eventId));
 }
 
 export function getEventUpstream(eventId) {
-  return authRequest(
-    `/rippletrace/event/${encodeURIComponent(eventId)}/upstream`
-  );
+  return authRequest(ROUTES.RIPPLETRACE.EVENT_UPSTREAM(eventId));
 }

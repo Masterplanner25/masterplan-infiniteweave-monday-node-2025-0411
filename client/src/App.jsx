@@ -2,7 +2,10 @@ import { lazy, useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/shared/ui/tooltip";
 
-import { checkApiCompatibility } from "./api/version";
+import {
+  checkApiCompatibility,
+  isAdvisoryVersionMismatch,
+} from "./api/version";
 import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import AppShell from "./components/shared/AppShell";
 import KPIDashboard from "./components/shared/KPIDashboard";
@@ -94,24 +97,91 @@ function BootGate() {
 
 export default function App() {
   const [versionStatus, setVersionStatus] = useState(null);
+  const [versionDismissed, setVersionDismissed] = useState(false);
   const routeElement = (name, element) => (
     <RouteErrorBoundary name={name}>
       {element}
     </RouteErrorBoundary>
   );
-  const versionCheckBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-  const showVersionMismatch = !import.meta.env.DEV && versionStatus?.status === "major_mismatch";
+
+  const getClientVersionStr = () =>
+    globalThis.__AINDY_APP_VERSION_OVERRIDE__ || __APP_VERSION__;
+
+  const handleVersionStatus = (newStatus) => {
+    setVersionStatus((currentStatus) => {
+      const currentKey = currentStatus
+        ? `${currentStatus.status}:${currentStatus.apiVersion || ""}:${currentStatus.clientVersion || ""}`
+        : "";
+      const nextKey = newStatus
+        ? `${newStatus.status}:${newStatus.apiVersion || ""}:${newStatus.clientVersion || ""}`
+        : "";
+
+      if (
+        newStatus?.status === "major_mismatch" ||
+        newStatus?.status === "minor_mismatch" ||
+        (nextKey && nextKey !== currentKey)
+      ) {
+        setVersionDismissed(false);
+      }
+      return newStatus;
+    });
+  };
 
   useEffect(() => {
-    checkApiCompatibility(versionCheckBaseUrl).then(setVersionStatus);
-  }, [versionCheckBaseUrl]);
+    const versionCheckBaseUrl =
+      import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+    const check = () => {
+      checkApiCompatibility(versionCheckBaseUrl).then(handleVersionStatus);
+    };
+
+    check();
+
+    const handleFocus = () => check();
+    window.addEventListener("focus", handleFocus);
+
+    const interval = setInterval(check, 10 * 60 * 1000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleApiWarning = () => {
+      if (!versionStatus || versionStatus.status === "compatible") {
+        handleVersionStatus({
+          status: "minor_mismatch",
+          apiVersion: "?",
+          clientVersion: getClientVersionStr(),
+        });
+      }
+    };
+
+    window.addEventListener("aindy:version-warning", handleApiWarning);
+    return () => window.removeEventListener("aindy:version-warning", handleApiWarning);
+  }, [versionStatus]);
+
+  const showBanner =
+    !import.meta.env.DEV &&
+    versionStatus &&
+    versionStatus.status !== "compatible" &&
+    versionStatus.status !== "unreachable" &&
+    !versionDismissed;
 
   return (
     <>
-      {showVersionMismatch ? (
+      {showBanner ? (
         <VersionMismatchBanner
+          status={versionStatus.status}
           apiVersion={versionStatus.apiVersion}
           clientVersion={versionStatus.clientVersion}
+          onDismiss={
+            isAdvisoryVersionMismatch(versionStatus.status)
+              ? () => setVersionDismissed(true)
+              : undefined
+          }
         />
       ) : null}
       <TooltipProvider>

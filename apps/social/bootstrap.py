@@ -1,6 +1,8 @@
 """Social domain bootstrap."""
 from __future__ import annotations
 
+import os
+
 BOOTSTRAP_DEPENDS_ON: list[str] = []
 APP_DEPENDS_ON: list[str] = ["analytics"]
 
@@ -23,9 +25,28 @@ def _register_response_adapters() -> None:
     register_response_adapter("social", legacy_envelope_adapter)
 
 
+def social_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+    from sqlalchemy import text
+
+    linkedin_client_id = os.getenv("LINKEDIN_CLIENT_ID")
+    linkedin_client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+    if not linkedin_client_id or not linkedin_client_secret:
+        raise RuntimeError("LinkedIn credentials not configured")
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        return True
+    finally:
+        db.close()
+
+
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("social", social_health_check)
     register_health_check("social", _check_health)
 
 

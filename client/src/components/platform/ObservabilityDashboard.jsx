@@ -11,7 +11,9 @@ import {
   YAxis } from "recharts";
 
 import { getObservabilityDashboard } from "../../api/operator.js";
+import { useAuth } from "../../context/AuthContext";
 import { useSystem } from "../../context/SystemContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import {
   ActionButton,
   EmptyState,
@@ -117,6 +119,8 @@ function buildBootDashboard(system) {
 }
 
 export default function ObservabilityDashboard() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const { system } = useSystem();
   const [data, setData] = useState(() => buildBootDashboard(system));
   const [loading, setLoading] = useState(true);

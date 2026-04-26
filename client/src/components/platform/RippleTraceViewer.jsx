@@ -12,6 +12,8 @@ import {
   formatDateTime,
   surfacePalette,
 } from "./SurfacePrimitives";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import {
   getCausalChain,
   getDropPointNarrative,
@@ -158,6 +160,8 @@ function TraceGraph({ nodes, edges, selectedNodeId, onSelectNode }) {
 }
 
 export default function RippleTraceViewer() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const [traceId, setTraceId] = useState("");
   const [submittedTraceId, setSubmittedTraceId] = useState("");
   const [data, setData] = useState(null);

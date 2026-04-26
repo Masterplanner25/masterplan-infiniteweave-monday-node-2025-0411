@@ -12,7 +12,9 @@ import {
   fetchRunEvents,
 } from "../../api/agent.js";
 import { postScoreFeedback } from "../../api/analytics.js";
+import { useAuth } from "../../context/AuthContext";
 import { useSystem } from "../../context/SystemContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import { LoadingPanel } from "../shared/LoadingPanel";
 import { EmptyState } from "../shared/EmptyState";
 import { Toast } from "../shared/Toast";
@@ -449,6 +451,8 @@ function eventTypeColor(eventType) {
 // ── Main AgentConsole ─────────────────────────────────────────────────────────
 
 export default function AgentConsole() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const { system } = useSystem();
   const [goal, setGoal] = useState("");
   const [submitting, setSubmitting] = useState(false);

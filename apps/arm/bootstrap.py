@@ -4,13 +4,15 @@ from __future__ import annotations
 import logging
 from threading import Lock
 
+from sqlalchemy import text
+
 logger = logging.getLogger(__name__)
 
 _ANALYZER = None
 _ANALYZER_LOCK = Lock()
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "analytics"]
+APP_DEPENDS_ON: list[str] = ["analytics"]
 
 
 def register() -> None:
@@ -176,9 +178,28 @@ def _job_arm_generate(payload: dict, db):
 
 
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("arm", arm_health_check)
     register_health_check("arm", _check_health)
+
+
+def arm_health_check() -> bool:
+    from AINDY.config import settings
+    from AINDY.db.database import SessionLocal
+    from apps.arm.models import ArmConfig
+
+    if not (settings.OPENAI_API_KEY or settings.DEEPSEEK_API_KEY):
+        return False
+
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        db.query(ArmConfig.id).limit(1).all()
+        return True
+    finally:
+        db.close()
 
 
 def _check_health() -> dict:

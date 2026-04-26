@@ -5,6 +5,8 @@ import {
   recallFromAgent,
   getFederatedMemory,
 } from "../../api/agent.js";
+import { useAuth } from "../../context/AuthContext";
+import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 
 // ── Constants ───────────────────────────────────────────────────────────────
 import { safeMap } from "../../utils/safe";
@@ -439,6 +441,8 @@ function FederatedSearchPanel({ agents }) {
 // ── Main Component ──────────────────────────────────────────────────────────
 
 export default function AgentRegistry() {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return <AdminAccessRequired />;
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

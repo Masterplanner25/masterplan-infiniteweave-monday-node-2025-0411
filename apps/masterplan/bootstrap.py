@@ -8,7 +8,7 @@ from uuid import UUID
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["agent", "automation", "identity", "tasks"]
+APP_DEPENDS_ON: list[str] = ["automation", "identity", "tasks"]
 
 
 def register() -> None:
@@ -316,9 +316,38 @@ def _scheduler_recalculate_all_etas() -> None:
         db.close()
 
 
+def masterplan_health_check() -> bool:
+    from AINDY.db.database import SessionLocal
+
+    try:
+        from AINDY.kernel.circuit_breaker import CircuitState, get_openai_circuit_breaker
+    except Exception as exc:
+        raise RuntimeError(f"masterplan health import failed: {exc}") from exc
+
+    cb = get_openai_circuit_breaker()
+    if cb.state == CircuitState.OPEN:
+        raise RuntimeError(
+            f"OpenAI circuit breaker is open - Genesis AI unavailable. Opened at: {cb.opened_at}"
+        )
+
+    try:
+        from apps.masterplan.models import MasterPlan
+    except Exception as exc:
+        raise RuntimeError(f"masterplan model import failed: {exc}") from exc
+
+    db = SessionLocal()
+    try:
+        db.query(MasterPlan.id).limit(1).all()
+        return True
+    finally:
+        db.close()
+
+
 def _register_health_check() -> None:
+    from AINDY.platform_layer.domain_health import domain_health_registry
     from AINDY.platform_layer.registry import register_health_check
 
+    domain_health_registry.register("masterplan", masterplan_health_check)
     register_health_check("masterplan", _check_health)
 
 

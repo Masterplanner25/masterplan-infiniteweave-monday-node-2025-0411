@@ -115,9 +115,11 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
     # Observe for identity inference (non-blocking)
     if user_id:
         try:
-            from apps.identity.services.identity_service import IdentityService
-            id_service = IdentityService(db=db, user_id=user_id)
-            id_service.observe(
+            from apps.identity.public import observe_identity_event
+
+            observe_identity_event(
+                user_id=user_id,
+                db=db,
                 event_type="masterplan_locked",
                 context={"posture": masterplan.posture},
             )

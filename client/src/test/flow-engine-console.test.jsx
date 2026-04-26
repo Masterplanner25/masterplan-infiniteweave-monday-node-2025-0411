@@ -34,6 +34,23 @@ vi.mock("../api/operator.js", () => ({
   reportClientError: mockReportClientError,
 }));
 
+vi.mock("../context/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    useAuth: () => ({
+      token: null,
+      user: { is_admin: true },
+      isAdmin: true,
+      isAuthenticated: true,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+    }),
+  };
+});
+
 import FlowEngineConsole from "../components/platform/FlowEngineConsole";
 import { RouteErrorBoundary } from "../components/shared/ErrorBoundary";
 

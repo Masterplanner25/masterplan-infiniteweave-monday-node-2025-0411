@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import case, select
+from sqlalchemy import case
 
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 from AINDY.platform_layer.registry import get_symbol
@@ -12,18 +12,39 @@ from AINDY.platform_layer.user_ids import parse_user_id, require_user_id
 from .tasks_bridge import get_task_graph_context_via_syscall
 
 
-def fetch_recent_memory(user_id: str, db, *, context: str = "infinity_loop") -> list[dict]:
-    # TODO: replace identity_boot_service imports with an identity-owned syscall when that ABI is defined.
-    from apps.identity.services.identity_boot_service import get_recent_memory
+class RecordDict(dict):
+    """Dict wrapper that preserves legacy attribute-style access for analytics internals."""
 
-    return list(get_recent_memory(user_id, db, context=context) or [])
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self[name] = value
+
+
+def _wrap_record(row: dict[str, Any] | None):
+    if row is None:
+        return None
+    return RecordDict(row)
+
+
+def _wrap_records(rows: list[dict[str, Any]] | None) -> list[RecordDict]:
+    return [_wrap_record(row) for row in (rows or []) if row is not None]
+
+
+def fetch_recent_memory(user_id: str, db, *, context: str = "infinity_loop") -> list[dict]:
+    from apps.identity.public import get_recent_memory as _get_recent_memory
+
+    return list(_get_recent_memory(user_id, db, context=context) or [])
 
 
 def fetch_user_metrics(user_id: str, db) -> dict[str, Any]:
-    # TODO: replace identity_boot_service imports with an identity-owned syscall when that ABI is defined.
-    from apps.identity.services.identity_boot_service import get_user_metrics
+    from apps.identity.public import get_user_metrics as _get_user_metrics
 
-    return dict(get_user_metrics(user_id, db) or {})
+    return dict(_get_user_metrics(user_id, db) or {})
 
 
 def fetch_task_graph_context(db, user_id: str) -> dict[str, Any]:
@@ -57,90 +78,62 @@ def fetch_system_state(db) -> dict[str, Any]:
     return dict(compute_current_state(db) or {})
 
 
-def get_loop_adjustment_model():
-    from apps.automation.public import LoopAdjustment
-
-    return LoopAdjustment
-
-
-def get_user_feedback_model():
-    from apps.automation.public import UserFeedback
-
-    return UserFeedback
-
-
 def get_latest_loop_adjustment(*, user_id: str, db):
-    LoopAdjustment = get_loop_adjustment_model()
     owner_user_id = parse_user_id(user_id)
     if owner_user_id is None:
         return None
-    return (
-        db.query(LoopAdjustment)
-        .filter(LoopAdjustment.user_id == owner_user_id)
-        .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
-        .first()
-    )
+
+    from apps.automation.public import get_loop_adjustments
+
+    rows = get_loop_adjustments(owner_user_id, db, limit=1)
+    return _wrap_record(rows[0] if rows else None)
 
 
 def list_strategy_accuracy_adjustments(*, user_id: str, db, limit: int = 20) -> list[Any]:
-    LoopAdjustment = get_loop_adjustment_model()
     owner_user_id = parse_user_id(user_id)
     if owner_user_id is None:
         return []
-    return (
-        db.query(LoopAdjustment)
-        .filter(
-            LoopAdjustment.user_id == owner_user_id,
-            LoopAdjustment.prediction_accuracy.isnot(None),
+
+    from apps.automation.public import get_loop_adjustments
+
+    return _wrap_records(
+        get_loop_adjustments(
+            owner_user_id,
+            db,
+            limit=limit,
+            with_prediction_accuracy=True,
+            order_by="evaluated_desc",
         )
-        .order_by(LoopAdjustment.evaluated_at.desc(), LoopAdjustment.created_at.desc())
-        .limit(limit)
-        .all()
+        or []
     )
 
 
 def get_pending_loop_adjustment(*, user_id: str, db, managed_transactions: bool):
-    LoopAdjustment = get_loop_adjustment_model()
     owner_user_id = parse_user_id(user_id)
     if owner_user_id is None:
         return None
-    if managed_transactions:
-        return (
-            db.execute(
-                select(LoopAdjustment)
-                .where(
-                    LoopAdjustment.user_id == owner_user_id,
-                    LoopAdjustment.evaluated_at.is_(None),
-                )
-                .order_by(LoopAdjustment.created_at.desc())
-                .with_for_update()
-            )
-            .scalars()
-            .first()
-        )
-    return (
-        db.query(LoopAdjustment)
-        .filter(
-            LoopAdjustment.user_id == owner_user_id,
-            LoopAdjustment.evaluated_at.is_(None),
-        )
-        .order_by(LoopAdjustment.created_at.desc())
-        .first()
+
+    from apps.automation.public import get_loop_adjustments
+
+    rows = get_loop_adjustments(
+        owner_user_id,
+        db,
+        limit=1,
+        unevaluated_only=True,
+        order_by="created_desc",
+        for_update=managed_transactions,
     )
+    return _wrap_record(rows[0] if rows else None)
 
 
 def list_recent_feedback_rows(*, user_id: str, db, limit: int = 5) -> list[Any]:
-    UserFeedback = get_user_feedback_model()
     owner_user_id = parse_user_id(user_id)
     if owner_user_id is None:
         return []
-    return (
-        db.query(UserFeedback)
-        .filter(UserFeedback.user_id == owner_user_id)
-        .order_by(UserFeedback.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+
+    from apps.automation.public import get_user_feedback
+
+    return _wrap_records(get_user_feedback(owner_user_id, db, limit=limit) or [])
 
 
 def fetch_next_ready_task(*, db, user_id: str) -> dict[str, Any] | None:
@@ -186,20 +179,25 @@ def list_incomplete_tasks(*, user_id: str, db, limit: int | None = None) -> list
     return list(query.all())
 
 
-def create_loop_adjustment(**kwargs):
-    LoopAdjustment = get_loop_adjustment_model()
-    return LoopAdjustment(**kwargs)
+def create_loop_adjustment(*, db, **kwargs):
+    from apps.automation.public import create_loop_adjustment as _create_loop_adjustment
+
+    return _wrap_record(dict(_create_loop_adjustment(db=db, **kwargs) or {}))
 
 
 def get_latest_loop_adjustment_for_update(*, persisted_user_id, db):
-    LoopAdjustment = get_loop_adjustment_model()
-    return (
-        db.execute(
-            select(LoopAdjustment)
-            .where(LoopAdjustment.user_id == persisted_user_id)
-            .order_by(LoopAdjustment.applied_at.desc(), LoopAdjustment.created_at.desc())
-            .with_for_update()
-        )
-        .scalars()
-        .first()
+    from apps.automation.public import get_loop_adjustments
+
+    rows = get_loop_adjustments(
+        persisted_user_id,
+        db,
+        limit=1,
+        for_update=True,
     )
+    return _wrap_record(rows[0] if rows else None)
+
+
+def update_loop_adjustment(*, adjustment_id, db, **kwargs):
+    from apps.automation.public import update_loop_adjustment as _update_loop_adjustment
+
+    return _wrap_record(_update_loop_adjustment(adjustment_id=adjustment_id, db=db, **kwargs))
