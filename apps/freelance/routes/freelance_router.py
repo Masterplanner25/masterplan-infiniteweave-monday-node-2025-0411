@@ -10,7 +10,7 @@ from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from apps.search.routes._route_helpers import (
+from apps.search.public import (
     _ai_provider_unavailable_response,
     _extract_flow_error,
     _is_circuit_open_detail,

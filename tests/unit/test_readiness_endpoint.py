@@ -134,6 +134,7 @@ def test_get_readiness_report_allows_peripheral_domain_degradation(monkeypatch):
 def test_ready_and_readiness_routes_return_same_shape(monkeypatch):
     from AINDY.main import app
     from AINDY.platform_layer import health_service
+    from AINDY.platform_layer import platform_loader
 
     payload = {
         "status": "ready",
@@ -145,6 +146,16 @@ def test_ready_and_readiness_routes_return_same_shape(monkeypatch):
         "get_readiness_report",
         lambda: (200, payload),
     )
+    monkeypatch.setattr(
+        platform_loader,
+        "get_last_restore_result",
+        lambda: {
+            "flows": {"db_count": 1, "registry_count": 1, "ok": True},
+            "nodes": {"db_count": 1, "registry_count": 1, "ok": True},
+            "webhooks": {"db_count": 1, "registry_count": 1, "ok": True},
+            "all_ok": True,
+        },
+    )
 
     client = TestClient(app)
     ready = client.get("/ready")
@@ -155,3 +166,74 @@ def test_ready_and_readiness_routes_return_same_shape(monkeypatch):
     assert ready.json()["status"] == "ready"
     assert readiness.json()["status"] == "ready"
     assert ready.json().keys() == readiness.json().keys()
+
+
+def test_ready_probe_returns_503_when_restore_incomplete(monkeypatch):
+    from AINDY.main import app
+    from AINDY.platform_layer import platform_loader
+
+    monkeypatch.setattr(
+        platform_loader,
+        "get_last_restore_result",
+        lambda: {
+            "flows": {"db_count": 3, "registry_count": 2, "ok": False},
+            "nodes": {"db_count": 1, "registry_count": 1, "ok": True},
+            "webhooks": {"db_count": 1, "registry_count": 1, "ok": True},
+            "all_ok": False,
+        },
+    )
+
+    client = TestClient(app)
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
+    assert response.json()["reason"] == "registry_restore_incomplete"
+    assert response.json()["detail"]["all_ok"] is False
+
+
+def test_ready_probe_returns_503_when_restore_not_run(monkeypatch):
+    from AINDY.main import app
+    from AINDY.platform_layer import platform_loader
+
+    monkeypatch.setattr(platform_loader, "get_last_restore_result", lambda: None)
+
+    client = TestClient(app)
+    response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready", "reason": "restore_pending"}
+
+
+def test_ready_probe_returns_200_when_restore_complete(monkeypatch):
+    from AINDY.main import app
+    from AINDY.platform_layer import health_service, platform_loader
+
+    monkeypatch.setattr(
+        platform_loader,
+        "get_last_restore_result",
+        lambda: {
+            "flows": {"db_count": 1, "registry_count": 1, "ok": True},
+            "nodes": {"db_count": 1, "registry_count": 1, "ok": True},
+            "webhooks": {"db_count": 1, "registry_count": 1, "ok": True},
+            "all_ok": True,
+        },
+    )
+    monkeypatch.setattr(
+        health_service,
+        "get_readiness_report",
+        lambda: (
+            200,
+            {
+                "status": "ready",
+                "checks": {"startup_complete": True},
+                "required_failures": [],
+            },
+        ),
+    )
+
+    client = TestClient(app)
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"

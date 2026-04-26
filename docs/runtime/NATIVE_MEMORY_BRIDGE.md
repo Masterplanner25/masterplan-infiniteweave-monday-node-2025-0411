@@ -1,3 +1,10 @@
+---
+title: "Native Memory Bridge"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Native Memory Bridge
 
 The native memory bridge is an optional C++/Rust/Python extension that accelerates memory scoring and semantic similarity computation. It is used by the memory retrieval pipeline when `USE_NATIVE_SCORER=true` (the default in `AINDY/config.py`) and the native module can be imported.

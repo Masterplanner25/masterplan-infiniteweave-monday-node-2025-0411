@@ -87,7 +87,7 @@ def adapt_policy_thresholds(db: Session, user_id) -> dict:
     from AINDY.platform_layer.user_ids import parse_user_id
     from ..orchestration.infinity_loop import EXPECTED_SCORE_OFFSETS
     from apps.analytics.user_score import ScoreHistory
-    from apps.automation.infinity_loop import LoopAdjustment
+    from apps.automation.public import LoopAdjustment
 
     try:
         uid = parse_user_id(user_id)

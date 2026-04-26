@@ -1,3 +1,10 @@
+---
+title: "Implementation Docs — Utility Parity Audit"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Implementation Docs — Utility Parity Audit
 
 ---

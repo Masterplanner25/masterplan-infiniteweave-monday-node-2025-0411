@@ -92,7 +92,7 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
         KPI_WEIGHT_MIN,
         KPI_WEIGHT_MIN_SAMPLES,
     )
-    from apps.automation.infinity_loop import LoopAdjustment
+    from apps.automation.public import LoopAdjustment
 
     try:
         uid = parse_user_id(user_id)

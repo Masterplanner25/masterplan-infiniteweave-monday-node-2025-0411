@@ -1,3 +1,10 @@
+---
+title: "Nodus Memory Integration"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Nodus Memory Integration
 
 Nodus has first-class memory primitives backed by A.I.N.D.Y.'s Memory Bridge.

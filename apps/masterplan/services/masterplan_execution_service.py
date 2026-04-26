@@ -66,7 +66,7 @@ def sync_masterplan_tasks(
     user_id: str | uuid.UUID,
     replace_existing: bool = False,
 ) -> dict[str, Any]:
-    from apps.tasks.models import Task
+    from apps.tasks.public import Task
 
     owner_user_id = uuid.UUID(str(user_id))
     existing = (
@@ -123,8 +123,8 @@ def sync_masterplan_tasks(
 
 
 def get_masterplan_execution_status(*, db, masterplan_id: int, user_id: str | uuid.UUID) -> dict[str, Any]:
-    from apps.automation.models import AutomationLog
-    from apps.tasks.models import Task
+    from apps.automation.public import AutomationLog
+    from apps.tasks.public import Task
 
     owner_user_id = uuid.UUID(str(user_id))
     tasks = (

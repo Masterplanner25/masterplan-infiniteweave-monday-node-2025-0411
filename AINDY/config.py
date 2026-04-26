@@ -114,6 +114,21 @@ class Settings(BaseSettings):
         return bool(v)
 
     VERSION: str = Field(default_factory=_read_version, exclude=True)
+    API_VERSION: str = Field(
+        default="1.0.0",
+        description=(
+            "Semantic version of the API contract. Increment MAJOR on breaking changes, "
+            "MINOR on additive changes, PATCH on bug fixes. "
+            "Frontend and SDK must declare a compatible minimum version."
+        ),
+    )
+    API_MIN_CLIENT_VERSION: str = Field(
+        default="1.0.0",
+        description=(
+            "Minimum client version this API supports. Clients declaring a version "
+            "below this will receive a version-mismatch warning in response headers."
+        ),
+    )
 
     # --- Optional runtime options ---
     LOG_LEVEL: str = "INFO"

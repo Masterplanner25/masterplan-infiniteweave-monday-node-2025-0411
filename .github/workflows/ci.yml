@@ -28,6 +28,25 @@ jobs:
       - name: Run ruff
         run: ruff check .
 
+  docs-lint:
+    name: Docs Frontmatter Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Lint documentation frontmatter
+        run: python scripts/lint_docs.py
+
+      - name: Check for stale docs (warning only)
+        run: python scripts/lint_docs.py || true
+
   test:
     name: Test + Coverage
     runs-on: ubuntu-latest
@@ -97,6 +116,12 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('AINDY/requirements.txt') }}
           restore-keys: ${{ runner.os }}-pip-
+
+      - name: Check cross-app import boundaries
+        run: python scripts/check_app_imports.py
+
+      - name: Validate bootstrap dependency declarations
+        run: python -c "from apps._bootstrap_validator import validate_bootstrap_deps; validate_bootstrap_deps('apps'); print('Bootstrap deps OK')"
 
       - name: Install dependencies
         run: pip install -r AINDY/requirements.txt
@@ -354,6 +379,41 @@ jobs:
         run: node scripts/validate-env.js
         env:
           VITE_API_BASE_URL: "https://ci-placeholder.aindy.dev"
+
+  frontend-e2e:
+    name: Frontend E2E
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: client/playwright-report/
+          retention-days: 7
 
   docker-build:
     name: Docker Build

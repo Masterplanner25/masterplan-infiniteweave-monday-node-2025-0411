@@ -3,6 +3,7 @@ import { safeMap } from "../utils/safe";
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 const TOKEN_STORAGE_KEY = "token";
 const LEGACY_TOKEN_STORAGE_KEY = "aindy_token";
+const CLIENT_VERSION = globalThis.__AINDY_APP_VERSION_OVERRIDE__ || __APP_VERSION__;
 const NORMALIZED_ARRAY_KEYS = new Set([
   "agents",
   "allowed_auto_grant_tools",
@@ -124,10 +125,16 @@ async function request(path, opts = {}) {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        "X-Client-Version": CLIENT_VERSION,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.headers || {}),
       },
     });
+
+    const versionWarning = res.headers?.get?.("X-Version-Warning");
+    if (versionWarning) {
+      console.warn("[API Version Warning]", versionWarning);
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -187,10 +194,16 @@ async function requestAbsolute(url, opts = {}) {
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
+        "X-Client-Version": CLIENT_VERSION,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(opts.headers || {}),
       },
     });
+
+    const versionWarning = res.headers?.get?.("X-Version-Warning");
+    if (versionWarning) {
+      console.warn("[API Version Warning]", versionWarning);
+    }
 
     if (!res.ok) {
       const errText = await res.text();

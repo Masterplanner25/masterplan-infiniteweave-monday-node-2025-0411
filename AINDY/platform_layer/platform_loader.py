@@ -28,6 +28,55 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+_last_restore_result: dict[str, Any] | None = None
+
+
+def get_last_restore_result() -> dict[str, Any] | None:
+    return _last_restore_result
+
+
+async def verify_restore_completeness(db: Session) -> dict[str, Any]:
+    """
+    Return restore health data comparing persisted active rows vs live runtime state.
+    """
+    from AINDY.db.models.dynamic_flow import DynamicFlow
+    from AINDY.db.models.dynamic_node import DynamicNode
+    from AINDY.db.models.webhook_subscription import WebhookSubscription
+    from AINDY.platform_layer.event_service import list_webhooks
+    from AINDY.platform_layer.node_registry import list_dynamic_nodes
+    from AINDY.runtime.flow_registry import list_dynamic_flows
+
+    global _last_restore_result
+
+    result: dict[str, Any] = {
+        "flows": {"db_count": 0, "registry_count": 0, "ok": False},
+        "nodes": {"db_count": 0, "registry_count": 0, "ok": False},
+        "webhooks": {"db_count": 0, "registry_count": 0, "ok": False},
+        "all_ok": False,
+    }
+    try:
+        result["flows"]["db_count"] = len(
+            db.query(DynamicFlow).filter(DynamicFlow.is_active).all()
+        )
+        result["nodes"]["db_count"] = len(
+            db.query(DynamicNode).filter(DynamicNode.is_active).all()
+        )
+        result["webhooks"]["db_count"] = len(
+            db.query(WebhookSubscription).filter(WebhookSubscription.is_active).all()
+        )
+
+        result["flows"]["registry_count"] = len(list_dynamic_flows())
+        result["nodes"]["registry_count"] = len(list_dynamic_nodes())
+        result["webhooks"]["registry_count"] = len(list_webhooks())
+
+        for key in ("flows", "nodes", "webhooks"):
+            bucket = result[key]
+            bucket["ok"] = bucket["registry_count"] == bucket["db_count"]
+        result["all_ok"] = all(result[key]["ok"] for key in ("flows", "nodes", "webhooks"))
+    except Exception as exc:
+        logger.error("platform_loader: restore verification failed: %s", exc)
+    _last_restore_result = result
+    return result
 
 
 def load_dynamic_registry(db: Session) -> dict[str, int]:

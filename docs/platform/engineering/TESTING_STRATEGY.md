@@ -1,3 +1,10 @@
+---
+title: "Testing Strategy"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Testing Strategy
 
 This document distinguishes current testing reality from required policy going forward. It defines testing discipline and does not invent tests or tooling that are not present.
@@ -71,7 +78,7 @@ The inventory below is retained as an archived progress record from earlier spri
 
 | File | Tests | Coverage |
 |------|-------|----------|
-| `tests/conftest.py` | — | Shared fixtures: TestClient, mock_db, mock_openai, auth_headers, api_key_headers |
+| `tests/conftest.py` | â€” | Shared fixtures: TestClient, mock_db, mock_openai, auth_headers, api_key_headers |
 | `tests/test_calculation_services.py` | 26 | All Infinity Algorithm formulas, C++ kernel flag, Python/C++ parity |
 | `tests/test_memory_bridge.py` | 40 | Python bridge layer, MemoryNodeDAO, Rust/C++ kernel (cosine similarity, weighted dot product, dim=1536) |
 | `tests/test_models.py` | 15 | SQLAlchemy model structure, orphan function documentation |
@@ -84,13 +91,13 @@ The inventory below is retained as an archived progress record from earlier spri
 | `tests/test_routes_bridge.py` | 8 | Bridge routes (JWT-only writes, read path) |
 | `tests/test_routes_analytics.py` | 13 | Analytics route auth enforcement, zero-view guard, zero-difficulty 422 |
 | `tests/test_routes_leadgen.py` | 10 | Route auth enforcement, dead code documentation |
-| `tests/test_routes_genesis.py` | 35 | Route auth enforcement, import regression guards. Genesis Blocks 1-3 (22 new): TestGenesisBlock1 (10) — model column presence, factory signature, masterplan_router registration/auth; TestGenesisBlock2 (5) — new route registration, auth guards, one-way flag guard; TestGenesisBlock3 (7) — real LLM assertion, synthesis gate (422), posture logic, posture_description. |
-| `tests/test_genesis_flow.py` | 55 | Genesis Blocks 4-6: TestValidateDraftIntegrity (13) — AUDIT_SYSTEM_PROMPT schema, retry logic, fail-safe, happy/failed path with mocked OpenAI; TestGenesisAuditRoute (6) — route registration, auth, handler reachability; TestMasterplanFactoryHardening (10) — synthesis_ready gate, draft_from_session, rollback-on-failure, posture from draft; TestMasterplanRouterLock (8) — new static /lock endpoint, ValueError?422, posture_description in response; TestMasterplanListResponseShape (4) — {"plans": [...]} shape; TestDuplicateRouteRemoval (4) — single handler in main_router, no duplicate paths; TestSynthesisPromptSchema (2) — synthesis_notes field; TestPostureDescriptionHelper (4) — all posture labels; TestGenesisFlowRouteRegistration (2) — all genesis + masterplan routes present. |
+| `tests/test_routes_genesis.py` | 35 | Route auth enforcement, import regression guards. Genesis Blocks 1-3 (22 new): TestGenesisBlock1 (10) â€” model column presence, factory signature, masterplan_router registration/auth; TestGenesisBlock2 (5) â€” new route registration, auth guards, one-way flag guard; TestGenesisBlock3 (7) â€” real LLM assertion, synthesis gate (422), posture logic, posture_description. |
+| `tests/test_genesis_flow.py` | 55 | Genesis Blocks 4-6: TestValidateDraftIntegrity (13) â€” AUDIT_SYSTEM_PROMPT schema, retry logic, fail-safe, happy/failed path with mocked OpenAI; TestGenesisAuditRoute (6) â€” route registration, auth, handler reachability; TestMasterplanFactoryHardening (10) â€” synthesis_ready gate, draft_from_session, rollback-on-failure, posture from draft; TestMasterplanRouterLock (8) â€” new static /lock endpoint, ValueError?422, posture_description in response; TestMasterplanListResponseShape (4) â€” {"plans": [...]} shape; TestDuplicateRouteRemoval (4) â€” single handler in main_router, no duplicate paths; TestSynthesisPromptSchema (2) â€” synthesis_notes field; TestPostureDescriptionHelper (4) â€” all posture labels; TestGenesisFlowRouteRegistration (2) â€” all genesis + masterplan routes present. |
 | `tests/test_security.py` | 25 | JWT auth (401 + acceptance), CORS, rate limiting, hardcoded key scan, permission secret; Phase 3: seo/authorship/arm/rippletrace/freelance/research/dashboard/social/db_verify/network_bridge rejection + acceptance |
 | `tests/test_arm.py` | 62 | ARM Phase 1 (46): SecurityValidator, ConfigManager, FileProcessor, ARM routes with mocked OpenAI. ARM Phase 2 (16): TestARMMetrics route-level (4), TestARMMetricsService unit (7), TestARMConfigSuggestions unit (4), TestARMRoutes new endpoints (1). No DB required for service unit tests. |
-| `tests/test_memory_bridge_phase1.py` | 36 | Memory Bridge Phase 1 (2026-03-18): TestWritePathFix (8) — create_memory_node() regression, transient fallback, MemoryTrace docstring, create_memory_link export; TestMemoryNodeDAOUnit (11) — save/get_by_id/get_by_tags/get_linked_nodes/create_link, source+user_id in _node_to_dict; TestMemoryRouterEndpoints (12) — router registration, 5 auth guards, create/get/search/link with mocked DAO; TestCreateMemoryLinkUnit (5) — DAO delegation, default link_type, source+user_id model columns. |
-| `tests/test_memory_bridge_phase2.py` | 24 | Memory Bridge Phase 2 (2026-03-18): TestEmbeddingService (7) — OpenAI call, retry, zero-vector fallback, C++ kernel path, cosine_similarity_python correctness; TestMemoryNodeEmbeddingColumn (2) — column presence in model + DB; TestResonanceScoring (4) — formula correctness (semantic/tag/recency weights); TestMemoryTypeEnforcement (4) — Literal validation at API boundary, ORM event listener; TestMemoryRoutePhase2 (7) — POST /memory/nodes/search, POST /memory/recall (auth, 400 on no query/tags, scoring metadata). |
-| `tests/test_memory_bridge_phase3.py` | 22 | Memory Bridge Phase 3 (2026-03-18): TestRecallMemoriesBridge (4) — no-db returns [], DAO delegation, failure returns [], node_type filter; TestCreateMemoryNodeBridge (3) — no-db transient, new DAO used, default node_type=None; TestARMAnalysisMemoryHook (4) — write fires on success, recall fires before prompt, skipped when no user_id, failure does not raise; TestARMCodegenMemoryHook (3) — write fires, failure silenced, skipped when no user_id; TestTaskCompletionMemoryHook (4) — write fires, skipped when no user_id, failure silenced, user_id kwarg accepted; TestGenesisMemoryHooks (4) — lock writes decision node, lock memory failure safe, activate writes decision node, activate memory failure safe. |
+| `tests/test_memory_bridge_phase1.py` | 36 | Memory Bridge Phase 1 (2026-03-18): TestWritePathFix (8) â€” create_memory_node() regression, transient fallback, MemoryTrace docstring, create_memory_link export; TestMemoryNodeDAOUnit (11) â€” save/get_by_id/get_by_tags/get_linked_nodes/create_link, source+user_id in _node_to_dict; TestMemoryRouterEndpoints (12) â€” router registration, 5 auth guards, create/get/search/link with mocked DAO; TestCreateMemoryLinkUnit (5) â€” DAO delegation, default link_type, source+user_id model columns. |
+| `tests/test_memory_bridge_phase2.py` | 24 | Memory Bridge Phase 2 (2026-03-18): TestEmbeddingService (7) â€” OpenAI call, retry, zero-vector fallback, C++ kernel path, cosine_similarity_python correctness; TestMemoryNodeEmbeddingColumn (2) â€” column presence in model + DB; TestResonanceScoring (4) â€” formula correctness (semantic/tag/recency weights); TestMemoryTypeEnforcement (4) â€” Literal validation at API boundary, ORM event listener; TestMemoryRoutePhase2 (7) â€” POST /memory/nodes/search, POST /memory/recall (auth, 400 on no query/tags, scoring metadata). |
+| `tests/test_memory_bridge_phase3.py` | 22 | Memory Bridge Phase 3 (2026-03-18): TestRecallMemoriesBridge (4) â€” no-db returns [], DAO delegation, failure returns [], node_type filter; TestCreateMemoryNodeBridge (3) â€” no-db transient, new DAO used, default node_type=None; TestARMAnalysisMemoryHook (4) â€” write fires on success, recall fires before prompt, skipped when no user_id, failure does not raise; TestARMCodegenMemoryHook (3) â€” write fires, failure silenced, skipped when no user_id; TestTaskCompletionMemoryHook (4) â€” write fires, skipped when no user_id, failure silenced, user_id kwarg accepted; TestGenesisMemoryHooks (4) â€” lock writes decision node, lock memory failure safe, activate writes decision node, activate memory failure safe. |
 
 Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.3.0`, `pytest-cov==7.0.0`, `python-jose==3.5.0`, `passlib==1.7.4`, `bcrypt==4.0.1`, `slowapi==0.1.9` in `requirements.txt`. Discovery and coverage configured in `pytest.ini` and `AINDY/.coveragerc`.
 
@@ -107,9 +114,9 @@ Test infrastructure: `pytest==9.0.2`, `pytest-mock==3.15.1`, `pytest-asyncio==1.
 **Historical note on root test files**
 - Legacy root-level test files have been migrated out of `tests/` and replaced by the structured layout above.
 
-**Phase 2 security tests** — all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth ? 401) and the acceptance path (valid JWT ? expected status). No intentional failures remain in the test suite.
+**Phase 2 security tests** â€” all 7 previously-failing `_WILL_FAIL` security tests now pass. Each test verifies both the rejection path (no auth ? 401) and the acceptance path (valid JWT ? expected status). No intentional failures remain in the test suite.
 
-**Phase 3 security tests** — 12 additional tests in `TestPhase3RouteProtection` class verify every router protected in Phase 3: `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router` (JWT rejection), `db_verify_router`, `network_bridge_router` (API key rejection and acceptance).
+**Phase 3 security tests** â€” 12 additional tests in `TestPhase3RouteProtection` class verify every router protected in Phase 3: `seo_routes`, `authorship_router`, `arm_router`, `rippletrace_router`, `freelance_router`, `research_results_router`, `dashboard_router`, `social_router` (JWT rejection), `db_verify_router`, `network_bridge_router` (API key rejection and acceptance).
 
 ## 2. Required Coverage Areas (Policy)
 
@@ -184,20 +191,20 @@ A change cannot be merged if:
 - It alters invariants without validation tests.
 - It changes API contract without route-level test updates.
 - The `Last updated` date in `docs/GOVERNANCE_INDEX.md` is not refreshed after doc changes.
-- **CI checks fail** — every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 69%.
+- **CI checks fail** â€” every PR must pass the `lint` and `test` jobs in `.github/workflows/ci.yml` before merge. Coverage must remain at or above 69%.
 
 ## 8. Known Gaps
 - Some structured tests still retain targeted mocks for external boundaries, especially older memory-bridge and model-provider coverage. That is acceptable only where the boundary is truly external or nondeterministic.
 - The historical counts above are preserved for traceability, but they do not describe the current suite layout anymore.
-- ? **Resolved (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured — `pytest-cov`, `.coveragerc`, and `--cov-fail-under=64` in `pytest.ini`. Baseline: 69%.
-- ? **Resolved (2026-03-18 CI/CD Sprint):** CI enforcement live — GitHub Actions `ci.yml` enforces lint + test + coverage on every push/PR.
+- ? **Resolved (2026-03-18 CI/CD Sprint):** Coverage metrics tooling configured â€” `pytest-cov`, `.coveragerc`, and `--cov-fail-under=64` in `pytest.ini`. Baseline: 69%.
+- ? **Resolved (2026-03-18 CI/CD Sprint):** CI enforcement live â€” GitHub Actions `ci.yml` enforces lint + test + coverage on every push/PR.
 - No migration validation tests (`alembic/` has no test harness).
 - No tests for background task loops (`apps/tasks/services/task_service.py`).
 - No error handling contract tests validating JSON error structure per `docs/governance/ERROR_HANDLING_POLICY.md`.
 - ? **Resolved (2026-03-22):** Duplicate `test_get_results` names in `test_routes.py` renamed to unique identifiers. Other root tests still mirror names across files but are unique within each file.
 - ? **Resolved (2026-03-22):** Migration drift guard added via `tests/test_migrations.py` (asserts `alembic current` equals `alembic heads`).
-- ? **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/platform/engineering/TECH_DEBT.md` §6.
-- ? **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit — no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit — no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
+- ? **Resolved (2026-03-17 Phase 2):** Security gap tests (authentication, CORS, rate limiting) are all passing. No intentional failures remain in the test suite. See `docs/platform/engineering/TECH_DEBT.md` Â§6.
+- ? **Resolved (2026-03-17 ARM Phase 2):** `test_arm.py` expanded with 16 new tests for Thinking KPI System: `TestARMMetrics` (route-level auth + structure), `TestARMMetricsService` (pure unit â€” no DB, uses `__new__` + `MagicMock`), `TestARMConfigSuggestions` (pure unit â€” no DB). Pattern established: service unit tests bypass DB entirely using `ARMMetricsService.__new__()` to isolate calculation logic.
 - ? **Resolved (2026-03-17 Genesis Blocks 4-6):** `test_genesis_flow.py` added with 55 tests covering: `validate_draft_integrity()` with mocked OpenAI (including retry and fail-safe paths), `POST /genesis/audit` route registration + auth, factory hardening (`synthesis_ready` gate, `db.rollback()` path), `POST /masterplans/lock` endpoint, `GET /masterplans/` response shape, duplicate route removal, synthesis prompt schema, posture description helper. Total: 301 passing.
 - ? **Resolved (2026-03-18 Memory Bridge Phase 1):** `test_memory_bridge_phase1.py` added with 36 tests. Bug-documenting tests in `test_memory_bridge.py` and `test_routes_leadgen.py` flipped to regression guards. Total: 338 passing.
 - ? **Resolved (2026-03-18 Memory Bridge Phase 2):** `test_memory_bridge_phase2.py` added with 24 tests covering embedding service, resonance scoring, type enforcement (Pydantic Literal + ORM event), and Phase 2 API endpoints (`/memory/nodes/search`, `/memory/recall`). All OpenAI calls mocked. `test_models.py::test_memory_node_has_no_embedding_column` renamed and inverted to confirm column presence. Total: 362 passing.

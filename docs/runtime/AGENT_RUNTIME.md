@@ -1,3 +1,10 @@
+---
+title: "Agent Runtime"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Agent Runtime
 
 This document describes the agent runtime subsystem in `AINDY/agents/`. It

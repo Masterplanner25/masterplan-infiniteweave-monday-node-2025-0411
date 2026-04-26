@@ -1,3 +1,10 @@
+---
+title: "Plugin Registry Pattern"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Plugin Registry Pattern
 
 This document describes the actual integration mechanism between the AINDY

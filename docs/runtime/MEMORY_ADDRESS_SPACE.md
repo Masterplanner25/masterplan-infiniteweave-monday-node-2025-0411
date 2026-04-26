@@ -1,3 +1,10 @@
+---
+title: "Memory Address Space (MAS)"
+last_verified: "2026-04-19"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Memory Address Space (MAS)
 
 The Memory Address Space transforms `MemoryNode` from a flat, tag/semantic-only store into a filesystem-like, path-addressable namespace. Every node can be located by a deterministic hierarchical path in addition to its UUID.

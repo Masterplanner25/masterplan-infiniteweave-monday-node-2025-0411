@@ -1,3 +1,11 @@
+---
+title: "A.I.N.D.Y. Failure Mode Runbooks"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
 # A.I.N.D.Y. Failure Mode Runbooks
 
 Commands below assume you are in the repository root and the API writes logs to:

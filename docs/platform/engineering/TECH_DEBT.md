@@ -1,3 +1,10 @@
+---
+title: "Technical Debt Register"
+last_verified: "2026-04-25"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Technical Debt Register
 
 **Last triaged:** 2026-04-25  

@@ -1,3 +1,10 @@
+---
+title: "Multi-Instance Flow Resume — Architecture and Validation"
+last_verified: "2026-04-20"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Multi-Instance Flow Resume — Architecture and Validation
 
 ## Problem

@@ -106,7 +106,7 @@ def score_history_node(state, context):
 def score_feedback_list_node(state, context):
     try:
         import uuid
-        from apps.automation.models import UserFeedback
+        from apps.automation.public import UserFeedback
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))

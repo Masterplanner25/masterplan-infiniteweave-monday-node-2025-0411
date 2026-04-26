@@ -1,3 +1,10 @@
+---
+title: "Execution Contract"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Execution Contract
 
 ## Purpose

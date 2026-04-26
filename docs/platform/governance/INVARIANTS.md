@@ -1,3 +1,10 @@
+---
+title: "Invariants"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Invariants
 
 This document lists invariants enforced by the current implementation. Each invariant includes enforcement location and mechanism. If a rule is mentioned in docs but not enforced in code, it is explicitly marked.
@@ -220,7 +227,7 @@ This document lists invariants enforced by the current implementation. Each inva
 - Invariant Name: Only synthesis-ready sessions can produce a MasterPlan
 - Description: `create_masterplan_from_genesis()` refuses to lock a genesis session unless `session.synthesis_ready` is `True`. This ensures a MasterPlan is only created from a session that has successfully completed synthesis.
 - Enforcement Location: `AINDY/services/masterplan_factory.py: create_masterplan_from_genesis`
-- Enforcement Mechanism: Raises `ValueError("Session is not synthesis-ready — run /genesis/synthesize first")` if `session.synthesis_ready` is `False`. Callers (`POST /genesis/lock`, `POST /masterplans/lock`) catch `ValueError` and return HTTP 422.
+- Enforcement Mechanism: Raises `ValueError("Session is not synthesis-ready â€” run /genesis/synthesize first")` if `session.synthesis_ready` is `False`. Callers (`POST /genesis/lock`, `POST /masterplans/lock`) catch `ValueError` and return HTTP 422.
 - What Would Break If Violated: MasterPlans could be created from incomplete or un-synthesized sessions, producing plans without a proper GPT-4o draft.
 - Enforcement Type: Application-enforced.
 
@@ -232,12 +239,12 @@ This document lists invariants enforced by the current implementation. Each inva
 - What Would Break If Violated: Audit would be called with a null/empty draft, causing either an empty OpenAI request or a MagicMock serialization error.
 - Enforcement Type: Application-enforced.
 
-## 26. Atomic MasterPlan Creation — Rollback on Failure
+## 26. Atomic MasterPlan Creation â€” Rollback on Failure
 - Invariant Name: Factory database mutations are atomic with rollback
 - Description: All DB write operations inside `create_masterplan_from_genesis()` are wrapped in a try/except. Any exception during `db.add()`, `db.commit()`, or `db.refresh()` triggers `db.rollback()` before the exception is re-raised, preserving DB consistency.
 - Enforcement Location: `AINDY/services/masterplan_factory.py: create_masterplan_from_genesis` (try/except block around masterplan add + session freeze + commit)
 - Enforcement Mechanism: Explicit `db.rollback()` in the except clause before re-raising.
-- What Would Break If Violated: Partial DB state — e.g., a MasterPlan row inserted but session status not updated, or vice versa — could leave data in an inconsistent mid-lock state.
+- What Would Break If Violated: Partial DB state â€” e.g., a MasterPlan row inserted but session status not updated, or vice versa â€” could leave data in an inconsistent mid-lock state.
 - Enforcement Type: Application-enforced.
 
 ## 27. Memory Node Type Enforcement (ORM Event)

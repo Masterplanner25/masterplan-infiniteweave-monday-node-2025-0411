@@ -1,3 +1,10 @@
+---
+title: "Error Handling Policy"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 ﻿# Error Handling Policy
 
 This document distinguishes current behavior from required policy rules. It does not redesign the system and does not assume unimplemented mechanisms. Undefined behavior is explicitly marked.

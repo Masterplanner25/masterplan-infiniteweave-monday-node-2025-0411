@@ -1,3 +1,10 @@
+---
+title: "Gateway Contract"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 ﻿# Gateway Contract
 
 This document defines the contract between the Node/Express gateway and the FastAPI backend. It is based strictly on current implementation and separates current behavior from policy requirements.

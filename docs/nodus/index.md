@@ -1,3 +1,10 @@
+---
+title: "Nodus"
+last_verified: "2026-04-01"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Nodus
 
 Nodus is the control language for A.I.N.D.Y. Scripts run inside a sandbox — no imports, no filesystem, no network. The only way to do anything useful is through syscalls.

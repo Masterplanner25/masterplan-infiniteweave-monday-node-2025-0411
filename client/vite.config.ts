@@ -1,36 +1,32 @@
+import { readFileSync } from "fs";
+import path from "path";
+
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8"));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
 
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(process.cwd(), "src"),
     },
   },
 
   build: {
-    // Production source maps leak source code - disable in prod builds.
-    // Use a separate sentry/error-tracking upload step for debugging.
     sourcemap: mode === "development",
-
-    // Warn when any single chunk exceeds 500KB gzipped.
     chunkSizeWarningLimit: 500,
-
-    // Target modern browsers (avoids legacy polyfill bloat).
-    // Adjust if you need IE11 or Safari 13 support.
     target: ["chrome90", "firefox88", "safari14", "edge90"],
-
     rollupOptions: {
       output: {
         manualChunks: {
-          // Core React runtime - changes rarely, caches well.
           "vendor-react": ["react", "react-dom", "react-router-dom"],
-          // Charting - large, rarely changes.
           "vendor-charts": ["recharts", "d3"],
-          // Radix UI primitives - shared across components.
           "vendor-ui": [
             "@radix-ui/react-slot",
             "@radix-ui/react-tooltip",
@@ -39,7 +35,6 @@ export default defineConfig(({ mode }) => ({
             "class-variance-authority",
             "tailwind-merge",
           ],
-          // Platform-only operator tooling - only admin users load this.
           "chunk-platform": [
             "./src/components/platform/AgentConsole.jsx",
             "./src/components/platform/FlowEngineConsole.jsx",
@@ -55,7 +50,6 @@ export default defineConfig(({ mode }) => ({
     },
   },
 
-  // Dev server proxy - keeps dev experience clean without CORS config.
   server: {
     proxy: {
       "/api": {
@@ -71,5 +65,6 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     setupFiles: ["./src/test/setup.js"],
     css: false,
+    exclude: ["e2e/**", "node_modules/**", "dist/**"],
   },
 }));

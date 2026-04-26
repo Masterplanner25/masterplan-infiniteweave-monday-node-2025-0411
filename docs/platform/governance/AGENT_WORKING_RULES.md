@@ -1,3 +1,10 @@
+---
+title: "Agent Working Rules"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Agent Working Rules
 
 This document defines enforceable collaboration boundaries for AI agents operating in this repository. It is directive and governance-focused.

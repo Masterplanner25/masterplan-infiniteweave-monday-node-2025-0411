@@ -1,3 +1,10 @@
+---
+title: "SECRET_KEY Rotation Runbook"
+last_verified: "2026-04-23"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # SECRET_KEY Rotation Runbook
 
 ## When to rotate SECRET_KEY

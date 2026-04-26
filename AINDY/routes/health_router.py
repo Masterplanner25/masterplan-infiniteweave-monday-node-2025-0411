@@ -455,19 +455,37 @@ async def health_check_deep(request: Request):
     return JSONResponse(status_code=200, content=payload)
 
 
-@router.get("/ready", summary="Check Readiness")
-@limiter.limit("120/minute")
-def readiness(request: Request):
+def _readiness_response() -> JSONResponse:
     from AINDY.platform_layer.health_service import get_readiness_report
+    from AINDY.platform_layer.platform_loader import get_last_restore_result
+
+    restore_result = get_last_restore_result()
+    if restore_result is None:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "reason": "restore_pending"},
+        )
+    if not restore_result.get("all_ok", False):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "degraded",
+                "reason": "registry_restore_incomplete",
+                "detail": restore_result,
+            },
+        )
 
     status_code, payload = get_readiness_report()
     return JSONResponse(status_code=status_code, content=payload)
+
+
+@router.get("/ready", summary="Check Readiness")
+@limiter.limit("120/minute")
+def readiness(request: Request):
+    return _readiness_response()
 
 
 @router.get("/readiness", summary="Check Readiness (Kubernetes alias)")
 @limiter.limit("120/minute")
 def readiness_alias(request: Request):
-    from AINDY.platform_layer.health_service import get_readiness_report
-
-    status_code, payload = get_readiness_report()
-    return JSONResponse(status_code=status_code, content=payload)
+    return _readiness_response()

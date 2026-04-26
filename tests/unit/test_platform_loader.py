@@ -395,3 +395,88 @@ def test_load_dynamic_registry_reports_combined_restore_summary(monkeypatch):
     assert node_calls == ["restored-node"]
     assert flow_calls == ["restored-flow"]
     assert webhook_calls == ["restored-sub"]
+
+
+@pytest.mark.asyncio
+async def test_verify_restore_completeness_all_ok(monkeypatch):
+    import AINDY.db.models.dynamic_flow as dynamic_flow_module
+    import AINDY.db.models.dynamic_node as dynamic_node_module
+    import AINDY.db.models.webhook_subscription as webhook_model_module
+    import AINDY.platform_layer.event_service as event_service
+    import AINDY.platform_layer.node_registry as node_registry
+    import AINDY.runtime.flow_registry as flow_registry
+
+    class FakeDynamicFlow:
+        is_active = object()
+
+    class FakeDynamicNode:
+        is_active = object()
+
+    class FakeWebhookSubscription:
+        is_active = object()
+
+    db = _FakeSession(
+        {
+            FakeDynamicFlow: [SimpleNamespace(is_active=True) for _ in range(2)],
+            FakeDynamicNode: [SimpleNamespace(is_active=True) for _ in range(3)],
+            FakeWebhookSubscription: [SimpleNamespace(is_active=True) for _ in range(4)],
+        }
+    )
+
+    monkeypatch.setattr(dynamic_flow_module, "DynamicFlow", FakeDynamicFlow)
+    monkeypatch.setattr(dynamic_node_module, "DynamicNode", FakeDynamicNode)
+    monkeypatch.setattr(webhook_model_module, "WebhookSubscription", FakeWebhookSubscription)
+    monkeypatch.setattr(flow_registry, "list_dynamic_flows", lambda: [{"name": "f1"}, {"name": "f2"}])
+    monkeypatch.setattr(node_registry, "list_dynamic_nodes", lambda: [{"name": "n1"}, {"name": "n2"}, {"name": "n3"}])
+    monkeypatch.setattr(event_service, "list_webhooks", lambda user_id=None: [{"id": "w1"}, {"id": "w2"}, {"id": "w3"}, {"id": "w4"}])
+
+    result = await loader.verify_restore_completeness(db)
+
+    assert result == {
+        "flows": {"db_count": 2, "registry_count": 2, "ok": True},
+        "nodes": {"db_count": 3, "registry_count": 3, "ok": True},
+        "webhooks": {"db_count": 4, "registry_count": 4, "ok": True},
+        "all_ok": True,
+    }
+    assert loader.get_last_restore_result() == result
+
+
+@pytest.mark.asyncio
+async def test_verify_restore_completeness_flows_missing(monkeypatch):
+    import AINDY.db.models.dynamic_flow as dynamic_flow_module
+    import AINDY.db.models.dynamic_node as dynamic_node_module
+    import AINDY.db.models.webhook_subscription as webhook_model_module
+    import AINDY.platform_layer.event_service as event_service
+    import AINDY.platform_layer.node_registry as node_registry
+    import AINDY.runtime.flow_registry as flow_registry
+
+    class FakeDynamicFlow:
+        is_active = object()
+
+    class FakeDynamicNode:
+        is_active = object()
+
+    class FakeWebhookSubscription:
+        is_active = object()
+
+    db = _FakeSession(
+        {
+            FakeDynamicFlow: [SimpleNamespace(is_active=True) for _ in range(3)],
+            FakeDynamicNode: [SimpleNamespace(is_active=True)],
+            FakeWebhookSubscription: [SimpleNamespace(is_active=True)],
+        }
+    )
+
+    monkeypatch.setattr(dynamic_flow_module, "DynamicFlow", FakeDynamicFlow)
+    monkeypatch.setattr(dynamic_node_module, "DynamicNode", FakeDynamicNode)
+    monkeypatch.setattr(webhook_model_module, "WebhookSubscription", FakeWebhookSubscription)
+    monkeypatch.setattr(flow_registry, "list_dynamic_flows", lambda: [{"name": "f1"}, {"name": "f2"}])
+    monkeypatch.setattr(node_registry, "list_dynamic_nodes", lambda: [{"name": "n1"}])
+    monkeypatch.setattr(event_service, "list_webhooks", lambda user_id=None: [{"id": "w1"}])
+
+    result = await loader.verify_restore_completeness(db)
+
+    assert result["flows"] == {"db_count": 3, "registry_count": 2, "ok": False}
+    assert result["nodes"] == {"db_count": 1, "registry_count": 1, "ok": True}
+    assert result["webhooks"] == {"db_count": 1, "registry_count": 1, "ok": True}
+    assert result["all_ok"] is False

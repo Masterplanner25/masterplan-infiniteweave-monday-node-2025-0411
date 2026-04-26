@@ -1,3 +1,10 @@
+---
+title: "Syscall System"
+last_verified: "2026-04-18"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
 # Syscall System
 
 A.I.N.D.Y. syscalls are the single gated interface between Nodus scripts and host services. All cross-boundary calls — memory reads, flow executions, event emissions — route through the syscall dispatcher. No Nodus code touches a DB session or a service function directly.
