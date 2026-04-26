@@ -4,6 +4,7 @@ import importlib
 
 import pytest
 
+from apps._bootstrap_validator import validate_bootstrap_deps
 from AINDY.kernel.errors import BootstrapDependencyError
 from AINDY.platform_layer.bootstrap_contract import (
     compute_boot_order,
@@ -38,6 +39,10 @@ def test_current_registered_bootstrap_manifest_is_valid() -> None:
     import AINDY.startup as startup
 
     validate_bootstrap_manifest(startup.registry)
+
+
+def test_legacy_apps_path_validator_entry_point_is_valid() -> None:
+    validate_bootstrap_deps("apps")
 
 
 def test_missing_declared_dependency_raises_bootstrap_error() -> None:
