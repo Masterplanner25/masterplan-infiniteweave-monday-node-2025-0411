@@ -147,25 +147,27 @@ export default function Sidebar() {
           isAnyChildActive={
             isActive("/masterplan") ||
             isActive("/tasks") ||
-            isActive("/agent") ||
-            isActive("/freelance/dashboard") ||
-            (isAdmin && (isActive("/console") || isActive("/agent/approvals") || isActive("/observability") || isActive("/rippletrace")))
+            isActive("/platform/agent") ||
+            isActive("/platform/approvals") ||
+            isActive("/platform/flows") ||
+            isActive("/platform/observability") ||
+            isActive("/platform/trace") ||
+            isActive("/freelance")
           }
         >
           <SubNavItem to="/masterplan" active={isActive("/masterplan")}>Master Plan</SubNavItem>
           <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
-          <SubNavItem to="/agent" active={location.pathname === "/agent"}>Agent Console</SubNavItem>
           {isAdmin ? (
             <>
-              <SubNavItem to="/console" active={isActive("/console")}>Console</SubNavItem>
-              <SubNavItem to="/agent/approvals" active={isActive("/agent/approvals")} badge={pendingApprovals || null}>
+              <SubNavItem to="/platform/flows" active={isActive("/platform/flows")}>Console</SubNavItem>
+              <SubNavItem to="/platform/approvals" active={isActive("/platform/approvals")} badge={pendingApprovals || null}>
                 Approval Inbox
               </SubNavItem>
-              <SubNavItem to="/observability" active={isActive("/observability")}>Observability</SubNavItem>
-              <SubNavItem to="/rippletrace" active={isActive("/rippletrace")}>Ripple Trace</SubNavItem>
+              <SubNavItem to="/platform/observability" active={isActive("/platform/observability")}>Observability</SubNavItem>
+              <SubNavItem to="/platform/trace" active={isActive("/platform/trace")}>Ripple Trace</SubNavItem>
             </>
           ) : null}
-          <SubNavItem to="/freelance/dashboard" active={isActive("/freelance/dashboard")}>Freelance Hub</SubNavItem>
+          <SubNavItem to="/freelance" active={isActive("/freelance")}>Freelance Hub</SubNavItem>
         </NavSection>
 
         <NavSection
