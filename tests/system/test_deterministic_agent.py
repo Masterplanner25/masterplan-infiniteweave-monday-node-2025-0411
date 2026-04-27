@@ -5,6 +5,7 @@ import uuid
 from unittest.mock import patch
 
 from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.agent_run import AgentRun, AgentStep
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.agents.agent_runtime import execute_run
@@ -140,6 +141,18 @@ def test_execute_run_persists_started_and_completed_state(db_session, test_user)
 
     def _complete_run(**kwargs):
         live_run = db_session.get(AgentRun, run.id)
+        db_session.add(
+            FlowRun(
+                id="flow-123",
+                trace_id=live_run.trace_id,
+                flow_name="agent_execute_run",
+                workflow_type="agent",
+                state={"steps": []},
+                status="completed",
+                user_id=test_user.id,
+            )
+        )
+        db_session.flush()
         live_run.status = "completed"
         live_run.flow_run_id = "flow-123"
         live_run.result = {"steps": [], "loop_enforced": True, "next_action": "review_output"}

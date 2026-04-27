@@ -316,6 +316,8 @@ def dispatch_delegated_run(
             coordination_role=delegation_mode,
         )
         setattr(child_run, _OBJECTIVE_ATTR, objective)
+        db.add(child_run)
+        db.flush()
 
         child_token = mint_token(
             run_id=str(child_run_id),
@@ -329,7 +331,6 @@ def dispatch_delegated_run(
             child_run.capability_token = child_token
             child_run.execution_token = child_token.get("execution_token")
 
-        db.add(child_run)
         parent_run.status = "delegated"
         parent_run.completed_at = None
         db.flush()

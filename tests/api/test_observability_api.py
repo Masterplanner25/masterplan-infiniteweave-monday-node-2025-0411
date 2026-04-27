@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import uuid
 
 from AINDY.db.models.agent_event import AgentEvent
+from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.request_metric import RequestMetric
 from AINDY.db.models.system_event import SystemEvent
@@ -80,6 +81,24 @@ def test_observability_dashboard_returns_real_db_sections(
 ):
     run_id = uuid.uuid4()
     trace_id = str(uuid.uuid4())
+
+    db_session.add(
+        AgentRun(
+            id=run_id,
+            user_id=test_user.id,
+            agent_type="default",
+            goal="observability dashboard fixture",
+            plan={"steps": []},
+            executive_summary="observability dashboard fixture",
+            overall_risk="low",
+            status="completed",
+            steps_total=0,
+            steps_completed=0,
+            correlation_id=f"run_{uuid.uuid4()}",
+            trace_id=trace_id,
+            created_at=datetime.now(timezone.utc),
+        )
+    )
 
     db_session.add(
         RequestMetric(
