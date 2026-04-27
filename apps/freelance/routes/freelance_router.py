@@ -1,5 +1,6 @@
 import json as _json
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -10,11 +11,6 @@ from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
-from apps.search.public import (
-    _ai_provider_unavailable_response,
-    _extract_flow_error,
-    _is_circuit_open_detail,
-)
 from apps.freelance.schemas.freelance import (
     FeedbackCreate,
     FreelanceDeliveryConfigUpdate,
@@ -27,8 +23,55 @@ from AINDY.services.auth_service import get_current_user
 router = APIRouter(prefix="/freelance", tags=["Freelance"])
 logger = logging.getLogger(__name__)
 
+
+def _trigger_delivery_confirmation_hooks(
+    db: Session,
+    *,
+    order_data: dict,
+    user_id: str,
+) -> None:
+    task_id = order_data.get("task_id")
+    try:
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+        ctx = SyscallContext(
+            execution_unit_id=str(uuid.uuid4()),
+            user_id=str(user_id),
+            capabilities=["task.read", "task.complete", "score.recalculate"],
+            trace_id="",
+            metadata={"_db": db},
+        )
+        if task_id:
+            task_result = get_dispatcher().dispatch(
+                "sys.v1.task.get",
+                {"task_id": int(task_id), "user_id": str(user_id)},
+                ctx,
+            )
+            if task_result.get("status") == "success":
+                task = ((task_result.get("data") or {}).get("task") or {})
+                task_name = task.get("name")
+                task_status = str(task.get("status") or "").lower()
+                if task_name and task_status != "completed":
+                    get_dispatcher().dispatch(
+                        "sys.v1.task.complete",
+                        {"task_name": task_name},
+                        ctx,
+                    )
+        get_dispatcher().dispatch(
+            "sys.v1.score.recalculate",
+            {"trigger_event": "freelance_delivery_confirmed"},
+            ctx,
+        )
+    except Exception as exc:
+        logger.warning(
+            "[freelance] delivery confirmation hooks failed (non-fatal): %s",
+            exc,
+        )
+
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str, *, return_full: bool = False):
     from AINDY.runtime.flow_engine import run_flow
+    from apps.search.public import _extract_flow_error
+
     try:
         result = run_flow(flow_name, payload, db=db, user_id=user_id)
     except RuntimeError as exc:
@@ -54,6 +97,11 @@ def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str
 
 def _execute_freelance(request: Request, route_name: str, handler, *, db: Session, user_id: str,
                        input_payload=None, success_status_code: int = 200):
+    from apps.search.public import (
+        _ai_provider_unavailable_response,
+        _is_circuit_open_detail,
+    )
+
     result = execute_with_pipeline_sync(
         request=request,
         route_name=route_name,
@@ -124,7 +172,10 @@ def _do_deliver_order(db: Session, order_id: int, ai_output: str | None, user_id
         db,
         user_id,
     )
-    return result.get("data") if isinstance(result, dict) and "data" in result else result
+    data = result.get("data") if isinstance(result, dict) and "data" in result else result
+    if isinstance(data, dict):
+        _trigger_delivery_confirmation_hooks(db, order_data=data, user_id=user_id)
+    return data
 
 
 def _do_update_delivery_configuration(
@@ -438,10 +489,12 @@ async def stripe_webhook(
     Verified via HMAC-SHA256 signature (Stripe-Signature header).
     """
     from AINDY.config import settings
-    from apps.freelance.services.freelance_service import (
-        process_stripe_webhook,
-        verify_stripe_signature,
+    from apps.freelance.services.freelance_service import verify_stripe_signature
+    from apps.freelance.services.idempotency import (
+        claim_webhook_event,
+        mark_webhook_outcome,
     )
+    from apps.freelance.services.webhook_service import handle_stripe_event
 
     payload_bytes = await request.body()
 
@@ -451,12 +504,6 @@ async def stripe_webhook(
             raise HTTPException(status_code=400, detail="stripe-signature header missing")
         if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
             raise HTTPException(status_code=400, detail="stripe-signature verification failed")
-    else:
-        logger.warning(
-            "[Stripe] STRIPE_WEBHOOK_SECRET not configured. "
-            "Webhook signature verification is DISABLED. "
-            "Set STRIPE_WEBHOOK_SECRET in production."
-        )
 
     try:
         event = _json.loads(payload_bytes)
@@ -464,12 +511,19 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail="invalid JSON body")
 
     event_type = str(event.get("type") or "")
-    event_data = event.get("data") or {}
-    result = process_stripe_webhook(
-        db,
-        event_type,
-        event_data,
-        event_id=str(event["id"]) if event.get("id") else None,
-    )
-    return {"received": True, **result}
+    stripe_event_id = str(event.get("id") or "")
+    if not stripe_event_id:
+        return {"received": True, "processed": False}
+
+    if not claim_webhook_event(db, stripe_event_id, event_type, payload=event):
+        return {"status": "skipped", "reason": "already_processed"}
+
+    try:
+        outcome = handle_stripe_event(db, event)
+        mark_webhook_outcome(db, stripe_event_id, "fulfilled")
+        return {"status": "ok", "outcome": outcome}
+    except Exception as exc:
+        logger.warning("[stripe] webhook processing failed: %s", exc)
+        mark_webhook_outcome(db, stripe_event_id, "failed", error=str(exc))
+        return {"status": "failed", "reason": "processing_error"}
 

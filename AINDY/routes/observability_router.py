@@ -74,6 +74,56 @@ def get_llm_status(
     return _execute_observability(request, "observability_llm_status", handler, db=db, user_id=user_id)
 
 
+@router.get("/rippletrace/status")
+@limiter.limit("60/minute")
+def get_rippletrace_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from apps.rippletrace.services.engine_registry import get_engine_breaker
+
+        engines = [
+            "delta_engine",
+            "learning_engine",
+            "narrative_engine",
+            "prediction_engine",
+            "recommendation_engine",
+        ]
+        engine_health: dict[str, dict] = {}
+        for engine in engines:
+            try:
+                breaker = get_engine_breaker(engine)
+                engine_health[engine] = {
+                    "circuit_state": breaker.state.value,
+                    "failure_count": breaker.failure_count,
+                }
+            except Exception as exc:
+                engine_health[engine] = {"error": str(exc)}
+        return {
+            "status": (
+                "healthy"
+                if all(
+                    info.get("circuit_state") != "open"
+                    for info in engine_health.values()
+                )
+                else "degraded"
+            ),
+            "engines": engine_health,
+        }
+
+    return _execute_observability(
+        request,
+        "observability_rippletrace_status",
+        handler,
+        db=db,
+        user_id=user_id,
+    )
+
+
 # ------------------------------
 # SCHEDULER STATUS
 # ------------------------------
@@ -85,8 +135,51 @@ def get_scheduler_status(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
+
     def handler(ctx):
-        return _run_flow_observability("observability_scheduler_status", {}, db, user_id)
+        result = _run_flow_observability("observability_scheduler_status", {}, db, user_id)
+        from AINDY.config import settings
+        from AINDY.platform_layer import scheduler_service
+
+        try:
+            scheduler = scheduler_service.get_scheduler()
+        except Exception:
+            result["stuck_run_watchdog"] = {
+                "registered": False,
+                "next_run_time": None,
+            }
+            return result
+
+        if not getattr(scheduler, "running", False):
+            result["stuck_run_watchdog"] = {
+                "registered": False,
+                "next_run_time": None,
+            }
+            return result
+
+        job = None
+        if callable(getattr(scheduler, "get_job", None)):
+            job = scheduler.get_job("stuck_run_watchdog")
+        elif callable(getattr(scheduler, "get_jobs", None)):
+            job = next(
+                (
+                    candidate
+                    for candidate in scheduler.get_jobs()
+                    if getattr(candidate, "id", None) == "stuck_run_watchdog"
+                ),
+                None,
+            )
+        result["stuck_run_watchdog"] = {
+            "registered": job is not None,
+            "next_run_time": (
+                job.next_run_time.isoformat()
+                if job is not None and getattr(job, "next_run_time", None) is not None
+                else None
+            ),
+            "interval_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+        }
+        return result
+
     return _execute_observability(request, "observability_scheduler_status", handler, db=db, user_id=user_id)
 
 
@@ -181,6 +274,65 @@ def get_queue_metrics(
         handler,
         db=db,
         user_id=user_id,
+    )
+
+
+@router.get("/dead-letter")
+@limiter.limit("60/minute")
+def list_dead_letter(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    user_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    from AINDY.agents.dead_letter_service import list_dead_lettered_runs
+
+    caller_user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        flows = list_dead_lettered_runs(db, limit=limit, user_id=user_id)
+        return {"flows": flows, "count": len(flows)}
+
+    return _execute_observability(
+        request,
+        "observability_dead_letter_list",
+        handler,
+        db=db,
+        user_id=caller_user_id,
+        input_payload={"limit": limit, "user_id": user_id},
+    )
+
+
+@router.get("/dead-letter/{flow_run_id}")
+@limiter.limit("60/minute")
+def get_dead_letter_run(
+    request: Request,
+    flow_run_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    caller_user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        from AINDY.agents.dead_letter_service import _flow_run_to_dict
+        from AINDY.db.models.flow_run import FlowRun
+
+        run = db.query(FlowRun).filter(
+            FlowRun.id == flow_run_id,
+            FlowRun.status == "dead_letter",
+        ).first()
+        if not run:
+            raise HTTPException(status_code=404, detail="Dead-lettered flow run not found")
+        return _flow_run_to_dict(run)
+
+    return _execute_observability(
+        request,
+        "observability_dead_letter_get",
+        handler,
+        db=db,
+        user_id=caller_user_id,
+        input_payload={"flow_run_id": flow_run_id},
     )
 
 

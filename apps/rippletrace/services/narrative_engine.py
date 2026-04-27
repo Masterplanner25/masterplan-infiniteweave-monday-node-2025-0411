@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import list_score_snapshots
+from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 from apps.rippletrace.models import DropPointDB, PingDB
 from apps.rippletrace.services.causal_engine import get_causal_chain
 from apps.rippletrace.services.delta_engine import compute_deltas
@@ -44,7 +44,9 @@ def generate_story_summary(narrative_data: Dict) -> str:
     return " ".join(sentences)
 
 
-def generate_narrative(drop_point_id: str, db: Session) -> Dict:
+def _generate_narrative_internal(drop_point_id: str, db: Session) -> Dict:
+    from apps.analytics.public import list_score_snapshots
+
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )
@@ -213,6 +215,37 @@ def generate_narrative(drop_point_id: str, db: Session) -> Dict:
 
     narrative_data["summary"] = generate_story_summary(narrative_data)
     return narrative_data
+
+
+def generate_narrative(drop_point_id: str, db: Session) -> Dict:
+    return call_with_engine_breaker(
+        "narrative_engine",
+        fallback={
+            "drop_point_id": drop_point_id,
+            "status": "circuit_open",
+            "timeline": [],
+            "inflection_points": [],
+            "causal_story": {"influenced_by": [], "led_to": []},
+            "interpretation": {
+                "current_state": "circuit_open",
+                "insight": "Narrative engine temporarily unavailable.",
+                "recommended_action": "Retry after recovery.",
+            },
+            "summary": "Narrative engine temporarily unavailable.",
+            "delta": {"drop_point_id": drop_point_id, "status": "circuit_open"},
+            "prediction": {"drop_point_id": drop_point_id, "status": "circuit_open"},
+            "recommendation": {
+                "drop_point_id": drop_point_id,
+                "action": "monitor",
+                "priority": "low",
+                "recommendations": ["Retry after recovery."],
+                "prediction": "circuit_open",
+                "confidence": 0.0,
+            },
+            "score_snapshots": [],
+        },
+        fn=lambda: _generate_narrative_internal(drop_point_id, db),
+    )
 
 
 def narrative_summary(db: Session, limit: int = 3) -> List[Dict]:

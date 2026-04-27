@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from AINDY.core.execution_signal_helper import queue_memory_capture
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from apps.masterplan.models import GenesisSessionDB, MasterPlan
 from apps.masterplan.services.posture import determine_posture  # adjust import if needed
@@ -13,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, user_id: str = None):
 
-    session = db.query(GenesisSessionDB).filter_by(id=session_id).first()
+    session = (
+        db.query(GenesisSessionDB)
+        .filter(GenesisSessionDB.id == session_id)
+        .with_for_update()
+        .first()
+    )
 
     if not session:
         raise Exception("Genesis session not found")
@@ -77,6 +83,11 @@ def create_masterplan_from_genesis(session_id: int, draft: dict, db: Session, us
 
         db.commit()
         db.refresh(masterplan)
+    except IntegrityError:
+        db.rollback()
+        raise ValueError(
+            f"A masterplan already exists for genesis session {session_id}"
+        )
     except Exception:
         db.rollback()
         raise

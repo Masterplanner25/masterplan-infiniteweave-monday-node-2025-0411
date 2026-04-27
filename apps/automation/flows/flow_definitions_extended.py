@@ -24,7 +24,8 @@ _RUNTIME_FLOW_MODULES = [
 ]
 
 _AUTOMATION_DOMAIN_FLOW_MODULES = [
-    "apps.automation.flows.automation_system_flows",
+    "apps.automation.flows.memory_flows",
+    "apps.automation.flows.system_flows",
     "apps.automation.flows.dashboard_autonomy_flows",
 ]
 

@@ -47,7 +47,6 @@ def main() -> None:
             )
         validate_queue_backend()
         publish_worker_runtime_state(queue_ready=True)
-        start_health_server()
         schema_ready = _wait_for_background_schema()
         publish_worker_runtime_state(schema_ready=schema_ready)
         if schema_ready:

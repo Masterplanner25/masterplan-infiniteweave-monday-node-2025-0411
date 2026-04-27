@@ -93,7 +93,7 @@ def _emit_wait_timeout_system_event(
 
 async def expire_timed_out_waits(db: AsyncSession) -> int:
     """
-    Mark expired waiting FlowRuns as failed.
+    Fail expired waiting FlowRuns.
 
     A run expires only when ``status == "waiting"`` and ``wait_deadline`` is in
     the past. ``wait_deadline IS NULL`` means no deadline and is left untouched.
@@ -110,23 +110,26 @@ async def expire_timed_out_waits(db: AsyncSession) -> int:
     if not expired_runs:
         return 0
 
+    expired_count = 0
     try:
         for flow_run in expired_runs:
             deadline = flow_run.wait_deadline
             flow_run.status = "failed"
             flow_run.waiting_for = None
             flow_run.wait_deadline = None
-            flow_run.error_message = "Flow wait deadline expired"
+            flow_run.error_message = "WAIT_TIMEOUT"
             flow_run.error_detail = {
                 "reason": "wait_timeout",
                 "deadline": deadline.isoformat() if deadline else None,
             }
             flow_run.completed_at = now
-        await _commit(db)
+            expired_count += 1
+        if expired_count:
+            await _commit(db)
     except Exception:
         await _rollback(db)
         raise
-    return len(expired_runs)
+    return expired_count
 
 
 async def expire_timed_out_wait_flows(db: AsyncSession) -> int:
@@ -142,7 +145,6 @@ async def expire_timed_out_wait_flows(db: AsyncSession) -> int:
         select(WaitingFlowRun).where(WaitingFlowRun.max_wait_seconds.is_not(None)),
     )
     expired_count = 0
-
     try:
         for waiting_row in waiting_rows:
             waited_since = _normalize_utc(waiting_row.waited_since)

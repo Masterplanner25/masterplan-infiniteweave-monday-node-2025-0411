@@ -1,6 +1,6 @@
 ---
 title: "A.I.N.D.Y. Failure Mode Runbooks"
-last_verified: "2026-04-25"
+last_verified: "2026-04-26"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -12,6 +12,10 @@ Commands below assume you are in the repository root and the API writes logs to:
 
 ```bash
 export LOG_FILE="logs/aindy_${ENV:-production}.log"
+# Detect log format in use:
+head -1 "$LOG_FILE" | python -c "import sys,json; json.load(sys.stdin); print('JSON format')" 2>/dev/null || echo "Plain text format"
+# Set JQ_FILTER if using JSON logs:
+export JQ_FILTER='jq -r "[.timestamp, .level, .trace_id, .message] | @tsv"'
 ```
 
 If your deployment wraps the API in a service manager or container platform, run the equivalent service restart command after editing `AINDY/.env`.
@@ -30,6 +34,12 @@ OpenAI degradation affects two very different paths in this codebase. Memory wri
 ```bash
 grep -E "\[OpenAI\] chat retry attempt|\[OpenAI\] embedding retry attempt|\[EmbeddingService\]|\[EmbeddingJobs\] embedding deferred|\[AgentRuntime\] Plan generation failed|\[Genesis\] OpenAI circuit open" "$LOG_FILE" | tail -50
 grep -E "429|RateLimitError|APITimeoutError|APIConnectionError|circuit open|rejecting call" "$LOG_FILE" | tail -50
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("OpenAI|EmbeddingService|EmbeddingJobs|AgentRuntime|Genesis|429|RateLimitError|APITimeoutError|APIConnectionError|circuit open|rejecting call")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\[OpenAI\] chat retry attempt|\[OpenAI\] embedding retry attempt|\[EmbeddingService\]|\[EmbeddingJobs\] embedding deferred|\[AgentRuntime\] Plan generation failed|\[Genesis\] OpenAI circuit open|429|RateLimitError|APITimeoutError|APIConnectionError|circuit open|rejecting call" "$LOG_FILE"
 ```
 - Health endpoint check:
 ```bash
@@ -65,6 +75,12 @@ Expected degraded output:
 ```bash
 grep -E "\[AgentRuntime\] Plan generation failed|\[Genesis\] OpenAI circuit open|\[OpenAI\] chat retry attempt" "$LOG_FILE" | tail -20
 ```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("AgentRuntime|Genesis|OpenAI")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\[AgentRuntime\] Plan generation failed|\[Genesis\] OpenAI circuit open|\[OpenAI\] chat retry attempt" "$LOG_FILE"
+```
 3. Check whether the system is safely degrading on the memory side:
 ```bash
 curl -s http://localhost:8000/health | jq '.memory_ingest_queue'
@@ -79,6 +95,12 @@ Use these checks to distinguish upstream OpenAI degradation from a local applica
 ```bash
 curl -s http://localhost:8000/health | jq '.dependencies.ai_providers'
 grep -E "\[OpenAI\]|\[EmbeddingService\]|\[AgentRuntime\] Plan generation failed" "$LOG_FILE" | tail -30
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("OpenAI|EmbeddingService|AgentRuntime")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\[OpenAI\]|\[EmbeddingService\]|\[AgentRuntime\] Plan generation failed" "$LOG_FILE"
 ```
 
 OpenAI degradation is the likely root cause when:
@@ -108,6 +130,12 @@ Expected healthy output before proceeding:
 ```bash
 grep -E "\[OpenAI\] chat retry attempt|\[OpenAI\] embedding retry attempt|\[Genesis\] OpenAI circuit open" "$LOG_FILE" | tail -20
 ```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("OpenAI|Genesis")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\[OpenAI\] chat retry attempt|\[OpenAI\] embedding retry attempt|\[Genesis\] OpenAI circuit open" "$LOG_FILE"
+```
 Expected result: no new lines appearing after recovery.
 3. Let the scheduled embedding sweep drain the backlog. It runs every minute as APScheduler job `process_pending_memory_embeddings`.
 ```bash
@@ -118,6 +146,12 @@ Expected result: `pending_embeddings` decreases over time.
 ```bash
 curl -s http://localhost:8000/health/deep | jq '.checks.scheduler'
 grep -E "process_pending_memory_embeddings|embedding deferred|Recovered|scheduler" "$LOG_FILE" | tail -50
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("process_pending_memory_embeddings|embedding deferred|Recovered|scheduler")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "process_pending_memory_embeddings|embedding deferred|Recovered|scheduler" "$LOG_FILE"
 ```
 Expected result: scheduler status is `ok`.
 5. Re-test one chat-completion route after the circuit closes.
@@ -166,6 +200,12 @@ Redis is used by several different runtime features, and the impact depends on h
 ```bash
 grep -E "RedisWaitRegistry|\\[EventBus\\]|\\[health\\] Redis ping failed|\\[DistributedQueue\\] Redis unavailable|worker heartbeat" "$LOG_FILE" | tail -80
 grep -E "ConnectionError|TimeoutError|ECONNREFUSED|NOAUTH|socket_timeout" "$LOG_FILE" | tail -80
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("RedisWaitRegistry|EventBus|Redis ping failed|DistributedQueue|worker heartbeat|ConnectionError|TimeoutError|ECONNREFUSED|NOAUTH|socket_timeout")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "RedisWaitRegistry|\\[EventBus\\]|\\[health\\] Redis ping failed|\\[DistributedQueue\\] Redis unavailable|worker heartbeat|ConnectionError|TimeoutError|ECONNREFUSED|NOAUTH|socket_timeout" "$LOG_FILE"
 ```
 - Health endpoint check:
 ```bash
@@ -218,6 +258,12 @@ curl -s http://localhost:8000/health | jq '.dependencies.redis, .wait_resume'
 redis-cli -u "$REDIS_URL" ping
 grep -E "RedisWaitRegistry|\\[EventBus\\]|\\[DistributedQueue\\]" "$LOG_FILE" | tail -50
 ```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("RedisWaitRegistry|EventBus|DistributedQueue")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "RedisWaitRegistry|\\[EventBus\\]|\\[DistributedQueue\\]" "$LOG_FILE"
+```
 
 Interpretation:
 - `redis-cli ... ping` fails and `/health.dependencies.redis.status` is `unavailable`: real Redis outage or network/auth failure.
@@ -245,9 +291,18 @@ Expected healthy values:
 psql "$DATABASE_URL" -c "SELECT run_id, event_type, waited_since, timeout_at, correlation_id FROM waiting_flow_runs ORDER BY waited_since ASC LIMIT 20;"
 psql "$DATABASE_URL" -c "SELECT id, flow_name, status, waiting_for, updated_at FROM flow_runs WHERE status = 'waiting' ORDER BY updated_at ASC LIMIT 20;"
 ```
-4. Let the resume watchdog and rehydration paths do their work. The watchdog runs from `apps/tasks/bootstrap.py` and checks stale waiting flows every `AINDY_WATCHDOG_INTERVAL_MINUTES`.
+4. Let the resume watchdog and rehydration paths do their work. The stuck-run watchdog (`AINDY/agents/stuck_run_watchdog.py`) runs as an APScheduler job on the leader instance every `AINDY_WATCHDOG_INTERVAL_MINUTES` minutes (default: 2) and checks stale waiting flows. Verify it is registered:
+```bash
+curl -s http://localhost:8000/observability/scheduler/status | jq '.stuck_run_watchdog'
+```
 ```bash
 grep -E "\\[resume_watchdog\\]|Cross-instance resume claimed run_id|WAIT/RESUME event" "$LOG_FILE" | tail -80
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("resume_watchdog|Cross-instance resume claimed run_id|WAIT/RESUME event")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\\[resume_watchdog\\]|Cross-instance resume claimed run_id|WAIT/RESUME event" "$LOG_FILE"
 ```
 Expected healthy recovery lines include one of:
 ```text
@@ -295,6 +350,12 @@ There are two separate stuck-run recovery paths in this codebase. `AINDY/agents/
 ```bash
 grep -E "\\[StuckRunService\\]|Recovered [0-9]+ stuck FlowRun|stuck_run_recovered|recover_stuck_flow_runs" "$LOG_FILE" | tail -100
 grep -E "stuck_run_scan_rollback_failed|Stuck-run recovery job failed|Recovery scan FAILED" "$LOG_FILE" | tail -50
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("StuckRunService|Recovered [0-9]+ stuck FlowRun|stuck_run_recovered|recover_stuck_flow_runs|stuck_run_scan_rollback_failed|Stuck-run recovery job failed|Recovery scan FAILED")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\\[StuckRunService\\]|Recovered [0-9]+ stuck FlowRun|stuck_run_recovered|recover_stuck_flow_runs|stuck_run_scan_rollback_failed|Stuck-run recovery job failed|Recovery scan FAILED" "$LOG_FILE"
 ```
 - Count current stale running flows:
 ```bash
@@ -402,6 +463,12 @@ curl -s http://localhost:8000/health | jq '.db_pool'
 ```bash
 curl -s http://localhost:8000/health | jq '.dependencies.ai_providers'
 grep -E "\\[OpenAI\\]|\\[AgentRuntime\\] Plan generation failed|\\[EmbeddingService\\]" "$LOG_FILE" | tail -50
+```
+```bash
+# JSON logging (production default - LOG_FORMAT=json or ENV=production):
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("OpenAI|AgentRuntime|EmbeddingService")) | [.timestamp, .level, .logger, .message] | @tsv'
+# Plain text logging (development - LOG_FORMAT=text):
+grep -E "\\[OpenAI\\]|\\[AgentRuntime\\] Plan generation failed|\\[EmbeddingService\\]" "$LOG_FILE"
 ```
 
 5. WAIT/RESUME coordination issue instead of general stuck-run failure:

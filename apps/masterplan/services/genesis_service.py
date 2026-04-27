@@ -73,6 +73,27 @@ def activate_masterplan_genesis(db: Session, *, plan_id: int, user_id: str) -> d
         plan.status = "active"
         db.commit()
 
+    cascade = {"activated_task_ids": [], "count": 0}
+    try:
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+        ctx = SyscallContext(
+            execution_unit_id=str(uuid.uuid4()),
+            user_id=str(user_id),
+            capabilities=["masterplan.cascade_activate"],
+            trace_id="",
+            metadata={"_db": db},
+        )
+        result = get_dispatcher().dispatch(
+            "sys.v1.masterplan.cascade_activate",
+            {"masterplan_id": str(plan.id), "user_id": str(user_id)},
+            ctx,
+        )
+        if result.get("status") == "success":
+            cascade = result.get("data") or cascade
+    except Exception as exc:
+        logger.warning("Genesis activate cascade failed (non-fatal): %s", exc)
+
     try:
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
 
@@ -91,4 +112,5 @@ def activate_masterplan_genesis(db: Session, *, plan_id: int, user_id: str) -> d
         "plan_id": getattr(plan, "id", plan_id),
         "status": getattr(plan, "status", "active"),
         "is_active": getattr(plan, "is_active", True),
+        "cascade": cascade,
     }

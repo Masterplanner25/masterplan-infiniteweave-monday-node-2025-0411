@@ -265,7 +265,7 @@ def create_run_capability_mappings(
                 )
                 existing_keys.add(run_key)
 
-        db.commit()
+        db.flush()
     except Exception as exc:
         logger.warning("[CapabilityService] create_run_capability_mappings failed: %s", exc)
 

@@ -3,13 +3,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from math import log
 from typing import List, Optional
+import logging
+import time
 import uuid
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import create_score_snapshot
 from apps.rippletrace.models import DropPointDB, PingDB
+
+logger = logging.getLogger(__name__)
 SEMANTIC_KEYWORDS = {"similar", "echo", "same idea"}
 INFERRED_KEYWORDS = {"unexpected", "random", "coincidence"}
 
@@ -47,7 +50,34 @@ def _map_drop_point_schema(drop_point: DropPointDB) -> dict:
     }
 
 
-def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
+def _write_snapshot_with_retry(
+    db: Session,
+    *,
+    drop_point_id: str,
+    max_retries: int = 3,
+    **kwargs,
+) -> dict:
+    from apps.analytics.public import create_score_snapshot
+
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return create_score_snapshot(drop_point_id=drop_point_id, db=db, **kwargs)
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "[threadweaver] snapshot write attempt %d/%d failed for %s: %s",
+                attempt + 1,
+                max_retries,
+                drop_point_id,
+                exc,
+            )
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (2**attempt))
+    raise last_exc
+
+
+def _analyze_drop_point_internal(drop_point_id: str, db: Session) -> Optional[dict]:
     drop_point = (
         db.query(DropPointDB).filter(DropPointDB.id == drop_point_id).first()
     )
@@ -91,9 +121,9 @@ def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
     drop_point.spread_score = spread_score
     drop_point.narrative_score = narrative_score
 
-    create_score_snapshot(
+    _write_snapshot_with_retry(
+        db,
         drop_point_id=drop_point_id,
-        db=db,
         timestamp=datetime.now(timezone.utc),
         narrative_score=narrative_score,
         velocity_score=velocity_score,
@@ -116,6 +146,64 @@ def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
         "spread_score": spread_score,
         "narrative_score": narrative_score,
     }
+
+
+def analyze_drop_point(drop_point_id: str, db: Session) -> Optional[dict]:
+    try:
+        result = _analyze_drop_point_internal(drop_point_id, db)
+    except Exception:
+        try:
+            from AINDY.platform_layer.metrics import rippletrace_drop_points_processed_total
+
+            rippletrace_drop_points_processed_total.labels(status="failure").inc()
+        except Exception:
+            pass
+        raise
+    try:
+        from AINDY.platform_layer.metrics import rippletrace_drop_points_processed_total
+
+        rippletrace_drop_points_processed_total.labels(status="success").inc()
+    except Exception:
+        pass
+    return result
+
+
+def analyze_drop_points(drop_point_ids: List[str], db: Session) -> dict:
+    results = {"processed": 0, "failed": 0, "errors": []}
+    for drop_point_id in drop_point_ids:
+        try:
+            _analyze_drop_point_internal(drop_point_id, db)
+            results["processed"] += 1
+            try:
+                from AINDY.platform_layer.metrics import (
+                    rippletrace_drop_points_processed_total,
+                )
+
+                rippletrace_drop_points_processed_total.labels(status="success").inc()
+            except Exception:
+                pass
+        except Exception as exc:
+            results["failed"] += 1
+            results["errors"].append(
+                {
+                    "drop_point_id": drop_point_id,
+                    "error": str(exc),
+                }
+            )
+            logger.warning(
+                "[threadweaver] drop_point %s failed (skipping): %s",
+                drop_point_id,
+                exc,
+            )
+            try:
+                from AINDY.platform_layer.metrics import (
+                    rippletrace_drop_points_processed_total,
+                )
+
+                rippletrace_drop_points_processed_total.labels(status="failure").inc()
+            except Exception:
+                pass
+    return results
 
 
 def get_dashboard_snapshot(db: Session) -> dict:

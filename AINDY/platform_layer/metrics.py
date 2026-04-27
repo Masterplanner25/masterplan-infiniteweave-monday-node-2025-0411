@@ -256,6 +256,35 @@ startup_recovery_runs_recovered_total = Counter(
     registry=REGISTRY,
 )
 
+flow_runs_dead_lettered_total = Counter(
+    "aindy_flow_runs_dead_lettered_total",
+    "Total FlowRun rows moved to dead_letter status",
+    ["reason"],
+    registry=REGISTRY,
+)
+
+rippletrace_engine_runs_total = Counter(
+    "aindy_rippletrace_engine_runs_total",
+    "Total RippleTrace engine runs",
+    ["engine", "status"],
+    registry=REGISTRY,
+)
+
+rippletrace_engine_duration_seconds = Histogram(
+    "aindy_rippletrace_engine_duration_seconds",
+    "RippleTrace engine run duration",
+    ["engine"],
+    buckets=[0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 30.0],
+    registry=REGISTRY,
+)
+
+rippletrace_drop_points_processed_total = Counter(
+    "aindy_rippletrace_drop_points_processed_total",
+    "Total drop points processed by threadweaver",
+    ["status"],
+    registry=REGISTRY,
+)
+
 wait_recovery_poll_failure_total = Counter(
     "aindy_wait_recovery_poll_failure_total",
     "Number of wait recovery poll failures (background job)",

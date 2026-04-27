@@ -53,10 +53,11 @@ def _emit_task_event(
     user_id: str | uuid.UUID | None,
     payload: dict[str, Any],
 ) -> None:
-    """Persist task lifecycle events on the caller's session."""
+    """Persist task lifecycle events on an isolated session."""
+    event_db = SessionLocal()
     try:
         emit_system_event(
-            db=db,
+            db=event_db,
             event_type=event_type,
             user_id=user_id,
             payload=payload,
@@ -64,6 +65,8 @@ def _emit_task_event(
         )
     except Exception as exc:
         logger.warning("[task] system event emit failed (%s): %s", event_type, exc)
+    finally:
+        event_db.close()
 
 
 def _serialize_dependency(task_id: int, dependency_type: str = "hard") -> dict[str, Any]:

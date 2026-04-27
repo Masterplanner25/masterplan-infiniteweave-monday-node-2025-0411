@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/validate-env.js && vite build",
+    "build:app": "node scripts/validate-env.js && vite build --mode app",
+    "build:platform": "node scripts/validate-env.js && vite build --mode platform",
+    "build:all": "node scripts/validate-env.js && vite build",
     "build:check": "node scripts/validate-env.js && vite build --mode production",
     "test": "vitest run",
     "test:watch": "vitest",

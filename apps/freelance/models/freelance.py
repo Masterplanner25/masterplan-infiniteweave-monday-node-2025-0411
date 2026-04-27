@@ -148,13 +148,23 @@ class WebhookEvent(Base):
             postgresql_where=text("idempotency_key IS NOT NULL"),
             sqlite_where=text("idempotency_key IS NOT NULL"),
         ),
+        Index(
+            "ux_freelance_webhook_events_stripe_event_id",
+            "stripe_event_id",
+            unique=True,
+            postgresql_where=text("stripe_event_id IS NOT NULL"),
+            sqlite_where=text("stripe_event_id IS NOT NULL"),
+        ),
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    stripe_event_id = Column(String(255), nullable=True, index=True)
     event_type = Column(String(100), nullable=True)
     idempotency_key = Column(String(255), nullable=False)
     payload = Column(JSON, nullable=True)
     processing_status = Column(String, nullable=False, default="pending")
+    outcome = Column(String(32), nullable=True)
+    error = Column(Text, nullable=True)
     processed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

@@ -17,6 +17,8 @@ Current shape:
 | [Getting Started](getting-started/index.md) | Up and running in 5 minutes |
 | [Core Concepts](core-concepts/index.md) | Five things you need to know |
 | [Syscall Reference](syscalls/index.md) | Every v1 syscall with examples |
+| [HTTP API Changelog](api/CHANGELOG.md) | Consumer-facing REST endpoint changes, auth updates, and breaking-path guidance |
+| [HTTP API Migration Guide](api/MIGRATION.md) | Upgrade checklist for integrations moving to the current REST API contract |
 | [Nodus](nodus/index.md) | The control language |
 | [SDK](sdk/index.md) | Python SDK for external integrations |
 | [Watcher](watcher/index.md) | OS-level attention monitoring agent |

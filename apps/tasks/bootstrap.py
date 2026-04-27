@@ -79,6 +79,7 @@ def _register_execution_adapters() -> None:
 
 
 def _register_events() -> None:
+    from AINDY.platform_layer.event_service import register_event_handler as register_internal_event_handler
     from AINDY.platform_layer.registry import register_event_handler, register_event_type
     from apps.tasks.events import TaskEventTypes
 
@@ -91,6 +92,7 @@ def _register_events() -> None:
     register_event_handler("system.startup", _handle_system_startup)
     register_event_handler("system.shutdown", _handle_system_shutdown)
     register_event_handler("scheduler.tick", _handle_scheduler_tick)
+    register_internal_event_handler(TaskEventTypes.TASK_COMPLETED, _handle_task_completed)
 
 
 def _handle_system_startup(context: dict):
@@ -109,6 +111,44 @@ def _handle_system_shutdown(context: dict):
 def _handle_scheduler_tick(context: dict):
     from apps.tasks.services.task_service import is_background_leader
     return is_background_leader()
+
+
+def _handle_task_completed(context: dict) -> None:
+    payload = context.get("payload") or {}
+    task_id = payload.get("task_id")
+    user_id = context.get("user_id")
+    if not task_id or not user_id:
+        return
+    try:
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+        ctx = SyscallContext(
+            execution_unit_id=str(uuid.uuid4()),
+            user_id=str(user_id),
+            capabilities=["task.read", "masterplan.cascade_activate"],
+            trace_id=context.get("trace_id", ""),
+            metadata={},
+        )
+        task_result = get_dispatcher().dispatch(
+            "sys.v1.task.get",
+            {"task_id": int(task_id), "user_id": str(user_id)},
+            ctx,
+        )
+        if task_result["status"] != "success":
+            return
+        task = ((task_result.get("data") or {}).get("task") or {})
+        masterplan_id = task.get("masterplan_id")
+        if not masterplan_id:
+            return
+        get_dispatcher().dispatch(
+            "sys.v1.masterplan.cascade_activate",
+            {"masterplan_id": str(masterplan_id), "user_id": str(user_id)},
+            ctx,
+        )
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "[cascade] task completion cascade failed (non-fatal): %s", exc
+        )
 
 
 def _register_jobs() -> None:

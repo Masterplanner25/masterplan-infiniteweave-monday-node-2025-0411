@@ -29,7 +29,21 @@ from AINDY.platform_layer.trace_context import reset_parent_event_id
 from AINDY.platform_layer.trace_context import reset_trace_id
 from AINDY.platform_layer.trace_context import set_parent_event_id
 from AINDY.platform_layer.trace_context import set_trace_id
+from AINDY.platform_layer.otel import get_tracer, span_context_from_trace_id
 from AINDY.platform_layer.user_ids import parse_user_id
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import NonRecordingSpan, Status, StatusCode, set_span_in_context
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    trace = None
+    NonRecordingSpan = None
+    Status = None
+    StatusCode = None
+    set_span_in_context = None
+    _OTEL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -548,7 +562,7 @@ def submit_async_job(
                         db.commit()
                         _emit_job_log_written(log_id)
                         logger.info(
-                            "[AsyncJobService] Inline fallback forced JobLog %s â†' success",
+                            "[AsyncJobService] Inline fallback forced JobLog %s Ã¢â€ ' success",
                             log_id,
                         )
                 except Exception as _e:
@@ -997,7 +1011,51 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
 
         inline_error: Exception | None = None
         try:
-            result = handler(payload, db)
+            if _OTEL_AVAILABLE:
+                try:
+                    tracer = get_tracer("aindy.async_job")
+                except Exception:
+                    tracer = trace.get_tracer("noop")
+                span_kwargs: dict[str, Any] = {
+                    "attributes": {
+                        "job.name": task_name,
+                        "job.id": str(log_id or ""),
+                        "trace.id": str(log.trace_id or log_id or ""),
+                    }
+                }
+                try:
+                    current_span = trace.get_current_span()
+                    current_context = current_span.get_span_context()
+                    if not current_context.is_valid:
+                        linked_context = span_context_from_trace_id(log.trace_id or str(log_id))
+                        if linked_context is not None:
+                            span_kwargs["context"] = set_span_in_context(
+                                NonRecordingSpan(linked_context)
+                            )
+                except Exception:
+                    pass
+                try:
+                    span_cm = tracer.start_as_current_span(
+                        f"async_job.{task_name}",
+                        **span_kwargs,
+                    )
+                except Exception:
+                    span_cm = None
+                if span_cm is None:
+                    result = handler(payload, db)
+                else:
+                    with span_cm as span:
+                        try:
+                            result = handler(payload, db)
+                        except Exception as exc:
+                            try:
+                                span.record_exception(exc)
+                                span.set_status(Status(StatusCode.ERROR, str(exc)))
+                            except Exception:
+                                pass
+                            raise
+            else:
+                result = handler(payload, db)
             if not _is_execution_envelope(result):
                 result = execution_success(result=result, events=[], trace_id=str(log_id))
             log.status = "success"
@@ -1064,7 +1122,7 @@ def _execute_job_inline(db, log_id: str, task_name: str, payload: dict[str, Any]
         db.rollback()
         log = db.query(JobLog).filter(JobLog.id == log_id).first()
         if log:
-            # REPLACED: implicit always-fail â†' consult retry policy via log.max_attempts
+            # REPLACED: implicit always-fail Ã¢â€ ' consult retry policy via log.max_attempts
             # log.max_attempts is set at submission time (default 1, matching ASYNC_JOB_DEFAULT).
             # When a caller supplies max_attempts > 1 at submit, the retry infrastructure
             # here will honour it without any further changes.
@@ -1186,7 +1244,7 @@ def _ensure_inline_log_terminal(db, log_id: str) -> None:
         log.completed_at = datetime.now(timezone.utc)
     db.add(log)
     db.commit()
-    logger.info("[AsyncJobService] Inline fallback forced log %s â†' success", log_id)
+    logger.info("[AsyncJobService] Inline fallback forced log %s Ã¢â€ ' success", log_id)
 
 
 # Register late-bound handlers that depend on async_job_service.

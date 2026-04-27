@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
@@ -38,11 +39,13 @@ class RequestMetricWriter:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._dropped = 0
+        self._last_flush_monotonic = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
+        self._last_flush_monotonic = 0.0
         self._thread = threading.Thread(
             target=self._run,
             name="request-metric-writer",
@@ -116,6 +119,7 @@ class RequestMetricWriter:
             db = SessionLocal()
             db.execute(insert(RequestMetric), mappings)
             db.commit()
+            self._last_flush_monotonic = time.monotonic()
         except Exception as exc:
             logger.warning(
                 "[request_metric_writer] Batch flush failed (%d rows): %s",
@@ -128,6 +132,14 @@ class RequestMetricWriter:
                     db.close()
                 except Exception:
                     pass
+
+    def snapshot(self) -> dict[str, int | bool | float]:
+        return {
+            "queue_depth": int(self._queue.qsize()),
+            "dropped_total": int(self._dropped),
+            "worker_running": bool(self._thread and self._thread.is_alive()),
+            "last_flush_monotonic": float(self._last_flush_monotonic),
+        }
 
 
 _writer: Optional[RequestMetricWriter] = None

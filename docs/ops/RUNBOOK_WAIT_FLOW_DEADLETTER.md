@@ -1,6 +1,6 @@
 ---
 title: "Runbook: WAIT Flow Dead-Letter"
-last_verified: "2026-04-25"
+last_verified: "2026-04-26"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -60,6 +60,12 @@ Time-based expiry is enforced by scheduled jobs in [AINDY/platform_layer/recover
 
 If no event is ever emitted, the wait can persist until deadline expiry or manual intervention.
 
+## Implementation Status
+
+Implemented (see `AINDY/agents/dead_letter_service.py`).
+Timed-out flows are moved to `status="dead_letter"` by the stuck-run scanner
+when `flow_runs.updated_at < NOW() - FLOW_WAIT_TIMEOUT_MINUTES`.
+
 ## Recovery Procedure
 
 ### Detection
@@ -86,11 +92,28 @@ Success looks like:
 - If a matching `system_events.type` and `trace_id` exists, the resume watchdog should recover it.
 - If no matching event exists, this is a true dead-letter wait.
 
+Additional dead-letter checks:
+
+```bash
+# Count dead-lettered flows
+psql "$DATABASE_URL" -c "SELECT count(*) FROM flow_runs WHERE status = 'dead_letter';"
+
+# List recent dead-lettered flows via API
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/observability/dead-letter | jq '.flows[] | {id, flow_name, dead_letter_reason, dead_lettered_at}'
+
+# Inspect a specific dead-lettered flow
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/observability/dead-letter/<flow_run_id> | jq
+
+# Prometheus metric (if OTEL/metrics configured)
+curl -s http://localhost:8000/metrics | grep aindy_flow_runs_dead_lettered_total
+```
+
 ### Automated Expiry
 
 This tree includes automated expiry jobs:
 - `expire_timed_out_waits()` runs every 5 minutes and fails waiting FlowRuns whose `wait_deadline` is in the past.
 - `expire_timed_out_wait_flows()` runs every 60 seconds and fails `waiting_flow_runs` rows whose `max_wait_seconds` has elapsed.
+- `scan_and_recover_stuck_runs()` moves stale waiting flows to `status='dead_letter'` with `dead_letter_reason` and `dead_lettered_at`.
 
 Relevant logs:
 - `Expired %d timed-out waiting FlowRun(s)`
@@ -98,8 +121,8 @@ Relevant logs:
 - `WAIT flow timeout recovery job failed (non-fatal): %s`
 - `Timed-out WaitingFlowRun recovery dispatch failed: %s`
 
-There is also a polling job in [apps/tasks/bootstrap.py](/abs/path/C:/dev/masterplan-infiniteweave-monday-node-2025-0411/apps/tasks/bootstrap.py):
-- `_job_wait_recovery_poll()` logs unresolved waits and fires `__time_wait__` rows with expired `timeout_at` when `max_wait_seconds` is null
+There is also a leader-only APScheduler watchdog in [AINDY/agents/stuck_run_watchdog.py](/abs/path/C:/dev/masterplan-infiniteweave-monday-node-2025-0411/AINDY/agents/stuck_run_watchdog.py):
+- `watchdog_scan()` logs recovered stuck runs and dead-lettered wait flows on the configured interval
 
 ### Manual Resolution
 
@@ -119,6 +142,52 @@ curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" "$API_BASE_URL/apps/agen
 ```
 
 Use this only when the waiting flow belongs to an agent execution and the caller is the run owner. The route cannot recover arbitrary waits generically.
+
+## Impact Assessment
+
+Dead-lettered flows are terminal - they will not resume automatically.
+The flow's intended outcome did not complete.
+
+| Scenario | User Impact |
+|---|---|
+| Task-completion flow dead-lettered | Task remains in its pre-completion state |
+| Agent run flow dead-lettered | Agent run is stranded; use `/agent/runs/{id}/recover` |
+| Memory write flow dead-lettered | Memory node may not have been persisted |
+
+## Recovery Options
+
+### Option 1: Replay via the existing replay endpoint
+
+```bash
+# If the flow supports replay (has a replayed_from_run_id path):
+curl -s -X POST "http://localhost:8000/agent/runs/<agent_run_id>/replay" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq
+```
+
+### Option 2: Manual state correction
+
+For flows where the application state is recoverable:
+
+```bash
+# Re-trigger the original action that started the flow.
+# Dead-lettered flows do not auto-replay - the action must be re-initiated.
+echo "Re-initiate the original triggering action"
+```
+
+### Option 3: Administrative cleanup
+
+```bash
+# Mark a dead-lettered flow as acknowledged (no replay):
+# There is no built-in "acknowledge" endpoint yet.
+# Direct DB update (admin only):
+psql "$DATABASE_URL" -c "
+  UPDATE flow_runs
+  SET status = 'failed',
+      dead_letter_reason = dead_letter_reason || ' | acknowledged'
+  WHERE id = '<flow_run_id>'
+    AND status = 'dead_letter';
+"
+```
 
 3. Last-resort direct DB failure of a WAIT run.
 
@@ -176,15 +245,18 @@ psql "$DATABASE_URL" -c "SELECT run_id, event_type FROM waiting_flow_runs WHERE 
 ```
 
 Expected output:
-- `flow_runs.status` is terminal, typically `failed`
+- `flow_runs.status` is terminal, typically `dead_letter` or `failed`
 - the `waiting_flow_runs` row is gone
-- if automated timeout handled it, `error_message` is `WAIT_TIMEOUT` or `Flow wait deadline expired`
+- if automated timeout handled it, `error_message` is `WAIT_TIMEOUT`, `Flow wait deadline expired`, or a `wait_timeout:<N>m` dead-letter reason
 
 ## Prevention
 - Set sane per-flow deadlines so `wait_deadline` is populated.
 - Monitor `waiting_flow_runs` age and volume.
 - Design wake events to be idempotent and observable through `system_events`.
 - Keep `FLOW_WAIT_TIMEOUT_MINUTES` appropriate for real workloads.
+- Increase `FLOW_WAIT_TIMEOUT_MINUTES` if legitimate flows need more time.
+- Ensure the event source that should fire the resume event is healthy.
+- Monitor `aindy_flow_runs_dead_lettered_total` for unexpected spikes.
 
 ## Escalation
 Escalate to `platform-team` if:

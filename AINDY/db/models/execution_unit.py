@@ -89,7 +89,12 @@ class ExecutionUnit(Base):
     # String form chosen so integer-PK operations and UUID-PK AgentRuns coexist.
 
     # ── Execution links ────────────────────────────────────────────────────────
-    flow_run_id = Column(String(128), nullable=True, index=True)
+    flow_run_id = Column(
+        String(128),
+        ForeignKey("flow_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # The FlowRun that executed this unit (null until a flow is started for it).
 
     correlation_id = Column(String(72), nullable=True, index=True)

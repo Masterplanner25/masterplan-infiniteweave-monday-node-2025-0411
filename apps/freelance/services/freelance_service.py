@@ -48,6 +48,7 @@ from AINDY.memory.memory_scoring_service import get_relevant_memories
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_DELIVERY_TYPES = {"manual", "email", "webhook", "payment", "subscription"}
+_SUBSCRIPTION_ACCESS_ACTIVE = {"active", "trialing"}
 
 # -----------------------------------------------------
 # Core Freelance Order Logic
@@ -397,7 +398,10 @@ def get_all_orders(db: Session, user_id: str = None):
     q = db.query(FreelanceOrder)
     if user_id:
         q = q.filter(FreelanceOrder.user_id == uuid.UUID(str(user_id)))
-    return q.order_by(FreelanceOrder.created_at.desc()).all()
+    orders = q.order_by(FreelanceOrder.created_at.desc()).all()
+    for order in orders:
+        _apply_subscription_access_control(order)
+    return orders
 
 
 def get_all_feedback(db: Session, user_id: str = None):
@@ -1228,6 +1232,21 @@ def _find_order_by_subscription_id(db, subscription_id):
         .filter(FreelanceOrder.stripe_subscription_id == subscription_id)
         .first()
     )
+
+
+def _apply_subscription_access_control(order: FreelanceOrder) -> FreelanceOrder:
+    """
+    The freelance domain has no separate entitlement table yet, so
+    subscription-backed deliverables are gated off the persisted order status.
+    Inactive subscriptions may still view order metadata, but not the delivered
+    content blob itself.
+    """
+    if str(getattr(order, "delivery_type", "") or "").lower() != "subscription":
+        return order
+    if str(getattr(order, "subscription_status", "") or "").lower() in _SUBSCRIPTION_ACCESS_ACTIVE:
+        return order
+    order.ai_output = None
+    return order
 
 
 def _confirm_payment(

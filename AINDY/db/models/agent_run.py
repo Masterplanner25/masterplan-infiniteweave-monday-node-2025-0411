@@ -33,7 +33,12 @@ class AgentRun(Base):
 
     # N+6: links to the FlowRun that executed this agent run (nullable for
     # backward-compatibility with runs created before the deterministic adapter)
-    flow_run_id = Column(String, nullable=True, index=False)
+    flow_run_id = Column(
+        String,
+        ForeignKey("flow_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=False,
+    )
 
     # N+7: records the original run_id when this run was created via /replay
     # (nullable — only set on replayed runs; absent on originals)
@@ -110,7 +115,12 @@ class AgentStep(Base):
     __tablename__ = "agent_steps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    run_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     step_index = Column(Integer, nullable=False)
 
     tool_name = Column(String(64), nullable=False)

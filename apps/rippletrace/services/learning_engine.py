@@ -6,8 +6,6 @@ from typing import Dict
 
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import list_score_snapshots
-
 DEFAULT_VELOCITY_TREND = 0.35
 DEFAULT_NARRATIVE_TREND = 1.0
 DEFAULT_EARLY_VELOCITY_RATE = 0.2
@@ -61,6 +59,7 @@ def record_prediction(
 
 def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
     from AINDY.db.models.learning import LearningRecordDB
+    from apps.analytics.public import list_score_snapshots
 
     record = (
         db.query(LearningRecordDB)

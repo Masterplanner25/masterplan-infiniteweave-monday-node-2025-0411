@@ -819,6 +819,17 @@ def run_worker_loop(
         concurrency, visibility_timeout, check_interval,
     )
 
+    from AINDY.worker.health_server import WorkerHealthServer
+
+    health_port = int(os.getenv("WORKER_HEALTH_PORT", "8001"))
+    health = WorkerHealthServer(port=health_port)
+    heartbeat_timeout = int(os.getenv("AINDY_WORKER_LIVENESS_TIMEOUT_SECONDS", "60"))
+    health.register_check(
+        "heartbeat",
+        lambda: get_worker_health_snapshot()["heartbeat_age_seconds"] < heartbeat_timeout,
+    )
+    health.start()
+
     # Startup stale recovery plus periodic background thread.
     stale_thread = threading.Thread(
         target=_run_stale_recovery,
@@ -840,28 +851,30 @@ def run_worker_loop(
     heartbeat_thread.start()
 
     # â”€â”€ Dequeue worker threads â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if concurrency <= 1:
-        _single_thread_loop(q)
-    else:
-        threads: list[threading.Thread] = []
-        for i in range(concurrency):
-            t = threading.Thread(
-                target=_single_thread_loop,
-                args=(q,),
-                name=f"aindy-worker-{i}",
-                daemon=True,
-            )
-            t.start()
-            threads.append(t)
+    try:
+        if concurrency <= 1:
+            _single_thread_loop(q)
+        else:
+            threads: list[threading.Thread] = []
+            for i in range(concurrency):
+                t = threading.Thread(
+                    target=_single_thread_loop,
+                    args=(q,),
+                    name=f"aindy-worker-{i}",
+                    daemon=True,
+                )
+                t.start()
+                threads.append(t)
 
-        _STOP.wait()
-        for t in threads:
-            t.join(timeout=10)
-
-    stale_thread.join(timeout=5)
-    heartbeat_thread.join(timeout=5)
-    _set_worker_state("DRAINING")
-    logger.info("[Worker] shutdown complete")
+            _STOP.wait()
+            for t in threads:
+                t.join(timeout=10)
+    finally:
+        stale_thread.join(timeout=5)
+        heartbeat_thread.join(timeout=5)
+        health.stop()
+        _set_worker_state("DRAINING")
+        logger.info("[Worker] shutdown complete")
 
 
 # ---------------------------------------------------------------------------

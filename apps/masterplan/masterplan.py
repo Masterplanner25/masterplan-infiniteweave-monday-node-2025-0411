@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, JSON, Text, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey, JSON, Text, Date, Index, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -8,6 +8,14 @@ from AINDY.db.database import Base
 
 class MasterPlan(Base):
     __tablename__ = "master_plans"
+    __table_args__ = (
+        Index(
+            "uq_masterplan_genesis_session_id",
+            "linked_genesis_session_id",
+            unique=True,
+            postgresql_where=text("linked_genesis_session_id IS NOT NULL"),
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     start_date = Column(DateTime, nullable=False)
