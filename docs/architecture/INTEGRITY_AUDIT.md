@@ -1,4 +1,12 @@
-# Relational Integrity Audit — 2026-04-26
+---
+title: "Relational Integrity Audit"
+last_verified: "2026-04-26"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
+# Relational Integrity Audit - 2026-04-26
 
 ## Fixed (this sprint)
 | Table | Column | Constraint added | Migration |
