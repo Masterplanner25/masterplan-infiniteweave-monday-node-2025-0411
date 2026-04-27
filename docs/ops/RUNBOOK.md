@@ -1,6 +1,6 @@
 ---
 title: "A.I.N.D.Y. Operations Runbook"
-last_verified: "2026-04-25"
+last_verified: "2026-04-26"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -62,6 +62,8 @@ Covers:
 | Variable | Default | Effect | When to set |
 |---|---|---|---|
 | `AINDY_CACHE_BACKEND` | `redis` | `redis`, `memory`, or `off` | `redis` for shared deployments; `memory` only for local single-instance |
+| `LOG_FORMAT` | `json` in production | Sets log output format: `json` or `text`. Auto-detected from `ENV`. | Set `text` for development |
+| `LOG_LEVEL` | `INFO` | Root logger level: `DEBUG`, `INFO`, `WARNING`, `ERROR` | Set `DEBUG` for troubleshooting |
 
 #### Execution Mode
 | Variable | Default | Effect | When to set |
@@ -70,6 +72,8 @@ Covers:
 | `EXECUTION_MODE` | `thread` | `thread` or `distributed` | `distributed` when running separate workers |
 | `AINDY_ENABLE_BACKGROUND_TASKS` | `true` | Enables scheduler leadership/startup hooks | Disable only for API followers or local debugging |
 | `AINDY_ENFORCE_SCHEMA` | `true` | Enforces Alembic-head startup gate | Keep `true`; production rejects `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `None` | OTLP endpoint for distributed tracing. Unset = tracing disabled. | Any production deployment with an OTLP backend |
+| `WORKER_HEALTH_PORT` | `8001` / `8002` / `8003` | Port for the worker health probe HTTP server | Set per-process in supervisord |
 | `DB_POOL_SIZE` | `10` | SQL pool size | Tune for concurrency |
 | `DB_MAX_OVERFLOW` | `20` | Extra transient DB connections | Tune for burst load |
 | `DB_POOL_TIMEOUT` | `30` | Wait time for pool checkout | Tune for DB pressure |
@@ -171,7 +175,55 @@ redis-cli -u "$REDIS_URL" GET aindy:worker:heartbeat
 | `Event bus subscriber failed to start:` | Subscriber could not connect/start | Fix Redis/event-bus startup path |
 | `RuntimeError(str(_rbv))` | Router boundary validation failed during startup | Fix the boundary violation reported in logs |
 
-## 5. Health Check Reference
+## 5. Distributed Tracing (OpenTelemetry)
+
+A.I.N.D.Y. emits OpenTelemetry spans for HTTP requests, syscall dispatch,
+and async job execution. Tracing is a no-op when `OTEL_EXPORTER_OTLP_ENDPOINT`
+is not set.
+
+Enable tracing
+
+```bash
+# In AINDY/.env - add:
+OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4317
+```
+
+Supported exporters: any OTLP-compatible backend (Jaeger, Honeycomb,
+Grafana Tempo, Datadog, etc.).
+
+Verify tracing is active
+
+```bash
+# Startup log will include:
+grep "OTLP exporter configured\|tracing is no-op" "$LOG_FILE"
+# JSON format:
+grep '"message"' "$LOG_FILE" | jq -r 'select(.message | test("OTLP|tracing")) | .message'
+```
+
+Correlation with logs
+
+Every log record includes a `trace_id` field that matches the OTEL trace ID
+for the same request. To find all logs for a specific trace:
+
+```bash
+# JSON format:
+grep '"trace_id":"<trace_id>"' "$LOG_FILE" | jq -r '[.timestamp, .level, .message] | @tsv'
+```
+
+Span names
+
+| Span | Trigger | Attributes |
+|---|---|---|
+| `HTTP request` | Every FastAPI request | `route`, `method`, `status_code` |
+| `syscall.<name>` | Every syscall dispatch call | `syscall.name`, `syscall.version`, `user.id` |
+| `async_job.<name>` | Every async job execution | `job.name`, `job.id`, `trace.id` |
+
+Disabling tracing
+
+Remove `OTEL_EXPORTER_OTLP_ENDPOINT` from the environment. The system
+falls back to no-op tracing with zero overhead.
+
+## 6. Health Check Reference
 `GET /health` returns:
 - `status`: `healthy`, `degraded`, or `critical`
 - `timestamp`: response timestamp
@@ -184,7 +236,7 @@ redis-cli -u "$REDIS_URL" GET aindy:worker:heartbeat
 
 Healthy means `status: "healthy"` and dependency statuses are `ok` or explicitly non-required states such as `degraded` for unconfigured optional Mongo. `critical` returns HTTP 503.
 
-## 6. Nodus VM Setup
+## 7. Nodus VM Setup
 Nodus is an external scripting VM used by `nodus.*` flow nodes.
 
 `NODUS_SOURCE_PATH` must point to the source directory that contains the importable `nodus` package root.
@@ -200,7 +252,7 @@ If `NODUS_SOURCE_PATH` is unset or unimportable and no `nodus.*` nodes are regis
 ```
 If `nodus.*` nodes are registered, startup warns in non-prod and raises in production.
 
-## 7. Docker Compose Quick Start
+## 8. Docker Compose Quick Start
 ```yaml
 services:
   postgres:
@@ -236,7 +288,47 @@ services:
 ```
 Mongo is optional unless `MONGO_REQUIRED=true`. Redis is optional only for single-instance `EXECUTION_MODE=thread`.
 
-## 8. Common Operational Tasks
+## 9. Worker Health Probes
+
+Background worker processes expose a minimal HTTP health endpoint on their
+own port. These are internal-only endpoints, not accessible through the API
+proxy.
+
+| Process | Default Port | Command to check |
+|---|---:|---|
+| Async job worker (`AINDY.worker.worker_loop`) | `8001` | `curl http://localhost:8001/health` |
+| Memory ingest worker (`AINDY.worker.memory_ingest_worker`) | `8002` | `curl http://localhost:8002/health` |
+| Metric writer worker (`AINDY.worker.metric_writer_worker`) | `8003` | `curl http://localhost:8003/health` |
+
+Health response shape:
+
+```bash
+echo '{"status": "healthy", "checks": {"<check_name>": {"ok": true}}}'
+```
+
+HTTP `200` means all checks are passing. HTTP `503` means at least one check
+is failing.
+
+Override the port with `WORKER_HEALTH_PORT=<port>` in the worker's environment.
+
+Checking all workers at once
+
+```bash
+for port in 8001 8002 8003; do
+  echo -n "Port $port: "
+  curl -sf http://localhost:$port/health | jq -r '.status' || echo "unreachable"
+done
+```
+
+Supervisord management (if using `ops/supervisord.conf`)
+
+```bash
+supervisorctl status
+supervisorctl restart aindy:aindy-worker
+supervisorctl tail -f aindy:aindy-memory-ingest
+```
+
+## 10. Common Operational Tasks
 ```bash
 alembic -c alembic.ini upgrade head
 alembic -c alembic.ini current
@@ -246,7 +338,7 @@ docker compose logs -f worker
 ```
 For `SECRET_KEY` rotation, use [docs/platform/engineering/RUNBOOK_SECRET_ROTATION.md](/C:/dev/masterplan-infiniteweave-monday-node-2025-0411/docs/platform/engineering/RUNBOOK_SECRET_ROTATION.md:1).
 
-## 9. MongoDB (Social App)
+## 11. MongoDB (Social App)
 
 ### Configuration
 | Variable | Default | Purpose |
