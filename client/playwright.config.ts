@@ -44,5 +44,14 @@ export default defineConfig({
       },
       dependencies: ["setup"],
     },
+    {
+      name: "platform",
+      testMatch: [/e2e\/platform-access\.spec\.ts/, /e2e\/platform-panels\.spec\.ts/],
+      use: {
+        ...devices["Desktop Chrome"],
+        storageState: "e2e/.auth/user.json",
+      },
+      dependencies: ["setup"],
+    },
   ],
 });

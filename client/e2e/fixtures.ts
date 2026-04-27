@@ -179,6 +179,23 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
           });
         }
 
+        if (path === "/scores/me" && method === "GET") {
+          return jsonResponse({
+            master_score: 82.5,
+            kpis: {
+              execution_speed: 85,
+              decision_efficiency: 80,
+              ai_productivity_boost: 78,
+              focus_quality: 84,
+              masterplan_progress: 79,
+            },
+          });
+        }
+
+        if (path === "/scores/me/history" && method === "GET") {
+          return jsonResponse({ history: [] });
+        }
+
         if (path === "/tasks/list" && method === "GET") {
           return jsonResponse(tasks);
         }
@@ -213,6 +230,199 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
 
         if (path === "/masterplans/" && method === "GET") {
           return jsonResponse({ plans: masterplans });
+        }
+
+        if (path === "/dashboard/health" && method === "GET") {
+          return jsonResponse({
+            logs: [
+              {
+                timestamp: "2026-04-26T10:00:00Z",
+                status: "healthy",
+                avg_latency_ms: 18.4,
+              },
+              {
+                timestamp: "2026-04-26T09:55:00Z",
+                status: "healthy",
+                avg_latency_ms: 21.1,
+              },
+            ],
+          });
+        }
+
+        if (path === "/platform/keys" && method === "GET") {
+          return jsonResponse({ keys: [] });
+        }
+
+        if (path === "/platform/syscalls" && method === "GET") {
+          return jsonResponse({ syscalls: [] });
+        }
+
+        if (path === "/agent/runs" && method === "GET") {
+          if (url.searchParams.get("status") === "pending_approval") {
+            return jsonResponse([]);
+          }
+
+          return jsonResponse([
+            {
+              run_id: "run-001",
+              id: "run-001",
+              goal: "Audit masterplan execution drift",
+              status: "completed",
+              run_type: "masterplan",
+              overall_risk: "low",
+              created_at: "2026-04-26T10:00:00Z",
+              completed_at: "2026-04-26T10:02:30Z",
+              steps_completed: 0,
+              steps_total: 0,
+              plan: { steps: [] },
+            },
+          ]);
+        }
+
+        if (/^\/agent\/runs\/[^/]+\/steps$/.test(path) && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (/^\/agent\/runs\/[^/]+\/events$/.test(path) && method === "GET") {
+          return jsonResponse({ events: [] });
+        }
+
+        if (path === "/agent/tools" && method === "GET") {
+          return jsonResponse([
+            {
+              name: "task.create",
+              risk: "low",
+              description: "Create a task from a run outcome.",
+            },
+          ]);
+        }
+
+        if (path === "/agent/trust" && method === "GET") {
+          return jsonResponse({
+            auto_execute_low: false,
+            auto_execute_medium: false,
+            allowed_auto_grant_tools: [],
+          });
+        }
+
+        if (path === "/agent/suggestions" && method === "GET") {
+          return jsonResponse([]);
+        }
+
+        if (path === "/agent/registry" && method === "GET") {
+          return jsonResponse({ agents: [] });
+        }
+
+        if (path === "/flows/runs" && method === "GET") {
+          return jsonResponse({
+            runs: [
+              {
+                id: "flow-001",
+                flow_name: "masterplan_activation",
+                status: "success",
+                workflow_type: "task_completion",
+                created_at: "2026-04-26T10:00:00Z",
+                completed_at: "2026-04-26T10:02:30Z",
+                current_node: null,
+                waiting_for: null,
+                error_message: null,
+                state: {},
+              },
+            ],
+            total: 1,
+          });
+        }
+
+        if (/^\/flows\/runs\/[^/]+\/history$/.test(path) && method === "GET") {
+          return jsonResponse({ history: [] });
+        }
+
+        if (path === "/flows/registry" && method === "GET") {
+          return jsonResponse({
+            flow_count: 0,
+            node_count: 0,
+            flows: {},
+            nodes: [],
+          });
+        }
+
+        if (path === "/flows/strategies" && method === "GET") {
+          return jsonResponse({ strategies: [], count: 0 });
+        }
+
+        if (path === "/automation/logs" && method === "GET") {
+          return jsonResponse({ logs: [] });
+        }
+
+        if (path === "/automation/scheduler/status" && method === "GET") {
+          return jsonResponse({
+            running: true,
+            job_count: 1,
+            jobs: [
+              {
+                id: "job-001",
+                name: "stuck-run watchdog",
+                trigger: "interval",
+                next_run: "2026-04-26T10:10:00Z",
+              },
+            ],
+          });
+        }
+
+        if (path === "/observability/dashboard" && method === "GET") {
+          return jsonResponse({
+            summary: {
+              window_hours: 24,
+              avg_latency_ms: 18,
+              window_requests: 42,
+              window_errors: 0,
+              error_rate_pct: 0,
+              active_flows: 1,
+              loop_events: 2,
+              agent_events: 1,
+              system_event_total: 3,
+              health_status: "healthy",
+            },
+            request_metrics: {
+              recent: [{ path: "/tasks", method: "GET", status_code: 200 }],
+              recent_errors: [],
+              error_rate_series: [
+                { label: "2026-04-26T10:00:00Z", error_rate: 0, errors: 0, requests: 21 },
+              ],
+            },
+            loop_activity: [],
+            agent_timeline: [],
+            system_events: {
+              recent: [],
+              counts: {},
+            },
+            system_health: {
+              latest: {
+                timestamp: "2026-04-26T10:00:00Z",
+                avg_latency_ms: 18,
+                status: "healthy",
+              },
+              logs: [
+                {
+                  timestamp: "2026-04-26T10:00:00Z",
+                  avg_latency_ms: 18,
+                  status: "healthy",
+                },
+              ],
+            },
+            flows: {
+              status_counts: { success: 1 },
+              recent: [],
+            },
+          });
+        }
+
+        if (path.startsWith("/observability/") && method === "GET") {
+          return jsonResponse({ status: "ok", data: {} });
+        }
+
+        if (path.startsWith("/rippletrace/") && method === "GET") {
+          return jsonResponse({ traces: [] });
         }
 
         const activateMatch = path.match(/^\/masterplans\/(\d+)\/activate$/);
