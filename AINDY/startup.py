@@ -958,6 +958,8 @@ def _recover_stuck_runs(db_factory, enable_background: bool) -> None:
             _scan_result = scan_and_recover_stuck_runs(
                 _scan_db,
                 staleness_minutes=settings.STUCK_RUN_THRESHOLD_MINUTES,
+                include_wait_timeouts=True,
+                return_stats=True,
             )
             _recovered = int(_scan_result.get("recovered", 0))
             _dead_lettered = int(_scan_result.get("dead_lettered", 0))

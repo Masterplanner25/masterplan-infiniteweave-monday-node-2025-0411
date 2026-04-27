@@ -99,10 +99,10 @@ Additional dead-letter checks:
 psql "$DATABASE_URL" -c "SELECT count(*) FROM flow_runs WHERE status = 'dead_letter';"
 
 # List recent dead-lettered flows via API
-curl -s -H "Authorization: Bearer $JWT" http://localhost:8000/observability/dead-letter | jq '.flows[] | {id, flow_name, dead_letter_reason, dead_lettered_at}'
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/observability/dead-letter | jq '.flows[] | {id, flow_name, dead_letter_reason, dead_lettered_at}'
 
 # Inspect a specific dead-lettered flow
-curl -s -H "Authorization: Bearer $JWT" http://localhost:8000/observability/dead-letter/<flow_run_id> | jq
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8000/observability/dead-letter/<flow_run_id> | jq
 
 # Prometheus metric (if OTEL/metrics configured)
 curl -s http://localhost:8000/metrics | grep aindy_flow_runs_dead_lettered_total
@@ -161,7 +161,7 @@ The flow's intended outcome did not complete.
 ```bash
 # If the flow supports replay (has a replayed_from_run_id path):
 curl -s -X POST "http://localhost:8000/agent/runs/<agent_run_id>/replay" \
-  -H "Authorization: Bearer $JWT" | jq
+  -H "Authorization: Bearer $ADMIN_TOKEN" | jq
 ```
 
 ### Option 2: Manual state correction

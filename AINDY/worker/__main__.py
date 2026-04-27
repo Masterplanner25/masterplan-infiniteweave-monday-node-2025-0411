@@ -16,6 +16,7 @@ from AINDY.platform_layer.deployment_contract import publish_worker_runtime_stat
 from AINDY.platform_layer import scheduler_service
 from AINDY.platform_layer.registry import load_plugins
 from AINDY.worker import _wait_for_background_schema, lifecycle_services
+from AINDY.worker.health_server import start_health_server
 from AINDY.worker.worker_loop import run_worker_loop
 
 logger = logging.getLogger(__name__)

@@ -159,6 +159,7 @@ export default function Sidebar() {
           <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
           {isAdmin ? (
             <>
+              <SubNavItem to="/platform/agent" active={isActive("/platform/agent")}>Agent Console</SubNavItem>
               <SubNavItem to="/platform/flows" active={isActive("/platform/flows")}>Console</SubNavItem>
               <SubNavItem to="/platform/approvals" active={isActive("/platform/approvals")} badge={pendingApprovals || null}>
                 Approval Inbox

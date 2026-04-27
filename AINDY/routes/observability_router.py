@@ -157,9 +157,10 @@ def get_scheduler_status(
             }
             return result
 
-        if hasattr(scheduler, "get_job"):
+        job = None
+        if callable(getattr(scheduler, "get_job", None)):
             job = scheduler.get_job("stuck_run_watchdog")
-        else:
+        elif callable(getattr(scheduler, "get_jobs", None)):
             job = next(
                 (
                     candidate

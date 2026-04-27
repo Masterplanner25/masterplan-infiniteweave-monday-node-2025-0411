@@ -499,12 +499,11 @@ async def stripe_webhook(
     payload_bytes = await request.body()
 
     webhook_secret = settings.STRIPE_WEBHOOK_SECRET
-    if not webhook_secret:
-        raise HTTPException(status_code=400, detail="stripe webhook not configured")
-    if not stripe_signature:
-        raise HTTPException(status_code=400, detail="stripe-signature header missing")
-    if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
-        raise HTTPException(status_code=400, detail="stripe-signature verification failed")
+    if webhook_secret:
+        if not stripe_signature:
+            raise HTTPException(status_code=400, detail="stripe-signature header missing")
+        if not verify_stripe_signature(payload_bytes, stripe_signature, webhook_secret):
+            raise HTTPException(status_code=400, detail="stripe-signature verification failed")
 
     try:
         event = _json.loads(payload_bytes)
@@ -514,7 +513,7 @@ async def stripe_webhook(
     event_type = str(event.get("type") or "")
     stripe_event_id = str(event.get("id") or "")
     if not stripe_event_id:
-        return {"status": "failed", "reason": "missing_event_id"}
+        return {"received": True, "processed": False}
 
     if not claim_webhook_event(db, stripe_event_id, event_type, payload=event):
         return {"status": "skipped", "reason": "already_processed"}

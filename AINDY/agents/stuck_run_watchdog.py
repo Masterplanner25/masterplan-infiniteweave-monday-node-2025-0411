@@ -23,6 +23,8 @@ def watchdog_scan() -> None:
         result = scan_and_recover_stuck_runs(
             db,
             staleness_minutes=settings.STUCK_RUN_THRESHOLD_MINUTES,
+            include_wait_timeouts=True,
+            return_stats=True,
         )
         recovered = int(result.get("recovered", 0))
         dead_lettered = int(result.get("dead_lettered", 0))

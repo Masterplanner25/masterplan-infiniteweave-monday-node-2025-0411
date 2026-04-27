@@ -270,7 +270,10 @@ def recover_stuck_agent_run(
 def scan_and_recover_stuck_runs(
     db: Session,
     staleness_minutes: int | None = None,
-) -> dict[str, int]:
+    *,
+    include_wait_timeouts: bool = False,
+    return_stats: bool = False,
+) -> int | dict[str, int]:
     """
     Scan for stuck FlowRun rows and mark them failed.
 
@@ -304,14 +307,16 @@ def scan_and_recover_stuck_runs(
             )
             .all()
         )
-        waiting_runs = (
-            db.query(FlowRun)
-            .filter(
-                FlowRun.status == "waiting",
-                FlowRun.updated_at < timeout_threshold,
+        waiting_runs = []
+        if include_wait_timeouts:
+            waiting_runs = (
+                db.query(FlowRun)
+                .filter(
+                    FlowRun.status == "waiting",
+                    FlowRun.updated_at < timeout_threshold,
+                )
+                .all()
             )
-            .all()
-        )
 
         if not stuck_runs and not waiting_runs:
             logger.info(
@@ -320,7 +325,7 @@ def scan_and_recover_stuck_runs(
                 staleness_minutes,
                 settings.FLOW_WAIT_TIMEOUT_MINUTES,
             )
-            return {"recovered": 0, "dead_lettered": 0}
+            return {"recovered": 0, "dead_lettered": 0} if return_stats else 0
 
         logger.warning(
             "[StuckRunService] Startup scan: found %d stuck run(s) and %d timed-out waiting run(s) "
@@ -357,33 +362,36 @@ def scan_and_recover_stuck_runs(
                         error=str(rollback_exc),
                     )
 
-        for flow_run in waiting_runs:
-            try:
-                reason = f"wait_timeout:{settings.FLOW_WAIT_TIMEOUT_MINUTES}m"
-                moved = move_to_dead_letter(db, str(flow_run.id), reason=reason)
-                if moved:
-                    dead_lettered += 1
-            except Exception as exc:
-                logger.error(
-                    "[StuckRunService] Failed to dead-letter waiting FlowRun %s: %s",
-                    flow_run.id,
-                    exc,
-                )
+        if include_wait_timeouts:
+            for flow_run in waiting_runs:
                 try:
-                    db.rollback()
-                except Exception as rollback_exc:
-                    emit_observability_event(
-                        event_type="stuck_run_scan_rollback_failed",
-                        payload={
-                            "flow_run_id": str(flow_run.id),
-                            "error": str(rollback_exc),
-                        },
+                    reason = f"wait_timeout:{settings.FLOW_WAIT_TIMEOUT_MINUTES}m"
+                    moved = move_to_dead_letter(db, str(flow_run.id), reason=reason)
+                    if moved:
+                        dead_lettered += 1
+                except Exception as exc:
+                    logger.error(
+                        "[StuckRunService] Failed to dead-letter waiting FlowRun %s: %s",
+                        flow_run.id,
+                        exc,
                     )
+                    try:
+                        db.rollback()
+                    except Exception as rollback_exc:
+                        emit_observability_event(
+                            event_type="stuck_run_scan_rollback_failed",
+                            payload={
+                                "flow_run_id": str(flow_run.id),
+                                "error": str(rollback_exc),
+                            },
+                        )
 
     except Exception as exc:
         logger.error(
             "[StuckRunService] Startup scan aborted with unexpected error: %s", exc
         )
 
-    return {"recovered": recovered, "dead_lettered": dead_lettered}
+    if return_stats:
+        return {"recovered": recovered, "dead_lettered": dead_lettered}
+    return recovered
 
