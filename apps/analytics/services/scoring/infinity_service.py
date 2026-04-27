@@ -54,8 +54,6 @@ from sqlalchemy.orm import Session
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.platform_layer.registry import emit_event, get_symbol
 from AINDY.platform_layer.user_ids import parse_user_id
-from apps.arm.public import list_analysis_results
-
 from ..orchestration.concurrency import supports_managed_transactions, transaction_scope
 
 logger = logging.getLogger(__name__)
@@ -242,6 +240,8 @@ def calculate_decision_efficiency(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
+        from apps.arm.public import list_analysis_results
+
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
         tasks = _get_user_tasks_for_scoring(user_id, db)
@@ -303,6 +303,8 @@ def calculate_ai_productivity_boost(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
+        from apps.arm.public import list_analysis_results
+
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
 

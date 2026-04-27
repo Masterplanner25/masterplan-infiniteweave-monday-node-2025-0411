@@ -97,7 +97,7 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
     Logs the event into A.I.N.D.Y.'s metrics system (calculation_results table).
     """
     def handler(_ctx):
-        from apps.analytics.services.calculations.calculation_services import save_calculation
+        from apps.analytics.public import save_calculation
 
         metric_name = f"UserEvent::{event.platform}"
         result = save_calculation(db, metric_name, 1.0)

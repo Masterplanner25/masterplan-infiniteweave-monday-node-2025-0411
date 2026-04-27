@@ -12,6 +12,8 @@ Endpoints:
   GET  /arm/config   — read current ARM configuration
   PUT  /arm/config   — update ARM configuration
 """
+import logging
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -24,7 +26,10 @@ from AINDY.db.database import get_db
 from AINDY.services.auth_service import get_current_user
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.arm.dao import arm_config_dao
+from apps.arm.bootstrap import ARM_CONFIG_CHANNEL, _invalidate_arm_analyzer_cache
 from apps.arm.services.deepseek.config_manager_deepseek import DEFAULT_CONFIG, _UPDATABLE_KEYS
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -235,20 +240,39 @@ async def update_config(
 ):
     """Update ARM configuration parameters."""
     def handler(ctx):
+        user_id = str(current_user["sub"])
         current = _arm_config_to_dict(arm_config_dao.get_config(db))
         filtered = {k: v for k, v in body.updates.items() if k in _UPDATABLE_KEYS}
         if filtered:
             current.update(filtered)
             updated = arm_config_dao.upsert_config(db, **current)
+            _invalidate_arm_analyzer_cache()
+            try:
+                from AINDY.platform_layer.registry import emit_event
+
+                emit_event(
+                    "arm.config.updated",
+                    {"updated_by": user_id, "channel": ARM_CONFIG_CHANNEL},
+                )
+            except Exception as exc:
+                logger.warning("[arm] Config invalidation emit failed (non-fatal): %s", exc)
+            try:
+                from AINDY.kernel.event_bus import get_event_bus
+
+                get_event_bus().publish("arm.config.updated", correlation_id=user_id)
+                logger.info("[arm] Config update broadcast sent via %s", ARM_CONFIG_CHANNEL)
+            except Exception as exc:
+                logger.warning("[arm] Config update broadcast failed (non-fatal): %s", exc)
             config_payload = _arm_config_to_dict(updated)
             queue_system_event(
                 db=db,
                 event_type="arm.config.updated",
-                user_id=str(current_user["sub"]),
+                user_id=user_id,
                 source="arm",
                 payload={
                     "updated_keys": list(filtered.keys()),
                     "config": config_payload,
+                    "channel": ARM_CONFIG_CHANNEL,
                 },
                 required=False,
             )

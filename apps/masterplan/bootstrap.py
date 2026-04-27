@@ -27,6 +27,7 @@ def register() -> None:
     _register_flow_results()
     _register_flow_plans()
     _register_syscalls()
+    _register_required_syscalls()
     _register_health_check()
 
 
@@ -197,7 +198,18 @@ def _register_flow_plans() -> None:
 
 def _register_syscalls() -> None:
     from apps.masterplan.syscalls.syscall_handlers import register_masterplan_syscall_handlers
+    from apps.masterplan.syscalls.dependency_cascade_syscall import (
+        register_dependency_cascade_syscalls,
+    )
+
     register_masterplan_syscall_handlers()
+    register_dependency_cascade_syscalls()
+
+
+def _register_required_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_required_syscall
+
+    register_required_syscall("sys.v1.masterplan.cascade_activate")
 
 
 def _job_genesis_message(payload: dict, db):

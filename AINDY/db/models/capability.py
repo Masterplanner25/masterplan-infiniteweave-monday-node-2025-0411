@@ -11,7 +11,7 @@ AgentCapabilityMapping:
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Index, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from AINDY.db.database import Base
@@ -41,9 +41,19 @@ class AgentCapabilityMapping(Base):
     __tablename__ = "agent_capability_mappings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    capability_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    capability_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("capabilities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     agent_type = Column(String(64), nullable=True, index=True)
-    agent_run_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    agent_run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_runs.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

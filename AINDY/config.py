@@ -132,6 +132,15 @@ class Settings(BaseSettings):
     )
 
     # --- Optional runtime options ---
+    # Logging configuration (read directly via os.getenv - not in Settings
+    # to avoid circular import with log setup which runs before settings load):
+    #   LOG_FORMAT=json   - force JSON output (default in production)
+    #   LOG_FORMAT=text   - force plain text (default in development)
+    #   LOG_LEVEL=INFO    - root log level (DEBUG, INFO, WARNING, ERROR)
+    # Worker process health probe port (read via os.getenv in worker entry points):
+    #   WORKER_HEALTH_PORT=8001  - async job worker
+    #   WORKER_HEALTH_PORT=8002  - memory ingest worker
+    #   WORKER_HEALTH_PORT=8003  - metric writer worker
     LOG_LEVEL: str = "INFO"
     REDIS_URL: str | None = None
     AINDY_REQUIRE_REDIS: bool = False

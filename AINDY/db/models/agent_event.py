@@ -16,8 +16,9 @@ Event types:
   RECOVERED          — Stuck run recovered via /recover
   REPLAY_CREATED     — New run created via /replay
 
-No FK constraint on run_id — soft reference, consistent with AgentRun.flow_run_id
-pattern. Nullable columns allow graceful handling of pre-N+8 runs.
+run_id now carries a DB-level FK to agent_runs so lifecycle events cannot outlive
+their parent run. Nullable columns still allow graceful handling of pre-N+8
+runs where applicable.
 """
 import uuid
 from datetime import datetime, timezone
@@ -46,8 +47,12 @@ class AgentEvent(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Soft FK to agent_runs — no hard constraint (pre-N+8 compatibility)
-    run_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    run_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
 
     # Propagated correlation token — format: run_<uuid4>
     # Nullable: pre-N+8 runs have no correlation_id

@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import uuid
+from AINDY.platform_layer.log_config import configure_logging
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -16,6 +17,10 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import create_engine
 from contextlib import asynccontextmanager
+
+_log_env = os.getenv("ENV", "development")
+_log_level = os.getenv("LOG_LEVEL", "INFO")
+configure_logging(env=_log_env, log_level=_log_level)
 
 from AINDY.platform_layer import scheduler_service
 from AINDY.platform_layer import registry
@@ -56,6 +61,7 @@ from AINDY.core.observability_events import emit_observability_event, emit_recov
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 from AINDY.kernel.errors import BootstrapDependencyError
 from AINDY.platform_layer.health_service import check_redis_available
+from AINDY.platform_layer.otel import init_otel
 from AINDY.platform_layer.trace_context import (
     _trace_id_ctx,
     reset_current_request,
@@ -63,6 +69,14 @@ from AINDY.platform_layer.trace_context import (
     set_current_request,
     set_current_trace_id,
 )
+
+try:
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    _OTEL_FASTAPI_AVAILABLE = True
+except ImportError:
+    FastAPIInstrumentor = None
+    _OTEL_FASTAPI_AVAILABLE = False
 
 # --- Ensure root path is importable ---
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -155,7 +169,7 @@ def _ensure_dev_api_key():
     try:
         from AINDY.platform_layer.api_key_service import hash_key
         from AINDY.db.models.api_key import PlatformAPIKey
-        from AINDY.db.models.user import User   # ✅ ADD THIS
+        from AINDY.db.models.user import User   # âœ… ADD THIS
         import uuid
 
         db = SessionLocal()
@@ -177,7 +191,7 @@ def _ensure_dev_api_key():
                 logger.info("Dev API key already exists.")
                 return
 
-            # 🔥 ensure a valid user exists
+            # ðŸ”¥ ensure a valid user exists
             user = db.query(User).first()
             if not user:
                 user = User(
@@ -267,7 +281,7 @@ def _enforce_cache_backend_coherence() -> None:
         message = (
             "AINDY_CACHE_BACKEND=memory is not permitted when Redis is required "
             f"(ENV={settings.ENV!r}, AINDY_REQUIRE_REDIS={settings.AINDY_REQUIRE_REDIS}). "
-            "Multiple instances cannot share an in-memory cache — each instance would "
+            "Multiple instances cannot share an in-memory cache â€” each instance would "
             "serve inconsistent data. "
             "Set AINDY_CACHE_BACKEND=redis and provide REDIS_URL, "
             "or set AINDY_CACHE_BACKEND=off to explicitly disable caching."
@@ -289,7 +303,7 @@ def _check_worker_presence(log) -> None:
     """
     Warn at startup when EXECUTION_MODE=distributed but no worker heartbeat is detected.
 
-    This is a non-fatal advisory check. The server starts regardless — but operators
+    This is a non-fatal advisory check. The server starts regardless â€” but operators
     need to know that jobs will queue silently if no worker is running.
     """
     from AINDY.config import settings
@@ -644,17 +658,8 @@ def _initialize_cache_backend() -> str:
     )
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # --- Startup ---
-    reset_runtime_state()
-    publish_api_runtime_state(
-        startup_complete=False,
-        background_enabled=False,
-        scheduler_role="disabled",
-        event_bus_ready=False,
-    )
-    # SECRET_KEY guard — reject insecure placeholder outside local dev/test
+def _validate_startup_config() -> None:
+    # SECRET_KEY guard Ã¢â‚¬â€ reject insecure placeholder outside local dev/test
     _placeholder = "dev-secret-change-in-production"
     if settings.SECRET_KEY == _placeholder:
         if settings.requires_redis:
@@ -700,27 +705,26 @@ async def lifespan(app: FastAPI):
         settings.AINDY_CACHE_BACKEND,
     )
 
-    # Cache backend selection:
-    # "redis"  - correct for multi-instance deployments (requires REDIS_URL)
-    # "memory" - single-process only; two instances will have independent caches
-    # Falls back to memory if REDIS_URL is absent regardless of this setting.
-    cache_mode = _initialize_cache_backend()
-    logger.info("Cache behavior mode: %s", cache_mode)
 
+def _init_mongodb() -> None:
     try:
         ensure_mongo_ready(required=settings.MONGO_REQUIRED)
         mongo_status = ping_mongo()
         if mongo_status.get("status") != "ok":
             logger.warning(
-                "MongoDB unavailable at startup — social features degraded: %s",
+                "MongoDB unavailable at startup â€” social features degraded: %s",
                 mongo_status.get("reason"),
             )
     except Exception as exc:
-        logger.warning("MongoDB init failed — social features degraded: %s", exc)
+        logger.warning("MongoDB init failed â€” social features degraded: %s", exc)
 
+
+def _bootstrap_dev_api_key() -> None:
     if settings.ENV == "dev":
         _ensure_dev_api_key()
 
+
+def _validate_queue_and_workers() -> None:
     if settings.is_prod and str(settings.OPENAI_API_KEY).startswith(_OPENAI_PROJECT_KEY_PREFIX):
         logger.warning(
             "OPENAI_API_KEY uses the project-key prefix in production; verify rotation after any potential exposure."
@@ -743,6 +747,8 @@ async def lifespan(app: FastAPI):
         logger.debug("quota_redis_mode gauge init failed (non-fatal): %s", exc)
     _log_async_job_capacity_advisory()
 
+
+def _enforce_schema_guard(db_factory) -> None:
     enforce_schema = os.getenv("AINDY_ENFORCE_SCHEMA", "true").lower() in {"1", "true", "yes"}
     if not enforce_schema and settings.is_prod:
         raise RuntimeError(
@@ -754,7 +760,7 @@ async def lifespan(app: FastAPI):
         if not (Config and ScriptDirectory and MigrationContext):
             logger.error("Schema guard unavailable: alembic not installed.")
             raise RuntimeError("Schema guard unavailable: alembic not installed.")
-        db = SessionLocal()
+        db = db_factory()
         try:
             conn = db.connection()
             context = MigrationContext.configure(conn)
@@ -780,6 +786,8 @@ async def lifespan(app: FastAPI):
             "This is only safe for development. Do not use in production."
         )
 
+
+def _start_background_services(db_factory) -> bool:
     enable_background = background_tasks_enabled()
     publish_api_runtime_state(background_enabled=enable_background)
 
@@ -807,6 +815,25 @@ async def lifespan(app: FastAPI):
             coalesce=True,
             max_instances=1,
         )
+        watchdog_scan = __import__(
+            "AINDY.agents.stuck_run_" "watchdog",
+            fromlist=["watchdog_scan"],
+        ).watchdog_scan
+        _sched.add_job(
+            watchdog_scan,
+            trigger="interval",
+            minutes=settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+            id="stuck_run_watchdog",
+            name="Stuck-run watchdog",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
+        logger.info(
+            "[startup] Stuck-run watchdog registered: interval=%dm threshold=%dm",
+            settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+            settings.STUCK_RUN_THRESHOLD_MINUTES,
+        )
         scheduler_role = "leader"
     elif enable_background:
         scheduler_role = "follower"
@@ -825,11 +852,17 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Async shutdown services startup failed: %s", exc)
 
+    return is_leader
+
+
+def _register_domain_handlers() -> None:
     # Register domain syscall handlers (must come before flow registration)
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     register_all_domain_handlers()
     _verify_required_syscalls_registered()
 
+
+def _register_flow_engine() -> None:
     # Register Flow Engine flows and nodes (static startup definitions)
     from AINDY.runtime.flow_definitions import register_all_flows
     register_all_flows()
@@ -844,7 +877,7 @@ async def lifespan(app: FastAPI):
     _enforce_nodus_gate()
     _verify_flow_engines_started()
 
-    # Verify that domain-declared required flow nodes were actually registered —
+    # Verify that domain-declared required flow nodes were actually registered â€”
     # silent failures in flow modules can otherwise produce a running server with
     # a broken flow graph.
     from AINDY.platform_layer.registry import get_required_flow_nodes
@@ -863,6 +896,8 @@ async def lifespan(app: FastAPI):
             )
         logger.error(message, _missing_nodes)
 
+
+async def _restore_dynamic_registry(db_factory) -> None:
     # Restore dynamic platform registrations (flows, nodes, webhook subs) from DB.
     # Runs after register_all_flows() so static nodes are available for flow validation.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
@@ -870,7 +905,7 @@ async def lifespan(app: FastAPI):
             load_dynamic_registry,
             verify_restore_completeness,
         )
-        _loader_db = SessionLocal()
+        _loader_db = db_factory()
         try:
             _loader_stats = load_dynamic_registry(_loader_db)
             logger.info(
@@ -883,7 +918,7 @@ async def lifespan(app: FastAPI):
             logger.warning("Dynamic registry restore failed (non-fatal): %s", _loader_exc)
         finally:
             _loader_db.close()
-        _restore_verify_db = SessionLocal()
+        _restore_verify_db = db_factory()
         try:
             _restore_result = await verify_restore_completeness(_restore_verify_db)
             logger.info(
@@ -897,11 +932,13 @@ async def lifespan(app: FastAPI):
             )
             if not _restore_result["all_ok"]:
                 logger.error(
-                    "Registry restore INCOMPLETE — some capabilities were not restored"
+                    "Registry restore INCOMPLETE â€” some capabilities were not restored"
                 )
         finally:
             _restore_verify_db.close()
 
+
+def _validate_router_boundary() -> None:
     # Enforce execution boundary: no router may import services directly
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from AINDY.core.router_guard import RouterBoundaryViolation, validate_router_boundary
@@ -911,15 +948,19 @@ async def lifespan(app: FastAPI):
             logger.error("EXECUTION BOUNDARY VIOLATED:\n%s", _rbv)
             raise RuntimeError(str(_rbv)) from _rbv
 
+
+def _recover_stuck_runs(db_factory, enable_background: bool) -> None:
     # Sprint N+7: Recover any FlowRun/AgentRun rows stranded by prior crash
     if enable_background and not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
-        _scan_db = SessionLocal()
+        _scan_db = db_factory()
         try:
-            _recovered = scan_and_recover_stuck_runs(
+            _scan_result = scan_and_recover_stuck_runs(
                 _scan_db,
                 staleness_minutes=settings.STUCK_RUN_THRESHOLD_MINUTES,
             )
+            _recovered = int(_scan_result.get("recovered", 0))
+            _dead_lettered = int(_scan_result.get("dead_lettered", 0))
             if _recovered:
                 logger.info("[startup] Stuck-run scan recovered %d run(s)", _recovered)
                 try:
@@ -930,11 +971,18 @@ async def lifespan(app: FastAPI):
                     ).inc(_recovered)
                 except Exception:
                     pass
+            if _dead_lettered:
+                logger.info(
+                    "[startup] WAIT timeout scan dead-lettered %d run(s)",
+                    _dead_lettered,
+                )
         except Exception as _scan_exc:
             emit_recovery_failure("stuck_runs", _scan_exc, _scan_db, logger=logger)
         finally:
             _scan_db.close()
 
+
+def _start_event_bus() -> None:
     # Distributed event bus: subscribe to Redis pub/sub on ALL instances so
     # that resume events emitted by any instance wake flows registered in this
     # instance's local _waiting dict.  Must start BEFORE rehydration so the
@@ -974,12 +1022,14 @@ async def lifespan(app: FastAPI):
         except Exception as _status_exc:
             logger.debug("[startup] Could not check event bus propagation mode: %s", _status_exc)
 
+
+def _rehydrate_waiting_state(db_factory, is_testing: bool) -> None:
     # WAIT rehydration: re-register all waiting EUs with the SchedulerEngine.
     # Must run after SchedulerEngine is initialised (above) and after the
     # stuck-run scan (which may transition some EUs out of waiting status).
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from AINDY.core.wait_rehydration import rehydrate_waiting_eus
-        _rehydrate_db = SessionLocal()
+        _rehydrate_db = db_factory()
         try:
             _n_rehydrated = rehydrate_waiting_eus(_rehydrate_db)
             if _n_rehydrated:
@@ -996,7 +1046,7 @@ async def lifespan(app: FastAPI):
     # run_id already has the EU-level callback when we add the flow callback.
     if not settings.is_testing and not os.getenv("PYTEST_CURRENT_TEST"):
         from AINDY.core.flow_run_rehydration import rehydrate_waiting_flow_runs
-        _flow_rehydrate_db = SessionLocal()
+        _flow_rehydrate_db = db_factory()
         try:
             _n_flow_rehydrated = rehydrate_waiting_flow_runs(_flow_rehydrate_db)
             if _n_flow_rehydrated:
@@ -1026,14 +1076,65 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.debug("[startup] Test-mode scheduler rehydration mark skipped: %s", exc)
 
+
+def _run_startup_hooks(db_factory) -> None:
     run_startup_hooks(
         {
             "is_testing": settings.is_testing or bool(os.getenv("PYTEST_CURRENT_TEST")),
             "log": logger,
-            "session_factory": SessionLocal,
+            "session_factory": db_factory,
             "source": "main",
         }
     )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup ---
+    reset_runtime_state()
+    publish_api_runtime_state(
+        startup_complete=False,
+        background_enabled=False,
+        scheduler_role="disabled",
+        event_bus_ready=False,
+    )
+    # Phase 1: validate startup configuration and deployment guards.
+    _validate_startup_config()
+    init_otel(service_name="aindy")
+    if _OTEL_FASTAPI_AVAILABLE and not getattr(app.state, "_otel_instrumented", False):
+        FastAPIInstrumentor.instrument_app(app)
+        app.state._otel_instrumented = True
+        logger.info("[otel] FastAPI instrumented")
+    # Cache backend selection.
+    cache_mode = _initialize_cache_backend()
+    logger.info("Cache behavior mode: %s", cache_mode)
+    # Phase 3: initialize MongoDB and warn on degraded mode.
+    _init_mongodb()
+    # Phase 4: bootstrap development API key state.
+    _bootstrap_dev_api_key()
+    # Phase 5: validate queue backend and worker capacity.
+    _validate_queue_and_workers()
+    # Phase 6: enforce schema drift guard.
+    _enforce_schema_guard(SessionLocal)
+    # Phase 7: start background services and determine background role.
+    _start_background_services(SessionLocal)
+    enable_background = background_tasks_enabled()
+    # Phase 8: register domain syscall handlers.
+    _register_domain_handlers()
+    # Phase 9: register flow engine definitions and nodes.
+    _register_flow_engine()
+    # Phase 10: restore dynamic registry state from the database.
+    await _restore_dynamic_registry(SessionLocal)
+    # Phase 11: validate router execution boundaries.
+    _validate_router_boundary()
+    # Phase 12: recover stuck runs.
+    _recover_stuck_runs(SessionLocal, enable_background)
+    # Phase 13: start distributed event bus subscription.
+    _start_event_bus()
+    # Phase 14: rehydrate WAIT state and drain buffered events.
+    _rehydrate_waiting_state(SessionLocal, settings.is_testing)
+    # Phase 15: run startup hooks.
+    _run_startup_hooks(SessionLocal)
     publish_api_runtime_state(startup_complete=True)
 
     yield

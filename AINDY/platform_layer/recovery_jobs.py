@@ -93,7 +93,7 @@ def _emit_wait_timeout_system_event(
 
 async def expire_timed_out_waits(db: AsyncSession) -> int:
     """
-    Mark expired waiting FlowRuns as failed.
+    Move expired waiting FlowRuns to dead_letter.
 
     A run expires only when ``status == "waiting"`` and ``wait_deadline`` is in
     the past. ``wait_deadline IS NULL`` means no deadline and is left untouched.
@@ -110,23 +110,28 @@ async def expire_timed_out_waits(db: AsyncSession) -> int:
     if not expired_runs:
         return 0
 
+    from AINDY.agents.dead_letter_service import move_to_dead_letter
+
+    expired_count = 0
     try:
         for flow_run in expired_runs:
             deadline = flow_run.wait_deadline
-            flow_run.status = "failed"
-            flow_run.waiting_for = None
-            flow_run.wait_deadline = None
-            flow_run.error_message = "Flow wait deadline expired"
-            flow_run.error_detail = {
-                "reason": "wait_timeout",
-                "deadline": deadline.isoformat() if deadline else None,
-            }
-            flow_run.completed_at = now
-        await _commit(db)
+            if move_to_dead_letter(
+                db,
+                str(flow_run.id),
+                reason=f"wait_timeout:{settings.FLOW_WAIT_TIMEOUT_MINUTES}m",
+            ):
+                expired_count += 1
+                flow_run.error_detail = {
+                    "reason": "wait_timeout",
+                    "deadline": deadline.isoformat() if deadline else None,
+                }
+        if expired_count:
+            await _commit(db)
     except Exception:
         await _rollback(db)
         raise
-    return len(expired_runs)
+    return expired_count
 
 
 async def expire_timed_out_wait_flows(db: AsyncSession) -> int:
@@ -142,9 +147,11 @@ async def expire_timed_out_wait_flows(db: AsyncSession) -> int:
         select(WaitingFlowRun).where(WaitingFlowRun.max_wait_seconds.is_not(None)),
     )
     expired_count = 0
+    from AINDY.agents.dead_letter_service import move_to_dead_letter
 
     try:
         for waiting_row in waiting_rows:
+            moved = False
             waited_since = _normalize_utc(waiting_row.waited_since)
             if waited_since is None or waiting_row.max_wait_seconds is None:
                 continue
@@ -167,23 +174,25 @@ async def expire_timed_out_wait_flows(db: AsyncSession) -> int:
             )
 
             if flow_run is not None:
-                flow_run.status = "failed"
-                flow_run.waiting_for = None
-                flow_run.wait_deadline = None
-                flow_run.error_message = "WAIT_TIMEOUT"
-                flow_run.error_detail = {
-                    "reason": "wait_timeout",
-                    "elapsed_seconds": elapsed_seconds,
-                    "max_wait_seconds": waiting_row.max_wait_seconds,
-                    "waiting_for": waiting_row.event_type,
-                }
-                flow_run.completed_at = now
+                moved = move_to_dead_letter(
+                    db,
+                    str(flow_run.id),
+                    reason=f"wait_timeout:{settings.FLOW_WAIT_TIMEOUT_MINUTES}m",
+                )
+                if moved:
+                    flow_run.error_detail = {
+                        "reason": "wait_timeout",
+                        "elapsed_seconds": elapsed_seconds,
+                        "max_wait_seconds": waiting_row.max_wait_seconds,
+                        "waiting_for": waiting_row.event_type,
+                    }
 
             if isinstance(db, AsyncSession):
                 await db.delete(waiting_row)
             else:
                 db.delete(waiting_row)
-            expired_count += 1
+            if flow_run is None or moved:
+                expired_count += 1
 
         if expired_count:
             await _flush(db)

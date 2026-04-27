@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 
@@ -13,6 +14,8 @@ from AINDY.platform_layer.event_trace_service import (
     link_events,
 )
 from AINDY.db.models.system_event import SystemEvent
+
+logger = logging.getLogger(__name__)
 
 
 def get_trace_graph(db, trace_id: str) -> dict[str, list[dict[str, Any]]]:
@@ -127,6 +130,7 @@ def generate_trace_insights(db, trace_id: str) -> dict[str, Any]:
 
     predictions: list[dict[str, Any]] = []
     recommendations: list[dict[str, Any]] = []
+    engine_errors: list[dict[str, str]] = []
     if drop_point_ids:
         from apps.rippletrace.services.prediction_engine import predict_drop_point
         from apps.rippletrace.services.recommendation_engine import (
@@ -140,20 +144,42 @@ def generate_trace_insights(db, trace_id: str) -> dict[str, Any]:
                     db,
                     record_learning=False,
                 )
-                if prediction.get("prediction"):
+                if prediction.get("prediction") or prediction.get("status"):
                     predictions.append(prediction)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "[rippletrace] prediction insight failed for drop_point %s: %s",
+                    drop_point_id,
+                    exc,
+                )
+                engine_errors.append(
+                    {
+                        "engine": "prediction_engine",
+                        "drop_point_id": drop_point_id,
+                        "error": str(exc),
+                    }
+                )
             try:
                 recommendation = recommend_for_drop_point(
                     drop_point_id,
                     db,
                     log_prediction=False,
                 )
-                if recommendation.get("action"):
+                if recommendation.get("action") or recommendation.get("status"):
                     recommendations.append(recommendation)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "[rippletrace] recommendation insight failed for drop_point %s: %s",
+                    drop_point_id,
+                    exc,
+                )
+                engine_errors.append(
+                    {
+                        "engine": "recommendation_engine",
+                        "drop_point_id": drop_point_id,
+                        "error": str(exc),
+                    }
+                )
 
     summary_parts: list[str] = []
     if root_event:
@@ -209,6 +235,7 @@ def generate_trace_insights(db, trace_id: str) -> dict[str, Any]:
         "predictions": predictions,
         "drop_point_recommendations": recommendations,
         "ripple_span": ripple_span,
+        "engine_errors": engine_errors,
     }
 
 

@@ -1,5 +1,5 @@
 """
-SyscallDispatcher — single entry point for all A.I.N.D.Y. system calls.
+SyscallDispatcher â€” single entry point for all A.I.N.D.Y. system calls.
 
 All sys.v{N}.{domain}.{action} calls route through dispatch(). The dispatcher:
 
@@ -9,7 +9,7 @@ All sys.v{N}.{domain}.{action} calls route through dispatch(). The dispatcher:
   4. Validates input payload against the entry's input_schema (if present).
   5. Checks tenant isolation and resource quota.
   6. Executes the registered handler.
-  7. Validates output against output_schema (non-fatal — logs warning only).
+  7. Validates output against output_schema (non-fatal â€” logs warning only).
   8. Emits deprecation warning if the syscall is marked deprecated.
   9. Wraps the result in the standard response envelope.
  10. Emits a SYSCALL_EXECUTED SystemEvent (non-fatal, swallowed on failure).
@@ -71,6 +71,20 @@ from AINDY.kernel.syscall_versioning import (
     resolve_version,
     SYSCALL_VERSION_FALLBACK,
 )
+from AINDY.platform_layer.otel import get_tracer, span_context_from_trace_id
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import NonRecordingSpan, Status, StatusCode, set_span_in_context
+
+    _OTEL_AVAILABLE = True
+except ImportError:
+    trace = None
+    NonRecordingSpan = None
+    Status = None
+    StatusCode = None
+    set_span_in_context = None
+    _OTEL_AVAILABLE = False
 
 __all__ = [
     "SyscallDispatcher",
@@ -83,10 +97,10 @@ __all__ = [
     "child_context",
 ]
 
-# ── Trace propagation ContextVars ─────────────────────────────────────────────
+# â”€â”€ Trace propagation ContextVars â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # These carry the root trace_id and execution_unit_id across nested dispatch()
 # calls within the same thread or asyncio task.  The root dispatch() sets them
-# and always resets them in a finally block — nested calls inherit them without
+# and always resets them in a finally block â€” nested calls inherit them without
 # writing a new token.
 _TRACE_ID_CTX: ContextVar[str] = ContextVar("syscall_trace_id", default="")
 _EU_ID_CTX: ContextVar[str] = ContextVar("syscall_eu_id", default="")
@@ -104,7 +118,7 @@ class SyscallDispatcher:
     """Routes sys.v1.* calls to registered handlers with capability enforcement.
 
     Instantiate once and reuse (the module-level singleton is the normal path).
-    The dispatcher itself is stateless — all state lives in the handlers and DB.
+    The dispatcher itself is stateless â€” all state lives in the handlers and DB.
     """
 
     def dispatch(
@@ -115,14 +129,14 @@ class SyscallDispatcher:
     ) -> dict[str, Any]:
         """Execute a syscall and return the standard response envelope.
 
-        This method never raises. All errors — unknown syscall, permission
-        denial, handler failure — are captured in the returned envelope.
+        This method never raises. All errors â€” unknown syscall, permission
+        denial, handler failure â€” are captured in the returned envelope.
 
         Trace propagation
         -----------------
         If a parent dispatch() is already active in this thread / asyncio task,
         the child inherits its trace_id and execution_unit_id automatically via
-        ContextVars — even if the caller passed a freshly-constructed context.
+        ContextVars â€” even if the caller passed a freshly-constructed context.
         This ensures a single trace_id across the full nested execution chain.
 
         If this is the root call (no parent active), the context's existing
@@ -141,7 +155,7 @@ class SyscallDispatcher:
         context, _tok_trace, _tok_eu = self._resolve_trace_context(context)
         try:
             return self._dispatch(name, payload, context, t_start)
-        except Exception as exc:  # belt-and-suspenders — _dispatch shouldn't leak
+        except Exception as exc:  # belt-and-suspenders â€” _dispatch shouldn't leak
             logger.error(
                 "[SyscallDispatcher] unhandled exception for '%s': %s",
                 name, exc, exc_info=True,
@@ -153,7 +167,7 @@ class SyscallDispatcher:
             if _tok_eu is not None:
                 _EU_ID_CTX.reset(_tok_eu)
 
-    # ── Private ───────────────────────────────────────────────────────────────
+    # â”€â”€ Private â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _resolve_trace_context(
         self,
@@ -174,14 +188,14 @@ class SyscallDispatcher:
         inherited_eu = _EU_ID_CTX.get()
 
         if inherited_trace:
-            # ── Nested call — inherit parent trace/EU ─────────────────────────
+            # â”€â”€ Nested call â€” inherit parent trace/EU â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (
                 context.trace_id != inherited_trace
                 or context.execution_unit_id != inherited_eu
             ):
                 logger.debug(
                     "[SyscallDispatcher] trace inherit: caller trace=%r eu=%r "
-                    "→ parent trace=%r eu=%r",
+                    "â†’ parent trace=%r eu=%r",
                     context.trace_id, context.execution_unit_id,
                     inherited_trace, inherited_eu,
                 )
@@ -195,7 +209,7 @@ class SyscallDispatcher:
                 )
             return context, None, None
 
-        # ── Root call — establish trace context ───────────────────────────────
+        # â”€â”€ Root call â€” establish trace context â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         trace_id = context.trace_id or str(_uuid.uuid4())
         eu_id = context.execution_unit_id or str(_uuid.uuid4())
         if not context.trace_id or not context.execution_unit_id:
@@ -218,7 +232,7 @@ class SyscallDispatcher:
         context: SyscallContext,
         t_start: float,
     ) -> dict[str, Any]:
-        # Step 1 — parse version and validate syscall exists
+        # Step 1 â€” parse version and validate syscall exists
         try:
             parsed_version, _ = parse_syscall_name(name)
         except ValueError:
@@ -241,7 +255,7 @@ class SyscallDispatcher:
                 _, action = parse_syscall_name(name)
                 fallback_name = f"sys.{resolved}.{action}"
                 logger.warning(
-                    "[SyscallDispatcher] version fallback: %r → %r",
+                    "[SyscallDispatcher] version fallback: %r â†’ %r",
                     name, fallback_name,
                 )
                 name = fallback_name
@@ -256,7 +270,7 @@ class SyscallDispatcher:
                 version=parsed_version,
             )
 
-        # Step 2 — enforce capability
+        # Step 2 â€” enforce capability
         if entry.capability not in context.capabilities:
             return self._error_envelope(
                 name, context,
@@ -266,7 +280,7 @@ class SyscallDispatcher:
                 version=parsed_version,
             )
 
-        # Step 2b — tenant isolation: validate context has a user_id
+        # Step 2b â€” tenant isolation: validate context has a user_id
         if not context.user_id:
             return self._error_envelope(
                 name, context,
@@ -275,7 +289,7 @@ class SyscallDispatcher:
                 version=parsed_version,
             )
 
-        # Step 2c — resource quota check (syscall budget)
+        # Step 2c â€” resource quota check (syscall budget)
         # If _get_rm() or check_quota() raises, fail-open (log warning, allow execution).
         # Only a clean (False, reason) return blocks the syscall.
         try:
@@ -288,7 +302,7 @@ class SyscallDispatcher:
                 return self._error_envelope(name, context, quota_reason, t_start,
                                             version=parsed_version)
 
-        # Step 2d — input validation against ABI schema
+        # Step 2d â€” input validation against ABI schema
         if entry.input_schema:
             errors = validate_input(entry.input_schema, payload)
             if errors:
@@ -299,20 +313,63 @@ class SyscallDispatcher:
                     version=parsed_version,
                 )
 
-        # Step 2e — deprecation check (warn but still execute)
+        # Step 2e â€” deprecation check (warn but still execute)
         deprecation_warning: str | None = None
         if entry.deprecated:
             parts = [f"Syscall '{name}' is deprecated"]
             if entry.deprecated_since:
                 parts.append(f"since {entry.deprecated_since}")
             if entry.replacement:
-                parts.append(f"— use '{entry.replacement}' instead")
+                parts.append(f"â€” use '{entry.replacement}' instead")
             deprecation_warning = " ".join(parts) + "."
             logger.warning("[SyscallDispatcher] %s", deprecation_warning)
 
-        # Step 3 — execute handler
+        # Step 3 â€” execute handler
         try:
-            data = entry.handler(payload, context)
+            if _OTEL_AVAILABLE:
+                try:
+                    tracer = get_tracer("aindy.syscall")
+                except Exception:
+                    tracer = trace.get_tracer("noop")
+                span_kwargs: dict[str, Any] = {
+                    "attributes": {
+                        "syscall.name": name,
+                        "syscall.version": parsed_version or "unknown",
+                        "syscall.capability": entry.capability if entry else "unknown",
+                        "user.id": str(context.user_id or ""),
+                        "trace.id": str(context.trace_id or ""),
+                    }
+                }
+                try:
+                    current_span = trace.get_current_span()
+                    current_context = current_span.get_span_context()
+                    if not current_context.is_valid:
+                        linked_context = span_context_from_trace_id(context.trace_id)
+                        if linked_context is not None:
+                            span_kwargs["context"] = set_span_in_context(
+                                NonRecordingSpan(linked_context)
+                            )
+                except Exception:
+                    pass
+                try:
+                    span_cm = tracer.start_as_current_span(f"syscall.{name}", **span_kwargs)
+                except Exception:
+                    span_cm = None
+                if span_cm is None:
+                    data = entry.handler(payload, context)
+                else:
+                    with span_cm as span:
+                        try:
+                            data = entry.handler(payload, context)
+                        except Exception as exc:
+                            try:
+                                span.record_exception(exc)
+                                span.set_status(Status(StatusCode.ERROR, str(exc)))
+                            except Exception:
+                                pass
+                            raise
+            else:
+                data = entry.handler(payload, context)
         except Exception as exc:
             logger.warning(
                 "[SyscallDispatcher] handler error '%s': %s", name, exc, exc_info=True,
@@ -324,7 +381,7 @@ class SyscallDispatcher:
             return self._error_envelope(name, context, message, t_start,
                                         version=parsed_version)
 
-        # Step 3b — output validation (non-fatal: log warning, never fail execution)
+        # Step 3b â€” output validation (non-fatal: log warning, never fail execution)
         if entry.output_schema:
             out_errors = validate_output(entry.output_schema, data if isinstance(data, dict) else {})
             if out_errors:
@@ -333,7 +390,7 @@ class SyscallDispatcher:
                     name, "; ".join(out_errors),
                 )
 
-        # Step 4 — record syscall usage in ResourceManager (non-fatal)
+        # Step 4 â€” record syscall usage in ResourceManager (non-fatal)
         try:
             duration_so_far = int((time.monotonic() - t_start) * 1000)
             _get_rm().record_usage(
@@ -343,13 +400,13 @@ class SyscallDispatcher:
         except Exception as _rm_exc:
             logger.debug("[SyscallDispatcher] resource record skipped: %s", _rm_exc)
 
-        # Step 5 — emit observability event (non-fatal)
+        # Step 5 â€” emit observability event (non-fatal)
         try:
             self._emit_syscall_event(name, context, "success")
         except Exception as exc:
             logger.debug("[SyscallDispatcher] observability skipped for '%s': %s", name, exc)
 
-        # Step 6 — return structured result
+        # Step 6 â€” return structured result
         return {
             "status": "success",
             "data": data,
@@ -425,7 +482,7 @@ class SyscallDispatcher:
             )
 
 
-# ── Module-level singleton ────────────────────────────────────────────────────
+# â”€â”€ Module-level singleton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 _DISPATCHER = SyscallDispatcher()
 
@@ -439,7 +496,7 @@ def get_dispatcher() -> SyscallDispatcher:
     return _DISPATCHER
 
 
-# ── Context builder helpers ───────────────────────────────────────────────────
+# â”€â”€ Context builder helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def make_syscall_ctx_from_flow(
     context: dict,
@@ -502,8 +559,8 @@ def child_context(
     """Build a child SyscallContext that inherits trace_id and eu_id from parent.
 
     Use this when a handler explicitly dispatches a nested syscall and wants to
-    forward the full execution identity — trace_id, execution_unit_id, and
-    user_id — unchanged.  capabilities and metadata can be overridden.
+    forward the full execution identity â€” trace_id, execution_unit_id, and
+    user_id â€” unchanged.  capabilities and metadata can be overridden.
 
     The ContextVar mechanism in dispatch() already propagates the trace
     automatically for most cases; use child_context() when you need the

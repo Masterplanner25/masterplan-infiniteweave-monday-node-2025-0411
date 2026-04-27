@@ -46,6 +46,10 @@ class FlowRun(Base):
     job_log_id = Column(String, nullable=True)
     error_detail = Column(JSON, nullable=True)
     error_message = Column(Text, nullable=True)
+    dead_letter_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    dead_lettered_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True),

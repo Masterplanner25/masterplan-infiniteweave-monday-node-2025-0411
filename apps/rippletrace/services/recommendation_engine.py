@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import get_score_snapshot
+from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.prediction_engine import predict_drop_point
 
@@ -59,10 +59,16 @@ def _value(snapshot, key: str):
 
 
 def _latest_snapshot(drop_point_id: str, db: Session) -> Optional[dict]:
+    from apps.analytics.public import get_score_snapshot
+
     return get_score_snapshot(drop_point_id, db)
 
 
-def recommend_for_drop_point(drop_point_id: str, db: Session, log_prediction: bool = True) -> Dict:
+def _recommend_for_drop_point_internal(
+    drop_point_id: str,
+    db: Session,
+    log_prediction: bool = True,
+) -> Dict:
     prediction = predict_drop_point(drop_point_id, db, record_learning=log_prediction)
     if prediction.get("status"):
         return {
@@ -110,6 +116,35 @@ def recommend_for_drop_point(drop_point_id: str, db: Session, log_prediction: bo
         "delta_minutes": delta_payload.get("delta_minutes"),
         "next_best_action_score": next_best_action_score,
     }
+
+
+def recommend_for_drop_point(
+    drop_point_id: str,
+    db: Session,
+    log_prediction: bool = True,
+) -> Dict:
+    return call_with_engine_breaker(
+        "recommendation_engine",
+        fallback={
+            "drop_point_id": drop_point_id,
+            "action": "monitor",
+            "priority": "low",
+            "recommendations": ["Recommendation engine temporarily unavailable."],
+            "prediction": "circuit_open",
+            "confidence": 0.0,
+            "prediction_confidence": 0.0,
+            "velocity_score": 0.0,
+            "narrative_score": 0.0,
+            "delta_minutes": None,
+            "next_best_action_score": 0.0,
+            "status": "circuit_open",
+        },
+        fn=lambda: _recommend_for_drop_point_internal(
+            drop_point_id,
+            db,
+            log_prediction=log_prediction,
+        ),
+    )
 
 
 def recommendations_summary(db: Session, limit: int = 20) -> Dict[str, List[Dict]]:

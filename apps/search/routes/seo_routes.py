@@ -69,7 +69,7 @@ def analyze_seo(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from apps.analytics.services.calculations.calculation_services import save_calculation
+    from apps.analytics.public import save_calculation
     user_id = str(current_user["sub"])
 
     results = analyze_seo_content(data.text, data.top_n, db=db, user_id=user_id)

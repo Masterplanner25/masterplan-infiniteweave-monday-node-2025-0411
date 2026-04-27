@@ -199,6 +199,7 @@ def genesis_activate_node(state, context):
         import uuid
         from datetime import datetime, timezone
         from AINDY.core.execution_signal_helper import queue_memory_capture
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
         from apps.masterplan.models import MasterPlan
 
         db = context.get("db")
@@ -212,6 +213,21 @@ def genesis_activate_node(state, context):
         plan.status = "active"
         plan.activated_at = datetime.now(timezone.utc)
         db.commit()
+        try:
+            cascade_ctx = SyscallContext(
+                execution_unit_id=str(uuid.uuid4()),
+                user_id=str(user_id),
+                capabilities=["masterplan.cascade_activate"],
+                trace_id="",
+                metadata={"_db": db},
+            )
+            get_dispatcher().dispatch(
+                "sys.v1.masterplan.cascade_activate",
+                {"masterplan_id": str(plan.id), "user_id": str(user_id)},
+                cascade_ctx,
+            )
+        except Exception:
+            pass
         try:
             queue_memory_capture(
                 db=db, user_id=str(user_id), agent_namespace="genesis",
@@ -385,6 +401,8 @@ def masterplan_projection_node(state, context):
 def masterplan_activate_node(state, context):
     try:
         from datetime import datetime, timezone
+        import uuid
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
         from apps.masterplan.models import MasterPlan
         from apps.masterplan.services.masterplan_execution_service import get_masterplan_execution_status, sync_masterplan_tasks
 
@@ -400,10 +418,28 @@ def masterplan_activate_node(state, context):
         plan.activated_at = datetime.now(timezone.utc)
         db.commit()
         task_sync = sync_masterplan_tasks(db=db, masterplan=plan, user_id=user_id)
+        cascade = {"activated_task_ids": [], "count": 0}
+        try:
+            cascade_ctx = SyscallContext(
+                execution_unit_id=str(uuid.uuid4()),
+                user_id=str(user_id),
+                capabilities=["masterplan.cascade_activate"],
+                trace_id="",
+                metadata={"_db": db},
+            )
+            cascade_result = get_dispatcher().dispatch(
+                "sys.v1.masterplan.cascade_activate",
+                {"masterplan_id": str(plan.id), "user_id": str(user_id)},
+                cascade_ctx,
+            )
+            if cascade_result.get("status") == "success":
+                cascade = cascade_result.get("data") or cascade
+        except Exception:
+            pass
         execution_status = get_masterplan_execution_status(db=db, masterplan_id=plan.id, user_id=user_id)
         return {"status": "SUCCESS", "output_patch": {"masterplan_activate_result": {
             "status": "activated", "plan_id": plan.id,
-            "task_sync": task_sync, "execution_status": execution_status,
+            "task_sync": task_sync, "execution_status": execution_status, "cascade": cascade,
         }}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

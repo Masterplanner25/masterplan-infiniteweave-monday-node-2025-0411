@@ -54,7 +54,40 @@ def _register_response_adapters() -> None:
 def _register_health_check() -> None:
     from AINDY.platform_layer.registry import register_health_check
 
-    register_health_check("rippletrace", lambda: {"status": "ok"})
+    register_health_check("rippletrace", _check_rippletrace_health)
+
+
+def _check_rippletrace_health() -> dict:
+    from apps.rippletrace.services.engine_registry import get_engine_breaker
+
+    engines = [
+        "delta_engine",
+        "learning_engine",
+        "narrative_engine",
+        "prediction_engine",
+        "recommendation_engine",
+    ]
+    engine_health: dict[str, dict] = {}
+    for engine in engines:
+        try:
+            breaker = get_engine_breaker(engine)
+            engine_health[engine] = {
+                "circuit_state": breaker.state.value,
+                "failure_count": breaker.failure_count,
+            }
+        except Exception as exc:
+            engine_health[engine] = {"error": str(exc)}
+    return {
+        "status": (
+            "ok"
+            if all(
+                info.get("circuit_state") != "open"
+                for info in engine_health.values()
+            )
+            else "degraded"
+        ),
+        "engines": engine_health,
+    }
 
 
 def _register_syscalls() -> None:

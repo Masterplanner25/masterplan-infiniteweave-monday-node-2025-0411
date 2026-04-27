@@ -270,7 +270,7 @@ def recover_stuck_agent_run(
 def scan_and_recover_stuck_runs(
     db: Session,
     staleness_minutes: int | None = None,
-) -> int:
+) -> dict[str, int]:
     """
     Scan for stuck FlowRun rows and mark them failed.
 
@@ -278,18 +278,23 @@ def scan_and_recover_stuck_runs(
       - status == "running"
       - updated_at < now() - staleness_minutes
 
-    Returns the number of runs recovered.
+    Returns counters for recovered and dead-lettered runs.
     Never raises — all exceptions are caught internally.
     """
     if staleness_minutes is None:
         staleness_minutes = _default_threshold_minutes()
 
     recovered = 0
+    dead_lettered = 0
 
     try:
         from AINDY.db.models.flow_run import FlowRun
+        from AINDY.config import settings
+        from AINDY.agents.dead_letter_service import move_to_dead_letter
 
-        threshold_dt = datetime.now(timezone.utc) - timedelta(minutes=staleness_minutes)
+        now = datetime.now(timezone.utc)
+        threshold_dt = now - timedelta(minutes=staleness_minutes)
+        timeout_threshold = now - timedelta(minutes=settings.FLOW_WAIT_TIMEOUT_MINUTES)
 
         stuck_runs = (
             db.query(FlowRun)
@@ -299,18 +304,31 @@ def scan_and_recover_stuck_runs(
             )
             .all()
         )
-
-        if not stuck_runs:
-            logger.info(
-                "[StuckRunService] Startup scan: no stuck runs (threshold=%dm)",
-                staleness_minutes,
+        waiting_runs = (
+            db.query(FlowRun)
+            .filter(
+                FlowRun.status == "waiting",
+                FlowRun.updated_at < timeout_threshold,
             )
-            return 0
+            .all()
+        )
+
+        if not stuck_runs and not waiting_runs:
+            logger.info(
+                "[StuckRunService] Startup scan: no stuck or timed-out waiting runs "
+                "(stuck_threshold=%dm wait_timeout=%dm)",
+                staleness_minutes,
+                settings.FLOW_WAIT_TIMEOUT_MINUTES,
+            )
+            return {"recovered": 0, "dead_lettered": 0}
 
         logger.warning(
-            "[StuckRunService] Startup scan: found %d stuck run(s) (threshold=%dm)",
+            "[StuckRunService] Startup scan: found %d stuck run(s) and %d timed-out waiting run(s) "
+            "(stuck_threshold=%dm wait_timeout=%dm)",
             len(stuck_runs),
+            len(waiting_runs),
             staleness_minutes,
+            settings.FLOW_WAIT_TIMEOUT_MINUTES,
         )
 
         for flow_run in stuck_runs:
@@ -339,10 +357,33 @@ def scan_and_recover_stuck_runs(
                         error=str(rollback_exc),
                     )
 
+        for flow_run in waiting_runs:
+            try:
+                reason = f"wait_timeout:{settings.FLOW_WAIT_TIMEOUT_MINUTES}m"
+                moved = move_to_dead_letter(db, str(flow_run.id), reason=reason)
+                if moved:
+                    dead_lettered += 1
+            except Exception as exc:
+                logger.error(
+                    "[StuckRunService] Failed to dead-letter waiting FlowRun %s: %s",
+                    flow_run.id,
+                    exc,
+                )
+                try:
+                    db.rollback()
+                except Exception as rollback_exc:
+                    emit_observability_event(
+                        event_type="stuck_run_scan_rollback_failed",
+                        payload={
+                            "flow_run_id": str(flow_run.id),
+                            "error": str(rollback_exc),
+                        },
+                    )
+
     except Exception as exc:
         logger.error(
             "[StuckRunService] Startup scan aborted with unexpected error: %s", exc
         )
 
-    return recovered
+    return {"recovered": recovered, "dead_lettered": dead_lettered}
 

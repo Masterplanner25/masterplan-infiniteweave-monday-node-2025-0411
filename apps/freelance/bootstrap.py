@@ -1,8 +1,12 @@
 """Freelance domain bootstrap."""
 from __future__ import annotations
 
+import logging
+
 BOOTSTRAP_DEPENDS_ON: list[str] = []
 APP_DEPENDS_ON: list[str] = ["automation", "search", "tasks"]
+
+logger = logging.getLogger(__name__)
 
 
 def register() -> None:
@@ -32,8 +36,16 @@ def _register_models() -> None:
 
 
 def _register_router() -> None:
+    from AINDY.config import settings
     from AINDY.platform_layer.registry import register_router
     from apps.freelance.routes.freelance_router import router as freelance_router
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        logger.warning(
+            "[freelance] STRIPE_WEBHOOK_SECRET is not set. "
+            "Stripe webhooks will reject all incoming events with 400. "
+            "Set STRIPE_WEBHOOK_SECRET to enable payment automation."
+        )
     register_router(freelance_router)
 
 

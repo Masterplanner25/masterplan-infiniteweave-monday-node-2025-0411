@@ -6,7 +6,7 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import list_score_snapshots
+from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 from apps.rippletrace.models import PingDB
 from apps.rippletrace.services.delta_engine import compute_deltas, drop_point_ids_with_history
 from apps.rippletrace.services.learning_engine import get_learning_thresholds, record_prediction
@@ -34,7 +34,13 @@ def _datetime_from_iso(value: str | None):
         return None
 
 
-def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = True) -> dict:
+def _predict_drop_point_internal(
+    drop_point_id: str,
+    db: Session,
+    record_learning: bool = True,
+) -> dict:
+    from apps.analytics.public import list_score_snapshots
+
     snapshots = list_score_snapshots(drop_point_id, db, limit=5)
     if len(snapshots) < 3:
         return {"drop_point_id": drop_point_id, "status": "insufficient_data"}
@@ -109,6 +115,31 @@ def predict_drop_point(drop_point_id: str, db: Session, record_learning: bool = 
         "velocity_rate": round(velocity_rate, 4),
         "latest_narrative_score": round(latest_narrative, 4),
     }
+
+
+def predict_drop_point(
+    drop_point_id: str,
+    db: Session,
+    record_learning: bool = True,
+) -> dict:
+    return call_with_engine_breaker(
+        "prediction_engine",
+        fallback={
+            "drop_point_id": drop_point_id,
+            "status": "circuit_open",
+            "prediction": "circuit_open",
+            "confidence": 0.0,
+            "velocity_trend": 0.0,
+            "narrative_trend": 0.0,
+            "velocity_rate": 0.0,
+            "latest_narrative_score": 0.0,
+        },
+        fn=lambda: _predict_drop_point_internal(
+            drop_point_id,
+            db,
+            record_learning=record_learning,
+        ),
+    )
 
 
 def scan_drop_point_predictions(db: Session, limit: int = 50) -> List[dict]:

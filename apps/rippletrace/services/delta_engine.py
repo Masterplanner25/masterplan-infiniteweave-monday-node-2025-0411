@@ -5,10 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-from apps.analytics.public import (
-    list_score_snapshot_drop_point_ids,
-    list_score_snapshots,
-)
+from apps.rippletrace.services.engine_registry import call_with_engine_breaker
 
 NARRATIVE_SPIKE_THRESHOLD = 5.0
 EMERGING_VELOCITY_THRESHOLD = 0.75
@@ -105,7 +102,9 @@ def _construct_delta_payload(drop_point_id: str, previous: dict, latest: dict) -
     }
 
 
-def compute_deltas(drop_point_id: str, db: Session) -> dict:
+def _compute_deltas_internal(drop_point_id: str, db: Session) -> dict:
+    from apps.analytics.public import list_score_snapshots
+
     snapshots = list_score_snapshots(drop_point_id, db, limit=2)
     if not snapshots:
         return {"drop_point_id": drop_point_id, "status": "no_snapshots"}
@@ -120,13 +119,25 @@ def compute_deltas(drop_point_id: str, db: Session) -> dict:
     return _construct_delta_payload(drop_point_id, previous, latest)
 
 
+def compute_deltas(drop_point_id: str, db: Session) -> dict:
+    return call_with_engine_breaker(
+        "delta_engine",
+        fallback={"drop_point_id": drop_point_id, "status": "circuit_open"},
+        fn=lambda: _compute_deltas_internal(drop_point_id, db),
+    )
+
+
 def drop_point_ids_with_history(db: Session) -> List[str]:
+    from apps.analytics.public import list_score_snapshot_drop_point_ids
+
     return list_score_snapshot_drop_point_ids(db, min_count=2)
 
 
 def _delta_stats_for_drop(
     drop_point_id: str, db: Session
 ) -> Optional[Tuple[dict, dict, Dict]]:
+    from apps.analytics.public import list_score_snapshots
+
     snapshots = list_score_snapshots(drop_point_id, db, limit=2)
     if len(snapshots) < 2:
         return None

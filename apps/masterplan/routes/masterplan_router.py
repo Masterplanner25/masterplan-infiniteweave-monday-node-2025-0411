@@ -239,3 +239,49 @@ def activate_masterplan(
     current_user: dict = Depends(get_current_user),
 ):
     return _with_execution_envelope(_run_flow_masterplan("masterplan_activate", {"plan_id": plan_id}, db, str(current_user["sub"])))
+
+
+@router.post("/{plan_id}/activate-cascade")
+@limiter.limit("30/minute")
+async def activate_masterplan_cascade(
+    request: Request,
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["sub"])
+
+    def handler(ctx):
+        import uuid
+        from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
+        syscall_ctx = SyscallContext(
+            execution_unit_id=str(uuid.uuid4()),
+            user_id=user_id,
+            capabilities=["masterplan.cascade_activate"],
+            trace_id="",
+            metadata={"_db": db},
+        )
+        result = get_dispatcher().dispatch(
+            "sys.v1.masterplan.cascade_activate",
+            {"masterplan_id": str(plan_id), "user_id": user_id},
+            syscall_ctx,
+        )
+        if result["status"] != "success":
+            raise HTTPException(status_code=500, detail=result.get("error") or "cascade activation failed")
+        data = result.get("data") or {}
+        return {
+            "activated": data.get("activated_task_ids", []),
+            "count": int(data.get("count") or 0),
+            "masterplan_id": str(plan_id),
+        }
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="masterplan.activate_cascade",
+        handler=handler,
+        user_id=user_id,
+        input_payload={"plan_id": plan_id},
+        metadata={"db": db},
+    )
+    return _with_execution_envelope(result)

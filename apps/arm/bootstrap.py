@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 _ANALYZER = None
 _ANALYZER_LOCK = Lock()
+ARM_CONFIG_CHANNEL = "aindy:arm:config_updated"
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
 APP_DEPENDS_ON: list[str] = ["analytics"]
@@ -30,6 +31,7 @@ def register() -> None:
     _register_flow_plans()
     _register_required_flow_nodes()
     _register_health_check()
+    _register_config_invalidation_subscriber()
 
 
 def _register_models() -> None:
@@ -150,6 +152,28 @@ def _get_analyzer():
     return _ANALYZER
 
 
+def _invalidate_arm_analyzer_cache() -> None:
+    """Force the ARM analyzer singleton to reload config on next use."""
+    global _ANALYZER
+    with _ANALYZER_LOCK:
+        _ANALYZER = None
+    logger.info("[arm] Analyzer singleton invalidated - will reload config on next use")
+
+
+def _register_config_invalidation_subscriber() -> None:
+    from AINDY.platform_layer.registry import register_event_handler
+
+    # The current distributed event bus only supports the scheduler WAIT/RESUME
+    # channel. Until it grows arbitrary channel subscription, ARM config
+    # invalidation is limited to in-process registry events plus immediate local
+    # invalidation at write time.
+    def _on_config_updated(context: dict) -> None:
+        logger.info("[arm] Config invalidation received from registry event")
+        _invalidate_arm_analyzer_cache()
+
+    register_event_handler("arm.config.updated", _on_config_updated)
+
+
 def _job_arm_analyze(payload: dict, db):
     analyzer = _get_analyzer()
     return analyzer.run_analysis(
@@ -215,10 +239,24 @@ def _check_health() -> dict:
         if not settings.DEEPSEEK_API_KEY:
             reasons.append("deepseek api key not configured")
         if reasons:
-            return {"status": "degraded", "reason": "; ".join(reasons)}
-        return {"status": "ok"}
+            return {
+                "status": "degraded",
+                "reason": "; ".join(reasons),
+                "analyzer_cached": _ANALYZER is not None,
+                "config_channel": ARM_CONFIG_CHANNEL,
+            }
+        return {
+            "status": "ok",
+            "analyzer_cached": _ANALYZER is not None,
+            "config_channel": ARM_CONFIG_CHANNEL,
+        }
     except Exception as exc:
-        return {"status": "degraded", "reason": str(exc)}
+        return {
+            "status": "degraded",
+            "reason": str(exc),
+            "analyzer_cached": _ANALYZER is not None,
+            "config_channel": ARM_CONFIG_CHANNEL,
+        }
     finally:
         if db is not None:
             db.close()
