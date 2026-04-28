@@ -30,12 +30,17 @@ _MOVED_FLOW_SYMBOLS = {
     "watcher_ingest_orchestrate",
 }
 
+# Boot-time vs. call-time dependencies
+#
+# BOOTSTRAP_DEPENDS_ON lists only apps whose syscalls automation requires
+# to be registered BEFORE automation itself boots (used by
+# _register_required_syscalls). Apps whose syscalls automation only calls
+# AT RUNTIME (arm, masterplan, tasks, search) do not need to be listed
+# here — the syscall dispatcher returns an error envelope if a syscall
+# is unavailable, and all apps are booted before the server accepts traffic.
 BOOTSTRAP_DEPENDS_ON: list[str] = [
-    "agent",
-    "analytics",
-    "arm",
-    "masterplan",
-    "tasks",
+    "agent",      # required at boot: sys.v1.agent.* registered before verification
+    "analytics",  # required at boot: sys.v1.score.feedback registered before verification
 ]
 APP_DEPENDS_ON: list[str] = ["agent"]
 

@@ -1,27 +1,27 @@
-import { authRequest } from "./_core.js";
+import { authRequest, taggedRequest, unwrapEnvelope } from "./_core.js";
 import { ROUTES } from "./_routes.js";
 
-export function getTasks() {
-  return authRequest(ROUTES.TASKS.LIST, { method: "GET" });
-}
+export const getTasks = taggedRequest("tasks", () =>
+  authRequest(ROUTES.TASKS.LIST, { method: "GET" }).then(unwrapEnvelope)
+);
 
-export function createTask(taskData) {
-  return authRequest(ROUTES.TASKS.CREATE, {
+export const createTask = taggedRequest("tasks", (taskData) =>
+  authRequest(ROUTES.TASKS.CREATE, {
     method: "POST",
     body: JSON.stringify(taskData),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function completeTask(taskName) {
-  return authRequest(ROUTES.TASKS.COMPLETE, {
+export const completeTask = taggedRequest("tasks", (taskName) =>
+  authRequest(ROUTES.TASKS.COMPLETE, {
     method: "POST",
     body: JSON.stringify({ name: taskName }),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function startTask(taskName) {
-  return authRequest(ROUTES.TASKS.START, {
+export const startTask = taggedRequest("tasks", (taskName) =>
+  authRequest(ROUTES.TASKS.START, {
     method: "POST",
     body: JSON.stringify({ name: taskName }),
-  });
-}
+  }).then(unwrapEnvelope)
+);

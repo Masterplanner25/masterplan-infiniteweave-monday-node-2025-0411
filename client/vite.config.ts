@@ -19,6 +19,19 @@ const platformComponentPaths = [
 
 export default defineConfig(({ mode }) => {
   const buildTarget = mode === "app" || mode === "platform" ? mode : "all";
+  const manualChunks = {
+    "vendor-react": ["react", "react-dom", "react-router-dom"],
+    "vendor-charts": ["recharts", "d3"],
+    "vendor-ui": [
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tooltip",
+      "lucide-react",
+      "clsx",
+      "class-variance-authority",
+      "tailwind-merge",
+    ],
+    ...(buildTarget === "app" ? {} : { "chunk-platform": platformComponentPaths }),
+  };
 
   const input =
     buildTarget === "app"
@@ -54,19 +67,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input,
         output: {
-          manualChunks: {
-            "vendor-react": ["react", "react-dom", "react-router-dom"],
-            "vendor-charts": ["recharts", "d3"],
-            "vendor-ui": [
-              "@radix-ui/react-slot",
-              "@radix-ui/react-tooltip",
-              "lucide-react",
-              "clsx",
-              "class-variance-authority",
-              "tailwind-merge",
-            ],
-            "chunk-platform": platformComponentPaths,
-          },
+          manualChunks,
           entryFileNames: (chunkInfo) =>
             chunkInfo.name === "platform"
               ? "platform/assets/[name]-[hash].js"

@@ -2,11 +2,13 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getDashboardOverview } from "../../api/legacy.js";
 import { getMyScore, recalculateScore, getScoreHistory } from "../../api/product.js";
+import { useAuth } from "../../context/AuthContext";
 import { useSystem } from "../../context/SystemContext";
-import FlowEngineConsole from "../platform/FlowEngineConsole";
 import GraphView from "./GraphView";import { safeMap } from "../../utils/safe";
 import { Toast } from "../shared/Toast";
 import { useToast } from "../../utils/useToast";
+
+const PLATFORM_BASE = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
 
 const C = {
   bg1: "#161b22",
@@ -268,6 +270,50 @@ function OverviewTab({ data }) {
 
 }
 
+function ExecutionTab() {
+  const { isAdmin } = useAuth();
+
+  if (!isAdmin) {
+    return (
+      <div style={{ color: "#8b949e" }}>
+        Platform execution tools are available to admin users only.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        background: "#0d1117",
+        border: "1px solid #21262d",
+        borderRadius: 10,
+        padding: "20px 24px",
+      }}
+    >
+      <h2 style={{ color: "#6cf", marginTop: 0 }}>Execution Console</h2>
+      <p style={{ color: "#8b949e", marginBottom: 16 }}>
+        The execution console now lives in the dedicated platform admin app.
+      </p>
+      <a
+        href={`${PLATFORM_BASE}/flows`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          background: "#6cf",
+          color: "#000",
+          borderRadius: 6,
+          padding: "10px 14px",
+          fontWeight: "bold",
+          textDecoration: "none",
+        }}
+      >
+        Open Platform Console
+      </a>
+    </div>
+  );
+}
+
 const TABS = [
 { id: "overview", label: "Overview" },
 { id: "execution", label: "Execution" },
@@ -342,7 +388,7 @@ export default function Dashboard() {
           <OverviewTab data={data} />
         </>
       }
-      {activeTab === "execution" && <FlowEngineConsole />}
+      {activeTab === "execution" && <ExecutionTab />}
       {activeTab === "graph" && <GraphView />}
     </div>);
 

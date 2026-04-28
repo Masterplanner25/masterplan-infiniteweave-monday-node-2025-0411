@@ -68,6 +68,16 @@ def set_utc(dbapi_connection, connection_record):
         if settings.is_testing:
             cursor.execute("SET statement_timeout = '10s';")
             cursor.execute("SET idle_in_transaction_session_timeout = '10s';")
+        else:
+            if settings.DB_STATEMENT_TIMEOUT_MS > 0:
+                cursor.execute(
+                    f"SET statement_timeout = '{settings.DB_STATEMENT_TIMEOUT_MS}ms';"
+                )
+            if settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS > 0:
+                cursor.execute(
+                    f"SET idle_in_transaction_session_timeout = "
+                    f"'{settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS}ms';"
+                )
     except Exception as exc:
         emit_observability_event(
             logger,
@@ -120,7 +130,7 @@ def get_db():
         db.close()
 
 
-def get_pool_status() -> dict[str, int]:
+def get_pool_status() -> dict[str, int | str]:
     """Return the current SQLAlchemy pool status for observability endpoints."""
     if DATABASE_URL.startswith("sqlite") or isinstance(getattr(engine, "pool", None), (NullPool, StaticPool)):
         return {
@@ -128,6 +138,8 @@ def get_pool_status() -> dict[str, int]:
             "checkedout": 0,
             "overflow": 0,
             "checked_in": 0,
+            "statement_timeout_ms": settings.DB_STATEMENT_TIMEOUT_MS,
+            "idle_in_transaction_timeout_ms": settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
         }
 
     pool = getattr(engine, "pool", None)
@@ -137,21 +149,28 @@ def get_pool_status() -> dict[str, int]:
             "checkedout": 0,
             "overflow": 0,
             "checked_in": 0,
+            "statement_timeout_ms": settings.DB_STATEMENT_TIMEOUT_MS,
+            "idle_in_transaction_timeout_ms": settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
         }
 
     try:
-        return {
+        status = {
             "pool_size": int(pool.size()),
             "checkedout": int(pool.checkedout()),
             "overflow": int(pool.overflow()),
             "checked_in": int(pool.checkedin()),
         }
+        status["statement_timeout_ms"] = settings.DB_STATEMENT_TIMEOUT_MS
+        status["idle_in_transaction_timeout_ms"] = settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS
+        return status
     except Exception:
         return {
             "pool_size": 0,
             "checkedout": 0,
             "overflow": 0,
             "checked_in": 0,
+            "statement_timeout_ms": settings.DB_STATEMENT_TIMEOUT_MS,
+            "idle_in_transaction_timeout_ms": settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS,
         }
 
 # --------------------------------------------------------------------

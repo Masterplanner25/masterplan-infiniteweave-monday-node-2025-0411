@@ -3,19 +3,22 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
 
+const PLATFORM_BASE = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
+const platformUrl = (path) => `${PLATFORM_BASE}${path}`;
+
 const NAV_GROUPS = [
   {
     title: "PLATFORM",
     adminOnly: true,
     links: [
-      { to: "/platform/agent", label: "Agent Console" },
-      { to: "/platform/flows", label: "Flow Engine" },
-      { to: "/platform/observability", label: "Observability" },
-      { to: "/platform/health", label: "Health" },
-      { to: "/platform/executions", label: "Executions" },
-      { to: "/platform/approvals", label: "Approvals" },
-      { to: "/platform/registry", label: "Registry" },
-      { to: "/platform/trace", label: "Ripple Trace" },
+      { to: "/agent", label: "Agent Console", external: true },
+      { to: "/flows", label: "Flow Engine", external: true },
+      { to: "/observability", label: "Observability", external: true },
+      { to: "/health", label: "Health", external: true },
+      { to: "/executions", label: "Executions", external: true },
+      { to: "/approvals", label: "Approvals", external: true },
+      { to: "/registry", label: "Registry", external: true },
+      { to: "/trace", label: "Ripple Trace", external: true },
     ],
   },
   {
@@ -62,17 +65,41 @@ const NAV_GROUPS = [
   },
 ];
 
-function ShellLink({ to, label, onNavigate }) {
+function ShellLink({ to, label, onNavigate, external = false }) {
+  const baseClasses = [
+    "block rounded-2xl border px-3 py-2 text-sm transition-colors",
+    "border-zinc-800/60 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-100",
+  ];
+
+  if (external) {
+    const isActive = typeof window !== "undefined" && window.location.pathname.startsWith("/platform");
+    return (
+      <a
+        href={platformUrl(to)}
+        onClick={onNavigate}
+        target="_self"
+        className={[
+          "block rounded-2xl border px-3 py-2 text-sm transition-colors",
+          isActive
+            ? "border-[#00ffaa]/30 bg-[#00ffaa]/10 text-[#00ffaa]"
+            : "border-zinc-800/60 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-100",
+        ].join(" ")}
+      >
+        {label}
+      </a>
+    );
+  }
+
   return (
     <NavLink
       to={to}
       onClick={onNavigate}
       className={({ isActive }) =>
         [
-          "block rounded-2xl border px-3 py-2 text-sm transition-colors",
+          ...baseClasses,
           isActive
             ? "border-[#00ffaa]/30 bg-[#00ffaa]/10 text-[#00ffaa]"
-            : "border-zinc-800/60 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900/70 hover:text-zinc-100",
+            : "",
         ].join(" ")
       }
     >
@@ -134,6 +161,7 @@ export default function AppShell() {
                       key={link.to}
                       to={link.to}
                       label={link.label}
+                      external={link.external}
                       onNavigate={() => setSidebarOpen(false)}
                     />
                   ))}

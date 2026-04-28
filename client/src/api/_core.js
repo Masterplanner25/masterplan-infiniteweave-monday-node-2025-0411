@@ -51,6 +51,34 @@ export class ApiError extends Error {
   }
 }
 
+export function taggedRequest(domain, apiFn) {
+  return function (...args) {
+    return apiFn(...args).catch((err) => {
+      if (err instanceof ApiError) {
+        err.domain = domain;
+      }
+      throw err;
+    });
+  };
+}
+
+export function unwrapEnvelope(response) {
+  // Option B: the client still has many callers that depend on raw execution
+  // envelopes, so unwrapping is opt-in at the API module layer for now.
+  if (
+    response &&
+    typeof response === "object" &&
+    "data" in response &&
+    "error" in response
+  ) {
+    if (response.error) {
+      throw new ApiError(200, response.error, response);
+    }
+    return response.data ?? response;
+  }
+  return response;
+}
+
 function normalizeArrayFields(value) {
   if (Array.isArray(value)) {
     return safeMap(value, (item) => normalizeArrayFields(item));
@@ -121,27 +149,28 @@ async function request(path, opts = {}) {
   const url = buildApiUrl(path);
   const token = getStoredToken();
   const controller = new AbortController();
+  const { _isRetry = false, ...fetchOpts } = opts;
   const timeoutId = typeof window !== "undefined"
     ? setTimeout(() => controller.abort(), 30_000)
     : null;
 
-  if (opts.signal) {
-    if (opts.signal.aborted) {
+  if (fetchOpts.signal) {
+    if (fetchOpts.signal.aborted) {
       controller.abort();
     } else {
-      opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      fetchOpts.signal.addEventListener("abort", () => controller.abort(), { once: true });
     }
   }
 
   try {
     const res = await fetch(url, {
-      ...opts,
+      ...fetchOpts,
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "X-Client-Version": CLIENT_VERSION,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(opts.headers || {}),
+        ...(fetchOpts.headers || {}),
       },
     });
 
@@ -149,6 +178,14 @@ async function request(path, opts = {}) {
     if (versionWarning && typeof window !== "undefined") {
       console.warn("[API Version Warning]", versionWarning);
       dispatchVersionWarning(versionWarning);
+    }
+
+    if (res.status === 503) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") || "0", 10);
+      if (retryAfter > 0 && retryAfter <= 60 && !_isRetry) {
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        return request(path, { ...fetchOpts, _isRetry: true });
+      }
     }
 
     if (!res.ok) {
@@ -173,6 +210,9 @@ async function request(path, opts = {}) {
   } catch (err) {
     if (err?.name === "AbortError") {
       throw new ApiError(408, "Request timed out after 30 seconds.", null);
+    }
+    if (err instanceof TypeError && !err.status) {
+      throw new ApiError(0, "Network error. Check your connection.", null);
     }
     throw err;
   } finally {
@@ -218,27 +258,28 @@ export function adminRequest(path, opts = {}) {
 async function requestAbsolute(url, opts = {}) {
   const token = getStoredToken();
   const controller = new AbortController();
+  const { _isRetry = false, ...fetchOpts } = opts;
   const timeoutId = typeof window !== "undefined"
     ? setTimeout(() => controller.abort(), 30_000)
     : null;
 
-  if (opts.signal) {
-    if (opts.signal.aborted) {
+  if (fetchOpts.signal) {
+    if (fetchOpts.signal.aborted) {
       controller.abort();
     } else {
-      opts.signal.addEventListener("abort", () => controller.abort(), { once: true });
+      fetchOpts.signal.addEventListener("abort", () => controller.abort(), { once: true });
     }
   }
 
   try {
     const res = await fetch(url, {
-      ...opts,
+      ...fetchOpts,
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "X-Client-Version": CLIENT_VERSION,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(opts.headers || {}),
+        ...(fetchOpts.headers || {}),
       },
     });
 
@@ -246,6 +287,14 @@ async function requestAbsolute(url, opts = {}) {
     if (versionWarning && typeof window !== "undefined") {
       console.warn("[API Version Warning]", versionWarning);
       dispatchVersionWarning(versionWarning);
+    }
+
+    if (res.status === 503) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") || "0", 10);
+      if (retryAfter > 0 && retryAfter <= 60 && !_isRetry) {
+        await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+        return requestAbsolute(url, { ...fetchOpts, _isRetry: true });
+      }
     }
 
     if (!res.ok) {
@@ -270,6 +319,9 @@ async function requestAbsolute(url, opts = {}) {
   } catch (err) {
     if (err?.name === "AbortError") {
       throw new ApiError(408, "Request timed out after 30 seconds.", null);
+    }
+    if (err instanceof TypeError && !err.status) {
+      throw new ApiError(0, "Network error. Check your connection.", null);
     }
     throw err;
   } finally {

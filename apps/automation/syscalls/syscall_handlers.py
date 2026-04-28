@@ -473,6 +473,75 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
         db.close()
 
 
+def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
+    """
+    Query stored WatcherSignal records. Returns serialized dicts only.
+
+    Payload:
+      user_id:      str | None
+      session_id:   str | None
+      signal_type:  str | None
+      limit:        int
+      offset:       int
+
+    Returns:
+      {"signals": list[dict], "total": int}
+    """
+    from uuid import UUID
+
+    from AINDY.db.database import SessionLocal
+    from apps.automation.models import WatcherSignal
+
+    session_id = payload.get("session_id")
+    signal_type = payload.get("signal_type")
+    requested_user_id = payload.get("user_id")
+    limit = max(0, min(int(payload.get("limit") or 100), 500))
+    offset = max(0, int(payload.get("offset") or 0))
+
+    external_db = (ctx.metadata or {}).get("_db")
+    db = external_db or SessionLocal()
+    owns_session = external_db is None
+    try:
+        query = db.query(WatcherSignal)
+        if session_id:
+            query = query.filter(WatcherSignal.session_id == session_id)
+        if signal_type:
+            query = query.filter(WatcherSignal.signal_type == signal_type)
+        if requested_user_id:
+            query = query.filter(WatcherSignal.user_id == UUID(str(requested_user_id)))
+
+        total = query.count()
+        rows = (
+            query.order_by(WatcherSignal.signal_timestamp.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return {
+            "signals": [
+                {
+                    "id": row.id,
+                    "signal_type": row.signal_type,
+                    "session_id": row.session_id,
+                    "app_name": row.app_name,
+                    "window_title": row.window_title,
+                    "activity_type": row.activity_type,
+                    "signal_timestamp": row.signal_timestamp.isoformat(),
+                    "received_at": row.received_at.isoformat(),
+                    "duration_seconds": row.duration_seconds,
+                    "focus_score": row.focus_score,
+                    "user_id": str(row.user_id) if row.user_id is not None else None,
+                    "metadata": row.signal_metadata,
+                }
+                for row in rows
+            ],
+            "total": total,
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GOAL DOMAIN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -606,9 +675,28 @@ def _handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
         syscall_name  (str)  — required; fully-qualified target syscall name
         capability    (str)  — optional; defaults to tool_name
     """
-    from apps.agent.public import dispatch_tool_request
+    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
-    return dispatch_tool_request(payload, context)
+    tool_name = str((payload or {}).get("tool_name") or "").strip()
+    user_id = str((payload or {}).get("user_id") or "").strip()
+    syscall_name = str((payload or {}).get("syscall_name") or "").strip()
+    forwarded_payload = (payload or {}).get("payload") or {}
+    capability = str((payload or {}).get("capability") or tool_name).strip()
+
+    if not tool_name:
+        raise ValueError("tool_name is required")
+    if not user_id:
+        raise ValueError("user_id is required")
+    if not syscall_name:
+        raise ValueError("syscall_name is required")
+    if not isinstance(forwarded_payload, dict):
+        raise ValueError("payload must be an object")
+
+    ctx = make_syscall_ctx_from_tool(user_id, capabilities=[capability])
+    result = get_dispatcher().dispatch(syscall_name, forwarded_payload, ctx)
+    if result["status"] == "error":
+        raise RuntimeError(result["error"])
+    return result["data"]
 
 
 # ── MAS Memory Handlers ───────────────────────────────────────────────────────
@@ -682,6 +770,7 @@ def register_all_domain_handlers() -> None:
     # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
         ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False, None),
+        ("sys.v1.watcher.query",           handle_watcher_query,          "watcher.query",         "Query stored watcher signals",                           False, None),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False, None),
         (
