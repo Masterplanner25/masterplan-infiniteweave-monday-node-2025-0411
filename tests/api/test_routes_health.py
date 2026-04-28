@@ -69,7 +69,7 @@ class TestHealthEndpoint:
         assert data["checks"]["nodus"]["detail"] == "NODUS_SOURCE_PATH not set"
 
     def test_deep_health_reports_openai_circuit_as_degraded(self, client):
-        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+        from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
         breaker = get_openai_circuit_breaker()
 

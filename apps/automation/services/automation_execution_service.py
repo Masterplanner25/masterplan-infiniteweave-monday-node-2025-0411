@@ -8,7 +8,6 @@ from typing import Any
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
-from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.platform_layer.external_call_service import perform_external_call
 
 
@@ -50,7 +49,9 @@ def _execute_social_action(payload: dict[str, Any], config: dict[str, Any]) -> d
     if not content:
         raise ValueError("social_content_required")
 
-    mongo = get_mongo_client()
+    from AINDY.db.mongo_setup import require_mongo_client
+
+    mongo = require_mongo_client("automation_execution_service")
     social_db = mongo["aindy_social_layer"]
     posts = social_db["posts"]
     post_id = str(config.get("post_id") or "")

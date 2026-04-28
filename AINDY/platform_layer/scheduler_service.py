@@ -226,6 +226,16 @@ def _register_system_jobs(scheduler: BackgroundScheduler) -> None:
     )
 
     scheduler.add_job(
+        _process_queue_delayed_jobs,
+        trigger=IntervalTrigger(seconds=30),
+        id="queue_maintenance_process_delayed",
+        name="Queue delayed-job promotion",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
         _expire_timed_out_waits,
         trigger=IntervalTrigger(minutes=5),
         id="expire_timed_out_waits",
@@ -377,6 +387,20 @@ def _check_queue_backend_health() -> None:
             logger.info("Distributed queue backend recovered to Redis")
     except Exception as exc:
         logger.warning("Queue backend health check failed: %s", exc)
+
+
+def _process_queue_delayed_jobs() -> None:
+    try:
+        from AINDY.core.distributed_queue import InMemoryQueueBackend, get_queue
+
+        queue_backend = get_queue()
+        if isinstance(queue_backend, InMemoryQueueBackend):
+            return
+        promoted = int(queue_backend.process_delayed_jobs())
+        if promoted > 0:
+            logger.debug("Queue delayed-job promotion moved %d job(s)", promoted)
+    except Exception as exc:
+        logger.warning("Queue delayed-job promotion failed: %s", exc)
 
 
 def _expire_timed_out_waits() -> None:

@@ -13,6 +13,7 @@ from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
 CORE_DOMAINS: list[str] = ["tasks", "identity", "agent"]
+logger = logging.getLogger(__name__)
 
 def _read_version() -> str:
     import json, pathlib
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     MONGO_URL: str | None = None
     PERMISSION_SECRET: str = ""  # Deprecated — HMAC removed; kept for backward compat
-    OPENAI_API_KEY: str
+    OPENAI_API_KEY: str = ""
     DEEPSEEK_API_KEY: str | None = None
     OPENAI_CHAT_TIMEOUT_SECONDS: float = 30.0
     OPENAI_EMBEDDING_TIMEOUT_SECONDS: float = 15.0
@@ -96,22 +97,14 @@ class Settings(BaseSettings):
         normalized = (v or "").strip()
         bad_values = {"your-key-here", "sk-placeholder", "changeme", "replace_me"}
         if not normalized or normalized.lower() in bad_values:
-            raise ValueError("OPENAI_API_KEY is not set or is a placeholder")
+            if env_name == "production":
+                raise ValueError("OPENAI_API_KEY is not set or is a placeholder")
+            logger.warning("OPENAI_API_KEY is not set or is a placeholder; OpenAI features may be unavailable")
         return v
 
     @field_validator("ENFORCE_EXECUTION_CONTRACT")
     @classmethod
     def default_contract_enforcement_for_tests(cls, v: bool) -> bool:
-        if "ENFORCE_EXECUTION_CONTRACT" in os.environ:
-            return bool(v)
-        env_name = os.getenv("ENV", "development").lower()
-        is_test = env_name == "test" or os.getenv(
-            "TEST_MODE", "0"
-        ).lower() in {"1", "true", "yes"} or os.getenv(
-            "TESTING", "0"
-        ).lower() in {"1", "true", "yes"}
-        if is_test:
-            return False
         return bool(v)
 
     VERSION: str = Field(default_factory=_read_version, exclude=True)

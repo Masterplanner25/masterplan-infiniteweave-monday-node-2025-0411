@@ -408,7 +408,7 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
     from uuid import UUID
 
     from AINDY.db.database import SessionLocal
-    from AINDY.db.models.watcher_signal import WatcherSignal
+    from apps.automation.models import WatcherSignal
     from AINDY.platform_layer.watcher_contract import (
         get_valid_activity_types,
         get_valid_signal_types,
@@ -606,9 +606,9 @@ def _handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
         syscall_name  (str)  — required; fully-qualified target syscall name
         capability    (str)  — optional; defaults to tool_name
     """
-    from apps.agent.syscalls.syscall_handlers import handle_agent_dispatch_tool
+    from apps.agent.public import dispatch_tool_request
 
-    return handle_agent_dispatch_tool(payload, context)
+    return dispatch_tool_request(payload, context)
 
 
 # ── MAS Memory Handlers ───────────────────────────────────────────────────────

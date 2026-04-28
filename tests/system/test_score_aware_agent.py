@@ -20,6 +20,7 @@ Phase 2: KPI context injection into planner
 import sys
 import os
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,17 +33,17 @@ import pytest
 class TestWatcherSignalUserIdColumn:
 
     def test_user_id_column_exists(self):
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.models import WatcherSignal
         cols = {c.name for c in WatcherSignal.__table__.columns}
         assert "user_id" in cols, "WatcherSignal must have a user_id column"
 
     def test_user_id_column_is_nullable(self):
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.models import WatcherSignal
         col = WatcherSignal.__table__.columns["user_id"]
         assert col.nullable is True, "user_id should be nullable (watcher uses API-key auth)"
 
     def test_user_id_column_is_indexed(self):
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.models import WatcherSignal
         indexed_cols = {
             col.name
             for idx in WatcherSignal.__table__.indexes
@@ -52,7 +53,7 @@ class TestWatcherSignalUserIdColumn:
 
     def test_signal_type_column_still_exists(self):
         """Regression: other columns not removed."""
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.models import WatcherSignal
         cols = {c.name for c in WatcherSignal.__table__.columns}
         for required in ["id", "signal_type", "session_id", "app_name", "activity_type", "signal_timestamp"]:
             assert required in cols
@@ -119,56 +120,57 @@ class TestSignalPayloadUserIdField:
 
 class TestFocusQualityPerUser:
 
-    def _make_mock_db(self, sessions=None, distractions=0, focus_achieved=0):
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_db.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
+    def _patch_watcher_signals(self, monkeypatch, sessions=None, distractions=0, focus_achieved=0):
+        def _fake_list_watcher_signals(db, *, user_id=None, signal_type=None, limit=50, offset=0, session_id=None):
+            del db, user_id, limit, offset, session_id
+            if signal_type == "session_ended":
+                return sessions or []
+            if signal_type == "distraction_detected":
+                return [{"id": f"distraction-{idx}"} for idx in range(distractions)]
+            if signal_type == "focus_achieved":
+                return [{"id": f"focus-{idx}"} for idx in range(focus_achieved)]
+            return []
 
-        if sessions is None:
-            # No sessions for this user
-            mock_query.all.return_value = []
-            mock_query.count.return_value = 0
-        else:
-            mock_query.all.return_value = sessions
-            # first call to count = distractions, second = focus_achieved
-            mock_query.count.side_effect = [distractions, focus_achieved]
+        monkeypatch.setattr(
+            "apps.automation.public.list_watcher_signals",
+            _fake_list_watcher_signals,
+        )
 
-        return mock_db
-
-    def test_returns_neutral_when_no_user_sessions(self):
+    def test_returns_neutral_when_no_user_sessions(self, monkeypatch):
         from apps.analytics.services.infinity_service import calculate_focus_quality
-        mock_db = self._make_mock_db(sessions=[])
+        self._patch_watcher_signals(monkeypatch, sessions=[])
+        mock_db = MagicMock()
         score, count = calculate_focus_quality("user-xyz", mock_db)
         assert score == 50.0
         assert count == 0
 
-    def test_returns_score_when_user_sessions_exist(self):
+    def test_returns_score_when_user_sessions_exist(self, monkeypatch):
         from apps.analytics.services.infinity_service import calculate_focus_quality
-        mock_session = MagicMock()
-        mock_session.duration_seconds = 1800.0  # 30 minutes
-        mock_db = self._make_mock_db(sessions=[mock_session], distractions=2, focus_achieved=1)
+        session = {
+            "duration_seconds": 1800.0,
+            "received_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self._patch_watcher_signals(monkeypatch, sessions=[session], distractions=2, focus_achieved=1)
+        mock_db = MagicMock()
         score, count = calculate_focus_quality("user-abc", mock_db)
         assert 0.0 <= score <= 100.0
         assert count == 1
 
     def test_query_filters_by_user_id(self):
-        """Verify user_id filter is applied in the focus_quality query chain."""
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        """Verify user_id is passed through the automation public surface."""
         import inspect
         from apps.analytics.services.infinity_service import calculate_focus_quality
         source = inspect.getsource(calculate_focus_quality)
-        assert "user_id" in source, "calculate_focus_quality must filter by user_id"
+        assert "user_id=user_id" in source, "calculate_focus_quality must pass user_id into the public surface"
 
     def test_distraction_and_focus_queries_use_user_id(self):
-        """All three WatcherSignal queries in focus_quality must include user_id filter."""
+        """All three watcher-signal reads in focus_quality must be scoped by user."""
         import inspect
         from apps.analytics.services.infinity_service import calculate_focus_quality
         source = inspect.getsource(calculate_focus_quality)
-        # Count occurrences of user_id == user_id filter in the source
-        occurrences = source.count("WatcherSignal.user_id == user_id")
+        occurrences = source.count("user_id=user_id")
         assert occurrences >= 3, (
-            f"Expected 3 user_id filters (sessions, distractions, focus_achieved), found {occurrences}"
+            f"Expected 3 user_id-scoped watcher reads (sessions, distractions, focus_achieved), found {occurrences}"
         )
 
     def test_no_neutral_return_comment_in_source(self):

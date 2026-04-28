@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 from AINDY.core.distributed_queue import QueueSaturatedError
 from AINDY.core.system_event_service import emit_error_event
 from AINDY.db.database import SessionLocal
+from AINDY.db.mongo_setup import MongoUnavailableError
 from AINDY.kernel.circuit_breaker import CircuitOpenError
 
 logger = logging.getLogger("AINDY.main")
@@ -34,6 +35,22 @@ async def queue_saturated_exception_handler(request: Request, exc: QueueSaturate
         status_code=exc.status_code,
         headers={"Retry-After": str(exc.retry_after_seconds)},
         content={"error": "queue_saturated", "message": str(exc)},
+    )
+
+
+async def mongo_unavailable_exception_handler(
+    request: Request, exc: MongoUnavailableError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": "mongo_unavailable",
+            "message": exc.detail,
+            "hint": (
+                "Set MONGO_URL and ensure MongoDB is reachable, "
+                "or set SKIP_MONGO_PING=true only in non-production environments."
+            ),
+        },
     )
 
 
@@ -127,6 +144,7 @@ def register_exception_handlers(app) -> None:
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.add_exception_handler(QueueSaturatedError, queue_saturated_exception_handler)
+    app.add_exception_handler(MongoUnavailableError, mongo_unavailable_exception_handler)
     app.add_exception_handler(CircuitOpenError, circuit_open_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

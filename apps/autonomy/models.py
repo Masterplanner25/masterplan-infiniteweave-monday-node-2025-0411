@@ -32,3 +32,7 @@ class AutonomyDecision(Base):
         Index("ix_autonomy_decisions_user_created_at", "user_id", "created_at"),
         Index("ix_autonomy_decisions_trace_created_at", "trace_id", "created_at"),
     )
+
+
+def register_models() -> None:
+    return None

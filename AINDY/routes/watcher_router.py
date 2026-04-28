@@ -149,7 +149,7 @@ def receive_signals(
         )
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="watcher.signals.receive",
         handler=handler,
         user_id=user_id,
@@ -191,7 +191,7 @@ def list_signals(
         }
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="watcher.signals.list",
         handler=handler,
         user_id=user_id,

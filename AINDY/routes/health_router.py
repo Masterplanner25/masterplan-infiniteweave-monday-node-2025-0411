@@ -6,10 +6,11 @@ from asyncio import gather, to_thread, wait_for
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import text
 
 from AINDY.config import settings
+from AINDY.core.execution_helper import execute_with_pipeline
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.system_event_service import emit_system_event
 from AINDY.db.database import SessionLocal, get_pool_status
@@ -301,11 +302,9 @@ def _check_nodus_status() -> dict:
 
 
 def _check_ai_providers_status() -> dict:
-    from AINDY.kernel.circuit_breaker import (
-        CircuitState,
-        get_deepseek_circuit_breaker,
-        get_openai_circuit_breaker,
-    )
+    from AINDY.kernel.circuit_breaker import CircuitState
+    from AINDY.platform_layer.deepseek_client import get_deepseek_circuit_breaker
+    from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
     def _summarize(cb) -> dict:
         state = cb.state
@@ -383,23 +382,39 @@ async def report_client_error(
     """
     db = SessionLocal()
     try:
-        queue_system_event(
-            db=db,
-            event_type="client.error.reported",
-            user_id=payload.get("user_id"),
-            trace_id=payload.get("trace_id") or str(_uuid.uuid4()),
-            source="frontend",
-            payload={
-                "error_message": str(payload.get("error_message") or "")[:1000],
-                "component_stack": str(payload.get("component_stack") or "")[:3000],
-                "route": str(payload.get("route") or "")[:200],
-                "user_agent": str(payload.get("user_agent") or "")[:300],
-                "error_type": str(payload.get("error_type") or "boundary"),
-            },
-            required=False,
+        def handler(ctx):
+            try:
+                queue_system_event(
+                    db=db,
+                    event_type="client.error.reported",
+                    user_id=payload.get("user_id"),
+                    trace_id=payload.get("trace_id") or str(_uuid.uuid4()),
+                    source="frontend",
+                    payload={
+                        "error_message": str(payload.get("error_message") or "")[:1000],
+                        "component_stack": str(payload.get("component_stack") or "")[:3000],
+                        "route": str(payload.get("route") or "")[:200],
+                        "user_agent": str(payload.get("user_agent") or "")[:300],
+                        "error_type": str(payload.get("error_type") or "boundary"),
+                    },
+                    required=False,
+                )
+            except Exception:
+                pass
+            return {"accepted": True}
+
+        result = await execute_with_pipeline(
+            request=request,
+            route_name="health.client.error.report",
+            handler=handler,
+            input_payload=payload,
+            metadata={"db": db, "source": "frontend"},
+            return_result=True,
         )
-    except Exception:
-        pass
+        if not result.success:
+            detail = result.metadata.get("detail") or result.error or "Execution failed"
+            return JSONResponse(status_code=int(result.metadata.get("status_code", 500)), content={"detail": detail})
+        return Response(status_code=204)
     finally:
         db.close()
 
@@ -416,22 +431,38 @@ async def report_client_vitals(
     """
     db = SessionLocal()
     try:
-        queue_system_event(
-            db=db,
-            event_type="client.vitals.reported",
-            user_id=payload.get("user_id"),
-            trace_id=payload.get("session_id") or str(_uuid.uuid4()),
-            source="frontend",
-            payload={
-                "lcp_ms": payload.get("lcp_ms"),
-                "cls_score": payload.get("cls_score"),
-                "inp_ms": payload.get("inp_ms"),
-                "route": str(payload.get("route") or "")[:200],
-            },
-            required=False,
+        def handler(ctx):
+            try:
+                queue_system_event(
+                    db=db,
+                    event_type="client.vitals.reported",
+                    user_id=payload.get("user_id"),
+                    trace_id=payload.get("session_id") or str(_uuid.uuid4()),
+                    source="frontend",
+                    payload={
+                        "lcp_ms": payload.get("lcp_ms"),
+                        "cls_score": payload.get("cls_score"),
+                        "inp_ms": payload.get("inp_ms"),
+                        "route": str(payload.get("route") or "")[:200],
+                    },
+                    required=False,
+                )
+            except Exception:
+                pass
+            return {"accepted": True}
+
+        result = await execute_with_pipeline(
+            request=request,
+            route_name="health.client.vitals.report",
+            handler=handler,
+            input_payload=payload,
+            metadata={"db": db, "source": "frontend"},
+            return_result=True,
         )
-    except Exception:
-        pass
+        if not result.success:
+            detail = result.metadata.get("detail") or result.error or "Execution failed"
+            return JSONResponse(status_code=int(result.metadata.get("status_code", 500)), content={"detail": detail})
+        return Response(status_code=204)
     finally:
         db.close()
 

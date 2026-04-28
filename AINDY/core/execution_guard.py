@@ -15,6 +15,7 @@ _EXEMPT_PREFIXES = (
     "/openapi.json",
     "/health",
     "/ready",
+    "/readiness",
 )
 
 

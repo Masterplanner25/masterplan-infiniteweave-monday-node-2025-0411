@@ -33,7 +33,7 @@ def get_recent_autonomy_decisions(
 ):
     user_id = str(current_user["sub"])
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="autonomy.decisions.list",
         handler=lambda ctx: _run_flow_autonomy("autonomy_decisions_list", {"limit": limit}, db, user_id),
         user_id=user_id,

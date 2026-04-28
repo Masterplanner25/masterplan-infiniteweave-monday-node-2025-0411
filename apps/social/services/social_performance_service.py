@@ -30,6 +30,9 @@ def compute_conversion_signal(post: dict[str, Any]) -> float:
 def summarize_social_performance(*, user_id: str | None = None, limit: int = 50) -> dict[str, Any]:
     try:
         mongo = get_mongo_client()
+        # Local graceful-degradation path: social performance can return an
+        # empty degraded payload when Mongo is unavailable, so it does not
+        # require require_mongo_client().
         if mongo is None:
             logger.warning("MongoDB unavailable for social performance query — returning empty")
             return {"status": "degraded", "data": [], "reason": "mongodb_unavailable"}

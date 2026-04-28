@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
-from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.core.execution_helper import execute_with_pipeline, execute_with_pipeline_sync
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from apps.freelance.schemas.freelance import (
@@ -70,7 +70,7 @@ def _trigger_delivery_confirmation_hooks(
 
 def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str, *, return_full: bool = False):
     from AINDY.runtime.flow_engine import run_flow
-    from apps.search.public import _extract_flow_error
+    from apps.search.public import extract_flow_error
 
     try:
         result = run_flow(flow_name, payload, db=db, user_id=user_id)
@@ -85,7 +85,7 @@ def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str
             raise HTTPException(status_code=code, detail=msg) from exc
         raise
     if result.get("status") == "FAILED":
-        error = _extract_flow_error(result)
+        error = extract_flow_error(result)
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -98,8 +98,8 @@ def _run_flow_freelance(flow_name: str, payload: dict, db: Session, user_id: str
 def _execute_freelance(request: Request, route_name: str, handler, *, db: Session, user_id: str,
                        input_payload=None, success_status_code: int = 200):
     from apps.search.public import (
-        _ai_provider_unavailable_response,
-        _is_circuit_open_detail,
+        build_ai_provider_unavailable_payload,
+        is_circuit_open_detail,
     )
 
     result = execute_with_pipeline_sync(
@@ -114,8 +114,12 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
     )
     if not result.success:
         detail = result.metadata.get("detail") or result.error or "Execution failed"
-        if _is_circuit_open_detail(detail):
-            return _ai_provider_unavailable_response(detail)
+        if is_circuit_open_detail(detail):
+            return JSONResponse(
+                status_code=503,
+                content=build_ai_provider_unavailable_payload(detail),
+                headers={"Retry-After": "60"},
+            )
         raise HTTPException(
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,
@@ -512,18 +516,39 @@ async def stripe_webhook(
 
     event_type = str(event.get("type") or "")
     stripe_event_id = str(event.get("id") or "")
-    if not stripe_event_id:
-        return {"received": True, "processed": False}
+    def handler(ctx):
+        if not stripe_event_id:
+            return {"received": True, "processed": False}
 
-    if not claim_webhook_event(db, stripe_event_id, event_type, payload=event):
-        return {"status": "skipped", "reason": "already_processed"}
+        if not claim_webhook_event(db, stripe_event_id, event_type, payload=event):
+            return {"status": "skipped", "reason": "already_processed"}
 
-    try:
-        outcome = handle_stripe_event(db, event)
-        mark_webhook_outcome(db, stripe_event_id, "fulfilled")
-        return {"status": "ok", "outcome": outcome}
-    except Exception as exc:
-        logger.warning("[stripe] webhook processing failed: %s", exc)
-        mark_webhook_outcome(db, stripe_event_id, "failed", error=str(exc))
-        return {"status": "failed", "reason": "processing_error"}
+        try:
+            outcome = handle_stripe_event(db, event)
+            mark_webhook_outcome(db, stripe_event_id, "fulfilled")
+            return {"status": "ok", "outcome": outcome}
+        except Exception as exc:
+            logger.warning("[stripe] webhook processing failed: %s", exc)
+            mark_webhook_outcome(db, stripe_event_id, "failed", error=str(exc))
+            return {"status": "failed", "reason": "processing_error"}
+
+    result = await execute_with_pipeline(
+        request=request,
+        route_name="freelance.webhook.stripe",
+        handler=handler,
+        input_payload={"event_type": event_type, "event_id": stripe_event_id},
+        metadata={"db": db, "source": "freelance"},
+        return_result=True,
+    )
+    if not result.success:
+        detail = result.metadata.get("detail") or result.error or "Execution failed"
+        raise HTTPException(
+            status_code=int(result.metadata.get("status_code", 500)),
+            detail=detail,
+        )
+    data = result.data
+    if isinstance(data, dict):
+        data = dict(data)
+        data.pop("execution_envelope", None)
+    return data
 

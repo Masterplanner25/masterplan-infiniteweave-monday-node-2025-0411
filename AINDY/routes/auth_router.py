@@ -120,18 +120,27 @@ def logout(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from AINDY.db.models.user import User
+    def handler(ctx):
+        from AINDY.db.models.user import User
 
-    if current_user.get("auth_type") == "api_key":
-        raise HTTPException(status_code=401, detail="Bearer token required")
+        if current_user.get("auth_type") == "api_key":
+            raise HTTPException(status_code=401, detail="Bearer token required")
 
-    user_id = parse_user_id(current_user["sub"])
-    if user_id:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user:
-            user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
-            db.commit()
-    return {"status": "logged_out"}
+        user_id = parse_user_id(current_user["sub"])
+        if user_id:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
+                db.commit()
+        return {"status": "logged_out"}
+
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name="auth.logout",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+    )
 
 
 @router.post("/admin/invalidate-sessions/{user_id}")
@@ -142,24 +151,34 @@ def admin_invalidate_sessions(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from AINDY.db.models.user import User
+    def handler(ctx):
+        from AINDY.db.models.user import User
 
-    if current_user.get("auth_type") == "api_key":
-        scopes = set(current_user.get("api_key_scopes") or [])
-        if "platform.admin" not in scopes:
+        if current_user.get("auth_type") == "api_key":
+            scopes = set(current_user.get("api_key_scopes") or [])
+            if "platform.admin" not in scopes:
+                raise HTTPException(status_code=403, detail="Admin required")
+        elif not current_user.get("is_admin"):
             raise HTTPException(status_code=403, detail="Admin required")
-    elif not current_user.get("is_admin"):
-        raise HTTPException(status_code=403, detail="Admin required")
 
-    target_id = parse_user_id(user_id)
-    if not target_id:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
+        target_id = parse_user_id(user_id)
+        if not target_id:
+            raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    user = db.query(User).filter(User.id == target_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        user = db.query(User).filter(User.id == target_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
-    db.commit()
-    return {"status": "sessions_invalidated", "user_id": str(target_id)}
+        user.token_version = (int(getattr(user, "token_version", 0)) + 1) % 32767
+        db.commit()
+        return {"status": "sessions_invalidated", "user_id": str(target_id)}
+
+    return execute_with_pipeline_sync(
+        request=request,
+        route_name="auth.admin.invalidate_sessions",
+        handler=handler,
+        user_id=str(current_user["sub"]),
+        metadata={"db": db},
+        input_payload={"user_id": user_id},
+    )
 

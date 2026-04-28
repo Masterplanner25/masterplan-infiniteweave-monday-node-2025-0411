@@ -68,7 +68,7 @@ def test_masterplan_health_check_happy_path(monkeypatch, fake_sessionlocal):
     fake_cb.state = circuit_breaker.CircuitState.CLOSED
 
     monkeypatch.setattr("AINDY.db.database.SessionLocal", factory)
-    monkeypatch.setattr("AINDY.kernel.circuit_breaker.get_openai_circuit_breaker", lambda: fake_cb)
+    monkeypatch.setattr("AINDY.platform_layer.openai_client.get_openai_circuit_breaker", lambda: fake_cb)
 
     assert module.masterplan_health_check() is True
     assert session.closed is True
@@ -79,7 +79,7 @@ def test_masterplan_health_check_raises_when_circuit_open(monkeypatch):
     circuit_breaker = importlib.import_module("AINDY.kernel.circuit_breaker")
     fake_cb = SimpleNamespace(state=circuit_breaker.CircuitState.OPEN, opened_at="now")
 
-    monkeypatch.setattr("AINDY.kernel.circuit_breaker.get_openai_circuit_breaker", lambda: fake_cb)
+    monkeypatch.setattr("AINDY.platform_layer.openai_client.get_openai_circuit_breaker", lambda: fake_cb)
 
     with pytest.raises(RuntimeError, match="OpenAI circuit breaker is open"):
         module.masterplan_health_check()

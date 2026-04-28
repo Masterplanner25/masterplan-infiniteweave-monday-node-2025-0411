@@ -125,7 +125,7 @@ def analytics_linkedin_ingest_node(state, context):
         import uuid
         from apps.analytics.models import CanonicalMetricDB
         from apps.analytics.schemas.analytics import LinkedInRawInput
-        from apps.social.services.linkedin_adapter import linkedin_adapter
+        from apps.social.public import adapt_linkedin_metrics
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -143,7 +143,7 @@ def analytics_linkedin_ingest_node(state, context):
             return {"status": "FAILURE", "error": "HTTP_404:MasterPlan not found"}
 
         data = LinkedInRawInput(**data_dict)
-        canonical = linkedin_adapter(data)
+        canonical = adapt_linkedin_metrics(data)
         canonical["user_id"] = user_id
 
         existing = db.query(CanonicalMetricDB).filter_by(

@@ -7,7 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = ["automation"]
 
 
 def register() -> None:

@@ -1,22 +1,43 @@
-"""Public interface for the search app. Other apps must only import from this file."""
+"""
+Public surface for the search domain.
+Consumers: freelance
+"""
+
+from __future__ import annotations
+
+from typing import Any
 
 from apps.search.models import LeadGenResult, ResearchResult, SearchHistory
 
-# TODO: these route-helper exports should be refactored before stabilizing the interface.
-from apps.search.routes._route_helpers import (
-    _ai_provider_unavailable_response,
-    _extract_flow_error,
-    _is_circuit_open_detail,
-)
-from apps.search.services.leadgen_service import create_lead_results, run_ai_search
+PUBLIC_API_VERSION = "1.0"
+
+
+def extract_flow_error(result: dict) -> str:
+    from apps.search.services.public_surface_service import extract_flow_error as _extract_flow_error
+
+    return str(_extract_flow_error(result) or "")
+
+
+def is_circuit_open_detail(detail: Any) -> bool:
+    from apps.search.services.public_surface_service import (
+        is_circuit_open_detail as _is_circuit_open_detail,
+    )
+
+    return bool(_is_circuit_open_detail(detail))
+
+
+def build_ai_provider_unavailable_payload(detail: Any) -> dict[str, Any]:
+    from apps.search.services.public_surface_service import (
+        build_ai_provider_unavailable_payload as _build_ai_provider_unavailable_payload,
+    )
+
+    return dict(_build_ai_provider_unavailable_payload(detail) or {})
 
 __all__ = [
     "LeadGenResult",
     "ResearchResult",
     "SearchHistory",
-    "_ai_provider_unavailable_response",
-    "_extract_flow_error",
-    "_is_circuit_open_detail",
-    "create_lead_results",
-    "run_ai_search",
+    "extract_flow_error",
+    "is_circuit_open_detail",
+    "build_ai_provider_unavailable_payload",
 ]

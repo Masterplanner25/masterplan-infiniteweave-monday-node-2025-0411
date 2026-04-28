@@ -7,33 +7,15 @@ def register_author(db: Session, name: str, platform: str, notes: str | None = N
     """
     Registers or updates an author record in the database.
     """
-    from apps.authorship.models import AuthorDB
+    from apps.authorship.public import register_author as register_author_public
 
-    normalized_user_id = None
-    if user_id:
-        normalized_user_id = uuid.UUID(str(user_id))
-    existing = db.query(AuthorDB).filter_by(name=name, platform=platform, user_id=normalized_user_id).first()
-    if existing:
-        # AuthorDB joined_at/last_seen are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
-        existing.last_seen = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(existing)
-        return existing
-
-    author = AuthorDB(
-        id=f"author-{datetime.now(timezone.utc).timestamp()}",
+    return register_author_public(
+        db,
         name=name,
         platform=platform,
         notes=notes,
-        # AuthorDB joined_at/last_seen are legacy naive DateTime columns; SQLAlchemy may strip tzinfo here.
-        joined_at=datetime.now(timezone.utc),
-        last_seen=datetime.now(timezone.utc),
-        user_id=normalized_user_id,
+        user_id=user_id,
     )
-    db.add(author)
-    db.commit()
-    db.refresh(author)
-    return author
 
 
 def connect_external_author(
@@ -72,28 +54,14 @@ def connect_external_author(
 
     return {
         "status": "connected",
-        "author_id": author.id,
+        "author_id": author["id"],
         "platform": platform,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def list_authors(db: Session, platform: str | None = None, limit: int = 100):
-    from apps.authorship.models import AuthorDB
+    from apps.authorship.public import list_authors as list_authors_public
 
-    query = db.query(AuthorDB)
-    if platform:
-        query = query.filter(AuthorDB.platform == platform)
-    authors = query.order_by(AuthorDB.last_seen.desc()).limit(limit).all()
-    return [
-        {
-            "id": a.id,
-            "name": a.name,
-            "platform": a.platform,
-            "notes": a.notes,
-            "joined_at": a.joined_at.isoformat() if a.joined_at else None,
-            "last_seen": a.last_seen.isoformat() if a.last_seen else None,
-        }
-        for a in authors
-    ]
+    return list_authors_public(db, platform=platform, limit=limit)
 

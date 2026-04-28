@@ -27,18 +27,14 @@ CONFIDENCE_MEDIUM_MIN_TASKS = 2
 
 def _compute_velocity(db: Session, user_id: str) -> float:
     """Return tasks/day completed in the last VELOCITY_WINDOW_DAYS days."""
-    from apps.tasks.public import Task
+    from apps.tasks.public import count_tasks_completed_since
 
     owner_user_id = require_user_id(user_id)
     cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    count = (
-        db.query(Task)
-        .filter(
-            Task.user_id == owner_user_id,
-            Task.status == "completed",
-            Task.end_time >= cutoff,
-        )
-        .count()
+    count = count_tasks_completed_since(
+        db,
+        user_id=owner_user_id,
+        since=cutoff,
     )
     return count / VELOCITY_WINDOW_DAYS
 
@@ -54,19 +50,15 @@ def _confidence_label(velocity: float, completed_in_window: int) -> str:
 
 
 def _total_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.public import Task
+    from apps.tasks.public import count_tasks
 
-    return db.query(Task).filter(Task.user_id == require_user_id(user_id)).count()
+    return count_tasks(db, user_id=require_user_id(user_id))
 
 
 def _completed_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.public import Task
+    from apps.tasks.public import count_tasks
 
-    return (
-        db.query(Task)
-        .filter(Task.user_id == require_user_id(user_id), Task.status == "completed")
-        .count()
-    )
+    return count_tasks(db, user_id=require_user_id(user_id), status="completed")
 
 
 def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
@@ -77,7 +69,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         dict with keys: velocity, projected_completion_date, days_ahead_behind,
         eta_confidence, anchor_date, total_tasks, completed_tasks, remaining_tasks
     """
-    from apps.tasks.public import Task
+    from apps.tasks.public import count_tasks_completed_since
 
     owner_user_id = require_user_id(user_id)
     plan = (
@@ -89,14 +81,10 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         raise ValueError(f"MasterPlan {masterplan_id} not found for user {user_id}")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    tasks_in_window = (
-        db.query(Task)
-        .filter(
-            Task.user_id == owner_user_id,
-            Task.status == "completed",
-            Task.end_time >= cutoff,
-        )
-        .count()
+    tasks_in_window = count_tasks_completed_since(
+        db,
+        user_id=owner_user_id,
+        since=cutoff,
     )
     velocity = tasks_in_window / VELOCITY_WINDOW_DAYS
 

@@ -6,10 +6,27 @@ APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
+    _register_models()
     _register_router()
     _register_response_adapters()
     _register_flow_results()
     _register_health_check()
+
+
+def _register_models() -> None:
+    from AINDY.db.database import Base
+    from AINDY.db.model_registry import register_models
+    from AINDY.platform_layer.registry import register_symbols
+    import apps.autonomy.models as autonomy_models
+
+    register_models(autonomy_models.register_models)
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(autonomy_models).items()
+            if isinstance(value, type) and getattr(value, "metadata", None) is Base.metadata
+        }
+    )
 
 
 def _register_router() -> None:

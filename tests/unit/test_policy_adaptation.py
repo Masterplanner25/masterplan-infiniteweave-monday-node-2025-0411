@@ -217,6 +217,9 @@ def test_get_policy_thresholds_endpoint_returns_200_with_auth(client, auth_heade
     from apps.analytics.routes import analytics_router as router_mod
 
     async def _fake_execute_with_pipeline(*args, **kwargs):
+        request = kwargs.get("request")
+        if request is not None:
+            request.state.execution_context = object()
         return kwargs["handler"](None)
 
     mocker.patch.object(router_mod, "execute_with_pipeline", side_effect=_fake_execute_with_pipeline)
@@ -252,6 +255,9 @@ def test_post_policy_thresholds_adapt_returns_200_with_auth(client, auth_headers
     from apps.analytics.routes import analytics_router as router_mod
 
     async def _fake_execute_with_pipeline(*args, **kwargs):
+        request = kwargs.get("request")
+        if request is not None:
+            request.state.execution_context = object()
         return kwargs["handler"](None)
 
     mocker.patch.object(router_mod, "execute_with_pipeline", side_effect=_fake_execute_with_pipeline)

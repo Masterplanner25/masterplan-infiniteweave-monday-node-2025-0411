@@ -1,4 +1,7 @@
-"""Public contract for the automation app."""
+"""
+Public contract for the automation app.
+Consumers: analytics, bridge, freelance, masterplan, rippletrace, tasks
+"""
 
 from __future__ import annotations
 
@@ -211,9 +214,223 @@ def update_loop_adjustment(
     return _row_to_dict(row)
 
 
+def create_bridge_user_event(
+    db: Session,
+    *,
+    user: str,
+    origin: str,
+    raw_timestamp: str | None,
+    occurred_at: datetime,
+) -> dict[str, Any]:
+    """Create one bridge-originated user event row."""
+    from apps.automation.services.public_surface_service import (
+        create_bridge_user_event as _create_bridge_user_event,
+        row_to_dict,
+    )
+
+    return row_to_dict(
+        _create_bridge_user_event(
+            db,
+            user=user,
+            origin=origin,
+            raw_timestamp=raw_timestamp,
+            occurred_at=occurred_at,
+        )
+    )
+
+
+def list_automation_logs(
+    db: Session,
+    *,
+    user_id: str | UUID,
+    limit: int = 250,
+) -> list[dict[str, Any]]:
+    """Return recent automation logs as plain dicts."""
+    from apps.automation.services.public_surface_service import (
+        list_automation_logs as _list_automation_logs,
+        row_to_dict,
+    )
+
+    return [row_to_dict(row) for row in _list_automation_logs(db, user_id=user_id, limit=limit)]
+
+
+def list_watcher_signals(
+    db: Session,
+    *,
+    session_id: str | None = None,
+    user_id: str | UUID | None = None,
+    signal_type: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Return watcher signals as plain dicts."""
+    from apps.automation.services.public_surface_service import (
+        list_watcher_signals as _list_watcher_signals,
+        row_to_dict,
+    )
+
+    rows = _list_watcher_signals(
+        db,
+        session_id=session_id,
+        user_id=user_id,
+        signal_type=signal_type,
+        limit=limit,
+        offset=offset,
+    )
+    data = [row_to_dict(row) for row in rows]
+    for row in data:
+        if "signal_metadata" in row and "metadata" not in row:
+            row["metadata"] = row["signal_metadata"]
+    return data
+
+
+def persist_watcher_signals(
+    db: Session,
+    *,
+    signals: list[dict[str, Any]],
+    user_id: str | UUID,
+) -> dict[str, Any]:
+    """Persist watcher signals and return ingestion counts."""
+    from apps.automation.services.public_surface_service import (
+        persist_watcher_signals as _persist_watcher_signals,
+    )
+
+    return dict(_persist_watcher_signals(db, signals=signals, user_id=user_id) or {})
+
+
+def ensure_learning_thresholds(
+    db: Session,
+    *,
+    velocity_trend: float,
+    narrative_trend: float,
+    early_velocity_rate: float,
+    early_narrative_ceiling: float,
+) -> dict[str, Any]:
+    """Return the current learning thresholds, creating defaults when absent."""
+    from apps.automation.services.public_surface_service import (
+        create_learning_threshold_row,
+        get_learning_threshold_row,
+        row_to_dict,
+    )
+
+    row = get_learning_threshold_row(db)
+    if row is None:
+        row = create_learning_threshold_row(
+            db,
+            velocity_trend=velocity_trend,
+            narrative_trend=narrative_trend,
+            early_velocity_rate=early_velocity_rate,
+            early_narrative_ceiling=early_narrative_ceiling,
+        )
+    return row_to_dict(row)
+
+
+def update_learning_thresholds(
+    db: Session,
+    *,
+    threshold_id: str,
+    **kwargs,
+) -> dict[str, Any] | None:
+    """Update one learning-threshold row."""
+    from apps.automation.services.public_surface_service import (
+        row_to_dict,
+        update_learning_threshold_row,
+    )
+
+    row = update_learning_threshold_row(db, threshold_id=threshold_id, **kwargs)
+    return row_to_dict(row) if row is not None else None
+
+
+def create_learning_record(db: Session, **kwargs) -> dict[str, Any]:
+    """Create one learning record row and return it as a plain dict."""
+    from apps.automation.services.public_surface_service import (
+        create_learning_record_row,
+        row_to_dict,
+    )
+
+    return row_to_dict(create_learning_record_row(db, **kwargs))
+
+
+def get_latest_learning_record(
+    db: Session,
+    *,
+    drop_point_id: str,
+    pending_only: bool = False,
+) -> dict[str, Any] | None:
+    """Return the newest learning record for one drop point."""
+    from apps.automation.services.public_surface_service import (
+        get_latest_learning_record_row,
+        row_to_dict,
+    )
+
+    row = get_latest_learning_record_row(
+        db,
+        drop_point_id=drop_point_id,
+        pending_only=pending_only,
+    )
+    return row_to_dict(row) if row is not None else None
+
+
+def list_learning_records(
+    db: Session,
+    *,
+    limit: int | None = None,
+    evaluated_only: bool = False,
+) -> list[dict[str, Any]]:
+    """List learning records as plain dicts."""
+    from apps.automation.services.public_surface_service import (
+        list_learning_record_rows,
+        row_to_dict,
+    )
+
+    rows = list_learning_record_rows(db, limit=limit, evaluated_only=evaluated_only)
+    return [row_to_dict(row) for row in rows]
+
+
+def list_learning_record_drop_point_ids(
+    db: Session,
+    *,
+    actual_outcome: str | None = None,
+) -> list[str]:
+    """List distinct drop-point IDs from learning records."""
+    from apps.automation.services.public_surface_service import (
+        list_learning_record_drop_point_ids as _list_learning_record_drop_point_ids,
+    )
+
+    return list(_list_learning_record_drop_point_ids(db, actual_outcome=actual_outcome) or [])
+
+
+def update_learning_record(
+    db: Session,
+    *,
+    record_id: str,
+    **kwargs,
+) -> dict[str, Any] | None:
+    """Update one learning record row."""
+    from apps.automation.services.public_surface_service import (
+        row_to_dict,
+        update_learning_record_row,
+    )
+
+    row = update_learning_record_row(db, record_id=record_id, **kwargs)
+    return row_to_dict(row) if row is not None else None
+
+
 __all__ = [
     "execute_automation_action",
     "get_loop_adjustments",
     "get_user_feedback",
     "create_loop_adjustment",
+    "update_loop_adjustment",
+    "create_bridge_user_event",
+    "list_automation_logs",
+    "list_watcher_signals",
+    "persist_watcher_signals",
+    "ensure_learning_thresholds",
+    "update_learning_thresholds",
+    "create_learning_record",
+    "get_latest_learning_record",
+    "list_learning_records",
+    "list_learning_record_drop_point_ids",
+    "update_learning_record",
 ]

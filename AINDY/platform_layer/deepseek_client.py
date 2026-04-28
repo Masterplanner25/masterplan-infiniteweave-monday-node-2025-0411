@@ -9,6 +9,7 @@ import logging
 from typing import Any
 
 import httpx
+from openai import OpenAI
 from tenacity import (
     retry,
     retry_if_exception,
@@ -17,8 +18,13 @@ from tenacity import (
     wait_exponential,
 )
 
-from AINDY.kernel.circuit_breaker import CircuitOpenError, get_deepseek_circuit_breaker as _kernel_get_deepseek_circuit_breaker
-from AINDY.platform_layer.openai_client import OpenAI
+from AINDY.kernel.circuit_breaker import CircuitBreaker, CircuitOpenError
+from AINDY.platform_layer.llm_client import (
+    CircuitBreakerLLMClient,
+    LLMCallError,
+    LLMCircuitOpenError,
+    LLMClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +41,16 @@ _RETRYABLE = (
     httpx.RemoteProtocolError,
 )
 
+_deepseek_breaker = CircuitBreaker(
+    name="deepseek",
+    failure_threshold=5,
+    recovery_timeout_secs=60,
+)
+
 
 def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, LLMCallError) and exc.__cause__ is not None:
+        exc = exc.__cause__
     if isinstance(exc, CircuitOpenError):
         return False
     type_name = type(exc).__name__
@@ -62,6 +76,82 @@ def _record_deepseek_terminal_error(call_type: str) -> None:
             pass
 
 
+def _extract_message_text(response: Any) -> str:
+    try:
+        return str(response.choices[0].message.content or "")
+    except Exception as exc:  # pragma: no cover
+        raise LLMCallError("deepseek response did not contain assistant text") from exc
+
+
+class DeepSeekLLMClient(LLMClient):
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        default_model: str = "deepseek-chat",
+        client: Any | None = None,
+        chat_timeout: float = 30.0,
+    ) -> None:
+        from AINDY.config import settings
+
+        self._api_key = api_key if api_key is not None else settings.DEEPSEEK_API_KEY
+        self._default_model = default_model
+        self._chat_timeout = chat_timeout
+        self._client = client if client is not None else OpenAI(api_key=self._api_key or "missing-deepseek-api-key")
+
+    def chat_completion_response(
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        timeout: float | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        try:
+            return self._client.chat.completions.create(
+                model=model,
+                messages=messages,
+                timeout=self._chat_timeout if timeout is None else timeout,
+                **kwargs,
+            )
+        except Exception as exc:
+            raise LLMCallError("deepseek chat completion failed") from exc
+
+    def chat(
+        self,
+        messages: list[dict],
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ) -> str:
+        response = self.chat_completion_response(
+            model=model or self._default_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return _extract_message_text(response)
+
+    def is_available(self) -> bool:
+        return bool(str(self._api_key or "").strip())
+
+
+def _legacy_raise(exc: BaseException) -> None:
+    if isinstance(exc, LLMCircuitOpenError):
+        raise exc
+    if isinstance(exc, LLMCallError) and exc.__cause__ is not None:
+        raise exc.__cause__ from exc
+    raise exc
+
+
+def _coerce_deepseek_client(client: Any) -> Any:
+    if isinstance(client, CircuitBreakerLLMClient):
+        return client
+    if isinstance(client, DeepSeekLLMClient):
+        return client
+    return DeepSeekLLMClient(client=client, api_key="")
+
+
 @retry(
     retry=retry_if_not_exception_type(CircuitOpenError) & retry_if_exception(_is_retryable),
     stop=stop_after_attempt(3),
@@ -77,14 +167,25 @@ def _chat_completion_with_retry(
     timeout: float = 30.0,
     **kwargs: Any,
 ) -> Any:
-    cb = get_deepseek_circuit_breaker()
-    return cb.call(
-        client.chat.completions.create,
-        model=model,
-        messages=messages,
-        timeout=timeout,
-        **kwargs,
-    )
+    normalized_client = _coerce_deepseek_client(client)
+    try:
+        if isinstance(normalized_client, CircuitBreakerLLMClient):
+            return normalized_client.call_method(
+                "chat_completion_response",
+                model=model,
+                messages=messages,
+                timeout=timeout,
+                **kwargs,
+            )
+        return get_deepseek_circuit_breaker().call(
+            normalized_client.chat_completion_response,
+            model=model,
+            messages=messages,
+            timeout=timeout,
+            **kwargs,
+        )
+    except (LLMCallError, LLMCircuitOpenError) as exc:
+        _legacy_raise(exc)
 
 
 def chat_completion_deepseek(
@@ -108,17 +209,20 @@ def chat_completion_deepseek(
         raise
 
 
-def get_deepseek_client() -> Any:
+def get_deepseek_circuit_breaker() -> CircuitBreaker:
+    return _deepseek_breaker
+
+
+def get_deepseek_client() -> LLMClient:
     global _client
     if _client is None:
-        from AINDY.config import settings
-
-        _client = OpenAI(api_key=settings.DEEPSEEK_API_KEY)
+        provider = DeepSeekLLMClient()
+        _client = CircuitBreakerLLMClient(
+            provider,
+            provider="deepseek",
+            breaker=get_deepseek_circuit_breaker(),
+        )
     return _client
 
 
-_client: Any | None = None
-
-
-def get_deepseek_circuit_breaker():
-    return _kernel_get_deepseek_circuit_breaker()
+_client: LLMClient | None = None

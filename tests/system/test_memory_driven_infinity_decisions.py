@@ -9,6 +9,7 @@ from apps.tasks.models import Task
 from apps.analytics.services.infinity_orchestrator import execute
 from apps.rippletrace.services.rippletrace_service import build_trace_graph
 from AINDY.memory.memory_persistence import MemoryNodeModel
+from AINDY.platform_layer.trace_context import reset_pipeline_active, set_pipeline_active
 
 
 def _stable_score() -> dict:
@@ -43,33 +44,37 @@ def _create_ready_task(db_session, test_user, name: str) -> Task:
 
 def _emit_trace(db_session, test_user, *, task_name: str, final_event_type: str) -> tuple[str, uuid.UUID]:
     trace_id = str(uuid.uuid4())
-    started_event_id = queue_system_event(
-        db=db_session,
-        event_type=SystemEventTypes.EXECUTION_STARTED,
-        user_id=test_user.id,
-        trace_id=trace_id,
-        source="flow",
-        payload={
-            "message": f"Started {task_name}",
-            "task_name": task_name,
-            "workflow_type": "task_completed",
-        },
-        required=True,
-    )
-    final_event_id = queue_system_event(
-        db=db_session,
-        event_type=final_event_type,
-        user_id=test_user.id,
-        trace_id=trace_id,
-        parent_event_id=started_event_id,
-        source="flow",
-        payload={
-            "message": f"{task_name} finished with {final_event_type}",
-            "task_name": task_name,
-            "workflow_type": "task_completed",
-        },
-        required=True,
-    )
+    token = set_pipeline_active(True)
+    try:
+        started_event_id = queue_system_event(
+            db=db_session,
+            event_type=SystemEventTypes.EXECUTION_STARTED,
+            user_id=test_user.id,
+            trace_id=trace_id,
+            source="flow",
+            payload={
+                "message": f"Started {task_name}",
+                "task_name": task_name,
+                "workflow_type": "task_completed",
+            },
+            required=True,
+        )
+        final_event_id = queue_system_event(
+            db=db_session,
+            event_type=final_event_type,
+            user_id=test_user.id,
+            trace_id=trace_id,
+            parent_event_id=started_event_id,
+            source="flow",
+            payload={
+                "message": f"{task_name} finished with {final_event_type}",
+                "task_name": task_name,
+                "workflow_type": "task_completed",
+            },
+            required=True,
+        )
+    finally:
+        reset_pipeline_active(token)
     return trace_id, final_event_id
 
 

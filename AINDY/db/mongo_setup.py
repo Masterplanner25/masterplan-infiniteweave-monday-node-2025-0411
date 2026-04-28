@@ -13,6 +13,17 @@ logger = logging.getLogger(__name__)
 _client = None
 
 
+class MongoUnavailableError(RuntimeError):
+    """Raised when a service requires Mongo but none is configured or reachable."""
+
+    def __init__(self, context: str = "") -> None:
+        detail = "MongoDB is not available"
+        if context:
+            detail = f"{detail}: {context}"
+        super().__init__(detail)
+        self.detail = detail
+
+
 def ensure_mongo_ready(*, required: bool | None = None) -> MongoClient | None:
     """Initialize Mongo when available and enforce fail-fast only when required."""
     global _client
@@ -99,6 +110,21 @@ def get_mongo_client():
     if _client is None:
         return init_mongo()
     return _client
+
+
+def require_mongo_client(context: str = "") -> MongoClient:
+    """
+    Return the Mongo client or raise MongoUnavailableError.
+
+    Use this in services that require Mongo. It replaces the pattern:
+      mongo = get_mongo_client()
+      if mongo is None:
+          # unhandled
+    """
+    client = get_mongo_client()
+    if client is None:
+        raise MongoUnavailableError(context)
+    return client
 
 
 def ping_mongo() -> dict:

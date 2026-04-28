@@ -177,8 +177,7 @@ def watcher_ingest_orchestrate(state, context):
 
 def watcher_signals_list_node(state, context):
     try:
-        from uuid import UUID
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.public import list_watcher_signals
 
         db = context.get("db")
         session_id = state.get("session_id")
@@ -187,31 +186,14 @@ def watcher_signals_list_node(state, context):
         limit = state.get("limit", 50)
         offset_val = state.get("offset", 0)
 
-        q = db.query(WatcherSignal)
-        if session_id:
-            q = q.filter(WatcherSignal.session_id == session_id)
-        if user_id_filter:
-            q = q.filter(WatcherSignal.user_id == UUID(str(user_id_filter)))
-        if signal_type:
-            q = q.filter(WatcherSignal.signal_type == signal_type)
-
-        signals = q.order_by(WatcherSignal.signal_timestamp.desc()).offset(offset_val).limit(limit).all()
-        data = [
-            {
-                "id": s.id,
-                "signal_type": s.signal_type,
-                "session_id": s.session_id,
-                "app_name": s.app_name,
-                "window_title": s.window_title,
-                "activity_type": s.activity_type,
-                "signal_timestamp": s.signal_timestamp.isoformat(),
-                "received_at": s.received_at.isoformat(),
-                "duration_seconds": s.duration_seconds,
-                "focus_score": s.focus_score,
-                "metadata": s.signal_metadata,
-            }
-            for s in signals
-        ]
+        data = list_watcher_signals(
+            db,
+            session_id=session_id,
+            user_id=user_id_filter,
+            signal_type=signal_type,
+            limit=limit,
+            offset=offset_val,
+        )
         return {"status": "SUCCESS", "output_patch": {"watcher_signals_list_result": data}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

@@ -224,7 +224,7 @@ def upsert_profile(
             return _mongo_degraded_payload(str(exc))
 
     result = execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="social.profile.upsert",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -253,7 +253,7 @@ def get_profile(request: Request, username: str, db: Database | None = Depends(g
 
     try:
         return execute_with_pipeline_sync(
-            request=None,
+            request=request,
             route_name="social.profile.get",
             handler=handler,
         )
@@ -305,7 +305,7 @@ def create_post(
         }
 
     result = execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="social.post.create",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -392,7 +392,7 @@ def get_feed(
         }
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="social.feed.get",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -473,7 +473,7 @@ def record_post_interaction(
         }
 
     result = execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="social.post.interact",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -489,7 +489,7 @@ def get_social_analytics(
     current_user: dict = Depends(get_current_user),
 ):
     result = execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="social.analytics.get",
         handler=lambda ctx: summarize_social_performance(user_id=str(current_user["sub"])),
         user_id=str(current_user["sub"]),

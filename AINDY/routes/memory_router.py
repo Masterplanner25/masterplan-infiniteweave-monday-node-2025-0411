@@ -622,24 +622,44 @@ async def execute_nodus_task(
         from AINDY.platform_layer.async_job_service import submit_async_job, build_queued_response
         from fastapi.responses import JSONResponse
 
-        log_id = submit_async_job(
-            task_name="memory.nodus.execute",
-            payload={
-                "operation_name": resolved_operation_name,
-                "operation_code": resolved_operation_code,
-                "task_name": resolved_operation_name,
-                "task_code": resolved_operation_code,
-                "user_id": user_id,
-                "session_tags": body.session_tags,
-                "allowed_operations": body.allowed_operations,
-                "execution_id": body.execution_id,
-                "capability_token": body.capability_token,
-            },
+        def handler(ctx):
+            log_id = submit_async_job(
+                task_name="memory.nodus.execute",
+                payload={
+                    "operation_name": resolved_operation_name,
+                    "operation_code": resolved_operation_code,
+                    "task_name": resolved_operation_name,
+                    "task_code": resolved_operation_code,
+                    "user_id": user_id,
+                    "session_tags": body.session_tags,
+                    "allowed_operations": body.allowed_operations,
+                    "execution_id": body.execution_id,
+                    "capability_token": body.capability_token,
+                },
+                user_id=user_id,
+                source="memory.nodus.execute",
+            )
+            queued = build_queued_response(log_id, task_name="memory.nodus.execute", source="memory.nodus.execute")
+            return {"_http_status": 202, "_http_response": queued}
+
+        result = await execute_with_pipeline(
+            request=request,
+            route_name="memory.nodus.execute",
+            handler=handler,
             user_id=user_id,
-            source="memory.nodus.execute",
+            metadata={"db": db},
+            input_payload=body.model_dump(),
+            return_result=True,
         )
-        queued = build_queued_response(log_id, task_name="memory.nodus.execute", source="memory.nodus.execute")
-        return JSONResponse(status_code=202, content=queued)
+        if not result.success:
+            detail = result.metadata.get("detail") or result.error or "Execution failed"
+            raise HTTPException(
+                status_code=int(result.metadata.get("status_code", 500)),
+                detail=detail,
+            )
+        data = result.data or {}
+        payload = data.get("_http_response", {}) if isinstance(data, dict) else {}
+        return JSONResponse(status_code=202, content=payload)
 
     # ── Sync path: inline execution through the pipeline ─────────────────────
     async def _run_nodus():

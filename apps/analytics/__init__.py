@@ -1,4 +1,10 @@
-"""Analytics package public exports."""
+"""
+Domain analytics package exports.
+
+This package owns user-facing analytics logic: KPI scoring, Infinity scoring,
+user score history, and analytics features exposed through the analytics app.
+Platform-level observability does not belong here.
+"""
 
 from .models import (
     AIEfficiency,

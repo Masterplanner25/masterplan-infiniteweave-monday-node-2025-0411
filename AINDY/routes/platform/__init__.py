@@ -37,6 +37,14 @@ from AINDY.routes.platform.platform_ops_router import (
     memory_tree,
     router as platform_ops_router,
 )
+from AINDY.routes.platform.queue_router import (
+    delete_dead_letter,
+    drain_dead_letters,
+    get_queue_health,
+    list_dead_letters,
+    replay_dead_letter,
+    router as queue_router,
+)
 from AINDY.routes.platform.schemas import NodusRunRequest, NodusScriptUpload
 from AINDY.routes.platform.webhooks_router import (
     create_webhook,
@@ -60,5 +68,6 @@ for child in (
     nodus_flow_router,
     nodus_schedule_router,
     platform_ops_router,
+    queue_router,
 ):
     router.include_router(child)
