@@ -676,7 +676,7 @@ class TestCompleteTaskETAHook:
         fake_plan.user_id = "00000000-0000-0000-0000-000000000001"
 
         with patch("apps.tasks.services.task_service.find_task", return_value=mock_task), \
-             patch("apps.tasks.services.task_service.get_mongo_client", return_value=None), \
+             patch("AINDY.db.mongo_setup.require_mongo_client", side_effect=Exception("no mongo")), \
              patch("apps.tasks.services.task_service.get_active_masterplan_via_syscall", return_value={"id": fake_plan.id, "anchor_date": fake_plan.anchor_date.isoformat()}), \
              patch("AINDY.memory.memory_capture_engine.MemoryCaptureEngine.evaluate_and_capture", return_value=None), \
              patch("AINDY.runtime.memory.orchestrator.MemoryOrchestrator.get_context") as mock_context, \

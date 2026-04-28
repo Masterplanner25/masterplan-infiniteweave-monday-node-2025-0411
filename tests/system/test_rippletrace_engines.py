@@ -7,9 +7,9 @@ from unittest.mock import patch
 import pytest
 
 from AINDY.db.models.system_event import SystemEvent
+from apps.automation.models import LearningRecordDB, LearningThresholdDB
 from apps.rippletrace.models import DropPointDB
 from apps.analytics.models import ScoreSnapshotDB
-from AINDY.db.models.learning import LearningRecordDB, LearningThresholdDB
 from apps.rippletrace.models import PlaybookDB, StrategyDB
 from apps.rippletrace.services import (
     causal_engine,
@@ -427,7 +427,8 @@ def test_learning_engine_records_and_evaluates(monkeypatch):
     prediction = learning_engine.record_prediction(
         db, "dp", "likely_to_spike", velocity_at_prediction=1.0, narrative_at_prediction=2.0
     )
-    assert isinstance(prediction, LearningRecordDB)
+    assert isinstance(prediction, dict)
+    assert prediction["drop_point_id"] == "dp"
     record = LearningRecordDB(
         id="lr-1",
         drop_point_id="dp",
@@ -463,13 +464,13 @@ def test_learning_engine_adjust_thresholds(monkeypatch):
         )
         records.append(rec)
     db = FakeSession({"LearningRecordDB": records})
-    threshold = LearningThresholdDB(
-        id="thr-1",
-        velocity_trend=0.5,
-        narrative_trend=1.0,
-        early_velocity_rate=0.2,
-        early_narrative_ceiling=15.0,
-    )
+    threshold = {
+        "id": "thr-1",
+        "velocity_trend": 0.5,
+        "narrative_trend": 1.0,
+        "early_velocity_rate": 0.2,
+        "early_narrative_ceiling": 15.0,
+    }
     monkeypatch.setattr(learning_engine, "get_learning_thresholds", lambda *_: threshold)
     summary = learning_engine.adjust_thresholds(db)
     assert "thresholds" in summary

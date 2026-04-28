@@ -52,7 +52,7 @@ def fetch_task_graph_context(db, user_id: str) -> dict[str, Any]:
 
 
 def fetch_social_performance_signals(*, user_id: str) -> list[dict[str, Any]]:
-    from apps.social.services.social_performance_service import get_social_performance_signals
+    from apps.social.public import get_social_performance_signals
 
     return list(get_social_performance_signals(user_id=str(user_id)) or [])
 

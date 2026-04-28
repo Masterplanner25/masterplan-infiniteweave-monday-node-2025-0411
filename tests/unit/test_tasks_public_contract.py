@@ -73,7 +73,7 @@ def test_tasks_public_happy_paths(monkeypatch):
 
         fetched = tasks_public.get_task_by_id(session, task.id, str(user_id))
         assert fetched is not None
-        assert fetched.id == task.id
+        assert fetched["id"] == task.id
 
         class _DispatchResult:
             envelope = {"job_id": "job-1", "status": "queued", "trace_id": "trace-1"}

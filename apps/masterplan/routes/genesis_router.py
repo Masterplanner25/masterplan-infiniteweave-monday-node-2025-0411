@@ -7,8 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from AINDY.core.execution_gate import to_envelope
-from AINDY.core.execution_service import ExecutionContext
-from AINDY.core.execution_service import run_execution
+from AINDY.core.execution_helper import execute_with_pipeline_sync
 from AINDY.core.observability_events import emit_observability_event
 from AINDY.db.database import get_db
 from apps.masterplan.models import GenesisSessionDB
@@ -68,7 +67,7 @@ def _is_circuit_open_error(detail) -> bool:
     )
 
 
-def _ai_provider_unavailable_response(detail) -> JSONResponse:
+def _ai_provider_unavailable_payload(detail) -> dict:
     payload = {
         "error": "ai_provider_unavailable",
         "message": "An AI provider is temporarily unavailable. Please retry in a moment.",
@@ -79,7 +78,7 @@ def _ai_provider_unavailable_response(detail) -> JSONResponse:
         payload = dict(detail)
         payload.setdefault("message", "An AI provider is temporarily unavailable. Please retry in a moment.")
         payload.setdefault("retryable", True)
-    return JSONResponse(status_code=503, content=payload, headers={"Retry-After": "60"})
+    return payload
 
 
 def _genesis_flow_envelope(result: dict) -> dict:
@@ -105,12 +104,12 @@ def _genesis_run_flow(flow_name: str, payload: dict, db, user_id: str):
     data = result.get("data")
 
     if isinstance(data, dict) and data.get("_http_status") == 202:
-        return JSONResponse(status_code=202, content=data.get("_http_response", {}))
+        return {"_http_status": 202, "_http_response": data.get("_http_response", {})}
 
     if result.get("status") == "FAILED":
         error = _extract_flow_error(result)
         if _is_circuit_open_error(error):
-            return _ai_provider_unavailable_response(error)
+            raise HTTPException(status_code=503, detail=_ai_provider_unavailable_payload(error))
         if error.startswith("HTTP_"):
             parts = error.split(":", 1)
             code = int(parts[0].replace("HTTP_", ""))
@@ -130,17 +129,32 @@ def _get_user_session(db: Session, session_id: int, user_id: str) -> GenesisSess
     return _get_owned_session(db, session_id, user_id)
 
 
-def _execute_genesis(route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
-    return run_execution(
-        ExecutionContext(
-            db=db,
-            user_id=user_id,
-            source="genesis",
-            operation=route_name,
-            start_payload=input_payload or {},
-        ),
-        lambda: handler(None),
+def _execute_genesis(request: Request, route_name: str, handler, *, db: Session, user_id: str, input_payload=None):
+    result = execute_with_pipeline_sync(
+        request=request,
+        route_name=route_name,
+        handler=handler,
+        user_id=user_id,
+        input_payload=input_payload or {},
+        metadata={"db": db, "source": "genesis"},
+        return_result=True,
     )
+    if not result.success:
+        detail = result.metadata.get("detail") or result.error or "Execution failed"
+        if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
+            return JSONResponse(status_code=503, content=detail, headers={"Retry-After": "60"})
+        raise HTTPException(
+            status_code=int(result.metadata.get("status_code", 500)),
+            detail=detail,
+        )
+    data = result.data
+    if isinstance(data, dict) and data.get("_http_status"):
+        payload = data.get("_http_response", {})
+        if isinstance(payload, dict) and data.get("execution_envelope") is not None:
+            payload = dict(payload)
+            payload.setdefault("execution_envelope", data["execution_envelope"])
+        return JSONResponse(status_code=int(data["_http_status"]), content=payload)
+    return data
 
 
 @router.post(
@@ -155,7 +169,7 @@ def create_genesis_session(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _execute_genesis("genesis.session.create", lambda _ctx: _genesis_run_flow("genesis_session_create", {}, db, user_id), db=db, user_id=user_id)
+    return _execute_genesis(request, "genesis.session.create", lambda _ctx: _genesis_run_flow("genesis_session_create", {}, db, user_id), db=db, user_id=user_id)
 
 
 @router.post(
@@ -213,7 +227,7 @@ def genesis_message(
             except Exception as _obs_exc:
                 logger.warning("[genesis] observability failure emit failed: %s", _obs_exc)
             if _is_circuit_open_error(error):
-                return _ai_provider_unavailable_response(error)
+                raise HTTPException(status_code=503, detail=_ai_provider_unavailable_payload(error))
             raise HTTPException(status_code=500, detail="Genesis message execution failed")
 
         from apps.masterplan.services.genesis_service import restore_synthesis_ready
@@ -232,6 +246,7 @@ def genesis_message(
         return _genesis_flow_envelope(result)
 
     return _execute_genesis(
+        request,
         "genesis.message",
         handler,
         db=db,
@@ -253,7 +268,7 @@ def get_genesis_session(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _execute_genesis("genesis.session.get", lambda _ctx: _genesis_run_flow("genesis_session_get", {"session_id": session_id}, db, user_id), db=db, user_id=user_id, input_payload={"session_id": session_id})
+    return _execute_genesis(request, "genesis.session.get", lambda _ctx: _genesis_run_flow("genesis_session_get", {"session_id": session_id}, db, user_id), db=db, user_id=user_id, input_payload={"session_id": session_id})
 
 
 @router.get(
@@ -269,7 +284,7 @@ def get_genesis_draft(
     current_user: dict = Depends(get_current_user),
 ):
     user_id = str(current_user["sub"])
-    return _execute_genesis("genesis.draft.get", lambda _ctx: _genesis_run_flow("genesis_draft_get", {"session_id": session_id}, db, user_id), db=db, user_id=user_id, input_payload={"session_id": session_id})
+    return _execute_genesis(request, "genesis.draft.get", lambda _ctx: _genesis_run_flow("genesis_draft_get", {"session_id": session_id}, db, user_id), db=db, user_id=user_id, input_payload={"session_id": session_id})
 
 
 @router.post(
@@ -337,7 +352,7 @@ def synthesize_genesis(
 
         return result
 
-    return _execute_genesis("genesis.synthesize", handler, db=db, user_id=user_id, input_payload={"session_id": session_id})
+    return _execute_genesis(request, "genesis.synthesize", handler, db=db, user_id=user_id, input_payload={"session_id": session_id})
 
 
 class AuditRequest(BaseModel):
@@ -378,7 +393,7 @@ def audit_genesis_draft(
             output=None, error=None, duration_ms=None, attempt_count=1,
         ))
         return audit_result
-    return _execute_genesis("genesis.audit", _audit_handler, db=db, user_id=user_id, input_payload={"session_id": body.session_id})
+    return _execute_genesis(request, "genesis.audit", _audit_handler, db=db, user_id=user_id, input_payload={"session_id": body.session_id})
 
 
 @router.post(
@@ -475,7 +490,7 @@ def lock_masterplan(
     except Exception as _obs_exc:
         logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
 
-    return _execute_genesis("genesis.lock", lambda _ctx: result, db=db, user_id=user_id, input_payload={"session_id": session_id})
+    return _execute_genesis(request, "genesis.lock", lambda _ctx: result, db=db, user_id=user_id, input_payload={"session_id": session_id})
 
 
 @router.post(
@@ -534,6 +549,6 @@ def activate_masterplan(
             logger.warning("[genesis] observability success emit failed: %s", _obs_exc)
         return result
 
-    return _execute_genesis("genesis.activate", _activate_handler, db=db, user_id=user_id, input_payload={"plan_id": plan_id})
+    return _execute_genesis(request, "genesis.activate", _activate_handler, db=db, user_id=user_id, input_payload={"plan_id": plan_id})
 
 

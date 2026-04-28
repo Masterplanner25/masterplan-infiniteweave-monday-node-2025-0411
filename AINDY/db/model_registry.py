@@ -19,7 +19,6 @@ import AINDY.db.models.agent_event  # noqa: F401
 import AINDY.db.models.agent_registry  # noqa: F401
 import AINDY.db.models.agent_run  # noqa: F401
 import AINDY.db.models.api_key  # noqa: F401
-import AINDY.db.models.autonomy_decision  # noqa: F401
 import AINDY.db.models.background_task_lease  # noqa: F401
 import AINDY.db.models.capability  # noqa: F401
 import AINDY.db.models.dynamic_flow  # noqa: F401
@@ -28,7 +27,6 @@ import AINDY.db.models.execution_unit  # noqa: F401
 import AINDY.db.models.event_edge  # noqa: F401
 import AINDY.db.models.flow_run  # noqa: F401
 import AINDY.db.models.job_log  # noqa: F401
-import AINDY.db.models.learning  # noqa: F401
 import AINDY.db.models.memory_metrics  # noqa: F401
 import AINDY.db.models.memory_node_history  # noqa: F401
 import AINDY.db.models.memory_trace  # noqa: F401
@@ -41,7 +39,6 @@ import AINDY.db.models.system_health_log  # noqa: F401
 import AINDY.db.models.system_state_snapshot  # noqa: F401
 import AINDY.db.models.user  # noqa: F401
 import AINDY.db.models.user_identity  # noqa: F401
-import AINDY.db.models.watcher_signal  # noqa: F401
 import AINDY.db.models.waiting_flow_run  # noqa: F401
 import AINDY.db.models.webhook_subscription  # noqa: F401
 

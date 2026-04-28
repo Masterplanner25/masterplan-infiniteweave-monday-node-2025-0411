@@ -66,30 +66,31 @@ def sync_masterplan_tasks(
     user_id: str | uuid.UUID,
     replace_existing: bool = False,
 ) -> dict[str, Any]:
-    from apps.tasks.public import Task
+    from apps.tasks.public import count_tasks, delete_tasks_by_ids, list_tasks_for_masterplan
 
     owner_user_id = uuid.UUID(str(user_id))
-    existing = (
-        db.query(Task)
-        .filter(Task.user_id == owner_user_id, Task.masterplan_id == masterplan.id)
-        .order_by(Task.id.asc())
-        .all()
+    existing = list_tasks_for_masterplan(
+        db,
+        user_id=owner_user_id,
+        masterplan_id=masterplan.id,
     )
     if existing and not replace_existing:
         return {
             "generated": 0,
             "total_tasks": len(existing),
-            "task_ids": [task.id for task in existing],
+            "task_ids": [task["id"] for task in existing],
             "skipped": True,
         }
 
     if replace_existing and existing:
-        protected = [task.id for task in existing if task.status == "completed"]
+        protected = [task["id"] for task in existing if task.get("status") == "completed"]
         if protected:
             raise ValueError("masterplan_tasks_completed_cannot_replace")
-        for task in existing:
-            db.delete(task)
-        db.flush()
+        delete_tasks_by_ids(
+            db,
+            user_id=owner_user_id,
+            task_ids=[int(task["id"]) for task in existing],
+        )
 
     roots = _extract_root_items(masterplan.structure_json or {})
     created_ids: list[int] = []
@@ -112,10 +113,10 @@ def sync_masterplan_tasks(
     db.commit()
     return {
         "generated": len(created_ids),
-        "total_tasks": (
-            db.query(Task)
-            .filter(Task.user_id == owner_user_id, Task.masterplan_id == masterplan.id)
-            .count()
+        "total_tasks": count_tasks(
+            db,
+            user_id=owner_user_id,
+            masterplan_id=masterplan.id,
         ),
         "task_ids": created_ids,
         "skipped": False,
@@ -123,71 +124,64 @@ def sync_masterplan_tasks(
 
 
 def get_masterplan_execution_status(*, db, masterplan_id: int, user_id: str | uuid.UUID) -> dict[str, Any]:
-    from apps.automation.public import AutomationLog
-    from apps.tasks.public import Task
+    from apps.automation.public import list_automation_logs
+    from apps.tasks.public import list_tasks_for_masterplan
 
     owner_user_id = uuid.UUID(str(user_id))
-    tasks = (
-        db.query(Task)
-        .filter(Task.user_id == owner_user_id, Task.masterplan_id == masterplan_id)
-        .order_by(Task.id.asc())
-        .all()
+    tasks = list_tasks_for_masterplan(
+        db,
+        user_id=owner_user_id,
+        masterplan_id=masterplan_id,
     )
     task_counts = {
         "total": len(tasks),
-        "completed": sum(1 for task in tasks if task.status == "completed"),
-        "pending": sum(1 for task in tasks if task.status == "pending"),
-        "blocked": sum(1 for task in tasks if task.status == "blocked"),
-        "in_progress": sum(1 for task in tasks if task.status == "in_progress"),
-        "paused": sum(1 for task in tasks if task.status == "paused"),
+        "completed": sum(1 for task in tasks if task.get("status") == "completed"),
+        "pending": sum(1 for task in tasks if task.get("status") == "pending"),
+        "blocked": sum(1 for task in tasks if task.get("status") == "blocked"),
+        "in_progress": sum(1 for task in tasks if task.get("status") == "in_progress"),
+        "paused": sum(1 for task in tasks if task.get("status") == "paused"),
     }
-    task_lookup = {task.id: task for task in tasks}
+    task_lookup = {task["id"]: task for task in tasks}
     task_ids = set(task_lookup)
-    logs = (
-        db.query(AutomationLog)
-        .filter(AutomationLog.user_id == owner_user_id)
-        .order_by(AutomationLog.created_at.desc())
-        .limit(250)
-        .all()
-    )
+    logs = list_automation_logs(db, user_id=owner_user_id, limit=250)
     relevant_logs = []
     for log in logs:
-        payload = log.payload or {}
+        payload = log.get("payload") or {}
         if payload.get("masterplan_id") == masterplan_id or payload.get("task_id") in task_ids:
             relevant_logs.append(log)
     automation_counts = {
         "total": len(relevant_logs),
-        "pending": sum(1 for log in relevant_logs if log.status == "pending"),
-        "running": sum(1 for log in relevant_logs if log.status == "running"),
-        "success": sum(1 for log in relevant_logs if log.status == "success"),
-        "failed": sum(1 for log in relevant_logs if log.status == "failed"),
-        "deferred": sum(1 for log in relevant_logs if log.status == "deferred"),
-        "ignored": sum(1 for log in relevant_logs if log.status == "ignored"),
+        "pending": sum(1 for log in relevant_logs if log.get("status") == "pending"),
+        "running": sum(1 for log in relevant_logs if log.get("status") == "running"),
+        "success": sum(1 for log in relevant_logs if log.get("status") == "success"),
+        "failed": sum(1 for log in relevant_logs if log.get("status") == "failed"),
+        "deferred": sum(1 for log in relevant_logs if log.get("status") == "deferred"),
+        "ignored": sum(1 for log in relevant_logs if log.get("status") == "ignored"),
     }
     task_items = [
         {
-            "task_id": task.id,
-            "name": task.name,
-            "status": task.status,
-            "priority": task.priority,
-            "parent_task_id": task.parent_task_id,
-            "depends_on": task.depends_on or [],
-            "automation_type": task.automation_type,
-            "automation_config": task.automation_config,
+            "task_id": task["id"],
+            "name": task.get("name"),
+            "status": task.get("status"),
+            "priority": task.get("priority"),
+            "parent_task_id": task.get("parent_task_id"),
+            "depends_on": task.get("depends_on") or [],
+            "automation_type": task.get("automation_type"),
+            "automation_config": task.get("automation_config"),
         }
         for task in tasks
     ]
     failed_automations = [
         {
-            "automation_log_id": log.id,
-            "task_id": (log.payload or {}).get("task_id"),
-            "task_name": (log.payload or {}).get("task_name") or log.task_name,
-            "status": log.status,
-            "error_message": log.error_message,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "automation_log_id": log.get("id"),
+            "task_id": (log.get("payload") or {}).get("task_id"),
+            "task_name": (log.get("payload") or {}).get("task_name") or log.get("task_name"),
+            "status": log.get("status"),
+            "error_message": log.get("error_message"),
+            "created_at": log.get("created_at"),
         }
         for log in relevant_logs
-        if log.status == "failed"
+        if log.get("status") == "failed"
     ]
     return {
         "tasks": task_counts,

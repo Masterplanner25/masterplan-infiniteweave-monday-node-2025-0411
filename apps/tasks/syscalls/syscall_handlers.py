@@ -165,11 +165,10 @@ def _handle_task_orchestrate(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
-    from AINDY.db.models.watcher_signal import WatcherSignal
+    from apps.automation.public import persist_watcher_signals
     from AINDY.platform_layer.watcher_contract import (
         get_valid_activity_types,
         get_valid_signal_types,
-        parse_signal_timestamp,
     )
 
     signals: list = payload.get("signals") or []
@@ -179,10 +178,6 @@ def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
 
     db, owns_session = _session_from_context(ctx)
     try:
-        persisted = 0
-        session_ended_count = 0
-        batch_user_id = str(user_id)
-
         for idx, sig in enumerate(signals):
             signal_type = sig.get("signal_type")
             activity_type = sig.get("activity_type")
@@ -190,36 +185,14 @@ def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
                 raise ValueError(f"Signal [{idx}]: unknown signal_type {signal_type!r}")
             if activity_type not in get_valid_activity_types():
                 raise ValueError(f"Signal [{idx}]: unknown activity_type {activity_type!r}")
-
-            ts = parse_signal_timestamp(sig.get("timestamp"))
-            meta = sig.get("metadata") or {}
-            db.add(
-                WatcherSignal(
-                    signal_type=signal_type,
-                    session_id=sig.get("session_id"),
-                    user_id=user_id,
-                    app_name=sig.get("app_name"),
-                    window_title=sig.get("window_title") or None,
-                    activity_type=activity_type,
-                    signal_timestamp=ts,
-                    received_at=datetime.now(timezone.utc),
-                    duration_seconds=meta.get("duration_seconds"),
-                    focus_score=meta.get("focus_score"),
-                    signal_metadata=meta if meta else None,
-                )
-            )
-            if signal_type == "session_ended":
-                session_ended_count += 1
-            persisted += 1
-
-        db.commit()
+        result = persist_watcher_signals(db, signals=signals, user_id=user_id)
         return {
             "watcher_ingest_result": {
-                "accepted": persisted,
-                "session_ended_count": session_ended_count,
+                "accepted": int(result.get("accepted") or 0),
+                "session_ended_count": int(result.get("session_ended_count") or 0),
             },
-            "watcher_batch_user_id": batch_user_id,
-            "watcher_session_ended_count": session_ended_count,
+            "watcher_batch_user_id": result.get("watcher_batch_user_id"),
+            "watcher_session_ended_count": int(result.get("session_ended_count") or 0),
         }
     except Exception:
         db.rollback()

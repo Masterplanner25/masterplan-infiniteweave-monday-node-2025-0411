@@ -1,3 +1,3 @@
-from AINDY.db.models.learning import LearningRecordDB
+from apps.automation.models import LearningRecordDB
 
 __all__ = ["LearningRecordDB"]

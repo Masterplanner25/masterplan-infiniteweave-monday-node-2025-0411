@@ -1392,15 +1392,24 @@ def _update_linked_task_feedback(db: Session, order: FreelanceOrder, *, outcome:
     try:
         if not order.task_id or not order.user_id:
             return
-        from apps.tasks.public import get_task_by_id
+        from apps.tasks.public import get_task_by_id, update_task_status
         task = get_task_by_id(db, order.task_id, str(order.user_id))
         if not task:
             return
-        if outcome == "success" and task.status != "completed":
-            task.status = "completed"
-        elif outcome == "failure" and task.status == "completed":
-            task.status = "paused"
-        db.commit()
+        if outcome == "success" and task.get("status") != "completed":
+            update_task_status(
+                db,
+                task_id=order.task_id,
+                user_id=str(order.user_id),
+                status="completed",
+            )
+        elif outcome == "failure" and task.get("status") == "completed":
+            update_task_status(
+                db,
+                task_id=order.task_id,
+                user_id=str(order.user_id),
+                status="paused",
+            )
     except Exception as exc:
         db.rollback()
         logger.warning("Freelance task feedback sync failed: %s", exc)
@@ -1410,14 +1419,13 @@ def _sync_freelance_automation(db: Session, order: FreelanceOrder) -> None:
     try:
         if not order.task_id or not order.user_id:
             return
-        from apps.tasks.public import queue_task_automation
-        from apps.tasks.public import get_task_by_id
+        from apps.tasks.public import get_task_by_id, queue_task_automation_by_id
         task = get_task_by_id(db, order.task_id, str(order.user_id))
-        if not task:
+        if not task or not task.get("automation_type"):
             return
-        dispatch = queue_task_automation(
+        dispatch = queue_task_automation_by_id(
             db=db,
-            task=task,
+            task_id=order.task_id,
             user_id=str(order.user_id),
             reason="freelance_delivery_completed",
         )

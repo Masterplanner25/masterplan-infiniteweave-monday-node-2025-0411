@@ -100,7 +100,12 @@ class PersistentFlowRunner:
 
     def start(self, initial_state: dict, flow_name: str = "default") -> dict:
         from AINDY.db.models.flow_run import FlowRun
+        from AINDY.platform_layer.async_execution_context import (
+            activate_async_execution_context,
+            deactivate_async_execution_context,
+        )
 
+        async_token = activate_async_execution_context()
         trace_id = ensure_trace_id(
             initial_state.get("trace_id") if isinstance(initial_state, dict) else None
         ) or str(uuid.uuid4())
@@ -163,6 +168,7 @@ class PersistentFlowRunner:
         finally:
             reset_parent_event_id(parent_token)
             reset_trace_id(trace_token)
+            deactivate_async_execution_context(async_token)
 
     def _initialize_execution_unit(self, run, flow_name: str) -> None:
         try:
@@ -212,22 +218,33 @@ class PersistentFlowRunner:
 
     def resume(self, run_id: str) -> dict:
         from AINDY.db.models.flow_run import FlowHistory, FlowRun
+        from AINDY.platform_layer.async_execution_context import (
+            activate_async_execution_context,
+            deactivate_async_execution_context,
+        )
 
+        async_token = activate_async_execution_context()
         db_run_id = str(run_id)
         run = self.db.query(FlowRun).filter(FlowRun.id == db_run_id).first()
         if not run:
-            return _format_execution_response(
-                status="FAILED",
-                trace_id=db_run_id,
-                result={"error": f"FlowRun {run_id} not found"},
-                events=[],
-                next_action=None,
-                run_id=db_run_id,
-            )
+            try:
+                return _format_execution_response(
+                    status="FAILED",
+                    trace_id=db_run_id,
+                    result={"error": f"FlowRun {run_id} not found"},
+                    events=[],
+                    next_action=None,
+                    run_id=db_run_id,
+                )
+            finally:
+                deactivate_async_execution_context(async_token)
 
         claim_response = self._claim_waiting_run(run, db_run_id)
         if claim_response is not None:
-            return claim_response
+            try:
+                return claim_response
+            finally:
+                deactivate_async_execution_context(async_token)
 
         def _reload_run() -> FlowRun | None:
             return self.db.query(FlowRun).filter(FlowRun.id == db_run_id).first()
@@ -376,3 +393,4 @@ class PersistentFlowRunner:
         finally:
             reset_parent_event_id(parent_token)
             reset_trace_id(trace_token)
+            deactivate_async_execution_context(async_token)

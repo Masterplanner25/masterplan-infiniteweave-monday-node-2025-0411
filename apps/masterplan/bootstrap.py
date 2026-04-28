@@ -332,7 +332,8 @@ def masterplan_health_check() -> bool:
     from AINDY.db.database import SessionLocal
 
     try:
-        from AINDY.kernel.circuit_breaker import CircuitState, get_openai_circuit_breaker
+        from AINDY.kernel.circuit_breaker import CircuitState
+        from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
     except Exception as exc:
         raise RuntimeError(f"masterplan health import failed: {exc}") from exc
 

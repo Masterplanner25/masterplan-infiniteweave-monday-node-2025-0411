@@ -17,16 +17,15 @@ def log_bridge_user_event(
     occurred_at: datetime,
 ) -> None:
     """Persist a bridge user event. Non-fatal: logs a warning on failure."""
-    from apps.automation.public import BridgeUserEvent
+    from apps.automation.public import create_bridge_user_event
 
     try:
-        db.add(
-            BridgeUserEvent(
-                user_name=user,
-                origin=origin,
-                raw_timestamp=raw_timestamp,
-                occurred_at=occurred_at,
-            )
+        create_bridge_user_event(
+            db,
+            user=user,
+            origin=origin,
+            raw_timestamp=raw_timestamp,
+            occurred_at=occurred_at,
         )
         db.commit()
     except Exception as exc:

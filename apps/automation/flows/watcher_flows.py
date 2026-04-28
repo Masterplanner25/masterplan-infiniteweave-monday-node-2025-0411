@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 def watcher_signals_list_node(state, context):
     try:
         from uuid import UUID
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.models import WatcherSignal
 
         db = context.get("db")
         session_id = state.get("session_id")

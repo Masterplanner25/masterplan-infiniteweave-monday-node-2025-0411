@@ -1,3 +1,3 @@
-from AINDY.db.models.learning import LearningThresholdDB
+from apps.automation.models import LearningThresholdDB
 
 __all__ = ["LearningThresholdDB"]

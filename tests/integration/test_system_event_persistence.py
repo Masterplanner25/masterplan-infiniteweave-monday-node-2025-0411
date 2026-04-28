@@ -7,16 +7,21 @@ from unittest.mock import patch
 def test_emit_system_event_persists_to_test_db(db_session, test_user):
     from AINDY.db.models.system_event import SystemEvent
     from AINDY.core.execution_signal_helper import queue_system_event
+    from AINDY.platform_layer.trace_context import reset_pipeline_active, set_pipeline_active
 
     trace_id = str(uuid.uuid4())
-    queue_system_event(
-        db=db_session,
-        event_type="execution.started",
-        user_id=test_user.id,
-        trace_id=trace_id,
-        payload={"status": "started"},
-        required=True,
-    )
+    token = set_pipeline_active(True)
+    try:
+        queue_system_event(
+            db=db_session,
+            event_type="execution.started",
+            user_id=test_user.id,
+            trace_id=trace_id,
+            payload={"status": "started"},
+            required=True,
+        )
+    finally:
+        reset_pipeline_active(token)
 
     rows = db_session.query(SystemEvent).filter(SystemEvent.type == "execution.started").all()
     assert len(rows) == 1

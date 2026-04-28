@@ -11,6 +11,7 @@ from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.memory.memory_scoring_service import get_relevant_memories, score_memory
 from apps.rippletrace.services.rippletrace_service import build_trace_graph
 from AINDY.core.system_event_types import SystemEventTypes
+from AINDY.platform_layer.trace_context import reset_pipeline_active, set_pipeline_active
 
 
 def _stable_score_snapshot() -> dict:
@@ -51,34 +52,38 @@ def _create_ready_task(db_session, test_user, name: str = "Recover execution pat
 
 def _emit_execution_failure_trace(db_session, test_user, *, task_name: str, trigger_event: str = "task_completed"):
     trace_id = str(uuid.uuid4())
-    started_event_id = queue_system_event(
-        db=db_session,
-        event_type=SystemEventTypes.EXECUTION_STARTED,
-        user_id=test_user.id,
-        trace_id=trace_id,
-        source="flow",
-        payload={
-            "message": f"Started {task_name}",
-            "task_name": task_name,
-            "workflow_type": trigger_event,
-        },
-        required=True,
-    )
-    failed_event_id = queue_system_event(
-        db=db_session,
-        event_type=SystemEventTypes.EXECUTION_FAILED,
-        user_id=test_user.id,
-        trace_id=trace_id,
-        parent_event_id=started_event_id,
-        source="flow",
-        payload={
-            "message": f"{task_name} failed",
-            "task_name": task_name,
-            "workflow_type": trigger_event,
-            "error": "simulated failure",
-        },
-        required=True,
-    )
+    token = set_pipeline_active(True)
+    try:
+        started_event_id = queue_system_event(
+            db=db_session,
+            event_type=SystemEventTypes.EXECUTION_STARTED,
+            user_id=test_user.id,
+            trace_id=trace_id,
+            source="flow",
+            payload={
+                "message": f"Started {task_name}",
+                "task_name": task_name,
+                "workflow_type": trigger_event,
+            },
+            required=True,
+        )
+        failed_event_id = queue_system_event(
+            db=db_session,
+            event_type=SystemEventTypes.EXECUTION_FAILED,
+            user_id=test_user.id,
+            trace_id=trace_id,
+            parent_event_id=started_event_id,
+            source="flow",
+            payload={
+                "message": f"{task_name} failed",
+                "task_name": task_name,
+                "workflow_type": trigger_event,
+                "error": "simulated failure",
+            },
+            required=True,
+        )
+    finally:
+        reset_pipeline_active(token)
     return trace_id, started_event_id, failed_event_id
 
 
@@ -210,25 +215,29 @@ class TestCausalLearningLoop:
         task = _create_ready_task(db_session, test_user, name="Competing memory task")
 
         success_trace = str(uuid.uuid4())
-        success_started = queue_system_event(
-            db=db_session,
-            event_type=SystemEventTypes.EXECUTION_STARTED,
-            user_id=test_user.id,
-            trace_id=success_trace,
-            source="flow",
-            payload={"message": "success path started", "task_name": task.name, "workflow_type": "task_completed"},
-            required=True,
-        )
-        queue_system_event(
-            db=db_session,
-            event_type=SystemEventTypes.EXECUTION_COMPLETED,
-            user_id=test_user.id,
-            trace_id=success_trace,
-            parent_event_id=success_started,
-            source="flow",
-            payload={"message": "success path completed", "task_name": task.name, "workflow_type": "task_completed"},
-            required=True,
-        )
+        token = set_pipeline_active(True)
+        try:
+            success_started = queue_system_event(
+                db=db_session,
+                event_type=SystemEventTypes.EXECUTION_STARTED,
+                user_id=test_user.id,
+                trace_id=success_trace,
+                source="flow",
+                payload={"message": "success path started", "task_name": task.name, "workflow_type": "task_completed"},
+                required=True,
+            )
+            queue_system_event(
+                db=db_session,
+                event_type=SystemEventTypes.EXECUTION_COMPLETED,
+                user_id=test_user.id,
+                trace_id=success_trace,
+                parent_event_id=success_started,
+                source="flow",
+                payload={"message": "success path completed", "task_name": task.name, "workflow_type": "task_completed"},
+                required=True,
+            )
+        finally:
+            reset_pipeline_active(token)
 
         _, _, failed_event_id = _emit_execution_failure_trace(db_session, test_user, task_name=task.name)
 

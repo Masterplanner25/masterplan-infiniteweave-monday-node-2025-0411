@@ -164,28 +164,37 @@ async def replay_automation_log(
 
 @router.get("/scheduler/status")
 @limiter.limit("60/minute")
-def get_scheduler_status(
+async def get_scheduler_status(
     request: Request,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from platform_layer.scheduler_service import get_scheduler
+    def handler(_ctx):
+        from platform_layer.scheduler_service import get_scheduler
 
-    try:
-        scheduler = get_scheduler()
-        jobs = scheduler.get_jobs()
-        job_list = [
-            {
-                "id": job.id,
-                "name": job.name,
-                "next_run_time": job.next_run_time,
-                "trigger": str(job.trigger),
-            }
-            for job in jobs
-        ]
-        return {"running": scheduler.running, "jobs": job_list, "job_count": len(job_list)}
-    except RuntimeError:
-        return {"running": False, "jobs": [], "job_count": 0}
+        try:
+            scheduler = get_scheduler()
+            jobs = scheduler.get_jobs()
+            job_list = [
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run_time": job.next_run_time,
+                    "trigger": str(job.trigger),
+                }
+                for job in jobs
+            ]
+            return {"running": scheduler.running, "jobs": job_list, "job_count": len(job_list)}
+        except RuntimeError:
+            return {"running": False, "jobs": [], "job_count": 0}
+
+    return await _execute_automation(
+        request,
+        "automation.scheduler.status",
+        handler,
+        db=db,
+        user_id=str(current_user["sub"]),
+    )
 
 
 @router.post("/tasks/{task_id}/trigger")

@@ -605,7 +605,7 @@ def test_score_get_health_and_dashboard_nodes(monkeypatch):
 def test_analytics_and_watcher_nodes_smoke():
     from apps.masterplan.models import MasterPlan
     from apps.analytics.models import CanonicalMetricDB
-    from AINDY.db.models.watcher_signal import WatcherSignal
+    from apps.automation.models import WatcherSignal
     from AINDY.runtime.flow_definitions_extended import (
         analytics_masterplan_get_node,
         analytics_masterplan_summary_node,

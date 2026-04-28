@@ -856,7 +856,7 @@ class TestWatcherHandlers:
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
+            "apps.automation.models": mock_watcher_signal_mod,
             "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             with pytest.raises(ValueError, match="unknown signal_type"):
@@ -878,7 +878,7 @@ class TestWatcherHandlers:
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
+            "apps.automation.models": mock_watcher_signal_mod,
             "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [self._valid_signal()]}, _ctx())
@@ -907,7 +907,7 @@ class TestWatcherHandlers:
             "db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
             "db.models.watcher_signal": mock_watcher_signal_mod,
-            "AINDY.db.models.watcher_signal": mock_watcher_signal_mod,
+            "apps.automation.models": mock_watcher_signal_mod,
             "AINDY.platform_layer.watcher_contract": mock_watcher_contract,
         }):
             result = _handle_watcher_ingest({"signals": [sig1, sig2]}, _ctx())

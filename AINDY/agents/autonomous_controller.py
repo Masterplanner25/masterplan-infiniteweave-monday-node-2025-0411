@@ -5,13 +5,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from AINDY.db.models.agent_run import AgentRun
-from AINDY.db.models.autonomy_decision import AutonomyDecision
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.execution_envelope import success
 from AINDY.core.system_event_types import SystemEventTypes
 from AINDY.platform_layer.registry import get_trigger_evaluator
 from AINDY.utils.uuid_utils import normalize_uuid
+from apps.autonomy.models import AutonomyDecision
 
 
 DEFAULT_DEFER_SECONDS = 300

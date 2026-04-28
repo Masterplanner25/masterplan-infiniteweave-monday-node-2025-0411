@@ -53,7 +53,8 @@ def get_llm_status(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from AINDY.kernel.circuit_breaker import get_deepseek_circuit_breaker, get_openai_circuit_breaker
+    from AINDY.platform_layer.deepseek_client import get_deepseek_circuit_breaker
+    from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
     user_id = str(current_user["sub"])
 

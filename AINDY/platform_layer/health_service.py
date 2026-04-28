@@ -525,11 +525,9 @@ def check_schema() -> DependencyStatus:
 
 
 def check_ai_providers() -> DependencyStatus:
-    from AINDY.kernel.circuit_breaker import (
-        CircuitState,
-        get_deepseek_circuit_breaker,
-        get_openai_circuit_breaker,
-    )
+    from AINDY.kernel.circuit_breaker import CircuitState
+    from AINDY.platform_layer.deepseek_client import get_deepseek_circuit_breaker
+    from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
     def _summarize(cb) -> dict[str, Any]:
         state = cb.state

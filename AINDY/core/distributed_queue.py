@@ -252,6 +252,14 @@ class DistributedQueueBackend(ABC):
     def get_dlq_depth(self) -> int:
         """Return the number of dead-lettered jobs."""
 
+    def remove_dead_letter(self, job_id: str) -> bool:
+        """Remove one dead-lettered job by job_id."""
+        return False
+
+    def drain_dead_letters(self) -> int:
+        """Remove all dead-lettered jobs and return the number removed."""
+        return 0
+
     # ── Optional extensions ────────────────────────────────────────────────
 
     def enqueue_delayed(self, payload: QueueJobPayload, delay_seconds: float) -> None:
@@ -318,10 +326,17 @@ class DistributedQueueBackend(ABC):
         return None
 
     def health_snapshot(self) -> dict:
+        metrics = self.get_metrics()
         return {
             "backend": "redis" if self.backend_name == "redis" else "memory",
+            "backend_name": self.backend_name,
             "degraded": self.degraded,
             "redis_available": self.redis_available,
+            "metrics": metrics,
+            "queue_depth": metrics.get("queue_depth", 0),
+            "in_flight_count": metrics.get("in_flight_count", 0),
+            "dlq_depth": metrics.get("dlq_depth", metrics.get("failed_jobs", 0)),
+            "delayed_jobs": metrics.get("delayed_jobs", 0),
         }
 
 
@@ -797,6 +812,42 @@ return redis.call('ZADD', KEYS[2], ARGV[2], ARGV[1])
         entries = self._redis.lrange(self._dlq_key, 0, max(0, n) - 1)
         return [json.loads(entry) for entry in entries]
 
+    def remove_dead_letter(self, job_id: str) -> bool:
+        entries = self._run_redis_operation(
+            "remove_dead_letter_lrange",
+            lambda: self._redis.lrange(self._dlq_key, 0, -1),
+        )
+        target_raw = None
+        for entry_raw in entries:
+            try:
+                if json.loads(entry_raw).get("job_id") == job_id:
+                    target_raw = entry_raw
+                    break
+            except Exception:
+                continue
+        if target_raw is None:
+            return False
+        removed = int(
+            self._run_redis_operation(
+                "remove_dead_letter_lrem",
+                lambda: self._redis.lrem(self._dlq_key, 1, target_raw),
+            )
+        )
+        if removed:
+            _refresh_queue_metrics(self.backend_name, self.get_metrics())
+        return removed > 0
+
+    def drain_dead_letters(self) -> int:
+        count = self.get_dlq_depth()
+        if count <= 0:
+            return 0
+        self._run_redis_operation(
+            "drain_dead_letters_del",
+            lambda: self._redis.delete(self._dlq_key),
+        )
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
+        return count
+
 
 # ---------------------------------------------------------------------------
 # In-memory backend (tests / single-process dev)
@@ -901,11 +952,13 @@ class InMemoryQueueBackend(DistributedQueueBackend):
             self._dlq.append({
                 "job_id": job_id,
                 "payload": entry[0] if entry else None,
+                "payload_raw": entry[0].to_json() if entry else "",
                 "error": error,
                 "failed_at": datetime.now(timezone.utc).isoformat(),
             })
         async_queue_failure_total.labels(backend=self.backend_name, stage="job").inc()
         logger.warning("[Queue:mem] fail→DLQ job_id=%s error=%s", job_id, error)
+        _refresh_queue_metrics(self.backend_name, self.get_metrics())
 
     # ── Delayed enqueue ────────────────────────────────────────────────────
 
@@ -991,6 +1044,26 @@ class InMemoryQueueBackend(DistributedQueueBackend):
     def get_dlq_depth(self) -> int:
         with self._dlq_lock:
             return len(self._dlq)
+
+    def remove_dead_letter(self, job_id: str) -> bool:
+        removed = False
+        with self._dlq_lock:
+            for idx, entry in enumerate(self._dlq):
+                if entry.get("job_id") == job_id:
+                    del self._dlq[idx]
+                    removed = True
+                    break
+        if removed:
+            _refresh_queue_metrics(self.backend_name, self.get_metrics())
+        return removed
+
+    def drain_dead_letters(self) -> int:
+        with self._dlq_lock:
+            count = len(self._dlq)
+            self._dlq.clear()
+        if count:
+            _refresh_queue_metrics(self.backend_name, self.get_metrics())
+        return count
 
     def get_inflight_ids(self) -> list[str]:
         """Return current in-flight job IDs (for test assertions)."""

@@ -66,7 +66,7 @@ def get_agents(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.agents.list",
         handler=lambda ctx: list_agents(db, include_stale=include_stale),
         user_id=str(current_user["sub"]),
@@ -82,7 +82,7 @@ def get_agents_status(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.agents.status",
         handler=lambda ctx: get_agent_status(db),
         user_id=str(current_user["sub"]),
@@ -98,7 +98,7 @@ def get_coordination_graph(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.graph.get",
         handler=lambda ctx: coordination_graph(db, user_id=current_user["sub"]),
         user_id=str(current_user["sub"]),
@@ -115,7 +115,7 @@ def register_agent(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.agents.register",
         handler=lambda ctx: register_or_update_agent(
             db,
@@ -167,7 +167,7 @@ def heartbeat_agent(
         return result
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.agents.heartbeat",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -201,7 +201,7 @@ def deregister_agent(
         return {"agent_id": agent_id, "status": "deregistered"}
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.agents.deregister",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -219,7 +219,7 @@ def get_coordination_runs(
 ):
     user_id = normalize_uuid(current_user["sub"])
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.runs.list",
         handler=lambda ctx: [
             run_to_dict(run)
@@ -265,7 +265,7 @@ def get_coordination_run_children(
         ]
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.runs.children",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -297,7 +297,7 @@ def get_coordination_inbox(
         return {"messages": messages, "count": len(messages)}
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.messages.inbox",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -334,7 +334,7 @@ def acknowledge_coordination_message(
         }
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.messages.acknowledge",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -372,7 +372,7 @@ def get_shared_memory(
         return {"nodes": nodes[:limit], "count": len(nodes[:limit])}
 
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.memory.shared",
         handler=handler,
         user_id=str(current_user["sub"]),
@@ -390,7 +390,7 @@ def detect_run_conflict_route(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.conflict.run",
         handler=lambda ctx: detect_run_conflict(
             db,
@@ -413,7 +413,7 @@ def detect_memory_conflict_route(
     current_user: dict = Depends(get_current_user),
 ):
     return execute_with_pipeline_sync(
-        request=None,
+        request=request,
         route_name="coordination.conflict.memory",
         handler=lambda ctx: detect_memory_write_conflict(
             db,

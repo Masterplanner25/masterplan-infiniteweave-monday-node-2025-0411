@@ -460,14 +460,13 @@ class TestCircuitOpenErrorHttpResponse:
         assert response.json()["retryable"] is True
 
     def test_non_ai_routes_still_work_when_openai_circuit_is_open(self, client, auth_headers):
-        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+        from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
         cb = get_openai_circuit_breaker()
         cb.reset()
         try:
-            cb._record_failure("closed")
-            cb._record_failure("closed")
-            cb._record_failure("closed")
+            for _ in range(cb.failure_threshold):
+                cb._record_failure("closed")
 
             with patch(
                 "apps.tasks.services.task_service.list_tasks",
@@ -482,14 +481,13 @@ class TestCircuitOpenErrorHttpResponse:
             cb.reset()
 
     def test_health_deep_reports_degraded_when_circuit_is_open(self, client):
-        from AINDY.kernel.circuit_breaker import get_openai_circuit_breaker
+        from AINDY.platform_layer.openai_client import get_openai_circuit_breaker
 
         cb = get_openai_circuit_breaker()
         cb.reset()
         try:
-            cb._record_failure("closed")
-            cb._record_failure("closed")
-            cb._record_failure("closed")
+            for _ in range(cb.failure_threshold):
+                cb._record_failure("closed")
 
             response = client.get("/health/deep")
             payload = response.json()

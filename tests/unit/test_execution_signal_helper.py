@@ -51,7 +51,7 @@ def test_queue_system_event_emits_immediately_outside_pipeline(monkeypatch):
 
     result = helper.queue_system_event(
         db="db-session",
-        event_type="execution.completed",
+        event_type="task.completed",
         user_id="user-2",
         trace_id="trace-2",
         payload={"ok": True},
@@ -60,7 +60,7 @@ def test_queue_system_event_emits_immediately_outside_pipeline(monkeypatch):
     assert result == "persisted-id"
     emit.assert_called_once_with(
         db="db-session",
-        event_type="execution.completed",
+        event_type="task.completed",
         user_id="user-2",
         trace_id="trace-2",
         parent_event_id=None,

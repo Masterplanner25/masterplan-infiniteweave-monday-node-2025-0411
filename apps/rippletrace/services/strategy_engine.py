@@ -22,20 +22,14 @@ def _split_terms(value: Optional[str]) -> List[str]:
 
 
 def get_successful_drops(db: Session) -> List[Dict]:
-    from AINDY.db.models.learning import LearningRecordDB
+    from apps.automation.public import list_learning_record_drop_point_ids
 
     narrative_success = (
         db.query(DropPointDB)
         .filter(DropPointDB.narrative_score >= SUCCESS_NARRATIVE_THRESHOLD)
         .all()
     )
-    spiked_ids = (
-        db.query(LearningRecordDB.drop_point_id)
-        .filter(LearningRecordDB.actual_outcome == "spiked")
-        .distinct()
-        .all()
-    )
-    spiked_set = {row[0] for row in spiked_ids if row[0]}
+    spiked_set = set(list_learning_record_drop_point_ids(db, actual_outcome="spiked"))
 
     unique_ids = {dp.id for dp in narrative_success}
     unique_ids.update(spiked_set)

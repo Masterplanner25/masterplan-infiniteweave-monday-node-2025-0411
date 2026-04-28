@@ -15,23 +15,15 @@ SPIKE_DELTA = 5.0
 
 
 def get_learning_thresholds(db: Session):
-    from AINDY.db.models.learning import LearningThresholdDB
+    from apps.automation.public import ensure_learning_thresholds
 
-    record = db.query(LearningThresholdDB).first()
-    if record:
-        return record
-    record = LearningThresholdDB(
-        id=str(uuid.uuid4()),
+    return ensure_learning_thresholds(
+        db,
         velocity_trend=DEFAULT_VELOCITY_TREND,
         narrative_trend=DEFAULT_NARRATIVE_TREND,
         early_velocity_rate=DEFAULT_EARLY_VELOCITY_RATE,
         early_narrative_ceiling=DEFAULT_EARLY_NARRATIVE_CEILING,
-        last_updated=datetime.now(timezone.utc),
     )
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
 
 
 def record_prediction(
@@ -41,35 +33,23 @@ def record_prediction(
     velocity_at_prediction: float,
     narrative_at_prediction: float,
 ):
-    from AINDY.db.models.learning import LearningRecordDB
+    from apps.automation.public import create_learning_record
 
-    learning = LearningRecordDB(
-        id=str(uuid.uuid4()),
+    return create_learning_record(
+        db,
         drop_point_id=drop_point_id,
         prediction=prediction,
         predicted_at=datetime.now(timezone.utc),
         velocity_at_prediction=velocity_at_prediction,
         narrative_at_prediction=narrative_at_prediction,
     )
-    db.add(learning)
-    db.commit()
-    db.refresh(learning)
-    return learning
 
 
 def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
-    from AINDY.db.models.learning import LearningRecordDB
+    from apps.automation.public import get_latest_learning_record, update_learning_record
     from apps.analytics.public import list_score_snapshots
 
-    record = (
-        db.query(LearningRecordDB)
-        .filter(
-            LearningRecordDB.drop_point_id == drop_point_id,
-            LearningRecordDB.actual_outcome.is_(None),
-        )
-        .order_by(LearningRecordDB.predicted_at.desc())
-        .first()
-    )
+    record = get_latest_learning_record(db, drop_point_id=drop_point_id, pending_only=True)
     if not record:
         return {"status": "no_prediction"}
 
@@ -77,14 +57,14 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
         drop_point_id,
         db,
         ascending=True,
-        after_timestamp=record.predicted_at,
+        after_timestamp=record.get("predicted_at"),
     )
     if not future_snapshots:
         return {"status": "no_future_data"}
 
     latest = future_snapshots[-1]
-    delta = float(latest.get("narrative_score") or 0.0) - record.narrative_at_prediction
-    velocity_delta = float(latest.get("velocity_score") or 0.0) - record.velocity_at_prediction
+    delta = float(latest.get("narrative_score") or 0.0) - float(record.get("narrative_at_prediction") or 0.0)
+    velocity_delta = float(latest.get("velocity_score") or 0.0) - float(record.get("velocity_at_prediction") or 0.0)
 
     if delta > SPIKE_DELTA:
         actual = "spiked"
@@ -93,82 +73,82 @@ def evaluate_outcome(drop_point_id: str, db: Session) -> Dict:
     else:
         actual = "stable"
 
-    record.actual_outcome = actual
-    record.evaluated_at = datetime.now(timezone.utc)
-    record.was_correct = record.prediction == actual
-    db.commit()
-    db.refresh(record)
+    updated = update_learning_record(
+        db,
+        record_id=record["id"],
+        actual_outcome=actual,
+        evaluated_at=datetime.now(timezone.utc),
+        was_correct=record.get("prediction") == actual,
+    ) or record
     return {
         "drop_point_id": drop_point_id,
-        "prediction": record.prediction,
+        "prediction": updated.get("prediction"),
         "actual_outcome": actual,
-        "was_correct": record.was_correct,
+        "was_correct": updated.get("was_correct"),
     }
 
 
 def adjust_thresholds(db: Session, lookback: int = LEARNING_LOOKBACK) -> Dict:
-    from AINDY.db.models.learning import LearningRecordDB
+    from apps.automation.public import list_learning_records, update_learning_thresholds
 
-    records = (
-        db.query(LearningRecordDB)
-        .filter(LearningRecordDB.actual_outcome.isnot(None))
-        .order_by(LearningRecordDB.predicted_at.desc())
-        .limit(lookback)
-        .all()
-    )
+    records = list_learning_records(db, limit=lookback, evaluated_only=True)
     if not records:
         return {"status": "no_data"}
 
     threshold = get_learning_thresholds(db)
-    evaluated = [r for r in records if r.was_correct is not None]
-    correct = sum(1 for r in evaluated if r.was_correct)
+    evaluated = [r for r in records if r.get("was_correct") is not None]
+    correct = sum(1 for r in evaluated if r.get("was_correct"))
     accuracy = correct / len(evaluated) if evaluated else 0.0
 
     false_pos = sum(
         1
         for r in evaluated
-        if r.prediction == "likely_to_spike" and r.actual_outcome != "spiked"
+        if r.get("prediction") == "likely_to_spike" and r.get("actual_outcome") != "spiked"
     )
     false_neg = sum(
         1
         for r in evaluated
-        if r.prediction != "likely_to_spike" and r.actual_outcome == "spiked"
+        if r.get("prediction") != "likely_to_spike" and r.get("actual_outcome") == "spiked"
     )
 
     if false_pos > false_neg:
-        threshold.velocity_trend += 0.05
-        threshold.narrative_trend += 0.5
+        threshold["velocity_trend"] += 0.05
+        threshold["narrative_trend"] += 0.5
     elif false_neg > false_pos:
-        threshold.velocity_trend = max(0.05, threshold.velocity_trend - 0.05)
-        threshold.narrative_trend = max(0.5, threshold.narrative_trend - 0.5)
+        threshold["velocity_trend"] = max(0.05, float(threshold.get("velocity_trend") or 0.0) - 0.05)
+        threshold["narrative_trend"] = max(0.5, float(threshold.get("narrative_trend") or 0.0) - 0.5)
 
-    threshold.last_updated = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(threshold)
+    threshold = update_learning_thresholds(
+        db,
+        threshold_id=threshold["id"],
+        velocity_trend=threshold["velocity_trend"],
+        narrative_trend=threshold["narrative_trend"],
+        last_updated=datetime.now(timezone.utc),
+    ) or threshold
     return {
         "accuracy": round(accuracy, 3),
         "false_positives": false_pos,
         "false_negatives": false_neg,
         "thresholds": {
-            "velocity_trend": round(threshold.velocity_trend, 3),
-            "narrative_trend": round(threshold.narrative_trend, 3),
+            "velocity_trend": round(float(threshold.get("velocity_trend") or 0.0), 3),
+            "narrative_trend": round(float(threshold.get("narrative_trend") or 0.0), 3),
         },
     }
 
 
 def learning_stats(db: Session) -> Dict:
-    from AINDY.db.models.learning import LearningRecordDB
+    from apps.automation.public import list_learning_records
 
-    records = db.query(LearningRecordDB).all()
+    records = list_learning_records(db)
     total = len(records)
-    evaluated = [r for r in records if r.actual_outcome]
-    correct = sum(1 for r in evaluated if r.was_correct)
+    evaluated = [r for r in records if r.get("actual_outcome")]
+    correct = sum(1 for r in evaluated if r.get("was_correct"))
     accuracy = correct / len(evaluated) if evaluated else 0.0
     false_pos = sum(
-        1 for r in evaluated if r.prediction == "likely_to_spike" and r.actual_outcome != "spiked"
+        1 for r in evaluated if r.get("prediction") == "likely_to_spike" and r.get("actual_outcome") != "spiked"
     )
     false_neg = sum(
-        1 for r in evaluated if r.prediction != "likely_to_spike" and r.actual_outcome == "spiked"
+        1 for r in evaluated if r.get("prediction") != "likely_to_spike" and r.get("actual_outcome") == "spiked"
     )
     return {
         "total_predictions": total,

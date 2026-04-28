@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from AINDY.db.database import SessionLocal
 from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from apps.tasks.models import Task
-from AINDY.db.mongo_setup import get_mongo_client
 from AINDY.core.system_event_service import emit_system_event
 from apps.tasks.events import TaskEventTypes as SystemEventTypes
 from apps.tasks.services.analytics_bridge import (
@@ -705,7 +704,9 @@ def orchestrate_task_completion(db: Session, name: str, user_id: str | uuid.UUID
         logger.warning("Task completion feedback failed: %s", exc)
 
     try:
-        mongo = get_mongo_client()
+        from AINDY.db.mongo_setup import require_mongo_client
+
+        mongo = require_mongo_client("task_service")
         db_mongo = mongo["aindy_social_layer"]
         profiles = db_mongo["profiles"]
         kpi_snapshot = get_kpi_snapshot_via_syscall(str(owner_user_id), db) or {}

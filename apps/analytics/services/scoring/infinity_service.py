@@ -365,41 +365,63 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from AINDY.db.models.watcher_signal import WatcherSignal
+        from apps.automation.public import list_watcher_signals
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
 
-        sessions = db.query(WatcherSignal).filter(
-            WatcherSignal.signal_type == "session_ended",
-            WatcherSignal.user_id == user_id,
-            WatcherSignal.received_at >= window_start,
-        ).all()
+        sessions = [
+            signal
+            for signal in list_watcher_signals(
+                db,
+                user_id=user_id,
+                signal_type="session_ended",
+                limit=500,
+            )
+            if _parse_task_end_time(signal.get("received_at")) is None
+            or _parse_task_end_time(signal.get("received_at")) >= window_start
+        ]
 
         if not sessions:
             return 50.0, 0
 
         # Average session duration
-        durations = [s.duration_seconds or 0 for s in sessions]
+        durations = [float(signal.get("duration_seconds") or 0) for signal in sessions]
         avg_duration_minutes = sum(durations) / len(durations) / 60
         duration_score = _sigmoid_score(avg_duration_minutes, 30.0, steepness=0.1)
 
         # Average distractions: count distraction_detected signals per session
-        distraction_signals = db.query(WatcherSignal).filter(
-            WatcherSignal.signal_type == "distraction_detected",
-            WatcherSignal.user_id == user_id,
-            WatcherSignal.received_at >= window_start,
-        ).count()
+        distraction_signals = len(
+            [
+                signal
+                for signal in list_watcher_signals(
+                    db,
+                    user_id=user_id,
+                    signal_type="distraction_detected",
+                    limit=1000,
+                )
+                if _parse_task_end_time(signal.get("received_at")) is None
+                or _parse_task_end_time(signal.get("received_at")) >= window_start
+            ]
+        )
 
         avg_distractions = distraction_signals / len(sessions)
         distraction_score = max(0.0, 100.0 - (avg_distractions * 10))
 
         # Focus achievement rate
-        focus_achieved = db.query(WatcherSignal).filter(
-            WatcherSignal.signal_type == "focus_achieved",
-            WatcherSignal.user_id == user_id,
-            WatcherSignal.received_at >= window_start,
-        ).count()
+        focus_achieved = len(
+            [
+                signal
+                for signal in list_watcher_signals(
+                    db,
+                    user_id=user_id,
+                    signal_type="focus_achieved",
+                    limit=1000,
+                )
+                if _parse_task_end_time(signal.get("received_at")) is None
+                or _parse_task_end_time(signal.get("received_at")) >= window_start
+            ]
+        )
 
         achievement_rate = focus_achieved / len(sessions)
 

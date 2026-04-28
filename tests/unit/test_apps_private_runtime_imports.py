@@ -80,7 +80,7 @@ def test_automation_watcher_ingest_uses_public_watcher_contract():
         sys.modules,
         {
             "AINDY.db.database": MagicMock(SessionLocal=MagicMock(return_value=mock_db)),
-            "AINDY.db.models.watcher_signal": watcher_signal_module,
+            "apps.automation.models": watcher_signal_module,
             "AINDY.platform_layer.watcher_contract": watcher_contract,
         },
     ):
