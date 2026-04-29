@@ -23,6 +23,7 @@ export function useApiCall(apiFn, options = {}) {
   const abortRef = useRef(null);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       if (abortRef.current) {
