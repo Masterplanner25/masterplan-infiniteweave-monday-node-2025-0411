@@ -365,19 +365,30 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
     Returns (score: float, data_points_used: int)
     """
     try:
-        from apps.automation.public import list_watcher_signals
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 
         now = datetime.now(timezone.utc)
         window_start = now - timedelta(days=SCORING_WINDOW_DAYS)
+        syscall_ctx = make_syscall_ctx_from_tool(str(user_id), capabilities=["watcher.query"])
+        syscall_ctx.metadata["_db"] = db
+
+        def _list_watcher_signals(*, user_id, signal_type: str, limit: int) -> list[dict]:
+            result = get_dispatcher().dispatch(
+                "sys.v1.watcher.query",
+                {
+                    "user_id": str(user_id),
+                    "signal_type": signal_type,
+                    "limit": limit,
+                },
+                syscall_ctx,
+            )
+            if result.get("status") != "success":
+                return []
+            return list((result.get("data") or {}).get("signals") or [])
 
         sessions = [
             signal
-            for signal in list_watcher_signals(
-                db,
-                user_id=user_id,
-                signal_type="session_ended",
-                limit=500,
-            )
+            for signal in _list_watcher_signals(user_id=user_id, signal_type="session_ended", limit=500)
             if _parse_task_end_time(signal.get("received_at")) is None
             or _parse_task_end_time(signal.get("received_at")) >= window_start
         ]
@@ -394,12 +405,7 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         distraction_signals = len(
             [
                 signal
-                for signal in list_watcher_signals(
-                    db,
-                    user_id=user_id,
-                    signal_type="distraction_detected",
-                    limit=1000,
-                )
+                for signal in _list_watcher_signals(user_id=user_id, signal_type="distraction_detected", limit=1000)
                 if _parse_task_end_time(signal.get("received_at")) is None
                 or _parse_task_end_time(signal.get("received_at")) >= window_start
             ]
@@ -412,12 +418,7 @@ def calculate_focus_quality(user_id: str, db: Session) -> tuple:
         focus_achieved = len(
             [
                 signal
-                for signal in list_watcher_signals(
-                    db,
-                    user_id=user_id,
-                    signal_type="focus_achieved",
-                    limit=1000,
-                )
+                for signal in _list_watcher_signals(user_id=user_id, signal_type="focus_achieved", limit=1000)
                 if _parse_task_end_time(signal.get("received_at")) is None
                 or _parse_task_end_time(signal.get("received_at")) >= window_start
             ]

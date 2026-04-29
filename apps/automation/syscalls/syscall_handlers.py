@@ -56,6 +56,15 @@ def _dispatch_owner_syscall(
     return result.get("data") or {}
 
 
+def _session_from_context(ctx: SyscallContext):
+    from AINDY.db.database import SessionLocal
+
+    external_db = (ctx.metadata or {}).get("_db")
+    if external_db is not None:
+        return external_db, False
+    return SessionLocal(), True
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # TASK DOMAIN
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -473,6 +482,75 @@ def _handle_watcher_ingest(payload: dict, context: SyscallContext) -> dict:
         db.close()
 
 
+def _handle_automation_list_feedback(payload: dict, context: SyscallContext) -> dict:
+    from apps.automation.public import get_user_feedback
+
+    user_id = payload.get("user_id") or context.user_id
+    limit = int(payload.get("limit", 20) or 20)
+    db, owns_session = _session_from_context(context)
+    try:
+        feedback = list(get_user_feedback(str(user_id), db, limit=limit) or [])
+        return {"feedback": feedback, "count": len(feedback)}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_automation_list_loop_adjustments(payload: dict, context: SyscallContext) -> dict:
+    from apps.automation.public import get_loop_adjustments
+
+    user_id = payload.get("user_id") or context.user_id
+    db, owns_session = _session_from_context(context)
+    try:
+        adjustments = list(
+            get_loop_adjustments(
+                str(user_id),
+                db,
+                limit=int(payload.get("limit", 10) or 10),
+                with_prediction_accuracy=bool(payload.get("with_prediction_accuracy", False)),
+                unevaluated_only=bool(payload.get("unevaluated_only", False)),
+                decision_type=payload.get("decision_type"),
+                with_actual_score=bool(payload.get("with_actual_score", False)),
+                with_expected_score=bool(payload.get("with_expected_score", False)),
+                order_by=str(payload.get("order_by", "applied_desc") or "applied_desc"),
+                for_update=bool(payload.get("for_update", False)),
+            )
+            or []
+        )
+        return {"adjustments": adjustments, "count": len(adjustments)}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_automation_create_loop_adjustment(payload: dict, context: SyscallContext) -> dict:
+    from apps.automation.public import create_loop_adjustment
+
+    db, owns_session = _session_from_context(context)
+    try:
+        adjustment = create_loop_adjustment(db=db, **payload)
+        return {"adjustment": adjustment or {}}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_automation_update_loop_adjustment(payload: dict, context: SyscallContext) -> dict:
+    from apps.automation.public import update_loop_adjustment
+
+    adjustment_id = payload.get("adjustment_id")
+    if not adjustment_id:
+        raise ValueError("sys.v1.automation.update_loop_adjustment requires 'adjustment_id'")
+    db, owns_session = _session_from_context(context)
+    try:
+        patch = {key: value for key, value in payload.items() if key != "adjustment_id"}
+        adjustment = update_loop_adjustment(adjustment_id=adjustment_id, db=db, **patch)
+        return {"adjustment": adjustment or {}}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
     """
     Query stored WatcherSignal records. Returns serialized dicts only.
@@ -770,6 +848,10 @@ def register_all_domain_handlers() -> None:
     # that may change between minor releases. Only core I/O syscalls are stable.
     _registrations = [
         ("sys.v1.score.feedback",          _handle_score_feedback,        "score.feedback",        "Persist score feedback record",                          False, None),
+        ("sys.v1.automation.list_feedback", _handle_automation_list_feedback, "automation.read",    "List user feedback records",                             False, None),
+        ("sys.v1.automation.list_loop_adjustments", _handle_automation_list_loop_adjustments, "automation.read", "List loop adjustment records", False, None),
+        ("sys.v1.automation.create_loop_adjustment", _handle_automation_create_loop_adjustment, "automation.write", "Create a loop adjustment record", False, None),
+        ("sys.v1.automation.update_loop_adjustment", _handle_automation_update_loop_adjustment, "automation.write", "Update a loop adjustment record", False, None),
         ("sys.v1.watcher.query",           handle_watcher_query,          "watcher.query",         "Query stored watcher signals",                           False, None),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False, None),

@@ -109,7 +109,7 @@ export default function App() {
   const [versionStatus, setVersionStatus] = useState(null);
   const [versionDismissed, setVersionDismissed] = useState(false);
   const routeElement = (name, element) => (
-    <RouteErrorBoundary name={name}>
+    <RouteErrorBoundary name={name} layer="domain" domain={name}>
       {element}
     </RouteErrorBoundary>
   );
@@ -196,7 +196,7 @@ export default function App() {
       ) : null}
       <TooltipProvider>
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <ErrorBoundary>
+          <ErrorBoundary layer="platform">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />

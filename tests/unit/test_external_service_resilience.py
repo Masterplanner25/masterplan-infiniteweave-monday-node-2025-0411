@@ -430,7 +430,10 @@ class TestCircuitOpenErrorHttpResponse:
             )
 
         assert response.status_code == 503
-        assert response.json()["error"] == "ai_provider_unavailable"
+        payload = response.json()
+        assert payload["error"] == "http_error"
+        assert payload["details"]["error"] == "ai_provider_unavailable"
+        assert payload["details"]["retryable"] is True
         assert "Retry-After" in response.headers
 
     def test_leadgen_returns_503_when_circuit_is_open(self, client, auth_headers):

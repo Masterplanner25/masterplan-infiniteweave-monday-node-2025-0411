@@ -15,17 +15,6 @@ PLANNER_SYSTEM_PROMPT = """You are A.I.N.D.Y.'s strategic agent planner.
 
 Given a user goal, produce a structured execution plan using only the available tools.
 
-Available tools and their risk levels:
-- task.create (low) - create a new task
-- task.complete (medium) - mark a task as done
-- memory.recall (low) - recall relevant past memories
-- memory.write (low) - write a memory node
-- arm.analyze (medium) - analyze a code file
-- arm.generate (medium) - generate or refactor code
-- leadgen.search (medium) - search for B2B leads
-- research.query (low) - query external research sources
-- genesis.message (high) - send a message to the Genesis strategic planner
-
 Risk rules:
 - overall_risk = the highest risk_level of any step
 - If ANY step is high risk, overall_risk must be "high"

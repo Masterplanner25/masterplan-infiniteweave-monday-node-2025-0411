@@ -91,6 +91,42 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
     ({ initialTasks, initialMasterplans, loginEmail: expectedEmail, loginPassword: expectedPassword, token: authToken }) => {
       const tasks = initialTasks.map((task) => ({ ...task }));
       const masterplans = initialMasterplans.map((plan) => ({ ...plan }));
+      let scoreMetrics = {
+        master_score: 82.5,
+        kpis: {
+          execution_speed: 85,
+          decision_efficiency: 80,
+          ai_productivity_boost: 78,
+          focus_quality: 84,
+          masterplan_progress: 79,
+        },
+        metadata: {
+          confidence: "high",
+          calculated_at: "2026-04-26T01:00:00Z",
+        },
+        message: "Execution systems stable.",
+      };
+      const agentRuns = [
+        {
+          run_id: "run-001",
+          id: "run-001",
+          goal: "Audit masterplan execution drift",
+          status: "completed",
+          run_type: "masterplan",
+          overall_risk: "low",
+          created_at: "2026-04-26T10:00:00Z",
+          completed_at: "2026-04-26T10:02:30Z",
+          steps_completed: 0,
+          steps_total: 0,
+          plan: { steps: [] },
+        },
+      ];
+      const agentRunSteps: Record<string, unknown[]> = {
+        "run-001": [],
+      };
+      const agentRunEvents: Record<string, unknown[]> = {
+        "run-001": [],
+      };
       const originalFetch = window.fetch.bind(window);
 
       const jsonResponse = (body: unknown, status = 200) =>
@@ -131,25 +167,11 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
             memory: [],
             runs: [],
             flows: [],
-            metrics: {
-              master_score: 82.5,
-              kpis: {
-                execution_speed: 85,
-                decision_efficiency: 80,
-                ai_productivity_boost: 78,
-                focus_quality: 84,
-                masterplan_progress: 79,
-              },
-              metadata: {
-                confidence: "high",
-                calculated_at: "2026-04-26T01:00:00Z",
-              },
-              message: "Execution systems stable.",
-            },
+            metrics: scoreMetrics,
             system_state: {
               memory_count: 12,
               active_runs: 2,
-              score: 82.5,
+              score: scoreMetrics.master_score,
               active_flows: 3,
             },
           });
@@ -180,16 +202,7 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
         }
 
         if (path === "/scores/me" && method === "GET") {
-          return jsonResponse({
-            master_score: 82.5,
-            kpis: {
-              execution_speed: 85,
-              decision_efficiency: 80,
-              ai_productivity_boost: 78,
-              focus_quality: 84,
-              masterplan_progress: 79,
-            },
-          });
+          return jsonResponse(scoreMetrics);
         }
 
         if (path === "/scores/me/history" && method === "GET") {
@@ -259,32 +272,20 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
 
         if (path === "/agent/runs" && method === "GET") {
           if (url.searchParams.get("status") === "pending_approval") {
-            return jsonResponse([]);
+            return jsonResponse(agentRuns.filter((run) => run.status === "pending_approval"));
           }
 
-          return jsonResponse([
-            {
-              run_id: "run-001",
-              id: "run-001",
-              goal: "Audit masterplan execution drift",
-              status: "completed",
-              run_type: "masterplan",
-              overall_risk: "low",
-              created_at: "2026-04-26T10:00:00Z",
-              completed_at: "2026-04-26T10:02:30Z",
-              steps_completed: 0,
-              steps_total: 0,
-              plan: { steps: [] },
-            },
-          ]);
+          return jsonResponse(agentRuns);
         }
 
         if (/^\/agent\/runs\/[^/]+\/steps$/.test(path) && method === "GET") {
-          return jsonResponse([]);
+          const runId = path.split("/")[3];
+          return jsonResponse(agentRunSteps[runId] ?? []);
         }
 
         if (/^\/agent\/runs\/[^/]+\/events$/.test(path) && method === "GET") {
-          return jsonResponse({ events: [] });
+          const runId = path.split("/")[3];
+          return jsonResponse({ run_id: runId, events: agentRunEvents[runId] ?? [] });
         }
 
         if (path === "/agent/tools" && method === "GET") {
@@ -303,6 +304,83 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
             auto_execute_medium: false,
             allowed_auto_grant_tools: [],
           });
+        }
+
+        if (path === "/agent/run" && method === "POST") {
+          const goal = body?.goal?.trim() || "";
+          if (!goal) {
+            return jsonResponse({ detail: "goal is required" }, 400);
+          }
+          const run = {
+            run_id: "run-pending-001",
+            id: "run-pending-001",
+            status: "pending_approval",
+            goal,
+            objective: goal,
+            overall_risk: "medium",
+            executive_summary: "Evaluate the submitted goal and propose a plan.",
+            steps_total: 2,
+            steps_completed: 0,
+            plan: {
+              steps: [
+                { tool: "memory.recall", args: {}, risk_level: "low", description: "Recall relevant context" },
+                { tool: "task.create", args: {}, risk_level: "low", description: "Create an action task" },
+              ],
+              overall_risk: "medium",
+              executive_summary: "Recall memory and create a task.",
+            },
+            events: [],
+            trace_id: "trace-pending-001",
+            correlation_id: "run_pending-001",
+            created_at: new Date().toISOString(),
+          };
+          const existingIndex = agentRuns.findIndex((entry) => entry.run_id === run.run_id);
+          if (existingIndex >= 0) {
+            agentRuns.splice(existingIndex, 1);
+          }
+          agentRuns.unshift(run);
+          agentRunSteps[run.run_id] = [];
+          agentRunEvents[run.run_id] = [];
+          return jsonResponse(run);
+        }
+
+        if (/^\/agent\/runs\/[^/]+\/approve$/.test(path) && method === "POST") {
+          const runId = path.split("/")[3];
+          const index = agentRuns.findIndex((entry) => entry.run_id === runId);
+          const goal = index >= 0 ? agentRuns[index].goal : "Test goal";
+          const updated = {
+            run_id: runId,
+            id: runId,
+            status: "completed",
+            goal,
+            objective: goal,
+            overall_risk: "medium",
+            executive_summary: "Executed successfully.",
+            steps_total: 2,
+            steps_completed: 2,
+            plan: { steps: [], overall_risk: "medium" },
+            result: { status: "done" },
+            events: [
+              { type: "agent.event", event_type: "PLAN_CREATED", timestamp: new Date().toISOString(), payload: { overall_risk: "medium", steps_total: 2 } },
+              { type: "agent.event", event_type: "EXECUTION_STARTED", timestamp: new Date().toISOString(), payload: {} },
+              { type: "agent.event", event_type: "STEP_EXECUTED", timestamp: new Date().toISOString(), payload: { step_index: 0, tool_name: "memory.recall", status: "success" } },
+              { type: "agent.event", event_type: "STEP_EXECUTED", timestamp: new Date().toISOString(), payload: { step_index: 1, tool_name: "task.create", status: "success" } },
+            ],
+            trace_id: "trace-pending-001",
+            created_at: index >= 0 ? agentRuns[index].created_at : new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          };
+          if (index >= 0) {
+            agentRuns[index] = updated;
+          } else {
+            agentRuns.unshift(updated);
+          }
+          agentRunEvents[runId] = [
+            { id: "ev-1", event_type: "PLAN_CREATED", occurred_at: new Date().toISOString(), payload: { overall_risk: "medium" } },
+            { id: "ev-2", event_type: "EXECUTION_STARTED", occurred_at: new Date().toISOString(), payload: {} },
+          ];
+          agentRunSteps[runId] = [];
+          return jsonResponse(updated);
         }
 
         if (path === "/agent/suggestions" && method === "GET") {
@@ -460,6 +538,24 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
 
         if (path === "/health" && method === "GET") {
           return jsonResponse({ status: "ok" });
+        }
+
+        if (path === "/scores/me/recalculate" && method === "POST") {
+          scoreMetrics = {
+            master_score: 88.0,
+            kpis: {
+              execution_speed: 90,
+              decision_efficiency: 86,
+              ai_productivity_boost: 85,
+              focus_quality: 88,
+              masterplan_progress: 91,
+            },
+            metadata: {
+              confidence: "high",
+              calculated_at: new Date().toISOString(),
+            },
+          };
+          return jsonResponse(scoreMetrics);
         }
 
         return originalFetch(input, init);

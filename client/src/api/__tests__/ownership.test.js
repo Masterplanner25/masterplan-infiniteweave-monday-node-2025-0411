@@ -58,11 +58,11 @@ describe("client API ownership boundaries", () => {
     expect(authRequest).toHaveBeenNthCalledWith(3, "/narrative/drop-1", { method: "GET" });
   });
 
-  it("keeps platform.js scoped to operator APIs only", () => {
+  it("exposes platform UI calls from platform.js alongside operator re-exports", () => {
     expect(platformApi.getFlowRuns).toBeTypeOf("function");
     expect(platformApi.getObservabilityDashboard).toBeTypeOf("function");
-    expect("getDashboardOverview" in platformApi).toBe(false);
-    expect("getNarrative" in platformApi).toBe(false);
+    expect(platformApi.getDashboardOverview).toBeTypeOf("function");
+    expect(platformApi.getNarrative).toBeTypeOf("function");
   });
 
   it("preserves backward-compatible flat exports while exposing explicit categories", () => {
@@ -84,12 +84,12 @@ describe("client API ownership boundaries", () => {
     );
     const healthSource = readFileSync(resolve(__dirname, "../../components/platform/HealthDashboard.jsx"), "utf8");
 
-    expect(dashboardSource).toContain('from "../../api/legacy.js"');
+    expect(dashboardSource).toContain('from "../../api/platform.js"');
     expect(dashboardSource).toContain('from "../../api/product.js"');
-    expect(graphViewSource).toContain('from "../../api/legacy.js"');
+    expect(graphViewSource).toContain('from "../../api/platform.js"');
     expect(flowConsoleSource).toContain('from "../../api/operator.js"');
     expect(observabilitySource).toContain('from "../../api/operator.js"');
-    expect(healthSource).toContain('from "../../api/legacy.js"');
+    expect(healthSource).toContain('from "../../api/platform.js"');
   });
 
   it("uses explicit API categories in core data-fetching components", () => {

@@ -15,6 +15,7 @@ This directory contains incident response procedures for the A.I.N.D.Y. platform
 | Runbook | Severity | Scenario |
 |---------|----------|---------|
 | [Redis Failure](RUNBOOK_REDIS_FAILURE.md) | P1 | Redis unreachable at startup or runtime |
+| [Async Job Queue Failure](RUNBOOK_QUEUE_FAILURE.md) | P2 | Distributed queue fallback, stranded in-flight jobs, or DLQ replay |
 | [Stuck Runs](RUNBOOK_STUCK_RUNS.md) | P2 | Flow or agent runs stranded in non-terminal state |
 | [Leader Failover](RUNBOOK_LEADER_FAILOVER.md) | P2 | APScheduler leader lost, background jobs paused |
 | [WAIT Flow Dead-Letter](RUNBOOK_WAIT_FLOW_DEADLETTER.md) | P3 | Flows waiting indefinitely for events |

@@ -9,7 +9,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = ["identity", "tasks"]
-APP_DEPENDS_ON: list[str] = ["arm", "automation", "identity", "social"]
+APP_DEPENDS_ON: list[str] = ["arm", "identity"]
 
 
 def register() -> None:

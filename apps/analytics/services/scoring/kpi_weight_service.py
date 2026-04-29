@@ -92,7 +92,7 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
         KPI_WEIGHT_MIN,
         KPI_WEIGHT_MIN_SAMPLES,
     )
-    from apps.automation.public import get_loop_adjustments
+    from apps.analytics.services.integration.dependency_adapter import list_strategy_accuracy_adjustments
 
     try:
         uid = parse_user_id(user_id)
@@ -112,11 +112,10 @@ def adapt_kpi_weights(db: Session, user_id) -> dict:
                 }
 
         adjustments = list(
-            get_loop_adjustments(
-                uid,
-                db,
+            list_strategy_accuracy_adjustments(
+                user_id=str(uid),
+                db=db,
                 limit=LOOKBACK_WINDOW,
-                with_prediction_accuracy=True,
             )
             or []
         )

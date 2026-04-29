@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getDashboardHealth } from "../../api/legacy.js";import { safeMap } from "../../utils/safe";
+import { getDashboardHealth } from "../../api/platform.js";import { safeMap } from "../../utils/safe";
 import { useAuth } from "../../context/AuthContext";
 import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 

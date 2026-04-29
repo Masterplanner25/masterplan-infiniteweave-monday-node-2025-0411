@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError as SAOperationalError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -22,6 +23,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     message = detail if isinstance(detail, str) else "Request failed"
     return JSONResponse(
         status_code=exc.status_code,
+        headers=exc.headers,
         content={
             "error": "http_error",
             "message": message,
@@ -50,6 +52,26 @@ async def mongo_unavailable_exception_handler(
                 "Set MONGO_URL and ensure MongoDB is reachable, "
                 "or set SKIP_MONGO_PING=true only in non-production environments."
             ),
+        },
+    )
+
+
+async def db_unavailable_exception_handler(
+    request: Request, exc: SAOperationalError
+) -> JSONResponse:
+    logger.error(
+        "[DB] OperationalError on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "30"},
+        content={
+            "error": "db_unavailable",
+            "message": "The database is temporarily unavailable. Please retry shortly.",
+            "retryable": True,
         },
     )
 
@@ -114,22 +136,23 @@ def _extract_user_id_from_request(request: Request):
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled error: %s", exc)
     db = None
-    try:
-        db = SessionLocal()
-        emit_error_event(
-            db=db,
-            error_type="unhandled_request",
-            message=str(exc),
-            user_id=_extract_user_id_from_request(request),
-            trace_id=getattr(getattr(request, "state", None), "trace_id", None),
-            payload={"path": request.url.path, "method": request.method},
-            required=True,
-        )
-    except Exception:
-        logger.exception("Failed to emit required unhandled request error event")
-    finally:
-        if db is not None:
-            db.close()
+    if not isinstance(exc, SAOperationalError):
+        try:
+            db = SessionLocal()
+            emit_error_event(
+                db=db,
+                error_type="unhandled_request",
+                message=str(exc),
+                user_id=_extract_user_id_from_request(request),
+                trace_id=getattr(getattr(request, "state", None), "trace_id", None),
+                payload={"path": request.url.path, "method": request.method},
+                required=True,
+            )
+        except Exception:
+            logger.exception("Failed to emit required unhandled request error event")
+        finally:
+            if db is not None:
+                db.close()
     return JSONResponse(
         status_code=500,
         content={
@@ -146,5 +169,6 @@ def register_exception_handlers(app) -> None:
     app.add_exception_handler(QueueSaturatedError, queue_saturated_exception_handler)
     app.add_exception_handler(MongoUnavailableError, mongo_unavailable_exception_handler)
     app.add_exception_handler(CircuitOpenError, circuit_open_exception_handler)
+    app.add_exception_handler(SAOperationalError, db_unavailable_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

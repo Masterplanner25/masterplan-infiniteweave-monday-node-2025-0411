@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
-from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.user_identity import UserIdentity
 from AINDY.core.execution_signal_helper import queue_system_event
 
@@ -29,6 +28,8 @@ def _ensure_user_score_via_syscall(*, db, user_id) -> dict:
 
 
 def initialize_signup_state(*, db, user) -> dict:
+    from apps.agent.models.agent_run import AgentRun
+
     identity = (
         db.query(UserIdentity)
         .filter(UserIdentity.user_id == user.id)

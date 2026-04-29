@@ -86,8 +86,8 @@ def adapt_policy_thresholds(db: Session, user_id) -> dict:
     """
     from AINDY.platform_layer.user_ids import parse_user_id
     from ..orchestration.infinity_loop import EXPECTED_SCORE_OFFSETS
+    from apps.analytics.services.integration.dependency_adapter import _dispatch_syscall
     from apps.analytics.user_score import ScoreHistory
-    from apps.automation.public import get_loop_adjustments
 
     try:
         uid = parse_user_id(user_id)
@@ -150,17 +150,20 @@ def adapt_policy_thresholds(db: Session, user_id) -> dict:
             "review_plan": "offset_review_plan",
         }
         for decision_type, col in offset_col_map.items():
-            rows = list(
-                get_loop_adjustments(
-                    uid,
-                    db,
-                    limit=LOOKBACK_ADJUSTMENTS,
-                    decision_type=decision_type,
-                    with_actual_score=True,
-                    with_expected_score=True,
-                )
-                or []
+            result = _dispatch_syscall(
+                "sys.v1.automation.list_loop_adjustments",
+                {
+                    "user_id": str(uid),
+                    "limit": LOOKBACK_ADJUSTMENTS,
+                    "decision_type": decision_type,
+                    "with_actual_score": True,
+                    "with_expected_score": True,
+                },
+                user_id=str(uid),
+                capability="automation.read",
+                db=db,
             )
+            rows = list(result.get("adjustments") or [])
             if len(rows) < MIN_ADJUSTMENTS_REQUIRED:
                 continue
             deltas = [

@@ -15,9 +15,7 @@ from AINDY.platform_layer.registry import get_symbol, load_plugins
 
 # Platform models.
 import AINDY.db.models.agent  # noqa: F401
-import AINDY.db.models.agent_event  # noqa: F401
 import AINDY.db.models.agent_registry  # noqa: F401
-import AINDY.db.models.agent_run  # noqa: F401
 import AINDY.db.models.api_key  # noqa: F401
 import AINDY.db.models.background_task_lease  # noqa: F401
 import AINDY.db.models.capability  # noqa: F401

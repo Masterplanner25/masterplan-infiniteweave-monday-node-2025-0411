@@ -75,7 +75,7 @@ def agent_run_create_node(state, context):
 
 def agent_runs_list_node(state, context):
     try:
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -98,7 +98,7 @@ def agent_runs_list_node(state, context):
 
 def agent_run_get_node(state, context):
     try:
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -215,7 +215,7 @@ def agent_run_replay_node(state, context):
 
 def agent_run_steps_node(state, context):
     try:
-        from AINDY.db.models.agent_run import AgentRun, AgentStep
+        from apps.agent.models.agent_run import AgentRun, AgentStep
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
@@ -247,7 +247,7 @@ def agent_run_steps_node(state, context):
 
 def agent_run_events_node(state, context):
     try:
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         from AINDY.agents.agent_runtime import get_run_events
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -290,7 +290,7 @@ def agent_tools_list_node(state, context):
 
 def agent_trust_get_node(state, context):
     try:
-        from AINDY.db.models.agent_run import AgentTrustSettings
+        from apps.agent.models.agent_run import AgentTrustSettings
         from AINDY.agents.capability_service import get_auto_grantable_tools
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -315,7 +315,7 @@ def agent_trust_get_node(state, context):
 def agent_trust_update_node(state, context):
     try:
         from datetime import datetime, timezone
-        from AINDY.db.models.agent_run import AgentTrustSettings
+        from apps.agent.models.agent_run import AgentTrustSettings
         from AINDY.agents.agent_tools import TOOL_REGISTRY
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -354,14 +354,21 @@ def agent_trust_update_node(state, context):
 def agent_suggestions_get_node(state, context):
     try:
         from AINDY.agents.agent_tools import suggest_tools
-        from apps.analytics.public import get_user_kpi_snapshot
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
-        snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
-        result = suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
-        return {"status": "SUCCESS", "output_patch": {"agent_suggestions_get_result": result}}
+        syscall_ctx = make_syscall_ctx_from_flow(context, capabilities=["analytics.read"])
+        syscall_ctx.metadata["_db"] = db
+        result = get_dispatcher().dispatch(
+            "sys.v1.analytics.get_kpi_snapshot",
+            {"user_id": str(user_id)},
+            syscall_ctx,
+        )
+        snapshot = result.get("data") if result.get("status") == "success" else None
+        suggestions = suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
+        return {"status": "SUCCESS", "output_patch": {"agent_suggestions_get_result": suggestions}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}
 
