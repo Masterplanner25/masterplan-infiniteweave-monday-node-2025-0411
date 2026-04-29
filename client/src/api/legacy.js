@@ -1,6 +1,6 @@
-// Migrated to platform.js. This file is kept for one release cycle
-// so any indirect callers continue to resolve. Remove after all
-// direct imports have been updated to platform.js.
+// SHIM — scheduled for deletion after 2026-05-28 (one release cycle from 2026-04-28).
+// All callers migrated to platform.js. Delete this file when V1-VAL-019 passes fully.
+// To remove: delete this file, remove the legacy.js entries from api/index.js.
 export {
   getDashboardOverview,
   getDashboardHealth,

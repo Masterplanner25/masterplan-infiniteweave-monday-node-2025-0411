@@ -14,7 +14,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from AINDY.config import CORE_DOMAINS
 from AINDY.platform_layer.registry_contracts import (
     validate_agent_event,
     validate_agent_planner_context,
@@ -595,7 +594,9 @@ def get_bootstrap_dependencies() -> dict[str, list[str]]:
 
 
 def get_core_domains() -> list[str]:
-    return list(CORE_DOMAINS)
+    from apps.bootstrap import _get_core_domains_from_metadata
+
+    return list(_get_core_domains_from_metadata())
 
 
 def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:

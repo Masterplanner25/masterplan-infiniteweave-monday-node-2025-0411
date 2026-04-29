@@ -57,7 +57,7 @@ def _recover_agent_run(flow_run, db: Session) -> None:
     Finds the linked AgentRun by flow_run_id, loads all completed
     AgentStep audit rows, then marks both FlowRun and AgentRun as failed.
     """
-    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from apps.agent.models.agent_run import AgentRun, AgentStep
 
     recovered_at = datetime.now(timezone.utc)
     # Mark the FlowRun terminal
@@ -159,7 +159,7 @@ def recover_stuck_agent_run(
       forbidden   → 403
       wrong_status / too_recent → 409
     """
-    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from apps.agent.models.agent_run import AgentRun, AgentStep
     from AINDY.db.models.flow_run import FlowRun
     from AINDY.agents.agent_runtime import run_to_dict
 

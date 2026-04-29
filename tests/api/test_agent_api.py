@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from AINDY.db.models.agent_run import AgentRun, AgentTrustSettings
+from apps.agent.models.agent_run import AgentRun, AgentTrustSettings
 from apps.automation.models import AutomationLog
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.db.models.user import User

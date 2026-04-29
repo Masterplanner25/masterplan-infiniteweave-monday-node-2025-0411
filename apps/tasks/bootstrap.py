@@ -7,6 +7,7 @@ import uuid
 logger = logging.getLogger(__name__)
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
+IS_CORE_DOMAIN: bool = True
 APP_DEPENDS_ON: list[str] = ["automation"]
 
 

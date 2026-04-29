@@ -14,8 +14,8 @@ from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
 from .background_task_lease import BackgroundTaskLease
 from .flow_run import FlowRun, FlowHistory, EventOutcome
-from .agent_run import AgentRun, AgentStep, AgentTrustSettings
-from .agent_event import AgentEvent
+from apps.agent.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+from apps.agent.models.agent_event import AgentEvent
 from .capability import Capability, AgentCapabilityMapping
 from .system_event import SystemEvent
 from .agent_registry import AgentRegistry

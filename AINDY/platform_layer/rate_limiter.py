@@ -56,7 +56,11 @@ def _identity_key(request: Request) -> str:
                     return subject
     except Exception:
         pass
-    return get_remote_address(request)
+    real_ip = (
+        request.headers.get("X-Real-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    )
+    return real_ip or get_remote_address(request)
 
 
 _test_mode = os.environ.get("TEST_MODE", "false").lower() in ("1", "true", "yes")

@@ -154,6 +154,121 @@ describe("frontend smoke tests", () => {
     vi.doUnmock("../api/operator.js");
   });
 
+  it("ErrorBoundary includes layer and domain in backend error report", async () => {
+    vi.resetModules();
+    const reportSpy = vi.fn();
+    vi.doMock("../api/operator.js", async () => ({
+      reportClientError: reportSpy,
+    }));
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    function Bomb() { throw new Error("tagged error"); }
+
+    const { default: EB } = await import("../components/shared/ErrorBoundary.jsx");
+    render(
+      <EB layer="domain" domain="Tasks">
+        <Bomb />
+      </EB>,
+    );
+
+    expect(reportSpy).toHaveBeenCalledOnce();
+    const [payload] = reportSpy.mock.calls[0];
+    expect(payload.layer).toBe("domain");
+    expect(payload.domain).toBe("Tasks");
+    expect(payload.error_type).toBe("boundary");
+
+    spy.mockRestore();
+    vi.resetModules();
+    vi.doUnmock("../api/operator.js");
+  });
+
+  it("ErrorBoundary defaults layer to 'unknown' when not provided", async () => {
+    vi.resetModules();
+    const reportSpy = vi.fn();
+    vi.doMock("../api/operator.js", async () => ({
+      reportClientError: reportSpy,
+    }));
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    function Bomb() { throw new Error("untagged error"); }
+
+    const { default: EB } = await import("../components/shared/ErrorBoundary.jsx");
+    render(
+      <EB>
+        <Bomb />
+      </EB>,
+    );
+
+    const [payload] = reportSpy.mock.calls[0];
+    expect(payload.layer).toBe("unknown");
+    expect(payload.domain).toBeNull();
+
+    spy.mockRestore();
+    vi.resetModules();
+    vi.doUnmock("../api/operator.js");
+  });
+
+  describe("InlineErrorBoundary", () => {
+    it("shows a named fallback when its child throws", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      function Bomb() { throw new Error("inline crash"); }
+
+      const { InlineErrorBoundary } = await import("../components/shared/ErrorBoundary.jsx");
+
+      render(
+        <InlineErrorBoundary name="Agent Timeline">
+          <Bomb />
+        </InlineErrorBoundary>,
+      );
+
+      expect(screen.getByText(/Agent Timeline failed to load/i)).toBeInTheDocument();
+      spy.mockRestore();
+    });
+
+    it("shows a generic fallback when no name is provided", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      function Bomb() { throw new Error("unnamed crash"); }
+
+      const { InlineErrorBoundary } = await import("../components/shared/ErrorBoundary.jsx");
+
+      render(
+        <InlineErrorBoundary>
+          <Bomb />
+        </InlineErrorBoundary>,
+      );
+
+      expect(screen.getByText(/This section failed to load/i)).toBeInTheDocument();
+      spy.mockRestore();
+    });
+
+    it("does not propagate the error to a parent boundary", async () => {
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      function Bomb() { throw new Error("contained crash"); }
+
+      const { InlineErrorBoundary, default: Boundary } = await import("../components/shared/ErrorBoundary.jsx");
+
+      render(
+        <Boundary fallback={<div>Parent fallback</div>}>
+          <div>Safe sibling</div>
+          <InlineErrorBoundary name="Isolated Section">
+            <Bomb />
+          </InlineErrorBoundary>
+        </Boundary>,
+      );
+
+      expect(screen.getByText("Safe sibling")).toBeInTheDocument();
+      expect(screen.getByText(/Isolated Section failed to load/i)).toBeInTheDocument();
+      expect(screen.queryByText("Parent fallback")).not.toBeInTheDocument();
+
+      spy.mockRestore();
+    });
+  });
+
   it("reportClientError does not throw when fetch fails", async () => {
     const fetchSpy = vi.fn().mockRejectedValue(new Error("Network error"));
     vi.stubGlobal("fetch", fetchSpy);

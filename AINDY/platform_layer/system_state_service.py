@@ -8,7 +8,6 @@ from typing import Any
 
 from sqlalchemy import func
 
-from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.request_metric import RequestMetric
 from AINDY.db.models.system_event import SystemEvent
@@ -31,6 +30,8 @@ class SystemStateThresholds:
 
 
 def compute_current_state(db, *, force_refresh: bool = False, persist_snapshot: bool = True) -> dict[str, Any]:
+    from apps.agent.models.agent_run import AgentRun
+
     now = datetime.now(timezone.utc)
     if not force_refresh and _cache_valid(now):
         return _STATE_CACHE["value"]

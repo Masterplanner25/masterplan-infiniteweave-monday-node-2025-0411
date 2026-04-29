@@ -290,7 +290,7 @@ def dispatch_delegated_run(
         from AINDY.agents.agent_runtime.shared import _OBJECTIVE_ATTR, _run_objective
         from AINDY.agents.agent_runtime.shared import LOCAL_AGENT_ID
         from AINDY.agents.capability_service import mint_token
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
 
         objective = _run_objective(parent_run)
         if not objective or getattr(parent_run, "user_id", None) is None:
@@ -381,7 +381,7 @@ def detect_run_conflict(
     agent_id: str | None = None,
 ) -> dict[str, Any]:
     from AINDY.agents.agent_runtime.shared import _run_objective
-    from AINDY.db.models.agent_run import AgentRun
+    from apps.agent.models.agent_run import AgentRun
 
     uid = normalize_uuid(user_id)
     active_runs = (

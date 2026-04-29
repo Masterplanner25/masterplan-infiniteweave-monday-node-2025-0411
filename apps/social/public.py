@@ -28,7 +28,18 @@ def get_social_performance_signals(
     return list(_get_social_performance_signals(user_id=user_id, limit=limit) or [])
 
 
+def get_user_scores(db, user_ids: list) -> dict:
+    """Return a mapping of user_id (str) -> master_score for the given user_ids."""
+    from apps.analytics.public import get_user_scores as get_analytics_user_scores
+
+    if not user_ids:
+        return {}
+    rows = get_analytics_user_scores(db=db, user_ids=[str(uid) for uid in user_ids])
+    return {user_id: float(row.get("master_score") or 0.0) for user_id, row in rows.items()}
+
+
 __all__ = [
     "adapt_linkedin_metrics",
     "get_social_performance_signals",
+    "get_user_scores",
 ]

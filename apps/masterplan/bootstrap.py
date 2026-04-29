@@ -7,7 +7,7 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_DEPENDS_ON: list[str] = []
+BOOTSTRAP_DEPENDS_ON: list[str] = ["automation", "identity", "tasks"]
 APP_DEPENDS_ON: list[str] = ["automation", "identity", "tasks"]
 
 

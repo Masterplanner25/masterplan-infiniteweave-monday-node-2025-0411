@@ -1,6 +1,7 @@
-import { Suspense, lazy, type ReactNode } from "react";
+import { lazy, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { SystemProvider } from "./context/SystemContext";
 
@@ -36,26 +37,34 @@ function PlatformGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function platformRoute(name: string, element: ReactNode) {
+  return (
+    <RouteErrorBoundary name={name} layer="platform" domain={name}>
+      {element}
+    </RouteErrorBoundary>
+  );
+}
+
 export default function PlatformApp() {
   return (
     <AuthProvider>
       <SystemProvider>
         <BrowserRouter basename="/platform">
           <PlatformGuard>
-            <Suspense fallback={<div>Loading...</div>}>
+            <ErrorBoundary layer="platform">
               <Routes>
                 <Route path="/" element={<Navigate to="/agent" replace />} />
-                <Route path="/agent" element={<AgentConsole />} />
-                <Route path="/flows" element={<FlowEngineConsole />} />
-                <Route path="/observability" element={<ObservabilityDashboard />} />
-                <Route path="/health" element={<HealthDashboard />} />
-                <Route path="/executions" element={<ExecutionConsole />} />
-                <Route path="/approvals" element={<AgentApprovalInbox />} />
-                <Route path="/registry" element={<AgentRegistry />} />
-                <Route path="/trace" element={<RippleTraceViewer />} />
+                <Route path="/agent" element={platformRoute("Agent Console", <AgentConsole />)} />
+                <Route path="/flows" element={platformRoute("Flow Engine", <FlowEngineConsole />)} />
+                <Route path="/observability" element={platformRoute("Observability", <ObservabilityDashboard />)} />
+                <Route path="/health" element={platformRoute("Health", <HealthDashboard />)} />
+                <Route path="/executions" element={platformRoute("Executions", <ExecutionConsole />)} />
+                <Route path="/approvals" element={platformRoute("Approvals", <AgentApprovalInbox />)} />
+                <Route path="/registry" element={platformRoute("Registry", <AgentRegistry />)} />
+                <Route path="/trace" element={platformRoute("Trace", <RippleTraceViewer />)} />
                 <Route path="*" element={<Navigate to="/agent" replace />} />
               </Routes>
-            </Suspense>
+            </ErrorBoundary>
           </PlatformGuard>
         </BrowserRouter>
       </SystemProvider>

@@ -1,6 +1,6 @@
 ---
 title: "Plugin Registry Pattern"
-last_verified: "2026-04-19"
+last_verified: "2026-04-29"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -92,6 +92,67 @@ one category of registration. All domain imports are deferred inside these
 functions — nothing is imported at module level except the standard library.
 
 ---
+
+### 2.4 Dependency Declarations: BOOTSTRAP_DEPENDS_ON and APP_DEPENDS_ON
+
+Every app `bootstrap.py` declares two dependency lists. They serve different
+purposes and are enforced at different points in time.
+
+**BOOTSTRAP_DEPENDS_ON**
+The hard boot-ordering graph. When app A declares
+`BOOTSTRAP_DEPENDS_ON: list[str] = ["B"]`, the bootstrap sequencer guarantees
+B finishes its `register()` call before A's `register()` is called. The
+ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's
+algorithm. If a cycle is detected, startup aborts.
+
+When to update: whenever A calls code from B inside its `register()` function
+body — for example, calling `get_job("B.some_handler")` or
+`register_event_handler` with a B-registered type.
+
+**APP_DEPENDS_ON**
+The runtime import governance graph. When app A declares
+`APP_DEPENDS_ON: list[str] = ["B"]`, it means A has deferred cross-domain
+imports from B inside service or flow functions (not inside `register()`).
+These imports fire at call time, not at startup. `APP_DEPENDS_ON` is:
+
+- Read by V1-VAL-015 (CI gate) to verify all deferred cross-domain imports
+  are declared.
+- Read by `_check_app_depends_on_ordering()` at startup (Prompt 19) to emit a
+  warning when a declared `APP_DEPENDS_ON` dependency boots after the
+  declaring app.
+- Not used by `resolve_boot_order()`. It does not affect boot sequence.
+
+When to update: whenever A has `from apps.B import ...` inside any function
+body in its services, flows, or routes.
+
+**Why they can differ**
+An app may need to call B at runtime without needing B to have completed its
+`register()` before A's `register()` runs. For example, `analytics` declares
+`APP_DEPENDS_ON: ["arm"]` because analytics services call ARM functions at
+execution time — but ARM's `register()` does not need to precede analytics's
+`register()`, so `arm` is not in analytics's `BOOTSTRAP_DEPENDS_ON`. The
+deferred imports fire safely after all apps have registered.
+
+**Consequences of divergence**
+If `APP_DEPENDS_ON` contains B but `BOOTSTRAP_DEPENDS_ON` does not:
+
+- Boot sequencer may order A before B.
+- All deferred imports from B inside A's service functions are safe because
+  they fire after `register()` completes for all apps.
+- Prompt 19's startup check emits a warning:
+  `"A: APP_DEPENDS_ON declares 'B' but 'B' boots after 'A'"`.
+- To silence the warning: either add B to A's `BOOTSTRAP_DEPENDS_ON`
+  (guarantees B registers before A), or accept the warning if the deferred
+  imports are provably safe.
+
+**Rule of thumb**
+
+- If the cross-domain call happens during `register()`: add to
+  `BOOTSTRAP_DEPENDS_ON`.
+- If the cross-domain call happens during request handling: add to
+  `APP_DEPENDS_ON`.
+- If both: add to both.
+- Converting a deferred import to a syscall: remove from `APP_DEPENDS_ON`.
 
 ## 3. Boot Sequence
 

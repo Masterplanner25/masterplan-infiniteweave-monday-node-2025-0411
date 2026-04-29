@@ -94,8 +94,8 @@ def to_execution_response(run: dict, db: Session) -> dict:
 
 def get_run_events(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     compat = get_runtime_compat_module()
-    from AINDY.db.models.agent_event import AgentEvent
-    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from apps.agent.models.agent_event import AgentEvent
+    from apps.agent.models.agent_run import AgentRun, AgentStep
 
     try:
         db_run_id = compat._db_run_id(run_id)

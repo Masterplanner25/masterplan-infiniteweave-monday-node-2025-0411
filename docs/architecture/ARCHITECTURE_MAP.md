@@ -1,6 +1,6 @@
 ---
 title: "AINDY Architecture Map"
-last_verified: "2026-04-25"
+last_verified: "2026-04-29"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -118,7 +118,14 @@ Example path:
 - `AINDY/kernel/syscall_dispatcher.py`
 - `apps/analytics/syscalls.py`
 
-Current state is not perfectly clean. Some apps still import analytics code directly, for example `apps/agent/routes/agent_router.py` imports `apps.analytics.public`, and several apps import analytics models such as `apps.analytics.models`. Treat the syscall boundary as the target pattern, with these direct imports as existing exceptions rather than the recommended default.
+Cross-app communication now primarily flows through the syscall layer. The
+major direct cross-app imports have been converted: analytics→automation
+(`sys.v1.automation.list_feedback`), analytics→social
+(`sys.v1.social.adapt_linkedin`), agent→analytics
+(`sys.v1.analytics.get_kpi_snapshot`), and identity→agent
+(`sys.v1.agent.count_runs`, `sys.v1.agent.list_recent_runs`,
+`sys.v1.agent.ensure_initial_run`). Remaining deferred imports between apps
+are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
 Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current hard core set is:
@@ -132,6 +139,14 @@ Representative dependency declarations in `apps/bootstrap.py`:
 - `automation` depends on `agent`, `analytics`, `arm`, `masterplan`, and `tasks`
 - `network_bridge` depends on `authorship`
 
+In addition to `BOOTSTRAP_DEPENDS_ON`, each app may declare
+`APP_DEPENDS_ON` — a broader set of runtime import dependencies that do not
+need to be boot-ordered but must be declared for governance.
+`APP_DEPENDS_ON` is validated by the V1-VAL-015 CI gate and checked at
+startup by `_check_app_depends_on_ordering()`. See
+[Plugin Registry Pattern](PLUGIN_REGISTRY_PATTERN.md#dependency-declarations-bootstrap_depends_on-and-app_depends_on)
+for the full semantics.
+
 ## Cross-Layer Boundaries
 
 ### What `AINDY/` Can See
@@ -143,7 +158,12 @@ Important boundary files:
 - `AINDY/platform_layer/platform_loader.py`
 
 ### What `apps/` Can See
-Apps import `AINDY.*` runtime and platform services freely. Cross-app communication is supposed to happen through syscalls, registered jobs, and public facade modules. In practice, there are still direct app-to-app imports, especially around analytics public helpers and shared models. Those imports are part of the current architecture and should be considered when changing cross-domain APIs.
+Apps import `AINDY.*` runtime and platform services freely. Cross-app
+communication is supposed to happen through syscalls, registered jobs, and
+public facade modules. Some deferred app-to-app imports still exist in the
+monolith, but they are declared in `APP_DEPENDS_ON`, validated by V1-VAL-015,
+and checked at startup for ordering drift by
+`_check_app_depends_on_ordering()`.
 
 ### The Syscall Contract
 The syscall dispatcher enforces capability checks, payload validation, version parsing, tenant context, and standardized envelopes. Version compatibility rules are defined in `AINDY/kernel/syscall_versioning.py`; runtime dispatch is implemented in `AINDY/kernel/syscall_dispatcher.py`.

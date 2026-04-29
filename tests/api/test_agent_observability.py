@@ -229,7 +229,7 @@ class TestScanRecoverGenericRun:
 
     def test_no_agent_run_query_for_generic(self):
         from AINDY.agents.stuck_run_service import scan_and_recover_stuck_runs
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
 
         fr = _flow_run(workflow_type="memory_workflow")
         db = _make_db(stuck_runs=[fr])
@@ -810,11 +810,11 @@ class TestMigrationReplayedFromRunId:
 
 class TestAgentRunModelHasColumn:
     def test_replayed_from_run_id_attribute_exists(self):
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         assert hasattr(AgentRun, "replayed_from_run_id")
 
     def test_column_is_nullable(self):
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         col = AgentRun.__table__.columns.get("replayed_from_run_id")
         assert col is not None
         assert col.nullable is True

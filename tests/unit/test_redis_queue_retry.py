@@ -3,7 +3,16 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-import redis
+
+redis = pytest.importorskip(
+    "redis",
+    reason="redis package not installed — run: pip install redis==5.0.4",
+)
+
+# redis and (optionally) fakeredis must be installed for these tests:
+#   pip install redis==5.0.4 fakeredis
+# These packages are in AINDY/requirements.txt. If they are missing
+# from your environment, run: pip install -r AINDY/requirements.txt
 
 from AINDY.core.distributed_queue import QueueJobPayload, RedisQueueBackend
 

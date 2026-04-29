@@ -73,3 +73,54 @@ def test_resolve_boot_order_detects_missing_dependency():
 
 def test_resolve_boot_order_empty_input():
     assert resolve_boot_order({}) == []
+
+
+def test_app_depends_on_ordering_check_emits_warning(monkeypatch):
+    """
+    _check_app_depends_on_ordering() must return a warning when an
+    APP_DEPENDS_ON edge points to an app that boots later.
+    """
+    import apps.bootstrap as bs
+
+    fake_metadata = {
+        "alpha": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=[],
+            APP_DEPENDS_ON=["beta"],
+        ),
+        "beta": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=[],
+            APP_DEPENDS_ON=[],
+        ),
+    }
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["alpha", "beta"])
+    monkeypatch.setattr(bs, "_load_bootstrap_metadata", lambda: fake_metadata)
+
+    warnings = bs._check_app_depends_on_ordering()
+    assert len(warnings) == 1
+    assert "alpha" in warnings[0]
+    assert "beta" in warnings[0]
+    assert "BOOTSTRAP_DEPENDS_ON" in warnings[0]
+
+
+def test_app_depends_on_ordering_no_warning_when_correct(monkeypatch):
+    """
+    _check_app_depends_on_ordering() must return no warnings when all
+    APP_DEPENDS_ON dependencies boot before or at the same position.
+    """
+    import apps.bootstrap as bs
+
+    fake_metadata = {
+        "alpha": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=["beta"],
+            APP_DEPENDS_ON=["beta"],
+        ),
+        "beta": SimpleNamespace(
+            BOOTSTRAP_DEPENDS_ON=[],
+            APP_DEPENDS_ON=[],
+        ),
+    }
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["beta", "alpha"])
+    monkeypatch.setattr(bs, "_load_bootstrap_metadata", lambda: fake_metadata)
+
+    warnings = bs._check_app_depends_on_ordering()
+    assert warnings == []

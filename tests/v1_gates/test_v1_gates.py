@@ -31,8 +31,11 @@ Test-to-task mapping:
     V1-VAL-014  test_domain_routes_mounted_explicitly      V1-REFACT-013
     V1-VAL-015  test_cross_app_deps_declared               V1-ARCH-001
     V1-VAL-016  test_no_bare_json_response_in_routes       V1-ARCH-002
+    # (covers apps/*/routes/ and AINDY/routes/)
     V1-VAL-017  test_db_unavailable_returns_503            V1-STAB-009
     V1-VAL-018  test_all_routers_documented_in_api_contracts V1-ARCH-003
+    V1-VAL-019  test_legacy_js_contains_no_definitions    V1-ARCH-004
+    V1-VAL-020  test_db_pool_exhausted_returns_503    V1-STAB-010
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
@@ -40,6 +43,7 @@ through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -684,11 +688,23 @@ def test_cross_app_deps_declared():
 def test_no_bare_json_response_in_routes():
     """
     V1-VAL-016 | Task: V1-ARCH-002
-    Route modules must not return bare JSONResponse objects outside the
-    accepted _http_status and _idempotency dispatch patterns.
+    Route modules in apps/*/routes/ and AINDY/routes/ must not return bare
+    JSONResponse objects outside the accepted _http_status and _idempotency
+    dispatch patterns. This gate covers both domain and platform routes.
     """
     root = Path(__file__).resolve().parents[2]
     routes_dirs = list((root / "apps").glob("*/routes"))
+
+    # Also cover AINDY platform route directories.
+    aindy_platform_routes = root / "AINDY" / "routes" / "platform"
+    if aindy_platform_routes.exists():
+        routes_dirs.append(aindy_platform_routes)
+
+    # And the top-level AINDY/routes/ directory (auth, health, flow, etc.)
+    aindy_routes_dir = root / "AINDY" / "routes"
+    if aindy_routes_dir.exists():
+        routes_dirs.append(aindy_routes_dir)
+
     violations: list[str] = []
 
     for routes_dir in routes_dirs:
@@ -831,3 +847,127 @@ def test_all_routers_documented_in_api_contracts():
         "appropriate mount group (root, /platform, or /apps).\n"
         "V1-ARCH-003: every registered router must appear in the API contracts doc."
     )
+
+
+def test_legacy_js_contains_no_definitions():
+    """
+    V1-VAL-019 | Task: V1-ARCH-004
+    client/src/api/legacy.js must contain only re-export statements —
+    no function definitions, class definitions, or variable declarations.
+    Any direct definition in legacy.js indicates a regression where
+    the shim was used as a destination rather than a waypoint.
+
+    When all three original callers (Dashboard.jsx, GraphView.jsx,
+    HealthDashboard.jsx) have migrated to platform.js and this test is
+    confirmed passing, delete legacy.js and update api/index.js to remove
+    the re-export.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    legacy_path = repo_root / "client" / "src" / "api" / "legacy.js"
+
+    assert legacy_path.exists(), (
+        "client/src/api/legacy.js does not exist. "
+        "If it has already been deleted, remove this test."
+    )
+
+    content = legacy_path.read_text(encoding="utf-8")
+
+    function_defs = re.findall(
+        r"^\s*(?:export\s+)?(?:async\s+)?function\s+\w+",
+        content,
+        re.MULTILINE,
+    )
+    assert not function_defs, (
+        f"legacy.js must not define functions directly. Found:\n"
+        + "\n".join(f"  {d.strip()}" for d in function_defs)
+        + "\n\nlegacy.js must only re-export from platform.js. "
+        "V1-ARCH-004: shim files must not accumulate definitions."
+    )
+
+    class_defs = re.findall(r"^\s*(?:export\s+)?class\s+\w+", content, re.MULTILINE)
+    assert not class_defs, (
+        f"legacy.js must not define classes. Found:\n"
+        + "\n".join(f"  {d.strip()}" for d in class_defs)
+    )
+
+    arrow_defs = re.findall(
+        r"^\s*(?:export\s+)?(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\(",
+        content,
+        re.MULTILINE,
+    )
+    assert not arrow_defs, (
+        f"legacy.js must not define arrow functions. Found:\n"
+        + "\n".join(f"  {d.strip()}" for d in arrow_defs)
+    )
+
+    assert "from " in content or "export {" in content, (
+        "legacy.js appears empty or malformed — expected re-export statements."
+    )
+
+
+def test_legacy_js_callers_migrated_to_platform():
+    """
+    V1-VAL-019b | Task: V1-ARCH-004
+    The three original callers of legacy.js must import from platform.js,
+    not legacy.js. When this test passes and test_legacy_js_contains_no_definitions
+    passes, legacy.js and this test can both be deleted.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    components = repo_root / "client" / "src" / "components"
+
+    callers = [
+        components / "app" / "Dashboard.jsx",
+        components / "app" / "GraphView.jsx",
+        components / "platform" / "HealthDashboard.jsx",
+    ]
+
+    regressions = []
+    for caller in callers:
+        if not caller.exists():
+            continue
+        content = caller.read_text(encoding="utf-8")
+        if "legacy.js" in content:
+            regressions.append(str(caller.relative_to(repo_root)))
+
+    assert not regressions, (
+        f"The following files still import from legacy.js and must be "
+        f"updated to import from platform.js:\n"
+        + "\n".join(f"  - {f}" for f in regressions)
+        + "\nV1-ARCH-004: legacy.js callers must migrate before the shim is removed."
+    )
+
+
+def test_db_pool_exhausted_returns_503(client, auth_headers):
+    """
+    V1-VAL-020 | Task: V1-STAB-010
+    When the connection pool is exhausted, routes must return 503 with
+    error=db_pool_exhausted and a Retry-After header. A 500 is not
+    acceptable because callers cannot distinguish a bug from capacity
+    exhaustion.
+    """
+    from sqlalchemy.exc import TimeoutError as SATimeoutError
+
+    from apps.agent.routes.agent_router import get_db
+
+    def exhausted_get_db():
+        raise SATimeoutError()
+        yield
+
+    client.app.dependency_overrides[get_db] = exhausted_get_db
+    try:
+        response = client.get("/apps/agent/runs", headers=auth_headers)
+    finally:
+        client.app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 503, (
+        f"Expected 503 when DB pool is exhausted, got {response.status_code}. "
+        "V1-STAB-010: pool exhaustion must return 503 so callers can retry."
+    )
+    assert "Retry-After" in response.headers, (
+        "Pool exhaustion response must include Retry-After header."
+    )
+    body = response.json()
+    assert body.get("error") == "db_pool_exhausted", (
+        f"Expected error='db_pool_exhausted', got {body.get('error')!r}."
+    )
+    assert body.get("retryable") is True
