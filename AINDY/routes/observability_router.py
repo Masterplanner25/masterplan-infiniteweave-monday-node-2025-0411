@@ -85,35 +85,15 @@ def get_rippletrace_status(
     user_id = str(current_user["sub"])
 
     def handler(ctx):
-        from apps.rippletrace.services.engine_registry import get_engine_breaker
+        from AINDY.platform_layer.registry import get_all_health_checks
 
-        engines = [
-            "delta_engine",
-            "learning_engine",
-            "narrative_engine",
-            "prediction_engine",
-            "recommendation_engine",
-        ]
-        engine_health: dict[str, dict] = {}
-        for engine in engines:
-            try:
-                breaker = get_engine_breaker(engine)
-                engine_health[engine] = {
-                    "circuit_state": breaker.state.value,
-                    "failure_count": breaker.failure_count,
-                }
-            except Exception as exc:
-                engine_health[engine] = {"error": str(exc)}
+        rippletrace_health = get_all_health_checks().get("rippletrace")
+        if rippletrace_health is None:
+            return {"status": "unknown", "engines": {}, "error": "rippletrace health check not registered"}
+        payload = rippletrace_health() or {}
         return {
-            "status": (
-                "healthy"
-                if all(
-                    info.get("circuit_state") != "open"
-                    for info in engine_health.values()
-                )
-                else "degraded"
-            ),
-            "engines": engine_health,
+            "status": "healthy" if payload.get("status") == "ok" else payload.get("status", "unknown"),
+            "engines": payload.get("engines") or {},
         }
 
     return _execute_observability(
@@ -139,8 +119,10 @@ def get_scheduler_status(
 
     def handler(ctx):
         result = _run_flow_observability("observability_scheduler_status", {}, db, user_id)
+        from AINDY.agents.stuck_run_watchdog import get_last_scan_result
         from AINDY.config import settings
         from AINDY.platform_layer import scheduler_service
+        last_scan = get_last_scan_result()
 
         try:
             scheduler = scheduler_service.get_scheduler()
@@ -148,6 +130,13 @@ def get_scheduler_status(
             result["stuck_run_watchdog"] = {
                 "registered": False,
                 "next_run_time": None,
+                "last_run_at": last_scan["last_run_at"],
+                "last_recovered": last_scan["recovered"],
+                "last_dead_lettered": last_scan["dead_lettered"],
+                "last_had_error": last_scan["had_error"],
+                "last_error_message": last_scan["error_message"],
+                "recovery_sla_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+                "stuck_threshold_minutes": settings.STUCK_RUN_THRESHOLD_MINUTES,
             }
             return result
 
@@ -155,6 +144,13 @@ def get_scheduler_status(
             result["stuck_run_watchdog"] = {
                 "registered": False,
                 "next_run_time": None,
+                "last_run_at": last_scan["last_run_at"],
+                "last_recovered": last_scan["recovered"],
+                "last_dead_lettered": last_scan["dead_lettered"],
+                "last_had_error": last_scan["had_error"],
+                "last_error_message": last_scan["error_message"],
+                "recovery_sla_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+                "stuck_threshold_minutes": settings.STUCK_RUN_THRESHOLD_MINUTES,
             }
             return result
 
@@ -178,6 +174,13 @@ def get_scheduler_status(
                 else None
             ),
             "interval_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+            "last_run_at": last_scan["last_run_at"],
+            "last_recovered": last_scan["recovered"],
+            "last_dead_lettered": last_scan["dead_lettered"],
+            "last_had_error": last_scan["had_error"],
+            "last_error_message": last_scan["error_message"],
+            "recovery_sla_minutes": settings.AINDY_WATCHDOG_INTERVAL_MINUTES,
+            "stuck_threshold_minutes": settings.STUCK_RUN_THRESHOLD_MINUTES,
         }
         return result
 

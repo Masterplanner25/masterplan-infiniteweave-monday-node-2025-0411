@@ -144,6 +144,22 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30       # seconds to wait for a connection
     DB_POOL_RECYCLE: int = 1800     # recycle connections older than 30 min
+    DB_STATEMENT_TIMEOUT_MS: int = Field(
+        default=30000,
+        description=(
+            "PostgreSQL statement_timeout in milliseconds. Applied to all "
+            "connections in non-test environments. Set to 0 to disable. "
+            "Default: 30000 (30 seconds). Test environments use 10000 (10s)."
+        ),
+    )
+    DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: int = Field(
+        default=30000,
+        description=(
+            "PostgreSQL idle_in_transaction_session_timeout in milliseconds. "
+            "Closes sessions that hold a transaction open without issuing "
+            "queries. Default: 30000 (30 seconds)."
+        ),
+    )
 
     # --- Execution transport ---
     # "thread"      — ThreadPoolExecutor (default; single-process only).

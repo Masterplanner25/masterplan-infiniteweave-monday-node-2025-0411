@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import path from "path";
+import { extname } from "path";
 
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -17,8 +18,51 @@ const platformComponentPaths = [
   "./src/components/platform/RippleTraceViewer.jsx",
 ];
 
+function platformHtmlFallback() {
+  return {
+    name: "platform-html-fallback",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const method = req.method?.toUpperCase();
+        const originalUrl = req.url ?? "/";
+
+        if (method !== "GET" && method !== "HEAD") {
+          next();
+          return;
+        }
+
+        const [pathname] = originalUrl.split("?");
+        const isPlatformRoute =
+          pathname === "/platform" || pathname.startsWith("/platform/");
+        const hasExtension = extname(pathname) !== "";
+
+        if (!isPlatformRoute || hasExtension) {
+          next();
+          return;
+        }
+
+        req.url = "/platform.html";
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const buildTarget = mode === "app" || mode === "platform" ? mode : "all";
+  const manualChunks = {
+    "vendor-react": ["react", "react-dom", "react-router-dom"],
+    "vendor-charts": ["recharts", "d3"],
+    "vendor-ui": [
+      "@radix-ui/react-slot",
+      "@radix-ui/react-tooltip",
+      "lucide-react",
+      "clsx",
+      "class-variance-authority",
+      "tailwind-merge",
+    ],
+    ...(buildTarget === "app" ? {} : { "chunk-platform": platformComponentPaths }),
+  };
 
   const input =
     buildTarget === "app"
@@ -35,7 +79,7 @@ export default defineConfig(({ mode }) => {
           };
 
   return {
-    plugins: [react()],
+    plugins: [react(), platformHtmlFallback()],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
@@ -54,19 +98,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input,
         output: {
-          manualChunks: {
-            "vendor-react": ["react", "react-dom", "react-router-dom"],
-            "vendor-charts": ["recharts", "d3"],
-            "vendor-ui": [
-              "@radix-ui/react-slot",
-              "@radix-ui/react-tooltip",
-              "lucide-react",
-              "clsx",
-              "class-variance-authority",
-              "tailwind-merge",
-            ],
-            "chunk-platform": platformComponentPaths,
-          },
+          manualChunks,
           entryFileNames: (chunkInfo) =>
             chunkInfo.name === "platform"
               ? "platform/assets/[name]-[hash].js"

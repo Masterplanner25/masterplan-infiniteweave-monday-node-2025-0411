@@ -44,6 +44,9 @@ jobs:
       - name: Lint documentation frontmatter
         run: python scripts/lint_docs.py
 
+      - name: Check API contract drift
+        run: python scripts/check_api_contracts.py
+
       - name: Check for stale docs (warning only)
         run: python scripts/lint_docs.py || true
 

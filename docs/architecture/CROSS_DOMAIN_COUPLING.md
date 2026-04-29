@@ -1,6 +1,6 @@
 ---
 title: "Cross-Domain Coupling"
-last_verified: "2026-04-25"
+last_verified: "2026-04-27"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -514,6 +514,13 @@ coupling sites.
 | `automation/syscalls/syscall_handlers` | `tasks.syscalls.register_task_syscall_handlers` | explicit re-registration call (removed) | RESOLVED (Prompt 12) |
 | `automation/flows/automation_flows` | `AINDY.agents.agent_runtime._run_to_dict` | deferred | private API (Prompt 3) |
 | `automation/flows/analytics_flows` | `analytics.services` | deferred | acceptable |
+
+Automation bootstrap note (2026-04-27): `apps.automation.bootstrap`
+reduced `BOOTSTRAP_DEPENDS_ON` from five apps to two (`agent`, `analytics`).
+`arm`, `masterplan`, and `tasks` were removed because automation only calls
+their syscalls at runtime. The syscall dispatcher returns error envelopes for
+unregistered syscalls rather than raising, so these are call-time dependencies
+only.
 
 **Acceptable**: deferred, read-only, one direction, no private API.  
 **Risk**: module-level (cascade), bidirectional, or private API call.

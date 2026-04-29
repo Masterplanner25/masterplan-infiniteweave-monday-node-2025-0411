@@ -79,6 +79,48 @@ def test_minimum_router_count():
     )
 
 
+def test_automation_boots_without_arm_masterplan(monkeypatch):
+    import apps.automation.bootstrap as automation_bootstrap
+
+    registered: list[str] = []
+    monkeypatch.setattr(
+        "AINDY.platform_layer.registry.register_required_syscall",
+        registered.append,
+    )
+
+    automation_bootstrap._register_required_syscalls()
+
+    assert registered == [
+        "sys.v1.score.feedback",
+        "sys.v1.agent.suggest_tools",
+        "sys.v1.agent.dispatch_tool",
+    ]
+    assert "sys.v1.arm.analyze" not in registered
+    assert "sys.v1.genesis.execute_llm" not in registered
+    assert "sys.v1.task.create" not in registered
+
+
+def test_automation_boot_order_keeps_tasks_via_analytics_dependency(monkeypatch):
+    import apps.bootstrap as bs
+
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": []},
+            "agent": {"BOOTSTRAP_DEPENDS_ON": []},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+            "automation": {"BOOTSTRAP_DEPENDS_ON": ["agent", "analytics"]},
+        },
+    )
+
+    order = bs.get_resolved_boot_order()
+
+    assert order.index("tasks") < order.index("analytics") < order.index("automation")
+    assert order.index("agent") < order.index("automation")
+
+
 # ---------------------------------------------------------------------------
 # Test: known event types registered
 # ---------------------------------------------------------------------------

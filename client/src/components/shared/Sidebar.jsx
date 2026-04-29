@@ -3,25 +3,43 @@ import { Link, useLocation } from "react-router-dom";
 
 import { getAgentRuns } from "../../api/agent.js";
 import { useAuth } from "../../context/AuthContext";
-import { APPROVAL_EVENT } from "../platform/AgentApprovalInbox";
+import { APPROVAL_EVENT } from "../../lib/platformEvents.js";
 
-const SubNavItem = ({ to, children, active, badge }) => (
-  <Link
-    to={to}
-    className={`mb-1 flex items-center justify-between gap-3 rounded-lg px-10 py-2 text-xs font-medium transition-all duration-200 ${
-      active
-        ? "bg-[#00ffaa]/5 text-[#00ffaa]"
-        : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-200"
-    }`}
-  >
-    <span>{children}</span>
-    {badge ? (
-      <span className="rounded-full bg-[#00ffaa] px-2 py-0.5 text-[10px] font-bold text-black">
-        {badge}
-      </span>
-    ) : null}
-  </Link>
-);
+const PLATFORM_BASE = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
+const platformUrl = (path) => `${PLATFORM_BASE}${path}`;
+
+const SubNavItem = ({ to, children, active, badge, external = false }) => {
+  const className = `mb-1 flex items-center justify-between gap-3 rounded-lg px-10 py-2 text-xs font-medium transition-all duration-200 ${
+    active
+      ? "bg-[#00ffaa]/5 text-[#00ffaa]"
+      : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-200"
+  }`;
+
+  const content = (
+    <>
+      <span>{children}</span>
+      {badge ? (
+        <span className="rounded-full bg-[#00ffaa] px-2 py-0.5 text-[10px] font-bold text-black">
+          {badge}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (external) {
+    return (
+      <a href={platformUrl(to)} target="_self" className={className}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link to={to} className={className}>
+      {content}
+    </Link>
+  );
+};
 
 const NavSection = ({ title, icon, isOpen, toggle, children, isAnyChildActive }) => (
   <div className="mb-2">
@@ -147,11 +165,7 @@ export default function Sidebar() {
           isAnyChildActive={
             isActive("/masterplan") ||
             isActive("/tasks") ||
-            isActive("/platform/agent") ||
-            isActive("/platform/approvals") ||
-            isActive("/platform/flows") ||
-            isActive("/platform/observability") ||
-            isActive("/platform/trace") ||
+            location.pathname.startsWith("/platform") ||
             isActive("/freelance")
           }
         >
@@ -159,13 +173,13 @@ export default function Sidebar() {
           <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
           {isAdmin ? (
             <>
-              <SubNavItem to="/platform/agent" active={isActive("/platform/agent")}>Agent Console</SubNavItem>
-              <SubNavItem to="/platform/flows" active={isActive("/platform/flows")}>Console</SubNavItem>
-              <SubNavItem to="/platform/approvals" active={isActive("/platform/approvals")} badge={pendingApprovals || null}>
+              <SubNavItem to="/agent" external active={location.pathname.startsWith("/platform")}>Agent Console</SubNavItem>
+              <SubNavItem to="/flows" external active={location.pathname.startsWith("/platform")}>Console</SubNavItem>
+              <SubNavItem to="/approvals" external active={location.pathname.startsWith("/platform")} badge={pendingApprovals || null}>
                 Approval Inbox
               </SubNavItem>
-              <SubNavItem to="/platform/observability" active={isActive("/platform/observability")}>Observability</SubNavItem>
-              <SubNavItem to="/platform/trace" active={isActive("/platform/trace")}>Ripple Trace</SubNavItem>
+              <SubNavItem to="/observability" external active={location.pathname.startsWith("/platform")}>Observability</SubNavItem>
+              <SubNavItem to="/trace" external active={location.pathname.startsWith("/platform")}>Ripple Trace</SubNavItem>
             </>
           ) : null}
           <SubNavItem to="/freelance" active={isActive("/freelance")}>Freelance Hub</SubNavItem>
@@ -199,9 +213,9 @@ export default function Sidebar() {
 
       <div className="mt-auto border-t border-zinc-800/50 pt-4">
         {isAdmin ? (
-          <Link to="/platform/health" className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
+          <a href={platformUrl("/health")} target="_self" className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
             🟢 System Online
-          </Link>
+          </a>
         ) : (
           <div className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
             🟢 System Online

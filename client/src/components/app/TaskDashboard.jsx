@@ -1,32 +1,27 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getTasks, createTask, completeTask, startTask } from "../../api/tasks.js";
 import { Toast } from "../shared/Toast";
+import DomainError from "../shared/DomainError.jsx";
 import { safeMap } from "../../utils/safe";
 import { useToast } from "../../utils/useToast";
+import { useApiCall } from "../../lib/useApiCall.js";
 
 export default function TaskDashboard() {
-  const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
-  const [loading, setLoading] = useState(true);
   const [velocityMessage, setVelocityMessage] = useState("");
   const { toast, showToast, clearToast } = useToast();
+  const { loading, error, data, execute: fetchTasks } = useApiCall(getTasks, {
+    domain: "tasks",
+  });
 
-  const fetchTasks = async () => {
-    try {
-      const data = await getTasks();
-      // Sort: Pending first, then by ID
-      const sorted = data.sort((a, b) => a.status === "completed" ? 1 : -1);
-      setTasks(sorted);
-    } catch (err) {
-      console.error("Failed to load tasks", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const tasks = useMemo(() => {
+    const items = Array.isArray(data) ? [...data] : [];
+    return items.sort((a, b) => (a.status === "completed" ? 1 : -1));
+  }, [data]);
 
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [fetchTasks]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -84,6 +79,7 @@ export default function TaskDashboard() {
 
       {/* --- TASK LIST --- */}
       <div style={styles.list}>
+        <DomainError domain="tasks" error={error} onRetry={fetchTasks} />
         {loading ? <p>Syncing...</p> : safeMap(tasks, (task) =>
         <div key={task.task_name} style={styles.taskCard(task.status)}>
             <div>
@@ -111,7 +107,7 @@ export default function TaskDashboard() {
           </div>)
         }
         
-        {!loading && tasks.length === 0 &&
+        {!loading && !error && tasks.length === 0 &&
         <p style={{ color: "#666", textAlign: "center" }}>No active directives.</p>
         }
       </div>

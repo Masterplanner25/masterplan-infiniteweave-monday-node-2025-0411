@@ -173,7 +173,7 @@ def list_signals(
     """Query stored watcher signals."""
     def handler(ctx):
         from AINDY.platform_layer.watcher_service import list_signals as svc_list_signals
-        rows = svc_list_signals(
+        payload = svc_list_signals(
             db,
             session_id=session_id,
             signal_type=signal_type,
@@ -181,6 +181,7 @@ def list_signals(
             limit=limit,
             offset=offset,
         )
+        rows = payload.get("signals") or []
         return {
             "signals": rows,
             "count": len(rows),

@@ -9,12 +9,18 @@ from AINDY.db.models.flow_run import FlowRun
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.execution_envelope import success
 from AINDY.core.system_event_types import SystemEventTypes
-from AINDY.platform_layer.registry import get_trigger_evaluator
+from AINDY.platform_layer.registry import get_symbol, get_trigger_evaluator
 from AINDY.utils.uuid_utils import normalize_uuid
-from apps.autonomy.models import AutonomyDecision
 
 
 DEFAULT_DEFER_SECONDS = 300
+
+
+def _autonomy_decision_model():
+    model = get_symbol("AutonomyDecision")
+    if model is None:
+        raise RuntimeError("AutonomyDecision model not registered")
+    return model
 
 
 def evaluate_trigger(trigger: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
@@ -52,6 +58,7 @@ def record_decision(
     job_log_id: str | None = None,
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    AutonomyDecision = _autonomy_decision_model()
     decision = AutonomyDecision(
         user_id=normalize_uuid(user_id) if user_id is not None else None,
         trigger_type=str(trigger.get("trigger_type") or "system"),
@@ -88,6 +95,7 @@ def record_decision(
 
 
 def list_recent_decisions(db, *, user_id: str | uuid.UUID | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    AutonomyDecision = _autonomy_decision_model()
     query = db.query(AutonomyDecision)
     if user_id is not None:
         query = query.filter(AutonomyDecision.user_id == normalize_uuid(user_id))
@@ -131,7 +139,7 @@ def count_active_executions(db, *, user_id: str | uuid.UUID | None = None) -> in
     return flow_query.count() + agent_query.count()
 
 
-def serialize_decision(row: AutonomyDecision) -> dict[str, Any]:
+def serialize_decision(row: Any) -> dict[str, Any]:
     return {
         "id": str(row.id),
         "user_id": str(row.user_id) if row.user_id else None,

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import uuid
 from unittest.mock import patch
 
+from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.waiting_flow_run import WaitingFlowRun
 from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
 from AINDY.kernel.resume_spec import RESUME_HANDLER_EU, ResumeSpec
@@ -63,6 +64,21 @@ def _seed_waiting_row(
     priority: str = PRIORITY_NORMAL,
 ):
     now = datetime.now(timezone.utc)
+    flow_run = db_session.query(FlowRun).filter(FlowRun.id == run_id).first()
+    if flow_run is None:
+        db_session.add(
+            FlowRun(
+                id=run_id,
+                flow_name="test.flow",
+                workflow_type="test_flow",
+                state={},
+                current_node="wait_node",
+                status="waiting",
+                waiting_for=event_type,
+                wait_deadline=now + timedelta(minutes=5),
+                trace_id=correlation_id,
+            )
+        )
     row = WaitingFlowRun(
         run_id=run_id,
         event_type=event_type,

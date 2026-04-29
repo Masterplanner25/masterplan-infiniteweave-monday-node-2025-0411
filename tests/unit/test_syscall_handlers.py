@@ -1043,15 +1043,22 @@ class TestResearchAndAgentHandlers:
             "capability": "task.create",
         }
 
-        with patch("apps.agent.agents.tool_helpers.dispatch_tool_syscall", return_value={"task_id": "t-1"}) as mock_dispatch:
+        dispatcher = MagicMock()
+        dispatcher.dispatch.return_value = {
+            "status": "success",
+            "data": {"task_id": "t-1"},
+            "error": None,
+        }
+
+        with patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
             result = _handle_agent_dispatch_tool(payload, _ctx())
 
         assert result == {"task_id": "t-1"}
-        mock_dispatch.assert_called_once_with(
-            "sys.v1.task.create",
-            {"task_name": "Write tests"},
-            _TEST_UUID,
-            "task.create",
-        )
+        dispatcher.dispatch.assert_called_once()
+        dispatched_name, dispatched_payload, dispatched_ctx = dispatcher.dispatch.call_args.args
+        assert dispatched_name == "sys.v1.task.create"
+        assert dispatched_payload == {"task_name": "Write tests"}
+        assert dispatched_ctx.user_id == _TEST_UUID
+        assert dispatched_ctx.capabilities == ["task.create"]
 
 

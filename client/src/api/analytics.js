@@ -1,137 +1,137 @@
-import { authRequest } from "./_core.js";
+import { authRequest, taggedRequest, unwrapEnvelope } from "./_core.js";
 import { ROUTES } from "./_routes.js";
 
-export function ingestLinkedInManual(payload) {
-  return authRequest(ROUTES.ANALYTICS.LINKEDIN_MANUAL, {
+export const ingestLinkedInManual = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.LINKEDIN_MANUAL, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function getMasterplanSummary(masterplanId, groupBy = null) {
+export const getMasterplanSummary = taggedRequest("analytics", (masterplanId, groupBy = null) => {
   const query = groupBy ? `?group_by=${encodeURIComponent(groupBy)}` : "";
   return authRequest(`${ROUTES.ANALYTICS.MASTERPLAN_SUMMARY(masterplanId)}${query}`, {
     method: "GET",
-  });
-}
+  }).then(unwrapEnvelope);
+});
 
-export function calculateTwr(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_TWR, {
+export const calculateTwr = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_TWR, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateEngagement(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_ENGAGEMENT, {
+export const calculateEngagement = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_ENGAGEMENT, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateAiEfficiency(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_AI_EFFICIENCY, {
+export const calculateAiEfficiency = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_AI_EFFICIENCY, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateImpactScore(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_IMPACT_SCORE, {
+export const calculateImpactScore = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_IMPACT_SCORE, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateIncomeEfficiency(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_INCOME_EFFICIENCY, {
+export const calculateIncomeEfficiency = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_INCOME_EFFICIENCY, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateRevenueScaling(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_REVENUE_SCALING, {
+export const calculateRevenueScaling = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_REVENUE_SCALING, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateExecutionSpeed(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_EXECUTION_SPEED, {
+export const calculateExecutionSpeed = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_EXECUTION_SPEED, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateAttentionValue(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_ATTENTION_VALUE, {
+export const calculateAttentionValue = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_ATTENTION_VALUE, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateEngagementRate(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_ENGAGEMENT_RATE, {
+export const calculateEngagementRate = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_ENGAGEMENT_RATE, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateBusinessGrowth(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_BUSINESS_GROWTH, {
+export const calculateBusinessGrowth = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_BUSINESS_GROWTH, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateMonetizationEfficiency(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_MONETIZATION_EFFICIENCY, {
+export const calculateMonetizationEfficiency = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_MONETIZATION_EFFICIENCY, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateAiProductivityBoost(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_AI_PRODUCTIVITY_BOOST, {
+export const calculateAiProductivityBoost = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_AI_PRODUCTIVITY_BOOST, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateDecisionEfficiency(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_DECISION_EFFICIENCY, {
+export const calculateDecisionEfficiency = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_DECISION_EFFICIENCY, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function calculateLostPotential(payload) {
-  return authRequest(ROUTES.ANALYTICS.CALCULATE_LOST_POTENTIAL, {
+export const calculateLostPotential = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.CALCULATE_LOST_POTENTIAL, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function getMyScore() {
-  return authRequest(ROUTES.ANALYTICS.SCORES_ME, { method: "GET" });
-}
+export const getMyScore = taggedRequest("analytics", () =>
+  authRequest(ROUTES.ANALYTICS.SCORES_ME, { method: "GET" }).then(unwrapEnvelope)
+);
 
-export function recalculateScore() {
-  return authRequest(ROUTES.ANALYTICS.SCORES_RECALCULATE, { method: "POST" });
-}
+export const recalculateScore = taggedRequest("analytics", () =>
+  authRequest(ROUTES.ANALYTICS.SCORES_RECALCULATE, { method: "POST" }).then(unwrapEnvelope)
+);
 
-export function getScoreHistory(limit = 30) {
-  return authRequest(`${ROUTES.ANALYTICS.SCORES_HISTORY}?limit=${limit}`, { method: "GET" });
-}
+export const getScoreHistory = taggedRequest("analytics", (limit = 30) =>
+  authRequest(`${ROUTES.ANALYTICS.SCORES_HISTORY}?limit=${limit}`, { method: "GET" }).then(unwrapEnvelope)
+);
 
-export function postScoreFeedback(payload) {
-  return authRequest(ROUTES.ANALYTICS.SCORES_FEEDBACK, {
+export const postScoreFeedback = taggedRequest("analytics", (payload) =>
+  authRequest(ROUTES.ANALYTICS.SCORES_FEEDBACK, {
     method: "POST",
     body: JSON.stringify(payload),
-  });
-}
+  }).then(unwrapEnvelope)
+);
 
-export function getScoreFeedback(limit = 50) {
-  return authRequest(`${ROUTES.ANALYTICS.SCORES_FEEDBACK}?limit=${limit}`, { method: "GET" });
-}
+export const getScoreFeedback = taggedRequest("analytics", (limit = 50) =>
+  authRequest(`${ROUTES.ANALYTICS.SCORES_FEEDBACK}?limit=${limit}`, { method: "GET" }).then(unwrapEnvelope)
+);

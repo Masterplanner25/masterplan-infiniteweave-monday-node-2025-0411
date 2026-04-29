@@ -4,10 +4,14 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-vi.mock("../_core.js", () => ({
-  authRequest: vi.fn(),
-  adminRequest: vi.fn(),
-}));
+vi.mock("../_core.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    authRequest: vi.fn(),
+    adminRequest: vi.fn(),
+  };
+});
 
 import { adminRequest, authRequest } from "../_core.js";
 import * as operatorApi from "../operator.js";

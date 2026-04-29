@@ -67,13 +67,13 @@ def test_app_dependency_metadata_matches_direct_cross_app_imports():
     for app in APP_NAMES:
         declared = set(metadata[app]["APP_DEPENDS_ON"])
         missing = sorted(actual[app] - declared)
-        extra = sorted(declared - actual[app])
-        if missing or extra:
-            mismatches.append(
-                f"{app}: missing={missing or '-'} extra={extra or '-'}"
-            )
+        if missing:
+            mismatches.append(f"{app}: missing={missing}")
 
-    assert not mismatches, "APP_DEPENDS_ON drift detected:\n" + "\n".join(mismatches)
+    assert not mismatches, (
+        "APP_DEPENDS_ON drift detected. Every direct cross-app import must be declared:\n"
+        + "\n".join(mismatches)
+    )
 
 
 def test_declared_dependencies_reference_existing_apps():

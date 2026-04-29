@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { approveAgentRun, getAgentRuns, rejectAgentRun } from "../../api/agent.js";
 import { useAuth } from "../../context/AuthContext";
+import { APPROVAL_EVENT } from "../../lib/platformEvents.js";
 import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import {
   ActionButton,
@@ -18,8 +19,6 @@ import {
   MetricCard,
   statusTone,
   surfacePalette } from "./SurfacePrimitives";import { safeMap } from "../../utils/safe";
-
-const APPROVAL_EVENT = "agent-approval-count-changed";
 
 function emitApprovalCountChanged() {
   window.dispatchEvent(new Event(APPROVAL_EVENT));

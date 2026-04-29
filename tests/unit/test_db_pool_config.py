@@ -9,7 +9,42 @@ def test_get_pool_status_returns_expected_keys():
 
     status = get_pool_status()
 
-    assert set(status.keys()) == {"pool_size", "checkedout", "overflow", "checked_in"}
+    assert set(status.keys()) == {
+        "pool_size",
+        "checkedout",
+        "overflow",
+        "checked_in",
+        "statement_timeout_ms",
+        "idle_in_transaction_timeout_ms",
+    }
+
+
+def test_db_statement_timeout_default_is_30000():
+    from AINDY.config import settings
+
+    assert settings.DB_STATEMENT_TIMEOUT_MS == 30000
+
+
+def test_db_idle_in_transaction_timeout_default_is_30000():
+    from AINDY.config import settings
+
+    assert settings.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS == 30000
+
+
+def test_get_pool_status_includes_statement_timeout_key():
+    from AINDY.db.database import get_pool_status
+
+    status = get_pool_status()
+
+    assert "statement_timeout_ms" in status
+
+
+def test_get_pool_status_includes_idle_in_transaction_timeout_key():
+    from AINDY.db.database import get_pool_status
+
+    status = get_pool_status()
+
+    assert "idle_in_transaction_timeout_ms" in status
 
 
 def test_health_response_includes_db_pool_key(client, monkeypatch):

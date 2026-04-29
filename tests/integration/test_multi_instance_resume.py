@@ -55,6 +55,7 @@ class TestMultiInstanceResume:
         5. Assert: resume callback calls ExecutionUnitService.resume_execution_unit("eu-abc")
         """
         from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+        from AINDY.db.models.flow_run import FlowRun
         from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
         from AINDY.kernel.resume_spec import RESUME_HANDLER_EU, ResumeSpec
 
@@ -73,6 +74,18 @@ class TestMultiInstanceResume:
         registry = RedisWaitRegistry(shared_redis)
         registry.register(run_id, spec)
 
+        db_session.add(
+            FlowRun(
+                id=run_id,
+                flow_name="test.flow",
+                workflow_type="test_flow",
+                state={},
+                current_node="wait_node",
+                status="waiting",
+                waiting_for="order.completed",
+                trace_id=None,
+            )
+        )
         db_session.add(
             WaitingFlowRun(
                 run_id=run_id,
@@ -123,6 +136,7 @@ class TestMultiInstanceResume:
         exactly one enqueues the resume and the other finds the key already deleted.
         """
         from AINDY.db.models.waiting_flow_run import WaitingFlowRun
+        from AINDY.db.models.flow_run import FlowRun
         from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
         from AINDY.kernel.resume_spec import RESUME_HANDLER_EU, ResumeSpec
 
@@ -139,6 +153,18 @@ class TestMultiInstanceResume:
                 run_id=run_id,
                 eu_type="flow",
             ),
+        )
+        db_session.add(
+            FlowRun(
+                id=run_id,
+                flow_name="test.flow",
+                workflow_type="test_flow",
+                state={},
+                current_node="wait_node",
+                status="waiting",
+                waiting_for="payment.received",
+                trace_id=None,
+            )
         )
         db_session.add(
             WaitingFlowRun(

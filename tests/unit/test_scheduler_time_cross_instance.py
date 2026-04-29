@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.waiting_flow_run import WaitingFlowRun
 from AINDY.kernel.redis_wait_registry import RedisWaitRegistry
 from AINDY.kernel.resume_spec import RESUME_HANDLER_EU, ResumeSpec
@@ -39,6 +40,21 @@ def _seed_waiting_row(
     eu_id: str | None = None,
     priority: str = PRIORITY_NORMAL,
 ):
+    existing = db_session.query(FlowRun).filter(FlowRun.id == run_id).first()
+    if existing is None:
+        db_session.add(
+            FlowRun(
+                id=run_id,
+                flow_name="test.flow",
+                workflow_type="test_flow",
+                state={},
+                current_node="wait_node",
+                status="waiting",
+                waiting_for="time.wait",
+                wait_deadline=timeout_at,
+                trace_id=None,
+            )
+        )
     row = WaitingFlowRun(
         run_id=run_id,
         event_type="time.wait",

@@ -34,14 +34,6 @@ const ARMLogs = lazy(() => import("./components/app/ARMLogs"));
 const ARMMetrics = lazy(() => import("./components/app/ARMMetrics"));
 const MemoryBrowser = lazy(() => import("./components/app/MemoryBrowser"));
 const IdentityDashboard = lazy(() => import("./components/app/IdentityDashboard"));
-const AgentConsole = lazy(() => import("./components/platform/AgentConsole"));
-const FlowEngineConsole = lazy(() => import("./components/platform/FlowEngineConsole"));
-const ObservabilityDashboard = lazy(() => import("./components/platform/ObservabilityDashboard"));
-const HealthDashboard = lazy(() => import("./components/platform/HealthDashboard"));
-const ExecutionConsole = lazy(() => import("./components/platform/ExecutionConsole"));
-const AgentApprovalInbox = lazy(() => import("./components/platform/AgentApprovalInbox"));
-const AgentRegistry = lazy(() => import("./components/platform/AgentRegistry"));
-const RippleTraceViewer = lazy(() => import("./components/platform/RippleTraceViewer"));
 
 function BootGate() {
   const { booting, booted, bootError, bootSystem } = useSystem();
@@ -93,6 +85,24 @@ function BootGate() {
   }
 
   return <Outlet />;
+}
+
+function PlatformRedirect() {
+  const { isAdmin } = useAuth();
+  const platformBase = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
+
+  if (isAdmin) {
+    // PlatformApp owns the /platform/* surface, including /agent and the
+    // other admin-only console routes that used to live in this router
+    // (AgentConsole, FlowEngineConsole, ObservabilityDashboard, etc.).
+    const suffix = window.location.pathname.replace(/^\/platform/, "");
+    const search = window.location.search || "";
+    const hash = window.location.hash || "";
+    window.location.href = `${platformBase}${suffix}${search}${hash}`;
+    return null;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 }
 
 export default function App() {
@@ -211,16 +221,7 @@ export default function App() {
                     <Route path="/arm/config/metrics" element={routeElement("ARM Metrics", <ARMMetrics />)} />
                     <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
                     <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
-                    <Route element={<ProtectedRoute requireAdmin />}>
-                      <Route path="/platform/agent" element={routeElement("Agent Console", <AgentConsole />)} />
-                      <Route path="/platform/flows" element={routeElement("Flow Engine Console", <FlowEngineConsole />)} />
-                      <Route path="/platform/observability" element={routeElement("Observability", <ObservabilityDashboard />)} />
-                      <Route path="/platform/health" element={routeElement("Health Dashboard", <HealthDashboard />)} />
-                      <Route path="/platform/executions" element={routeElement("Execution Console", <ExecutionConsole />)} />
-                      <Route path="/platform/approvals" element={routeElement("Agent Approvals", <AgentApprovalInbox />)} />
-                      <Route path="/platform/registry" element={routeElement("Agent Registry", <AgentRegistry />)} />
-                      <Route path="/platform/trace" element={routeElement("Ripple Trace", <RippleTraceViewer />)} />
-                    </Route>
+                    <Route path="/platform/*" element={<PlatformRedirect />} />
                     <Route path="*" element={<Navigate to="/dashboard" replace />} />
                   </Route>
                 </Route>

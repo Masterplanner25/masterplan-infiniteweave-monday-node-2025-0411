@@ -1,6 +1,6 @@
 ---
 title: "API Contracts"
-last_verified: "2026-04-18"
+last_verified: "2026-04-27"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -26,44 +26,52 @@ These paths are stable infrastructure. Never add an app or platform prefix here.
 Stable runtime API for external integrations and tooling. Breaking changes require a version bump.
 
 - `AINDY/routes/platform_router.py` (router prefix `/platform`, mounted at root) **[JWT or Platform API key]** ? `/platform/flows/*`, `/platform/nodes/*`, `/platform/webhooks/*`, `/platform/keys/*`
+- `AINDY/routes/platform/flows_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/flows/*`
+- `AINDY/routes/platform/nodes_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/nodes/*`
+- `AINDY/routes/platform/webhooks_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/webhooks/*`
+- `AINDY/routes/platform/keys_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/keys/*`
+- `AINDY/routes/platform/platform_ops_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/memory/*`, `/platform/syscalls/*`, `/platform/tenant/*`
+- `AINDY/routes/platform/queue_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/queue/health`, `/platform/queue/dead-letters`
+- `AINDY/routes/platform/nodus_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/nodus/*`
+- `AINDY/routes/platform/nodus_flow_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/nodus/flows/*`
+- `AINDY/routes/platform/nodus_schedule_router.py` (included by `AINDY/routes/platform_router.py`) **[JWT or Platform API key]** ? `/platform/nodus/schedules/*`
 - `AINDY/routes/flow_router.py` (router prefix `/flows`) **[JWT auth required]** ? `/platform/flows/runs`, `/platform/flows/runs/{id}`, `/platform/flows/registry`, etc.
 - `AINDY/routes/observability_router.py` (router prefix `/observability`) **[JWT auth required]** ? `/platform/observability/scheduler/status`, `/platform/observability/requests`, `/platform/observability/dashboard`, etc.
-- `AINDY/routes/system_state_router.py` (router prefix `/system`) **[JWT auth required]** ? `/platform/system/state`
 - `AINDY/routes/db_verify_router.py` (router prefix `/db`) **[API key required]** ? `/platform/db/verify`
 
 ### Apps layer (mounted at `/apps`)
 
 Mutable domain features. All paths below are prefixed with `/apps`.
 
-- `AINDY/routes/agent_router.py` (router prefix `/agent`) **[JWT auth required]** ? `/apps/agent/run`, `/apps/agent/runs`, etc.
-- `AINDY/routes/arm_router.py` (router prefix `/arm`) **[JWT auth required]** ? `/apps/arm/analyze`, `/apps/arm/generate`, etc.
-- `AINDY/routes/autonomy_router.py` (router prefix `/autonomy`) **[JWT auth required]** ? `/apps/autonomy/decisions`
-- `AINDY/routes/task_router.py` (router prefix `/tasks`) **[JWT auth required]** ? `/apps/tasks/create`, `/apps/tasks/start`, etc.
-- `AINDY/routes/goals_router.py` (router prefix `/goals`) **[JWT auth required]** ? `/apps/goals/`
-- `AINDY/routes/masterplan_router.py` (router prefix `/masterplans`) **[JWT auth required]** ? `/apps/masterplans/`
-- `AINDY/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** ? `/apps/genesis/session`, `/apps/genesis/message`, etc.
-- `AINDY/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** ? `/apps/automation/logs`, etc.
+- `apps/agent/routes/agent_router.py` (router prefix `/agent`) **[JWT auth required]** ? `/apps/agent/run`, `/apps/agent/runs`, etc.
+- `apps/arm/routes/arm_router.py` (router prefix `/arm`) **[JWT auth required]** ? `/apps/arm/analyze`, `/apps/arm/generate`, etc.
+- `apps/autonomy/routes/autonomy_router.py` (router prefix `/autonomy`) **[JWT auth required]** ? `/apps/autonomy/decisions`
+- `apps/tasks/routes/task_router.py` (router prefix `/tasks`) **[JWT auth required]** ? `/apps/tasks/create`, `/apps/tasks/start`, etc.
+- `apps/masterplan/routes/goals_router.py` (router prefix `/goals`) **[JWT auth required]** ? `/apps/goals/`
+- `apps/masterplan/routes/masterplan_router.py` (router prefix `/masterplans`) **[JWT auth required]** ? `/apps/masterplans/`
+- `apps/masterplan/routes/genesis_router.py` (router prefix `/genesis`) **[JWT auth required]** ? `/apps/genesis/session`, `/apps/genesis/message`, etc.
+- `apps/automation/routes/automation_router.py` (router prefix `/automation`) **[JWT auth required]** ? `/apps/automation/logs`, etc.
 - `AINDY/routes/memory_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/nodes`, `/apps/memory/recall`, etc.
 - `AINDY/routes/memory_metrics_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/metrics`, etc.
 - `AINDY/routes/memory_trace_router.py` (router prefix `/memory`) **[JWT auth required]** ? `/apps/memory/traces`, etc.
-- `AINDY/routes/bridge_router.py` (router prefix `/bridge`) **[JWT auth required for /nodes and /link; API key for /user_event]** ? `/apps/bridge/*`
-- `AINDY/routes/freelance_router.py` (router prefix `/freelance`) **[JWT auth required]** ? `/apps/freelance/*`
-- `AINDY/routes/leadgen_router.py` (router prefix `/leadgen`) **[JWT auth required]** ? `/apps/leadgen/`
-- `AINDY/routes/analytics_router.py` (router prefix `/analytics`) **[JWT auth required]** ? `/apps/analytics/*`
-- `AINDY/routes/social_router.py` (router prefix `/social`) **[JWT auth required]** ? `/apps/social/*`
-- `AINDY/routes/score_router.py` (router prefix `/scores`) **[JWT auth required]** ? `/apps/scores/me`, `/apps/scores/feedback`, etc.
-- `AINDY/routes/identity_router.py` (router prefix `/identity`) **[JWT auth required]** ? `/apps/identity/boot`, `/apps/identity/evolution`, etc.
+- `apps/bridge/routes/bridge_router.py` (router prefix `/bridge`) **[JWT auth required for /nodes and /link; API key for /user_event]** ? `/apps/bridge/*`
+- `apps/freelance/routes/freelance_router.py` (router prefix `/freelance`) **[JWT auth required]** ? `/apps/freelance/*`
+- `apps/search/routes/leadgen_router.py` (router prefix `/leadgen`) **[JWT auth required]** ? `/apps/leadgen/`
+- `apps/analytics/routes/analytics_router.py` (router prefix `/analytics`) **[JWT auth required]** ? `/apps/analytics/*`
+- `apps/social/routes/social_router.py` (router prefix `/social`) **[JWT auth required]** ? `/apps/social/*`
+- `apps/masterplan/routes/score_router.py` (router prefix `/scores`) **[JWT auth required]** ? `/apps/scores/me`, `/apps/scores/feedback`, etc.
+- `apps/identity/routes/identity_router.py` (router prefix `/identity`) **[JWT auth required]** ? `/apps/identity/boot`, `/apps/identity/evolution`, etc.
 - `AINDY/routes/watcher_router.py` (router prefix `/watcher`) **[API key required]** ? `/apps/watcher/signals`
 - `AINDY/routes/coordination_router.py` (router prefix `/coordination`) **[JWT auth required]** ? `/apps/coordination/agents`, `/apps/coordination/graph`
-- `AINDY/routes/dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** ? `/apps/dashboard/overview`
-- `AINDY/routes/health_dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** ? `/apps/dashboard/health`
-- `AINDY/routes/seo_routes.py` (router prefix `/seo`) **[JWT auth required]** ? `/apps/seo/analyze`, `/apps/seo/meta`, `/apps/seo/suggest`, etc.
-- `AINDY/routes/research_results_router.py` (router prefix `/research`) **[JWT auth required]** ? `/apps/research/`
-- `AINDY/routes/authorship_router.py` (router prefix `/authorship`) **[JWT auth required]** ? `/apps/authorship/reclaim`
-- `AINDY/routes/rippletrace_router.py` (router prefix `/rippletrace`) **[JWT auth required]** ? `/apps/rippletrace/*`
-- `AINDY/routes/network_bridge_router.py` (router prefix `/network_bridge`) **[API key required]** ? `/apps/network_bridge/*`
-- `AINDY/routes/main_router.py` (router prefix `/compute`) **[JWT auth required]** ? `/apps/compute/calculate_twr`, `/apps/compute/calculate_engagement`, etc. (legacy KPI surface)
-- `AINDY/routes/legacy_surface_router.py` (no router prefix, env-gated) **[compatibility surface]** ? `/apps/*` (old ripple/strategy/playbook endpoints; enabled via `AINDY_ENABLE_LEGACY_SURFACE=true`)
+- `apps/dashboard/routes/dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** ? `/apps/dashboard/overview`
+- `apps/dashboard/routes/health_dashboard_router.py` (router prefix `/dashboard`) **[JWT auth required]** ? `/apps/dashboard/health`
+- `apps/search/routes/seo_routes.py` (router prefix `/seo`) **[JWT auth required]** ? `/apps/seo/analyze`, `/apps/seo/meta`, `/apps/seo/suggest`, etc.
+- `apps/search/routes/research_results_router.py` (router prefix `/research`) **[JWT auth required]** ? `/apps/research/`
+- `apps/authorship/routes/authorship_router.py` (router prefix `/authorship`) **[JWT auth required]** ? `/apps/authorship/reclaim`
+- `apps/rippletrace/routes/rippletrace_router.py` (router prefix `/rippletrace`) **[JWT auth required]** ? `/apps/rippletrace/*`
+- `apps/network_bridge/routes/network_bridge_router.py` (router prefix `/network_bridge`) **[API key required]** ? `/apps/network_bridge/*`
+- `apps/analytics/routes/main_router.py` (router prefix `/compute`) **[JWT auth required]** ? `/apps/compute/calculate_twr`, `/apps/compute/calculate_engagement`, etc. (legacy KPI surface)
+- `apps/rippletrace/routes/legacy_surface_router.py` (no router prefix, env-gated) **[compatibility surface]** ? `/apps/*` (old ripple/strategy/playbook endpoints; enabled via `AINDY_ENABLE_LEGACY_SURFACE=true`)
 
 **Authentication model:**
 
@@ -209,11 +217,11 @@ Trace (`/platform/nodus/trace/*`):
   - `execution.completed` or `execution.failed` as the canonical execution result
 - Required event persistence failures attempt `error.system_event_failure` and then raise fail-closed.
 - Additional route-layer execution coverage:
-  - `auth_router.py`
-  - `analytics_router.py`
-  - `arm_router.py`
-  - `main_router.py`
-  - `memory_router.py`
+  - `AINDY/routes/auth_router.py`
+  - `apps/analytics/routes/analytics_router.py`
+  - `apps/arm/routes/arm_router.py`
+  - `apps/analytics/routes/main_router.py`
+  - `AINDY/routes/memory_router.py`
   now execute through `core/execution_pipeline.py` / `core/execution_helper.py`, which preserves their existing body shapes by default while adding request-scoped `trace_id`, best-effort `SystemEvent` lifecycle emission, and response `X-Trace-ID` headers.
 
 **Freelancing summary (current implementation):**
@@ -299,7 +307,7 @@ Trace (`/platform/nodus/trace/*`):
 Root route registered directly in `AINDY/main.py`:
 - `GET /`
 
-Legacy compatibility routes are registered in `AINDY/routes/legacy_surface_router.py` and include:
+Legacy compatibility routes are registered in `apps/rippletrace/routes/legacy_surface_router.py` and include:
 - `/dashboard`
 - `/top_drop_points`
 - `/analyze_ripple/{drop_point_id}`
@@ -327,6 +335,42 @@ Legacy compatibility routes are registered in `AINDY/routes/legacy_surface_route
 - `/generate_variations/{playbook_id}`
 - `/learning_stats`
 - `/evaluate/{drop_point_id}`
+
+## Legacy Compatibility Surface (Rippletrace)
+
+> **Deprecation status**: These routes are maintained for backward
+> compatibility. No new callers should be added. Migrate to the primary
+> `/apps/rippletrace/*` surface.
+
+| Method | Path | Primary equivalent | Status |
+|---|---|---|---|
+| GET | `/analyze_ripple/{drop_point_id}` | None | unique — no equivalent, do not remove |
+| GET | `/dashboard` | None | unique — no equivalent, do not remove |
+| GET | `/top_drop_points` | None | unique — no equivalent, do not remove |
+| GET | `/ripple_deltas/{drop_point_id}` | None | unique — no equivalent, do not remove |
+| GET | `/emerging_drops` | None | unique — no equivalent, do not remove |
+| GET | `/predict/{drop_point_id}` | `GET /rippletrace/predictions/{drop_point_id}` | deprecated |
+| GET | `/prediction_summary` | `GET /rippletrace/predictions/summary` | deprecated |
+| GET | `/recommend/{drop_point_id}` | `GET /rippletrace/recommendations/{drop_point_id}` | deprecated |
+| GET | `/recommendations_summary` | `GET /rippletrace/recommendations/summary` | deprecated |
+| GET | `/influence_graph` | None | unique — no equivalent, do not remove |
+| GET | `/influence_chain/{drop_point_id}` | None | unique — no equivalent, do not remove |
+| GET | `/causal_graph` | `GET /rippletrace/causal/graph` | deprecated |
+| GET | `/causal_chain/{drop_point_id}` | `GET /rippletrace/causal/chain/{drop_point_id}` | deprecated |
+| GET | `/narrative/{drop_point_id}` | `GET /rippletrace/narrative/{drop_point_id}` | deprecated |
+| GET | `/narrative_summary` | `GET /rippletrace/narrative/summary` | deprecated |
+| GET | `/strategies` | `GET /rippletrace/strategies` and `GET /rippletrace/strategies/build` | deprecated |
+| GET | `/strategy/{strategy_id}` | `GET /rippletrace/strategies/{strategy_id}` | deprecated |
+| GET | `/strategy_match/{drop_point_id}` | `GET /rippletrace/strategies/match/{drop_point_id}` | deprecated |
+| POST | `/build_playbook/{strategy_id}` | None | unique — no equivalent, do not remove |
+| GET | `/playbooks` | `GET /rippletrace/playbooks` | deprecated |
+| GET | `/playbook/{playbook_id}` | `GET /rippletrace/playbooks/{playbook_id}` | deprecated |
+| GET | `/playbook_match/{drop_point_id}` | `GET /rippletrace/playbooks/match/{drop_point_id}` | deprecated |
+| GET | `/generate_content/{playbook_id}` | None | unique — no equivalent, do not remove |
+| POST | `/generate_content_for_drop/{drop_point_id}` | None | unique — no equivalent, do not remove |
+| GET | `/generate_variations/{playbook_id}` | None | unique — no equivalent, do not remove |
+| GET | `/learning_stats` | `GET /rippletrace/learning/stats` | deprecated |
+| POST | `/evaluate/{drop_point_id}` | `POST /rippletrace/learning/evaluate/{drop_point_id}` | deprecated |
 
 ## 2. Per-Route Contract Definition (Current Implementation)
 
@@ -370,7 +414,7 @@ Response: `{ "message": "A.I.N.D.Y. API is running!" }`
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### SEO Routes (`AINDY/routes/seo_routes.py`)
+### SEO Routes (`apps/search/routes/seo_routes.py`)
 `POST /seo/analyze`
 Method: POST
 Request Body: `SEOInput` (`AINDY/services/seo.py`)
@@ -387,7 +431,7 @@ Response: `{ "meta_description": str }`
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Task Routes (`AINDY/routes/task_router.py`, prefix `/tasks`)
+### Task Routes (`apps/tasks/routes/task_router.py`, prefix `/tasks`)
   `POST /tasks/create`
   Method: POST
   Request Body: `TaskCreate` (`AINDY/schemas/task_schemas.py`)
@@ -439,7 +483,7 @@ Errors: Not explicitly defined.
   Status Codes: 200
   Errors: Not explicitly defined.
 
-### Bridge Routes (`AINDY/routes/bridge_router.py`, prefix `/bridge`)
+### Bridge Routes (`apps/bridge/routes/bridge_router.py`, prefix `/bridge`)
   `POST /bridge/nodes`
   Method: POST
   Request Body: `NodeCreateRequest` (inline Pydantic model) with fields:
@@ -485,7 +529,7 @@ Persistence: Writes to `bridge_user_events` with `user_name`, `origin`, `raw_tim
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Authorship Routes (`AINDY/routes/authorship_router.py`, prefix `/authorship`)
+### Authorship Routes (`apps/authorship/routes/authorship_router.py`, prefix `/authorship`)
 `POST /authorship/reclaim`
 Method: POST
 Request Body: None (parameters are plain function arguments)
@@ -494,7 +538,7 @@ Response: Output of `domain.authorship_services.reclaim_authorship` (schema not 
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### RippleTrace Routes (`AINDY/routes/rippletrace_router.py`, prefix `/rippletrace`)
+### RippleTrace Routes (`apps/rippletrace/routes/rippletrace_router.py`, prefix `/rippletrace`)
 `POST /rippletrace/drop_point`
 Method: POST
 Request Body: `DropPoint` (inline Pydantic model)
@@ -551,7 +595,7 @@ Response: `{ "status": "logged", "event": <event_dict> }`
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Network Bridge Routes (`AINDY/routes/network_bridge_router.py`, prefix `/network_bridge`)
+### Network Bridge Routes (`apps/network_bridge/routes/network_bridge_router.py`, prefix `/network_bridge`)
 `POST /network_bridge/connect`
 Method: POST
 Request Body: `NetworkHandshake`
@@ -585,7 +629,7 @@ Response: `{ "database_schema": { "table": [ {"name": str, "type": str, "nullabl
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Research Routes (`AINDY/routes/research_results_router.py`, prefix `/research`)
+### Research Routes (`apps/search/routes/research_results_router.py`, prefix `/research`)
 `POST /research/`
 Method: POST
 Request Body: `ResearchResultCreate` (`AINDY/schemas/research_results_schema.py`)
@@ -610,7 +654,7 @@ Response: `ResearchResultResponse` (includes `source`, `data`, and top-level `se
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Main Calculation & Masterplan Routes (`AINDY/routes/main_router.py`, no prefix)
+### Main Calculation & Masterplan Routes (`apps/analytics/routes/main_router.py`, no prefix)
 Route execution note:
 - These routes now enter the route execution pipeline and preserve their existing JSON/ORM body shapes rather than returning the generic execution envelope.
 
@@ -782,7 +826,7 @@ Response: ORM `MasterPlan` object.
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Freelance Routes (`AINDY/routes/freelance_router.py`, prefix `/freelance`)
+### Freelance Routes (`apps/freelance/routes/freelance_router.py`, prefix `/freelance`)
 `POST /freelance/order`
 Method: POST
 Request Body: `FreelanceOrderCreate`
@@ -835,7 +879,7 @@ Query Params: None
 Response: `RevenueMetricsResponse`
 Status Codes: 200, 500 on errors.
 
-### ARM Routes (`AINDY/routes/arm_router.py`, prefix `/arm`) — Phase 1 (2026-03-17)
+### ARM Routes (`apps/arm/routes/arm_router.py`, prefix `/arm`) — Phase 1 (2026-03-17)
 Auth: JWT Bearer required on all endpoints (router-level dependency).
 Route execution note:
 - ARM routes now enter the route execution pipeline. Sync responses preserve existing payload shape; queued async-heavy responses still return the existing `202` queued body unchanged.
@@ -1057,7 +1101,7 @@ Note: Advisory only — never auto-applies. User must call PUT /arm/config with
   combined_suggested_config or individual changes to apply. config_change keys are
   validated against DEFAULT_CONFIG allowlist in ConfigManager.update().
 
-### Leadgen Routes (`AINDY/routes/leadgen_router.py`, prefix `/leadgen`)
+### Leadgen Routes (`apps/search/routes/leadgen_router.py`, prefix `/leadgen`)
 `POST /leadgen/`
 Method: POST
 Request Body: None
@@ -1075,7 +1119,7 @@ Auth: JWT required; results filtered by `current_user["sub"]`.
 Status Codes: 200
 Errors: Not explicitly defined.
 
-### Dashboard Routes (`AINDY/routes/dashboard_router.py`, prefix `/dashboard`)
+### Dashboard Routes (`apps/dashboard/routes/dashboard_router.py`, prefix `/dashboard`)
 `GET /dashboard/overview`
 Method: GET
 Request Body: None
@@ -1109,7 +1153,7 @@ Auth: API key required
 Response: detailed component status object
 Status Codes: 200
 
-### Health Dashboard Routes (`AINDY/routes/health_dashboard_router.py`, prefix `/dashboard`)
+### Health Dashboard Routes (`apps/dashboard/routes/health_dashboard_router.py`, prefix `/dashboard`)
 `GET /dashboard/health`
 Method: GET
 Request Body: None
@@ -1119,7 +1163,7 @@ Status Codes: 200
 Auth: JWT required
 Errors: Not explicitly defined.
 
-### Social Routes (`AINDY/routes/social_router.py`, prefix `/social`)
+### Social Routes (`apps/social/routes/social_router.py`, prefix `/social`)
 `POST /social/profile`
 Method: POST
 Request Body: `SocialProfile` (`AINDY/db/models/social_models.py`)
@@ -1165,7 +1209,7 @@ Query Params: None
 Response: success envelope with analytics summary payload in `data`
 Status Codes: 200
 
-### Analytics Routes (`AINDY/routes/analytics_router.py`, prefix `/analytics`)
+### Analytics Routes (`apps/analytics/routes/analytics_router.py`, prefix `/analytics`)
 `POST /analytics/linkedin/manual`
 Method: POST
 Request Body: `LinkedInRawInput` (`AINDY/schemas/analytics.py`)
@@ -1192,7 +1236,7 @@ Status Codes: 200
 Errors: Not explicitly defined.
 Notes: route now enters the route execution pipeline and preserves the existing summary payload shape.
 
-### Genesis Routes (`AINDY/routes/genesis_router.py`, prefix `/genesis`) **[JWT auth required]** — Genesis Blocks 1-3 (2026-03-17)
+### Genesis Routes (`apps/masterplan/routes/genesis_router.py`, prefix `/genesis`) **[JWT auth required]** — Genesis Blocks 1-3 (2026-03-17)
 
 `POST /genesis/session`
 Method: POST
@@ -1244,7 +1288,7 @@ Response: `{ "status": "activated" }`
 Status Codes: 200, 404 if plan not found or not owned by user.
 Notes: Deactivates all other plans for the user first (single active plan invariant).
 
-### MasterPlan Routes (`AINDY/routes/masterplan_router.py`, prefix `/masterplans`) **[JWT auth required]** — Genesis Block 1 (2026-03-17)
+### MasterPlan Routes (`apps/masterplan/routes/masterplan_router.py`, prefix `/masterplans`) **[JWT auth required]** — Genesis Block 1 (2026-03-17)
 
 `GET /masterplans/`
 Method: GET
@@ -1272,7 +1316,7 @@ Response: `{ "status": "activated", "plan_id": int }`
 Status Codes: 200, 404 if not found or not owned.
 Notes: Deactivates all other user plans first.
 
-### Identity Routes (`AINDY/routes/identity_router.py`, prefix `/identity`) **[JWT auth required]** — Memory Bridge v5 Phase 2 (2026-03-19)
+### Identity Routes (`apps/identity/routes/identity_router.py`, prefix `/identity`) **[JWT auth required]** — Memory Bridge v5 Phase 2 (2026-03-19)
 
 `GET /identity/boot`
 Method: GET
@@ -1436,33 +1480,33 @@ Status Codes: 200, 401.
 ## Appendix: Route-to-Schema Map
 This appendix lists request schemas where they are explicitly defined.
 
-- `AINDY/routes/analytics_router.py` ? `AINDY/schemas/analytics.py` (`LinkedInRawInput`)
-- `AINDY/routes/arm_router.py` ? inline Pydantic models in `AINDY/routes/arm_router.py` (`AnalyzeRequest`, `GenerateRequest`, `ConfigUpdateRequest`) — updated Phase 1 (2026-03-17)
-- `AINDY/routes/bridge_router.py` ? inline Pydantic models in `AINDY/routes/bridge_router.py` (`NodeCreateRequest`, `LinkCreateRequest`, `TracePermission`)
-- `AINDY/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderCreate`, `FeedbackCreate`)
-- `AINDY/routes/genesis_router.py` ? untyped `dict` payloads (no Pydantic models defined)
-- `AINDY/routes/leadgen_router.py` ? query parameter only (`query`); no Pydantic body model
-- `AINDY/routes/main_router.py` ? `AINDY/schemas/analytics_inputs.py` (`TaskInput`, `EngagementInput`, etc.), `AINDY/schemas/batch.py` (`BatchInput`), `AINDY/schemas/masterplan.py` (`MasterPlanInput`)
-- `AINDY/routes/research_results_router.py` ? `AINDY/schemas/research_results_schema.py` (`ResearchResultCreate`)
-- `AINDY/routes/seo_routes.py` ? `AINDY/services/seo.py` (`SEOInput`, `MetaInput`)
-- `AINDY/routes/social_router.py` ? `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
-- `AINDY/routes/task_router.py` ? `AINDY/schemas/task_schemas.py` (`TaskCreate`, `TaskAction`)
+- `apps/analytics/routes/analytics_router.py` ? `AINDY/schemas/analytics.py` (`LinkedInRawInput`)
+- `apps/arm/routes/arm_router.py` ? inline Pydantic models in `apps/arm/routes/arm_router.py` (`AnalyzeRequest`, `GenerateRequest`, `ConfigUpdateRequest`) — updated Phase 1 (2026-03-17)
+- `apps/bridge/routes/bridge_router.py` ? inline Pydantic models in `apps/bridge/routes/bridge_router.py` (`NodeCreateRequest`, `LinkCreateRequest`, `TracePermission`)
+- `apps/freelance/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderCreate`, `FeedbackCreate`)
+- `apps/masterplan/routes/genesis_router.py` ? untyped `dict` payloads (no Pydantic models defined)
+- `apps/search/routes/leadgen_router.py` ? query parameter only (`query`); no Pydantic body model
+- `apps/analytics/routes/main_router.py` ? `AINDY/schemas/analytics_inputs.py` (`TaskInput`, `EngagementInput`, etc.), `AINDY/schemas/batch.py` (`BatchInput`), `AINDY/schemas/masterplan.py` (`MasterPlanInput`)
+- `apps/search/routes/research_results_router.py` ? `AINDY/schemas/research_results_schema.py` (`ResearchResultCreate`)
+- `apps/search/routes/seo_routes.py` ? `AINDY/services/seo.py` (`SEOInput`, `MetaInput`)
+- `apps/social/routes/social_router.py` ? `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
+- `apps/tasks/routes/task_router.py` ? `AINDY/schemas/task_schemas.py` (`TaskCreate`, `TaskAction`)
 
 Response schema sources (routes with `response_model`):
-- `AINDY/routes/bridge_router.py` ? inline models (`NodeResponse`, `NodeSearchResponse`, `LinkResponse`)
-- `AINDY/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderResponse`, `FeedbackResponse`, `RevenueMetricsResponse`)
-- `AINDY/routes/research_results_router.py` ? `AINDY/schemas/research_results_schema.py` (`ResearchResultResponse`)
-- `AINDY/routes/social_router.py` ? `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
+- `apps/bridge/routes/bridge_router.py` ? inline models (`NodeResponse`, `NodeSearchResponse`, `LinkResponse`)
+- `apps/freelance/routes/freelance_router.py` ? `AINDY/schemas/freelance.py` (`FreelanceOrderResponse`, `FeedbackResponse`, `RevenueMetricsResponse`)
+- `apps/search/routes/research_results_router.py` ? `AINDY/schemas/research_results_schema.py` (`ResearchResultResponse`)
+- `apps/social/routes/social_router.py` ? `AINDY/db/models/social_models.py` (`SocialProfile`, `SocialPost`, `FeedItem`)
 
 Routes returning ORM objects without `response_model` declarations:
-- `AINDY/routes/analytics_router.py`:
+- `apps/analytics/routes/analytics_router.py`:
 - `POST /analytics/linkedin/manual` returns `CanonicalMetricDB`
 - `GET /analytics/masterplan/{masterplan_id}` returns list of `CanonicalMetricDB`
-- `AINDY/routes/main_router.py`:
+- `apps/analytics/routes/main_router.py`:
 - `GET /results` returns list of `CalculationResult`
 - `POST /create_masterplan` returns `MasterPlan` (both duplicate handlers)
 - `GET /masterplans` returns list of `MasterPlan`
-- `AINDY/routes/rippletrace_router.py`:
+- `apps/rippletrace/routes/rippletrace_router.py`:
 - `POST /rippletrace/drop_point` returns `DropPointDB`
 - `POST /rippletrace/ping` returns `PingDB`
 - `GET /rippletrace/ripples/{drop_point_id}` returns list of `PingDB`
