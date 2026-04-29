@@ -31,6 +31,7 @@ Test-to-task mapping:
     V1-VAL-014  test_domain_routes_mounted_explicitly      V1-REFACT-013
     V1-VAL-015  test_cross_app_deps_declared               V1-ARCH-001
     V1-VAL-016  test_no_bare_json_response_in_routes       V1-ARCH-002
+    V1-VAL-017  test_db_unavailable_returns_503            V1-STAB-009
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
@@ -737,4 +738,45 @@ def test_no_bare_json_response_in_routes():
     assert not violations, (
         "Bare JSONResponse returns detected in route modules:\n"
         + "\n".join(sorted(violations))
+    )
+
+
+def test_db_unavailable_returns_503(client, auth_headers):
+    """
+    V1-VAL-017 | Task: V1-STAB-009
+    When PostgreSQL raises OperationalError, routes must return 503 with
+    error=db_unavailable and a Retry-After header. A 500 is not acceptable
+    because callers cannot distinguish a bug from a transient DB outage.
+    """
+    from sqlalchemy.exc import OperationalError as SAOperationalError
+
+    from apps.agent.routes.agent_router import get_db
+
+    def broken_get_db():
+        raise SAOperationalError("connection refused", None, None)
+        yield
+
+    client.app.dependency_overrides[get_db] = broken_get_db
+    try:
+        response = client.get("/apps/agent/runs", headers=auth_headers)
+    finally:
+        client.app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 503, (
+        f"Expected 503 when DB is unavailable, got {response.status_code}. "
+        "V1-STAB-009: DB outages must return 503 so callers can retry safely."
+    )
+    assert "Retry-After" in response.headers, (
+        "DB unavailability response must include Retry-After header."
+    )
+    try:
+        body = response.json()
+    except Exception:
+        pytest.fail("DB unavailability response must be valid JSON")
+    assert body.get("error") == "db_unavailable", (
+        f"Expected error='db_unavailable', got error={body.get('error')!r}. "
+        "Structured error codes let clients identify the failure type."
+    )
+    assert body.get("retryable") is True, (
+        "DB unavailability must be flagged as retryable."
     )
