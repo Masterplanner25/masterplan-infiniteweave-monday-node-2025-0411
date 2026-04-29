@@ -340,18 +340,12 @@ def get_trust_settings(
 @router.get("/suggestions")
 @limiter.limit("60/minute")
 def get_tool_suggestions(
-    request: Request = None,
+    request: Request,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return up to 3 KPI-driven tool suggestions for the current user."""
     user_id = _current_user_id(current_user)
-    if request is None:
-        from AINDY.agents.agent_tools import suggest_tools
-        from apps.analytics.public import get_user_kpi_snapshot
-
-        snapshot = get_user_kpi_snapshot(user_id, db)
-        return suggest_tools(snapshot, user_id=user_id, db=db)
     return _execute_agent(request, "agent.suggestions.get", lambda _ctx: _run_flow_agent("agent_suggestions_get", {}, db, user_id), db=db, user_id=str(user_id))
 
 

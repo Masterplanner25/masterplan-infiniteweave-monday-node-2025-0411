@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-APP_DEPENDS_ON: list[str] = ["analytics"]
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
+    _register_models()
     _register_router()
     _register_route_prefixes()
     _register_async_jobs()
@@ -16,6 +17,16 @@ def register() -> None:
     _register_flows()
     _register_flow_results()
     _register_health_check()
+
+
+def _register_models() -> None:
+    from AINDY.db.model_registry import register_models
+
+    def _import_models() -> None:
+        import apps.agent.models.agent_run  # noqa: F401
+        import apps.agent.models.agent_event  # noqa: F401
+
+    register_models(_import_models)
 
 
 def _register_router() -> None:

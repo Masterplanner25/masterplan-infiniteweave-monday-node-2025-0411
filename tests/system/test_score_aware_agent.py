@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from starlette.requests import Request
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -533,35 +534,29 @@ class TestSuggestionsEndpoint:
         assert "GET" in suggestion_route.methods
 
     def test_suggestions_endpoint_returns_list(self):
-        """With a mocked KPI snapshot, endpoint returns a list."""
+        """Route returns the execution helper result."""
         from apps.agent.routes.agent_router import get_tool_suggestions
+        request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
+        expected = []
 
-        with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=None):
-            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+        with patch("apps.agent.routes.agent_router._execute_agent", return_value=expected) as execute_agent:
+            result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert isinstance(result, list)
+        execute_agent.assert_called_once()
 
     def test_suggestions_endpoint_returns_suggestions_when_scores_low(self):
         """Low focus score → endpoint returns at least one suggestion."""
         from apps.agent.routes.agent_router import get_tool_suggestions
+        request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
-        snap = {
-            "master_score": 40.0,
-            "focus_quality": 25.0,
-            "execution_speed": 60.0,
-            "ai_productivity_boost": 60.0,
-            "decision_efficiency": 60.0,
-            "masterplan_progress": 60.0,
-            "confidence": "low",
-        }
+        expected = [{"tool": "memory.recall", "reason": "low focus", "suggested_goal": "Recall context"}]
 
-        with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=snap):
-            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+        with patch("apps.agent.routes.agent_router._execute_agent", return_value=expected):
+            result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert len(result) >= 1
         assert result[0]["tool"] == "memory.recall"
@@ -569,12 +564,12 @@ class TestSuggestionsEndpoint:
     def test_suggestions_endpoint_empty_when_no_scores(self):
         """User with no score history → empty list."""
         from apps.agent.routes.agent_router import get_tool_suggestions
+        request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
-        with patch("apps.agent.routes.agent_router.get_current_user", return_value=mock_user), \
-             patch("apps.analytics.public.get_user_kpi_snapshot", return_value=None):
-            result = get_tool_suggestions(current_user=mock_user, db=mock_db)
+        with patch("apps.agent.routes.agent_router._execute_agent", return_value=[]):
+            result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert result == []
 

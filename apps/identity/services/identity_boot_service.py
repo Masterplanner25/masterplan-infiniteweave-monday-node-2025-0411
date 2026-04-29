@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
-from AINDY.db.models.agent_run import AgentRun
+from apps.agent.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.platform_layer.user_ids import parse_user_id
