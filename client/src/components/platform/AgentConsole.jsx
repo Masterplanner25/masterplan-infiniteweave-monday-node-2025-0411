@@ -17,6 +17,7 @@ import { useSystem } from "../../context/SystemContext";
 import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 import { LoadingPanel } from "../shared/LoadingPanel";
 import { EmptyState } from "../shared/EmptyState";
+import { InlineErrorBoundary } from "../shared/ErrorBoundary";
 import { Toast } from "../shared/Toast";
 import { useToast } from "../../utils/useToast";
 
@@ -768,14 +769,17 @@ export default function AgentConsole() {
               </div>
 
               {activeDetailTab === "steps" &&
+            <InlineErrorBoundary name="Agent Steps">
             <PlanPreview
               run={selectedRun}
               steps={selectedSteps}
               loading={stepsLoading} />
+                </InlineErrorBoundary>
 
             }
 
               {activeDetailTab === "timeline" &&
+            <InlineErrorBoundary name="Agent Timeline">
             <div>
                   {runEvents.length === 0 ?
               <p style={{ color: "#6b7280", fontStyle: "italic", fontSize: "12px" }}>
@@ -832,6 +836,7 @@ export default function AgentConsole() {
                     </div>
               }
                 </div>
+                </InlineErrorBoundary>
             }
             </div> :
 

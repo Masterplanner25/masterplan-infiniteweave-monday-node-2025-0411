@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getDashboardOverview } from "../../api/legacy.js";
+import { getDashboardOverview } from "../../api/platform.js";
 import { getMyScore, recalculateScore, getScoreHistory } from "../../api/product.js";
 import { useAuth } from "../../context/AuthContext";
 import { useSystem } from "../../context/SystemContext";

@@ -37,6 +37,8 @@ export default class ErrorBoundary extends Component {
         route: typeof window !== "undefined" ? window.location.pathname : "",
         user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         error_type: "boundary",
+        layer: this.props.layer || "unknown",
+        domain: this.props.domain || null,
         user_id: userId,
         trace_id: null,
       });
@@ -68,9 +70,11 @@ export default class ErrorBoundary extends Component {
   }
 }
 
-export function RouteErrorBoundary({ children, name }) {
+export function RouteErrorBoundary({ children, name, layer, domain }) {
   return (
     <ErrorBoundary
+      layer={layer}
+      domain={domain}
       fallback={
         <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-zinc-400">
           <span>{name || "This page"} encountered an error.</span>
@@ -86,6 +90,24 @@ export function RouteErrorBoundary({ children, name }) {
       <Suspense fallback={<RouteSpinner />}>
         {children}
       </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+export function InlineErrorBoundary({ children, name }) {
+  return (
+    <ErrorBoundary
+      layer="component"
+      domain={name || "unknown"}
+      fallback={
+        <div className="rounded-xl border border-zinc-800/20 bg-zinc-950/20 p-4 text-center">
+          <p className="text-xs text-zinc-500">
+            {name ? `${name} failed to load.` : "This section failed to load."}
+          </p>
+        </div>
+      }
+    >
+      {children}
     </ErrorBoundary>
   );
 }

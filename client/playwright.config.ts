@@ -46,7 +46,12 @@ export default defineConfig({
     },
     {
       name: "platform",
-      testMatch: [/e2e\/platform-access\.spec\.ts/, /e2e\/platform-panels\.spec\.ts/],
+      testMatch: [
+        /e2e\/platform-access\.spec\.ts/,
+        /e2e\/platform-panels\.spec\.ts/,
+        /e2e\/agent-flow\.spec\.ts/,
+        /e2e\/analytics-flow\.spec\.ts/,
+      ],
       use: {
         ...devices["Desktop Chrome"],
         storageState: "e2e/.auth/user.json",
