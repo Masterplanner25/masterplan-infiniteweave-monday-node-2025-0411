@@ -20,6 +20,7 @@ These paths are stable infrastructure. Never add an app or platform prefix here.
 
 - `AINDY/routes/health_router.py` (no router prefix) **[public]** ? `/health`, `/health/`, `/ready`, `/health/details`
 - `AINDY/routes/auth_router.py` (router prefix `/auth`) **[public — provides tokens]** ? `/auth/register`, `/auth/login`
+- `AINDY/routes/version_router.py` (router prefix `/api`) **[public]** ? `/api/version`
 
 ### Platform layer (mounted at `/platform`)
 

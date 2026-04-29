@@ -32,6 +32,7 @@ Test-to-task mapping:
     V1-VAL-015  test_cross_app_deps_declared               V1-ARCH-001
     V1-VAL-016  test_no_bare_json_response_in_routes       V1-ARCH-002
     V1-VAL-017  test_db_unavailable_returns_503            V1-STAB-009
+    V1-VAL-018  test_all_routers_documented_in_api_contracts V1-ARCH-003
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
@@ -779,4 +780,54 @@ def test_db_unavailable_returns_503(client, auth_headers):
     )
     assert body.get("retryable") is True, (
         "DB unavailability must be flagged as retryable."
+    )
+
+
+def test_all_routers_documented_in_api_contracts():
+    """
+    V1-VAL-018 | Task: V1-ARCH-003
+    Every router file registered in app bootstraps and AINDY/routes/ must
+    appear by name in docs/platform/interfaces/API_CONTRACTS.md.
+    A router file absent from the doc is invisible API surface.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    contracts_path = repo_root / "docs" / "platform" / "interfaces" / "API_CONTRACTS.md"
+    assert contracts_path.exists(), f"API_CONTRACTS.md not found at {contracts_path}"
+    contracts_text = contracts_path.read_text(encoding="utf-8")
+
+    undocumented: list[str] = []
+
+    apps_dir = repo_root / "apps"
+    if apps_dir.exists():
+        for route_file in sorted(apps_dir.rglob("*.py")):
+            if "__pycache__" in route_file.parts:
+                continue
+            if route_file.parent.name not in ("routes",):
+                continue
+            if not (route_file.stem.endswith("_router") or route_file.stem.endswith("_routes")):
+                continue
+            rel = route_file.relative_to(repo_root).as_posix()
+            if rel not in contracts_text:
+                undocumented.append(rel)
+
+    aindy_routes_dir = repo_root / "AINDY" / "routes"
+    if aindy_routes_dir.exists():
+        for route_file in sorted(aindy_routes_dir.rglob("*.py")):
+            if "__pycache__" in route_file.parts:
+                continue
+            if route_file.name in ("__init__.py",):
+                continue
+            if not (route_file.stem.endswith("_router") or route_file.stem.endswith("_routes")):
+                continue
+            rel = route_file.relative_to(repo_root).as_posix()
+            if rel not in contracts_text:
+                undocumented.append(rel)
+
+    assert not undocumented, (
+        f"{len(undocumented)} router file(s) are not mentioned in "
+        f"docs/platform/interfaces/API_CONTRACTS.md:\n"
+        + "\n".join(f"  - {f}" for f in sorted(undocumented))
+        + "\n\nAdd an entry for each file to API_CONTRACTS.md under the "
+        "appropriate mount group (root, /platform, or /apps).\n"
+        "V1-ARCH-003: every registered router must appear in the API contracts doc."
     )
