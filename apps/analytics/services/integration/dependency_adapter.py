@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy import case
 
+from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 from AINDY.memory.memory_scoring_service import get_relevant_memories
 from AINDY.platform_layer.registry import get_symbol
 from AINDY.platform_layer.system_state_service import compute_current_state
@@ -35,6 +36,16 @@ def _wrap_records(rows: list[dict[str, Any]] | None) -> list[RecordDict]:
     return [_wrap_record(row) for row in (rows or []) if row is not None]
 
 
+def _dispatch_syscall(name: str, payload: dict[str, Any], *, user_id: str | None, capability: str, db=None) -> dict[str, Any]:
+    ctx = make_syscall_ctx_from_tool(str(user_id or ""), capabilities=[capability])
+    if db is not None:
+        ctx.metadata["_db"] = db
+    result = get_dispatcher().dispatch(name, payload, ctx)
+    if result.get("status") != "success":
+        return {}
+    return result.get("data") or {}
+
+
 def fetch_recent_memory(user_id: str, db, *, context: str = "infinity_loop") -> list[dict]:
     from apps.identity.public import get_recent_memory as _get_recent_memory
 
@@ -52,9 +63,13 @@ def fetch_task_graph_context(db, user_id: str) -> dict[str, Any]:
 
 
 def fetch_social_performance_signals(*, user_id: str) -> list[dict[str, Any]]:
-    from apps.social.public import get_social_performance_signals
-
-    return list(get_social_performance_signals(user_id=str(user_id)) or [])
+    result = _dispatch_syscall(
+        "sys.v1.social.get_performance_signals",
+        {"user_id": str(user_id), "limit": 3},
+        user_id=str(user_id),
+        capability="social.read",
+    )
+    return list(result.get("signals") or [])
 
 
 def fetch_memory_signals(*, user_id: str, trigger_event: str, db) -> list[dict[str, Any]]:
@@ -83,9 +98,14 @@ def get_latest_loop_adjustment(*, user_id: str, db):
     if owner_user_id is None:
         return None
 
-    from apps.automation.public import get_loop_adjustments
-
-    rows = get_loop_adjustments(owner_user_id, db, limit=1)
+    result = _dispatch_syscall(
+        "sys.v1.automation.list_loop_adjustments",
+        {"user_id": str(owner_user_id), "limit": 1},
+        user_id=str(owner_user_id),
+        capability="automation.read",
+        db=db,
+    )
+    rows = result.get("adjustments") or []
     return _wrap_record(rows[0] if rows else None)
 
 
@@ -94,18 +114,19 @@ def list_strategy_accuracy_adjustments(*, user_id: str, db, limit: int = 20) -> 
     if owner_user_id is None:
         return []
 
-    from apps.automation.public import get_loop_adjustments
-
-    return _wrap_records(
-        get_loop_adjustments(
-            owner_user_id,
-            db,
-            limit=limit,
-            with_prediction_accuracy=True,
-            order_by="evaluated_desc",
-        )
-        or []
+    result = _dispatch_syscall(
+        "sys.v1.automation.list_loop_adjustments",
+        {
+            "user_id": str(owner_user_id),
+            "limit": limit,
+            "with_prediction_accuracy": True,
+            "order_by": "evaluated_desc",
+        },
+        user_id=str(owner_user_id),
+        capability="automation.read",
+        db=db,
     )
+    return _wrap_records(result.get("adjustments") or [])
 
 
 def get_pending_loop_adjustment(*, user_id: str, db, managed_transactions: bool):
@@ -113,16 +134,20 @@ def get_pending_loop_adjustment(*, user_id: str, db, managed_transactions: bool)
     if owner_user_id is None:
         return None
 
-    from apps.automation.public import get_loop_adjustments
-
-    rows = get_loop_adjustments(
-        owner_user_id,
-        db,
-        limit=1,
-        unevaluated_only=True,
-        order_by="created_desc",
-        for_update=managed_transactions,
+    result = _dispatch_syscall(
+        "sys.v1.automation.list_loop_adjustments",
+        {
+            "user_id": str(owner_user_id),
+            "limit": 1,
+            "unevaluated_only": True,
+            "order_by": "created_desc",
+            "for_update": managed_transactions,
+        },
+        user_id=str(owner_user_id),
+        capability="automation.read",
+        db=db,
     )
+    rows = result.get("adjustments") or []
     return _wrap_record(rows[0] if rows else None)
 
 
@@ -131,9 +156,14 @@ def list_recent_feedback_rows(*, user_id: str, db, limit: int = 5) -> list[Any]:
     if owner_user_id is None:
         return []
 
-    from apps.automation.public import get_user_feedback
-
-    return _wrap_records(get_user_feedback(owner_user_id, db, limit=limit) or [])
+    result = _dispatch_syscall(
+        "sys.v1.automation.list_feedback",
+        {"user_id": str(owner_user_id), "limit": limit},
+        user_id=str(owner_user_id),
+        capability="automation.read",
+        db=db,
+    )
+    return _wrap_records(result.get("feedback") or [])
 
 
 def fetch_next_ready_task(*, db, user_id: str) -> dict[str, Any] | None:
@@ -180,24 +210,38 @@ def list_incomplete_tasks(*, user_id: str, db, limit: int | None = None) -> list
 
 
 def create_loop_adjustment(*, db, **kwargs):
-    from apps.automation.public import create_loop_adjustment as _create_loop_adjustment
-
-    return _wrap_record(dict(_create_loop_adjustment(db=db, **kwargs) or {}))
+    result = _dispatch_syscall(
+        "sys.v1.automation.create_loop_adjustment",
+        kwargs,
+        user_id=str(kwargs.get("user_id") or ""),
+        capability="automation.write",
+        db=db,
+    )
+    return _wrap_record(dict(result.get("adjustment") or {}))
 
 
 def get_latest_loop_adjustment_for_update(*, persisted_user_id, db):
-    from apps.automation.public import get_loop_adjustments
-
-    rows = get_loop_adjustments(
-        persisted_user_id,
-        db,
-        limit=1,
-        for_update=True,
+    result = _dispatch_syscall(
+        "sys.v1.automation.list_loop_adjustments",
+        {
+            "user_id": str(persisted_user_id),
+            "limit": 1,
+            "for_update": True,
+        },
+        user_id=str(persisted_user_id),
+        capability="automation.read",
+        db=db,
     )
+    rows = result.get("adjustments") or []
     return _wrap_record(rows[0] if rows else None)
 
 
 def update_loop_adjustment(*, adjustment_id, db, **kwargs):
-    from apps.automation.public import update_loop_adjustment as _update_loop_adjustment
-
-    return _wrap_record(_update_loop_adjustment(adjustment_id=adjustment_id, db=db, **kwargs))
+    result = _dispatch_syscall(
+        "sys.v1.automation.update_loop_adjustment",
+        {"adjustment_id": adjustment_id, **kwargs},
+        user_id=str(kwargs.get("user_id") or ""),
+        capability="automation.write",
+        db=db,
+    )
+    return _wrap_record(result.get("adjustment"))

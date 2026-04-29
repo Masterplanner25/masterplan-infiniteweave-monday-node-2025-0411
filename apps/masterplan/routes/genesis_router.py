@@ -142,7 +142,11 @@ def _execute_genesis(request: Request, route_name: str, handler, *, db: Session,
     if not result.success:
         detail = result.metadata.get("detail") or result.error or "Execution failed"
         if isinstance(detail, dict) and detail.get("error") == "ai_provider_unavailable":
-            return JSONResponse(status_code=503, content=detail, headers={"Retry-After": "60"})
+            raise HTTPException(
+                status_code=503,
+                detail=detail,
+                headers={"Retry-After": "60"},
+            )
         raise HTTPException(
             status_code=int(result.metadata.get("status_code", 500)),
             detail=detail,

@@ -6,7 +6,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
-from apps.agent.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.platform_layer.user_ids import parse_user_id
@@ -58,6 +57,8 @@ def _count_user_memory(user_id: str | UUID, db: Session) -> int:
 
 
 def _count_user_agent_runs(user_id: str | UUID, db: Session) -> int:
+    from apps.agent.models.agent_run import AgentRun
+
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     if normalized_user_id is None:
         return 0
@@ -89,6 +90,7 @@ def get_recent_agent_runs(
     limit: int = _BOOT_RUN_LIMIT,
 ) -> list[dict[str, Any]]:
     from AINDY.agents.agent_runtime import run_to_dict
+    from apps.agent.models.agent_run import AgentRun
 
     normalized_user_id = parse_user_id(user_id) if user_id is not None else None
     rows = (

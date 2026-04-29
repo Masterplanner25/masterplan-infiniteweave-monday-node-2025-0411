@@ -29,12 +29,15 @@ Test-to-task mapping:
     V1-VAL-012  test_task_operations_emit_system_event     V1-CONT-003
     V1-VAL-013  test_no_stack_traces_in_responses          V1-STAB-008
     V1-VAL-014  test_domain_routes_mounted_explicitly      V1-REFACT-013
+    V1-VAL-015  test_cross_app_deps_declared               V1-ARCH-001
+    V1-VAL-016  test_no_bare_json_response_in_routes       V1-ARCH-002
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
 """
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
@@ -577,4 +580,161 @@ def test_domain_routes_mounted_explicitly_without_flag(client):
 
     assert exposed_domain_routes, (
         "Domain app routes should be explicitly mounted."
+    )
+
+
+def test_cross_app_deps_declared():
+    """
+    V1-VAL-015 | Task: V1-ARCH-001
+    Every deferred cross-app import in apps/ must be declared in the importing
+    app's APP_DEPENDS_ON, and module-level cross-app imports are forbidden
+    outside apps/bootstrap.py.
+    """
+    root = Path(__file__).resolve().parents[2]
+    apps_dir = root / "apps"
+
+    def _read_app_depends_on(app_name: str) -> list[str]:
+        bootstrap_path = apps_dir / app_name / "bootstrap.py"
+        tree = ast.parse(bootstrap_path.read_text(encoding="utf-8", errors="ignore"))
+        for node in tree.body:
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if getattr(target, "id", None) == "APP_DEPENDS_ON":
+                        return list(ast.literal_eval(node.value) or [])
+            elif isinstance(node, ast.AnnAssign):
+                if getattr(node.target, "id", None) == "APP_DEPENDS_ON":
+                    return list(ast.literal_eval(node.value) or [])
+        return []
+
+    dependency_failures: list[str] = []
+    module_level_failures: list[str] = []
+    deferred_cross_apps: dict[str, set[str]] = {}
+
+    for path in apps_dir.rglob("*.py"):
+        if "__pycache__" in path.parts:
+            continue
+        if path == apps_dir / "bootstrap.py":
+            continue
+
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:
+            continue
+
+        try:
+            relative_to_apps = path.relative_to(apps_dir)
+        except ValueError:
+            continue
+        if len(relative_to_apps.parts) < 2:
+            continue
+
+        owning_app = relative_to_apps.parts[0]
+        rel_display = path.relative_to(root).as_posix()
+
+        all_imports = [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and isinstance(node.module, str)
+            and node.module.startswith("apps.")
+        ]
+        module_level_ids = {
+            id(node)
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom)
+            and isinstance(node.module, str)
+            and node.module.startswith("apps.")
+        }
+
+        per_file_deferred: list[tuple[str, ast.ImportFrom]] = []
+        for node in all_imports:
+            parts = node.module.split(".")
+            if len(parts) < 2:
+                continue
+            imported_app = parts[1]
+            if imported_app == owning_app:
+                continue
+            if id(node) in module_level_ids:
+                module_level_failures.append(
+                    f"{rel_display}:{node.lineno} imports from '{imported_app}' at module level"
+                )
+            else:
+                per_file_deferred.append((imported_app, node))
+                deferred_cross_apps.setdefault(owning_app, set()).add(imported_app)
+
+        declared = set(_read_app_depends_on(owning_app))
+        for imported_app, node in per_file_deferred:
+            if imported_app not in declared:
+                dependency_failures.append(
+                    f"{rel_display}:{node.lineno} imports from '{imported_app}' "
+                    f"but apps/{owning_app}/bootstrap.py APP_DEPENDS_ON does not declare '{imported_app}'"
+                )
+
+    assert not module_level_failures, (
+        "Module-level cross-app imports detected:\n"
+        + "\n".join(sorted(module_level_failures))
+    )
+    assert not dependency_failures, (
+        "Undeclared deferred cross-app imports detected:\n"
+        + "\n".join(sorted(dependency_failures))
+    )
+
+
+def test_no_bare_json_response_in_routes():
+    """
+    V1-VAL-016 | Task: V1-ARCH-002
+    Route modules must not return bare JSONResponse objects outside the
+    accepted _http_status and _idempotency dispatch patterns.
+    """
+    root = Path(__file__).resolve().parents[2]
+    routes_dirs = list((root / "apps").glob("*/routes"))
+    violations: list[str] = []
+
+    for routes_dir in routes_dirs:
+        for path in routes_dir.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            if path.name.startswith("_"):
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+            except SyntaxError:
+                continue
+
+            for node in tree.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+
+                allowed = False
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Constant) and isinstance(inner.value, str):
+                        if "_http_status" in inner.value or "_idempotency" in inner.value:
+                            allowed = True
+                            break
+                    if isinstance(inner, ast.Attribute) and isinstance(inner.attr, str):
+                        if "_http_status" in inner.attr or "_idempotency" in inner.attr:
+                            allowed = True
+                            break
+
+                if allowed:
+                    continue
+
+                for inner in ast.walk(node):
+                    if not isinstance(inner, ast.Return):
+                        continue
+                    call = inner.value
+                    if not isinstance(call, ast.Call):
+                        continue
+
+                    func_name = None
+                    if isinstance(call.func, ast.Name):
+                        func_name = call.func.id
+                    elif isinstance(call.func, ast.Attribute):
+                        func_name = call.func.attr
+
+                    if func_name == "JSONResponse":
+                        violations.append(f"{path.relative_to(root).as_posix()}:{inner.lineno}")
+
+    assert not violations, (
+        "Bare JSONResponse returns detected in route modules:\n"
+        + "\n".join(sorted(violations))
     )

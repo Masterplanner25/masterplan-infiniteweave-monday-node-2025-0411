@@ -22,6 +22,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     message = detail if isinstance(detail, str) else "Request failed"
     return JSONResponse(
         status_code=exc.status_code,
+        headers=exc.headers,
         content={
             "error": "http_error",
             "message": message,

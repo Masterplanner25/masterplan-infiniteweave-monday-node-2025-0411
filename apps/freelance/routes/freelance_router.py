@@ -115,9 +115,9 @@ def _execute_freelance(request: Request, route_name: str, handler, *, db: Sessio
     if not result.success:
         detail = result.metadata.get("detail") or result.error or "Execution failed"
         if is_circuit_open_detail(detail):
-            return JSONResponse(
+            raise HTTPException(
                 status_code=503,
-                content=build_ai_provider_unavailable_payload(detail),
+                detail=build_ai_provider_unavailable_payload(detail),
                 headers={"Retry-After": "60"},
             )
         raise HTTPException(

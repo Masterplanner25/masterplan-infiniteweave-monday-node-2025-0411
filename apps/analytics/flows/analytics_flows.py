@@ -106,12 +106,19 @@ def score_history_node(state, context):
 def score_feedback_list_node(state, context):
     try:
         import uuid
-        from apps.automation.public import get_user_feedback
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
         limit = state.get("limit", 50)
-        history = list(get_user_feedback(user_id, db, limit=limit) or [])
+        syscall_ctx = make_syscall_ctx_from_flow(context, capabilities=["automation.read"])
+        syscall_ctx.metadata["_db"] = db
+        result = get_dispatcher().dispatch(
+            "sys.v1.automation.list_feedback",
+            {"user_id": str(user_id), "limit": limit},
+            syscall_ctx,
+        )
+        history = result.get("data", {}).get("feedback", []) if result.get("status") == "success" else []
         return {"status": "SUCCESS", "output_patch": {"score_feedback_list_result": {
             "user_id": str(user_id),
             "count": len(history),
@@ -123,9 +130,9 @@ def score_feedback_list_node(state, context):
 def analytics_linkedin_ingest_node(state, context):
     try:
         import uuid
+        from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
         from apps.analytics.models import CanonicalMetricDB
         from apps.analytics.schemas.analytics import LinkedInRawInput
-        from apps.social.public import adapt_linkedin_metrics
 
         db = context.get("db")
         user_id = uuid.UUID(str(context.get("user_id")))
@@ -143,7 +150,16 @@ def analytics_linkedin_ingest_node(state, context):
             return {"status": "FAILURE", "error": "HTTP_404:MasterPlan not found"}
 
         data = LinkedInRawInput(**data_dict)
-        canonical = adapt_linkedin_metrics(data)
+        syscall_ctx = make_syscall_ctx_from_flow(context, capabilities=["social.read"])
+        syscall_ctx.metadata["_db"] = db
+        social_result = get_dispatcher().dispatch(
+            "sys.v1.social.adapt_linkedin",
+            {"data": data.model_dump() if hasattr(data, "model_dump") else dict(data)},
+            syscall_ctx,
+        )
+        if social_result.get("status") != "success":
+            return {"status": "FAILURE", "error": "Social adapter unavailable"}
+        canonical = social_result.get("data", {}).get("canonical", {})
         canonical["user_id"] = user_id
 
         existing = db.query(CanonicalMetricDB).filter_by(

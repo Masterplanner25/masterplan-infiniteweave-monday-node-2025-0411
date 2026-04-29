@@ -122,19 +122,25 @@ class TestSignalPayloadUserIdField:
 class TestFocusQualityPerUser:
 
     def _patch_watcher_signals(self, monkeypatch, sessions=None, distractions=0, focus_achieved=0):
-        def _fake_list_watcher_signals(db, *, user_id=None, signal_type=None, limit=50, offset=0, session_id=None):
-            del db, user_id, limit, offset, session_id
-            if signal_type == "session_ended":
-                return sessions or []
-            if signal_type == "distraction_detected":
-                return [{"id": f"distraction-{idx}"} for idx in range(distractions)]
-            if signal_type == "focus_achieved":
-                return [{"id": f"focus-{idx}"} for idx in range(focus_achieved)]
-            return []
+        class _FakeDispatcher:
+            def dispatch(self, name, payload, context):
+                del context
+                if name != "sys.v1.watcher.query":
+                    return {"status": "error", "data": {}, "error": "unexpected syscall"}
+                signal_type = payload.get("signal_type")
+                if signal_type == "session_ended":
+                    data = sessions or []
+                elif signal_type == "distraction_detected":
+                    data = [{"id": f"distraction-{idx}"} for idx in range(distractions)]
+                elif signal_type == "focus_achieved":
+                    data = [{"id": f"focus-{idx}"} for idx in range(focus_achieved)]
+                else:
+                    data = []
+                return {"status": "success", "data": {"signals": data}, "error": None}
 
         monkeypatch.setattr(
-            "apps.automation.public.list_watcher_signals",
-            _fake_list_watcher_signals,
+            "AINDY.kernel.syscall_dispatcher.get_dispatcher",
+            lambda: _FakeDispatcher(),
         )
 
     def test_returns_neutral_when_no_user_sessions(self, monkeypatch):
