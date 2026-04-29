@@ -99,6 +99,7 @@ def test_observability_dashboard_returns_real_db_sections(
             created_at=datetime.now(timezone.utc),
         )
     )
+    db_session.flush()
 
     db_session.add(
         RequestMetric(
