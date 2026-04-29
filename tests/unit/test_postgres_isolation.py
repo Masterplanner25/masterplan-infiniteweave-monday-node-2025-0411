@@ -13,7 +13,7 @@ from AINDY.core.execution_unit_service import ExecutionUnitService
 from AINDY.db.database import Base
 from AINDY.db.models.execution_unit import ExecutionUnit
 from AINDY.db.models.user import User
-from AINDY.kernel.syscall_dispatcher import SyscallDispatcher, SyscallContext
+from AINDY.kernel.syscall_dispatcher import SyscallContext, SyscallDispatcher, SyscallEntry
 from apps.agent.models.agent_run import AgentRun
 
 
@@ -196,11 +196,16 @@ def test_concurrent_agent_runs_same_user_no_eu_duplication():
 
 @pytest.mark.postgres
 def test_syscall_quota_enforced_under_concurrent_load():
+    from unittest.mock import patch
+
+    from AINDY.kernel import syscall_dispatcher as dispatcher_module
+
     counter = {"value": 0}
     guard = threading.Lock()
     barrier = threading.Barrier(5)
     results: list[dict] = []
     result_lock = threading.Lock()
+    original_get = dispatcher_module.SYSCALL_REGISTRY.get
 
     class _MockRM:
         def check_quota(self, execution_unit_id):
@@ -222,11 +227,21 @@ def test_syscall_quota_enforced_under_concurrent_load():
         trace_id="trace-postgres-quota",
     )
 
-    def _worker():
-        from unittest.mock import patch
+    def _registry_get(name):
+        if name == "sys.v1.memory.read":
+            return SyscallEntry(
+                handler=lambda payload, context: {"query": payload["query"], "user_id": context.user_id},
+                capability="memory.read",
+                description="test stub",
+            )
+        return original_get(name)
 
+    def _worker():
         barrier.wait()
-        with patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=_MockRM()):
+        with (
+            patch("AINDY.kernel.syscall_dispatcher._get_rm", return_value=_MockRM()),
+            patch.object(dispatcher_module.SYSCALL_REGISTRY, "get", side_effect=_registry_get),
+        ):
             result = SyscallDispatcher().dispatch(
                 "sys.v1.memory.read",
                 {"query": "quota-test", "user_id": ctx.user_id},
