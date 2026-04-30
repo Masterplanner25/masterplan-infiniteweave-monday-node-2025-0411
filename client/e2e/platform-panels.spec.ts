@@ -3,6 +3,8 @@ import { LoginPage } from "./pages/LoginPage";
 import { AgentConsolePage } from "./pages/AgentConsolePage";
 import { FlowEnginePage } from "./pages/FlowEnginePage";
 import { HealthPage } from "./pages/HealthPage";
+import { ExecutionConsolePage } from "./pages/ExecutionConsolePage";
+import { AgentRegistryPage } from "./pages/AgentRegistryPage";
 
 async function loginAsAdmin(page, setupMocks) {
   await setupMocks({ isAdmin: true });
@@ -53,4 +55,18 @@ test("Observability Dashboard renders for admin", async ({ page, setupMocks }) =
   await expect(page).toHaveURL(/\/platform\/observability$/);
   await expect(page.getByRole("heading", { name: "Observability Dashboard" })).toBeVisible({ timeout: 5000 });
   await expect(page.getByText(/system telemetry|error rate tracking/i).first()).toBeVisible();
+});
+
+test("Execution Console renders without error", async ({ page, setupMocks }) => {
+  await loginAsAdmin(page, setupMocks);
+  const execPage = new ExecutionConsolePage(page);
+  await execPage.goto();
+  await execPage.expectLoaded();
+});
+
+test("Agent Registry renders without error", async ({ page, setupMocks }) => {
+  await loginAsAdmin(page, setupMocks);
+  const registryPage = new AgentRegistryPage(page);
+  await registryPage.goto();
+  await registryPage.expectLoaded();
 });

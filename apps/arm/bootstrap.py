@@ -12,7 +12,7 @@ _ANALYZER = None
 _ANALYZER_LOCK = Lock()
 ARM_CONFIG_CHANNEL = "aindy:arm:config_updated"
 
-BOOTSTRAP_DEPENDS_ON: list[str] = []
+BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics"]
 APP_DEPENDS_ON: list[str] = ["analytics"]
 
 

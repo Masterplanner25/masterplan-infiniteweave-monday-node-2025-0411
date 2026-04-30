@@ -15,7 +15,6 @@ vi.mock("../_core.js", async (importOriginal) => {
 
 import { adminRequest, authRequest } from "../_core.js";
 import * as operatorApi from "../operator.js";
-import * as legacyApi from "../legacy.js";
 import * as platformApi from "../platform.js";
 import * as barrelApi from "../../api.js";
 
@@ -48,10 +47,10 @@ describe("client API ownership boundaries", () => {
     );
   });
 
-  it("routes legacy or mixed APIs through the legacy module", () => {
-    legacyApi.getDashboardOverview();
-    legacyApi.getDashboardHealth();
-    legacyApi.getNarrative("drop-1");
+  it("routes platform UI APIs through the platform module", () => {
+    platformApi.getDashboardOverview();
+    platformApi.getDashboardHealth();
+    platformApi.getNarrative("drop-1");
 
     expect(authRequest).toHaveBeenNthCalledWith(1, "/dashboard/overview", { method: "GET" });
     expect(authRequest).toHaveBeenNthCalledWith(2, "/dashboard/health", { method: "GET" });
@@ -71,7 +70,7 @@ describe("client API ownership boundaries", () => {
     expect(barrelApi.getDashboardOverview).toBeTypeOf("function");
     expect(barrelApi.productApi.getMyScore).toBeTypeOf("function");
     expect(barrelApi.operatorApi.getFlowRuns).toBeTypeOf("function");
-    expect(barrelApi.legacyApi.getDashboardOverview).toBeTypeOf("function");
+    expect(barrelApi.legacyApi).toBeUndefined();
   });
 
   it("uses explicit API categories in the focused UI components", () => {

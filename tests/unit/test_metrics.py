@@ -5,9 +5,18 @@ import asyncio
 from contextlib import ExitStack
 from unittest.mock import patch
 
+import prometheus_client as _prom
 import pytest
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
+
+# These tests require the real prometheus_client (CollectorRegistry.collect(),
+# metric.samples). They are skipped when the conftest stub is active.
+# To run: pip install prometheus-client  (declared in AINDY/requirements.txt)
+pytestmark = pytest.mark.skipif(
+    getattr(_prom, "_is_stub", False),
+    reason="requires real prometheus_client: pip install -r AINDY/requirements.txt",
+)
 
 from AINDY.core.execution_pipeline import ExecutionContext, ExecutionPipeline
 from AINDY.kernel.circuit_breaker import CircuitBreaker

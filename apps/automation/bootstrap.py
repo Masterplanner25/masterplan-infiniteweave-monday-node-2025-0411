@@ -53,6 +53,7 @@ def register() -> None:
     _register_events()
     _register_jobs()
     _register_async_jobs()
+    _register_syscalls()
     _register_capture_rules()
     _register_flows()
     _register_flow_results()
@@ -131,6 +132,20 @@ def _register_jobs() -> None:
 def _register_async_jobs() -> None:
     from AINDY.platform_layer.async_job_service import register_async_job
     register_async_job("automation.execute")(_job_automation_execute)
+
+
+def _register_syscalls() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.automation.syscalls import syscall_handlers
+
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(syscall_handlers).items()
+            if not name.startswith("__")
+        }
+    )
+    syscall_handlers.register_all_domain_handlers()
 
 
 def _register_capture_rules() -> None:

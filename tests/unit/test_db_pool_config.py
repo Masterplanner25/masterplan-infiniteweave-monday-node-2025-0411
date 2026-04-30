@@ -3,6 +3,16 @@ from __future__ import annotations
 import importlib
 from unittest.mock import MagicMock, patch
 
+import prometheus_client as _prom
+import pytest
+
+# test_metrics_endpoint_includes_db_pool_checkedout_gauge needs real prometheus output.
+# Mark only that test; the others work with the stub.
+_needs_real_prometheus = pytest.mark.skipif(
+    getattr(_prom, "_is_stub", False),
+    reason="requires real prometheus_client: pip install -r AINDY/requirements.txt",
+)
+
 
 def test_get_pool_status_returns_expected_keys():
     from AINDY.db.database import get_pool_status
@@ -104,6 +114,7 @@ def test_engine_creation_uses_configured_db_pool_size(monkeypatch):
     importlib.reload(database_module)
 
 
+@_needs_real_prometheus
 def test_metrics_registry_contains_db_pool_gauges():
     from AINDY.platform_layer.metrics import REGISTRY
 
@@ -112,6 +123,7 @@ def test_metrics_registry_contains_db_pool_gauges():
     assert "aindy_db_pool_checkedout" in metric_names
 
 
+@_needs_real_prometheus
 def test_metrics_endpoint_includes_db_pool_checkedout_gauge(client):
     response = client.get("/metrics")
 

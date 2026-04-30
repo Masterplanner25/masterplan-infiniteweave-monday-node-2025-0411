@@ -588,13 +588,13 @@ def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
         if requested_user_id:
             query = query.filter(WatcherSignal.user_id == UUID(str(requested_user_id)))
 
-        total = query.count()
         rows = (
             query.order_by(WatcherSignal.signal_timestamp.desc())
             .offset(offset)
             .limit(limit)
             .all()
         )
+        total = query.count() if hasattr(query, "count") else len(rows)
         return {
             "signals": [
                 {
@@ -608,8 +608,12 @@ def handle_watcher_query(payload: dict, ctx: SyscallContext) -> dict:
                     "received_at": row.received_at.isoformat(),
                     "duration_seconds": row.duration_seconds,
                     "focus_score": row.focus_score,
-                    "user_id": str(row.user_id) if row.user_id is not None else None,
-                    "metadata": row.signal_metadata,
+                    "user_id": (
+                        str(getattr(row, "user_id", None))
+                        if getattr(row, "user_id", None) is not None
+                        else None
+                    ),
+                    "metadata": getattr(row, "signal_metadata", None),
                 }
                 for row in rows
             ],
@@ -852,6 +856,7 @@ def register_all_domain_handlers() -> None:
         ("sys.v1.automation.list_loop_adjustments", _handle_automation_list_loop_adjustments, "automation.read", "List loop adjustment records", False, None),
         ("sys.v1.automation.create_loop_adjustment", _handle_automation_create_loop_adjustment, "automation.write", "Create a loop adjustment record", False, None),
         ("sys.v1.automation.update_loop_adjustment", _handle_automation_update_loop_adjustment, "automation.write", "Update a loop adjustment record", False, None),
+        ("sys.v1.watcher.ingest",          _handle_watcher_ingest,        "watcher.ingest",        "Persist watcher signals",                                False, None),
         ("sys.v1.watcher.query",           handle_watcher_query,          "watcher.query",         "Query stored watcher signals",                           False, None),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False, None),

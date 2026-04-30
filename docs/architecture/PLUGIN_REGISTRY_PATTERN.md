@@ -154,6 +154,41 @@ If `APP_DEPENDS_ON` contains B but `BOOTSTRAP_DEPENDS_ON` does not:
 - If both: add to both.
 - Converting a deferred import to a syscall: remove from `APP_DEPENDS_ON`.
 
+**IS_CORE_DOMAIN**
+A boolean that marks an app as essential to platform startup. When a core
+app's `register()` raises an exception, bootstrap aborts and the server does
+not start. When a peripheral app fails, startup continues in degraded mode
+and the app is published as unavailable.
+
+Declaration:
+
+```python
+IS_CORE_DOMAIN: bool = True   # set in apps that are core to the system
+IS_CORE_DOMAIN: bool = False  # explicit; equivalent to omitting the field
+```
+
+If a `bootstrap.py` does not declare `IS_CORE_DOMAIN`, the app is treated
+as peripheral (`False` by default). Only set this `True` if startup without
+the app is meaningless, for example an app that all other apps depend on for
+correctness, or that owns a critical shared resource.
+
+The current core apps are `tasks`, `identity`, and `agent`. Their
+`register()` functions must be bullet-proof because any exception they raise
+will abort the entire process.
+
+The platform reads `IS_CORE_DOMAIN` at startup via
+`apps/bootstrap._get_core_domains_from_metadata()` using the same AST parsing
+as `BOOTSTRAP_DEPENDS_ON` and `APP_DEPENDS_ON`. Core classification is
+entirely self-declared by app bootstrap modules.
+
+**Summary of all three bootstrap.py fields**
+
+| Field | Used by | Enforcement | Default |
+|---|---|---|---|
+| `BOOTSTRAP_DEPENDS_ON` | `resolve_boot_order()` | Boot ordering enforced at startup | `[]` |
+| `APP_DEPENDS_ON` | `_check_app_depends_on_ordering()` | Startup warning; V1-VAL-015 CI gate | `[]` |
+| `IS_CORE_DOMAIN` | `_get_core_domains_from_metadata()` | Failure aborts startup vs degrades | `False` |
+
 ## 3. Boot Sequence
 
 ```

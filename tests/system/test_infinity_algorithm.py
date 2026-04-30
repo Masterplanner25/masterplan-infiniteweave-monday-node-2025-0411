@@ -12,8 +12,14 @@ Covers:
   - Event trigger wiring (source inspection)
   - api.js + Dashboard.jsx presence checks
 """
+import prometheus_client as _prom
 import pytest
 from unittest.mock import MagicMock
+
+_needs_real_prometheus = pytest.mark.skipif(
+    getattr(_prom, "_is_stub", False),
+    reason="requires real prometheus_client: pip install -r AINDY/requirements.txt",
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -424,6 +430,7 @@ class TestMasterScoreCalculation:
 
         assert calculate_infinity_score("u1", MagicMock()) is None
 
+    @_needs_real_prometheus
     def test_calculate_infinity_score_increments_concurrent_write_metric_and_logs_error(self, mocker):
         from prometheus_client import CollectorRegistry, Counter
 
@@ -490,6 +497,7 @@ class TestMasterScoreCalculation:
         )
         assert sample.value == 1.0
 
+    @_needs_real_prometheus
     def test_calculate_infinity_score_increments_unknown_failure_metric(self, mocker):
         from prometheus_client import CollectorRegistry, Counter
 

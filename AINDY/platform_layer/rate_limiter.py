@@ -64,8 +64,10 @@ def _identity_key(request: Request) -> str:
 
 
 _test_mode = os.environ.get("TEST_MODE", "false").lower() in ("1", "true", "yes")
+_redis_url = os.environ.get("REDIS_URL") or os.environ.get("AINDY_REDIS_URL")
 limiter = Limiter(
     key_func=_identity_key,
     default_limits=["300/minute"],
     enabled=not _test_mode,
+    storage_uri=_redis_url if (_redis_url and not _test_mode) else None,
 )

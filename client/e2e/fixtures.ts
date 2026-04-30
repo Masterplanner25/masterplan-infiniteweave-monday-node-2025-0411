@@ -288,6 +288,97 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
           return jsonResponse({ run_id: runId, events: agentRunEvents[runId] ?? [] });
         }
 
+        // --- Genesis session lifecycle ---
+        if (path === "/genesis/session" && method === "POST") {
+          return jsonResponse(
+            {
+              session_id: "gen-session-001",
+              status: "active",
+              created_at: new Date().toISOString(),
+            },
+            201,
+          );
+        }
+
+        if (path === "/genesis/message" && method === "POST") {
+          return jsonResponse({
+            session_id: "gen-session-001",
+            reply: "I understand your goals. Let me ask — what does success look like in 3 years?",
+            synthesis_ready: true,
+            status: "active",
+          });
+        }
+
+        if (path === "/genesis/synthesize" && method === "POST") {
+          return jsonResponse({
+            session_id: "gen-session-001",
+            draft: {
+              title: "Strategic Growth Plan",
+              vision_statement: "Build a durable SaaS company with compounding distribution.",
+              time_horizon_years: 3,
+              primary_mechanism: "Product-led growth",
+              posture: "Strategic expansion",
+              goals: [
+                { title: "Increase revenue by 30%", priority: "high" },
+                { title: "Launch 2 new products", priority: "medium" },
+              ],
+              synthesis_ready: true,
+            },
+            status: "synthesized",
+          });
+        }
+
+        if (path === "/genesis/lock" && method === "POST") {
+          return jsonResponse({
+            session_id: "gen-session-001",
+            plan_id: "plan-001",
+            version: "V5 LOCKED ARC",
+            posture: "Strategic expansion",
+            status: "locked",
+          });
+        }
+
+        // --- Freelance orders ---
+        if (path === "/freelance/orders" && method === "GET") {
+          return jsonResponse([
+            {
+              id: 1,
+              status: "delivered",
+              client_name: "Northstar Labs",
+              service_type: "Website redesign",
+              price: 2500,
+              created_at: "2026-04-20T10:00:00Z",
+            },
+            {
+              id: 2,
+              status: "in_progress",
+              client_name: "Signal Forge",
+              service_type: "Mobile app MVP",
+              price: 8000,
+              created_at: "2026-04-22T14:00:00Z",
+            },
+          ]);
+        }
+
+        if (path === "/freelance/feedback" && method === "GET") {
+          return jsonResponse([
+            {
+              id: 1,
+              order_id: 1,
+              rating: 5,
+              feedback_text: "Fast delivery and clear communication.",
+            },
+          ]);
+        }
+
+        if (path === "/freelance/metrics/latest" && method === "GET") {
+          return jsonResponse({
+            total_orders: 2,
+            delivered: 1,
+            total_revenue: 10500,
+          });
+        }
+
         if (path === "/agent/tools" && method === "GET") {
           return jsonResponse([
             {

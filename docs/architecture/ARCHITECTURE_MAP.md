@@ -128,15 +128,13 @@ major direct cross-app imports have been converted: analytics→automation
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
-Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current hard core set is:
-
-- `tasks`
-- `identity`
-- `agent`
+Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks`, `identity`, and `agent`. Core domains abort the entire startup when their bootstrap fails; all other domains degrade gracefully. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
 
 Representative dependency declarations in `apps/bootstrap.py`:
 - `analytics` depends on `identity` and `tasks`
-- `automation` depends on `agent`, `analytics`, `arm`, `masterplan`, and `tasks`
+- `automation` depends on `agent` and `analytics`; its calls to `arm`, `masterplan`, `tasks`, and `search` are runtime syscalls, not `BOOTSTRAP_DEPENDS_ON` edges
+- `arm` depends on `analytics`
+- `masterplan` depends on `automation`, `identity`, and `tasks`
 - `network_bridge` depends on `authorship`
 
 In addition to `BOOTSTRAP_DEPENDS_ON`, each app may declare

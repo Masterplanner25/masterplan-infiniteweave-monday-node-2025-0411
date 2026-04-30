@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
 
@@ -40,14 +41,48 @@ def _handle_count_runs(payload: dict, ctx: SyscallContext) -> dict:
     if db is None:
         return {"count": 0}
     user_id = parse_user_id(payload.get("user_id"))
-    if user_id is None:
-        return {"count": 0}
-    query = db.query(AgentRun.id).filter(AgentRun.user_id == user_id)
+    query = db.query(AgentRun.id)
+    if payload.get("user_id") is not None:
+        if user_id is None:
+            return {"count": 0}
+        query = query.filter(AgentRun.user_id == user_id)
     status_filter = payload.get("status")
     if status_filter:
         statuses = status_filter if isinstance(status_filter, list) else [status_filter]
         query = query.filter(AgentRun.status.in_(statuses))
     return {"count": query.count()}
+
+
+def _handle_list_recent_durations(payload: dict, ctx: SyscallContext) -> dict:
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from apps.agent.models.agent_run import AgentRun
+
+    db = ctx.metadata.get("_db") or ctx.db
+    if db is None:
+        return {"durations": [], "count": 0}
+    window_hours = int(payload.get("window_hours", 1))
+    window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+
+    query = db.query(AgentRun).filter(AgentRun.created_at >= window_start)
+    if payload.get("user_id") is not None:
+        user_id = parse_user_id(payload.get("user_id"))
+        if user_id is None:
+            return {"durations": [], "count": 0}
+        query = query.filter(AgentRun.user_id == user_id)
+
+    rows = query.all()
+    durations = [
+        {
+            "started_at": (row.started_at or row.created_at).isoformat()
+            if (row.started_at or row.created_at)
+            else None,
+            "completed_at": (row.completed_at or row.started_at or row.created_at).isoformat()
+            if (row.completed_at or row.started_at or row.created_at)
+            else None,
+        }
+        for row in rows
+    ]
+    return {"durations": durations, "count": len(durations)}
 
 
 def _handle_list_recent_runs(payload: dict, ctx: SyscallContext) -> dict:
@@ -142,6 +177,26 @@ def register_agent_syscall_handlers() -> None:
         stable=False,
     )
     register_syscall(
+        name="sys.v1.agent.list_recent_durations",
+        handler=_handle_list_recent_durations,
+        capability="agent.read",
+        description="List recent AgentRun timing fields for duration calculations.",
+        input_schema={
+            "properties": {
+                "user_id": {"type": "string"},
+                "window_hours": {"type": "int"},
+            },
+        },
+        output_schema={
+            "required": ["durations", "count"],
+            "properties": {
+                "durations": {"type": "list"},
+                "count": {"type": "int"},
+            },
+        },
+        stable=False,
+    )
+    register_syscall(
         name="sys.v1.agent.list_recent_runs",
         handler=_handle_list_recent_runs,
         capability="agent.read",
@@ -178,5 +233,5 @@ def register_agent_syscall_handlers() -> None:
         stable=False,
     )
     logger.info(
-        "[agent_syscalls] registered dispatch_tool, count_runs, list_recent_runs, ensure_initial_run"
+        "[agent_syscalls] registered dispatch_tool, count_runs, list_recent_durations, list_recent_runs, ensure_initial_run"
     )

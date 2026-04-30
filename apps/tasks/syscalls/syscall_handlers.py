@@ -165,7 +165,7 @@ def _handle_task_orchestrate(payload: dict, ctx: SyscallContext) -> dict:
 
 
 def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
-    from apps.automation.public import persist_watcher_signals
+    from AINDY.kernel.syscall_dispatcher import dispatch_syscall
     from AINDY.platform_layer.watcher_contract import (
         get_valid_activity_types,
         get_valid_signal_types,
@@ -185,14 +185,24 @@ def _handle_watcher_ingest(payload: dict, ctx: SyscallContext) -> dict:
                 raise ValueError(f"Signal [{idx}]: unknown signal_type {signal_type!r}")
             if activity_type not in get_valid_activity_types():
                 raise ValueError(f"Signal [{idx}]: unknown activity_type {activity_type!r}")
-        result = persist_watcher_signals(db, signals=signals, user_id=user_id)
+        sc_result = dispatch_syscall(
+            "sys.v1.watcher.ingest",
+            {"signals": signals, "user_id": str(user_id)},
+            db=db,
+            user_id=str(user_id),
+            capability="watcher.ingest",
+        )
+        if sc_result.get("status") != "success":
+            raise ValueError(sc_result.get("error", "watcher.ingest failed"))
+        result = sc_result.get("data") or {}
+        ingest_result = result.get("watcher_ingest_result") or {}
         return {
             "watcher_ingest_result": {
-                "accepted": int(result.get("accepted") or 0),
-                "session_ended_count": int(result.get("session_ended_count") or 0),
+                "accepted": int(ingest_result.get("accepted") or 0),
+                "session_ended_count": int(ingest_result.get("session_ended_count") or 0),
             },
             "watcher_batch_user_id": result.get("watcher_batch_user_id"),
-            "watcher_session_ended_count": int(result.get("session_ended_count") or 0),
+            "watcher_session_ended_count": int(result.get("watcher_session_ended_count") or 0),
         }
     except Exception:
         db.rollback()
@@ -434,13 +444,6 @@ def register_task_syscall_handlers() -> None:
         },
         stable=False,
     )
-    register_syscall(
-        name="sys.v1.watcher.ingest",
-        handler=_handle_watcher_ingest,
-        capability="watcher.ingest",
-        description="Persist batch of WatcherSignals.",
-        stable=False,
-    )
     logger.info(
-        "[task_syscalls] registered task lifecycle, graph, watcher ingest, and task read automation syscalls"
+        "[task_syscalls] registered task lifecycle, graph, and task read automation syscalls"
     )

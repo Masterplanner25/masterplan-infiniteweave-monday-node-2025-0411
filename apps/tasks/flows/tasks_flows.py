@@ -177,23 +177,29 @@ def watcher_ingest_orchestrate(state, context):
 
 def watcher_signals_list_node(state, context):
     try:
-        from apps.automation.public import list_watcher_signals
+        from AINDY.kernel.syscall_dispatcher import dispatch_syscall
 
         db = context.get("db")
-        session_id = state.get("session_id")
-        signal_type = state.get("signal_type")
-        user_id_filter = state.get("user_id_filter")
-        limit = state.get("limit", 50)
-        offset_val = state.get("offset", 0)
-
-        data = list_watcher_signals(
-            db,
-            session_id=session_id,
-            user_id=user_id_filter,
-            signal_type=signal_type,
-            limit=limit,
-            offset=offset_val,
+        user_id = str(context.get("user_id") or "")
+        result = dispatch_syscall(
+            "sys.v1.watcher.query",
+            {
+                "session_id": state.get("session_id"),
+                "user_id": state.get("user_id_filter"),
+                "signal_type": state.get("signal_type"),
+                "limit": state.get("limit", 50),
+                "offset": state.get("offset", 0),
+            },
+            db=db,
+            user_id=user_id,
+            capability="watcher.query",
         )
+        if result.get("status") != "success":
+            return {
+                "status": "FAILURE",
+                "error": result.get("error", "watcher.query failed"),
+            }
+        data = (result.get("data") or {}).get("signals", [])
         return {"status": "SUCCESS", "output_patch": {"watcher_signals_list_result": data}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

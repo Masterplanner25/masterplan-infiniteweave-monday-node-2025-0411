@@ -34,8 +34,9 @@ Test-to-task mapping:
     # (covers apps/*/routes/ and AINDY/routes/)
     V1-VAL-017  test_db_unavailable_returns_503            V1-STAB-009
     V1-VAL-018  test_all_routers_documented_in_api_contracts V1-ARCH-003
-    V1-VAL-019  test_legacy_js_contains_no_definitions    V1-ARCH-004
+    V1-VAL-019  test_legacy_js_is_deleted    V1-ARCH-004
     V1-VAL-020  test_db_pool_exhausted_returns_503    V1-STAB-010
+    V1-VAL-021  test_rate_limiter_uses_redis_storage_in_production_config    V1-STAB-011
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
@@ -849,91 +850,21 @@ def test_all_routers_documented_in_api_contracts():
     )
 
 
-def test_legacy_js_contains_no_definitions():
+def test_legacy_js_is_deleted():
     """
     V1-VAL-019 | Task: V1-ARCH-004
-    client/src/api/legacy.js must contain only re-export statements —
-    no function definitions, class definitions, or variable declarations.
-    Any direct definition in legacy.js indicates a regression where
-    the shim was used as a destination rather than a waypoint.
-
-    When all three original callers (Dashboard.jsx, GraphView.jsx,
-    HealthDashboard.jsx) have migrated to platform.js and this test is
-    confirmed passing, delete legacy.js and update api/index.js to remove
-    the re-export.
+    client/src/api/legacy.js must not exist.
+    It was a migration shim (2026-04-28 to 2026-05-28) and has been deleted.
+    If this test fails, someone recreated the file — delete it and move
+    the functions to platform.js.
     """
     repo_root = Path(__file__).parent.parent.parent
     legacy_path = repo_root / "client" / "src" / "api" / "legacy.js"
 
-    assert legacy_path.exists(), (
-        "client/src/api/legacy.js does not exist. "
-        "If it has already been deleted, remove this test."
-    )
-
-    content = legacy_path.read_text(encoding="utf-8")
-
-    function_defs = re.findall(
-        r"^\s*(?:export\s+)?(?:async\s+)?function\s+\w+",
-        content,
-        re.MULTILINE,
-    )
-    assert not function_defs, (
-        f"legacy.js must not define functions directly. Found:\n"
-        + "\n".join(f"  {d.strip()}" for d in function_defs)
-        + "\n\nlegacy.js must only re-export from platform.js. "
-        "V1-ARCH-004: shim files must not accumulate definitions."
-    )
-
-    class_defs = re.findall(r"^\s*(?:export\s+)?class\s+\w+", content, re.MULTILINE)
-    assert not class_defs, (
-        f"legacy.js must not define classes. Found:\n"
-        + "\n".join(f"  {d.strip()}" for d in class_defs)
-    )
-
-    arrow_defs = re.findall(
-        r"^\s*(?:export\s+)?(?:const|let|var)\s+\w+\s*=\s*(?:async\s*)?\(",
-        content,
-        re.MULTILINE,
-    )
-    assert not arrow_defs, (
-        f"legacy.js must not define arrow functions. Found:\n"
-        + "\n".join(f"  {d.strip()}" for d in arrow_defs)
-    )
-
-    assert "from " in content or "export {" in content, (
-        "legacy.js appears empty or malformed — expected re-export statements."
-    )
-
-
-def test_legacy_js_callers_migrated_to_platform():
-    """
-    V1-VAL-019b | Task: V1-ARCH-004
-    The three original callers of legacy.js must import from platform.js,
-    not legacy.js. When this test passes and test_legacy_js_contains_no_definitions
-    passes, legacy.js and this test can both be deleted.
-    """
-    repo_root = Path(__file__).parent.parent.parent
-    components = repo_root / "client" / "src" / "components"
-
-    callers = [
-        components / "app" / "Dashboard.jsx",
-        components / "app" / "GraphView.jsx",
-        components / "platform" / "HealthDashboard.jsx",
-    ]
-
-    regressions = []
-    for caller in callers:
-        if not caller.exists():
-            continue
-        content = caller.read_text(encoding="utf-8")
-        if "legacy.js" in content:
-            regressions.append(str(caller.relative_to(repo_root)))
-
-    assert not regressions, (
-        f"The following files still import from legacy.js and must be "
-        f"updated to import from platform.js:\n"
-        + "\n".join(f"  - {f}" for f in regressions)
-        + "\nV1-ARCH-004: legacy.js callers must migrate before the shim is removed."
+    assert not legacy_path.exists(), (
+        "client/src/api/legacy.js exists but should have been deleted. "
+        "All functions have been migrated to platform.js. "
+        "V1-ARCH-004: delete the file and move any new functions to platform.js."
     )
 
 
@@ -971,3 +902,38 @@ def test_db_pool_exhausted_returns_503(client, auth_headers):
         f"Expected error='db_pool_exhausted', got {body.get('error')!r}."
     )
     assert body.get("retryable") is True
+
+
+def test_rate_limiter_uses_redis_storage_in_production_config():
+    """
+    V1-VAL-021 | Task: V1-STAB-011
+    When REDIS_URL is set and TEST_MODE is off, the rate limiter must
+    be constructed with Redis-backed storage. In-memory storage does not
+    enforce limits across multiple worker processes.
+    """
+    import importlib
+
+    captured = {}
+
+    original_limiter = __import__("slowapi").Limiter
+
+    def capturing_limiter(*args, **kwargs):
+        captured["storage_uri"] = kwargs.get("storage_uri")
+        return original_limiter(*args, **kwargs)
+
+    with patch.dict("os.environ", {
+        "REDIS_URL": "redis://localhost:6379/0",
+        "TEST_MODE": "false",
+    }):
+        import AINDY.platform_layer.rate_limiter as rl_module
+        with patch("slowapi.Limiter", side_effect=capturing_limiter):
+            importlib.reload(rl_module)
+
+    assert captured.get("storage_uri") is not None, (
+        "Rate limiter must use Redis storage when REDIS_URL is set. "
+        "In-memory storage does not enforce limits across worker processes. "
+        "V1-STAB-011: multi-process deployments require shared rate-limit storage."
+    )
+    assert "redis" in (captured.get("storage_uri") or ""), (
+        f"Expected a redis:// storage_uri, got: {captured.get('storage_uri')!r}"
+    )

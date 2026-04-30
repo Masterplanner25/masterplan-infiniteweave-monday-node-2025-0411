@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 
-BOOTSTRAP_DEPENDS_ON: list[str] = []
+BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics"]
 APP_DEPENDS_ON: list[str] = ["analytics"]
 
 

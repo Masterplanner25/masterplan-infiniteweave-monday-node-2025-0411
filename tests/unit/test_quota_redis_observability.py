@@ -4,6 +4,7 @@ import importlib
 from unittest.mock import patch
 
 
+
 def _counter_value(counter) -> float:
     return counter._value.get()
 

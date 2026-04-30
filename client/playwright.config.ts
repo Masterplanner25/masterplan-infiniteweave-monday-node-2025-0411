@@ -37,7 +37,13 @@ export default defineConfig({
     },
     {
       name: "authenticated",
-      testMatch: [/e2e\/tasks\.spec\.ts/, /e2e\/navigation\.spec\.ts/],
+      testMatch: [
+        /e2e\/tasks\.spec\.ts/,
+        /e2e\/navigation\.spec\.ts/,
+        /e2e\/masterplan\.spec\.ts/,
+        /e2e\/genesis-flow\.spec\.ts/,
+        /e2e\/freelance-flow\.spec\.ts/,
+      ],
       use: {
         ...devices["Desktop Chrome"],
         storageState: "e2e/.auth/user.json",

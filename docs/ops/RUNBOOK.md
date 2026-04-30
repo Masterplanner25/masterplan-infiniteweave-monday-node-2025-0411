@@ -1,6 +1,6 @@
 ---
 title: "A.I.N.D.Y. Operations Runbook"
-last_verified: "2026-04-26"
+last_verified: "2026-04-29"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -152,6 +152,12 @@ curl -X POST http://localhost:8000/platform/keys -H "Authorization: Bearer $JWT"
 ```bash
 WORKER_CONCURRENCY=1 python -m AINDY.worker.worker_loop
 ```
+   The worker service uses `restart: on-failure:5` in `docker-compose.yml`.
+   On crash, Docker automatically restarts it up to 5 times. After 5
+   consecutive failures, the container stays down and must be manually
+   restarted. Check `docker compose logs worker` for the failure reason
+   before restarting. The startup recovery scan runs on each restart and
+   marks in-flight jobs as failed.
 7. Verify the worker heartbeat in Redis.
 ```bash
 redis-cli -u "$REDIS_URL" GET aindy:worker:heartbeat
