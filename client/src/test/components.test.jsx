@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { EmptyState } from "../components/shared/EmptyState";
 import { LoadingPanel } from "../components/shared/LoadingPanel";
+import AppShell from "../components/shared/AppShell";
 import Sidebar from "../components/shared/Sidebar";
 import { Toast } from "../components/shared/Toast";
 
@@ -370,5 +371,74 @@ describe("Sidebar navigation", () => {
     expect(screen.getByRole("link", { name: /agent console/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /approval inbox/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /freelance hub/i })).toBeInTheDocument();
+  });
+});
+
+describe("Sidebar", () => {
+  it("renders without error when user is authenticated", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it("renders a navigation element", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
+  });
+
+  it("renders primary navigation links", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /genesis/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /master plan/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /execution engine/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /arm module/i }));
+    expect(screen.getByRole("link", { name: /^analyze$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /memory/i }));
+    expect(screen.getByRole("link", { name: /memory browser/i })).toBeInTheDocument();
+  });
+});
+
+describe("AppShell", () => {
+  it("renders without error", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<div>Dashboard content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it("renders the sidebar within the shell", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<div>Dashboard content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
   });
 });

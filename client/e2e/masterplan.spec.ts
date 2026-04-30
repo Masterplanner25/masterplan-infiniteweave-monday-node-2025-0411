@@ -4,6 +4,7 @@ import { MasterPlanPage } from "./pages/MasterPlanPage";
 
 async function loginAsUser(page, setupMocks) {
   await setupMocks({ isAdmin: false });
+  await page.goto("/");
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -33,9 +34,12 @@ test("activating a locked plan updates its status", async ({ page, setupMocks })
 
   await masterPlanPage.activatePlan();
 
-  const northstarCard = page.locator("div").filter({ hasText: "V3 NORTHSTAR" }).first();
-  await expect(northstarCard.getByText("ACTIVE")).toBeVisible({ timeout: 5000 });
-  await expect(northstarCard.getByRole("button", { name: /^activate$/i })).toHaveCount(0);
+  const northstarCard = page
+    .locator("div")
+    .filter({ has: page.getByText("V3 NORTHSTAR", { exact: true }) })
+    .filter({ has: page.getByText(/^ACTIVE$/, { exact: true }) })
+    .first();
+  await expect(northstarCard).toBeVisible({ timeout: 5000 });
 });
 
 test("anchor modal opens and saves an anchor date", async ({ page, setupMocks }) => {

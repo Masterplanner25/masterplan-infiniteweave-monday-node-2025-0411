@@ -43,6 +43,7 @@ export default defineConfig({
         /e2e\/masterplan\.spec\.ts/,
         /e2e\/genesis-flow\.spec\.ts/,
         /e2e\/freelance-flow\.spec\.ts/,
+        /e2e\/arm-flow\.spec\.ts/,
       ],
       use: {
         ...devices["Desktop Chrome"],

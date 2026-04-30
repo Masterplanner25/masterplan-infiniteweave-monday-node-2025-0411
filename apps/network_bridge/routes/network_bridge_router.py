@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from AINDY.core.execution_gate import to_envelope
 from AINDY.core.execution_helper import execute_with_pipeline_sync
+from AINDY.kernel.syscall_dispatcher import dispatch_syscall
 from AINDY.db.database import get_db
 from AINDY.platform_layer.rate_limiter import limiter
 from datetime import datetime
@@ -81,6 +82,7 @@ async def connect_external_author(
             platform=handshake.platform,
             connection_type=handshake.connection_type,
             notes=handshake.notes,
+            user_id=_ctx.user_id,
         )
         logger.info("Bridge connect: %s via %s", handshake.author_name, handshake.platform)
         return result
@@ -97,16 +99,21 @@ def log_user_event(request: Request, event: NetworkUser, db: Session = Depends(g
     Logs the event into A.I.N.D.Y.'s metrics system (calculation_results table).
     """
     def handler(_ctx):
-        from apps.analytics.public import save_calculation
-
         metric_name = f"UserEvent::{event.platform}"
-        result = save_calculation(db, metric_name, 1.0)
+        normalized_user_id = str(_ctx.user_id) if _ctx.user_id is not None else None
+        result = dispatch_syscall(
+            "sys.v1.analytics.save_calculation",
+            {"metric_name": metric_name, "value": 1.0, "user_id": normalized_user_id},
+            db=db,
+            user_id=normalized_user_id,
+            capability="analytics.write",
+        )
         logger.info("Bridge user event: %s via %s", event.name, event.platform)
         return {
             "status": "logged",
             "user": event.name,
             "tagline": event.tagline,
-            "record_id": result.id if result else str(uuid.uuid4()),
+            "record_id": result.get("id") if result else str(uuid.uuid4()),
         }
 
     return _with_execution_envelope(

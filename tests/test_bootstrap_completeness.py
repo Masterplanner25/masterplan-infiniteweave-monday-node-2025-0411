@@ -13,6 +13,9 @@ def _reset_bootstrap():
 
     bs._BOOTSTRAPPED = False
     bs._DEGRADED_DOMAINS = []
+    registry._loaded_plugins.clear()
+    registry._registered_apps.clear()
+    registry._bootstrap_dependencies.clear()
     registry.publish_degraded_domains(())
 
 

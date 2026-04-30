@@ -379,6 +379,49 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
           });
         }
 
+        // --- ARM Analysis ---
+        if (path === "/arm/analyze" && method === "POST" && body?.file_path === "bad/path.py") {
+          return jsonResponse({ detail: "File not found: bad/path.py" }, 404);
+        }
+
+        if (path === "/arm/analyze" && method === "POST") {
+          const requestBody = body?.file_path || body?.filePath || "tests/example.py";
+          return jsonResponse({
+            analysis_id: "arm-analysis-001",
+            session_id: "arm-session-001",
+            file_path: requestBody,
+            status: "success",
+            summary: "Code analysis complete. Found 2 functions with moderate complexity. No critical issues detected.",
+            result_summary: "No critical issues. Complexity score: 4.2/10.",
+            findings: [
+              {
+                type: "complexity",
+                severity: "low",
+                message: "Function calculate_score has cyclomatic complexity of 4",
+                line: 42,
+              },
+            ],
+            input_tokens: 850,
+            output_tokens: 312,
+            execution_seconds: 2.1,
+            model_used: "gpt-4o",
+          });
+        }
+
+        if (path === "/arm/logs" && method === "GET") {
+          return jsonResponse({
+            logs: [
+              {
+                id: "log-001",
+                file_path: "tests/example.py",
+                status: "success",
+                result_summary: "No critical issues",
+                created_at: "2026-04-29T10:00:00Z",
+              },
+            ],
+          });
+        }
+
         if (path === "/agent/tools" && method === "GET") {
           return jsonResponse([
             {
@@ -480,6 +523,62 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
 
         if (path === "/agent/registry" && method === "GET") {
           return jsonResponse({ agents: [] });
+        }
+
+        if (path === "/memory/agents" && method === "GET") {
+          return jsonResponse({
+            agents: [
+              {
+                id: "agent-arm",
+                name: "ARM",
+                memory_namespace: "arm",
+                is_active: true,
+                description: "Code analysis and generation agent.",
+                memory_stats: {
+                  total_nodes: 12,
+                  shared_nodes: 4,
+                  private_nodes: 8,
+                },
+              },
+              {
+                id: "agent-genesis",
+                name: "Genesis",
+                memory_namespace: "genesis",
+                is_active: false,
+                description: "Long-horizon planning agent.",
+                memory_stats: {
+                  total_nodes: 6,
+                  shared_nodes: 2,
+                  private_nodes: 4,
+                },
+              },
+            ],
+          });
+        }
+
+        if (/^\/memory\/agents\/[^/]+\/recall$/.test(path) && method === "GET") {
+          const namespace = decodeURIComponent(path.split("/")[3] || "agent");
+          return jsonResponse({
+            memories: [
+              {
+                id: `${namespace}-memory-001`,
+                content: `Mock memory recall result for ${namespace}`,
+                resonance_score: 0.82,
+              },
+            ],
+          });
+        }
+
+        if (path === "/memory/federated/recall" && method === "POST") {
+          return jsonResponse({
+            results: [
+              {
+                id: "federated-memory-001",
+                content: "Mock federated recall result",
+                resonance_score: 0.79,
+              },
+            ],
+          });
         }
 
         if (path === "/flows/runs" && method === "GET") {
