@@ -525,6 +525,62 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
           return jsonResponse({ agents: [] });
         }
 
+        if (path === "/memory/agents" && method === "GET") {
+          return jsonResponse({
+            agents: [
+              {
+                id: "agent-arm",
+                name: "ARM",
+                memory_namespace: "arm",
+                is_active: true,
+                description: "Code analysis and generation agent.",
+                memory_stats: {
+                  total_nodes: 12,
+                  shared_nodes: 4,
+                  private_nodes: 8,
+                },
+              },
+              {
+                id: "agent-genesis",
+                name: "Genesis",
+                memory_namespace: "genesis",
+                is_active: false,
+                description: "Long-horizon planning agent.",
+                memory_stats: {
+                  total_nodes: 6,
+                  shared_nodes: 2,
+                  private_nodes: 4,
+                },
+              },
+            ],
+          });
+        }
+
+        if (/^\/memory\/agents\/[^/]+\/recall$/.test(path) && method === "GET") {
+          const namespace = decodeURIComponent(path.split("/")[3] || "agent");
+          return jsonResponse({
+            memories: [
+              {
+                id: `${namespace}-memory-001`,
+                content: `Mock memory recall result for ${namespace}`,
+                resonance_score: 0.82,
+              },
+            ],
+          });
+        }
+
+        if (path === "/memory/federated/recall" && method === "POST") {
+          return jsonResponse({
+            results: [
+              {
+                id: "federated-memory-001",
+                content: "Mock federated recall result",
+                resonance_score: 0.79,
+              },
+            ],
+          });
+        }
+
         if (path === "/flows/runs" && method === "GET") {
           return jsonResponse({
             runs: [

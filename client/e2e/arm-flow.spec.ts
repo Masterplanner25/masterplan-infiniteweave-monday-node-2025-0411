@@ -3,6 +3,7 @@ import { LoginPage } from "./pages/LoginPage";
 
 async function loginAsUser(page, setupMocks) {
   await setupMocks({ isAdmin: false });
+  await page.goto("/");
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -21,8 +22,8 @@ test("ARM analyze page loads with default file path", async ({ page, setupMocks 
   ).toBeVisible({ timeout: 5000 });
 
   await expect(
-    page.getByDisplayValue("tests/example.py")
-  ).toBeVisible({ timeout: 3000 });
+    page.getByPlaceholder("File path (e.g. tests/example.py)")
+  ).toHaveValue("tests/example.py", { timeout: 3000 });
 
   await expect(
     page.getByRole("button", { name: "Run Analysis" })
