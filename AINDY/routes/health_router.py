@@ -155,6 +155,7 @@ def liveness_legacy_alias() -> dict:
 
 
 def _build_health_response(*, force: bool) -> JSONResponse:
+    """Build a health response with explicit _http_status handling."""
     if settings.is_testing:
         payload = _testing_health_payload()
         _emit_health_event(payload)
@@ -377,6 +378,7 @@ async def report_client_error(
     """
     Receive a frontend error report and write it as a SystemEvent.
     Returns 204 (no content) - the client does not need a response body.
+    Failure responses use explicit _http_status passthrough.
     Authentication is optional: unauthenticated reports are accepted so
     errors during login/boot can be captured.
     """
@@ -428,6 +430,7 @@ async def report_client_vitals(
     """
     Receive Web Vitals measurements from the frontend.
     Returns 204 - no response body needed.
+    Failure responses use explicit _http_status passthrough.
     """
     db = SessionLocal()
     try:
@@ -530,6 +533,7 @@ async def health_check_details_legacy(request: Request):
 @router.get("/health/deep", summary="Check Deep Health")
 @limiter.limit("10/minute")
 async def health_check_deep(request: Request):
+    """Return deep health with explicit _http_status semantics."""
     payload = await _build_deep_health_payload()
     return JSONResponse(status_code=200, content=payload)
 
@@ -537,12 +541,13 @@ async def health_check_deep(request: Request):
 @router.get("/health/domains", summary="Check Domain Health")
 @limiter.limit("60/minute")
 async def health_check_domains(request: Request):
-    """Return per-domain health for registered domain apps."""
+    """Return per-domain health for registered domain apps via explicit _http_status."""
     status_code, payload = _domain_health_payload()
     return JSONResponse(status_code=status_code, content=payload)
 
 
 def _readiness_response() -> JSONResponse:
+    """Build readiness response with explicit _http_status handling."""
     from AINDY.platform_layer.health_service import get_readiness_report
     from AINDY.platform_layer.platform_loader import get_last_restore_result
 

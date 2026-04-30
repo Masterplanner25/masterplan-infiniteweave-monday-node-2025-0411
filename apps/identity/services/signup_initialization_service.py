@@ -28,7 +28,7 @@ def _ensure_user_score_via_syscall(*, db, user_id) -> dict:
 
 
 def initialize_signup_state(*, db, user) -> dict:
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.kernel.syscall_dispatcher import dispatch_syscall
 
     identity = (
         db.query(UserIdentity)
@@ -62,36 +62,15 @@ def initialize_signup_state(*, db, user) -> dict:
 
     score = _ensure_user_score_via_syscall(db=db, user_id=user.id)
 
-    agent_run = (
-        db.query(AgentRun)
-        .filter(
-            AgentRun.user_id == user.id,
-            AgentRun.goal == "Initial agent context",
-        )
-        .first()
+    agent_result = dispatch_syscall(
+        "sys.v1.agent.ensure_initial_run",
+        {"user_id": str(user.id)},
+        db=db,
+        user_id=str(user.id),
     )
-    if agent_run is None:
-        agent_run = AgentRun(
-            user_id=user.id,
-            agent_type="identity_boot",
-            goal="Initial agent context",
-            status="initialized",
-            plan={
-                "status": "initialized",
-                "steps": 0,
-            },
-            executive_summary="Execution context initialized during signup.",
-            steps_total=0,
-            steps_completed=0,
-            current_step=0,
-            result={
-                "status": "initialized",
-                "steps": 0,
-            },
-        )
-        db.add(agent_run)
-        db.commit()
-        db.refresh(agent_run)
+    agent_run_id = None
+    if agent_result.get("status") == "success":
+        agent_run_id = agent_result.get("data", {}).get("run_id")
 
     queue_system_event(
         db=db,
@@ -101,7 +80,7 @@ def initialize_signup_state(*, db, user) -> dict:
             "email": user.email,
             "timestamp": user.created_at.isoformat() if user.created_at else None,
             "memory_node_id": initial_memory["id"],
-            "agent_run_id": str(agent_run.id),
+            "agent_run_id": agent_run_id,
         },
         required=True,
     )
@@ -115,7 +94,7 @@ def initialize_signup_state(*, db, user) -> dict:
         "agent_context": {
             "status": "initialized",
             "steps": 0,
-            "run_id": str(agent_run.id),
+            "run_id": agent_run_id,
         },
     }
 

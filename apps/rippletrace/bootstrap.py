@@ -1,7 +1,7 @@
 """Rippletrace domain bootstrap."""
 from __future__ import annotations
 
-BOOTSTRAP_DEPENDS_ON: list[str] = []
+BOOTSTRAP_DEPENDS_ON: list[str] = ["analytics", "automation"]
 APP_DEPENDS_ON: list[str] = ["analytics", "automation"]
 
 

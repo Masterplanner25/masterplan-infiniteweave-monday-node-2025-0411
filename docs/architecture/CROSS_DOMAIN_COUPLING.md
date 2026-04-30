@@ -1,6 +1,6 @@
 ---
 title: "Cross-Domain Coupling"
-last_verified: "2026-04-27"
+last_verified: "2026-04-29"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -503,9 +503,13 @@ coupling sites.
 
 | Source | Imports from | Type | Risk |
 |---|---|---|---|
-| `analytics/infinity_orchestrator` | `identity`, `masterplan`, `tasks`, `social` | module-level | CASCADE (Prompt 11) |
+| `analytics/infinity_orchestrator` | `identity`, `masterplan`, `tasks`, `social` | deferred | RESOLVED — converted to deferred imports (Prompt 11) |
 | `analytics/infinity_loop` | `tasks`, `masterplan`, `automation.models` | module-level + deferred | CASCADE for module-level |
-| `analytics/routes` | `masterplan.services` | deferred in handler | router_guard violation |
+| `analytics/routes` | `masterplan.services` | deferred in handler | ACCEPTED — handler-deferred, declared in APP_DEPENDS_ON |
+| `analytics/flows` | `automation.public.get_user_feedback` | syscall dispatch | RESOLVED — sys.v1.automation.list_feedback (Prompt 6) |
+| `analytics/flows` | `social.public.adapt_linkedin_metrics` | syscall dispatch | RESOLVED — sys.v1.social.adapt_linkedin (Prompt 6) |
+| `agent/flows` | `analytics.public.get_user_kpi_snapshot` | syscall dispatch | RESOLVED — sys.v1.analytics.get_kpi_snapshot (Prompt 2) |
+| `identity/services` | `agent.models.agent_run.AgentRun` | syscall dispatch | RESOLVED — sys.v1.agent.count_runs, list_recent_runs, ensure_initial_run (Prompt 18) |
 | `identity/identity_boot_service` | `analytics.kpi_snapshot` job | registry-job dispatch | none |
 | `masterplan/services` | `tasks.models`, `tasks.services` | deferred | acceptable |
 | `masterplan/services` | `automation.models` (AutomationLog) | deferred | acceptable |
@@ -562,6 +566,12 @@ Status values: OPEN | IN_PROGRESS | RESOLVED | ACCEPTED (intentional, not to be 
 | social → analytics ORM | `apps/social/**/*.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
 | rippletrace → analytics ORM | `apps/rippletrace/**/*.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
 | analytics → arm ORM | `apps/analytics/services/scoring/infinity_service.py` | ORM cross-import | RESOLVED | Priority Prompt 2 |
+| analytics â†’ automation list_feedback | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
+| analytics â†’ social adapt_linkedin | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
+| agent â†’ analytics get_kpi_snapshot | `agent/flows/agent_flows.py` | cross-domain deferred import | RESOLVED | Prompt 2 |
+| identity â†’ agent AgentRun direct query | `identity/services/identity_boot_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
+| identity â†’ agent signup AgentRun | `identity/services/signup_initialization_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
+| AgentRun in platform layer | `AINDY/db/models/agent_run.py` | domain model in platform | RESOLVED | Prompt 1 |
 | _run_to_dict private import | `apps/automation/flows/automation_flows.py` | private API | RESOLVED | Prompt 3 |
 
 ## 8. Coupling Governance Policy

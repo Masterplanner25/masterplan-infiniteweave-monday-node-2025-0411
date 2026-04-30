@@ -14,7 +14,7 @@ from AINDY.agents.agent_runtime.shared import get_runtime_compat_module, logger
 def replay_run(run_id: str, user_id: str, db: Session, mode: str = "same_plan") -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
 
         db_run_id = compat._db_run_id(run_id)
         original = db.query(AgentRun).filter(AgentRun.id == db_run_id).first()

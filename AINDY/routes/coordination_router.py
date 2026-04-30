@@ -19,7 +19,6 @@ from AINDY.agents.agent_coordinator import list_agents
 from AINDY.agents.agent_coordinator import register_or_update_agent
 from AINDY.agents.agent_coordinator import serialize_agent_registry
 from AINDY.agents.agent_runtime.presentation import run_to_dict
-from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.agent_registry import AgentRegistry
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.services.auth_service import get_current_user
@@ -217,6 +216,8 @@ def get_coordination_runs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    from apps.agent.models.agent_run import AgentRun
+
     user_id = normalize_uuid(current_user["sub"])
     return execute_with_pipeline_sync(
         request=request,
@@ -248,6 +249,8 @@ def get_coordination_run_children(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
+        from apps.agent.models.agent_run import AgentRun
+
         user_id = normalize_uuid(current_user["sub"])
         parent = db.query(AgentRun).filter(AgentRun.id == normalize_uuid(parent_run_id)).first()
         if parent is None:

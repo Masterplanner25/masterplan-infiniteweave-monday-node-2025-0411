@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+redis = pytest.importorskip(
+    "redis",
+    reason="redis package not installed — run: pip install -r AINDY/requirements.txt",
+)
+
 from AINDY.core.distributed_queue import InMemoryQueueBackend, RedisQueueBackend
 
 

@@ -125,7 +125,7 @@ def agent_execute_step(state: dict, context: dict) -> dict:
     edge _more_steps() while current_step_index < len(steps), then advance
     to agent_finalize_run when all steps are done.
     """
-    from AINDY.db.models.agent_run import AgentRun, AgentStep
+    from apps.agent.models.agent_run import AgentRun, AgentStep
 
     steps = state.get("steps", [])
     idx = state.get("current_step_index", 0)
@@ -393,7 +393,7 @@ def agent_finalize_run(state: dict, context: dict) -> dict:
     _capture_flow_completion() which writes the execution summary to the
     Memory Bridge via MemoryCaptureEngine.
     """
-    from AINDY.db.models.agent_run import AgentRun
+    from apps.agent.models.agent_run import AgentRun
 
     agent_run_id = state["agent_run_id"]
     agent_run_db_id = _db_run_id(agent_run_id)

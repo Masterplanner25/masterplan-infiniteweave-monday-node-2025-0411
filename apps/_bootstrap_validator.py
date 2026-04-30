@@ -47,6 +47,7 @@ def _manifest_from_apps_path(_apps_path: str | Path) -> _BootstrapManifestAdapte
 
     registered_apps: list[str] = []
     dependencies: dict[str, list[str]] = {}
+    core_domains: list[str] = []
 
     for child in sorted(apps_path.iterdir(), key=lambda path: path.name):
         if not child.is_dir() or child.name.startswith("_"):
@@ -57,6 +58,7 @@ def _manifest_from_apps_path(_apps_path: str | Path) -> _BootstrapManifestAdapte
 
         registered_apps.append(child.name)
         declared_deps: list[str] = []
+        is_core_domain = False
         try:
             tree = ast.parse(bootstrap_path.read_text(encoding="utf-8", errors="ignore"))
             for node in tree.body:
@@ -64,17 +66,23 @@ def _manifest_from_apps_path(_apps_path: str | Path) -> _BootstrapManifestAdapte
                     for target in node.targets:
                         if getattr(target, "id", None) == "BOOTSTRAP_DEPENDS_ON":
                             declared_deps = list(ast.literal_eval(node.value) or [])
+                        elif getattr(target, "id", None) == "IS_CORE_DOMAIN":
+                            is_core_domain = bool(ast.literal_eval(node.value))
                 elif isinstance(node, ast.AnnAssign):
                     if getattr(node.target, "id", None) == "BOOTSTRAP_DEPENDS_ON":
                         declared_deps = list(ast.literal_eval(node.value) or [])
+                    elif getattr(node.target, "id", None) == "IS_CORE_DOMAIN":
+                        is_core_domain = bool(ast.literal_eval(node.value))
         except (SyntaxError, ValueError, TypeError):
             declared_deps = []
         dependencies[child.name] = [str(dep) for dep in declared_deps]
+        if is_core_domain:
+            core_domains.append(child.name)
 
     return _BootstrapManifestAdapter(
         registered_apps=registered_apps,
         dependencies=dependencies,
-        core_domains=["tasks", "identity", "agent"],
+        core_domains=core_domains,
     )
 
 

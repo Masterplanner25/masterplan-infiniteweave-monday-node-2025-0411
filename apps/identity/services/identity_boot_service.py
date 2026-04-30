@@ -57,16 +57,17 @@ def _count_user_memory(user_id: str | UUID, db: Session) -> int:
 
 
 def _count_user_agent_runs(user_id: str | UUID, db: Session) -> int:
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.kernel.syscall_dispatcher import dispatch_syscall
 
-    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
-    if normalized_user_id is None:
-        return 0
-    return (
-        db.query(AgentRun.id)
-        .filter(AgentRun.user_id == normalized_user_id)
-        .count()
+    result = dispatch_syscall(
+        "sys.v1.agent.count_runs",
+        {"user_id": str(user_id)},
+        db=db,
+        user_id=str(user_id),
     )
+    if result.get("status") != "success":
+        return 0
+    return int(result.get("data", {}).get("count", 0))
 
 
 def _count_active_flows(user_id: str | UUID, db: Session) -> int:
@@ -89,23 +90,20 @@ def get_recent_agent_runs(
     *,
     limit: int = _BOOT_RUN_LIMIT,
 ) -> list[dict[str, Any]]:
-    from AINDY.agents.agent_runtime import run_to_dict
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.kernel.syscall_dispatcher import dispatch_syscall
 
-    normalized_user_id = parse_user_id(user_id) if user_id is not None else None
-    rows = (
-        db.query(AgentRun)
-        .filter(AgentRun.user_id == normalized_user_id)
-        .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
-        .limit(limit)
-        .all()
+    result = dispatch_syscall(
+        "sys.v1.agent.list_recent_runs",
+        {"user_id": str(user_id), "limit": limit},
+        db=db,
+        user_id=str(user_id),
     )
-    result = []
+    if result.get("status") != "success":
+        return []
+    rows = list(result.get("data", {}).get("runs", []))
     for row in rows:
-        item = run_to_dict(row)
-        item["goal"] = item.get("objective")
-        result.append(item)
-    return result
+        row["goal"] = row.get("objective")
+    return rows
 
 
 def get_user_metrics(user_id: str | UUID, db: Session) -> dict[str, Any] | None:

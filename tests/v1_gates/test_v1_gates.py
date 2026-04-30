@@ -31,8 +31,12 @@ Test-to-task mapping:
     V1-VAL-014  test_domain_routes_mounted_explicitly      V1-REFACT-013
     V1-VAL-015  test_cross_app_deps_declared               V1-ARCH-001
     V1-VAL-016  test_no_bare_json_response_in_routes       V1-ARCH-002
+    # (covers apps/*/routes/ and AINDY/routes/)
     V1-VAL-017  test_db_unavailable_returns_503            V1-STAB-009
     V1-VAL-018  test_all_routers_documented_in_api_contracts V1-ARCH-003
+    V1-VAL-019  test_legacy_js_is_deleted    V1-ARCH-004
+    V1-VAL-020  test_db_pool_exhausted_returns_503    V1-STAB-010
+    V1-VAL-021  test_rate_limiter_uses_redis_storage_in_production_config    V1-STAB-011
 
 Import note: tests use `services.*` paths (pre-refactor). After V1-REFACT-008
 through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
@@ -40,6 +44,7 @@ through V1-REFACT-011 complete, update imports to `kernel.*`, `memory.*`, etc.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -684,11 +689,23 @@ def test_cross_app_deps_declared():
 def test_no_bare_json_response_in_routes():
     """
     V1-VAL-016 | Task: V1-ARCH-002
-    Route modules must not return bare JSONResponse objects outside the
-    accepted _http_status and _idempotency dispatch patterns.
+    Route modules in apps/*/routes/ and AINDY/routes/ must not return bare
+    JSONResponse objects outside the accepted _http_status and _idempotency
+    dispatch patterns. This gate covers both domain and platform routes.
     """
     root = Path(__file__).resolve().parents[2]
     routes_dirs = list((root / "apps").glob("*/routes"))
+
+    # Also cover AINDY platform route directories.
+    aindy_platform_routes = root / "AINDY" / "routes" / "platform"
+    if aindy_platform_routes.exists():
+        routes_dirs.append(aindy_platform_routes)
+
+    # And the top-level AINDY/routes/ directory (auth, health, flow, etc.)
+    aindy_routes_dir = root / "AINDY" / "routes"
+    if aindy_routes_dir.exists():
+        routes_dirs.append(aindy_routes_dir)
+
     violations: list[str] = []
 
     for routes_dir in routes_dirs:
@@ -830,4 +847,93 @@ def test_all_routers_documented_in_api_contracts():
         + "\n\nAdd an entry for each file to API_CONTRACTS.md under the "
         "appropriate mount group (root, /platform, or /apps).\n"
         "V1-ARCH-003: every registered router must appear in the API contracts doc."
+    )
+
+
+def test_legacy_js_is_deleted():
+    """
+    V1-VAL-019 | Task: V1-ARCH-004
+    client/src/api/legacy.js must not exist.
+    It was a migration shim (2026-04-28 to 2026-05-28) and has been deleted.
+    If this test fails, someone recreated the file — delete it and move
+    the functions to platform.js.
+    """
+    repo_root = Path(__file__).parent.parent.parent
+    legacy_path = repo_root / "client" / "src" / "api" / "legacy.js"
+
+    assert not legacy_path.exists(), (
+        "client/src/api/legacy.js exists but should have been deleted. "
+        "All functions have been migrated to platform.js. "
+        "V1-ARCH-004: delete the file and move any new functions to platform.js."
+    )
+
+
+def test_db_pool_exhausted_returns_503(client, auth_headers):
+    """
+    V1-VAL-020 | Task: V1-STAB-010
+    When the connection pool is exhausted, routes must return 503 with
+    error=db_pool_exhausted and a Retry-After header. A 500 is not
+    acceptable because callers cannot distinguish a bug from capacity
+    exhaustion.
+    """
+    from sqlalchemy.exc import TimeoutError as SATimeoutError
+
+    from apps.agent.routes.agent_router import get_db
+
+    def exhausted_get_db():
+        raise SATimeoutError()
+        yield
+
+    client.app.dependency_overrides[get_db] = exhausted_get_db
+    try:
+        response = client.get("/apps/agent/runs", headers=auth_headers)
+    finally:
+        client.app.dependency_overrides.pop(get_db, None)
+
+    assert response.status_code == 503, (
+        f"Expected 503 when DB pool is exhausted, got {response.status_code}. "
+        "V1-STAB-010: pool exhaustion must return 503 so callers can retry."
+    )
+    assert "Retry-After" in response.headers, (
+        "Pool exhaustion response must include Retry-After header."
+    )
+    body = response.json()
+    assert body.get("error") == "db_pool_exhausted", (
+        f"Expected error='db_pool_exhausted', got {body.get('error')!r}."
+    )
+    assert body.get("retryable") is True
+
+
+def test_rate_limiter_uses_redis_storage_in_production_config():
+    """
+    V1-VAL-021 | Task: V1-STAB-011
+    When REDIS_URL is set and TEST_MODE is off, the rate limiter must
+    be constructed with Redis-backed storage. In-memory storage does not
+    enforce limits across multiple worker processes.
+    """
+    import importlib
+
+    captured = {}
+
+    original_limiter = __import__("slowapi").Limiter
+
+    def capturing_limiter(*args, **kwargs):
+        captured["storage_uri"] = kwargs.get("storage_uri")
+        return original_limiter(*args, **kwargs)
+
+    with patch.dict("os.environ", {
+        "REDIS_URL": "redis://localhost:6379/0",
+        "TEST_MODE": "false",
+    }):
+        import AINDY.platform_layer.rate_limiter as rl_module
+        with patch("slowapi.Limiter", side_effect=capturing_limiter):
+            importlib.reload(rl_module)
+
+    assert captured.get("storage_uri") is not None, (
+        "Rate limiter must use Redis storage when REDIS_URL is set. "
+        "In-memory storage does not enforce limits across worker processes. "
+        "V1-STAB-011: multi-process deployments require shared rate-limit storage."
+    )
+    assert "redis" in (captured.get("storage_uri") or ""), (
+        f"Expected a redis:// storage_uri, got: {captured.get('storage_uri')!r}"
     )

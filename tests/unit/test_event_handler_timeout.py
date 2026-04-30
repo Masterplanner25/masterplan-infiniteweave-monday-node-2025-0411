@@ -2,6 +2,14 @@ from __future__ import annotations
 
 import time
 
+import prometheus_client as _prom
+import pytest
+
+pytestmark = pytest.mark.skipif(
+    getattr(_prom, "_is_stub", False),
+    reason="requires real prometheus_client: pip install -r AINDY/requirements.txt",
+)
+
 from AINDY.config import settings
 from AINDY.platform_layer import event_service
 from AINDY.platform_layer.metrics import REGISTRY

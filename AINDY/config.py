@@ -12,7 +12,6 @@ from pydantic import Field, field_validator, model_validator
 from pathlib import Path
 
 utcnow = lambda: datetime.now(timezone.utc)
-CORE_DOMAINS: list[str] = ["tasks", "identity", "agent"]
 logger = logging.getLogger(__name__)
 
 def _read_version() -> str:

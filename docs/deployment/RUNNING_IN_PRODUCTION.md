@@ -7,7 +7,7 @@
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
 | `SECRET_KEY` | Yes | JWT signing key (min 32 chars; generate with `python -c "import secrets; print(secrets.token_hex(32))"`) |
-| `REDIS_URL` | For distributed mode | Redis connection string |
+| `REDIS_URL` | For distributed mode | Redis connection string. Note: `REDIS_URL` also enables Redis-backed rate limiting. Without it, rate limits are per-process only (each worker maintains independent buckets). For single-instance deployments with one worker process, this is acceptable; for multi-process deployments it is not. |
 | `MONGO_URL` | For memory features | MongoDB connection string |
 | `AINDY_API_KEY` | Recommended | Platform API key for dev key bootstrap |
 
@@ -37,6 +37,7 @@ The worker emits a heartbeat to Redis (`aindy:worker:heartbeat`). The API server
 ## Multi-Instance Checklist
 
 - [ ] `REDIS_URL` set and reachable
+- [ ] Rate limiter uses Redis storage (set `REDIS_URL` — the limiter automatically uses Redis-backed buckets when `REDIS_URL` is set, ensuring per-minute limits are enforced across all worker processes. Without Redis storage, each worker maintains its own independent bucket and per-minute limits are not shared.)
 - [ ] `AINDY_REQUIRE_REDIS=true`
 - [ ] `AINDY_CACHE_BACKEND=redis`
 - [ ] `EXECUTION_MODE=distributed`

@@ -16,7 +16,7 @@ from AINDY.agents.agent_runtime.shared import LOCAL_AGENT_ID, get_runtime_compat
 def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from AINDY.db.models.agent_run import AgentRun
+        from apps.agent.models.agent_run import AgentRun
         from AINDY.runtime.nodus_execution_service import execute_agent_run_via_nodus
 
         user_db_id = compat._db_user_id(user_id)

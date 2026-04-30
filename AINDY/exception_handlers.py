@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError as SAOperationalError
+from sqlalchemy.exc import TimeoutError as SATimeoutError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -76,6 +77,29 @@ async def db_unavailable_exception_handler(
     )
 
 
+async def db_pool_exhausted_exception_handler(
+    request: Request, exc: SATimeoutError
+) -> JSONResponse:
+    logger.error(
+        "[DB] Pool exhausted on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+    )
+    return JSONResponse(
+        status_code=503,
+        headers={"Retry-After": "10"},
+        content={
+            "error": "db_pool_exhausted",
+            "message": (
+                "All database connections are in use. "
+                "The server is under high load — please retry shortly."
+            ),
+            "retryable": True,
+        },
+    )
+
+
 async def circuit_open_exception_handler(request: Request, exc: CircuitOpenError):
     logger.warning(
         "[CircuitBreaker] open circuit rejected request path=%s error=%s",
@@ -136,7 +160,7 @@ def _extract_user_id_from_request(request: Request):
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled error: %s", exc)
     db = None
-    if not isinstance(exc, SAOperationalError):
+    if not isinstance(exc, (SAOperationalError, SATimeoutError)):
         try:
             db = SessionLocal()
             emit_error_event(
@@ -169,6 +193,7 @@ def register_exception_handlers(app) -> None:
     app.add_exception_handler(QueueSaturatedError, queue_saturated_exception_handler)
     app.add_exception_handler(MongoUnavailableError, mongo_unavailable_exception_handler)
     app.add_exception_handler(CircuitOpenError, circuit_open_exception_handler)
+    app.add_exception_handler(SATimeoutError, db_pool_exhausted_exception_handler)
     app.add_exception_handler(SAOperationalError, db_unavailable_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

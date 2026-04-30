@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 
 import { EmptyState } from "../components/shared/EmptyState";
 import { LoadingPanel } from "../components/shared/LoadingPanel";
+import Sidebar from "../components/shared/Sidebar";
 import { Toast } from "../components/shared/Toast";
 
 vi.mock("../context/AuthContext", async (importOriginal) => {
@@ -18,6 +20,14 @@ vi.mock("../context/AuthContext", async (importOriginal) => {
       logout: vi.fn(),
       setToken: vi.fn(),
     }),
+  };
+});
+
+vi.mock("../api/agent.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getAgentRuns: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -331,5 +341,34 @@ describe("RippleTraceViewer insight tabs", () => {
     expect(
       await screen.findByText("No drop point linked to this trace.")
     ).toBeInTheDocument();
+  });
+});
+
+describe("Sidebar navigation", () => {
+  it("renders without error when authenticated", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(container.firstChild).not.toBeNull();
+  });
+
+  it("renders navigation links for authenticated admin user", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("navigation")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /genesis/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /master plan/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /execution engine/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /agent console/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /approval inbox/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /freelance hub/i })).toBeInTheDocument();
   });
 });

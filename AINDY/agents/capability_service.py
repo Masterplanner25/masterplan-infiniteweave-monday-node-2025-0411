@@ -163,7 +163,7 @@ def _token_hash(
 
 def _get_trust(user_id: str, db) -> Optional[Any]:
     try:
-        from AINDY.db.models.agent_run import AgentTrustSettings
+        from apps.agent.models.agent_run import AgentTrustSettings
 
         return (
             db.query(AgentTrustSettings)

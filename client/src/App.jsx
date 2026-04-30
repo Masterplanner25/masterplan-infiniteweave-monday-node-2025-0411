@@ -20,6 +20,7 @@ import "./App.css";
 
 const Dashboard = lazy(() => import("./components/app/Dashboard"));
 const TaskDashboard = lazy(() => import("./components/app/TaskDashboard"));
+const Genesis = lazy(() => import("./components/app/Genesis"));
 const MasterPlanDashboard = lazy(() => import("./components/app/MasterPlanDashboard"));
 const AnalyticsPanel = lazy(() => import("./components/app/AnalyticsPanel"));
 const ResearchEngine = lazy(() => import("./components/app/ResearchEngine"));
@@ -206,6 +207,7 @@ export default function App() {
                     <Route path="/" element={<Navigate to="/dashboard" replace />} />
                     <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
                     <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
+                    <Route path="/genesis" element={routeElement("Genesis", <Genesis />)} />
                     <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
                     <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
                     <Route path="/kpi" element={routeElement("KPI Snapshot", <KPIDashboard />)} />

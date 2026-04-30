@@ -13,6 +13,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 docker compose up -d
 ```
 
+To run redis-backed tests: `pip install redis==5.0.4 fakeredis`
+
 This starts PostgreSQL and the API on `http://localhost:8000`.
 
 MongoDB is part of the normal runtime startup path. On application boot, `main.py` eagerly calls `db.mongo_setup.init_mongo()`, so a real `MONGO_URL` must be configured unless you are intentionally using the explicit bypass for tests or constrained local verification.

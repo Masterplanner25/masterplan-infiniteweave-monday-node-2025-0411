@@ -1,6 +1,6 @@
 ---
 title: "Scalability Readiness Audit (Multi-Instance Risks)"
-last_verified: "2026-04-26"
+last_verified: "2026-04-29"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -59,6 +59,12 @@ This audit focuses on process-level state, cross-instance consistency, and multi
 - Risk: Previously - `_waiting` was in-memory only. A FlowRun entering WAIT on Instance A would never resume if the resume event arrived on Instance B.
 - Resolution (2026-04-07): `AINDY/kernel/event_bus.py` introduces a Redis pub/sub distributed event bus. `notify_event(broadcast=True)` publishes to `aindy:scheduler_events` after the local scan. All instances subscribe and call `notify_event(broadcast=False)` on their own scheduler when a message arrives. Exactly-once execution is guaranteed by an atomic `UPDATE ... WHERE status='waiting'` DB claim - only the winning instance proceeds. All others return immediately. Startup rehydration re-registers all waiting FlowRun and EU callbacks on every instance so any instance can resume any waiting flow after a restart.
 - Status: Resolved (2026-04-07). Remaining known limitation: collective restart race window (all instances restart simultaneously during an in-flight event) - requires Redis Streams for full elimination.
+
+9) Rate limiter bucket state (per-process)
+- Location: `AINDY/platform_layer/rate_limiter.py`
+- Risk: Previously - SlowAPI defaulted to in-memory storage, so each API worker kept independent rate-limit buckets. In multi-process deployments a client could exceed per-minute limits by spreading requests across workers.
+- Resolution (Prompt 33): `AINDY/platform_layer/rate_limiter.py` now passes `storage_uri=REDIS_URL` to `Limiter()` when `REDIS_URL` is set and `TEST_MODE` is off. Rate-limit buckets are shared across all worker processes. When `REDIS_URL` is not set (development, single-process), the limiter falls back to in-memory storage - acceptable for single-process deployments.
+- Status: Resolved. Verified by `V1-VAL-021`, which checks that production-style config uses Redis-backed limiter storage.
 
 ## Actionable Recommendations (No redesign)
 - Replace `InMemoryBackend` with Redis/DB cache if cache consistency is required.

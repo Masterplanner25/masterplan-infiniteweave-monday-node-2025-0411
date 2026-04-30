@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import uuid
 
-from AINDY.db.models.agent_run import AgentRun
+from apps.agent.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.db.models.user import User

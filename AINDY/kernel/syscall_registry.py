@@ -70,6 +70,10 @@ class SyscallContext:
     memory_context: list = field(default_factory=list)
     metadata: dict = field(default_factory=dict)
 
+    @property
+    def db(self):
+        return self.metadata.get("_db")
+
 
 # ── Capability constants ──────────────────────────────────────────────────────
 

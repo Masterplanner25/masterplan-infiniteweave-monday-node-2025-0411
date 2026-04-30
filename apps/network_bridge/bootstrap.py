@@ -1,7 +1,7 @@
 """Network bridge domain bootstrap."""
 from __future__ import annotations
 
-BOOTSTRAP_DEPENDS_ON: list[str] = ["authorship"]
+BOOTSTRAP_DEPENDS_ON: list[str] = ["authorship", "rippletrace"]
 APP_DEPENDS_ON: list[str] = ["analytics", "authorship", "rippletrace"]
 
 

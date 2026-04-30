@@ -92,6 +92,7 @@ __all__ = [
     "DEFAULT_NODUS_CAPABILITIES",
     "register_syscall",
     "get_dispatcher",
+    "dispatch_syscall",
     "make_syscall_ctx_from_flow",
     "make_syscall_ctx_from_tool",
     "child_context",
@@ -494,6 +495,42 @@ def get_dispatcher() -> SyscallDispatcher:
     directly if they need isolation.
     """
     return _DISPATCHER
+
+
+def _infer_dispatch_capability(name: str) -> str:
+    try:
+        _, action = parse_syscall_name(name)
+    except ValueError:
+        return "event.emit"
+    parts = action.split(".")
+    domain = parts[0] if parts else ""
+    verb = parts[-1] if parts else ""
+    if verb in {"get", "list", "count", "read", "query", "fetch"} or verb.startswith(
+        ("get_", "list_", "count_", "read_", "query_", "fetch_")
+    ):
+        return f"{domain}.read"
+    if verb in {"create", "update", "delete", "ensure", "init", "write", "store", "observe"} or verb.startswith(
+        ("create_", "update_", "delete_", "ensure_", "init_", "write_", "store_", "observe_")
+    ):
+        return f"{domain}.write"
+    return action
+
+
+def dispatch_syscall(
+    name: str,
+    payload: dict[str, Any],
+    *,
+    db=None,
+    user_id: str | None = None,
+    capability: str | None = None,
+) -> dict[str, Any]:
+    ctx = make_syscall_ctx_from_tool(
+        str(user_id or ""),
+        capabilities=[capability or _infer_dispatch_capability(name)],
+    )
+    if db is not None:
+        ctx.metadata["_db"] = db
+    return get_dispatcher().dispatch(name, payload, ctx)
 
 
 # â”€â”€ Context builder helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -4,20 +4,20 @@
  * Prefer the explicit category modules for new code:
  * - ./api/product.js
  * - ./api/operator.js
- * - ./api/legacy.js
+ * - ./api/platform.js
  *
  * This file remains as a flat compatibility barrel for older imports and
  * contract tests that still inspect `client/src/api.js` directly.
+ * Legacy platform helpers have been consolidated into platform.js.
  */
 
 import * as productApi from "./api/product.js";
 import * as operatorApi from "./api/operator.js";
-import * as legacyApi from "./api/legacy.js";
 
 export * from "./api/index.js";
 export { ApiError } from "./api/_core.js";
 
-export { productApi, operatorApi, legacyApi };
+export { productApi, operatorApi };
 
 export const ENDPOINTS = {
   GET_FLOW_RUNS: "/flow/runs",

@@ -4,7 +4,13 @@ from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import httpx
+import prometheus_client as _prom
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    getattr(_prom, "_is_stub", False),
+    reason="requires real prometheus_client: pip install -r AINDY/requirements.txt",
+)
 
 from AINDY.kernel.circuit_breaker import CircuitBreaker, CircuitOpenError
 from AINDY.platform_layer.deepseek_client import chat_completion_deepseek

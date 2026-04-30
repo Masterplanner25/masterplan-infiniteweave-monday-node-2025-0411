@@ -221,7 +221,7 @@ def test_core_domain_failure_raises(monkeypatch):
     monkeypatch.setattr(
         bs,
         "_load_bootstrap_metadata",
-        lambda: {"tasks": {"BOOTSTRAP_DEPENDS_ON": []}},
+        lambda: {"tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True}},
     )
     monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks"])
     monkeypatch.setattr(
@@ -252,7 +252,7 @@ def test_peripheral_domain_failure_skips(monkeypatch):
         bs,
         "_load_bootstrap_metadata",
         lambda: {
-            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "bridge": {"BOOTSTRAP_DEPENDS_ON": []},
         },
     )
@@ -293,7 +293,7 @@ def test_peripheral_domain_attempts_boot_even_when_dependency_failed(monkeypatch
         bs,
         "_load_bootstrap_metadata",
         lambda: {
-            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "bridge": {"BOOTSTRAP_DEPENDS_ON": []},
             "automation": {"BOOTSTRAP_DEPENDS_ON": ["bridge"]},
         },
@@ -338,8 +338,8 @@ def test_social_bootstrap_failure_does_not_block_peripheral_analytics(monkeypatc
         bs,
         "_load_bootstrap_metadata",
         lambda: {
-            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
-            "identity": {"BOOTSTRAP_DEPENDS_ON": []},
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "social": {"BOOTSTRAP_DEPENDS_ON": []},
             "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
         },
@@ -385,9 +385,9 @@ def test_analytics_bootstrap_import_failure_is_degraded_and_health_reports_it(mo
         bs,
         "_load_bootstrap_metadata",
         lambda: {
-            "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
-            "identity": {"BOOTSTRAP_DEPENDS_ON": []},
-            "agent": {"BOOTSTRAP_DEPENDS_ON": []},
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
+            "agent": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
         },
     )

@@ -4,7 +4,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.core.execution_signal_helper import queue_system_event
 from AINDY.core.execution_envelope import success
@@ -130,6 +129,8 @@ def build_decision_response(
 
 
 def count_active_executions(db, *, user_id: str | uuid.UUID | None = None) -> int:
+    from apps.agent.models.agent_run import AgentRun
+
     flow_query = db.query(FlowRun).filter(FlowRun.status.in_(("running", "waiting")))
     agent_query = db.query(AgentRun).filter(AgentRun.status.in_(("approved", "executing", "pending_approval")))
     if user_id is not None:

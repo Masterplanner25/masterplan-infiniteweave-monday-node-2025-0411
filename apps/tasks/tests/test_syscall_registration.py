@@ -18,7 +18,6 @@ EXPECTED_TASK_SYSCALLS = [
     "sys.v1.task.queue_automation",
     "sys.v1.task.get_user_tasks",
     "sys.v1.tasks.get_graph_context",
-    "sys.v1.watcher.ingest",
 ]
 
 

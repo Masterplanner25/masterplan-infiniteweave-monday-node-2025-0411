@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_moved_task_and_watcher_syscalls_register_from_tasks_domain():
+def test_task_syscalls_register_from_tasks_domain_and_watcher_ingest_from_automation():
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
     from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
 
@@ -13,7 +13,7 @@ def test_moved_task_and_watcher_syscalls_register_from_tasks_domain():
         "apps.tasks.syscalls.syscall_handlers"
     )
     assert SYSCALL_REGISTRY["sys.v1.watcher.ingest"].handler.__module__ == (
-        "apps.tasks.syscalls.syscall_handlers"
+        "apps.automation.syscalls.syscall_handlers"
     )
 
 

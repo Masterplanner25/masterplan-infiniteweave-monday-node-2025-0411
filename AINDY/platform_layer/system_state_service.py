@@ -8,7 +8,6 @@ from typing import Any
 
 from sqlalchemy import func
 
-from AINDY.db.models.agent_run import AgentRun
 from AINDY.db.models.flow_run import FlowRun
 from AINDY.db.models.request_metric import RequestMetric
 from AINDY.db.models.system_event import SystemEvent
@@ -31,6 +30,8 @@ class SystemStateThresholds:
 
 
 def compute_current_state(db, *, force_refresh: bool = False, persist_snapshot: bool = True) -> dict[str, Any]:
+    from AINDY.kernel.syscall_dispatcher import dispatch_syscall
+
     now = datetime.now(timezone.utc)
     if not force_refresh and _cache_valid(now):
         return _STATE_CACHE["value"]
@@ -54,10 +55,17 @@ def compute_current_state(db, *, force_refresh: bool = False, persist_snapshot: 
         .filter(FlowRun.status.in_(("running", "waiting")))
         .count()
     )
-    active_agent_runs = (
-        db.query(AgentRun)
-        .filter(AgentRun.status.in_(("approved", "executing", "pending_approval")))
-        .count()
+    _agent_count_result = dispatch_syscall(
+        "sys.v1.agent.count_runs",
+        {"status": ["approved", "executing", "pending_approval"]},
+        db=db,
+        user_id=None,
+        capability="agent.read",
+    )
+    active_agent_runs = int(
+        (_agent_count_result.get("data") or {}).get("count", 0)
+        if _agent_count_result.get("status") == "success"
+        else 0
     )
     active_runs = active_flow_runs + active_agent_runs
 
@@ -72,9 +80,25 @@ def compute_current_state(db, *, force_refresh: bool = False, persist_snapshot: 
         _duration_ms(row.created_at, row.completed_at or row.updated_at)
         for row in db.query(FlowRun).filter(FlowRun.created_at >= window_start).all()
     ]
+    _agent_dur_result = dispatch_syscall(
+        "sys.v1.agent.list_recent_durations",
+        {"window_hours": 1},
+        db=db,
+        user_id=None,
+        capability="agent.read",
+    )
+    _dur_rows = (
+        (_agent_dur_result.get("data") or {}).get("durations", [])
+        if _agent_dur_result.get("status") == "success"
+        else []
+    )
     agent_durations = [
-        _duration_ms(row.started_at or row.created_at, row.completed_at or row.started_at or row.created_at)
-        for row in db.query(AgentRun).filter(AgentRun.created_at >= window_start).all()
+        _duration_ms(
+            datetime.fromisoformat(row["started_at"]) if row.get("started_at") else None,
+            datetime.fromisoformat(row["completed_at"]) if row.get("completed_at") else None,
+        )
+        for row in _dur_rows
+        if row.get("started_at")
     ]
     avg_execution_time = round(_avg(flow_durations + agent_durations + [avg_request_duration]), 2)
 

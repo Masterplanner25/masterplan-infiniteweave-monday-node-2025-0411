@@ -14,13 +14,19 @@ if "prometheus_client" not in sys.modules:
         importlib.import_module("prometheus_client")
     except ModuleNotFoundError:
         _pm = types.ModuleType("prometheus_client")
+        _pm._is_stub = True  # sentinel: tests can detect the real package is absent
+
+        class _ValueHolder:
+            def __init__(self): self._v = 0.0
+            def get(self): return self._v
 
         class _Metric:
-            def __init__(self, *a, **kw): pass
+            def __init__(self, *a, **kw):
+                self._value = _ValueHolder()
             def labels(self, **kw): return self
-            def inc(self, *a): pass
+            def inc(self, v=1): self._value._v += float(v)
             def observe(self, *a): pass
-            def set(self, *a): pass
+            def set(self, v=0): self._value._v = float(v)
 
         for _cls_name in ("Counter", "Histogram", "Gauge", "Summary", "Info", "Enum", "CollectorRegistry"):
             setattr(_pm, _cls_name, type(_cls_name, (_Metric,), {}))
