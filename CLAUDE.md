@@ -167,6 +167,20 @@ Test tiers in this repo are materially different:
 
 If a change touches schema, startup, plugin loading, or queueing, the default suite is not always enough. Choose the test tier that matches the risk.
 
+## 7a. Makefile Shortcuts
+
+```sh
+make setup-dev   # install all Python dependencies (redis, fakeredis, prometheus-client, etc.)
+make test        # run the default test suite (SQLite, no external services)
+make test-full   # run all tests including redis and prometheus suites
+make test-postgres  # run PostgreSQL-specific tests
+make lint        # ruff check
+```
+
+Note: `make test` ignores the two test files that require the real `redis`
+package at import time. After `make setup-dev`, those files can be included
+with `make test-full`.
+
 ## 8. Adding a New Route
 
 When adding a new HTTP route:

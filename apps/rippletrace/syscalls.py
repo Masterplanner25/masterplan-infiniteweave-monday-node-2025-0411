@@ -46,7 +46,44 @@ def _handle_rippletrace_list_pings(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_log_ripple_event(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.rippletrace.public import log_ripple_event as _log_ripple
+
+    event_type = payload.get("event_type")
+    user_id = payload.get("user_id") or ctx.user_id
+    source = payload.get("source")
+    data = payload.get("data") or {}
+
+    if not event_type:
+        raise ValueError("sys.v1.rippletrace.log_ripple_event requires 'event_type'")
+
+    event = {
+        "ping_type": event_type,
+        "source_platform": source,
+        **data,
+    }
+
+    db, owns_session = _session_from_context(ctx)
+    try:
+        result = _log_ripple(
+            db=db,
+            event=event,
+            user_id=user_id,
+        )
+        return {"logged": True, "result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_rippletrace_syscall_handlers() -> None:
+    register_syscall(
+        name="sys.v1.rippletrace.log_ripple_event",
+        handler=_handle_log_ripple_event,
+        capability="rippletrace.write",
+        description="Log a rippletrace event through the rippletrace domain.",
+        stable=False,
+    )
     register_syscall(
         name="sys.v1.rippletrace.list_recent_pings",
         handler=_handle_rippletrace_list_pings,

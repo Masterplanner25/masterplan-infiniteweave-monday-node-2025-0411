@@ -915,11 +915,11 @@ def test_rate_limiter_uses_redis_storage_in_production_config():
 
     captured = {}
 
-    original_limiter = __import__("slowapi").Limiter
-
     def capturing_limiter(*args, **kwargs):
         captured["storage_uri"] = kwargs.get("storage_uri")
-        return original_limiter(*args, **kwargs)
+        # Return a MagicMock — calling the real Limiter would attempt a Redis
+        # connection via the `limits` library and fail when redis is not installed.
+        return MagicMock()
 
     with patch.dict("os.environ", {
         "REDIS_URL": "redis://localhost:6379/0",

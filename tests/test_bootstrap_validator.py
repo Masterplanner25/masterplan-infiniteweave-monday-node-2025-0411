@@ -38,6 +38,7 @@ class _Manifest:
 def test_current_registered_bootstrap_manifest_is_valid() -> None:
     import AINDY.startup as startup
 
+    startup = importlib.reload(startup)
     validate_bootstrap_manifest(startup.registry)
 
 

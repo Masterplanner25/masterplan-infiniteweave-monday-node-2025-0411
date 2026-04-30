@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import uuid
 
+from AINDY.kernel.syscall_dispatcher import dispatch_syscall
+
 def register_author(db: Session, name: str, platform: str, notes: str | None = None, user_id: str | uuid.UUID | None = None):
     """
     Registers or updates an author record in the database.
@@ -25,6 +27,7 @@ def connect_external_author(
     platform: str,
     connection_type: str,
     notes: str | None,
+    user_id: str | uuid.UUID | None = None,
 ) -> dict:
     """
     Register the author, log a ripple event, save a metric, and commit.
@@ -32,8 +35,6 @@ def connect_external_author(
     Returns the result dict for the route handler.
     All DB work (including the final commit) is owned here.
     """
-    from apps.analytics.public import save_calculation
-    from apps.rippletrace.public import log_ripple_event
     from datetime import datetime
 
     author = register_author(db=db, name=author_name, platform=platform, notes=notes)
@@ -45,10 +46,28 @@ def connect_external_author(
         "notes": notes or "",
         "drop_point_id": "bridge",
     }
-    log_ripple_event(db, ripple_event)
+    normalized_user_id = str(user_id) if user_id is not None else None
+    dispatch_syscall(
+        "sys.v1.rippletrace.log_ripple_event",
+        {
+            "event_type": connection_type,
+            "user_id": normalized_user_id,
+            "source": platform,
+            "data": ripple_event,
+        },
+        db=db,
+        user_id=normalized_user_id,
+        capability="rippletrace.write",
+    )
 
     metric_name = f"UserEvent::{platform}"
-    save_calculation(db, metric_name, 1)
+    dispatch_syscall(
+        "sys.v1.analytics.save_calculation",
+        {"metric_name": metric_name, "value": 1, "user_id": normalized_user_id},
+        db=db,
+        user_id=normalized_user_id,
+        capability="analytics.write",
+    )
 
     db.commit()
 

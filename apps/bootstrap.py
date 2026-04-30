@@ -56,7 +56,7 @@ BOOTSTRAP_DEPENDS_ON_FALLBACKS: dict[str, list[str]] = {
     "freelance": ["automation"],
     "agent": [],
     "authorship": [],
-    "bridge": [],
+    "bridge": ["automation"],
     "autonomy": [],
     "dashboard": [],
     "network_bridge": ["authorship", "rippletrace"],
@@ -64,7 +64,6 @@ BOOTSTRAP_DEPENDS_ON_FALLBACKS: dict[str, list[str]] = {
 
 _ACCEPTED_APP_DEPENDS_ON_GAPS: frozenset[tuple[str, str]] = frozenset({
     ("analytics", "arm"),  # circular after arm -> analytics ordering is declared
-    ("bridge", "automation"),  # circular because automation is a boot-time upstream
 })
 
 
