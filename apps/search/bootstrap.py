@@ -14,6 +14,7 @@ def register() -> None:
     _register_agent_tools()
     _register_agent_capabilities()
     _register_capture_rules()
+    _register_flows()
     _register_flow_results()
     _register_flow_plans()
     _register_health_check()
@@ -87,6 +88,20 @@ def _register_capture_rules() -> None:
     from AINDY.platform_layer.registry import register_memory_policy
     from apps.search.memory_policy import register as register_search_memory_policy
     register_search_memory_policy(register_memory_policy)
+
+
+def _register_flows() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.search.flows import search_flows
+
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(search_flows).items()
+            if not name.startswith("__")
+        }
+    )
+    search_flows.register()
 
 
 def _register_flow_results() -> None:

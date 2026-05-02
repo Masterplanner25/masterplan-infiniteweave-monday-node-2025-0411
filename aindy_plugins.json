@@ -1,5 +1,13 @@
 {
-  "plugins": [
-    "apps.bootstrap"
-  ]
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {
+      "plugins": []
+    },
+    "default-apps": {
+      "plugins": [
+        "apps.bootstrap"
+      ]
+    }
+  }
 }

@@ -21,6 +21,7 @@ def register() -> None:
     _register_scheduled_jobs()
     _register_syscalls()
     _register_required_syscalls()
+    _register_flows()
     _register_flow_results()
     _register_health_check()
 
@@ -127,6 +128,20 @@ def _register_required_syscalls() -> None:
         "sys.v1.score.recalculate",
     ):
         register_required_syscall(name)
+
+
+def _register_flows() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.analytics.flows import analytics_flows
+
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(analytics_flows).items()
+            if not name.startswith("__")
+        }
+    )
+    analytics_flows.register()
 
 
 def _register_flow_results() -> None:

@@ -10,6 +10,9 @@ _api_runtime_state: dict[str, Any] = {
     "background_enabled": False,
     "scheduler_role": "disabled",
     "event_bus_ready": False,
+    "boot_profile": "unknown",
+    "app_plugins_loaded": False,
+    "app_plugin_count": 0,
 }
 
 _worker_runtime_state: dict[str, Any] = {
@@ -76,6 +79,9 @@ def reset_runtime_state() -> None:
             "background_enabled": False,
             "scheduler_role": "disabled",
             "event_bus_ready": False,
+            "boot_profile": "unknown",
+            "app_plugins_loaded": False,
+            "app_plugin_count": 0,
         }
     )
     _worker_runtime_state.clear()

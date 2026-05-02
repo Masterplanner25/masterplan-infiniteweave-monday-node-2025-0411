@@ -21,22 +21,11 @@ _AUTOMATION_DOMAIN_FLOW_MODULES = [
     "apps.automation.flows.memory_flows",
     "apps.automation.flows.system_flows",
     "apps.automation.flows.dashboard_autonomy_flows",
+    "apps.automation.flows.watcher_flows",
 ]
-
-_CROSS_DOMAIN_FLOW_MODULES = [
-    "apps.arm.flows.arm_flows",
-    "apps.analytics.flows.analytics_flows",
-    "apps.agent.flows.agent_flows",
-    "apps.freelance.flows.freelance_flows",
-    "apps.masterplan.flows.masterplan_flows",
-    "apps.search.flows.search_flows",
-    "apps.tasks.flows.tasks_flows",
-]
-
 
 def register_extended_flows() -> None:
     _register_automation_domain_flows()
-    _register_cross_domain_flows()
 
 
 def _resolve_registry_bindings():
@@ -73,36 +62,3 @@ def _register_automation_domain_flows() -> None:
     for mod in automation_modules:
         if hasattr(mod, "register"):
             mod.register()
-
-
-def _register_cross_domain_flows() -> None:
-    from AINDY.platform_layer.registry import register_symbols
-
-    flow_registry, register_flow = _resolve_registry_bindings()
-
-    for module_path in _CROSS_DOMAIN_FLOW_MODULES:
-        try:
-            mod = importlib.import_module(module_path)
-            mod.FLOW_REGISTRY = flow_registry
-            mod.register_flow = register_flow
-            register_symbols(
-                {
-                    name: value
-                    for name, value in vars(mod).items()
-                    if not name.startswith("__")
-                }
-            )
-            if hasattr(mod, "register"):
-                mod.register()
-            else:
-                logger.warning(
-                    "Flow module %s has no register() function - skipping", module_path
-                )
-        except Exception as exc:
-            logger.error(
-                "Flow module %s failed to register (flows from this domain will be "
-                "unavailable): %s",
-                module_path,
-                exc,
-                exc_info=True,
-            )

@@ -325,9 +325,8 @@ def test_register_extended_flows_registers_single_and_multi_node_flows(monkeypat
 
     flow_defs.register_extended_flows()
 
-    assert "masterplan_activate" in registered
-    assert registered["masterplan_activate"]["start"] == "masterplan_activate_node"
     assert "observability_dashboard" in registered
+    assert registered["observability_dashboard"]["start"] == "observability_dashboard_node"
     assert "watcher_signals_receive" in registered
     assert registered["watcher_signals_receive"]["start"] == "watcher_ingest_validate"
     assert "memory_execute_loop" in registered

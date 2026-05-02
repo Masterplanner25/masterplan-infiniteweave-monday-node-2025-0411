@@ -104,6 +104,16 @@ class TestRegisterAllDomainHandlers:
         assert callable(entry.handler)
         assert entry.capability == "task.create"
 
+    def test_single_owner_syscalls_keep_authoritative_handlers(self):
+        from AINDY.kernel.syscall_handlers import register_all_domain_handlers
+
+        register_all_domain_handlers()
+
+        assert SYSCALL_REGISTRY["sys.v1.agent.dispatch_tool"].handler.__name__ == "handle_agent_dispatch_tool"
+        assert SYSCALL_REGISTRY["sys.v1.memory.list"].handler.__name__ == "_handle_memory_list"
+        assert SYSCALL_REGISTRY["sys.v1.memory.tree"].handler.__name__ == "_handle_memory_tree"
+        assert SYSCALL_REGISTRY["sys.v1.memory.trace"].handler.__name__ == "_handle_memory_trace"
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # B: task domain handlers

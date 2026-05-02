@@ -35,8 +35,10 @@ from AINDY.platform_layer.cache_backend import NoOpCacheBackend
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.registry import (
     emit_event,
+    get_active_plugin_profile,
     get_plugin_boot_order,
     get_legacy_root_routers,
+    get_registered_apps,
     get_routers,
     load_plugins,
     run_startup_hooks,
@@ -122,19 +124,44 @@ logger = logging.getLogger("AINDY.main")
 _OPENAI_PROJECT_KEY_PREFIX = "sk-" + "proj-"
 _pool_was_near_exhaustion: bool = False
 
-try:
-    _resolved_boot_order = get_plugin_boot_order()
-    if _resolved_boot_order:
-        logger.info("Boot order resolved: %s", " -> ".join(_resolved_boot_order))
-    load_plugins()
-    validate_bootstrap_manifest(registry)
-except BootstrapDependencyError as exc:
-    logger.critical("Bootstrap dependency validation failed:\n%s", exc)
-    raise RuntimeError(str(exc)) from exc
-except RuntimeError:
-    raise
-except Exception as exc:
-    logger.warning("Plugin loading skipped: %s", exc)
+def _publish_boot_runtime_state() -> None:
+    active_profile = get_active_plugin_profile()
+    app_plugin_count = len(get_registered_apps())
+    publish_api_runtime_state(
+        boot_profile=active_profile,
+        app_plugins_loaded=app_plugin_count > 0,
+        app_plugin_count=app_plugin_count,
+    )
+
+
+def _initialize_runtime_bootstrap() -> None:
+    try:
+        active_profile = get_active_plugin_profile()
+        _resolved_boot_order = get_plugin_boot_order()
+        if _resolved_boot_order:
+            logger.info("Boot order resolved: %s", " -> ".join(_resolved_boot_order))
+        load_plugins()
+        validate_bootstrap_manifest(registry)
+        _publish_boot_runtime_state()
+        if active_profile == "platform-only":
+            logger.info("Startup profile selected: platform-only (runtime boot without app plugins).")
+        else:
+            logger.info(
+                "Startup profile selected: %s (%d registered app plugin%s).",
+                active_profile,
+                len(get_registered_apps()),
+                "" if len(get_registered_apps()) == 1 else "s",
+            )
+    except BootstrapDependencyError as exc:
+        logger.critical("Bootstrap dependency validation failed:\n%s", exc)
+        raise RuntimeError(str(exc)) from exc
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        logger.warning("Plugin loading skipped: %s", exc)
+
+
+_initialize_runtime_bootstrap()
 
 
 def _check_alembic_head() -> None:
@@ -1088,6 +1115,9 @@ async def lifespan(app: FastAPI):
         background_enabled=False,
         scheduler_role="disabled",
         event_bus_ready=False,
+        boot_profile=get_active_plugin_profile(),
+        app_plugins_loaded=bool(get_registered_apps()),
+        app_plugin_count=len(get_registered_apps()),
     )
     # Phase 1: validate startup configuration and deployment guards.
     _validate_startup_config()

@@ -898,3 +898,29 @@ def register_all_domain_handlers() -> None:
     )
 
 
+def register_all_domain_handlers() -> None:
+    """Register only automation-owned syscall handlers."""
+    _registrations = [
+        ("sys.v1.score.feedback", _handle_score_feedback, "score.feedback", "Persist score feedback record", False, None),
+        ("sys.v1.automation.list_feedback", _handle_automation_list_feedback, "automation.read", "List user feedback records", False, None),
+        ("sys.v1.automation.list_loop_adjustments", _handle_automation_list_loop_adjustments, "automation.read", "List loop adjustment records", False, None),
+        ("sys.v1.automation.create_loop_adjustment", _handle_automation_create_loop_adjustment, "automation.write", "Create a loop adjustment record", False, None),
+        ("sys.v1.automation.update_loop_adjustment", _handle_automation_update_loop_adjustment, "automation.write", "Update a loop adjustment record", False, None),
+        ("sys.v1.watcher.ingest", _handle_watcher_ingest, "watcher.ingest", "Persist watcher signals", False, None),
+        ("sys.v1.watcher.query", handle_watcher_query, "watcher.query", "Query stored watcher signals", False, None),
+        ("sys.v1.agent.suggest_tools", _handle_agent_suggest_tools, "agent.suggest_tools", "KPI-driven tool suggestions", False, None),
+    ]
+
+    for name, handler, capability, description, stable, input_schema in _registrations:
+        register_syscall(
+            name,
+            handler,
+            capability,
+            description,
+            input_schema=input_schema,
+            stable=stable,
+        )
+
+    logger.info("[syscall_handlers] registered %d automation-owned domain handlers", len(_registrations))
+
+

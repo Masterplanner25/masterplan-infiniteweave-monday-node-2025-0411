@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -95,6 +96,9 @@ _bootstrap_dependencies: dict[str, list[str]] = {}
 _core_domains: list[str] = []
 _degraded_domains: list[str] = []
 _health_checks: dict[str, Callable[[], dict[str, Any]]] = {}
+_PLUGIN_PROFILE_ENV_VARS: tuple[str, ...] = ("AINDY_BOOT_PROFILE", "AINDY_PLUGIN_PROFILE")
+_active_plugin_profile: str | None = None
+_runtime_agent_defaults_loaded = False
 
 
 def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
@@ -363,10 +367,12 @@ def register_agent_tool(name: str, tool: Any) -> Any:
 
 
 def get_agent_tool(name: str) -> Any | None:
+    _ensure_runtime_agent_defaults()
     return _agent_tools.get(name)
 
 
 def iter_agent_tools() -> Iterable[tuple[str, Any]]:
+    _ensure_runtime_agent_defaults()
     return tuple(_agent_tools.items())
 
 
@@ -377,6 +383,7 @@ def register_planner_context_provider(run_type: str, handler: Handler) -> Handle
 
 
 def get_planner_context(run_type: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    _ensure_runtime_agent_defaults()
     handler = _agent_planner_contexts.get(run_type) or _agent_planner_contexts.get("default")
     if handler is None:
         return {}
@@ -395,6 +402,7 @@ def register_run_tool_provider(run_type: str, handler: Handler) -> Handler:
 
 
 def get_tools_for_run(run_type: str, context: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    _ensure_runtime_agent_defaults()
     handler = _agent_run_tools.get(run_type) or _agent_run_tools.get("default")
     if handler is None:
         return []
@@ -413,6 +421,7 @@ def register_agent_completion_hook(run_type: str, handler: Handler) -> Handler:
 
 
 def run_agent_completion_hooks(run_type: str, context: dict[str, Any]) -> list[Any]:
+    _ensure_runtime_agent_defaults()
     results: list[Any] = []
     handlers = tuple(_agent_completion_hooks.get(run_type, ())) + tuple(
         _agent_completion_hooks.get("default", ()) if run_type != "default" else ()
@@ -454,6 +463,7 @@ def register_trigger_evaluator(trigger_type: str, handler: Handler) -> Handler:
 
 
 def get_trigger_evaluator(trigger_type: str) -> Handler | None:
+    _ensure_runtime_agent_defaults()
     load_plugins()
     return _trigger_evaluators.get(trigger_type) or _trigger_evaluators.get("default")
 
@@ -498,12 +508,23 @@ def _apply_capability_provider_bundle(bundle: CapabilityProviderBundle | dict[st
 
 
 def _load_capability_definition_providers() -> None:
+    _ensure_runtime_agent_defaults()
     load_plugins()
     for provider in tuple(_capability_definition_providers):
         try:
             _apply_capability_provider_bundle(provider())
         except Exception as exc:
             logger.warning("Capability definition provider failed: %s", exc)
+
+
+def _ensure_runtime_agent_defaults() -> None:
+    global _runtime_agent_defaults_loaded
+    if _runtime_agent_defaults_loaded:
+        return
+    from AINDY.platform_layer import runtime_agent_defaults
+
+    runtime_agent_defaults.register()
+    _runtime_agent_defaults_loaded = True
 
 
 def get_capability_definition(name: str) -> dict[str, Any] | None:
@@ -675,16 +696,130 @@ def get_core_domains() -> list[str]:
     return list(_core_domains)
 
 
-def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:
-    if manifest_path is None:
-        manifest_path = Path(__file__).resolve().parents[2] / "aindy_plugins.json"
-    path = Path(manifest_path)
+def _default_manifest_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "aindy_plugins.json"
+
+
+def _read_plugin_manifest(manifest_path: str | Path | None = None) -> tuple[Path, dict[str, Any] | None]:
+    path = Path(manifest_path) if manifest_path is not None else _default_manifest_path()
     if not path.exists():
+        return path, None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"Plugin manifest at {path} must be a JSON object")
+    return path, data
+
+
+def _normalize_plugin_profile_plugins(plugins: Any, *, profile_name: str, path: Path) -> list[str]:
+    if plugins is None:
+        return []
+    if not isinstance(plugins, list):
+        raise ValueError(
+            f"Plugin profile {profile_name!r} in {path} must declare a list of plugins"
+        )
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for module_name in plugins:
+        if not isinstance(module_name, str):
+            raise ValueError(
+                f"Plugin profile {profile_name!r} in {path} contains a non-string plugin entry"
+            )
+        cleaned = module_name.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        normalized.append(cleaned)
+    return normalized
+
+
+def _resolve_requested_plugin_profile(profile: str | None = None) -> str | None:
+    if isinstance(profile, str) and profile.strip():
+        return profile.strip()
+    for env_name in _PLUGIN_PROFILE_ENV_VARS:
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value
+    return None
+
+
+def resolve_plugin_profile(
+    manifest_path: str | Path | None = None,
+    *,
+    profile: str | None = None,
+) -> tuple[str, list[str]]:
+    path, data = _read_plugin_manifest(manifest_path)
+    if data is None:
+        return "missing", []
+
+    requested_profile = _resolve_requested_plugin_profile(profile)
+    legacy_plugins = data.get("plugins")
+    if isinstance(legacy_plugins, list):
+        return "__legacy__", _normalize_plugin_profile_plugins(
+            legacy_plugins,
+            profile_name="__legacy__",
+            path=path,
+        )
+
+    profiles = data.get("profiles")
+    if not isinstance(profiles, dict) or not profiles:
+        raise ValueError(
+            f"Plugin manifest at {path} must declare either top-level 'plugins' or 'profiles'"
+        )
+
+    if requested_profile:
+        selected_profile = requested_profile
+    else:
+        default_profile = data.get("default_profile")
+        if isinstance(default_profile, str) and default_profile.strip():
+            selected_profile = default_profile.strip()
+        elif "default-apps" in profiles:
+            selected_profile = "default-apps"
+        elif len(profiles) == 1:
+            selected_profile = next(iter(profiles))
+        else:
+            raise ValueError(
+                f"Plugin manifest at {path} must declare 'default_profile' when multiple profiles exist"
+            )
+
+    if selected_profile not in profiles:
+        raise ValueError(
+            f"Plugin profile {selected_profile!r} not found in manifest {path}"
+        )
+
+    profile_entry = profiles[selected_profile]
+    if not isinstance(profile_entry, dict):
+        raise ValueError(
+            f"Plugin profile {selected_profile!r} in {path} must be a JSON object"
+        )
+
+    return selected_profile, _normalize_plugin_profile_plugins(
+        profile_entry.get("plugins"),
+        profile_name=selected_profile,
+        path=path,
+    )
+
+
+def get_active_plugin_profile(manifest_path: str | Path | None = None) -> str:
+    global _active_plugin_profile
+    if isinstance(_active_plugin_profile, str) and _active_plugin_profile.strip():
+        return _active_plugin_profile
+    profile_name, _plugin_modules = resolve_plugin_profile(manifest_path)
+    _active_plugin_profile = profile_name
+    return profile_name
+
+
+def get_plugin_boot_order(
+    manifest_path: str | Path | None = None,
+    *,
+    profile: str | None = None,
+) -> list[str]:
+    _profile_name, plugin_modules = resolve_plugin_profile(manifest_path, profile=profile)
+    if not plugin_modules:
         return []
 
-    data = json.loads(path.read_text(encoding="utf-8"))
     boot_order: list[str] = []
-    for module_name in data.get("plugins", []):
+    for module_name in plugin_modules:
         try:
             module = importlib.import_module(module_name)
         except Exception as exc:
@@ -704,23 +839,36 @@ def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:
     return boot_order
 
 
-def load_plugins(manifest_path: str | Path | None = None) -> list[str]:
+def load_plugins(
+    manifest_path: str | Path | None = None,
+    *,
+    profile: str | None = None,
+) -> list[str]:
     """Load plugin bootstrap modules listed in the root manifest.
 
-    The manifest keeps application module names outside AINDY source. Expected
-    shape: {"plugins": ["some.module", ...]}.
+    The manifest keeps application module names outside AINDY source. Supported
+    shapes are either the legacy ``{"plugins": [...]}`` list or the runtime-owned
+    profile format:
+
+    ``{"default_profile": "default-apps", "profiles": {"platform-only": {"plugins": []}, ...}}``
     """
 
-    if manifest_path is None:
-        manifest_path = Path(__file__).resolve().parents[2] / "aindy_plugins.json"
-    path = Path(manifest_path)
-    if not path.exists():
+    path, data = _read_plugin_manifest(manifest_path)
+    if data is None:
         logger.info("No plugin manifest found at %s", path)
         return []
 
-    data = json.loads(path.read_text(encoding="utf-8"))
+    global _active_plugin_profile
+    active_profile, plugin_modules = resolve_plugin_profile(path, profile=profile)
+    _active_plugin_profile = active_profile
+    if not plugin_modules:
+        logger.info(
+            "Active plugin profile %s contains no plugin modules; runtime is starting without apps.",
+            active_profile,
+        )
+        return []
     loaded: list[str] = []
-    for module_name in data.get("plugins", []):
+    for module_name in plugin_modules:
         if module_name in _loaded_plugins:
             continue
         try:
@@ -734,5 +882,9 @@ def load_plugins(manifest_path: str | Path | None = None) -> list[str]:
         _loaded_plugins.add(module_name)
         loaded.append(module_name)
     if loaded:
-        logger.info("Loaded platform plugins: %s", ", ".join(loaded))
+        logger.info(
+            "Loaded platform plugins from profile %s: %s",
+            active_profile,
+            ", ".join(loaded),
+        )
     return loaded

@@ -27,6 +27,7 @@ def register() -> None:
     _register_agent_tools()
     _register_agent_capabilities()
     _register_capture_rules()
+    _register_flows()
     _register_flow_results()
     _register_flow_plans()
     _register_required_flow_nodes()
@@ -98,6 +99,20 @@ def _register_capture_rules() -> None:
     from AINDY.platform_layer.registry import register_memory_policy
     from apps.arm.memory_policy import register as register_arm_memory_policy
     register_arm_memory_policy(register_memory_policy)
+
+
+def _register_flows() -> None:
+    from AINDY.platform_layer.registry import register_symbols
+    from apps.arm.flows import arm_flows
+
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(arm_flows).items()
+            if not name.startswith("__")
+        }
+    )
+    arm_flows.register()
 
 
 def _register_flow_results() -> None:
