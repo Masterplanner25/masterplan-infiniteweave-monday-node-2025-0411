@@ -22,7 +22,7 @@ Covers:
 - Redis: required when `AINDY_REQUIRE_REDIS=true` or `ENV` is not `dev`/`development`/`test`. Also required for `EXECUTION_MODE=distributed`.
 - MongoDB: required only when `MONGO_REQUIRED=true`. If `SKIP_MONGO_PING=true`, startup skips the ping; if `MONGO_REQUIRED=true`, that skip becomes a startup error.
 - OpenAI API key: required. `config.py` rejects missing or placeholder `OPENAI_API_KEY` outside test mode.
-- Nodus VM: required only when any registered flow node is `nodus.execute` or starts with `nodus.`. `NODUS_SOURCE_PATH` must point to the root directory that makes `nodus.runtime.embedding` importable.
+- Nodus VM: required only when any registered flow node is `nodus.execute` or starts with `nodus.`. Install the `nodus` pip package from `AINDY/requirements.txt` so `nodus.runtime.embedding` is importable.
 
 ## 2. Required Environment Variables
 ### 2a. Always Required
@@ -52,11 +52,6 @@ Covers:
 | `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `3000` | Mongo server discovery timeout | Any deployment |
 | `MONGO_MAX_POOL_SIZE` | `10` | Max Mongo connections | Tune for social traffic |
 | `MONGO_MIN_POOL_SIZE` | `1` | Min Mongo connections | Keep warm connection available |
-
-#### Nodus
-| Variable | Default | Effect | When to set |
-|---|---|---|---|
-| `NODUS_SOURCE_PATH` | `None` | Adds Nodus source to `sys.path` and enables import check | Any deployment with registered `nodus.*` nodes |
 
 #### Cache
 | Variable | Default | Effect | When to set |
@@ -176,7 +171,7 @@ redis-cli -u "$REDIS_URL" GET aindy:worker:heartbeat
 | `Schema guard unavailable: alembic not installed.` | Alembic package unavailable | Install Alembic in runtime image |
 | `Schema drift detected. Run alembic upgrade head.` | DB not at Alembic head | Run migrations |
 | `APScheduler failed to start. Check apscheduler installation.` | Scheduler startup failure | Fix APScheduler/runtime image |
-| `[startup] Registered Nodus nodes require the Nodus VM, but it is unavailable.` | `nodus.*` nodes registered but VM missing/unimportable | Set `NODUS_SOURCE_PATH` correctly |
+| `[startup] Registered Nodus nodes require the Nodus VM, but it is unavailable.` | `nodus.*` nodes registered but VM missing/unimportable | Run `pip install -r AINDY/requirements.txt` and verify `nodus` imports |
 | `Required flow nodes missing after bootstrap:` | Registry/bootstrap mismatch | Fix flow registration/bootstrap imports |
 | `Event bus subscriber failed to start:` | Subscriber could not connect/start | Fix Redis/event-bus startup path |
 | `RuntimeError(str(_rbv))` | Router boundary validation failed during startup | Fix the boundary violation reported in logs |
@@ -245,14 +240,14 @@ Healthy means `status: "healthy"` and dependency statuses are `ok` or explicitly
 ## 7. Nodus VM Setup
 Nodus is an external scripting VM used by `nodus.*` flow nodes.
 
-`NODUS_SOURCE_PATH` must point to the source directory that contains the importable `nodus` package root.
+Install the pip package listed in `AINDY/requirements.txt` so the `nodus` package is available in site-packages.
 
 Verify importability:
 ```bash
-python -c "import sys; sys.path.insert(0, '/your/nodus/path'); import nodus.runtime.embedding; print('OK')"
+python -c "import nodus.runtime.embedding; print('OK')"
 ```
 
-If `NODUS_SOURCE_PATH` is unset or unimportable and no `nodus.*` nodes are registered, startup logs:
+If the `nodus` package is unavailable and no `nodus.*` nodes are registered, startup logs:
 ```text
 [startup] Nodus VM not available; no Nodus nodes registered, skipping.
 ```

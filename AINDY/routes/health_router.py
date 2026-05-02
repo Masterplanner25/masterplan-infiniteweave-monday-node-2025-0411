@@ -285,21 +285,22 @@ def _check_worker_health() -> dict:
 
 
 def _check_nodus_status() -> dict:
-    nodus_path = os.environ.get("NODUS_SOURCE_PATH")
-    if not nodus_path:
-        return {"status": "not_configured", "detail": "NODUS_SOURCE_PATH not set"}
-
-    import sys as _sys
-
-    if nodus_path not in _sys.path:
-        _sys.path.insert(0, nodus_path)
     try:
-        import importlib
-
-        importlib.import_module("nodus.runtime.embedding")
-        return {"status": "ok", "path": nodus_path}
+        import nodus.runtime.embedding as _nodus_emb
+        if not hasattr(_nodus_emb, "NodusRuntime"):
+            return {
+                "status": "unavailable",
+                "detail": "nodus package installed but NodusRuntime not found",
+                "hint": "Run: pip install -r AINDY/requirements.txt",
+            }
+        version = getattr(__import__("nodus"), "__version__", "unknown")
+        return {"status": "ok", "version": version}
     except ImportError as exc:
-        return {"status": "unavailable", "detail": str(exc), "path": nodus_path}
+        return {
+            "status": "unavailable",
+            "detail": str(exc),
+            "hint": "Run: pip install -r AINDY/requirements.txt",
+        }
 
 
 def _check_ai_providers_status() -> dict:

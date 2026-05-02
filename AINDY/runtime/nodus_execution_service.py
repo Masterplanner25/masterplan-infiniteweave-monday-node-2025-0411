@@ -557,12 +557,6 @@ def execute_nodus_task_payload(
             user_id=normalized_user_id,
         )
 
-        nodus_path = os.environ.get("NODUS_SOURCE_PATH")
-        if not nodus_path:
-            raise ImportError("NODUS_SOURCE_PATH is not set. Nodus VM cannot be loaded.")
-        if nodus_path not in sys.path:
-            sys.path.insert(0, nodus_path)
-
         from AINDY.nodus.runtime.embedding import NodusRuntime  # noqa: F401
 
         from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
@@ -684,8 +678,8 @@ def execute_nodus_task_payload(
             "task_name": task_name,
             "status": "bridge_ready",
             "message": (
-                "Nodus runtime unavailable. Configure NODUS_SOURCE_PATH to enable "
-                "Nodus script execution. Memory Bridge is available for direct API calls."
+                "Nodus runtime unavailable. Run: pip install -r AINDY/requirements.txt "
+                "to enable Nodus script execution. Memory Bridge is available for direct API calls."
             ),
             "detail": str(exc),
             "allowed_operations": allowed_operations or sorted(ALLOWED_OPERATION_CAPABILITIES.keys()),
