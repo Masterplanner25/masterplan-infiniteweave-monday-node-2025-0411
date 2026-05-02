@@ -12,7 +12,6 @@ class NodusSecurityError(ValueError):
 
 DEFAULT_READONLY_OPERATIONS = [
     "recall",
-    "recall_tool",
     "suggest",
     "recall_from",
     "recall_all",
@@ -20,7 +19,6 @@ DEFAULT_READONLY_OPERATIONS = [
 
 ALLOWED_OPERATION_CAPABILITIES = {
     "recall": "read_memory",
-    "recall_tool": "read_memory",
     "suggest": "read_memory",
     "recall_from": "read_memory",
     "recall_all": "read_memory",
