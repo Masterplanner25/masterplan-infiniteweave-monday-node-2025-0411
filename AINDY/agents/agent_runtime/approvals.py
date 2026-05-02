@@ -16,7 +16,7 @@ from AINDY.agents.agent_runtime.shared import get_runtime_compat_module, logger
 def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
 
         user_db_id = compat._db_user_id(user_id)
         db_run_id = compat._db_run_id(run_id)
@@ -80,7 +80,7 @@ def approve_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 def reject_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
 
         user_db_id = compat._db_user_id(user_id)
         db_run_id = compat._db_run_id(run_id)

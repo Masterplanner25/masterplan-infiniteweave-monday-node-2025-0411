@@ -14,6 +14,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from AINDY.platform_layer.agent_plugin_contracts import CapabilityProviderBundle
 from AINDY.platform_layer.registry_contracts import (
     validate_agent_event,
     validate_agent_planner_context,
@@ -69,11 +70,13 @@ _startup_hooks: list[Handler] = []
 _agent_tools: dict[str, Any] = {}
 _agent_planner_contexts: dict[str, Handler] = {}
 _agent_run_tools: dict[str, Handler] = {}
+_agent_completion_hooks: dict[str, list[Handler]] = defaultdict(list)
 _agent_event_emitters: dict[str, list[Handler]] = defaultdict(list)
 _agent_ranking_strategy: Handler | None = None
 _trigger_evaluators: dict[str, Handler] = {}
 _flow_strategies: dict[str, Handler] = {}
 _capability_definitions: dict[str, dict[str, Any]] = {}
+_capability_definition_providers: list[Handler] = []
 _tool_capabilities: dict[str, list[str]] = {}
 _agent_capabilities: dict[str, list[str]] = {}
 _restricted_tools: set[str] = set()
@@ -89,6 +92,7 @@ _symbols: dict[str, Any] = {}
 _loaded_plugins: set[str] = set()
 _registered_apps: list[str] = []
 _bootstrap_dependencies: dict[str, list[str]] = {}
+_core_domains: list[str] = []
 _degraded_domains: list[str] = []
 _health_checks: dict[str, Callable[[], dict[str, Any]]] = {}
 
@@ -366,7 +370,7 @@ def iter_agent_tools() -> Iterable[tuple[str, Any]]:
     return tuple(_agent_tools.items())
 
 
-def register_agent_planner_context(run_type: str, handler: Handler) -> Handler:
+def register_planner_context_provider(run_type: str, handler: Handler) -> Handler:
     validate_agent_planner_context(run_type, handler)
     _agent_planner_contexts[run_type] = handler
     return handler
@@ -380,7 +384,11 @@ def get_planner_context(run_type: str, context: dict[str, Any] | None = None) ->
     return value if isinstance(value, dict) else {}
 
 
-def register_agent_run_tools(run_type: str, handler: Handler) -> Handler:
+def register_agent_planner_context(run_type: str, handler: Handler) -> Handler:
+    return register_planner_context_provider(run_type, handler)
+
+
+def register_run_tool_provider(run_type: str, handler: Handler) -> Handler:
     validate_agent_run_tools(run_type, handler)
     _agent_run_tools[run_type] = handler
     return handler
@@ -392,6 +400,26 @@ def get_tools_for_run(run_type: str, context: dict[str, Any] | None = None) -> l
         return []
     value = handler(context or {})
     return value if isinstance(value, list) else []
+
+
+def register_agent_run_tools(run_type: str, handler: Handler) -> Handler:
+    return register_run_tool_provider(run_type, handler)
+
+
+def register_agent_completion_hook(run_type: str, handler: Handler) -> Handler:
+    validate_agent_event(f"agent.completion.{run_type}", handler)
+    _agent_completion_hooks[run_type].append(handler)
+    return handler
+
+
+def run_agent_completion_hooks(run_type: str, context: dict[str, Any]) -> list[Any]:
+    results: list[Any] = []
+    handlers = tuple(_agent_completion_hooks.get(run_type, ())) + tuple(
+        _agent_completion_hooks.get("default", ()) if run_type != "default" else ()
+    )
+    for handler in handlers:
+        results.append(handler(context))
+    return results
 
 
 def register_agent_event(event_name: str, handler: Handler) -> Handler:
@@ -447,11 +475,44 @@ def register_capability_definition(name: str, metadata: dict[str, Any]) -> dict[
     return _capability_definitions[name]
 
 
+def register_capability_definition_provider(handler: Handler) -> Handler:
+    if not callable(handler):
+        raise ValueError("capability definition provider must be callable")
+    if handler not in _capability_definition_providers:
+        _capability_definition_providers.append(handler)
+    return handler
+
+
+def _apply_capability_provider_bundle(bundle: CapabilityProviderBundle | dict[str, Any]) -> None:
+    if not isinstance(bundle, dict):
+        raise ValueError("capability provider must return a dict bundle")
+
+    for name, metadata in (bundle.get("definitions") or {}).items():
+        register_capability_definition(name, metadata)
+    for tool_name, capabilities in (bundle.get("tool_capabilities") or {}).items():
+        register_tool_capabilities(tool_name, capabilities)
+    for agent_id, capabilities in (bundle.get("agent_capabilities") or {}).items():
+        register_agent_capabilities(agent_id, capabilities)
+    for tool_name in (bundle.get("restricted_tools") or []):
+        register_restricted_tool(tool_name)
+
+
+def _load_capability_definition_providers() -> None:
+    load_plugins()
+    for provider in tuple(_capability_definition_providers):
+        try:
+            _apply_capability_provider_bundle(provider())
+        except Exception as exc:
+            logger.warning("Capability definition provider failed: %s", exc)
+
+
 def get_capability_definition(name: str) -> dict[str, Any] | None:
+    _load_capability_definition_providers()
     return _capability_definitions.get(name)
 
 
 def get_capability_definitions() -> dict[str, dict[str, Any]]:
+    _load_capability_definition_providers()
     return {name: dict(metadata) for name, metadata in _capability_definitions.items()}
 
 
@@ -463,6 +524,7 @@ def register_tool_capabilities(tool_name: str, capability_names: list[str]) -> l
 
 
 def get_capabilities_for_tool(tool_name: str) -> list[str]:
+    _load_capability_definition_providers()
     return list(_tool_capabilities.get(tool_name, ()))
 
 
@@ -474,6 +536,7 @@ def register_agent_capabilities(agent_id: str, capability_names: list[str]) -> l
 
 
 def get_capabilities_for_agent(agent_id: str) -> list[str]:
+    _load_capability_definition_providers()
     return list(_agent_capabilities.get(agent_id, ()))
 
 
@@ -484,6 +547,7 @@ def register_restricted_tool(tool_name: str) -> str:
 
 
 def get_restricted_tools() -> set[str]:
+    _load_capability_definition_providers()
     return set(_restricted_tools)
 
 
@@ -585,6 +649,19 @@ def publish_bootstrap_registration(app_name: str, dependencies: list[str] | None
     return normalized
 
 
+def publish_core_domains(domains: Iterable[str]) -> list[str]:
+    published = sorted(
+        {
+            str(domain).strip()
+            for domain in domains
+            if isinstance(domain, str) and str(domain).strip()
+        }
+    )
+    global _core_domains
+    _core_domains = published
+    return list(_core_domains)
+
+
 def get_registered_apps() -> list[str]:
     return list(_registered_apps)
 
@@ -594,9 +671,8 @@ def get_bootstrap_dependencies() -> dict[str, list[str]]:
 
 
 def get_core_domains() -> list[str]:
-    from apps.bootstrap import _get_core_domains_from_metadata
-
-    return list(_get_core_domains_from_metadata())
+    load_plugins()
+    return list(_core_domains)
 
 
 def get_plugin_boot_order(manifest_path: str | Path | None = None) -> list[str]:

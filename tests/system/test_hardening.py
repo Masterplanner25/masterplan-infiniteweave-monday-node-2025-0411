@@ -4,7 +4,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from apps.agent.models.agent_run import AgentTrustSettings
+from AINDY.db.models import AgentTrustSettings
 from AINDY.db.models.background_task_lease import BackgroundTaskLease
 from AINDY.db.models.job_log import JobLog
 from AINDY.db.models.system_event import SystemEvent

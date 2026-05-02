@@ -4,9 +4,9 @@ import random
 import uuid
 from unittest.mock import patch
 
-from apps.agent.models.agent_event import AgentEvent
+from AINDY.db.models import AgentEvent
 from AINDY.db.models.flow_run import FlowRun
-from apps.agent.models.agent_run import AgentRun, AgentStep
+from AINDY.db.models import AgentRun, AgentStep
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.agents.agent_runtime import execute_run
 from AINDY.agents.capability_service import mint_token

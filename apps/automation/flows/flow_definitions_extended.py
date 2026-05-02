@@ -3,7 +3,7 @@ flow_definitions_extended.py - Hard Execution Boundary node extensions.
 
 Coordinator only. All cross-domain imports are deferred to registration time
 so a failure in any single domain does not abort the entire bootstrap.
-Domain module symbols are explicitly registered with the platform symbol
+App flow module symbols are explicitly registered with the platform symbol
 registry so they remain discoverable via AINDY.runtime.flow_definitions_extended.
 
 Injection contract: the runtime shim may inject FLOW_REGISTRY and register_flow
@@ -16,12 +16,6 @@ import importlib
 import logging
 
 logger = logging.getLogger(__name__)
-
-_RUNTIME_FLOW_MODULES = [
-    "AINDY.runtime.flow_definitions_memory",
-    "AINDY.runtime.flow_definitions_engine",
-    "AINDY.runtime.flow_definitions_observability",
-]
 
 _AUTOMATION_DOMAIN_FLOW_MODULES = [
     "apps.automation.flows.memory_flows",
@@ -41,7 +35,6 @@ _CROSS_DOMAIN_FLOW_MODULES = [
 
 
 def register_extended_flows() -> None:
-    _register_runtime_flow_modules()
     _register_automation_domain_flows()
     _register_cross_domain_flows()
 
@@ -56,33 +49,6 @@ def _resolve_registry_bindings():
     _injected_flow = _g.get("register_flow")
     register_flow = _injected_flow if _injected_flow is not None else _default_register_flow
     return flow_registry, register_flow
-
-
-def _register_runtime_flow_modules() -> None:
-    from AINDY.platform_layer.registry import register_symbols
-    from AINDY.runtime import flow_helpers
-
-    flow_registry, register_flow = _resolve_registry_bindings()
-    runtime_modules = [importlib.import_module(path) for path in _RUNTIME_FLOW_MODULES]
-
-    flow_helpers.FLOW_REGISTRY = flow_registry
-    flow_helpers.register_flow = register_flow
-    for mod in runtime_modules:
-        mod.FLOW_REGISTRY = flow_registry
-        mod.register_flow = register_flow
-
-    register_symbols(
-        {
-            name: value
-            for mod in [flow_helpers, *runtime_modules]
-            for name, value in vars(mod).items()
-            if not name.startswith("__")
-        }
-    )
-
-    for mod in runtime_modules:
-        if hasattr(mod, "register"):
-            mod.register()
 
 
 def _register_automation_domain_flows() -> None:

@@ -44,7 +44,7 @@ def _requires_approval(overall_risk: str, user_id: str, db: Session) -> bool:
     if overall_risk == "high":
         return True
 
-    from apps.agent.models.agent_run import AgentTrustSettings
+    from AINDY.db.models import AgentTrustSettings
     from AINDY.platform_layer.user_ids import parse_user_id
 
     owner_user_id = parse_user_id(user_id)

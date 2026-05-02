@@ -12,10 +12,10 @@ from .user import User
 from .user_identity import UserIdentity
 from .memory_node_history import MemoryNodeHistory
 from .agent import Agent
+from .agent_event import AgentEvent
+from .agent_run import AgentRun, AgentStep, AgentTrustSettings
 from .background_task_lease import BackgroundTaskLease
 from .flow_run import FlowRun, FlowHistory, EventOutcome
-from apps.agent.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
-from apps.agent.models.agent_event import AgentEvent
 from .capability import Capability, AgentCapabilityMapping
 from .system_event import SystemEvent
 from .agent_registry import AgentRegistry

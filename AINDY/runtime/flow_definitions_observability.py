@@ -60,7 +60,7 @@ def observability_dashboard_node(state, context):
         from collections import Counter
         from datetime import datetime, timedelta, timezone
         from sqlalchemy import func
-        from apps.agent.models.agent_event import AgentEvent
+        from AINDY.db.models import AgentEvent
         from AINDY.db.models.flow_run import FlowRun
         from AINDY.db.models.request_metric import RequestMetric
         from AINDY.db.models.system_event import SystemEvent

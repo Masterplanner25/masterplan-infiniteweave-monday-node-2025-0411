@@ -10,15 +10,121 @@ When a coupling is RESOLVED, add a test asserting the import is gone.
 When a coupling is ACCEPTED, add a comment explaining why.
 """
 
+import ast
 import pathlib
 
 import pytest
 
 ROOT = pathlib.Path(__file__).parent.parent.parent
+AINDY_ROOT = ROOT / "AINDY"
+
+
+ALLOWED_AINDY_TO_APPS_IMPORTS: dict[str, dict[str, str]] = {}
 
 
 def _read(*parts: str) -> str:
     return (ROOT.joinpath(*parts)).read_text(encoding="utf-8")
+
+
+def _iter_aindy_import_statements() -> list[tuple[str, str]]:
+    statements: set[tuple[str, str]] = set()
+
+    for source_file in AINDY_ROOT.glob("**/*.py"):
+        source = source_file.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source, filename=str(source_file))
+        relative_path = source_file.relative_to(ROOT).as_posix()
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "apps" or alias.name.startswith("apps."):
+                        statement = f"import {alias.name}"
+                        if alias.asname:
+                            statement += f" as {alias.asname}"
+                        statements.add((relative_path, statement))
+            elif isinstance(node, ast.ImportFrom):
+                if node.module and (node.module == "apps" or node.module.startswith("apps.")):
+                    imported_names = ", ".join(
+                        alias.name if alias.asname is None else f"{alias.name} as {alias.asname}"
+                        for alias in node.names
+                    )
+                    statements.add((relative_path, f"from {node.module} import {imported_names}"))
+
+    return sorted(statements)
+
+
+def test_aindy_tree_direct_app_imports_are_explicit_and_minimal():
+    """AINDY must not directly import apps.*."""
+    unexpected: list[str] = []
+    seen_allowed: set[tuple[str, str]] = set()
+
+    for relative_path, statement in _iter_aindy_import_statements():
+        allowed_for_file = ALLOWED_AINDY_TO_APPS_IMPORTS.get(relative_path, {})
+        if statement in allowed_for_file:
+            seen_allowed.add((relative_path, statement))
+            continue
+        unexpected.append(f"{relative_path}: {statement}")
+
+    missing_allowed = []
+    for relative_path, allowed_statements in ALLOWED_AINDY_TO_APPS_IMPORTS.items():
+        for statement in allowed_statements:
+            if (relative_path, statement) not in seen_allowed:
+                missing_allowed.append(f"{relative_path}: {statement}")
+
+    assert not unexpected, (
+        "Found unauthorized direct imports from AINDY/ into apps.*:\n- "
+        + "\n- ".join(unexpected)
+        + "\nThe runtime must interact with plugins only through explicit runtime-owned contracts."
+    )
+    assert not missing_allowed, (
+        "Allowlist drift: remove stale AINDY -> apps import exceptions that no longer exist:\n- "
+        + "\n- ".join(missing_allowed)
+    )
+
+
+def test_aindy_tree_has_no_direct_agent_model_imports():
+    """Runtime code must not depend on apps.agent.models.* after model promotion."""
+    direct_agent_model_imports = [
+        f"{relative_path}: {statement}"
+        for relative_path, statement in _iter_aindy_import_statements()
+        if statement.startswith("from apps.agent.models")
+        or statement.startswith("import apps.agent.models")
+    ]
+    assert not direct_agent_model_imports, (
+        "Found forbidden runtime imports from apps.agent.models.*:\n- "
+        + "\n- ".join(direct_agent_model_imports)
+        + "\nAgent persistence models must be imported from AINDY.db.models."
+    )
+
+
+def test_aindy_tree_has_no_direct_apps_agent_imports():
+    """Runtime code must not import app-layer agent modules directly."""
+    direct_agent_imports = []
+    for source_file in AINDY_ROOT.glob("**/*.py"):
+        source = source_file.read_text(encoding="utf-8-sig")
+        if "apps.agent" in source:
+            direct_agent_imports.append(f"{source_file.relative_to(ROOT).as_posix()}: contains apps.agent")
+
+    assert not direct_agent_imports, (
+        "Found forbidden app-layer agent references under AINDY/:\n- "
+        + "\n- ".join(direct_agent_imports)
+        + "\nRuntime code must depend on runtime-owned modules or explicit platform interfaces."
+    )
+
+
+def test_aindy_tree_has_no_direct_apps_references():
+    """Runtime code must not contain direct apps.* import statements or references."""
+    direct_app_references = []
+    for source_file in AINDY_ROOT.glob("**/*.py"):
+        source = source_file.read_text(encoding="utf-8-sig")
+        if "from apps." in source or "import apps." in source:
+            direct_app_references.append(f"{source_file.relative_to(ROOT).as_posix()}: contains direct apps.* import text")
+
+    assert not direct_app_references, (
+        "Found forbidden direct apps.* references under AINDY/:\n- "
+        + "\n- ".join(direct_app_references)
+        + "\nRuntime code must not import plugins directly."
+    )
 
 
 def test_arm_agent_tools_no_direct_dispatch_tool_helper_import():

@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 from AINDY.platform_layer.bootstrap_graph import resolve_boot_order
 from AINDY.platform_layer.registry import (
+    publish_core_domains,
     publish_bootstrap_registration,
     publish_degraded_domains,
 )
@@ -207,6 +208,7 @@ def bootstrap() -> None:
         return
 
     core_domains = _get_core_domains_from_metadata()
+    publish_core_domains(core_domains)
     publish_degraded_domains(())
     ordered_apps = get_resolved_boot_order()
     metadata = _load_bootstrap_metadata()

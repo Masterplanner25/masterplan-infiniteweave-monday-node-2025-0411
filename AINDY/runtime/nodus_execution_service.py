@@ -289,7 +289,7 @@ def execute_agent_flow_orchestration(
 
     from AINDY.agents.capability_service import check_execution_capability
     from AINDY.core.execution_signal_helper import queue_system_event, record_agent_event
-    from apps.agent.models.agent_run import AgentRun, AgentStep
+    from AINDY.db.models import AgentRun, AgentStep
     from AINDY.runtime.flow_engine import PersistentFlowRunner
     from AINDY.runtime.nodus_adapter import AGENT_FLOW, _db_run_id
 

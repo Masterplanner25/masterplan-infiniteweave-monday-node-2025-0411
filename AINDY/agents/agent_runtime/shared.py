@@ -91,7 +91,7 @@ def _get_tools_for_run(run_type: str, *, user_id: str, db: Session) -> list[dict
     )
 
 
-def _emit_runtime_event(event_name: str, context: dict) -> list:
-    from AINDY.platform_layer.registry import emit_agent_event
+def _run_completion_hooks(run_type: str, context: dict) -> list:
+    from AINDY.platform_layer.registry import run_agent_completion_hooks
 
-    return emit_agent_event(event_name, context)
+    return run_agent_completion_hooks(run_type, context)

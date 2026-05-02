@@ -75,7 +75,7 @@ def agent_run_create_node(state, context):
 
 def agent_runs_list_node(state, context):
     try:
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
         from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -98,7 +98,7 @@ def agent_runs_list_node(state, context):
 
 def agent_run_get_node(state, context):
     try:
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
         from AINDY.agents.agent_runtime import run_to_dict
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -215,7 +215,7 @@ def agent_run_replay_node(state, context):
 
 def agent_run_steps_node(state, context):
     try:
-        from apps.agent.models.agent_run import AgentRun, AgentStep
+        from AINDY.db.models import AgentRun, AgentStep
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
@@ -247,7 +247,7 @@ def agent_run_steps_node(state, context):
 
 def agent_run_events_node(state, context):
     try:
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
         from AINDY.agents.agent_runtime import get_run_events
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -290,7 +290,7 @@ def agent_tools_list_node(state, context):
 
 def agent_trust_get_node(state, context):
     try:
-        from apps.agent.models.agent_run import AgentTrustSettings
+        from AINDY.db.models import AgentTrustSettings
         from AINDY.agents.capability_service import get_auto_grantable_tools
         from AINDY.utils.uuid_utils import normalize_uuid
 
@@ -315,7 +315,7 @@ def agent_trust_get_node(state, context):
 def agent_trust_update_node(state, context):
     try:
         from datetime import datetime, timezone
-        from apps.agent.models.agent_run import AgentTrustSettings
+        from AINDY.db.models import AgentTrustSettings
         from AINDY.agents.agent_tools import TOOL_REGISTRY
         from AINDY.utils.uuid_utils import normalize_uuid
 

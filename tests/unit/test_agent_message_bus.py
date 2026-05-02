@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from AINDY.agents.agent_coordinator import detect_memory_write_conflict, detect_run_conflict
 from AINDY.agents.agent_message_bus import acknowledge_message, get_inbox, publish_operation_request
 from AINDY.db.models.agent_registry import AgentRegistry
-from apps.agent.models.agent_run import AgentRun
+from AINDY.db.models import AgentRun
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.memory.memory_persistence import MemoryNodeModel
 from AINDY.utils.uuid_utils import normalize_uuid

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from AINDY.agents.agent_coordinator import dispatch_delegated_run, serialize_agent_registry
 from AINDY.db.models.agent_registry import AgentRegistry
-from apps.agent.models.agent_run import AgentRun
+from AINDY.db.models import AgentRun
 
 
 def _unwrap(payload):

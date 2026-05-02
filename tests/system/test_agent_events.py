@@ -4,8 +4,7 @@ import uuid
 
 import pytest
 
-from apps.agent.models.agent_event import AgentEvent
-from apps.agent.models.agent_run import AgentRun, AgentStep
+from AINDY.db.models import AgentEvent, AgentRun, AgentStep
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.db.models.user import User
 from AINDY.core.execution_signal_helper import record_agent_event
