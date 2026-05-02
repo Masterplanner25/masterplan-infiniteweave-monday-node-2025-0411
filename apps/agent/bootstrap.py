@@ -22,13 +22,8 @@ def register() -> None:
 
 
 def _register_models() -> None:
-    from AINDY.db.model_registry import register_models
-
-    def _import_models() -> None:
-        import apps.agent.models.agent_run  # noqa: F401
-        import apps.agent.models.agent_event  # noqa: F401
-
-    register_models(_import_models)
+    # Agent persistence models are runtime-owned and loaded by AINDY.db.model_registry.
+    return None
 
 
 def _register_router() -> None:

@@ -35,7 +35,7 @@ def handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
 
 def _handle_count_runs(payload: dict, ctx: SyscallContext) -> dict:
     from AINDY.platform_layer.user_ids import parse_user_id
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     db = ctx.db
     if db is None:
@@ -55,7 +55,7 @@ def _handle_count_runs(payload: dict, ctx: SyscallContext) -> dict:
 
 def _handle_list_recent_durations(payload: dict, ctx: SyscallContext) -> dict:
     from AINDY.platform_layer.user_ids import parse_user_id
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     db = ctx.metadata.get("_db") or ctx.db
     if db is None:
@@ -88,7 +88,7 @@ def _handle_list_recent_durations(payload: dict, ctx: SyscallContext) -> dict:
 def _handle_list_recent_runs(payload: dict, ctx: SyscallContext) -> dict:
     from AINDY.agents.agent_runtime import run_to_dict
     from AINDY.platform_layer.user_ids import parse_user_id
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     db = ctx.db
     if db is None:
@@ -109,7 +109,7 @@ def _handle_list_recent_runs(payload: dict, ctx: SyscallContext) -> dict:
 
 def _handle_ensure_initial_run(payload: dict, ctx: SyscallContext) -> dict:
     from AINDY.platform_layer.user_ids import parse_user_id
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     db = ctx.db
     if db is None:

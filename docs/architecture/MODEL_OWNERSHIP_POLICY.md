@@ -20,16 +20,17 @@ ALL of the following criteria:
 3. It does not encode business logic belonging to a single domain.
 
 Examples of platform models: User, FlowRun, ExecutionUnit, SystemEvent,
-MemoryTrace, NodusTraceEvent, PlatformAPIKey.
+MemoryTrace, NodusTraceEvent, PlatformAPIKey, AgentRun, AgentStep,
+AgentEvent, AgentTrustSettings.
 
 Examples of domain models (must live in apps/X/models.py):
 LearningRecord, WatcherSignal, AutonomyDecision.
 
-AgentRun, AgentStep, AgentEvent, AgentTrustSettings — domain models
-that were initially placed in AINDY/db/models/ but were migrated to
-apps/agent/models/ because they encode agent-domain business logic
-(approval gates, trust policy, event timeline) rather than
-platform-generic execution concepts.
+Agent route handlers, flows, syscalls, and tool registration remain
+domain behavior under `apps/agent/`, but the persistence types
+`AgentRun`, `AgentStep`, `AgentEvent`, and `AgentTrustSettings` are
+runtime-owned because they are referenced directly by runtime execution,
+recovery, observability, and capability enforcement code in `AINDY/`.
 
 ## Adding a new model
 
@@ -40,26 +41,21 @@ If you believe a model is truly platform-owned, add it to
 AINDY/db/models/ and get a second review confirming it meets all three
 criteria above.
 
-## Migrating a model from AINDY/db/models/ to apps/X/models/
+## Migrating a model between ownership layers
 
-If a model in AINDY/db/models/ is later determined to be domain-specific
-(fails criterion 1 or 3 above), migrate it to apps/X/models/ using the
-following process:
+If a model in `AINDY/db/models/` is later determined to be domain-specific,
+or a model in `apps/X/models/` is later determined to be runtime-owned,
+migrate ownership deliberately using the following process:
 
-1. Create apps/X/models/<name>.py with the full class definition.
-   Preserve __tablename__ exactly — do not change the database table name.
-2. Update apps/X/bootstrap.py to call register_models() for the new module.
-3. Remove the model from AINDY/db/model_registry.py direct imports.
-4. Replace AINDY/db/models/<name>.py with a __getattr__ lazy shim that
-   redirects to the new location for backward compatibility:
-       def __getattr__(name: str):
-           from apps.X.models import <name_module> as _m
-           return getattr(_m, name)
-5. Identify all platform-layer files (AINDY/**) that import the model at
-   module level. Convert each to a deferred import inside the function body.
-6. Once all platform-layer module-level callers are converted, delete the
-   shim file.
-7. Create a no-op Alembic migration recording the ownership transfer. The
-   __tablename__ does not change, so no schema migration is required.
+1. Move the full class definition to the new owner package.
+   Preserve `__tablename__` exactly unless a schema migration is intentional.
+2. Update model registration so Alembic and startup load the canonical owner.
+3. Update all `AINDY/`, app, and test imports to depend on the new owner.
+4. If compatibility is needed during the transition, leave a narrow shim in
+   the old location that re-exports the canonical class.
+5. Add or update CI enforcement so the old forbidden import direction fails.
+6. If table shape is unchanged, record the ownership transfer without a schema
+   migration. Only add Alembic changes when the database schema actually changes.
 
-The AgentRun migration (apps/agent/models/) is the canonical reference.
+The agent persistence move back into `AINDY/db/models/` is the canonical
+runtime-ownership reference.

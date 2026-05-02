@@ -1,4 +1,4 @@
-"""App-owned trigger evaluation rules."""
+"""App-owned trigger evaluation rules registered through runtime-owned contracts."""
 
 from __future__ import annotations
 

@@ -14,7 +14,7 @@ from AINDY.db.database import Base
 from AINDY.db.models.execution_unit import ExecutionUnit
 from AINDY.db.models.user import User
 from AINDY.kernel.syscall_dispatcher import SyscallContext, SyscallDispatcher, SyscallEntry
-from apps.agent.models.agent_run import AgentRun
+from AINDY.db.models import AgentRun
 
 
 pytestmark = [

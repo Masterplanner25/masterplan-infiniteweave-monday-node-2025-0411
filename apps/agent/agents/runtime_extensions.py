@@ -1,7 +1,7 @@
-"""Application-owned agent runtime behavior.
+"""Application-owned agent plugin implementations.
 
-The platform runtime asks these hooks for planner context, available tools, and
-post-run behavior without embedding product assumptions in AINDY.
+The runtime interacts with this module only through explicit runtime-owned
+plugin contracts and registries. It never imports this module directly.
 """
 
 from __future__ import annotations
@@ -161,11 +161,11 @@ def handle_agent_run_completed(context: dict):
 
 def register() -> None:
     from AINDY.platform_layer.registry import (
-        register_agent_event,
-        register_agent_planner_context,
-        register_agent_run_tools,
+        register_agent_completion_hook,
+        register_planner_context_provider,
+        register_run_tool_provider,
     )
 
-    register_agent_planner_context("default", build_planner_context)
-    register_agent_run_tools("default", get_tools_for_run)
-    register_agent_event("agent.run.completed", handle_agent_run_completed)
+    register_planner_context_provider("default", build_planner_context)
+    register_run_tool_provider("default", get_tools_for_run)
+    register_agent_completion_hook("default", handle_agent_run_completed)

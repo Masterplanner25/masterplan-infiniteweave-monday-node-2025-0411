@@ -49,6 +49,11 @@ Important boundaries:
 - `AINDY/` owns runtime and platform behavior.
 - `apps/` owns domain behavior and registers into the runtime.
 - The system is still one deployment unit, not a set of independently deployable services.
+- platform boot is registry-driven rather than hardcoded per-domain inside `AINDY/`
+- platform full operation still depends on app-owned routes, tools, flows, and some models
+- agent lifecycle persistence now lives in `AINDY/db/models/` as runtime-owned infrastructure
+- current transitional coupling is narrower and no longer includes `AINDY/` -> `apps.agent.models.*` imports
+- target architecture is no direct runtime-to-app imports, with cross-domain access through registries, syscalls, and public contracts
 
 ## Supported workflows today
 

@@ -25,20 +25,20 @@ from unittest.mock import MagicMock, patch
 class TestAgentRunModels:
 
     def test_agent_run_importable(self):
-        from apps.agent.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+        from AINDY.db.models import AgentRun, AgentStep, AgentTrustSettings
         assert AgentRun.__tablename__ == "agent_runs"
         assert AgentStep.__tablename__ == "agent_steps"
         assert AgentTrustSettings.__tablename__ == "agent_trust_settings"
 
     def test_tables_in_orm_metadata(self):
-        from apps.agent.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+        from AINDY.db.models import AgentRun, AgentStep, AgentTrustSettings
         table_names = set(AgentRun.metadata.tables)
         assert "agent_runs" in table_names
         assert "agent_steps" in table_names
         assert "agent_trust_settings" in table_names
 
     def test_agent_run_columns(self):
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
         cols = {c.name for c in AgentRun.__table__.columns}
         required = [
             "id", "user_id", "goal", "plan", "executive_summary",
@@ -50,7 +50,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_runs missing column: {col}"
 
     def test_agent_step_columns(self):
-        from apps.agent.models.agent_run import AgentStep
+        from AINDY.db.models import AgentStep
         cols = {c.name for c in AgentStep.__table__.columns}
         required = [
             "id", "run_id", "step_index", "tool_name", "tool_args",
@@ -61,7 +61,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_steps missing column: {col}"
 
     def test_agent_trust_settings_columns(self):
-        from apps.agent.models.agent_run import AgentTrustSettings
+        from AINDY.db.models import AgentTrustSettings
         cols = {c.name for c in AgentTrustSettings.__table__.columns}
         required = [
             "id", "user_id", "auto_execute_low", "auto_execute_medium",
@@ -71,7 +71,7 @@ class TestAgentRunModels:
             assert col in cols, f"agent_trust_settings missing column: {col}"
 
     def test_agent_trust_settings_user_id_unique(self):
-        from apps.agent.models.agent_run import AgentTrustSettings
+        from AINDY.db.models import AgentTrustSettings
         col = AgentTrustSettings.__table__.columns["user_id"]
         # unique constraint: check via table indexes or unique=True on column
         unique_cols = set()
@@ -318,7 +318,7 @@ class TestAgentRuntime:
 
         with patch("AINDY.agents.agent_runtime.generate_plan", return_value=VALID_PLAN), \
              patch("AINDY.agents.agent_runtime._requires_approval", return_value=True), \
-             patch("apps.agent.models.agent_run.AgentRun", return_value=fake_run):
+             patch("AINDY.db.models.AgentRun", return_value=fake_run):
             db.refresh.side_effect = lambda r: None
             result = create_run("test goal", "user_1", db)
 

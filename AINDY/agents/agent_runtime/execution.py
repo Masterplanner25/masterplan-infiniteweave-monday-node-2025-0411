@@ -16,7 +16,7 @@ from AINDY.agents.agent_runtime.shared import LOCAL_AGENT_ID, get_runtime_compat
 def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
         from AINDY.runtime.nodus_execution_service import execute_agent_run_via_nodus
 
         user_db_id = compat._db_user_id(user_id)
@@ -168,8 +168,8 @@ def execute_run(run_id: str, user_id: str, db: Session) -> Optional[dict]:
 
         db.refresh(run)
         if run.status == "completed":
-            compat._emit_runtime_event(
-                "agent.run.completed",
+            compat._run_completion_hooks(
+                getattr(run, "agent_type", "default"),
                 {
                     "run": run,
                     "db": db,

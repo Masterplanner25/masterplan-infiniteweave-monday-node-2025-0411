@@ -3,8 +3,7 @@ from __future__ import annotations
 import uuid
 from unittest.mock import patch
 
-from apps.agent.models.agent_event import AgentEvent
-from apps.agent.models.agent_run import AgentRun, AgentStep, AgentTrustSettings
+from AINDY.db.models import AgentEvent, AgentRun, AgentStep, AgentTrustSettings
 from AINDY.db.models.system_event import SystemEvent
 from AINDY.agents.agent_runtime import approve_run, create_run, execute_run
 from AINDY.agents.capability_service import (

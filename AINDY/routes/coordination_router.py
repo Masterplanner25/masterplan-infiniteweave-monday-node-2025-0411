@@ -216,7 +216,7 @@ def get_coordination_runs(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     user_id = normalize_uuid(current_user["sub"])
     return execute_with_pipeline_sync(
@@ -249,7 +249,7 @@ def get_coordination_run_children(
     current_user: dict = Depends(get_current_user),
 ):
     def handler(ctx):
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
 
         user_id = normalize_uuid(current_user["sub"])
         parent = db.query(AgentRun).filter(AgentRun.id == normalize_uuid(parent_run_id)).first()

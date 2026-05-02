@@ -1,4 +1,4 @@
-"""App-owned generic agent tools and suggestion behavior."""
+"""App-owned generic agent tools registered through runtime-owned registries."""
 
 from __future__ import annotations
 

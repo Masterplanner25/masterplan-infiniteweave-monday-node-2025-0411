@@ -857,17 +857,12 @@ def _register_domain_handlers() -> None:
 
 
 def _register_flow_engine() -> None:
-    # Register Flow Engine flows and nodes (static startup definitions)
+    # Register runtime-owned platform flows first, then let app bootstrap
+    # callbacks register app/domain flows through the registry boundary.
     from AINDY.runtime.flow_definitions import register_all_flows
+
     register_all_flows()
-    from AINDY.runtime import (
-        flow_definitions_engine,
-        flow_definitions_memory,
-        flow_definitions_observability,
-    )
-    flow_definitions_memory.register()
-    flow_definitions_engine.register()
-    flow_definitions_observability.register()
+    registry.register_flows()
     _enforce_nodus_gate()
     _verify_flow_engines_started()
 

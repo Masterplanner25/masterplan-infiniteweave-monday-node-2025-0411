@@ -67,7 +67,7 @@ def emit_event(
         payload:        Optional dict of event-specific data
     """
     try:
-        from apps.agent.models.agent_event import AgentEvent
+        from AINDY.db.models import AgentEvent
 
         if event_type not in AGENT_EVENT_TYPES:
             logger.warning(

@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from AINDY.db.models.flow_run import FlowHistory, FlowRun
 from AINDY.db.models.system_state_snapshot import SystemStateSnapshot
 from AINDY.memory.memory_persistence import MemoryNodeModel
-from apps.agent.models.agent_run import AgentRun, AgentStep
+from AINDY.db.models import AgentRun, AgentStep
 from apps.arm.models import AnalysisResult, CodeGeneration
 from tests.unit.test_postgres_isolation import _build_session_factory, _seed_user
 

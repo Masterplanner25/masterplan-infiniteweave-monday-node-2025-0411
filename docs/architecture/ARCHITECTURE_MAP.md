@@ -10,6 +10,15 @@ owner: "platform-team"
 ## System Overview
 AINDY is a modular-monolith runtime and application platform. The codebase is split into a runtime/platform layer in `AINDY/` and domain modules in `apps/`. `AINDY/` owns execution, scheduling, memory, syscalls, observability, and shared infrastructure; `apps/` owns domain behavior such as tasks, analytics, masterplan, social, and freelance.
 
+## Boundary Status
+
+The repo is in a transitional architecture state. Use these terms precisely:
+
+- **Platform boot**: process startup can load the plugin manifest, resolve app bootstrap order, register routers/jobs/flows/syscalls, and mount runtime-owned surfaces.
+- **Platform full operation**: many user-facing capabilities still require successfully registered apps because routes, tools, flows, and some ORM models are app-owned.
+- **Current transitional coupling**: most runtime-to-app integration is indirect through bootstrap and registries, but a small number of direct `AINDY/` -> `apps.*` imports still exist and are treated as temporary exceptions.
+- **Target architecture**: runtime boot and shared infrastructure remain in `AINDY/`, while domain interaction happens through registries, syscalls, and public contracts rather than direct imports.
+
 ## Layer 1: Runtime / Platform (`AINDY/`)
 
 ### Execution Kernel
@@ -22,7 +31,7 @@ Key files:
 - `AINDY/core/router_guard.py`
 
 ### Flow Engine
-The flow engine is implemented under `AINDY/runtime/flow_engine/` and the surrounding runtime package. Static flow definitions are registered from `AINDY/runtime/flow_definitions.py`, `AINDY/runtime/flow_definitions_memory.py`, `AINDY/runtime/flow_definitions_engine.py`, and `AINDY/runtime/flow_definitions_observability.py`.
+The flow engine is implemented under `AINDY/runtime/flow_engine/` and the surrounding runtime package. Runtime-owned platform flows are registered from `AINDY/runtime/flow_definitions.py`, `AINDY/runtime/flow_definitions_memory.py`, `AINDY/runtime/flow_definitions_engine.py`, and `AINDY/runtime/flow_definitions_observability.py`. App/domain flows are not imported by `AINDY/runtime`; they register separately through app bootstrap callbacks and the platform registry.
 
 Key files:
 - `AINDY/runtime/flow_engine/runner.py`
@@ -148,7 +157,22 @@ for the full semantics.
 ## Cross-Layer Boundaries
 
 ### What `AINDY/` Can See
-`AINDY/` imports from its own subpackages and shared libraries. A repository-wide check shows no direct `from apps...` imports inside `AINDY/`. Domain code is loaded indirectly through app bootstrap and registry wiring, not through hardcoded runtime imports.
+`AINDY/` primarily imports from its own subpackages and shared libraries. Domain code is mostly loaded indirectly through app bootstrap and registry wiring, but the boundary is not fully clean today.
+
+Current verified exceptions are narrow:
+- agent lifecycle persistence is runtime-owned in `AINDY/db/models/agent_run.py` and `AINDY/db/models/agent_event.py`
+- agent routes, flows, syscalls, and tool registration remain app-owned under `apps/agent/`
+- plugin registration happens through runtime-owned registries and contracts in `AINDY/platform_layer/`
+- platform flow registration is runtime-owned, while app flow registration is plugin-owned through app bootstrap
+
+This means:
+- platform boot is mostly indirect and registry-driven
+- platform full operation still depends on app registration, but runtime persistence no longer depends on app-owned agent models
+- new direct `AINDY/` -> `apps.*` imports are regressions
+
+Hard rule:
+- code under `AINDY/` must not directly import `apps.*`
+- runtime/plugin interaction must go through explicit runtime-owned contracts, registries, or published symbols
 
 Important boundary files:
 - `AINDY/main.py`

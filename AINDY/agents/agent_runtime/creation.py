@@ -22,7 +22,7 @@ def create_run(
 ) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
 
         objective_text = compat._resolve_objective(objective, values)
         user_db_id = compat._db_user_id(user_id)
@@ -146,7 +146,7 @@ def _create_run_from_plan(
 ) -> Optional[dict]:
     try:
         compat = get_runtime_compat_module()
-        from apps.agent.models.agent_run import AgentRun
+        from AINDY.db.models import AgentRun
 
         objective_text = compat._resolve_objective(objective, values)
         plan = plan or {}

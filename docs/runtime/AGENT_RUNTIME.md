@@ -187,10 +187,38 @@ The `AgentEvent` timeline is accessible at
 
 ## 9. Boundary Rules
 
-The agent runtime must not import from `apps.*` at module level. All
-cross-domain calls (to tasks, masterplan, analytics, social) are made through
-registered tool functions or through the syscall dispatcher. This keeps the
-runtime importable at startup independent of any domain app's health.
+Hard rule:
+- code under `AINDY/` must not directly import `apps.*`
+- runtime may interact with plugins only through runtime-owned registries, interfaces, and contracts
+- plugin implementations remain app-owned, but runtime must not import plugin modules directly
+
+The agent runtime therefore uses explicit runtime-owned plugin contracts for:
+- planner context providers
+- run tool providers
+- capability definition providers
+- trigger evaluators
+- agent completion hooks
+
+Agent lifecycle persistence is runtime-owned:
+- `AINDY/db/models/agent_run.py` defines `AgentRun`, `AgentStep`, and `AgentTrustSettings`
+- `AINDY/db/models/agent_event.py` defines `AgentEvent`
+- runtime code imports these models from `AINDY.db.models`, not from `apps.agent.models.*`
+
+That statement still applies specifically to the runtime side. The app layer
+continues to own routes, flows, syscalls, and plugin registration.
+
+No-plugin behavior is fail-safe:
+- no planner context provider -> empty planner context
+- no run tool provider -> empty tool list
+- no trigger evaluator -> defer
+- no completion hook -> no-op
+- no capability provider -> no capabilities granted, so capability enforcement fails closed
+
+So today:
+- platform boot is still registry-driven
+- agent runtime persistence and execution code are aligned on runtime-owned models
+- platform full operation is not yet independent from app-owned components
+- runtime must not import plugins directly
 
 See [PLUGIN_REGISTRY_PATTERN.md](../architecture/PLUGIN_REGISTRY_PATTERN.md)
 for the registration model and

@@ -19,14 +19,21 @@ the flow engine, the scheduler, and the agent runtime.
 AINDY is split into two layers:
 
 - **Runtime** (`AINDY/`) — execution engine, flow engine, memory, kernel,
-  scheduler, syscall dispatcher. Domain-agnostic. Must not import apps.
+  scheduler, syscall dispatcher. Intended long-term to be domain-agnostic and
+  free of direct app imports, but not fully there yet.
 - **Apps** (`apps/`) — domain modules (tasks, analytics, masterplan, etc.).
   Must register their behaviour into the runtime without the runtime
   knowing they exist.
 
 The plugin registry is the boundary contract between them. The runtime
-exposes a registration surface. Apps call it at startup. Neither layer
-holds a compile-time import of the other.
+exposes a registration surface. Apps call it at startup.
+
+Hard rule:
+- code under `AINDY/` must not directly import `apps.*`
+- runtime may only interact with plugins through explicit runtime-owned
+  contracts, registries, or published symbols
+- plugins must register behavior into the runtime; the runtime must not reach
+  back into plugin modules directly
 
 ---
 
@@ -214,12 +221,13 @@ main.py  lifespan()
 │           ├─ _register_agent_runtime_extensions()
 │           ├─ _register_async_jobs()
 │           ├─ _register_capture_rules()
-│           ├─ _register_flows()       # calls flow_definitions_extended.register_extended_flows()
+│           ├─ _register_flows()       # app-owned flow callbacks register app flows only
 │           ├─ _register_flow_results()
 │           └─ _register_flow_plans()
 │
 ├─ register_all_domain_handlers()      # syscall handlers registered via registry facade
-├─ register_all_flows()                # calls registry.register_flows() → all flow fns run
+├─ AINDY.runtime.flow_definitions.register_all_flows()  # runtime-owned platform flows only
+├─ registry.register_flows()           # app-owned flow callbacks run through bootstrap wiring
 ├─ load_dynamic_registry()             # DB-persisted flows/nodes/webhooks restored
 ├─ validate_router_boundary()          # AST check: no router imports domain services
 ├─ scan_and_recover_stuck_runs()       # recover crashed agent/flow runs
@@ -298,8 +306,10 @@ calls `AINDY.runtime.flow_engine.register_node` and `register_flow`.
 
 Flow files expose a `register()` function. The coordinator
 `flow_definitions_extended.register_extended_flows()` calls `register()` on
-each domain flow file. This function is itself called from
-`apps/bootstrap.py _register_flows()`.
+each app domain flow file. This function is itself called from
+`apps/bootstrap.py _register_flows()`. Runtime-owned platform flows register
+separately from `AINDY/runtime/flow_definitions.py`; app flow coordinators do
+not own or import runtime flow modules.
 
 ### Registering an event handler
 
@@ -340,8 +350,9 @@ def emit_event(event_type, context):
         handler(context)
 ```
 
-The runtime has zero knowledge of which apps are loaded. The registry is the
-only shared surface.
+At boot, the runtime learns about apps through the manifest, bootstrap
+registration, and runtime-owned registry state rather than through hardcoded
+domain imports.
 
 ---
 
@@ -409,6 +420,18 @@ compatibility shim; canonical syscall registration uses `SyscallSpec` via
 module level. This is checked at startup via `validate_router_boundary()` in
 `main.py lifespan()`. Violations raise `RouterBoundaryViolation` and prevent
 startup.
+
+A separate CI import-boundary test also scans `AINDY/` for direct `apps.*`
+imports and fails on any reintroduction. The hard rule has no broad runtime
+exceptions.
+
+Agent plugin contracts are runtime-owned. Current explicit registration
+interfaces cover:
+- planner context providers
+- run tool providers
+- capability definition providers
+- trigger evaluators
+- agent completion hooks
 
 The converse boundary — apps must not import from AINDY private internals —
 is enforced by convention and the audit process, not by automated checks.

@@ -5,9 +5,7 @@ import uuid
 
 import pytest
 
-from apps.agent.models.agent_event import AgentEvent
-from apps.agent.models.agent_run import AgentRun
-from apps.agent.models.agent_run import AgentTrustSettings
+from AINDY.db.models import AgentEvent, AgentRun, AgentTrustSettings
 from apps.automation.models import AutomationLog
 from AINDY.db.models.request_metric import RequestMetric
 from AINDY.db.models.system_event import SystemEvent

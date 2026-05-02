@@ -129,7 +129,7 @@ def build_decision_response(
 
 
 def count_active_executions(db, *, user_id: str | uuid.UUID | None = None) -> int:
-    from apps.agent.models.agent_run import AgentRun
+    from AINDY.db.models import AgentRun
 
     flow_query = db.query(FlowRun).filter(FlowRun.status.in_(("running", "waiting")))
     agent_query = db.query(AgentRun).filter(AgentRun.status.in_(("approved", "executing", "pending_approval")))
