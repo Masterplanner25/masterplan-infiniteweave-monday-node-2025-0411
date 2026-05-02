@@ -745,14 +745,29 @@ def _resolve_requested_plugin_profile(profile: str | None = None) -> str | None:
     return None
 
 
-def resolve_plugin_profile(
+def _plugin_boot_failure(
+    *,
+    path: Path,
+    profile_name: str,
+    module_name: str | None = None,
+    reason: str,
+) -> RuntimeError:
+    module_detail = f" plugin module {module_name!r}" if module_name else ""
+    return RuntimeError(
+        f"Failed to boot plugin profile {profile_name!r} from {path}:{module_detail} {reason}. "
+        "If you intend to start the runtime without app plugins, explicitly select "
+        "the zero-plugin profile (for example `AINDY_BOOT_PROFILE=platform-only`)."
+    )
+
+
+def _resolve_plugin_profile_selection(
     manifest_path: str | Path | None = None,
     *,
     profile: str | None = None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], bool]:
     path, data = _read_plugin_manifest(manifest_path)
     if data is None:
-        return "missing", []
+        return "missing", [], False
 
     requested_profile = _resolve_requested_plugin_profile(profile)
     legacy_plugins = data.get("plugins")
@@ -761,7 +776,7 @@ def resolve_plugin_profile(
             legacy_plugins,
             profile_name="__legacy__",
             path=path,
-        )
+        ), False
 
     profiles = data.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
@@ -771,7 +786,9 @@ def resolve_plugin_profile(
 
     if requested_profile:
         selected_profile = requested_profile
+        explicitly_selected = True
     else:
+        explicitly_selected = False
         default_profile = data.get("default_profile")
         if isinstance(default_profile, str) and default_profile.strip():
             selected_profile = default_profile.strip()
@@ -799,7 +816,19 @@ def resolve_plugin_profile(
         profile_entry.get("plugins"),
         profile_name=selected_profile,
         path=path,
+    ), explicitly_selected
+
+
+def resolve_plugin_profile(
+    manifest_path: str | Path | None = None,
+    *,
+    profile: str | None = None,
+) -> tuple[str, list[str]]:
+    selected_profile, plugins, _explicitly_selected = _resolve_plugin_profile_selection(
+        manifest_path,
+        profile=profile,
     )
+    return selected_profile, plugins
 
 
 def get_active_plugin_profile(manifest_path: str | Path | None = None) -> str:
@@ -816,24 +845,44 @@ def get_plugin_boot_order(
     *,
     profile: str | None = None,
 ) -> list[str]:
-    _profile_name, plugin_modules = resolve_plugin_profile(manifest_path, profile=profile)
+    path = Path(manifest_path) if manifest_path is not None else _default_manifest_path()
+    profile_name, plugin_modules, explicitly_selected = _resolve_plugin_profile_selection(
+        manifest_path,
+        profile=profile,
+    )
     if not plugin_modules:
-        return []
+        if profile_name == "missing":
+            return []
+        if explicitly_selected:
+            return []
+        raise _plugin_boot_failure(
+            path=path,
+            profile_name=profile_name,
+            reason="declares zero plugin modules",
+        )
 
     boot_order: list[str] = []
     for module_name in plugin_modules:
         try:
             module = importlib.import_module(module_name)
         except Exception as exc:
-            logger.warning("Skipping boot-order discovery for plugin %s: %s", module_name, exc)
-            continue
+            raise _plugin_boot_failure(
+                path=path,
+                profile_name=profile_name,
+                module_name=module_name,
+                reason=f"could not be imported ({exc.__class__.__name__}: {exc})",
+            ) from exc
         discover = getattr(module, "get_resolved_boot_order", None)
         if callable(discover):
             try:
                 value = discover()
             except Exception as exc:
-                logger.warning("Plugin %s boot-order discovery failed: %s", module_name, exc)
-                continue
+                raise _plugin_boot_failure(
+                    path=path,
+                    profile_name=profile_name,
+                    module_name=module_name,
+                    reason=f"failed during boot-order discovery ({exc.__class__.__name__}: {exc})",
+                ) from exc
             if isinstance(value, list):
                 boot_order.extend(name for name in value if isinstance(name, str) and name.strip())
                 continue
@@ -861,9 +910,18 @@ def load_plugins(
         return []
 
     global _active_plugin_profile
-    active_profile, plugin_modules = resolve_plugin_profile(path, profile=profile)
+    active_profile, plugin_modules, explicitly_selected = _resolve_plugin_profile_selection(
+        path,
+        profile=profile,
+    )
     _active_plugin_profile = active_profile
     if not plugin_modules:
+        if not explicitly_selected:
+            raise _plugin_boot_failure(
+                path=path,
+                profile_name=active_profile,
+                reason="declares zero plugin modules",
+            )
         logger.info(
             "Active plugin profile %s contains no plugin modules; runtime is starting without apps.",
             active_profile,
@@ -876,11 +934,23 @@ def load_plugins(
         try:
             module = importlib.import_module(module_name)
         except Exception as exc:
-            logger.warning("Skipping plugin %s: %s", module_name, exc)
-            continue
+            raise _plugin_boot_failure(
+                path=path,
+                profile_name=active_profile,
+                module_name=module_name,
+                reason=f"could not be imported ({exc.__class__.__name__}: {exc})",
+            ) from exc
         bootstrap = getattr(module, "bootstrap", None)
         if callable(bootstrap):
-            bootstrap()
+            try:
+                bootstrap()
+            except Exception as exc:
+                raise _plugin_boot_failure(
+                    path=path,
+                    profile_name=active_profile,
+                    module_name=module_name,
+                    reason=f"bootstrap raised {exc.__class__.__name__}: {exc}",
+                ) from exc
         _loaded_plugins.add(module_name)
         loaded.append(module_name)
     if loaded:

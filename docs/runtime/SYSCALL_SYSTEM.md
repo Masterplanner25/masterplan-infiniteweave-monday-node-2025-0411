@@ -1,6 +1,6 @@
 ---
 title: "Syscall System"
-last_verified: "2026-04-18"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -290,10 +290,16 @@ Core syscalls registered in `kernel/syscall_registry.py`; domain handlers regist
 | `sys.v1.nodus.execute` | `nodus.execute` | Run a Nodus script via the standard `NODUS_SCRIPT_FLOW` pipeline |
 | `sys.v1.job.submit` | `job.submit` | Submit an async job via `AsyncJobService` (wraps `submit_async_job()`) |
 | `sys.v1.agent.execute` | `agent.execute` | Execute an agent run via `execute_run()` (external agent wrapper) |
+| `sys.v1.agent.count_runs` | `agent.read` | Count AgentRun rows for a user, optionally filtered by status |
+| `sys.v1.agent.list_recent_durations` | `agent.read` | Recent AgentRun timing fields for runtime/system metrics |
+| `sys.v1.agent.list_recent_runs` | `agent.read` | Recent AgentRun rows as serialized dicts |
+| `sys.v1.agent.ensure_initial_run` | `agent.write` | Find or create the signup sentinel AgentRun |
 | `sys.v1.event.emit` | `event.emit` | Emit a system event |
 | `sys.v2.memory.read` | `memory.read` | v2 evolution — adds `filters` dict (memory_type, node_type, min_impact) |
 
-Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`. Execution entry-point handlers (`flow.execute_intent`, `nodus.execute`, `job.submit`, `agent.execute`) are registered directly in `kernel/syscall_registry.py` alongside `flow.run`.
+Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`. Execution entry-point handlers (`flow.execute_intent`, `nodus.execute`, `job.submit`, `agent.execute`) and runtime-owned helper syscalls are registered directly in `kernel/syscall_registry.py` alongside `flow.run`.
+
+The runtime/helper agent syscalls (`agent.count_runs`, `agent.list_recent_durations`, `agent.list_recent_runs`, `agent.ensure_initial_run`) are kernel-owned because runtime/platform code and identity boot paths depend on them as part of core execution and persistence behavior. `sys.v1.agent.dispatch_tool` remains app-owned because it still represents agent-app tool dispatch semantics rather than kernel persistence or execution primitives.
 
 ---
 
@@ -476,9 +482,9 @@ Response:
 | File | Role |
 |------|------|
 | `kernel/syscall_versioning.py` | `SyscallSpec`, `parse_syscall_name`, `validate_payload`, `resolve_version`, `ABI_VERSIONS` |
-| `kernel/syscall_registry.py` | `SyscallEntry`, `VersionedSyscallRegistry`, `SYSCALL_REGISTRY`, `register_syscall`, `DEFAULT_NODUS_CAPABILITIES` |
+| `kernel/syscall_registry.py` | `SyscallEntry`, `VersionedSyscallRegistry`, `SYSCALL_REGISTRY`, `register_syscall`, `DEFAULT_NODUS_CAPABILITIES`, kernel-owned helper syscall handlers |
 | `kernel/syscall_dispatcher.py` | `SyscallDispatcher`, `get_dispatcher`, `SyscallContext`, `child_context`, `_TRACE_ID_CTX`, `_EU_ID_CTX`, context builder helpers |
-| `kernel/syscall_handlers.py` | All 23 domain handler functions; `register_all_domain_handlers()` |
+| `kernel/syscall_handlers.py` | Domain-handler compatibility facade; `register_all_domain_handlers()` |
 | `routes/platform_router.py` | `GET /platform/syscalls` introspection endpoint; `POST /platform/syscall` dispatch |
 | `tests/unit/test_syscall_versioning.py` | 64 versioning/ABI tests (Groups A–J) |
 | `tests/unit/test_syscall_dispatcher.py` | Dispatcher unit tests |

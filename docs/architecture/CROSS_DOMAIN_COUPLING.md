@@ -1,6 +1,6 @@
 ---
 title: "Cross-Domain Coupling"
-last_verified: "2026-04-29"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -509,7 +509,7 @@ coupling sites.
 | `analytics/flows` | `automation.public.get_user_feedback` | syscall dispatch | RESOLVED — sys.v1.automation.list_feedback (Prompt 6) |
 | `analytics/flows` | `social.public.adapt_linkedin_metrics` | syscall dispatch | RESOLVED — sys.v1.social.adapt_linkedin (Prompt 6) |
 | `agent/flows` | `analytics.public.get_user_kpi_snapshot` | syscall dispatch | RESOLVED — sys.v1.analytics.get_kpi_snapshot (Prompt 2) |
-| `identity/services` | `agent.models.agent_run.AgentRun` | syscall dispatch | RESOLVED — sys.v1.agent.count_runs, list_recent_runs, ensure_initial_run (Prompt 18) |
+| `identity/services` | `agent.models.agent_run.AgentRun` | syscall dispatch | RESOLVED — sys.v1.agent.count_runs, list_recent_runs, ensure_initial_run (Prompt 18; kernel-owned helpers after Prompt 19) |
 | `identity/identity_boot_service` | `analytics.kpi_snapshot` job | registry-job dispatch | none |
 | `masterplan/services` | `tasks.models`, `tasks.services` | deferred | acceptable |
 | `masterplan/services` | `automation.models` (AutomationLog) | deferred | acceptable |
@@ -569,8 +569,8 @@ Status values: OPEN | IN_PROGRESS | RESOLVED | ACCEPTED (intentional, not to be 
 | analytics â†’ automation list_feedback | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
 | analytics â†’ social adapt_linkedin | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
 | agent â†’ analytics get_kpi_snapshot | `agent/flows/agent_flows.py` | cross-domain deferred import | RESOLVED | Prompt 2 |
-| identity â†’ agent AgentRun direct query | `identity/services/identity_boot_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
-| identity â†’ agent signup AgentRun | `identity/services/signup_initialization_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
+| identity â†’ agent AgentRun direct query | `identity/services/identity_boot_service.py` | cross-domain model import | RESOLVED | Prompt 18; helper syscall ownership moved to kernel in Prompt 19 |
+| identity â†’ agent signup AgentRun | `identity/services/signup_initialization_service.py` | cross-domain model import | RESOLVED | Prompt 18; helper syscall ownership moved to kernel in Prompt 19 |
 | AgentRun in platform layer | `AINDY/db/models/agent_run.py` | domain model in platform | RESOLVED | Prompt 1 |
 | _run_to_dict private import | `apps/automation/flows/automation_flows.py` | private API | RESOLVED | Prompt 3 |
 

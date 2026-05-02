@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from AINDY.kernel.syscall_registry import SyscallContext, register_syscall
 
@@ -33,114 +32,6 @@ def handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
     return dispatch_tool_syscall(syscall_name, inner_payload, user_id, capability)
 
 
-def _handle_count_runs(payload: dict, ctx: SyscallContext) -> dict:
-    from AINDY.platform_layer.user_ids import parse_user_id
-    from AINDY.db.models import AgentRun
-
-    db = ctx.db
-    if db is None:
-        return {"count": 0}
-    user_id = parse_user_id(payload.get("user_id"))
-    query = db.query(AgentRun.id)
-    if payload.get("user_id") is not None:
-        if user_id is None:
-            return {"count": 0}
-        query = query.filter(AgentRun.user_id == user_id)
-    status_filter = payload.get("status")
-    if status_filter:
-        statuses = status_filter if isinstance(status_filter, list) else [status_filter]
-        query = query.filter(AgentRun.status.in_(statuses))
-    return {"count": query.count()}
-
-
-def _handle_list_recent_durations(payload: dict, ctx: SyscallContext) -> dict:
-    from AINDY.platform_layer.user_ids import parse_user_id
-    from AINDY.db.models import AgentRun
-
-    db = ctx.metadata.get("_db") or ctx.db
-    if db is None:
-        return {"durations": [], "count": 0}
-    window_hours = int(payload.get("window_hours", 1))
-    window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
-
-    query = db.query(AgentRun).filter(AgentRun.created_at >= window_start)
-    if payload.get("user_id") is not None:
-        user_id = parse_user_id(payload.get("user_id"))
-        if user_id is None:
-            return {"durations": [], "count": 0}
-        query = query.filter(AgentRun.user_id == user_id)
-
-    rows = query.all()
-    durations = [
-        {
-            "started_at": (row.started_at or row.created_at).isoformat()
-            if (row.started_at or row.created_at)
-            else None,
-            "completed_at": (row.completed_at or row.started_at or row.created_at).isoformat()
-            if (row.completed_at or row.started_at or row.created_at)
-            else None,
-        }
-        for row in rows
-    ]
-    return {"durations": durations, "count": len(durations)}
-
-
-def _handle_list_recent_runs(payload: dict, ctx: SyscallContext) -> dict:
-    from AINDY.agents.agent_runtime import run_to_dict
-    from AINDY.platform_layer.user_ids import parse_user_id
-    from AINDY.db.models import AgentRun
-
-    db = ctx.db
-    if db is None:
-        return {"runs": []}
-    user_id = parse_user_id(payload.get("user_id"))
-    if user_id is None:
-        return {"runs": []}
-    limit = int(payload.get("limit", 10))
-    rows = (
-        db.query(AgentRun)
-        .filter(AgentRun.user_id == user_id)
-        .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
-        .limit(limit)
-        .all()
-    )
-    return {"runs": [run_to_dict(row) for row in rows]}
-
-
-def _handle_ensure_initial_run(payload: dict, ctx: SyscallContext) -> dict:
-    from AINDY.platform_layer.user_ids import parse_user_id
-    from AINDY.db.models import AgentRun
-
-    db = ctx.db
-    if db is None:
-        return {"run_id": None, "created": False}
-    user_id_raw = payload.get("user_id")
-    user_id = parse_user_id(user_id_raw)
-    if user_id is None:
-        return {"run_id": None, "created": False}
-    existing = (
-        db.query(AgentRun)
-        .filter(
-            AgentRun.user_id == user_id,
-            AgentRun.goal == "Initial agent context",
-        )
-        .first()
-    )
-    if existing:
-        return {"run_id": str(existing.id), "created": False}
-    run = AgentRun(
-        user_id=user_id,
-        goal="Initial agent context",
-        status="completed",
-        overall_risk="low",
-        steps_total=0,
-    )
-    db.add(run)
-    db.commit()
-    db.refresh(run)
-    return {"run_id": str(run.id), "created": True}
-
-
 def register_agent_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.agent.dispatch_tool",
@@ -159,79 +50,6 @@ def register_agent_syscall_handlers() -> None:
         },
         stable=False,
     )
-    register_syscall(
-        name="sys.v1.agent.count_runs",
-        handler=_handle_count_runs,
-        capability="agent.read",
-        description="Count AgentRun rows for a user, optionally filtered by status.",
-        input_schema={
-            "properties": {
-                "user_id": {"type": "string"},
-                "status": {"type": "list"},
-            },
-        },
-        output_schema={
-            "required": ["count"],
-            "properties": {"count": {"type": "int"}},
-        },
-        stable=False,
-    )
-    register_syscall(
-        name="sys.v1.agent.list_recent_durations",
-        handler=_handle_list_recent_durations,
-        capability="agent.read",
-        description="List recent AgentRun timing fields for duration calculations.",
-        input_schema={
-            "properties": {
-                "user_id": {"type": "string"},
-                "window_hours": {"type": "int"},
-            },
-        },
-        output_schema={
-            "required": ["durations", "count"],
-            "properties": {
-                "durations": {"type": "list"},
-                "count": {"type": "int"},
-            },
-        },
-        stable=False,
-    )
-    register_syscall(
-        name="sys.v1.agent.list_recent_runs",
-        handler=_handle_list_recent_runs,
-        capability="agent.read",
-        description="List recent AgentRun rows for a user as plain dicts.",
-        input_schema={
-            "properties": {
-                "user_id": {"type": "string"},
-                "limit": {"type": "int"},
-            },
-        },
-        output_schema={
-            "required": ["runs"],
-            "properties": {"runs": {"type": "list"}},
-        },
-        stable=False,
-    )
-    register_syscall(
-        name="sys.v1.agent.ensure_initial_run",
-        handler=_handle_ensure_initial_run,
-        capability="agent.write",
-        description="Find or create the initial signup AgentRun sentinel for a user.",
-        input_schema={
-            "properties": {
-                "user_id": {"type": "string"},
-            },
-        },
-        output_schema={
-            "required": ["run_id", "created"],
-            "properties": {
-                "run_id": {"type": "string"},
-                "created": {"type": "bool"},
-            },
-        },
-        stable=False,
-    )
     logger.info(
-        "[agent_syscalls] registered dispatch_tool, count_runs, list_recent_durations, list_recent_runs, ensure_initial_run"
+        "[agent_syscalls] registered dispatch_tool"
     )

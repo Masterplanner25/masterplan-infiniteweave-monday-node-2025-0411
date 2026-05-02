@@ -1,6 +1,6 @@
 ---
 title: "AINDY Architecture Map"
-last_verified: "2026-04-29"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -15,6 +15,7 @@ AINDY is a modular-monolith runtime and application platform. The codebase is sp
 The repo is in a transitional architecture state. Use these terms precisely:
 
 - **Platform boot**: process startup can load the plugin manifest, resolve app bootstrap order, register routers/jobs/flows/syscalls, and mount runtime-owned surfaces.
+- **Explicit no-app boot**: selecting `platform-only` starts the runtime with zero app plugins by design.
 - **Platform full operation**: many user-facing capabilities still require successfully registered apps because routes, tools, flows, and some ORM models are app-owned.
 - **Current transitional coupling**: most runtime-to-app integration is indirect through bootstrap and registries, but a small number of direct `AINDY/` -> `apps.*` imports still exist and are treated as temporary exceptions.
 - **Target architecture**: runtime boot and shared infrastructure remain in `AINDY/`, while domain interaction happens through registries, syscalls, and public contracts rather than direct imports.
@@ -98,7 +99,7 @@ Key files:
 ## Layer 2: Domain Modules (`apps/`)
 
 ### Module List
-Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks`, `identity`, and `agent`. All other registered apps are peripheral and may fail into degraded mode without stopping platform boot.
+Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks`, `identity`, and `agent`. All other registered apps are peripheral and may fail into degraded mode after `apps/bootstrap.py` has been successfully loaded by the selected plugin profile.
 
 | App | Primary Responsibility | Boot Classification |
 |---|---|---|
@@ -133,11 +134,14 @@ major direct cross-app imports have been converted: analytics→automation
 (`sys.v1.social.adapt_linkedin`), agent→analytics
 (`sys.v1.analytics.get_kpi_snapshot`), and identity→agent
 (`sys.v1.agent.count_runs`, `sys.v1.agent.list_recent_runs`,
-`sys.v1.agent.ensure_initial_run`). Remaining deferred imports between apps
+`sys.v1.agent.ensure_initial_run`). These runtime/helper agent syscalls are
+now kernel-owned in `AINDY/kernel/syscall_registry.py`, so identity and
+platform callers no longer depend on `apps/agent` registration for them.
+Remaining deferred imports between apps
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
-Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks`, `identity`, and `agent`. Core domains abort the entire startup when their bootstrap fails; all other domains degrade gracefully. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
+Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks`, `identity`, and `agent`. Core domains abort the entire startup when their bootstrap fails; all other domains degrade gracefully once the plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
 
 Representative dependency declarations in `apps/bootstrap.py`:
 - `analytics` depends on `identity` and `tasks`
@@ -265,4 +269,4 @@ config and DB setup
 - [Plugin Registry Pattern](./PLUGIN_REGISTRY_PATTERN.md)
 
 ## Last Verified
-2026-04-25
+2026-05-02

@@ -214,3 +214,29 @@ def test_platform_only_runtime_memory_tools_dispatch_kernel_syscalls(platform_on
         ("sys.v1.memory.read", {"query": "alpha"}, ["memory.read"]),
         ("sys.v1.memory.write", {"source": "agent", "content": "beta"}, ["memory.write"]),
     ]
+
+
+def test_startup_fails_when_default_profile_plugin_is_missing(platform_only_runtime, monkeypatch, tmp_path):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["missing.bootstrap.module"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with monkeypatch.context() as scoped:
+        scoped.delenv("AINDY_BOOT_PROFILE", raising=False)
+        scoped.delenv("AINDY_PLUGIN_PROFILE", raising=False)
+        scoped.setattr(registry, "_default_manifest_path", lambda: manifest)
+
+        import AINDY.startup as startup
+
+        with pytest.raises(RuntimeError, match="missing\\.bootstrap\\.module"):
+            importlib.reload(startup)

@@ -78,7 +78,8 @@ Reasonably supported today:
 - lease-gated scheduler leadership
 - readiness checks that reflect required runtime expectations
 - dynamic registry restore and restart rehydration paths
-- degraded startup for explicitly peripheral domains
+- degraded startup for explicitly peripheral domains after the app bootstrap plugin has loaded successfully
+- explicit no-app startup only through the `platform-only` boot profile
 
 ### Transitional or constrained
 
@@ -91,6 +92,10 @@ Still transitional:
 - optional Node gateway path that is not the core backend entrypoint
 
 For deployment guidance, use the deployment docs rather than inferring from old README text.
+
+Boot safety note:
+- `platform-only` is the intentional no-app runtime mode.
+- The default app profile is strict: if `apps.bootstrap` or another requested plugin module is missing or broken, startup now fails instead of silently falling back to a partial runtime.
 
 ## Quick start
 
