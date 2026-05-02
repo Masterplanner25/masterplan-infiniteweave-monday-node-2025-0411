@@ -156,14 +156,14 @@ def _register_capture_rules() -> None:
 
 def _register_flows() -> None:
     from AINDY.platform_layer.registry import register_flow, register_symbols
-    from apps.automation.flows import flow_definitions, flow_definitions_extended
+    from apps.automation.flows import flow_definitions, flow_definitions_extended, watcher_flows
     from apps.automation.syscalls import syscall_handlers
 
     register_flow(flow_definitions.register_all_flows)
     register_symbols(
         {
             name: value
-            for module in (flow_definitions, flow_definitions_extended, syscall_handlers)
+            for module in (flow_definitions, flow_definitions_extended, watcher_flows, syscall_handlers)
             for name, value in vars(module).items()
             if (
                 not name.startswith("__")
@@ -172,6 +172,7 @@ def _register_flows() -> None:
             )
         }
     )
+    register_flow(watcher_flows.register)
 
 
 def _register_flow_results() -> None:

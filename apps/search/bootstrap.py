@@ -91,7 +91,7 @@ def _register_capture_rules() -> None:
 
 
 def _register_flows() -> None:
-    from AINDY.platform_layer.registry import register_symbols
+    from AINDY.platform_layer.registry import register_flow, register_symbols
     from apps.search.flows import search_flows
 
     register_symbols(
@@ -101,7 +101,7 @@ def _register_flows() -> None:
             if not name.startswith("__")
         }
     )
-    search_flows.register()
+    register_flow(search_flows.register)
 
 
 def _register_flow_results() -> None:

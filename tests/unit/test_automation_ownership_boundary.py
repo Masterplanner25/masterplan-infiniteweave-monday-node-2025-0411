@@ -18,14 +18,16 @@ def test_task_syscalls_register_from_tasks_domain_and_watcher_ingest_from_automa
 
 
 def test_moved_watcher_flows_register_and_automation_flows_remain_available():
-    from AINDY.runtime.flow_definitions import register_all_flows
+    from AINDY.platform_layer import registry
+    import apps.automation.bootstrap as automation_bootstrap
     from AINDY.runtime.flow_engine import FLOW_REGISTRY
 
-    register_all_flows()
+    automation_bootstrap._register_flows()
+    for register_fn in tuple(registry._flows):
+        register_fn()
 
     assert FLOW_REGISTRY["watcher_signals_receive"]["start"] == "watcher_ingest_validate"
     assert FLOW_REGISTRY["watcher_evaluate_trigger"]["start"] == "watcher_evaluate_trigger_node"
-    assert "memory_execute_loop" in FLOW_REGISTRY
 
 
 def test_automation_no_longer_imports_watcher_flow_adapter_modules():

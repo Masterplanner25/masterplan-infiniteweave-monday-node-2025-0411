@@ -70,7 +70,7 @@ def _register_async_jobs() -> None:
 
 
 def _register_flows() -> None:
-    from AINDY.platform_layer.registry import register_symbols
+    from AINDY.platform_layer.registry import register_flow, register_symbols
     from apps.freelance.flows import freelance_flows
 
     register_symbols(
@@ -80,7 +80,7 @@ def _register_flows() -> None:
             if not name.startswith("__")
         }
     )
-    freelance_flows.register()
+    register_flow(freelance_flows.register)
 
 
 def _register_flow_results() -> None:

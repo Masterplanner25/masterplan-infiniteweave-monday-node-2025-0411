@@ -131,7 +131,7 @@ def _register_required_syscalls() -> None:
 
 
 def _register_flows() -> None:
-    from AINDY.platform_layer.registry import register_symbols
+    from AINDY.platform_layer.registry import register_flow, register_symbols
     from apps.analytics.flows import analytics_flows
 
     register_symbols(
@@ -141,7 +141,7 @@ def _register_flows() -> None:
             if not name.startswith("__")
         }
     )
-    analytics_flows.register()
+    register_flow(analytics_flows.register)
 
 
 def _register_flow_results() -> None:

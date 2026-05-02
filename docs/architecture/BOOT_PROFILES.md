@@ -1,3 +1,11 @@
+---
+title: Boot Profiles
+last_verified: "2026-05-02"
+api_version: "1.0"
+status: current
+owner: "platform-team"
+---
+
 # Boot Profiles
 
 `aindy_plugins.json` is now runtime-owned boot configuration, not just a flat app plugin list.

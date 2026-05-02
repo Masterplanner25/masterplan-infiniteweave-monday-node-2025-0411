@@ -327,11 +327,9 @@ def test_register_extended_flows_registers_single_and_multi_node_flows(monkeypat
 
     assert "observability_dashboard" in registered
     assert registered["observability_dashboard"]["start"] == "observability_dashboard_node"
-    assert "watcher_signals_receive" in registered
-    assert registered["watcher_signals_receive"]["start"] == "watcher_ingest_validate"
     assert "memory_execute_loop" in registered
-    assert "watcher_evaluate_trigger" in registered
-    assert registered["watcher_evaluate_trigger"]["start"] == "watcher_evaluate_trigger_node"
+    assert "automation_logs_list" in registered
+    assert registered["automation_logs_list"]["start"] == "automation_logs_list_node"
 
 
 def test_misc_extended_flow_nodes_smoke(monkeypatch):

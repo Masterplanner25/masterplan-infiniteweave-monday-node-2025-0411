@@ -154,6 +154,8 @@ def iter_jobs() -> Iterable[tuple[str, Handler]]:
 
 def register_flow(register_fn: Handler) -> Handler:
     validate_flow_registration(getattr(register_fn, "__name__", "<anonymous>"), register_fn)
+    if register_fn in _flows:
+        return register_fn
     _flows.append(register_fn)
     return register_fn
 
