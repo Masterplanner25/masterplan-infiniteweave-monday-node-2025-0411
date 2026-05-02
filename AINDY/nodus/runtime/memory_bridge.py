@@ -73,7 +73,7 @@ class AINDYMemoryBridge:
         limit: int = 3,
     ) -> list[dict]:
         """Retrieve memories by tag match and/or semantic query."""
-        limit = max(1, min(int(limit or 3), _MAX_LIMIT))
+        limit = max(1, min(int(limit if limit is not None else 3), _MAX_LIMIT))
         db = self._session()
         try:
             from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
@@ -132,7 +132,7 @@ class AINDYMemoryBridge:
         """Return suggestions from past successful outcomes."""
         if not query:
             return []
-        limit = max(1, min(int(limit or 3), _MAX_LIMIT))
+        limit = max(1, min(int(limit if limit is not None else 3), _MAX_LIMIT))
         db = self._session()
         try:
             from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
@@ -208,7 +208,7 @@ class AINDYMemoryBridge:
         """
         if not agent_namespace or not isinstance(agent_namespace, str):
             return []
-        limit = max(1, min(int(limit or 3), _MAX_LIMIT))
+        limit = max(1, min(int(limit if limit is not None else 3), _MAX_LIMIT))
 
         namespace_tag = f"_agent:{agent_namespace}"
         combined_tags = [namespace_tag] + list(tags or [])
@@ -245,7 +245,7 @@ class AINDYMemoryBridge:
 
         Called by the Nodus VM built-in recall_all(query, tags, limit).
         """
-        limit = max(1, min(int(limit or 5), _MAX_LIMIT))
+        limit = max(1, min(int(limit if limit is not None else 5), _MAX_LIMIT))
         db = self._session()
         try:
             from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
