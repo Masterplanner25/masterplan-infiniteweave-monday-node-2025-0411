@@ -306,6 +306,19 @@ def test_flow_result_completion_event_registration_is_accepted():
     registry.register_flow_result("flow.result.valid.completion", completion_event="flow.completed")
 
 
+def test_flow_registration_is_idempotent_for_same_callable():
+    def _unique_flow_registration():
+        return None
+
+    before = len(registry._flows)
+
+    registry.register_flow(_unique_flow_registration)
+    registry.register_flow(_unique_flow_registration)
+
+    after = len(registry._flows)
+    assert after == before + 1
+
+
 def test_startup_fails_fast_on_invalid_bootstrap(monkeypatch, caplog):
     caplog.set_level(logging.ERROR)
     monkeypatch.setattr(apps_bootstrap, "_BOOTSTRAPPED", False)

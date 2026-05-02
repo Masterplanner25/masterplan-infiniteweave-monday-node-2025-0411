@@ -34,12 +34,7 @@ def test_agent_dispatch_tool_dispatch_returns_standard_envelope():
 
     register_all_domain_handlers()
 
-    with patch("AINDY.kernel.syscall_dispatcher.get_dispatcher") as mock_get_dispatcher:
-        mock_get_dispatcher.return_value.dispatch.return_value = {
-            "status": "success",
-            "data": {"ok": True, "value": 7},
-            "error": None,
-        }
+    with patch("apps.agent.agents.tool_helpers.dispatch_tool_syscall", return_value={"ok": True, "value": 7}):
         result = get_dispatcher().dispatch(
             "sys.v1.agent.dispatch_tool",
             {

@@ -15,6 +15,7 @@ def register() -> None:
     _register_events()
     _register_jobs()
     _register_async_jobs()
+    _register_flows()
     _register_flow_results()
     _register_health_check()
 
@@ -66,6 +67,20 @@ def _register_jobs() -> None:
 def _register_async_jobs() -> None:
     from AINDY.platform_layer.async_job_service import register_async_job
     register_async_job("freelance.generate_delivery")(_job_freelance_generate_delivery)
+
+
+def _register_flows() -> None:
+    from AINDY.platform_layer.registry import register_flow, register_symbols
+    from apps.freelance.flows import freelance_flows
+
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(freelance_flows).items()
+            if not name.startswith("__")
+        }
+    )
+    register_flow(freelance_flows.register)
 
 
 def _register_flow_results() -> None:

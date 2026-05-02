@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import sys
+from collections import defaultdict
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,10 +52,100 @@ def _patch_session_aliases(monkeypatch, session_factory, engine):
             monkeypatch.setattr(module, "engine", engine, raising=False)
 
 
+_EMPTY_REGISTRY_STATE = {
+    "_routers": [],
+    "_root_routers": [],
+    "_legacy_root_routers": [],
+    "_syscalls": {},
+    "_jobs": {},
+    "_flows": [],
+    "_flow_result_keys": {},
+    "_flow_result_extractors": {},
+    "_flow_completion_events": {},
+    "_flow_plans": {},
+    "_event_handlers": defaultdict(list),
+    "_event_types": set(),
+    "_capture_rules": {},
+    "_memory_policies": {},
+    "_scheduled_jobs": {},
+    "_response_adapters": {},
+    "_route_guards": {},
+    "_execution_adapters": {},
+    "_startup_hooks": [],
+    "_agent_tools": {},
+    "_agent_planner_contexts": {},
+    "_agent_run_tools": {},
+    "_agent_completion_hooks": defaultdict(list),
+    "_agent_event_emitters": defaultdict(list),
+    "_agent_ranking_strategy": None,
+    "_trigger_evaluators": {},
+    "_flow_strategies": {},
+    "_capability_definitions": {},
+    "_capability_definition_providers": [],
+    "_tool_capabilities": {},
+    "_agent_capabilities": {},
+    "_restricted_tools": set(),
+    "_route_prefixes": {
+        "flow": "flow",
+        "memory": "flow",
+        "nodus": "nodus",
+        "platform": "job",
+    },
+    "_required_flow_nodes": [],
+    "_required_syscalls": [],
+    "_symbols": {},
+    "_loaded_plugins": set(),
+    "_registered_apps": [],
+    "_bootstrap_dependencies": {},
+    "_core_domains": [],
+    "_degraded_domains": [],
+    "_health_checks": {},
+    "_active_plugin_profile": None,
+    "_runtime_agent_defaults_loaded": False,
+}
+
+
+def _copy_registry_value(value):
+    if isinstance(value, defaultdict):
+        copied = defaultdict(value.default_factory)
+        for key, item in value.items():
+            copied[key] = list(item) if isinstance(item, list) else item
+        return copied
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, set):
+        return set(value)
+    return value
+
+
+def _fresh_main_app():
+    from AINDY.agents.tool_registry import TOOL_REGISTRY
+    from AINDY.platform_layer import registry
+    from AINDY.platform_layer.deployment_contract import reset_runtime_state
+    import apps.bootstrap as apps_bootstrap
+    import AINDY.main as main_module
+    import AINDY.startup as startup_module
+
+    TOOL_REGISTRY.clear()
+    for name, value in _EMPTY_REGISTRY_STATE.items():
+        setattr(registry, name, _copy_registry_value(value))
+    apps_bootstrap._BOOTSTRAPPED = False
+    apps_bootstrap._DEGRADED_DOMAINS = []
+    reset_runtime_state()
+    registry.load_plugins()
+
+    importlib.reload(startup_module)
+    main_module = importlib.reload(main_module)
+    return main_module.app
+
+
 @pytest.fixture
 def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
     from AINDY.db.database import get_db
-    from AINDY.main import app as fastapi_app
+
+    fastapi_app = _fresh_main_app()
 
     session_factory = (
         db_session_factory

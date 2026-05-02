@@ -70,9 +70,17 @@ def _register_trigger_evaluators() -> None:
 
 
 def _register_flows() -> None:
+    from AINDY.platform_layer.registry import register_flow, register_symbols
     from apps.agent.flows import agent_flows
 
-    agent_flows.register()
+    register_symbols(
+        {
+            name: value
+            for name, value in vars(agent_flows).items()
+            if not name.startswith("__")
+        }
+    )
+    register_flow(agent_flows.register)
 
 
 def _register_flow_results() -> None:
