@@ -239,12 +239,6 @@ def _local_disassemble(script: str, filename: str) -> str | None:
     the VM is not installed.  Errors are non-fatal.
     """
     try:
-        import os as _os
-        nodus_path = _os.environ.get("NODUS_SOURCE_PATH")
-        if not nodus_path:
-            return None
-        if nodus_path not in sys.path:
-            sys.path.insert(0, nodus_path)
         from AINDY.nodus.tooling.runner import disassemble_source, format_disassembly_with_locs
         result = disassemble_source(script, filename=filename)
         if not result.get("ok"):
@@ -295,8 +289,8 @@ def cmd_run(
             print(dis)
         else:
             _print_err(
-                "[warn] --dump-bytecode requires the Nodus VM to be installed locally "
-                "(NODUS_SOURCE_PATH). Continuing with API execution."
+                "[warn] --dump-bytecode requires the nodus package to be installed locally. "
+                "Continuing with API execution."
             )
 
     # Build API request

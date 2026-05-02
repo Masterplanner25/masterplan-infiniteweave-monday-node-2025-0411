@@ -343,19 +343,13 @@ def _check_worker_presence(log) -> None:
 
 def _check_nodus_importable() -> tuple[bool, str]:
     """Return whether the Nodus VM is importable plus a detail string."""
-    nodus_path = os.environ.get("NODUS_SOURCE_PATH")
-    if not nodus_path:
-        return False, "NODUS_SOURCE_PATH is not set"
-
-    if nodus_path not in sys.path:
-        sys.path.insert(0, nodus_path)
     try:
-        import importlib
-
-        importlib.import_module("nodus.runtime.embedding")
-        return True, nodus_path
+        import nodus.runtime.embedding as _nodus_emb
+        if not hasattr(_nodus_emb, "NodusRuntime"):
+            return False, "nodus package installed but NodusRuntime not found"
+        return True, f"nodus {getattr(__import__('nodus'), '__version__', 'unknown')}"
     except ImportError as exc:
-        return False, f"Nodus VM not importable from NODUS_SOURCE_PATH={nodus_path}: {exc}"
+        return False, f"nodus package not importable: {exc}. Run: pip install -r AINDY/requirements.txt"
 
 
 def _enforce_nodus_gate() -> None:
@@ -386,7 +380,7 @@ def _enforce_nodus_gate() -> None:
         "[startup] Registered Nodus nodes require the Nodus VM, but it is unavailable. "
         f"Registered nodes: {registered_nodus_nodes}. "
         f"{nodus_detail}. "
-        "Set NODUS_SOURCE_PATH to the Nodus VM source directory."
+        "Run: pip install -r AINDY/requirements.txt to install the nodus package."
     )
     if settings.is_prod:
         raise RuntimeError(message)

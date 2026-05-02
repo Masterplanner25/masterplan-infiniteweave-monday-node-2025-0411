@@ -47,7 +47,7 @@ There are also two structural boundaries to keep in mind:
 
 The plugin manifest is `aindy_plugins.json`, and in the current repo it lists only one plugin: `apps.bootstrap`. That means the platform loads domain behavior indirectly through the app bootstrap aggregator rather than importing each app module from `AINDY/`.
 
-`apps/bootstrap.py` defines the domain bootstrap graph. It keeps a hard-coded `APP_BOOTSTRAP_MODULES` map, reads each app's `BOOTSTRAP_DEPENDS_ON`, resolves a topological order with `resolve_boot_order(...)`, and then calls each app module's `register()` function in order. Core domains come from `AINDY/config.py` as `CORE_DOMAINS = ["tasks", "identity", "agent"]`.
+`apps/bootstrap.py` defines the domain bootstrap graph. It keeps a hard-coded `APP_BOOTSTRAP_MODULES` map, reads each app's `BOOTSTRAP_DEPENDS_ON`, resolves a topological order with `resolve_boot_order(...)`, and then calls each app module's `register()` function in order. Core domains are self-declared: each core app sets `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. `CORE_DOMAINS` no longer exists in `AINDY/config.py` - it was replaced by the self-declaration pattern as part of the platform/domain separation work.
 
 Bootstrap failure policy is asymmetric:
 

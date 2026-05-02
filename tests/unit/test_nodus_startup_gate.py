@@ -18,7 +18,7 @@ def test_nodus_gate_raises_in_prod_when_nodus_nodes_registered_and_vm_unavailabl
     monkeypatch.setattr(
         main,
         "_check_nodus_importable",
-        lambda: (False, "NODUS_SOURCE_PATH is not set"),
+        lambda: (False, "nodus package not importable: missing"),
     )
 
     with pytest.raises(RuntimeError, match="Registered nodes: \\['nodus.execute'\\]"):
@@ -38,14 +38,14 @@ def test_nodus_gate_warns_in_dev_when_nodus_nodes_registered_and_vm_unavailable(
     monkeypatch.setattr(
         main,
         "_check_nodus_importable",
-        lambda: (False, "NODUS_SOURCE_PATH is not set"),
+        lambda: (False, "nodus package not importable: missing"),
     )
 
     with caplog.at_level(logging.WARNING):
         main._enforce_nodus_gate()
 
     assert "Registered nodes: ['nodus.execute', 'nodus.helper']" in caplog.text
-    assert "Set NODUS_SOURCE_PATH" in caplog.text
+    assert "Run: pip install -r AINDY/requirements.txt to install the nodus package." in caplog.text
 
 
 def test_nodus_gate_allows_registered_nodus_nodes_when_vm_available(monkeypatch, caplog):
@@ -61,7 +61,7 @@ def test_nodus_gate_allows_registered_nodus_nodes_when_vm_available(monkeypatch,
     monkeypatch.setattr(
         main,
         "_check_nodus_importable",
-        lambda: (True, "C:/nodus"),
+        lambda: (True, "nodus 1.1.0"),
     )
 
     with caplog.at_level(logging.INFO):
@@ -83,7 +83,7 @@ def test_nodus_gate_skips_when_no_nodus_nodes_registered_and_vm_unavailable(monk
     monkeypatch.setattr(
         main,
         "_check_nodus_importable",
-        lambda: (False, "NODUS_SOURCE_PATH is not set"),
+        lambda: (False, "nodus package not importable: missing"),
     )
 
     with caplog.at_level(logging.INFO):

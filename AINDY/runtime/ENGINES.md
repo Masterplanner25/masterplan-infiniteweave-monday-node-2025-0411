@@ -22,7 +22,7 @@
 - VM-backed `nodus.execute` and `nodus.flow.*` runtime nodes
 
 **Node registration:** `nodus.*` nodes are registered into `NODE_REGISTRY` from `AINDY/runtime/nodus_adapter.py`
-**Startup:** Only active when Nodus nodes are registered and `NODUS_SOURCE_PATH` is importable
+**Startup:** Only active when Nodus nodes are registered and the pip-installed `nodus` package is importable
 **Gate:** `AINDY/main.py:_enforce_nodus_gate()`
 
 ## Boundary

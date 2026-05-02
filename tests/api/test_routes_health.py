@@ -1,4 +1,5 @@
 import time
+import importlib
 
 
 class TestHealthEndpoint:
@@ -60,13 +61,25 @@ class TestHealthEndpoint:
         assert "circuit" in data["checks"]["ai_providers"]["openai"]
         assert "circuit" in data["checks"]["ai_providers"]["deepseek"]
 
-    def test_deep_health_reports_nodus_not_configured_when_env_unset(self, client, monkeypatch):
+    def test_deep_health_reports_nodus_unavailable_when_package_missing(self, client, monkeypatch):
         monkeypatch.delenv("NODUS_SOURCE_PATH", raising=False)
+        module = importlib.import_module("AINDY.routes.health_router")
+        real_import = __import__
+
+        monkeypatch.setattr(
+            module,
+            "__import__",
+            lambda name, *args, **kwargs: (_ for _ in ()).throw(ImportError("nodus runtime missing"))
+            if name == "nodus"
+            else real_import(name, *args, **kwargs),
+            raising=False,
+        )
         response = client.get("/health/deep")
         assert response.status_code == 200
         data = response.json()
-        assert data["checks"]["nodus"]["status"] == "not_configured"
-        assert data["checks"]["nodus"]["detail"] == "NODUS_SOURCE_PATH not set"
+        assert data["checks"]["nodus"]["status"] == "unavailable"
+        assert data["checks"]["nodus"]["detail"] == "nodus runtime missing"
+        assert data["checks"]["nodus"]["hint"] == "Run: pip install -r AINDY/requirements.txt"
 
     def test_deep_health_reports_openai_circuit_as_degraded(self, client):
         from AINDY.platform_layer.openai_client import get_openai_circuit_breaker

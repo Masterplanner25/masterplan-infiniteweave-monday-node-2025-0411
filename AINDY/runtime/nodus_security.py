@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import re
 from typing import Any, Optional
 
@@ -58,49 +57,6 @@ RESTRICTED_OPERATION_SUMMARY = {
 
 MAX_TASK_CODE_LENGTH = 12000
 
-_FORBIDDEN_NODE_TYPES = (
-    ast.Import,
-    ast.ImportFrom,
-)
-
-_FORBIDDEN_FUNC_NAMES = frozenset(
-    {
-        "eval",
-        "exec",
-        "compile",
-        "__import__",
-        "open",
-        "breakpoint",
-        "input",
-    }
-)
-
-_FORBIDDEN_ATTR_CHAINS = frozenset(
-    {
-        "os",
-        "sys",
-        "subprocess",
-        "socket",
-        "pathlib",
-        "shutil",
-        "requests",
-        "urllib",
-        "http",
-        "builtins",
-    }
-)
-
-_FORBIDDEN_DUNDERS = frozenset(
-    {
-        "__builtins__",
-        "__import__",
-        "__class__",
-        "__bases__",
-        "__mro__",
-        "__subclasses__",
-    }
-)
-
 
 def normalize_allowed_operations(value: Optional[list[str]]) -> list[str]:
     operations = value or DEFAULT_READONLY_OPERATIONS
@@ -116,59 +72,32 @@ def normalize_allowed_operations(value: Optional[list[str]]) -> list[str]:
     return normalized
 
 
-def _is_forbidden_name(node: ast.AST) -> bool:
-    if isinstance(node, ast.Name) and node.id in _FORBIDDEN_FUNC_NAMES:
-        return True
-    if isinstance(node, ast.Attribute) and node.attr in _FORBIDDEN_FUNC_NAMES:
-        return True
-    return False
-
-
-def _is_forbidden_attr(node: ast.AST) -> bool:
-    """Flag attribute/name access whose root or member name is forbidden."""
-    if isinstance(node, ast.Name):
-        return node.id in _FORBIDDEN_ATTR_CHAINS
-    if isinstance(node, ast.Attribute):
-        current: ast.AST | None = node
-        while isinstance(current, ast.Attribute):
-            if current.attr in _FORBIDDEN_ATTR_CHAINS:
-                return True
-            current = current.value
-        if isinstance(current, ast.Name) and current.id in _FORBIDDEN_ATTR_CHAINS:
-            return True
-    return False
-
-
 def validate_nodus_source(task_code: str) -> None:
+    """Validate a Nodus script source for basic structural and security issues.
+
+    The Nodus VM enforces its own sandbox (no imports, no filesystem, no network).
+    This validator performs lightweight pre-execution checks without parsing
+    Nodus syntax as Python - the two languages are not compatible with Python AST.
+    """
     source = str(task_code or "")
     if not source.strip():
-        raise NodusSecurityError("Operation code is required.")
+        raise NodusSecurityError("Script source is required.")
     if len(source) > MAX_TASK_CODE_LENGTH:
-        raise NodusSecurityError("Operation code exceeds maximum allowed length.")
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as exc:
-        raise NodusSecurityError(f"Script has a syntax error: {exc}") from exc
+        raise NodusSecurityError(
+            f"Script exceeds maximum allowed length ({MAX_TASK_CODE_LENGTH} chars)."
+        )
 
-    for node in ast.walk(tree):
-        if isinstance(node, _FORBIDDEN_NODE_TYPES):
-            raise NodusSecurityError("system import is not allowed")
-        if isinstance(node, ast.Call):
-            func = node.func
-            if _is_forbidden_name(func):
-                name = getattr(func, "id", None) or getattr(func, "attr", None)
-                raise NodusSecurityError(f"'{name}' is not allowed in Nodus scripts")
-        if isinstance(node, (ast.Name, ast.Attribute)):
-            name = getattr(node, "id", None) or getattr(node, "attr", None)
-            if name in _FORBIDDEN_DUNDERS:
-                raise NodusSecurityError(f"Access to '{name}' is not allowed in Nodus scripts")
-        if _is_forbidden_attr(node):
-            name = getattr(node, "id", None) or getattr(node, "attr", None)
-            raise NodusSecurityError(f"Access to '{name}' is not allowed in Nodus scripts")
-        if isinstance(node, ast.Global):
-            raise NodusSecurityError("'global' statement is not allowed")
-        if isinstance(node, ast.Nonlocal):
-            raise NodusSecurityError("'nonlocal' statement is not allowed")
+    _INJECTION_PATTERNS = [
+        (r"^\s*import\s+\w", "Python import statement is not valid in Nodus scripts"),
+        (r"^\s*from\s+\w+\s+import\s+", "Python from-import is not valid in Nodus scripts"),
+        (r"__import__\s*\(", "__import__() is not available in Nodus scripts"),
+        (r"\beval\s*\(", "eval() is not available in Nodus scripts"),
+        (r"\bexec\s*\(", "exec() is not available in Nodus scripts"),
+    ]
+
+    for pattern, message in _INJECTION_PATTERNS:
+        if re.search(pattern, source, re.MULTILINE | re.IGNORECASE):
+            raise NodusSecurityError(message)
 
 
 def validate_requested_operation_usage(task_code: str, allowed_operations: list[str]) -> None:

@@ -1,0 +1,11 @@
+export fn recall_from(agent, query, tags, limit) {
+    return __memory_stdlib_recall_from(agent, query, tags, limit)
+}
+
+export fn recall_all(query, tags, limit) {
+    return __memory_stdlib_recall_all(query, tags, limit)
+}
+
+export fn share(node_id) {
+    return __memory_stdlib_share(node_id)
+}

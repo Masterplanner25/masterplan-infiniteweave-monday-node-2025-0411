@@ -22,7 +22,6 @@ directly.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from importlib import import_module
 from typing import Any, Optional
@@ -51,6 +50,11 @@ def get_engine_status() -> dict:
 
     dag_nodes = sorted(name for name in NODE_REGISTRY if not _is_nodus_node(name))
     nodus_nodes = sorted(name for name in NODE_REGISTRY if _is_nodus_node(name))
+    try:
+        import nodus.runtime.embedding as _nodus_emb
+        nodus_configured = hasattr(_nodus_emb, "NodusRuntime")
+    except ImportError:
+        nodus_configured = False
     return {
         "dag_engine": {
             "registered_nodes": len(dag_nodes),
@@ -62,7 +66,7 @@ def get_engine_status() -> dict:
             "registered_nodes": len(nodus_nodes),
             "node_names": nodus_nodes,
             "available": len(nodus_nodes) > 0,
-            "configured": bool(os.environ.get("NODUS_SOURCE_PATH")),
+            "configured": nodus_configured,
         },
     }
 
