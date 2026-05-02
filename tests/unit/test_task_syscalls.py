@@ -29,6 +29,10 @@ class TestTaskDomainSyscalls:
         assert "sys.v1.task.get" in SYSCALL_REGISTRY
         assert "sys.v1.task.queue_automation" in SYSCALL_REGISTRY
         assert "sys.v1.task.get_user_tasks" in SYSCALL_REGISTRY
+        assert "sys.v1.task.count" in SYSCALL_REGISTRY
+        assert "sys.v1.task.count_completed_since" in SYSCALL_REGISTRY
+        assert "sys.v1.task.list_for_masterplan" in SYSCALL_REGISTRY
+        assert "sys.v1.task.delete_by_ids" in SYSCALL_REGISTRY
 
     def test_dispatch_task_get_returns_envelope(self):
         from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
@@ -125,3 +129,56 @@ class TestTaskDomainSyscalls:
             {"status": "completed", "end_time": "2026-01-02T00:00:00+00:00"},
             {"status": "pending", "end_time": None},
         ]
+
+    def test_dispatch_runtime_masterplan_helper_task_syscalls(self):
+        from apps.tasks.syscalls.syscall_handlers import register_task_syscall_handlers
+
+        register_task_syscall_handlers()
+        mock_db = MagicMock()
+        mock_public = ModuleType("apps.tasks.services.public_surface_service")
+        mock_public.count_tasks = MagicMock(return_value=3)
+        mock_public.count_tasks_completed_since = MagicMock(return_value=2)
+        mock_public.list_tasks_for_masterplan = MagicMock(
+            return_value=[
+                SimpleNamespace(id=1, name="Task 1", status="pending"),
+                SimpleNamespace(id=2, name="Task 2", status="completed"),
+            ]
+        )
+        mock_public.delete_tasks_by_ids = MagicMock(return_value=2)
+        mock_public.task_to_dict = MagicMock(
+            side_effect=lambda task: {"id": task.id, "name": task.name, "status": task.status}
+        )
+
+        with patch.dict(sys.modules, {"apps.tasks.services.public_surface_service": mock_public}):
+            count_result = get_dispatcher().dispatch(
+                "sys.v1.task.count",
+                {"masterplan_id": 7},
+                _ctx(capability="task.read", db=mock_db),
+            )
+            completed_result = get_dispatcher().dispatch(
+                "sys.v1.task.count_completed_since",
+                {"since": "2026-01-01T00:00:00+00:00"},
+                _ctx(capability="task.read", db=mock_db),
+            )
+            list_result = get_dispatcher().dispatch(
+                "sys.v1.task.list_for_masterplan",
+                {"masterplan_id": 7},
+                _ctx(capability="task.read", db=mock_db),
+            )
+            delete_result = get_dispatcher().dispatch(
+                "sys.v1.task.delete_by_ids",
+                {"task_ids": [1, 2]},
+                _ctx(capability="task.write", db=mock_db),
+            )
+
+        assert count_result["status"] == "success"
+        assert count_result["data"]["count"] == 3
+        assert completed_result["status"] == "success"
+        assert completed_result["data"]["count"] == 2
+        assert list_result["status"] == "success"
+        assert list_result["data"]["tasks"] == [
+            {"id": 1, "name": "Task 1", "status": "pending"},
+            {"id": 2, "name": "Task 2", "status": "completed"},
+        ]
+        assert delete_result["status"] == "success"
+        assert delete_result["data"]["deleted_count"] == 2

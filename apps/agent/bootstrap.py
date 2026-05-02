@@ -8,7 +8,6 @@ APP_DEPENDS_ON: list[str] = []
 
 def register() -> None:
     _register_models()
-    _register_router()
     _register_route_prefixes()
     _register_syscalls()
     _register_async_jobs()
@@ -16,21 +15,12 @@ def register() -> None:
     _register_agent_capabilities()
     _register_agent_runtime_extensions()
     _register_trigger_evaluators()
-    _register_flows()
-    _register_flow_results()
     _register_health_check()
 
 
 def _register_models() -> None:
     # Agent persistence models are runtime-owned and loaded by AINDY.db.model_registry.
     return None
-
-
-def _register_router() -> None:
-    from AINDY.platform_layer.registry import register_router
-    from apps.agent.routes.agent_router import router as agent_router
-    register_router(agent_router)
-
 
 def _register_route_prefixes() -> None:
     from AINDY.platform_layer.registry import register_route_prefix
@@ -67,43 +57,6 @@ def _register_agent_runtime_extensions() -> None:
 def _register_trigger_evaluators() -> None:
     from apps.agent.agents.triggers import register
     register()
-
-
-def _register_flows() -> None:
-    from AINDY.platform_layer.registry import register_flow, register_symbols
-    from apps.agent.flows import agent_flows
-
-    register_symbols(
-        {
-            name: value
-            for name, value in vars(agent_flows).items()
-            if not name.startswith("__")
-        }
-    )
-    register_flow(agent_flows.register)
-
-
-def _register_flow_results() -> None:
-    from AINDY.platform_layer.registry import register_flow_result
-
-    result_keys = {
-        "agent_run_create": "agent_run_create_result",
-        "agent_runs_list": "agent_runs_list_result",
-        "agent_run_get": "agent_run_get_result",
-        "agent_run_approve": "agent_run_approve_result",
-        "agent_run_reject": "agent_run_reject_result",
-        "agent_run_recover": "agent_run_recover_result",
-        "agent_run_replay": "agent_run_replay_result",
-        "agent_run_steps": "agent_run_steps_result",
-        "agent_run_events": "agent_run_events_result",
-        "agent_tools_list": "agent_tools_list_result",
-        "agent_trust_get": "agent_trust_get_result",
-        "agent_trust_update": "agent_trust_update_result",
-        "agent_suggestions_get": "agent_suggestions_get_result",
-    }
-    for flow_name, result_key in result_keys.items():
-        register_flow_result(flow_name, result_key=result_key)
-
 
 def _job_agent_create_run(payload: dict, db):
     from AINDY.agents.agent_runtime import create_run, execute_run, to_execution_response

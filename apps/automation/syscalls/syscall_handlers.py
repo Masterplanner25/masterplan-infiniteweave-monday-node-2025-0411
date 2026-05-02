@@ -523,6 +523,20 @@ def _handle_automation_list_loop_adjustments(payload: dict, context: SyscallCont
             db.close()
 
 
+def _handle_automation_list_logs(payload: dict, context: SyscallContext) -> dict:
+    from apps.automation.public import list_automation_logs
+
+    user_id = payload.get("user_id") or context.user_id
+    limit = int(payload.get("limit", 250) or 250)
+    db, owns_session = _session_from_context(context)
+    try:
+        logs = list(list_automation_logs(db, user_id=str(user_id), limit=limit) or [])
+        return {"logs": logs, "count": len(logs)}
+    finally:
+        if owns_session:
+            db.close()
+
+
 def _handle_automation_create_loop_adjustment(payload: dict, context: SyscallContext) -> dict:
     from apps.automation.public import create_loop_adjustment
 
@@ -904,6 +918,7 @@ def register_all_domain_handlers() -> None:
         ("sys.v1.score.feedback", _handle_score_feedback, "score.feedback", "Persist score feedback record", False, None),
         ("sys.v1.automation.list_feedback", _handle_automation_list_feedback, "automation.read", "List user feedback records", False, None),
         ("sys.v1.automation.list_loop_adjustments", _handle_automation_list_loop_adjustments, "automation.read", "List loop adjustment records", False, None),
+        ("sys.v1.automation.list_logs", _handle_automation_list_logs, "automation.read", "List automation logs", False, None),
         ("sys.v1.automation.create_loop_adjustment", _handle_automation_create_loop_adjustment, "automation.write", "Create a loop adjustment record", False, None),
         ("sys.v1.automation.update_loop_adjustment", _handle_automation_update_loop_adjustment, "automation.write", "Update a loop adjustment record", False, None),
         ("sys.v1.watcher.ingest", _handle_watcher_ingest, "watcher.ingest", "Persist watcher signals", False, None),

@@ -1,11 +1,12 @@
 """
-routes/__init__.py - platform route registry.
+routes/__init__.py - runtime route registry.
 
-AINDY/routes owns platform and root system routers only. Application routers
-are imported from apps/*/routes by AINDY.main and mounted under /apps.
+AINDY/routes owns root and platform routers plus runtime-owned `/apps/*`
+surfaces that belong to the platform layer rather than any app plugin.
 """
 import os
 
+from AINDY.routes.agent_router import router as agent_router
 from AINDY.routes.auth_router import router as auth_router
 from AINDY.routes.coordination_router import router as coordination_router
 from AINDY.routes.flow_router import router as flow_router
@@ -31,6 +32,7 @@ PLATFORM_ROUTERS = [
 
 # Platform primitives still exposed on the historical /apps surface.
 APP_ROUTERS = [
+    agent_router,
     memory_router,
     memory_metrics_router,
     memory_trace_router,

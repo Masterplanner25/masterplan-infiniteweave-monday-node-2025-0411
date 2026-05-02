@@ -21,7 +21,7 @@ single-agent execution layer built from:
 - `services/agent_tools.py`
 - `services/nodus_adapter.py`
 - `services/flow_engine.py`
-- `routes/agent_router.py`
+- `AINDY/routes/agent_router.py`
 - `db/models/agent_run.py`
 - `db/models/agent_event.py`
 - `services/capability_service.py`
@@ -32,7 +32,7 @@ The current lifecycle is:
 
 ### Production-ready or close to production-ready
 
-- Agent run creation, approval, rejection, replay, recovery, step inspection, and event timeline APIs are implemented in `routes/agent_router.py`.
+- Agent run creation, approval, rejection, replay, recovery, step inspection, and event timeline APIs are implemented in `AINDY/routes/agent_router.py`.
 - The agent planner is live in `services/agent_runtime.py` and uses GPT-generated structured plans over a fixed tool registry.
 - The execution path is deterministic in practice because approved plans are executed through `PersistentFlowRunner` in `services/flow_engine.py` via `services/nodus_adapter.py`.
 - Per-run scoped capability enforcement exists in `services/capability_service.py` and is checked both before flow execution and before tool execution.
@@ -104,7 +104,7 @@ Planner / Runtime policy
 
 - Agent Runtime
   - Current role: plan generation, approval, capability minting, run lifecycle management.
-  - Primary files: `services/agent_runtime.py`, `routes/agent_router.py`.
+  - Primary files: `services/agent_runtime.py`, `AINDY/routes/agent_router.py`.
 
 - Nodus Execution Layer
   - Intended role: declarative workflow language, compiler, bytecode/VM execution, deterministic traces.
@@ -187,7 +187,7 @@ Exact files/modules affected:
 - `services/flow_engine.py`
 - `services/async_job_service.py`
 - `services/stuck_run_service.py`
-- `routes/agent_router.py`
+- `AINDY/routes/agent_router.py`
 - `routes/flow_router.py`
 - `client/src/components/AgentConsole.jsx`
 - `client/src/components/AgentApprovalInbox.jsx`
@@ -217,7 +217,7 @@ Exact files/modules affected:
 - `services/agent_event_service.py`
 - `bridge/nodus_memory_bridge.py`
 - `routes/memory_router.py`
-- `routes/agent_router.py`
+- `AINDY/routes/agent_router.py`
 - new Nodus workflow asset location in-repo
 
 Success criteria:

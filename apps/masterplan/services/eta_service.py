@@ -10,10 +10,13 @@ Public API:
 """
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from sqlalchemy.orm import Session
+
+from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
 from AINDY.platform_layer.user_ids import require_user_id
 
 from apps.masterplan.models import MasterPlan
@@ -25,13 +28,48 @@ CONFIDENCE_HIGH_MIN_TASKS = 5
 CONFIDENCE_MEDIUM_MIN_TASKS = 2
 
 
+def _dispatch_task_read(payload: dict, *, db: Session, user_id: str, capability: str) -> dict:
+    syscall_name = str(payload.pop("_syscall"))
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=[capability],
+        trace_id="",
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(syscall_name, payload, ctx)
+    if result.get("status") != "success":
+        raise RuntimeError(result.get("error") or "task read syscall failed")
+    return result.get("data") or {}
+
+
+def _count_tasks(db: Session, *, user_id: str, status: str | None = None) -> int:
+    payload: dict = {"_syscall": "sys.v1.task.count"}
+    if status is not None:
+        payload["status"] = status
+    return int(
+        _dispatch_task_read(payload, db=db, user_id=user_id, capability="task.read").get("count")
+        or 0
+    )
+
+
+def _count_tasks_completed_since(db: Session, *, user_id: str, since: datetime) -> int:
+    return int(
+        _dispatch_task_read(
+            {"_syscall": "sys.v1.task.count_completed_since", "since": since.isoformat()},
+            db=db,
+            user_id=user_id,
+            capability="task.read",
+        ).get("count")
+        or 0
+    )
+
+
 def _compute_velocity(db: Session, user_id: str) -> float:
     """Return tasks/day completed in the last VELOCITY_WINDOW_DAYS days."""
-    from apps.tasks.public import count_tasks_completed_since
-
     owner_user_id = require_user_id(user_id)
     cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    count = count_tasks_completed_since(
+    count = _count_tasks_completed_since(
         db,
         user_id=owner_user_id,
         since=cutoff,
@@ -50,15 +88,11 @@ def _confidence_label(velocity: float, completed_in_window: int) -> str:
 
 
 def _total_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.public import count_tasks
-
-    return count_tasks(db, user_id=require_user_id(user_id))
+    return _count_tasks(db, user_id=str(require_user_id(user_id)))
 
 
 def _completed_tasks_for_user(db: Session, user_id: str) -> int:
-    from apps.tasks.public import count_tasks
-
-    return count_tasks(db, user_id=require_user_id(user_id), status="completed")
+    return _count_tasks(db, user_id=str(require_user_id(user_id)), status="completed")
 
 
 def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
@@ -69,8 +103,6 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         dict with keys: velocity, projected_completion_date, days_ahead_behind,
         eta_confidence, anchor_date, total_tasks, completed_tasks, remaining_tasks
     """
-    from apps.tasks.public import count_tasks_completed_since
-
     owner_user_id = require_user_id(user_id)
     plan = (
         db.query(MasterPlan)
@@ -81,7 +113,7 @@ def calculate_eta(db: Session, masterplan_id: int, user_id: str) -> dict:
         raise ValueError(f"MasterPlan {masterplan_id} not found for user {user_id}")
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=VELOCITY_WINDOW_DAYS)
-    tasks_in_window = count_tasks_completed_since(
+    tasks_in_window = _count_tasks_completed_since(
         db,
         user_id=owner_user_id,
         since=cutoff,

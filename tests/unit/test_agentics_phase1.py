@@ -350,11 +350,11 @@ class TestAgentRuntime:
 class TestAgentRouterStructure:
 
     def test_agent_router_importable(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         assert router is not None
 
     def test_router_prefix(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         assert router.prefix == "/agent"
 
     def test_router_mounted_in_main_app(self):
@@ -364,37 +364,37 @@ class TestAgentRouterStructure:
         assert "/apps/agent/run" in paths, "agent_router not mounted in main app"
 
     def test_agent_router_has_post_run_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("/run" in p for p in paths)
 
     def test_agent_router_has_runs_list_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("/runs" in p for p in paths)
 
     def test_agent_router_has_approve_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("approve" in p for p in paths)
 
     def test_agent_router_has_reject_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("reject" in p for p in paths)
 
     def test_agent_router_has_steps_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("steps" in p for p in paths)
 
     def test_agent_router_has_tools_route(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("tools" in p for p in paths)
 
     def test_agent_router_has_trust_routes(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("trust" in p for p in paths)
 

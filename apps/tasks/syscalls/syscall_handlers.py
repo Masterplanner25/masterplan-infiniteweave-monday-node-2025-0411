@@ -324,6 +324,106 @@ def _handle_task_get_graph_context(payload: dict, ctx: SyscallContext) -> dict:
             db.close()
 
 
+def _handle_task_count(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.tasks.services.public_surface_service import count_tasks
+
+    user_id = payload.get("user_id") or _context_user_id(ctx)
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return {
+            "count": int(
+                count_tasks(
+                    db,
+                    user_id=user_id,
+                    status=payload.get("status"),
+                    masterplan_id=payload.get("masterplan_id"),
+                )
+            )
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_task_count_completed_since(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.tasks.services.public_surface_service import count_tasks_completed_since
+
+    raw_since = payload.get("since")
+    if raw_since is None:
+        raise ValueError("sys.v1.task.count_completed_since requires 'since'")
+
+    since = raw_since
+    if isinstance(raw_since, str):
+        normalized = raw_since.replace("Z", "+00:00")
+        since = datetime.fromisoformat(normalized)
+    if not isinstance(since, datetime):
+        raise ValueError("sys.v1.task.count_completed_since requires 'since' as datetime or ISO string")
+
+    user_id = payload.get("user_id") or _context_user_id(ctx)
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return {
+            "count": int(
+                count_tasks_completed_since(
+                    db,
+                    user_id=user_id,
+                    since=since,
+                )
+            )
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_task_list_for_masterplan(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.tasks.services.public_surface_service import list_tasks_for_masterplan, task_to_dict
+
+    masterplan_id = payload.get("masterplan_id")
+    if masterplan_id is None:
+        raise ValueError("sys.v1.task.list_for_masterplan requires 'masterplan_id'")
+
+    user_id = payload.get("user_id") or _context_user_id(ctx)
+    db, owns_session = _session_from_context(ctx)
+    try:
+        tasks = list_tasks_for_masterplan(
+            db,
+            user_id=user_id,
+            masterplan_id=int(masterplan_id),
+        )
+        return {
+            "tasks": [task_to_dict(task) for task in tasks],
+            "count": len(tasks),
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_task_delete_by_ids(payload: dict, ctx: SyscallContext) -> dict:
+    from apps.tasks.services.public_surface_service import delete_tasks_by_ids
+
+    task_ids = payload.get("task_ids")
+    if not isinstance(task_ids, list):
+        raise ValueError("sys.v1.task.delete_by_ids requires 'task_ids' list")
+
+    user_id = payload.get("user_id") or _context_user_id(ctx)
+    db, owns_session = _session_from_context(ctx)
+    try:
+        return {
+            "deleted_count": int(
+                delete_tasks_by_ids(
+                    db,
+                    user_id=user_id,
+                    task_ids=[int(task_id) for task_id in task_ids],
+                )
+            )
+        }
+    finally:
+        if owns_session:
+            db.close()
+
+
 def register_task_syscall_handlers() -> None:
     register_syscall(
         name="sys.v1.task.create",
@@ -441,6 +541,78 @@ def register_task_syscall_handlers() -> None:
                 "critical_path": {"type": "array"},
                 "critical_weight": {"type": "dict"},
             },
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.task.count",
+        handler=_handle_task_count,
+        capability="task.read",
+        description="Count tasks for the current user.",
+        input_schema={
+            "properties": {
+                "user_id": {"type": "string"},
+                "status": {"type": "string"},
+                "masterplan_id": {"type": "integer"},
+            },
+        },
+        output_schema={
+            "required": ["count"],
+            "properties": {"count": {"type": "integer"}},
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.task.count_completed_since",
+        handler=_handle_task_count_completed_since,
+        capability="task.read",
+        description="Count completed tasks for the current user since a timestamp.",
+        input_schema={
+            "required": ["since"],
+            "properties": {
+                "user_id": {"type": "string"},
+                "since": {"type": "string"},
+            },
+        },
+        output_schema={
+            "required": ["count"],
+            "properties": {"count": {"type": "integer"}},
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.task.list_for_masterplan",
+        handler=_handle_task_list_for_masterplan,
+        capability="task.read",
+        description="List tasks associated with one masterplan for the current user.",
+        input_schema={
+            "required": ["masterplan_id"],
+            "properties": {
+                "user_id": {"type": "string"},
+                "masterplan_id": {"type": "integer"},
+            },
+        },
+        output_schema={
+            "required": ["tasks"],
+            "properties": {"tasks": {"type": "array"}, "count": {"type": "integer"}},
+        },
+        stable=False,
+    )
+    register_syscall(
+        name="sys.v1.task.delete_by_ids",
+        handler=_handle_task_delete_by_ids,
+        capability="task.write",
+        description="Delete tasks by ID for the current user.",
+        input_schema={
+            "required": ["task_ids"],
+            "properties": {
+                "user_id": {"type": "string"},
+                "task_ids": {"type": "array"},
+            },
+        },
+        output_schema={
+            "required": ["deleted_count"],
+            "properties": {"deleted_count": {"type": "integer"}},
         },
         stable=False,
     )

@@ -115,47 +115,47 @@ def test_router_guard_scan_and_validate(tmp_path):
     validate_router_boundary(clean_dir)
 
 
-def test_masterplan_execution_service_sync_skip_and_status():
+def test_masterplan_execution_service_sync_skip_and_status(monkeypatch):
     from apps.masterplan.services.masterplan_execution_service import (
         get_masterplan_execution_status,
         sync_masterplan_tasks,
     )
+    from apps.masterplan.services import masterplan_execution_service as service
 
     owner_id = uuid.uuid4()
-    task = SimpleNamespace(
-        id=1,
-        status="completed",
-        name="Task 1",
-        priority="high",
-        parent_task_id=None,
-        depends_on=[],
-        automation_type=None,
-        automation_config=None,
-    )
-    log = SimpleNamespace(
-        id=10,
-        user_id=owner_id,
-        status="failed",
-        task_name="Task 1",
-        error_message="broken",
-        created_at=datetime.now(timezone.utc),
-        payload={"masterplan_id": 7, "task_id": 1},
-    )
-
-    task_query = MagicMock()
-    task_query.filter.return_value = task_query
-    task_query.order_by.return_value = task_query
-    task_query.all.return_value = [task]
-    task_query.count.return_value = 1
-
-    log_query = MagicMock()
-    log_query.filter.return_value = log_query
-    log_query.order_by.return_value = log_query
-    log_query.limit.return_value = log_query
-    log_query.all.return_value = [log]
-
     db = MagicMock()
-    db.query.side_effect = [task_query, task_query, log_query]
+    monkeypatch.setattr(
+        service,
+        "_list_tasks_for_masterplan",
+        lambda **kwargs: [
+            {
+                "id": 1,
+                "status": "completed",
+                "name": "Task 1",
+                "priority": "high",
+                "parent_task_id": None,
+                "depends_on": [],
+                "automation_type": None,
+                "automation_config": None,
+            }
+        ],
+    )
+    monkeypatch.setattr(service, "_count_tasks", lambda **kwargs: 1)
+    monkeypatch.setattr(
+        service,
+        "_list_automation_logs",
+        lambda **kwargs: [
+            {
+                "id": 10,
+                "user_id": str(owner_id),
+                "status": "failed",
+                "task_name": "Task 1",
+                "error_message": "broken",
+                "created_at": datetime.now(timezone.utc),
+                "payload": {"masterplan_id": 7, "task_id": 1},
+            }
+        ],
+    )
 
     masterplan = SimpleNamespace(id=7, structure_json={})
     sync_result = sync_masterplan_tasks(db=db, masterplan=masterplan, user_id=owner_id)
@@ -167,17 +167,16 @@ def test_masterplan_execution_service_sync_skip_and_status():
     assert status_result["automations"]["failed"] == 1
 
 
-def test_masterplan_execution_service_replace_protects_completed_tasks():
+def test_masterplan_execution_service_replace_protects_completed_tasks(monkeypatch):
     from apps.masterplan.services.masterplan_execution_service import sync_masterplan_tasks
-
-    completed_task = SimpleNamespace(id=1, status="completed")
-    query = MagicMock()
-    query.filter.return_value = query
-    query.order_by.return_value = query
-    query.all.return_value = [completed_task]
+    from apps.masterplan.services import masterplan_execution_service as service
 
     db = MagicMock()
-    db.query.return_value = query
+    monkeypatch.setattr(
+        service,
+        "_list_tasks_for_masterplan",
+        lambda **kwargs: [{"id": 1, "status": "completed"}],
+    )
     masterplan = SimpleNamespace(id=5, structure_json={})
 
     with pytest.raises(ValueError, match="masterplan_tasks_completed_cannot_replace"):

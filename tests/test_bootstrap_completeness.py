@@ -96,14 +96,14 @@ def test_automation_boots_without_arm_masterplan(monkeypatch):
     assert registered == [
         "sys.v1.score.feedback",
         "sys.v1.agent.suggest_tools",
-        "sys.v1.agent.dispatch_tool",
     ]
     assert "sys.v1.arm.analyze" not in registered
     assert "sys.v1.genesis.execute_llm" not in registered
     assert "sys.v1.task.create" not in registered
+    assert "sys.v1.agent.dispatch_tool" not in registered
 
 
-def test_automation_boot_order_keeps_tasks_via_analytics_dependency(monkeypatch):
+def test_automation_boot_order_has_no_cross_app_boot_edges(monkeypatch):
     import apps.bootstrap as bs
 
     monkeypatch.setattr(
@@ -114,14 +114,13 @@ def test_automation_boot_order_keeps_tasks_via_analytics_dependency(monkeypatch)
             "identity": {"BOOTSTRAP_DEPENDS_ON": []},
             "agent": {"BOOTSTRAP_DEPENDS_ON": []},
             "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
-            "automation": {"BOOTSTRAP_DEPENDS_ON": ["agent", "analytics"]},
+            "automation": {"BOOTSTRAP_DEPENDS_ON": []},
         },
     )
 
     order = bs.get_resolved_boot_order()
 
-    assert order.index("tasks") < order.index("analytics") < order.index("automation")
-    assert order.index("agent") < order.index("automation")
+    assert set(order) == {"tasks", "identity", "agent", "analytics", "automation"}
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +175,6 @@ def test_known_flow_results_registered():
         "arm_analysis": "analysis_result",
         "leadgen_search": "search_results",
         "automation_logs_list": "automation_logs_list_result",
-        "agent_run_create": "agent_run_create_result",
         "freelance_order_create": "freelance_order_create_result",
         "memory_recall": "memory_recall_result",
         "flow_runs_list": "flow_runs_list_result",

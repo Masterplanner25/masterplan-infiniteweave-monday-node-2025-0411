@@ -459,10 +459,10 @@ class TestETAService:
         with pytest.raises(ValueError, match="not found"):
             calculate_eta(db=mock_db, masterplan_id=9999, user_id=uuid4())
 
-    def test_calculate_eta_returns_dict_keys(self):
+    def test_calculate_eta_returns_dict_keys(self, monkeypatch):
         from apps.masterplan.services.eta_service import calculate_eta
+        from apps.masterplan.services import eta_service
         from apps.masterplan.models import MasterPlan
-        from apps.tasks.models import Task
 
         mock_db = MagicMock()
         plan = self._make_plan(anchor_date=datetime(2027, 6, 1))
@@ -471,11 +471,15 @@ class TestETAService:
             q = MagicMock()
             if model is MasterPlan:
                 q.filter.return_value.first.return_value = plan
-            elif model is Task:
-                q.filter.return_value.count.return_value = 10
             return q
 
         mock_db.query.side_effect = mock_query
+        monkeypatch.setattr(eta_service, "_count_tasks_completed_since", lambda *args, **kwargs: 10)
+        monkeypatch.setattr(
+            eta_service,
+            "_count_tasks",
+            lambda *args, status=None, **kwargs: 10 if status is None else 10,
+        )
 
         result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         assert "velocity" in result
@@ -486,11 +490,11 @@ class TestETAService:
         assert "completed_tasks" in result
         assert "remaining_tasks" in result
 
-    def test_calculate_eta_zero_velocity_no_projection(self):
+    def test_calculate_eta_zero_velocity_no_projection(self, monkeypatch):
         """When velocity=0, projected_completion_date must be None."""
         from apps.masterplan.services.eta_service import calculate_eta
+        from apps.masterplan.services import eta_service
         from apps.masterplan.models import MasterPlan
-        from apps.tasks.models import Task
 
         mock_db = MagicMock()
         plan = self._make_plan()
@@ -499,47 +503,40 @@ class TestETAService:
             q = MagicMock()
             if model is MasterPlan:
                 q.filter.return_value.first.return_value = plan
-            elif model is Task:
-                q.filter.return_value.count.return_value = 0
             return q
 
         mock_db.query.side_effect = mock_query
+        monkeypatch.setattr(eta_service, "_count_tasks_completed_since", lambda *args, **kwargs: 0)
+        monkeypatch.setattr(eta_service, "_count_tasks", lambda *args, status=None, **kwargs: 0)
 
         result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         assert result["velocity"] == 0
         assert result["projected_completion_date"] is None
         assert result["eta_confidence"] == "insufficient_data"
 
-    def test_calculate_eta_days_ahead_positive_when_early(self):
+    def test_calculate_eta_days_ahead_positive_when_early(self, monkeypatch):
         """days_ahead_behind is positive when projected date is before anchor."""
         from apps.masterplan.services.eta_service import calculate_eta
+        from apps.masterplan.services import eta_service
         from apps.masterplan.models import MasterPlan
-        from apps.tasks.models import Task
 
         anchor = datetime.now(timezone.utc) + timedelta(days=365)
         mock_db = MagicMock()
         plan = self._make_plan(anchor_date=anchor)
 
-        call_count = {"n": 0}
-
         def mock_query(model):
             q = MagicMock()
             if model is MasterPlan:
                 q.filter.return_value.first.return_value = plan
-            elif model is Task:
-                call_count["n"] += 1
-                # 1st call: tasks_in_window (completed in 14d) = 70
-                # 2nd call: total tasks = 100
-                # 3rd call: completed tasks = 50
-                if call_count["n"] == 1:
-                    q.filter.return_value.count.return_value = 70
-                elif call_count["n"] == 2:
-                    q.filter.return_value.count.return_value = 100
-                else:
-                    q.filter.return_value.count.return_value = 50
             return q
 
         mock_db.query.side_effect = mock_query
+        monkeypatch.setattr(eta_service, "_count_tasks_completed_since", lambda *args, **kwargs: 70)
+        monkeypatch.setattr(
+            eta_service,
+            "_count_tasks",
+            lambda *args, status=None, **kwargs: 100 if status is None else 50,
+        )
 
         result = calculate_eta(db=mock_db, masterplan_id=1, user_id=plan.user_id)
         # velocity=5/day, remaining=50, days_needed=10 → projected ~10 days from now

@@ -44,7 +44,7 @@ owner: "platform-team"
 | --- | --- | --- | --- | --- |
 | automation | `apps/freelance/services/freelance_service.py` | `apps.automation.public.execute_automation_action` | yes | KEEP |
 | automation | `apps/bridge/services/bridge_service.py` | `apps.automation.public.BridgeUserEvent` | yes | KEEP |
-| automation | `apps/masterplan/services/masterplan_execution_service.py` | `apps.automation.public.AutomationLog` | yes | KEEP |
+| automation | `apps/masterplan/services/masterplan_execution_service.py` | `apps.automation.public.list_automation_logs` | no | MOVED_TO_SYSCALL |
 | automation | `apps/analytics/services/scoring/policy_adaptation_service.py` | `apps.automation.public.LoopAdjustment` | yes | KEEP |
 | automation | `apps/analytics/services/scoring/kpi_weight_service.py` | `apps.automation.public.LoopAdjustment` | yes | KEEP |
 | automation | `apps/analytics/services/integration/dependency_adapter.py` | `apps.automation.public.LoopAdjustment`, `apps.automation.public.UserFeedback` | yes | KEEP |
@@ -65,5 +65,5 @@ owner: "platform-team"
 | analytics | `apps/search/routes/seo_routes.py` | `apps.analytics.services.calculations.calculation_services.save_calculation` | no | MIGRATE |
 | analytics | `apps/network_bridge/routes/network_bridge_router.py` | `apps.analytics.services.calculations.calculation_services.save_calculation` | no | MIGRATE |
 | tasks | `apps/freelance/services/freelance_service.py` | `apps.tasks.public.get_task_by_id`, `apps.tasks.public.queue_task_automation` | yes | KEEP |
-| tasks | `apps/masterplan/services/masterplan_execution_service.py` | `apps.tasks.public.Task` | yes | KEEP |
-| tasks | `apps/masterplan/services/eta_service.py` | `apps.tasks.public.Task` | yes | KEEP |
+| tasks | `apps/masterplan/services/masterplan_execution_service.py` | `apps.tasks.public.count_tasks`, `apps.tasks.public.list_tasks_for_masterplan`, `apps.tasks.public.delete_tasks_by_ids` | no | MOVED_TO_SYSCALL |
+| tasks | `apps/masterplan/services/eta_service.py` | `apps.tasks.public.count_tasks`, `apps.tasks.public.count_tasks_completed_since` | no | MOVED_TO_SYSCALL |

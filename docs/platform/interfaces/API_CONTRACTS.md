@@ -1,6 +1,6 @@
 ---
 title: "API Contracts"
-last_verified: "2026-04-27"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -44,7 +44,7 @@ Stable runtime API for external integrations and tooling. Breaking changes requi
 
 Mutable domain features. All paths below are prefixed with `/apps`.
 
-- `apps/agent/routes/agent_router.py` (router prefix `/agent`) **[JWT auth required]** ? `/apps/agent/run`, `/apps/agent/runs`, etc.
+- `AINDY/routes/agent_router.py` (router prefix `/agent`) **[JWT auth required]** ? `/apps/agent/run`, `/apps/agent/runs`, etc. The URL remains under `/apps` for compatibility, but ownership is runtime-layer rather than app-layer.
 - `apps/arm/routes/arm_router.py` (router prefix `/arm`) **[JWT auth required]** ? `/apps/arm/analyze`, `/apps/arm/generate`, etc.
 - `apps/autonomy/routes/autonomy_router.py` (router prefix `/autonomy`) **[JWT auth required]** ? `/apps/autonomy/decisions`
 - `apps/tasks/routes/task_router.py` (router prefix `/tasks`) **[JWT auth required]** ? `/apps/tasks/create`, `/apps/tasks/start`, etc.

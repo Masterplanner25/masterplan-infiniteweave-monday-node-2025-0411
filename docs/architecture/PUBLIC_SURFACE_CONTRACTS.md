@@ -1,6 +1,6 @@
 ---
 title: "Public Surface Contracts"
-last_verified: "2026-04-27"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -35,7 +35,7 @@ only supported Python-level contract between domain apps.
 | `automation` | `create_loop_adjustment` | `analytics` |
 | `automation` | `update_loop_adjustment` | `analytics` |
 | `automation` | `create_bridge_user_event` | `bridge` |
-| `automation` | `list_automation_logs` | `masterplan` |
+| `automation` | `list_automation_logs` | none recorded |
 | `automation` | `list_watcher_signals` | `analytics`, `tasks` |
 | `automation` | `persist_watcher_signals` | `tasks` |
 | `automation` | `ensure_learning_thresholds` | `rippletrace` |
@@ -82,7 +82,7 @@ only supported Python-level contract between domain apps.
 | `tasks` | `queue_task_automation` | none recorded |
 | `tasks` | `update_task_status` | `freelance` |
 | `tasks` | `queue_task_automation_by_id` | `freelance` |
-| `tasks` | `count_tasks` | `masterplan` |
-| `tasks` | `count_tasks_completed_since` | `masterplan` |
-| `tasks` | `list_tasks_for_masterplan` | `masterplan` |
-| `tasks` | `delete_tasks_by_ids` | `masterplan` |
+| `tasks` | `count_tasks` | none recorded |
+| `tasks` | `count_tasks_completed_since` | none recorded |
+| `tasks` | `list_tasks_for_masterplan` | none recorded |
+| `tasks` | `delete_tasks_by_ids` | none recorded |

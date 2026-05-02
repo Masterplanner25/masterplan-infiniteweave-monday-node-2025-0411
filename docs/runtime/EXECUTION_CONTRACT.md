@@ -1,6 +1,6 @@
 ---
 title: "Execution Contract"
-last_verified: "2026-04-18"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -43,7 +43,8 @@ Current behavior:
 
 - Closest subsystem to a canonical contract
 - Has explicit run records, approval, step persistence, lifecycle events, and canonical runtime entry through `nodus_execution_service`
-- Flow-backed orchestration still remains above that canonical runtime entrypoint for retry and lifecycle semantics
+- The `/apps/agent/*` HTTP surface is runtime-owned in `AINDY/routes/agent_router.py`
+- Route behavior no longer depends on app-owned flow wrappers for create/list/get/approve/reject/recover/replay/tools/trust/events/steps exposure
 
 ### Task
 

@@ -319,3 +319,25 @@ def test_infinity_loop_no_module_level_goal_alignment_import():
         "apps/analytics/services/orchestration/infinity_loop.py still imports calculate_goal_alignment at module level. "
         "See docs/architecture/CROSS_DOMAIN_COUPLING.md §7 for the migration path."
     )
+
+
+def test_masterplan_execution_service_no_direct_tasks_or_automation_public_imports():
+    """Masterplan execution must use syscall boundaries for task and automation helpers."""
+    source = _read("apps", "masterplan", "services", "masterplan_execution_service.py")
+    assert "from apps.tasks.public import" not in source, (
+        "apps/masterplan/services/masterplan_execution_service.py still imports apps.tasks.public directly. "
+        "Masterplan execution should use owner syscalls instead."
+    )
+    assert "from apps.automation.public import" not in source, (
+        "apps/masterplan/services/masterplan_execution_service.py still imports apps.automation.public directly. "
+        "Masterplan execution should use owner syscalls instead."
+    )
+
+
+def test_masterplan_eta_service_no_direct_tasks_public_imports():
+    """Masterplan ETA service must use task syscalls instead of tasks.public imports."""
+    source = _read("apps", "masterplan", "services", "eta_service.py")
+    assert "from apps.tasks.public import" not in source, (
+        "apps/masterplan/services/eta_service.py still imports apps.tasks.public directly. "
+        "ETA projection should use owner syscalls instead."
+    )
