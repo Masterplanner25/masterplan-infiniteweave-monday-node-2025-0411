@@ -103,12 +103,13 @@ _runtime_agent_defaults_loaded = False
 
 def register_router(router: Any, *, root: bool = False, legacy_root: bool = False) -> Any:
     validate_router(router)
+    target = _routers
     if legacy_root:
-        _legacy_root_routers.append(router)
+        target = _legacy_root_routers
     elif root:
-        _root_routers.append(router)
-    else:
-        _routers.append(router)
+        target = _root_routers
+    if router not in target:
+        target.append(router)
     return router
 
 
