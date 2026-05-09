@@ -768,7 +768,7 @@ def test_db_unavailable_returns_503(client, auth_headers):
     """
     from sqlalchemy.exc import OperationalError as SAOperationalError
 
-    from apps.agent.routes.agent_router import get_db
+    from AINDY.routes.agent_router import get_db
 
     def broken_get_db():
         raise SAOperationalError("connection refused", None, None)
@@ -878,7 +878,7 @@ def test_db_pool_exhausted_returns_503(client, auth_headers):
     """
     from sqlalchemy.exc import TimeoutError as SATimeoutError
 
-    from apps.agent.routes.agent_router import get_db
+    from AINDY.routes.agent_router import get_db
 
     def exhausted_get_db():
         raise SATimeoutError()

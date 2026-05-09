@@ -14,7 +14,6 @@ only supported Python-level contract between domain apps.
 
 | Providing app | Public function | Consumers |
 |---|---|---|
-| `agent` | `dispatch_tool_request` | `automation` |
 | `analytics` | `save_calculation` | `network_bridge`, `search` |
 | `analytics` | `get_user_kpi_snapshot` | `agent` |
 | `analytics` | `run_infinity_orchestrator` | `arm` |

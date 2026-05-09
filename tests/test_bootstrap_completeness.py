@@ -123,6 +123,22 @@ def test_automation_boot_order_has_no_cross_app_boot_edges(monkeypatch):
     assert set(order) == {"tasks", "identity", "agent", "analytics", "automation"}
 
 
+def test_agent_is_not_classified_as_core_domain(monkeypatch):
+    import apps.bootstrap as bs
+
+    monkeypatch.setattr(
+        bs,
+        "_BOOTSTRAP_METADATA_CACHE",
+        None,
+    )
+
+    core_domains = bs._get_core_domains_from_metadata()
+
+    assert "tasks" in core_domains
+    assert "identity" in core_domains
+    assert "agent" not in core_domains
+
+
 # ---------------------------------------------------------------------------
 # Test: known event types registered
 # ---------------------------------------------------------------------------
@@ -452,5 +468,50 @@ def test_analytics_bootstrap_import_failure_is_degraded_and_health_reports_it(mo
         assert "tasks" not in payload["degraded_apps"]
         assert "identity" not in payload["degraded_apps"]
         assert "agent" not in payload["degraded_apps"]
+    finally:
+        _reset_bootstrap()
+
+
+def test_agent_bootstrap_failure_is_degraded_not_fatal(monkeypatch):
+    _reset_bootstrap()
+    import apps.bootstrap as bs
+    from AINDY.platform_layer.registry import get_degraded_domains
+
+    calls: list[str] = []
+
+    def _ok(name: str):
+        return lambda: calls.append(name)
+
+    monkeypatch.setattr(
+        bs,
+        "_load_bootstrap_metadata",
+        lambda: {
+            "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
+            "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
+            "agent": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": False},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"], "IS_CORE_DOMAIN": False},
+        },
+    )
+    monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "agent", "analytics"])
+
+    def _import_module(app_name: str):
+        if app_name == "agent":
+            raise ImportError("broken agent import")
+        return SimpleNamespace(
+            register={
+                "tasks": _ok("tasks"),
+                "identity": _ok("identity"),
+                "analytics": _ok("analytics"),
+            }[app_name]
+        )
+
+    monkeypatch.setattr(bs, "_import_bootstrap_module", _import_module)
+
+    try:
+        bs.bootstrap()
+        assert calls == ["tasks", "identity", "analytics"]
+        assert bs.get_degraded_domains() == ["agent"]
+        assert get_degraded_domains() == ["agent"]
+        assert bs._BOOTSTRAPPED is True
     finally:
         _reset_bootstrap()

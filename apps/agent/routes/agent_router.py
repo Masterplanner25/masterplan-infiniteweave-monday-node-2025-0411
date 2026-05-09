@@ -1,4 +1,8 @@
-"""Compatibility wrapper for the runtime-owned agent router."""
+"""Deprecated compatibility wrapper for the runtime-owned agent router.
+
+Prefer importing from ``AINDY.routes.agent_router`` directly. This module
+remains only as a transitional re-export for legacy callers.
+"""
 
 from AINDY.routes.agent_router import (  # noqa: F401
     RunRequest,

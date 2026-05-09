@@ -522,6 +522,36 @@ class TestSuggestTools:
         result = suggest_tools({"focus_quality": "bad", "execution_speed": None})
         assert isinstance(result, list)
 
+    def test_provider_can_load_kpi_context_via_registered_job_when_runtime_passes_none(self):
+        from AINDY.agents.agent_tools import suggest_tools
+        from AINDY.agents.tool_registry import TOOL_REGISTRY
+
+        db = MagicMock()
+        dispatcher = MagicMock()
+        dispatcher.dispatch.return_value = {"status": "error", "data": {}, "error": "unavailable"}
+        tool_registry_snapshot = dict(TOOL_REGISTRY)
+        TOOL_REGISTRY.clear()
+        TOOL_REGISTRY.update({
+            "memory.recall": {"category": "memory"},
+        })
+
+        def fake_get_job(name):
+            if name == "analytics.kpi_snapshot":
+                return lambda user_id, db: self._snap(focus=20.0, speed=80.0, ai_boost=80.0, master=50.0)
+            if name == "analytics.latest_adjustment":
+                return lambda user_id, db: None
+            return None
+
+        try:
+            with patch("apps.agent.agents.tools.get_dispatcher", return_value=dispatcher), \
+                 patch("AINDY.platform_layer.registry.get_job", side_effect=fake_get_job):
+                result = suggest_tools(None, user_id="user-123", db=db)
+        finally:
+            TOOL_REGISTRY.clear()
+            TOOL_REGISTRY.update(tool_registry_snapshot)
+
+        assert result[0]["tool"] == "memory.recall"
+
 
 class TestSuggestionsEndpoint:
 

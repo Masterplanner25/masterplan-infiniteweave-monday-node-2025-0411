@@ -761,40 +761,6 @@ def _handle_agent_suggest_tools(payload: dict, context: SyscallContext) -> dict:
         return {"suggestions": []}
 
 
-def _handle_agent_dispatch_tool(payload: dict, context: SyscallContext) -> dict:
-    """sys.v1.agent.dispatch_tool — proxy an approved agent tool syscall through the dispatcher.
-
-    Payload keys:
-        tool_name     (str)  — required; logical tool identifier
-        payload       (dict) — optional; forwarded syscall payload
-        user_id       (str)  — required; tool caller identity
-        syscall_name  (str)  — required; fully-qualified target syscall name
-        capability    (str)  — optional; defaults to tool_name
-    """
-    from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
-
-    tool_name = str((payload or {}).get("tool_name") or "").strip()
-    user_id = str((payload or {}).get("user_id") or "").strip()
-    syscall_name = str((payload or {}).get("syscall_name") or "").strip()
-    forwarded_payload = (payload or {}).get("payload") or {}
-    capability = str((payload or {}).get("capability") or tool_name).strip()
-
-    if not tool_name:
-        raise ValueError("tool_name is required")
-    if not user_id:
-        raise ValueError("user_id is required")
-    if not syscall_name:
-        raise ValueError("syscall_name is required")
-    if not isinstance(forwarded_payload, dict):
-        raise ValueError("payload must be an object")
-
-    ctx = make_syscall_ctx_from_tool(user_id, capabilities=[capability])
-    result = get_dispatcher().dispatch(syscall_name, forwarded_payload, ctx)
-    if result["status"] == "error":
-        raise RuntimeError(result["error"])
-    return result["data"]
-
-
 # ── MAS Memory Handlers ───────────────────────────────────────────────────────
 # Thin wrappers that delegate to syscall_registry handlers.
 # Registered via register_all_domain_handlers() so they override the base
@@ -874,23 +840,6 @@ def register_all_domain_handlers() -> None:
         ("sys.v1.watcher.query",           handle_watcher_query,          "watcher.query",         "Query stored watcher signals",                           False, None),
         # Agent
         ("sys.v1.agent.suggest_tools",     _handle_agent_suggest_tools,   "agent.suggest_tools",   "KPI-driven tool suggestions",                            False, None),
-        (
-            "sys.v1.agent.dispatch_tool",
-            _handle_agent_dispatch_tool,
-            "agent.tool_dispatch",
-            "Dispatch an approved agent tool syscall through the agent boundary",
-            False,
-            {
-                "required": ["tool_name", "payload", "user_id", "syscall_name"],
-                "properties": {
-                    "tool_name": {"type": "string"},
-                    "payload": {"type": "dict"},
-                    "user_id": {"type": "string"},
-                    "syscall_name": {"type": "string"},
-                    "capability": {"type": "string"},
-                },
-            },
-        ),
         # Memory Address Space (path-based — experimental extensions)
         ("sys.v1.memory.list",             _mas_memory_list,              "memory.list",           "List MAS nodes at path prefix",                          False, None),
         ("sys.v1.memory.tree",             _mas_memory_tree,              "memory.tree",           "Hierarchical tree of nodes under path",                  False, None),

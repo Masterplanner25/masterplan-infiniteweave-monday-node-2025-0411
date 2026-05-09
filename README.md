@@ -96,6 +96,7 @@ For deployment guidance, use the deployment docs rather than inferring from old 
 Boot safety note:
 - `platform-only` is the intentional no-app runtime mode.
 - The default app profile is strict: if `apps.bootstrap` or another requested plugin module is missing or broken, startup now fails instead of silently falling back to a partial runtime.
+- The exact supported no-app surface is defined in [docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md](docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md).
 
 ## Quick start
 
@@ -164,6 +165,7 @@ Use [docs/deployment/DEPLOYMENT_MODEL.md](docs/deployment/DEPLOYMENT_MODEL.md) a
 | [Deployment Model](docs/deployment/DEPLOYMENT_MODEL.md) | Supported topologies, required infra, production caveats |
 | [System Spec](docs/architecture/SYSTEM_SPEC.md) | Current architectural specification |
 | [Runtime Behavior](docs/runtime/RUNTIME_BEHAVIOR.md) | Startup, scheduler, event bus, execution modes |
+| [Runtime-Only Deployment](docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md) | Supported no-app boot contract, mounted surfaces, baseline agent/runtime behavior |
 | [Execution Contract](docs/runtime/EXECUTION_CONTRACT.md) | Runtime execution guarantees |
 | [Syscall System](docs/runtime/SYSCALL_SYSTEM.md) | Versioned syscall layer and scope |
 | [OS Isolation Layer](docs/runtime/OS_ISOLATION_LAYER.md) | Resource management, waits, distributed resume caveats |

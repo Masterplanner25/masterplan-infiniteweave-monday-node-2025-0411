@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 BOOTSTRAP_DEPENDS_ON: list[str] = []
-IS_CORE_DOMAIN: bool = True
+IS_CORE_DOMAIN: bool = False
 APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
     _register_models()
     _register_route_prefixes()
-    _register_syscalls()
     _register_async_jobs()
     _register_agent_tools()
     _register_agent_capabilities()
@@ -25,12 +24,6 @@ def _register_models() -> None:
 def _register_route_prefixes() -> None:
     from AINDY.platform_layer.registry import register_route_prefix
     register_route_prefix("agent", "agent")
-
-
-def _register_syscalls() -> None:
-    from apps.agent.syscalls.syscall_handlers import register_agent_syscall_handlers
-
-    register_agent_syscall_handlers()
 
 
 def _register_async_jobs() -> None:

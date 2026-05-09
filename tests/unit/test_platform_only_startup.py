@@ -7,9 +7,14 @@ from collections import defaultdict
 import pytest
 from fastapi.routing import APIRoute
 
-from AINDY.agents.tool_registry import TOOL_REGISTRY
+from AINDY.agents.tool_registry import TOOL_REGISTRY, _SUGGESTION_PROVIDERS
+from AINDY.agents.tool_registry import execute_tool
 from AINDY.platform_layer import registry
-from AINDY.platform_layer.deployment_contract import get_api_runtime_state, reset_runtime_state
+from AINDY.platform_layer.deployment_contract import (
+    get_api_runtime_state,
+    reset_runtime_state,
+    runtime_only_deployment_contract,
+)
 
 
 class _StopStartup(Exception):
@@ -90,6 +95,7 @@ def _copy_registry_value(value):
 @pytest.fixture
 def platform_only_runtime(monkeypatch):
     tool_registry_snapshot = dict(TOOL_REGISTRY)
+    suggestion_provider_snapshot = list(_SUGGESTION_PROVIDERS)
     snapshot = {
         name: _copy_registry_value(getattr(registry, name))
         for name in _REGISTRY_STATE_EMPTY
@@ -97,6 +103,7 @@ def platform_only_runtime(monkeypatch):
     try:
         monkeypatch.setenv("AINDY_BOOT_PROFILE", "platform-only")
         TOOL_REGISTRY.clear()
+        _SUGGESTION_PROVIDERS.clear()
         for name, value in _REGISTRY_STATE_EMPTY.items():
             setattr(registry, name, _copy_registry_value(value))
         reset_runtime_state()
@@ -105,6 +112,8 @@ def platform_only_runtime(monkeypatch):
         monkeypatch.delenv("AINDY_BOOT_PROFILE", raising=False)
         TOOL_REGISTRY.clear()
         TOOL_REGISTRY.update(tool_registry_snapshot)
+        _SUGGESTION_PROVIDERS.clear()
+        _SUGGESTION_PROVIDERS.extend(suggestion_provider_snapshot)
         for name, value in snapshot.items():
             setattr(registry, name, value)
         import AINDY.startup as startup
@@ -148,13 +157,14 @@ def test_create_app_succeeds_in_platform_only_mode(platform_only_runtime):
         for route in app.routes
         if isinstance(route, APIRoute)
     }
+    contract = runtime_only_deployment_contract()
 
     assert registry.get_active_plugin_profile() == "platform-only"
     assert registry.get_registered_apps() == []
-    assert "/health" in routes
-    assert "/ready" in routes
-    assert any(path.startswith("/platform/") for path in routes)
-    assert any(path.startswith("/apps/memory") for path in routes)
+    for required_route in contract["mounted_routes"]["required_routes"]:
+        assert required_route in routes
+    for required_prefix in contract["mounted_routes"]["required_prefixes"]:
+        assert any(path.startswith(required_prefix) for path in routes)
     assert not any(path.startswith("/apps/social") for path in routes)
     assert not any(path.startswith("/apps/tasks") for path in routes)
 
@@ -174,6 +184,7 @@ def test_platform_only_lifespan_reaches_runtime_startup(platform_only_runtime, m
 
 def test_platform_only_registers_runtime_agent_defaults(platform_only_runtime):
     _startup, _main = _reload_platform_only_modules()
+    contract = runtime_only_deployment_contract()
 
     planner_context = registry.get_planner_context("default", {"user_id": "user-1", "db": object()})
     tools = registry.get_tools_for_run("default", {"user_id": "user-1", "db": object()})
@@ -182,10 +193,10 @@ def test_platform_only_registers_runtime_agent_defaults(platform_only_runtime):
 
     assert planner_context["system_prompt"]
     assert isinstance(planner_context["context_block"], str)
-    assert {tool["name"] for tool in tools} >= {"memory.recall", "memory.write"}
+    assert {tool["name"] for tool in tools} == set(contract["baseline_agent_capabilities"]["tools"])
     assert evaluator is not None
     assert evaluator({"trigger_type": "user", "trigger": {"importance": 0.9}, "context": {}})["decision"] == "execute"
-    assert {"execute_flow", "read_memory", "write_memory"} <= set(capabilities)
+    assert set(contract["baseline_agent_capabilities"]["capabilities"]) <= set(capabilities)
 
 
 def test_platform_only_runtime_memory_tools_dispatch_kernel_syscalls(platform_only_runtime, monkeypatch):
@@ -213,6 +224,53 @@ def test_platform_only_runtime_memory_tools_dispatch_kernel_syscalls(platform_on
     assert dispatched == [
         ("sys.v1.memory.read", {"query": "alpha"}, ["memory.read"]),
         ("sys.v1.memory.write", {"source": "agent", "content": "beta"}, ["memory.write"]),
+    ]
+
+
+def test_platform_only_runtime_agent_suggestions_are_empty_without_app_providers(platform_only_runtime):
+    _startup, _main = _reload_platform_only_modules()
+
+    from AINDY.agents.runtime_api import get_agent_tool_suggestions_runtime
+
+    assert get_agent_tool_suggestions_runtime(db=object(), user_id="user-1") == []
+
+
+def test_platform_only_runtime_completion_hook_is_generic_noop(platform_only_runtime):
+    _startup, _main = _reload_platform_only_modules()
+
+    results = registry.run_agent_completion_hooks("default", {"run": object(), "db": object(), "user_id": "user-1"})
+
+    assert results == [None]
+
+
+def test_platform_only_app_owned_capabilities_fail_predictably(platform_only_runtime):
+    _startup, _main = _reload_platform_only_modules()
+
+    tools = registry.get_tools_for_run("default", {"user_id": "user-1", "db": object()})
+    result = execute_tool("task.create", {"title": "hello"}, "user-1", object())
+
+    assert {tool["name"] for tool in tools} == {"memory.recall", "memory.write"}
+    assert result == {
+        "success": False,
+        "result": None,
+        "error": "Tool 'task.create' not found in registry",
+    }
+
+
+def test_runtime_only_deployment_contract_is_explicit():
+    contract = runtime_only_deployment_contract()
+
+    assert contract["boot_profile"] == "platform-only"
+    assert contract["health_and_readiness"] == {
+        "liveness_route": "/health",
+        "readiness_route": "/ready",
+    }
+    assert contract["intentionally_unavailable"] == [
+        "app-domain routers from apps/*",
+        "app-owned agent tools beyond runtime defaults",
+        "app-owned planner enrichment and suggestion providers",
+        "app-owned completion hooks and Infinity orchestration",
+        "app-owned syscalls and startup hooks",
     ]
 
 

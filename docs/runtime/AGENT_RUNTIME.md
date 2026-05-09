@@ -1,6 +1,6 @@
 ---
 title: "Agent Runtime"
-last_verified: "2026-05-02"
+last_verified: "2026-05-08"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -34,6 +34,22 @@ memory, ARM, or the Infinity Loop live in `apps/` and are invoked through the
 registered tool registry. The agent HTTP exposure is also runtime-owned now:
 `AINDY/routes/agent_router.py` serves the `/apps/agent/*` surface while keeping
 tool implementations app-owned behind registries.
+
+Baseline runtime behavior is intentionally generic:
+- generic planner prompt
+- runtime-owned memory tools (`memory.recall`, `memory.write`)
+- trigger evaluation with no domain assumptions
+- no-op completion hook
+- empty suggestion output unless a plugin registers a suggestion provider
+
+The supported runtime-only deployment surface for that baseline is defined in
+[Runtime-Only Deployment](./RUNTIME_ONLY_DEPLOYMENT.md).
+
+App-enriched behavior is optional:
+- KPI-aware planner prompt enrichment
+- richer suggestion generation from analytics or persisted loop state
+- post-run Infinity orchestration
+- additional app-owned tools such as task, ARM, search, and masterplan actions
 
 ---
 
@@ -200,6 +216,7 @@ The agent runtime therefore uses explicit runtime-owned plugin contracts for:
 - capability definition providers
 - trigger evaluators
 - agent completion hooks
+- tool suggestion providers
 
 Agent lifecycle persistence is runtime-owned:
 - `AINDY/db/models/agent_run.py` defines `AgentRun`, `AgentStep`, and `AgentTrustSettings`
@@ -210,12 +227,17 @@ That statement still applies specifically to the runtime side. The runtime now
 owns the user-facing agent HTTP surface and helper API layer. App plugins still
 own agent tools, plugin registration, and app-specific extensions.
 
-No-plugin behavior is fail-safe:
-- no planner context provider -> empty planner context
-- no run tool provider -> empty tool list
-- no trigger evaluator -> defer
-- no completion hook -> no-op
-- no capability provider -> no capabilities granted, so capability enforcement fails closed
+No-plugin behavior is fail-safe at the runtime boundary:
+- runtime defaults provide a generic planner context
+- runtime defaults provide the memory tool catalog
+- no app suggestion provider -> empty suggestion list
+- no app completion hook -> runtime no-op completion
+- no additional run tool provider -> runtime-only tool list remains available
+- no capability provider beyond runtime defaults -> only runtime default capabilities are granted
+
+App plugins may replace or extend these defaults through registry registration,
+but the runtime must continue to start and answer requests without assuming any
+specific app such as analytics is present.
 
 So today:
 - platform boot is still registry-driven

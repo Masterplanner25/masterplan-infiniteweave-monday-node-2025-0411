@@ -526,9 +526,15 @@ edges. `arm`, `masterplan`, `tasks`, `search`, and `analytics` were already
 runtime call-time dependencies only. After the agent helper syscall migration,
 the remaining agent helper contracts needed by runtime/bootstrap paths became
 kernel-owned, and automation's remaining agent-facing contract
-(`sys.v1.agent.dispatch_tool`) is intentionally app-owned and call-time only.
+there is no longer an app-owned generic agent tool-dispatch syscall.
 That means automation should not force `apps/agent` to boot first merely to
-validate a runtime tool-dispatch path.
+validate runtime helper behavior.
+
+Agent runtime note: runtime-owned agent APIs should not fetch analytics or
+other app-domain state directly. Suggestion enrichment, KPI-aware planner
+context, and Infinity completion behavior must stay behind optional
+plugin-owned provider registration so platform-only startup keeps a clean
+baseline agent surface.
 
 **Acceptable**: deferred, read-only, one direction, no private API.  
 **Risk**: module-level (cascade), bidirectional, or private API call.

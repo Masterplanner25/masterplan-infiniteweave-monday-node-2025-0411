@@ -45,6 +45,7 @@ Current behavior:
 - Has explicit run records, approval, step persistence, lifecycle events, and canonical runtime entry through `nodus_execution_service`
 - The `/apps/agent/*` HTTP surface is runtime-owned in `AINDY/routes/agent_router.py`
 - Route behavior no longer depends on app-owned flow wrappers for create/list/get/approve/reject/recover/replay/tools/trust/events/steps exposure
+- `apps/agent/routes/agent_router.py` is only a transitional compatibility re-export and is not an ownership surface
 
 ### Task
 

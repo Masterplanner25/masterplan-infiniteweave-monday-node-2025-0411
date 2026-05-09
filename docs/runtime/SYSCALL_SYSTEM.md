@@ -299,7 +299,7 @@ Core syscalls registered in `kernel/syscall_registry.py`; domain handlers regist
 
 Domain handlers registered at startup via `register_all_domain_handlers()` in `kernel/syscall_handlers.py`. Execution entry-point handlers (`flow.execute_intent`, `nodus.execute`, `job.submit`, `agent.execute`) and runtime-owned helper syscalls are registered directly in `kernel/syscall_registry.py` alongside `flow.run`.
 
-The runtime/helper agent syscalls (`agent.count_runs`, `agent.list_recent_durations`, `agent.list_recent_runs`, `agent.ensure_initial_run`) are kernel-owned because runtime/platform code and identity boot paths depend on them as part of core execution and persistence behavior. `sys.v1.agent.dispatch_tool` remains app-owned because it still represents agent-app tool dispatch semantics rather than kernel persistence or execution primitives.
+The runtime/helper agent syscalls (`agent.count_runs`, `agent.list_recent_durations`, `agent.list_recent_runs`, `agent.ensure_initial_run`) are kernel-owned because runtime/platform code and identity boot paths depend on them as part of core execution and persistence behavior. Agent tools no longer route through a generic `sys.v1.agent.dispatch_tool` proxy; each tool dispatches directly to its owner syscall with an explicit capability context.
 
 ---
 

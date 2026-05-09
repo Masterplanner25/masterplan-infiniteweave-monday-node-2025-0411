@@ -25,3 +25,9 @@ def test_plugin_registry_does_not_own_agent_router_after_bootstrap():
 
     registered_prefixes = [getattr(router, "prefix", None) for router in registry.get_routers()]
     assert "/agent" not in registered_prefixes
+
+
+def test_legacy_agent_router_shim_reexports_runtime_router():
+    from apps.agent.routes.agent_router import router as shim_router
+
+    assert shim_router is runtime_agent_router

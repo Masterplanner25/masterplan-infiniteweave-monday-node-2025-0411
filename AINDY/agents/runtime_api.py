@@ -25,7 +25,6 @@ from AINDY.agents.capability_service import get_auto_grantable_tools
 from AINDY.agents.stuck_run_service import recover_stuck_agent_run
 from AINDY.core.execution_dispatcher import async_heavy_execution_enabled
 from AINDY.db.models import AgentRun, AgentStep, AgentTrustSettings
-from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
 from AINDY.platform_layer.async_job_service import defer_async_job, submit_autonomous_async_job
 from AINDY.platform_layer.trace_context import ensure_trace_id
 from AINDY.utils.uuid_utils import normalize_uuid
@@ -328,15 +327,4 @@ def update_agent_trust_runtime(
 
 
 def get_agent_tool_suggestions_runtime(*, db, user_id) -> list[dict[str, Any]]:
-    syscall_ctx = make_syscall_ctx_from_tool(
-        str(user_id),
-        capabilities=["analytics.read"],
-    )
-    syscall_ctx.metadata["_db"] = db
-    result = get_dispatcher().dispatch(
-        "sys.v1.analytics.get_kpi_snapshot",
-        {"user_id": str(user_id)},
-        syscall_ctx,
-    )
-    snapshot = result.get("data") if result.get("status") == "success" else None
-    return suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
+    return suggest_tools(user_id=user_id, db=db)

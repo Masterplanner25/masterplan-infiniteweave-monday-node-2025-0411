@@ -1,6 +1,6 @@
 ---
 title: "AINDY Architecture Map"
-last_verified: "2026-05-02"
+last_verified: "2026-05-08"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -16,6 +16,7 @@ The repo is in a transitional architecture state. Use these terms precisely:
 
 - **Platform boot**: process startup can load the plugin manifest, resolve app bootstrap order, register routers/jobs/flows/syscalls, and mount runtime-owned surfaces.
 - **Explicit no-app boot**: selecting `platform-only` starts the runtime with zero app plugins by design.
+- **Runtime-only deployment contract**: the supported no-app surface is defined in [Runtime-Only Deployment](../runtime/RUNTIME_ONLY_DEPLOYMENT.md) and should not be confused with the default app profile.
 - **Platform full operation**: many user-facing capabilities still require successfully registered apps because tools, flows, and some ORM models are still app-owned, even though some `/apps/*` HTTP surfaces are now runtime-owned.
 - **Current transitional coupling**: most runtime-to-app integration is indirect through bootstrap and registries, but a small number of direct `AINDY/` -> `apps.*` imports still exist and are treated as temporary exceptions.
 - **Target architecture**: runtime boot and shared infrastructure remain in `AINDY/`, while domain interaction happens through registries, syscalls, and public contracts rather than direct imports.
@@ -101,11 +102,11 @@ Key files:
 ## Layer 2: Domain Modules (`apps/`)
 
 ### Module List
-Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks`, `identity`, and `agent`. All other registered apps are peripheral and may fail into degraded mode after `apps/bootstrap.py` has been successfully loaded by the selected plugin profile.
+Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks` and `identity`. All other registered apps, including `agent`, are peripheral and may fail into degraded mode after `apps/bootstrap.py` has been successfully loaded by the selected plugin profile.
 
 | App | Primary Responsibility | Boot Classification |
 |---|---|---|
-| `agent` | Agent-facing routes, tools, and runtime extensions | Core |
+| `agent` | Agent tools, async jobs, and runtime enrichment extensions | Peripheral |
 | `analytics` | KPI scoring, Infinity orchestration, analytics routes and syscalls | Peripheral |
 | `arm` | ARM runs, config, and DeepSeek-backed analysis workflows | Peripheral |
 | `authorship` | Authorship domain models and routes | Peripheral |
@@ -146,11 +147,19 @@ cross into tasks and automation through owner syscalls
 `sys.v1.task.list_for_masterplan`, `sys.v1.task.delete_by_ids`, and
 `sys.v1.automation.list_logs`) instead of direct `apps.tasks.public` /
 `apps.automation.public` imports.
+Agent tool modules also dispatch directly to their owner syscalls with
+explicit capabilities rather than routing through a generic agent-owned
+tool-dispatch proxy.
+The runtime-owned agent layer now exposes a generic baseline on its own:
+generic planner context, runtime memory tools, default trigger evaluation, and
+empty suggestion/completion enrichment unless app plugins register providers.
+Analytics-aware suggestions, KPI-enriched planning, and Infinity post-run
+behavior remain optional plugin-owned extensions.
 Remaining deferred imports between apps
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
-Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks`, `identity`, and `agent`. Core domains abort the entire startup when their bootstrap fails; all other domains degrade gracefully once the plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
+Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks` and `identity`. Core domains abort the entire startup when their bootstrap fails; all other domains, including `agent`, degrade gracefully once the plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
 
 Representative dependency declarations in `apps/bootstrap.py`:
 - `analytics` depends on `identity` and `tasks`
@@ -175,13 +184,15 @@ for the full semantics.
 Current verified exceptions are narrow:
 - agent lifecycle persistence is runtime-owned in `AINDY/db/models/agent_run.py` and `AINDY/db/models/agent_event.py`
 - the `/apps/agent/*` HTTP surface is runtime-owned in `AINDY/routes/agent_router.py`
-- agent tool registration and remaining app-specific extensions remain app-owned under `apps/agent/`
+- `apps/agent/routes/agent_router.py` remains only as a transitional compatibility re-export to the runtime router
+- agent tool registration, async jobs, and remaining app-specific runtime enrichment stay app-owned under `apps/agent/`
 - plugin registration happens through runtime-owned registries and contracts in `AINDY/platform_layer/`
 - platform flow registration is runtime-owned, while app flow registration is plugin-owned through app bootstrap
 
 This means:
 - platform boot is mostly indirect and registry-driven
-- platform full operation still depends on app registration, but runtime persistence and agent run exposure no longer depend on app-owned agent route modules
+- runtime-owned agent routing, persistence, helper syscalls, and defaults do not require `apps/agent` bootstrap to exist
+- platform full operation still depends on app registration for non-baseline agent enrichment such as additional tools, async job handlers, KPI-aware planning, and post-run hooks
 - new direct `AINDY/` -> `apps.*` imports are regressions
 
 Hard rule:

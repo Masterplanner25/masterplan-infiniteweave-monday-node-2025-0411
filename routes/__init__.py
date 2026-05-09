@@ -6,7 +6,7 @@ import sys
 from importlib import import_module
 
 _ROUTE_ALIASES = {
-    "agent_router": "apps.agent.routes.agent_router",
+    "agent_router": "AINDY.routes.agent_router",
     "analytics_router": "apps.analytics.routes.analytics_router",
     "arm_router": "apps.arm.routes.arm_router",
     "auth_router": "AINDY.routes.auth_router",

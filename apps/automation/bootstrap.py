@@ -33,12 +33,9 @@ _MOVED_FLOW_SYMBOLS = {
 # Boot-time vs. call-time dependencies
 #
 # BOOTSTRAP_DEPENDS_ON lists only apps whose contracts automation requires to
-# be registered before automation itself boots. After the agent helper syscall
-# migration, automation's remaining agent interaction is call-time only:
-# `sys.v1.agent.dispatch_tool` stays app-owned and should fail at runtime if
-# the agent app is absent rather than creating a startup-order edge here.
-# Automation's required syscalls are now all automation-owned, so there are no
-# cross-app bootstrap edges to declare.
+# be registered before automation itself boots. Automation's cross-domain
+# integrations now resolve through owner syscalls at call time, so there are
+# no cross-app bootstrap edges to declare here.
 BOOTSTRAP_DEPENDS_ON: list[str] = []
 APP_DEPENDS_ON: list[str] = []
 

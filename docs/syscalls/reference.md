@@ -142,7 +142,6 @@ The following table lists stable domain syscalls by namespace:
 | `sys.v1.agent.list_recent_runs` | `agent.read` | Recent runs as serialized dicts |
 | `sys.v1.agent.ensure_initial_run` | `agent.write` | Find or create signup sentinel run |
 | `sys.v1.agent.suggest_tools` | `agent.read` | KPI-driven tool suggestions |
-| `sys.v1.agent.dispatch_tool` | `agent.run` | Proxy an approved agent tool call |
 
 ### Masterplan namespace
 

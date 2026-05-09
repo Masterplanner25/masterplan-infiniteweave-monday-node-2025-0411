@@ -341,3 +341,19 @@ def test_masterplan_eta_service_no_direct_tasks_public_imports():
         "apps/masterplan/services/eta_service.py still imports apps.tasks.public directly. "
         "ETA projection should use owner syscalls instead."
     )
+
+
+def test_agent_tool_modules_do_not_route_through_agent_dispatch_syscall():
+    """Agent tool modules must dispatch directly to owner syscalls."""
+    for parts in (
+        ("apps", "agent", "agents", "tools.py"),
+        ("apps", "arm", "agents", "tools.py"),
+        ("apps", "masterplan", "agents", "tools.py"),
+        ("apps", "search", "agents", "tools.py"),
+        ("apps", "tasks", "agents", "tools.py"),
+    ):
+        source = _read(*parts)
+        assert "sys.v1.agent.dispatch_tool" not in source, (
+            f"{'/'.join(parts)} still routes through sys.v1.agent.dispatch_tool. "
+            "Tools must call owner syscalls directly."
+        )

@@ -55,7 +55,7 @@ def register_tool(
 
 
 def register_tool_suggestion_provider(provider: Callable) -> Callable:
-    """Register a callable that can suggest tools for a context snapshot."""
+    """Register a callable that can suggest tools for an optional context snapshot."""
     if provider not in _SUGGESTION_PROVIDERS:
         _SUGGESTION_PROVIDERS.append(provider)
     return provider
@@ -155,12 +155,30 @@ def get_tool_risk(tool_name: str) -> str:
     return entry["risk"] if entry else "high"
 
 
-def suggest_tools(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
-    """Return tool suggestions from registered app-owned providers."""
+def suggest_tools(
+    suggestion_context: dict | None = None,
+    user_id: str = None,
+    db=None,
+    **legacy_kwargs,
+) -> list:
+    """Return tool suggestions from registered providers.
+
+    The runtime treats the suggestion context as opaque. App-owned providers may
+    interpret it however they choose, or may derive their own context from
+    plugin-owned jobs and services when it is absent.
+    """
     _ensure_tools_loaded()
+    if suggestion_context is None and "kpi_snapshot" in legacy_kwargs:
+        suggestion_context = legacy_kwargs["kpi_snapshot"]
     for provider in tuple(_SUGGESTION_PROVIDERS):
         try:
-            suggestions = provider(kpi_snapshot=kpi_snapshot, user_id=user_id, db=db)
+            suggestions = provider(
+                suggestion_context=suggestion_context,
+                user_id=user_id,
+                db=db,
+            )
+        except TypeError:
+            suggestions = provider(kpi_snapshot=suggestion_context, user_id=user_id, db=db)
         except Exception as exc:
             logger.warning("[AgentTools] suggestion provider failed: %s", exc)
             continue
