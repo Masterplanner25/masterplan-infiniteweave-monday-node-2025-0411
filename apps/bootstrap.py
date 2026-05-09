@@ -48,7 +48,7 @@ BOOTSTRAP_DEPENDS_ON_FALLBACKS: dict[str, list[str]] = {
     "tasks": [],
     "analytics": ["identity", "tasks"],
     "masterplan": ["automation", "identity", "tasks"],
-    "automation": ["agent", "analytics"],
+    "automation": [],
     "arm": ["analytics"],
     "search": ["analytics"],
     "identity": [],

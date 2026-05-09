@@ -11,8 +11,10 @@ from AINDY.platform_layer import registry
 @pytest.fixture(autouse=True)
 def _reset_plugin_registry_state(monkeypatch):
     registry._loaded_plugins.clear()
+    registry._active_plugin_profile = None
     yield
     registry._loaded_plugins.clear()
+    registry._active_plugin_profile = None
     monkeypatch.delenv("AINDY_BOOT_PROFILE", raising=False)
     monkeypatch.delenv("AINDY_PLUGIN_PROFILE", raising=False)
 
@@ -84,6 +86,50 @@ def test_load_plugins_can_select_platform_only_via_env(tmp_path, monkeypatch):
     assert boot_order == []
 
 
+def test_default_profile_with_zero_plugins_fails_unless_explicitly_selected(tmp_path):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": []}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="default-apps"):
+        registry.load_plugins(manifest)
+
+    with pytest.raises(RuntimeError, match="default-apps"):
+        registry.get_plugin_boot_order(manifest)
+
+
+def test_explicit_zero_plugin_profile_is_allowed(tmp_path):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["apps.bootstrap"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    loaded = registry.load_plugins(manifest, profile="platform-only")
+    boot_order = registry.get_plugin_boot_order(manifest, profile="platform-only")
+
+    assert loaded == []
+    assert boot_order == []
+
+
 def test_load_plugins_supports_runtime_owned_profiles(tmp_path, monkeypatch):
     _write_fake_plugin_module(
         tmp_path,
@@ -113,6 +159,28 @@ def test_load_plugins_supports_runtime_owned_profiles(tmp_path, monkeypatch):
     assert loaded == ["runtime_bootstrap_profile_test"]
     assert module.BOOTSTRAP_CALLS == ["runtime_bootstrap_profile_test"]
     assert boot_order == ["domain.alpha", "domain.beta"]
+
+
+def test_missing_requested_plugin_fails_explicitly(tmp_path):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["missing.bootstrap.module"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="missing\\.bootstrap\\.module"):
+        registry.load_plugins(manifest)
+
+    with pytest.raises(RuntimeError, match="missing\\.bootstrap\\.module"):
+        registry.get_plugin_boot_order(manifest)
 
 
 def test_load_plugins_supports_legacy_manifest_shape(tmp_path, monkeypatch):

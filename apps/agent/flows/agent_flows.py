@@ -354,20 +354,11 @@ def agent_trust_update_node(state, context):
 def agent_suggestions_get_node(state, context):
     try:
         from AINDY.agents.agent_tools import suggest_tools
-        from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_flow
         from AINDY.utils.uuid_utils import normalize_uuid
 
         db = context.get("db")
         user_id = normalize_uuid(context.get("user_id"))
-        syscall_ctx = make_syscall_ctx_from_flow(context, capabilities=["analytics.read"])
-        syscall_ctx.metadata["_db"] = db
-        result = get_dispatcher().dispatch(
-            "sys.v1.analytics.get_kpi_snapshot",
-            {"user_id": str(user_id)},
-            syscall_ctx,
-        )
-        snapshot = result.get("data") if result.get("status") == "success" else None
-        suggestions = suggest_tools(kpi_snapshot=snapshot, user_id=user_id, db=db)
+        suggestions = suggest_tools(user_id=user_id, db=db)
         return {"status": "SUCCESS", "output_patch": {"agent_suggestions_get_result": suggestions}}
     except Exception as e:
         return {"status": "FAILURE", "error": str(e)}

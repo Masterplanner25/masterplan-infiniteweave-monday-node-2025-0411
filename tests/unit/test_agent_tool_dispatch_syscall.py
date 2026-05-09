@@ -1,57 +1,71 @@
 from __future__ import annotations
 
+from importlib import import_module
 from unittest.mock import patch
 
-from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY, SyscallContext
+from AINDY.kernel.syscall_registry import SYSCALL_REGISTRY
 
 
 TEST_USER_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 
 
-def _ctx(*, capabilities: list[str]) -> SyscallContext:
-    return SyscallContext(
-        execution_unit_id="eu-agent-dispatch",
-        user_id=TEST_USER_ID,
-        capabilities=capabilities,
-        trace_id="trace-agent-dispatch",
-    )
+def test_runtime_agent_helper_syscalls_are_kernel_owned_before_domain_registration():
+    expected = {
+        "sys.v1.agent.count_runs": "agent.read",
+        "sys.v1.agent.list_recent_durations": "agent.read",
+        "sys.v1.agent.list_recent_runs": "agent.read",
+        "sys.v1.agent.ensure_initial_run": "agent.write",
+    }
+
+    for syscall_name, capability in expected.items():
+        assert syscall_name in SYSCALL_REGISTRY
+        assert SYSCALL_REGISTRY[syscall_name].capability == capability
 
 
-def test_agent_dispatch_tool_registered_after_domain_handler_registration():
+def test_agent_dispatch_tool_is_not_registered_after_domain_handler_registration():
     from AINDY.kernel.syscall_handlers import register_all_domain_handlers
 
     register_all_domain_handlers()
 
-    assert "sys.v1.agent.dispatch_tool" in SYSCALL_REGISTRY
-    entry = SYSCALL_REGISTRY["sys.v1.agent.dispatch_tool"]
-    assert entry.capability == "agent.tool_dispatch"
-    assert entry.input_schema["required"] == ["tool_name", "payload", "user_id", "syscall_name"]
+    assert "sys.v1.agent.dispatch_tool" not in SYSCALL_REGISTRY
 
 
-def test_agent_dispatch_tool_dispatch_returns_standard_envelope():
-    from AINDY.kernel.syscall_dispatcher import get_dispatcher
-    from AINDY.kernel.syscall_handlers import register_all_domain_handlers
+def test_agent_tool_modules_dispatch_directly_to_owned_syscalls():
+    cases = [
+        ("apps.tasks.agents.tools", "task_create", {"task_name": "Write tests"}, "sys.v1.task.create", "task.create"),
+        ("apps.tasks.agents.tools", "task_complete", {"task_id": "t-1"}, "sys.v1.task.complete_full", "task.complete_full"),
+        ("apps.search.agents.tools", "leadgen_search", {"query": "acme"}, "sys.v1.leadgen.search_ai", "leadgen.search_ai"),
+        ("apps.search.agents.tools", "research_query", {"query": "market"}, "sys.v1.research.query", "research.query"),
+        ("apps.masterplan.agents.tools", "genesis_message", {"message": "Next step?"}, "sys.v1.genesis.message", "genesis.message"),
+        ("apps.arm.agents.tools", "arm_analyze", {"target": "repo"}, "sys.v1.arm.analyze", "arm.analyze"),
+        ("apps.arm.agents.tools", "arm_generate", {"prompt": "refactor"}, "sys.v1.arm.generate", "arm.generate"),
+        ("apps.agent.agents.tools", "memory_recall", {"query": "auth"}, "sys.v1.memory.read", "memory.read"),
+    ]
 
-    register_all_domain_handlers()
-
-    with patch("apps.agent.agents.tool_helpers.dispatch_tool_syscall", return_value={"ok": True, "value": 7}):
-        result = get_dispatcher().dispatch(
-            "sys.v1.agent.dispatch_tool",
-            {
-                "tool_name": "test.tool",
-                "payload": {"x": 1},
-                "user_id": TEST_USER_ID,
-                "syscall_name": "sys.v1.test.tool",
-                "capability": "test.tool",
-            },
-            _ctx(capabilities=["agent.tool_dispatch"]),
+    for module_name, fn_name, args, syscall_name, capability in cases:
+        module = import_module(module_name)
+        fn = getattr(module, fn_name)
+        with patch(f"{module_name}.invoke_tool_syscall", return_value={"ok": True}) as invoke:
+            fn(args, TEST_USER_ID, None)
+        invoke.assert_called_once_with(
+            syscall_name,
+            args,
+            user_id=TEST_USER_ID,
+            capability=capability,
         )
 
-    assert result["status"] == "success"
-    assert result["data"] == {"ok": True, "value": 7}
-    assert result["trace_id"] == "trace-agent-dispatch"
-    assert result["execution_unit_id"] == "eu-agent-dispatch"
-    assert result["syscall"] == "sys.v1.agent.dispatch_tool"
-    assert result["version"] == "v1"
-    assert isinstance(result["duration_ms"], int)
-    assert result["error"] is None
+
+def test_memory_write_adds_agent_source_before_direct_syscall_dispatch():
+    import apps.agent.agents.tools as agent_tools
+
+    with patch("apps.agent.agents.tools.invoke_tool_syscall", return_value={"node": {"id": "n-1"}}) as invoke:
+        result = agent_tools.memory_write({"content": "note"}, TEST_USER_ID, None)
+
+    assert result == {"node_id": "n-1"}
+    invoke.assert_called_once()
+    dispatched_name, dispatched_payload = invoke.call_args.args
+    assert dispatched_name == "sys.v1.memory.write"
+    assert dispatched_payload["content"] == "note"
+    assert dispatched_payload["source"] == "agent"
+    assert invoke.call_args.kwargs["user_id"] == TEST_USER_ID
+    assert invoke.call_args.kwargs["capability"] == "memory.write"

@@ -5,6 +5,38 @@ from typing import Any
 
 from AINDY.config import settings
 
+RUNTIME_ONLY_BOOT_PROFILE = "platform-only"
+RUNTIME_ONLY_REQUIRED_ROUTES = (
+    "/health",
+    "/ready",
+    "/apps/agent/run",
+    "/apps/agent/tools",
+    "/apps/memory/recall",
+    "/apps/memory/nodes",
+    "/platform/syscalls",
+)
+RUNTIME_ONLY_REQUIRED_ROUTE_PREFIXES = (
+    "/platform/",
+    "/apps/agent/",
+    "/apps/memory/",
+)
+RUNTIME_ONLY_BASELINE_AGENT_TOOLS = (
+    "memory.recall",
+    "memory.write",
+)
+RUNTIME_ONLY_BASELINE_AGENT_CAPABILITIES = (
+    "execute_flow",
+    "read_memory",
+    "write_memory",
+)
+RUNTIME_ONLY_INTENTIONALLY_UNAVAILABLE = (
+    "app-domain routers from apps/*",
+    "app-owned agent tools beyond runtime defaults",
+    "app-owned planner enrichment and suggestion providers",
+    "app-owned completion hooks and Infinity orchestration",
+    "app-owned syscalls and startup hooks",
+)
+
 _api_runtime_state: dict[str, Any] = {
     "startup_complete": False,
     "background_enabled": False,
@@ -95,10 +127,33 @@ def reset_runtime_state() -> None:
     )
 
 
+def runtime_only_deployment_contract() -> dict[str, Any]:
+    return {
+        "boot_profile": RUNTIME_ONLY_BOOT_PROFILE,
+        "mounted_routes": {
+            "required_routes": list(RUNTIME_ONLY_REQUIRED_ROUTES),
+            "required_prefixes": list(RUNTIME_ONLY_REQUIRED_ROUTE_PREFIXES),
+        },
+        "baseline_agent_capabilities": {
+            "planner": "generic runtime prompt",
+            "tools": list(RUNTIME_ONLY_BASELINE_AGENT_TOOLS),
+            "capabilities": list(RUNTIME_ONLY_BASELINE_AGENT_CAPABILITIES),
+            "suggestions": "empty unless a plugin registers a provider",
+            "completion_hook": "runtime no-op",
+        },
+        "health_and_readiness": {
+            "liveness_route": "/health",
+            "readiness_route": "/ready",
+        },
+        "intentionally_unavailable": list(RUNTIME_ONLY_INTENTIONALLY_UNAVAILABLE),
+    }
+
+
 def deployment_contract_summary() -> dict[str, Any]:
     return {
         "environment": settings.ENV,
         "execution_mode": settings.EXECUTION_MODE,
+        "runtime_only_support": runtime_only_deployment_contract(),
         "requires": {
             "redis": redis_required(),
             "worker": worker_required(),

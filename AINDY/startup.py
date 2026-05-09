@@ -158,7 +158,8 @@ def _initialize_runtime_bootstrap() -> None:
     except RuntimeError:
         raise
     except Exception as exc:
-        logger.warning("Plugin loading skipped: %s", exc)
+        logger.critical("Runtime bootstrap failed: %s", exc)
+        raise RuntimeError(f"Runtime bootstrap failed: {exc}") from exc
 
 
 _initialize_runtime_bootstrap()

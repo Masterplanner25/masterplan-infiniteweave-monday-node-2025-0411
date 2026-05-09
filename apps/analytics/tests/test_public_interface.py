@@ -16,7 +16,7 @@ def test_public_module_importable():
 def test_no_private_service_imports_in_external_callers():
     callers = [
         "apps/tasks/services/task_service.py",
-        "apps/agent/routes/agent_router.py",
+        "AINDY/routes/agent_router.py",
         "apps/agent/flows/agent_flows.py",
         "apps/arm/services/deepseek/deepseek_code_analyzer.py",
     ]

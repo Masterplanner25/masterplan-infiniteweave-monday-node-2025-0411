@@ -823,7 +823,7 @@ class TestAgentRunModelHasColumn:
 class TestSerializerUnification:
     def test_run_to_response_includes_flow_run_id(self):
         """After unification, _run_to_response() returns flow_run_id."""
-        from apps.agent.routes.agent_router import _run_to_response
+        from AINDY.routes.agent_router import _run_to_response
 
         run = MagicMock()
         run.id = uuid.uuid4()
@@ -849,7 +849,7 @@ class TestSerializerUnification:
         assert response["flow_run_id"] == "fr-123"
 
     def test_run_to_response_includes_replayed_from_run_id(self):
-        from apps.agent.routes.agent_router import _run_to_response
+        from AINDY.routes.agent_router import _run_to_response
 
         run = MagicMock()
         run.id = uuid.uuid4()

@@ -4,6 +4,8 @@ import uuid
 from typing import Any
 from types import SimpleNamespace
 
+from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
+
 from apps.masterplan.models import MasterPlan
 
 
@@ -11,8 +13,6 @@ _CHILD_KEYS = ("phases", "milestones", "steps", "tasks", "actions", "initiatives
 
 
 def create_task(*args, **kwargs):
-    from AINDY.kernel.syscall_dispatcher import SyscallContext, get_dispatcher
-
     db = kwargs["db"]
     user_id = kwargs["user_id"]
     ctx = SyscallContext(
@@ -59,6 +59,72 @@ def create_task(*args, **kwargs):
     )
 
 
+def _dispatch(name: str, payload: dict[str, Any], *, db, user_id: str | uuid.UUID, capabilities: list[str]) -> dict[str, Any]:
+    ctx = SyscallContext(
+        execution_unit_id=str(uuid.uuid4()),
+        user_id=str(user_id),
+        capabilities=capabilities,
+        trace_id="",
+        metadata={"_db": db},
+    )
+    result = get_dispatcher().dispatch(name, payload, ctx)
+    if result["status"] != "success":
+        raise RuntimeError(result.get("error") or f"{name} syscall failed")
+    return result.get("data") or {}
+
+
+def _list_tasks_for_masterplan(*, db, user_id: str | uuid.UUID, masterplan_id: int) -> list[dict[str, Any]]:
+    return list(
+        _dispatch(
+            "sys.v1.task.list_for_masterplan",
+            {"masterplan_id": masterplan_id},
+            db=db,
+            user_id=user_id,
+            capabilities=["task.read"],
+        ).get("tasks")
+        or []
+    )
+
+
+def _count_tasks(*, db, user_id: str | uuid.UUID, masterplan_id: int | None = None) -> int:
+    return int(
+        _dispatch(
+            "sys.v1.task.count",
+            {"masterplan_id": masterplan_id} if masterplan_id is not None else {},
+            db=db,
+            user_id=user_id,
+            capabilities=["task.read"],
+        ).get("count")
+        or 0
+    )
+
+
+def _delete_tasks_by_ids(*, db, user_id: str | uuid.UUID, task_ids: list[int]) -> int:
+    return int(
+        _dispatch(
+            "sys.v1.task.delete_by_ids",
+            {"task_ids": task_ids},
+            db=db,
+            user_id=user_id,
+            capabilities=["task.write"],
+        ).get("deleted_count")
+        or 0
+    )
+
+
+def _list_automation_logs(*, db, user_id: str | uuid.UUID, limit: int = 250) -> list[dict[str, Any]]:
+    return list(
+        _dispatch(
+            "sys.v1.automation.list_logs",
+            {"limit": limit},
+            db=db,
+            user_id=user_id,
+            capabilities=["automation.read"],
+        ).get("logs")
+        or []
+    )
+
+
 def sync_masterplan_tasks(
     *,
     db,
@@ -66,11 +132,9 @@ def sync_masterplan_tasks(
     user_id: str | uuid.UUID,
     replace_existing: bool = False,
 ) -> dict[str, Any]:
-    from apps.tasks.public import count_tasks, delete_tasks_by_ids, list_tasks_for_masterplan
-
     owner_user_id = uuid.UUID(str(user_id))
-    existing = list_tasks_for_masterplan(
-        db,
+    existing = _list_tasks_for_masterplan(
+        db=db,
         user_id=owner_user_id,
         masterplan_id=masterplan.id,
     )
@@ -86,8 +150,8 @@ def sync_masterplan_tasks(
         protected = [task["id"] for task in existing if task.get("status") == "completed"]
         if protected:
             raise ValueError("masterplan_tasks_completed_cannot_replace")
-        delete_tasks_by_ids(
-            db,
+        _delete_tasks_by_ids(
+            db=db,
             user_id=owner_user_id,
             task_ids=[int(task["id"]) for task in existing],
         )
@@ -113,8 +177,8 @@ def sync_masterplan_tasks(
     db.commit()
     return {
         "generated": len(created_ids),
-        "total_tasks": count_tasks(
-            db,
+        "total_tasks": _count_tasks(
+            db=db,
             user_id=owner_user_id,
             masterplan_id=masterplan.id,
         ),
@@ -124,12 +188,9 @@ def sync_masterplan_tasks(
 
 
 def get_masterplan_execution_status(*, db, masterplan_id: int, user_id: str | uuid.UUID) -> dict[str, Any]:
-    from apps.automation.public import list_automation_logs
-    from apps.tasks.public import list_tasks_for_masterplan
-
     owner_user_id = uuid.UUID(str(user_id))
-    tasks = list_tasks_for_masterplan(
-        db,
+    tasks = _list_tasks_for_masterplan(
+        db=db,
         user_id=owner_user_id,
         masterplan_id=masterplan_id,
     )
@@ -143,7 +204,7 @@ def get_masterplan_execution_status(*, db, masterplan_id: int, user_id: str | uu
     }
     task_lookup = {task["id"]: task for task in tasks}
     task_ids = set(task_lookup)
-    logs = list_automation_logs(db, user_id=owner_user_id, limit=250)
+    logs = _list_automation_logs(db=db, user_id=owner_user_id, limit=250)
     relevant_logs = []
     for log in logs:
         payload = log.get("payload") or {}

@@ -32,17 +32,12 @@ _MOVED_FLOW_SYMBOLS = {
 
 # Boot-time vs. call-time dependencies
 #
-# BOOTSTRAP_DEPENDS_ON lists only apps whose syscalls automation requires
-# to be registered BEFORE automation itself boots (used by
-# _register_required_syscalls). Apps whose syscalls automation only calls
-# AT RUNTIME (arm, masterplan, tasks, search) do not need to be listed
-# here — the syscall dispatcher returns an error envelope if a syscall
-# is unavailable, and all apps are booted before the server accepts traffic.
-BOOTSTRAP_DEPENDS_ON: list[str] = [
-    "agent",      # required at boot: sys.v1.agent.* registered before verification
-    "analytics",  # required at boot: sys.v1.score.feedback registered before verification
-]
-APP_DEPENDS_ON: list[str] = ["agent"]
+# BOOTSTRAP_DEPENDS_ON lists only apps whose contracts automation requires to
+# be registered before automation itself boots. Automation's cross-domain
+# integrations now resolve through owner syscalls at call time, so there are
+# no cross-app bootstrap edges to declare here.
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = []
 
 
 def register() -> None:
@@ -215,7 +210,6 @@ def _register_required_syscalls() -> None:
     for name in (
         "sys.v1.score.feedback",
         "sys.v1.agent.suggest_tools",
-        "sys.v1.agent.dispatch_tool",
     ):
         register_required_syscall(name)
 

@@ -1,6 +1,6 @@
 ---
 title: Boot Profiles
-last_verified: "2026-05-02"
+last_verified: "2026-05-08"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -35,6 +35,8 @@ Rules:
 - `AINDY_BOOT_PROFILE` selects a named profile at runtime.
 - `AINDY_PLUGIN_PROFILE` is accepted as a backward-compatible alias.
 - Legacy manifests using `{"plugins": [...]}` are still supported.
+- Empty plugin lists are only accepted when the zero-plugin profile is explicitly selected.
+- If a non-empty selected profile references a missing or broken plugin module, startup fails immediately with the profile name and module name in the error.
 
 Ownership boundary:
 
@@ -47,4 +49,21 @@ Platform-only behavior:
 - App-domain routers from `apps/*` are absent because no app plugins are loaded.
 - Runtime startup still initializes platform flow definitions and registry-owned surfaces.
 - Runtime-owned standalone agent defaults remain available: planner context, memory tool catalog, capability definitions, trigger evaluation, and a no-op completion hook.
-- App-owned startup hooks, app-owned syscalls, and app-owned cross-domain flows are unavailable until an app-enabled profile is selected.
+- App-owned startup hooks, app-owned syscalls, app-owned cross-domain flows, and `apps/agent` enrichment registrations are unavailable until an app-enabled profile is selected.
+
+For the exact supported runtime-only surface, use
+[Runtime-Only Deployment](../runtime/RUNTIME_ONLY_DEPLOYMENT.md) as the
+authoritative contract.
+
+`apps/agent` classification:
+
+- `apps/agent` is no longer a core domain.
+- The runtime-owned agent API, models, helper syscalls, and default planner/tool behavior live in `AINDY`.
+- `apps/agent` now contributes optional enrichment inside `default-apps`: extra tools, async job handlers, capability bundles, KPI-aware planner context, and completion hooks.
+
+Failure semantics:
+
+- `platform-only` is an intentional no-app boot path. Use it when the runtime should start without loading app plugins.
+- `default-apps` and any other non-empty profile are strict at the requested plugin-module boundary. Missing `apps.bootstrap`, import errors inside a requested plugin module, and bootstrap exceptions are startup failures.
+- Inside `apps.bootstrap`, only apps marked core abort the startup. Peripheral apps such as `agent` may degrade if their own bootstrap fails.
+- If an operator intended a no-app runtime but forgot to select `platform-only`, the startup error now tells them to choose an explicit zero-plugin profile instead of silently continuing.

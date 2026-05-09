@@ -522,16 +522,46 @@ class TestSuggestTools:
         result = suggest_tools({"focus_quality": "bad", "execution_speed": None})
         assert isinstance(result, list)
 
+    def test_provider_can_load_kpi_context_via_registered_job_when_runtime_passes_none(self):
+        from AINDY.agents.agent_tools import suggest_tools
+        from AINDY.agents.tool_registry import TOOL_REGISTRY
+
+        db = MagicMock()
+        dispatcher = MagicMock()
+        dispatcher.dispatch.return_value = {"status": "error", "data": {}, "error": "unavailable"}
+        tool_registry_snapshot = dict(TOOL_REGISTRY)
+        TOOL_REGISTRY.clear()
+        TOOL_REGISTRY.update({
+            "memory.recall": {"category": "memory"},
+        })
+
+        def fake_get_job(name):
+            if name == "analytics.kpi_snapshot":
+                return lambda user_id, db: self._snap(focus=20.0, speed=80.0, ai_boost=80.0, master=50.0)
+            if name == "analytics.latest_adjustment":
+                return lambda user_id, db: None
+            return None
+
+        try:
+            with patch("apps.agent.agents.tools.get_dispatcher", return_value=dispatcher), \
+                 patch("AINDY.platform_layer.registry.get_job", side_effect=fake_get_job):
+                result = suggest_tools(None, user_id="user-123", db=db)
+        finally:
+            TOOL_REGISTRY.clear()
+            TOOL_REGISTRY.update(tool_registry_snapshot)
+
+        assert result[0]["tool"] == "memory.recall"
+
 
 class TestSuggestionsEndpoint:
 
     def test_suggestions_route_exists(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         paths = [r.path for r in router.routes]
         assert any("suggestions" in p for p in paths)
 
     def test_suggestions_endpoint_is_get(self):
-        from apps.agent.routes.agent_router import router
+        from AINDY.routes.agent_router import router
         suggestion_route = next(
             (r for r in router.routes if hasattr(r, "path") and "suggestions" in r.path),
             None,
@@ -541,13 +571,13 @@ class TestSuggestionsEndpoint:
 
     def test_suggestions_endpoint_returns_list(self):
         """Route returns the execution helper result."""
-        from apps.agent.routes.agent_router import get_tool_suggestions
+        from AINDY.routes.agent_router import get_tool_suggestions
         request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
         expected = []
 
-        with patch("apps.agent.routes.agent_router._execute_agent", return_value=expected) as execute_agent:
+        with patch("AINDY.routes.agent_router._execute_agent", return_value=expected) as execute_agent:
             result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert isinstance(result, list)
@@ -555,13 +585,13 @@ class TestSuggestionsEndpoint:
 
     def test_suggestions_endpoint_returns_suggestions_when_scores_low(self):
         """Low focus score → endpoint returns at least one suggestion."""
-        from apps.agent.routes.agent_router import get_tool_suggestions
+        from AINDY.routes.agent_router import get_tool_suggestions
         request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
         expected = [{"tool": "memory.recall", "reason": "low focus", "suggested_goal": "Recall context"}]
 
-        with patch("apps.agent.routes.agent_router._execute_agent", return_value=expected):
+        with patch("AINDY.routes.agent_router._execute_agent", return_value=expected):
             result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert len(result) >= 1
@@ -569,12 +599,12 @@ class TestSuggestionsEndpoint:
 
     def test_suggestions_endpoint_empty_when_no_scores(self):
         """User with no score history → empty list."""
-        from apps.agent.routes.agent_router import get_tool_suggestions
+        from AINDY.routes.agent_router import get_tool_suggestions
         request = Request({"type": "http", "method": "GET", "path": "/agent/suggestions", "headers": []})
         mock_user = {"sub": str(uuid.uuid4())}
         mock_db = MagicMock()
 
-        with patch("apps.agent.routes.agent_router._execute_agent", return_value=[]):
+        with patch("AINDY.routes.agent_router._execute_agent", return_value=[]):
             result = get_tool_suggestions(request=request, current_user=mock_user, db=mock_db)
 
         assert result == []

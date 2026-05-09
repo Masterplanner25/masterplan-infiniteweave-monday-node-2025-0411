@@ -27,6 +27,7 @@ ALLOWLIST = {
     "AINDY/routes/platform/nodus_shared.py",  # shared helper module, not a router surface
     "AINDY/routes/platform/schemas.py",  # shared request/response models, not a router surface
     "AINDY/routes/version_router.py",  # dormant router module; not mounted by the live app
+    "apps/agent/routes/agent_router.py",  # deprecated compatibility re-export; runtime ownership lives in AINDY/routes/agent_router.py
     "apps/search/routes/_route_helpers.py",  # helper utilities for search routes, never mounted directly
 }
 

@@ -124,7 +124,9 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope="session")
 def app(testing_session_factory, test_engine):
-    from AINDY.main import app as fastapi_app
+    from AINDY.main import create_app
+
+    fastapi_app = create_app()
 
     restore = _patch_session_aliases(testing_session_factory, test_engine)
     try:

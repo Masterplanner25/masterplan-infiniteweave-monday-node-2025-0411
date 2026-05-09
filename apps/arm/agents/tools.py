@@ -3,25 +3,16 @@
 from __future__ import annotations
 
 from AINDY.agents.tool_registry import register_tool
-from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
+from AINDY.agents.tool_syscalls import invoke_tool_syscall
 
 
-def _dispatch_agent_tool(tool_name: str, syscall_name: str, args: dict, user_id: str) -> dict:
-    ctx = make_syscall_ctx_from_tool(user_id, capabilities=["agent.tool_dispatch"])
-    result = get_dispatcher().dispatch(
-        "sys.v1.agent.dispatch_tool",
-        {
-            "tool_name": tool_name,
-            "payload": args,
-            "user_id": user_id,
-            "syscall_name": syscall_name,
-            "capability": tool_name,
-        },
-        ctx,
+def _dispatch_tool_syscall(syscall_name: str, args: dict, user_id: str, *, capability: str) -> dict:
+    return invoke_tool_syscall(
+        syscall_name,
+        args,
+        user_id=user_id,
+        capability=capability,
     )
-    if result["status"] == "error":
-        raise RuntimeError(result["error"])
-    return result["data"]
 
 
 def register() -> None:
@@ -46,7 +37,7 @@ def register() -> None:
 
 
 def arm_analyze(args: dict, user_id: str, db) -> dict:
-    data = _dispatch_agent_tool("arm.analyze", "sys.v1.arm.analyze", args, user_id)
+    data = _dispatch_tool_syscall("sys.v1.arm.analyze", args, user_id, capability="arm.analyze")
     return {
         "summary": data.get("summary", ""),
         "architecture_score": data.get("architecture_score"),
@@ -56,7 +47,7 @@ def arm_analyze(args: dict, user_id: str, db) -> dict:
 
 
 def arm_generate(args: dict, user_id: str, db) -> dict:
-    data = _dispatch_agent_tool("arm.generate", "sys.v1.arm.generate", args, user_id)
+    data = _dispatch_tool_syscall("sys.v1.arm.generate", args, user_id, capability="arm.generate")
     return {
         "generated_code": data.get("generated_code", ""),
         "explanation": data.get("explanation", ""),

@@ -83,7 +83,6 @@ class TestRegisterAllDomainHandlers:
             "sys.v1.goal.create",
             "sys.v1.research.query",
             "sys.v1.agent.suggest_tools",
-            "sys.v1.agent.dispatch_tool",
             "sys.v1.authorship.list_authors",
             "sys.v1.rippletrace.list_recent_pings",
         ]
@@ -109,7 +108,6 @@ class TestRegisterAllDomainHandlers:
 
         register_all_domain_handlers()
 
-        assert SYSCALL_REGISTRY["sys.v1.agent.dispatch_tool"].handler.__name__ == "handle_agent_dispatch_tool"
         assert SYSCALL_REGISTRY["sys.v1.memory.list"].handler.__name__ == "_handle_memory_list"
         assert SYSCALL_REGISTRY["sys.v1.memory.tree"].handler.__name__ == "_handle_memory_tree"
         assert SYSCALL_REGISTRY["sys.v1.memory.trace"].handler.__name__ == "_handle_memory_trace"
@@ -1042,33 +1040,5 @@ class TestResearchAndAgentHandlers:
         assert len(suggestions) >= 1
         assert suggestions[0]["tool"] == "memory.recall"
 
-    def test_agent_dispatch_tool_calls_helper(self):
-        from AINDY.kernel.syscall_handlers import _handle_agent_dispatch_tool
-
-        payload = {
-            "tool_name": "task.create",
-            "payload": {"task_name": "Write tests"},
-            "user_id": _TEST_UUID,
-            "syscall_name": "sys.v1.task.create",
-            "capability": "task.create",
-        }
-
-        dispatcher = MagicMock()
-        dispatcher.dispatch.return_value = {
-            "status": "success",
-            "data": {"task_id": "t-1"},
-            "error": None,
-        }
-
-        with patch("AINDY.kernel.syscall_dispatcher.get_dispatcher", return_value=dispatcher):
-            result = _handle_agent_dispatch_tool(payload, _ctx())
-
-        assert result == {"task_id": "t-1"}
-        dispatcher.dispatch.assert_called_once()
-        dispatched_name, dispatched_payload, dispatched_ctx = dispatcher.dispatch.call_args.args
-        assert dispatched_name == "sys.v1.task.create"
-        assert dispatched_payload == {"task_name": "Write tests"}
-        assert dispatched_ctx.user_id == _TEST_UUID
-        assert dispatched_ctx.capabilities == ["task.create"]
 
 

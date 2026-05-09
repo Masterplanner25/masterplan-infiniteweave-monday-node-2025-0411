@@ -22,7 +22,7 @@ owner: "platform-team"
 | function | purpose | parameters | returns | imported by callers | bypass violations observed |
 | --- | --- | --- | --- | --- | --- |
 | `save_calculation` | Persists one analytics calculation result row. | `db: Session`, `metric_name: str`, `value: float`, `user_id: str | None` | `CalculationResult | None` | Yes: `apps/network_bridge/services/network_bridge_services.py` | `apps/search/routes/seo_routes.py`, `apps/network_bridge/routes/network_bridge_router.py` import `apps.analytics.services.calculations.calculation_services.save_calculation` directly |
-| `get_user_kpi_snapshot` | Returns the latest KPI snapshot for one user. | `user_id: str`, `db: Session` | `UserKpiSnapshotDict | None` | Yes: `apps/agent/routes/agent_router.py`, `apps/agent/flows/agent_flows.py`, `apps/analytics/syscalls.py` | None found |
+| `get_user_kpi_snapshot` | Returns the latest KPI snapshot for one user. | `user_id: str`, `db: Session` | `UserKpiSnapshotDict | None` | Historical runtime-agent callers plus `apps/agent/flows/agent_flows.py`, `apps/analytics/syscalls.py` | None found |
 | `run_infinity_orchestrator` | Runs the analytics infinity orchestrator for one trigger event. | `user_id: str`, `trigger_event: str`, `db: Session` | `InfinityOrchestratorResult` | Yes: `apps/arm/services/deepseek/deepseek_code_analyzer.py` | None found |
 | `get_user_score` | Returns one `UserScore` row as a plain dict. | `user_id: str`, `db: Session` | `UserScoreDict | None` | No caller imports found | None found |
 | `get_user_scores` | Returns a batch of user score dicts keyed by user ID. | `user_ids: list[str]`, `db: Session` | `dict[str, UserScoreDict]` | Yes: `apps/social/__init__.py`, `apps/social/services/__init__.py`, `apps/social/services/social_service.py` | None found |
@@ -44,12 +44,12 @@ owner: "platform-team"
 | --- | --- | --- | --- | --- |
 | automation | `apps/freelance/services/freelance_service.py` | `apps.automation.public.execute_automation_action` | yes | KEEP |
 | automation | `apps/bridge/services/bridge_service.py` | `apps.automation.public.BridgeUserEvent` | yes | KEEP |
-| automation | `apps/masterplan/services/masterplan_execution_service.py` | `apps.automation.public.AutomationLog` | yes | KEEP |
+| automation | `apps/masterplan/services/masterplan_execution_service.py` | `apps.automation.public.list_automation_logs` | no | MOVED_TO_SYSCALL |
 | automation | `apps/analytics/services/scoring/policy_adaptation_service.py` | `apps.automation.public.LoopAdjustment` | yes | KEEP |
 | automation | `apps/analytics/services/scoring/kpi_weight_service.py` | `apps.automation.public.LoopAdjustment` | yes | KEEP |
 | automation | `apps/analytics/services/integration/dependency_adapter.py` | `apps.automation.public.LoopAdjustment`, `apps.automation.public.UserFeedback` | yes | KEEP |
 | automation | `apps/analytics/flows/analytics_flows.py` | `apps.automation.public.UserFeedback` | yes | KEEP |
-| analytics | `apps/agent/routes/agent_router.py` | `apps.analytics.public.get_user_kpi_snapshot` | yes | KEEP |
+| analytics | `AINDY/routes/agent_router.py` | historical runtime-owned suggestion path (removed) | yes | REMOVED |
 | analytics | `apps/agent/flows/agent_flows.py` | `apps.analytics.public.get_user_kpi_snapshot` | yes | KEEP |
 | analytics | `apps/arm/services/deepseek/deepseek_code_analyzer.py` | `apps.analytics.public.run_infinity_orchestrator` | yes | KEEP |
 | analytics | `apps/network_bridge/services/network_bridge_services.py` | `apps.analytics.public.save_calculation` | yes | KEEP |
@@ -65,5 +65,5 @@ owner: "platform-team"
 | analytics | `apps/search/routes/seo_routes.py` | `apps.analytics.services.calculations.calculation_services.save_calculation` | no | MIGRATE |
 | analytics | `apps/network_bridge/routes/network_bridge_router.py` | `apps.analytics.services.calculations.calculation_services.save_calculation` | no | MIGRATE |
 | tasks | `apps/freelance/services/freelance_service.py` | `apps.tasks.public.get_task_by_id`, `apps.tasks.public.queue_task_automation` | yes | KEEP |
-| tasks | `apps/masterplan/services/masterplan_execution_service.py` | `apps.tasks.public.Task` | yes | KEEP |
-| tasks | `apps/masterplan/services/eta_service.py` | `apps.tasks.public.Task` | yes | KEEP |
+| tasks | `apps/masterplan/services/masterplan_execution_service.py` | `apps.tasks.public.count_tasks`, `apps.tasks.public.list_tasks_for_masterplan`, `apps.tasks.public.delete_tasks_by_ids` | no | MOVED_TO_SYSCALL |
+| tasks | `apps/masterplan/services/eta_service.py` | `apps.tasks.public.count_tasks`, `apps.tasks.public.count_tasks_completed_since` | no | MOVED_TO_SYSCALL |

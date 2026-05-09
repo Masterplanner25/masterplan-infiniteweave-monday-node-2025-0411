@@ -1,6 +1,6 @@
 ---
 title: "AINDY Architecture Map"
-last_verified: "2026-04-29"
+last_verified: "2026-05-08"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -15,7 +15,9 @@ AINDY is a modular-monolith runtime and application platform. The codebase is sp
 The repo is in a transitional architecture state. Use these terms precisely:
 
 - **Platform boot**: process startup can load the plugin manifest, resolve app bootstrap order, register routers/jobs/flows/syscalls, and mount runtime-owned surfaces.
-- **Platform full operation**: many user-facing capabilities still require successfully registered apps because routes, tools, flows, and some ORM models are app-owned.
+- **Explicit no-app boot**: selecting `platform-only` starts the runtime with zero app plugins by design.
+- **Runtime-only deployment contract**: the supported no-app surface is defined in [Runtime-Only Deployment](../runtime/RUNTIME_ONLY_DEPLOYMENT.md) and should not be confused with the default app profile.
+- **Platform full operation**: many user-facing capabilities still require successfully registered apps because tools, flows, and some ORM models are still app-owned, even though some `/apps/*` HTTP surfaces are now runtime-owned.
 - **Current transitional coupling**: most runtime-to-app integration is indirect through bootstrap and registries, but a small number of direct `AINDY/` -> `apps.*` imports still exist and are treated as temporary exceptions.
 - **Target architecture**: runtime boot and shared infrastructure remain in `AINDY/`, while domain interaction happens through registries, syscalls, and public contracts rather than direct imports.
 
@@ -77,13 +79,15 @@ Key files:
 - `AINDY/platform_layer/bootstrap_graph.py`
 
 ### Agent Runtime
-Agent runtime code lives under `AINDY/agents/`. It provides the runtime shell, tool registry, coordinator, and stuck-run recovery used by the agent-facing apps and flows.
+Agent runtime code lives under `AINDY/agents/`. It provides the runtime shell, tool registry, coordinator, stuck-run recovery, and the helper layer behind the runtime-owned `/apps/agent/*` HTTP surface.
 
 Key files:
 - `AINDY/agents/agent_runtime.py`
+- `AINDY/agents/runtime_api.py`
 - `AINDY/agents/agent_coordinator.py`
 - `AINDY/agents/tool_registry.py`
 - `AINDY/agents/stuck_run_service.py`
+- `AINDY/routes/agent_router.py`
 
 ### Nodus Engine
 Nodus support is split between runtime-facing adapters and the lightweight embedded runtime package. The execution adapters and schedule integration live in `AINDY/runtime/`, while the local runtime package under `AINDY/nodus/` contains the bundled embedding support used by Nodus execution.
@@ -98,11 +102,11 @@ Key files:
 ## Layer 2: Domain Modules (`apps/`)
 
 ### Module List
-Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks`, `identity`, and `agent`. All other registered apps are peripheral and may fail into degraded mode without stopping platform boot.
+Boot classification comes from `apps/bootstrap.py`. Core domains are `tasks` and `identity`. All other registered apps, including `agent`, are peripheral and may fail into degraded mode after `apps/bootstrap.py` has been successfully loaded by the selected plugin profile.
 
 | App | Primary Responsibility | Boot Classification |
 |---|---|---|
-| `agent` | Agent-facing routes, tools, and runtime extensions | Core |
+| `agent` | Agent tools, async jobs, and runtime enrichment extensions | Peripheral |
 | `analytics` | KPI scoring, Infinity orchestration, analytics routes and syscalls | Peripheral |
 | `arm` | ARM runs, config, and DeepSeek-backed analysis workflows | Peripheral |
 | `authorship` | Authorship domain models and routes | Peripheral |
@@ -131,17 +135,35 @@ Cross-app communication now primarily flows through the syscall layer. The
 major direct cross-app imports have been converted: analytics→automation
 (`sys.v1.automation.list_feedback`), analytics→social
 (`sys.v1.social.adapt_linkedin`), agent→analytics
-(`sys.v1.analytics.get_kpi_snapshot`), and identity→agent
+(`sys.v1.analytics.get_kpi_snapshot`), identity→agent
 (`sys.v1.agent.count_runs`, `sys.v1.agent.list_recent_runs`,
-`sys.v1.agent.ensure_initial_run`). Remaining deferred imports between apps
+`sys.v1.agent.ensure_initial_run`), and automation's former boot-time
+dependence on agent helper syscalls. These runtime/helper agent syscalls are
+now kernel-owned in `AINDY/kernel/syscall_registry.py`, so identity,
+platform, and automation bootstrap callers no longer depend on
+`apps/agent` registration for them. Masterplan execution and ETA reads now
+cross into tasks and automation through owner syscalls
+(`sys.v1.task.count`, `sys.v1.task.count_completed_since`,
+`sys.v1.task.list_for_masterplan`, `sys.v1.task.delete_by_ids`, and
+`sys.v1.automation.list_logs`) instead of direct `apps.tasks.public` /
+`apps.automation.public` imports.
+Agent tool modules also dispatch directly to their owner syscalls with
+explicit capabilities rather than routing through a generic agent-owned
+tool-dispatch proxy.
+The runtime-owned agent layer now exposes a generic baseline on its own:
+generic planner context, runtime memory tools, default trigger evaluation, and
+empty suggestion/completion enrichment unless app plugins register providers.
+Analytics-aware suggestions, KPI-enriched planning, and Infinity post-run
+behavior remain optional plugin-owned extensions.
+Remaining deferred imports between apps
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
-Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks`, `identity`, and `agent`. Core domains abort the entire startup when their bootstrap fails; all other domains degrade gracefully. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
+Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks` and `identity`. Core domains abort the entire startup when their bootstrap fails; all other domains, including `agent`, degrade gracefully once the plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
 
 Representative dependency declarations in `apps/bootstrap.py`:
 - `analytics` depends on `identity` and `tasks`
-- `automation` depends on `agent` and `analytics`; its calls to `arm`, `masterplan`, `tasks`, and `search` are runtime syscalls, not `BOOTSTRAP_DEPENDS_ON` edges
+- `automation` has no cross-app `BOOTSTRAP_DEPENDS_ON`; its calls to `agent`, `analytics`, `arm`, `masterplan`, `tasks`, and `search` are runtime syscalls or automation-owned syscall registrations rather than boot-order edges
 - `arm` depends on `analytics`
 - `masterplan` depends on `automation`, `identity`, and `tasks`
 - `network_bridge` depends on `authorship`
@@ -161,13 +183,16 @@ for the full semantics.
 
 Current verified exceptions are narrow:
 - agent lifecycle persistence is runtime-owned in `AINDY/db/models/agent_run.py` and `AINDY/db/models/agent_event.py`
-- agent routes, flows, syscalls, and tool registration remain app-owned under `apps/agent/`
+- the `/apps/agent/*` HTTP surface is runtime-owned in `AINDY/routes/agent_router.py`
+- `apps/agent/routes/agent_router.py` remains only as a transitional compatibility re-export to the runtime router
+- agent tool registration, async jobs, and remaining app-specific runtime enrichment stay app-owned under `apps/agent/`
 - plugin registration happens through runtime-owned registries and contracts in `AINDY/platform_layer/`
 - platform flow registration is runtime-owned, while app flow registration is plugin-owned through app bootstrap
 
 This means:
 - platform boot is mostly indirect and registry-driven
-- platform full operation still depends on app registration, but runtime persistence no longer depends on app-owned agent models
+- runtime-owned agent routing, persistence, helper syscalls, and defaults do not require `apps/agent` bootstrap to exist
+- platform full operation still depends on app registration for non-baseline agent enrichment such as additional tools, async job handlers, KPI-aware planning, and post-run hooks
 - new direct `AINDY/` -> `apps.*` imports are regressions
 
 Hard rule:
@@ -226,7 +251,7 @@ Key files and directories:
 HTTP request
   -> FastAPI app in AINDY/main.py
   -> middleware / execution contract / auth
-  -> route handler in AINDY/routes/* or apps/*/routes/*
+  -> route handler in AINDY/routes/* or apps/*/routes/* compatibility shims
   -> domain service
   -> syscall dispatcher if crossing domain boundaries
   -> PostgreSQL or MongoDB
@@ -265,4 +290,4 @@ config and DB setup
 - [Plugin Registry Pattern](./PLUGIN_REGISTRY_PATTERN.md)
 
 ## Last Verified
-2026-04-25
+2026-05-02

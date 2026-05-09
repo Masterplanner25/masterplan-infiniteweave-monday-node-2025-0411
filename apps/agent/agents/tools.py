@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 
 from AINDY.agents.tool_registry import TOOL_REGISTRY, register_tool, register_tool_suggestion_provider
+from AINDY.agents.tool_syscalls import invoke_tool_syscall
 from AINDY.kernel.syscall_dispatcher import get_dispatcher, make_syscall_ctx_from_tool
-from apps.agent.agents.tool_helpers import dispatch_tool_syscall
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +34,50 @@ def register() -> None:
 
 
 def memory_recall(args: dict, user_id: str, db) -> dict:
-    return dispatch_tool_syscall("sys.v1.memory.read", args, user_id, "memory.read")
+    return invoke_tool_syscall("sys.v1.memory.read", args, user_id=user_id, capability="memory.read")
 
 
 def memory_write(args: dict, user_id: str, db) -> dict:
     payload = {"source": "agent", **args}
-    data = dispatch_tool_syscall("sys.v1.memory.write", payload, user_id, "memory.write")
+    data = invoke_tool_syscall("sys.v1.memory.write", payload, user_id=user_id, capability="memory.write")
     node = data.get("node", {})
     return {"node_id": node.get("id") if isinstance(node, dict) else None}
 
 
-def suggest_tools_for_kpi(kpi_snapshot: dict, user_id: str = None, db=None) -> list:
+def _load_suggestion_context(
+    suggestion_context: dict | None,
+    *,
+    user_id: str | None,
+    db,
+) -> dict | None:
+    if isinstance(suggestion_context, dict) and suggestion_context:
+        return suggestion_context
+    if not user_id or db is None:
+        return suggestion_context if isinstance(suggestion_context, dict) else None
+    try:
+        from AINDY.platform_layer.registry import get_job
+
+        get_user_kpi_snapshot = get_job("analytics.kpi_snapshot")
+        if get_user_kpi_snapshot is None:
+            return suggestion_context if isinstance(suggestion_context, dict) else None
+        snapshot = get_user_kpi_snapshot(user_id=user_id, db=db)
+        return snapshot if isinstance(snapshot, dict) else None
+    except Exception as exc:
+        logger.warning("[AgentTools] suggestion context lookup failed: %s", exc)
+        return suggestion_context if isinstance(suggestion_context, dict) else None
+
+
+def suggest_tools_for_kpi(
+    suggestion_context: dict | None = None,
+    user_id: str = None,
+    db=None,
+    **legacy_kwargs,
+) -> list:
+    kpi_snapshot = _load_suggestion_context(
+        suggestion_context if suggestion_context is not None else legacy_kwargs.get("kpi_snapshot"),
+        user_id=user_id,
+        db=db,
+    )
     try:
         ctx = make_syscall_ctx_from_tool(str(user_id or ""), capabilities=["agent.suggest_tools"])
         result = get_dispatcher().dispatch(

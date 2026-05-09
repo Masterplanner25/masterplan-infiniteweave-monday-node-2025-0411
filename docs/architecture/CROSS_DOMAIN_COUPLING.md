@@ -1,6 +1,6 @@
 ---
 title: "Cross-Domain Coupling"
-last_verified: "2026-04-29"
+last_verified: "2026-05-02"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -509,22 +509,32 @@ coupling sites.
 | `analytics/flows` | `automation.public.get_user_feedback` | syscall dispatch | RESOLVED — sys.v1.automation.list_feedback (Prompt 6) |
 | `analytics/flows` | `social.public.adapt_linkedin_metrics` | syscall dispatch | RESOLVED — sys.v1.social.adapt_linkedin (Prompt 6) |
 | `agent/flows` | `analytics.public.get_user_kpi_snapshot` | syscall dispatch | RESOLVED — sys.v1.analytics.get_kpi_snapshot (Prompt 2) |
-| `identity/services` | `agent.models.agent_run.AgentRun` | syscall dispatch | RESOLVED — sys.v1.agent.count_runs, list_recent_runs, ensure_initial_run (Prompt 18) |
+| `identity/services` | `agent.models.agent_run.AgentRun` | syscall dispatch | RESOLVED — sys.v1.agent.count_runs, list_recent_runs, ensure_initial_run (Prompt 18; kernel-owned helpers after Prompt 19) |
 | `identity/identity_boot_service` | `analytics.kpi_snapshot` job | registry-job dispatch | none |
-| `masterplan/services` | `tasks.models`, `tasks.services` | deferred | acceptable |
-| `masterplan/services` | `automation.models` (AutomationLog) | deferred | acceptable |
+| `masterplan/services/masterplan_execution_service.py` | `tasks`, `automation` | syscall dispatch | RESOLVED — task counts/list/delete and automation log reads now go through owner syscalls |
+| `masterplan/services/eta_service.py` | `tasks` | syscall dispatch | RESOLVED — ETA velocity/count reads now go through task syscalls |
+| `masterplan/services` | `identity.public` | deferred | ACCEPTED — prompt-context and identity observation remain app-level public contracts |
 | `automation/syscalls/syscall_handlers` | `task`, `leadgen`, `arm`, `genesis`, `analytics`, `authorship`, `rippletrace`, `goal`, `research` | syscall dispatch wrappers | boundary restored (Prompt 2) |
 | `automation/syscalls/syscall_handlers` | `automation.models` | deferred | acceptable |
 | `automation/syscalls/syscall_handlers` | `tasks.syscalls.register_task_syscall_handlers` | explicit re-registration call (removed) | RESOLVED (Prompt 12) |
 | `automation/flows/automation_flows` | `AINDY.agents.agent_runtime._run_to_dict` | deferred | private API (Prompt 3) |
 | `automation/flows/analytics_flows` | `analytics.services` | deferred | acceptable |
 
-Automation bootstrap note (2026-04-27): `apps.automation.bootstrap`
-reduced `BOOTSTRAP_DEPENDS_ON` from five apps to two (`agent`, `analytics`).
-`arm`, `masterplan`, and `tasks` were removed because automation only calls
-their syscalls at runtime. The syscall dispatcher returns error envelopes for
-unregistered syscalls rather than raising, so these are call-time dependencies
-only.
+Automation bootstrap note (2026-05-02): `apps.automation.bootstrap`
+no longer declares cross-app `BOOTSTRAP_DEPENDS_ON` or `APP_DEPENDS_ON`
+edges. `arm`, `masterplan`, `tasks`, `search`, and `analytics` were already
+runtime call-time dependencies only. After the agent helper syscall migration,
+the remaining agent helper contracts needed by runtime/bootstrap paths became
+kernel-owned, and automation's remaining agent-facing contract
+there is no longer an app-owned generic agent tool-dispatch syscall.
+That means automation should not force `apps/agent` to boot first merely to
+validate runtime helper behavior.
+
+Agent runtime note: runtime-owned agent APIs should not fetch analytics or
+other app-domain state directly. Suggestion enrichment, KPI-aware planner
+context, and Infinity completion behavior must stay behind optional
+plugin-owned provider registration so platform-only startup keeps a clean
+baseline agent surface.
 
 **Acceptable**: deferred, read-only, one direction, no private API.  
 **Risk**: module-level (cascade), bidirectional, or private API call.
@@ -569,10 +579,12 @@ Status values: OPEN | IN_PROGRESS | RESOLVED | ACCEPTED (intentional, not to be 
 | analytics â†’ automation list_feedback | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
 | analytics â†’ social adapt_linkedin | `analytics/flows/analytics_flows.py` | cross-domain deferred import | RESOLVED | Prompt 6 |
 | agent â†’ analytics get_kpi_snapshot | `agent/flows/agent_flows.py` | cross-domain deferred import | RESOLVED | Prompt 2 |
-| identity â†’ agent AgentRun direct query | `identity/services/identity_boot_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
-| identity â†’ agent signup AgentRun | `identity/services/signup_initialization_service.py` | cross-domain model import | RESOLVED | Prompt 18 |
+| identity â†’ agent AgentRun direct query | `identity/services/identity_boot_service.py` | cross-domain model import | RESOLVED | Prompt 18; helper syscall ownership moved to kernel in Prompt 19 |
+| identity â†’ agent signup AgentRun | `identity/services/signup_initialization_service.py` | cross-domain model import | RESOLVED | Prompt 18; helper syscall ownership moved to kernel in Prompt 19 |
 | AgentRun in platform layer | `AINDY/db/models/agent_run.py` | domain model in platform | RESOLVED | Prompt 1 |
 | _run_to_dict private import | `apps/automation/flows/automation_flows.py` | private API | RESOLVED | Prompt 3 |
+| masterplan execution direct public imports | `apps/masterplan/services/masterplan_execution_service.py` | deferred cross-domain public import | RESOLVED | Prompt 22 |
+| masterplan ETA direct task public imports | `apps/masterplan/services/eta_service.py` | deferred cross-domain public import | RESOLVED | Prompt 22 |
 
 ## 8. Coupling Governance Policy
 

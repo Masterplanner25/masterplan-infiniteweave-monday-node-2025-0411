@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 
 def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch, persisted_user):
-    agent_router = importlib.import_module("apps.agent.routes.agent_router")
+    agent_router = importlib.import_module("AINDY.routes.agent_router")
 
     captured = {}
 
@@ -17,12 +17,6 @@ def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch, persisted_u
         return SimpleNamespace(success=True, data={"ok": True}, metadata={"eu_id": "eu-1", "trace_id": "trace-1"})
 
     monkeypatch.setattr(agent_router, "execute_with_pipeline_sync", _fake_execute_with_pipeline_sync)
-    monkeypatch.setattr(
-        agent_router,
-        "_run_flow_agent",
-        lambda *args, **kwargs: {"ok": True},
-    )
-
     result = agent_router.create_agent_run(
         request=MagicMock(),
         body=agent_router.RunRequest(goal="Ship v1"),
@@ -37,7 +31,7 @@ def test_agent_create_run_uses_shared_execution_wrapper(monkeypatch, persisted_u
 
 
 def test_agent_tools_route_uses_shared_execution_wrapper(monkeypatch, persisted_user):
-    agent_router = importlib.import_module("apps.agent.routes.agent_router")
+    agent_router = importlib.import_module("AINDY.routes.agent_router")
 
     captured = {}
 
