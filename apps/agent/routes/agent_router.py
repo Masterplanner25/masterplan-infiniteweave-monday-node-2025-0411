@@ -5,7 +5,9 @@ remains only as a transitional re-export for legacy callers and intentionally
 exposes only the public router surface.
 """
 
-import AINDY.routes.agent_router as _runtime_agent_router
+from importlib import import_module
+
+_runtime_agent_router = import_module("AINDY.routes.agent_router")
 
 RunRequest = _runtime_agent_router.RunRequest
 TrustSettingsUpdate = _runtime_agent_router.TrustSettingsUpdate
