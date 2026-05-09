@@ -18,6 +18,9 @@ import { useSystem } from "./context/SystemContext";
 
 import "./App.css";
 
+const RUNTIME_ONLY_HOME = "/memory";
+const APP_PROFILE_HOME = "/dashboard";
+
 const Dashboard = lazy(() => import("./components/app/Dashboard"));
 const TaskDashboard = lazy(() => import("./components/app/TaskDashboard"));
 const Genesis = lazy(() => import("./components/app/Genesis"));
@@ -35,6 +38,10 @@ const ARMLogs = lazy(() => import("./components/app/ARMLogs"));
 const ARMMetrics = lazy(() => import("./components/app/ARMMetrics"));
 const MemoryBrowser = lazy(() => import("./components/app/MemoryBrowser"));
 const IdentityDashboard = lazy(() => import("./components/app/IdentityDashboard"));
+
+function isRuntimeOnlySystem(system) {
+  return system?.runtime?.boot_mode === "runtime-only";
+}
 
 function BootGate() {
   const { booting, booted, bootError, bootSystem } = useSystem();
@@ -90,6 +97,7 @@ function BootGate() {
 
 function PlatformRedirect() {
   const { isAdmin } = useAuth();
+  const { system } = useSystem();
   const platformBase = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
 
   if (isAdmin) {
@@ -103,7 +111,20 @@ function PlatformRedirect() {
     return null;
   }
 
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to={isRuntimeOnlySystem(system) ? RUNTIME_ONLY_HOME : APP_PROFILE_HOME} replace />;
+}
+
+function RuntimeAwareHomeRedirect() {
+  const { system } = useSystem();
+  return <Navigate to={isRuntimeOnlySystem(system) ? RUNTIME_ONLY_HOME : APP_PROFILE_HOME} replace />;
+}
+
+function AppProfileRoute({ element }) {
+  const { system } = useSystem();
+  if (isRuntimeOnlySystem(system)) {
+    return <Navigate to={RUNTIME_ONLY_HOME} replace />;
+  }
+  return element;
 }
 
 export default function App() {
@@ -204,27 +225,27 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route element={<BootGate />}>
                   <Route element={routeElement("Application Shell", <AppShell />)}>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                    <Route path="/dashboard" element={routeElement("Dashboard", <Dashboard />)} />
-                    <Route path="/tasks" element={routeElement("Tasks", <TaskDashboard />)} />
-                    <Route path="/genesis" element={routeElement("Genesis", <Genesis />)} />
-                    <Route path="/masterplan" element={routeElement("MasterPlan", <MasterPlanDashboard />)} />
-                    <Route path="/analytics" element={routeElement("Analytics", <AnalyticsPanel />)} />
-                    <Route path="/kpi" element={routeElement("KPI Snapshot", <KPIDashboard />)} />
-                    <Route path="/search/research" element={routeElement("Research", <ResearchEngine />)} />
-                    <Route path="/search/leadgen" element={routeElement("Lead Generation", <LeadGen />)} />
-                    <Route path="/social" element={routeElement("Social Feed", <Feed />)} />
-                    <Route path="/freelance" element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />
-                    <Route path="/arm/analyze" element={routeElement("ARM Analyze", <ARMAnalyze />)} />
-                    <Route path="/arm/config" element={routeElement("ARM Config", <ARMConfig />)} />
-                    <Route path="/arm/config/suggest" element={routeElement("ARM Suggest", <ARMConfigSuggest />)} />
-                    <Route path="/arm/config/generate" element={routeElement("ARM Generate", <ARMGenerate />)} />
-                    <Route path="/arm/config/logs" element={routeElement("ARM Logs", <ARMLogs />)} />
-                    <Route path="/arm/config/metrics" element={routeElement("ARM Metrics", <ARMMetrics />)} />
+                    <Route path="/" element={<RuntimeAwareHomeRedirect />} />
+                    <Route path="/dashboard" element={<AppProfileRoute element={routeElement("Dashboard", <Dashboard />)} />} />
+                    <Route path="/tasks" element={<AppProfileRoute element={routeElement("Tasks", <TaskDashboard />)} />} />
+                    <Route path="/genesis" element={<AppProfileRoute element={routeElement("Genesis", <Genesis />)} />} />
+                    <Route path="/masterplan" element={<AppProfileRoute element={routeElement("MasterPlan", <MasterPlanDashboard />)} />} />
+                    <Route path="/analytics" element={<AppProfileRoute element={routeElement("Analytics", <AnalyticsPanel />)} />} />
+                    <Route path="/kpi" element={<AppProfileRoute element={routeElement("KPI Snapshot", <KPIDashboard />)} />} />
+                    <Route path="/search/research" element={<AppProfileRoute element={routeElement("Research", <ResearchEngine />)} />} />
+                    <Route path="/search/leadgen" element={<AppProfileRoute element={routeElement("Lead Generation", <LeadGen />)} />} />
+                    <Route path="/social" element={<AppProfileRoute element={routeElement("Social Feed", <Feed />)} />} />
+                    <Route path="/freelance" element={<AppProfileRoute element={routeElement("Freelance Dashboard", <FreelanceDashboard />)} />} />
+                    <Route path="/arm/analyze" element={<AppProfileRoute element={routeElement("ARM Analyze", <ARMAnalyze />)} />} />
+                    <Route path="/arm/config" element={<AppProfileRoute element={routeElement("ARM Config", <ARMConfig />)} />} />
+                    <Route path="/arm/config/suggest" element={<AppProfileRoute element={routeElement("ARM Suggest", <ARMConfigSuggest />)} />} />
+                    <Route path="/arm/config/generate" element={<AppProfileRoute element={routeElement("ARM Generate", <ARMGenerate />)} />} />
+                    <Route path="/arm/config/logs" element={<AppProfileRoute element={routeElement("ARM Logs", <ARMLogs />)} />} />
+                    <Route path="/arm/config/metrics" element={<AppProfileRoute element={routeElement("ARM Metrics", <ARMMetrics />)} />} />
                     <Route path="/memory" element={routeElement("Memory", <MemoryBrowser />)} />
                     <Route path="/identity" element={routeElement("Identity", <IdentityDashboard />)} />
                     <Route path="/platform/*" element={<PlatformRedirect />} />
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="*" element={<RuntimeAwareHomeRedirect />} />
                   </Route>
                 </Route>
               </Route>

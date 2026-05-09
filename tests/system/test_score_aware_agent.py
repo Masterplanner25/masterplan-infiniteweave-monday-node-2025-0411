@@ -26,6 +26,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from starlette.requests import Request
 
+pytestmark = pytest.mark.app_profile
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 1 — WatcherSignal model

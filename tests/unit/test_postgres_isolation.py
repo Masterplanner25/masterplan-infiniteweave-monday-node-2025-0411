@@ -15,9 +15,11 @@ from AINDY.db.models.execution_unit import ExecutionUnit
 from AINDY.db.models.user import User
 from AINDY.kernel.syscall_dispatcher import SyscallContext, SyscallDispatcher, SyscallEntry
 from AINDY.db.models import AgentRun
+from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
 
 
 pytestmark = [
+    pytest.mark.app_profile,
     pytest.mark.postgres,
     pytest.mark.skipif(
         not os.getenv("DATABASE_URL", "").startswith("postgresql"),
@@ -27,11 +29,8 @@ pytestmark = [
 
 
 def _build_session_factory():
-    import AINDY.db.model_registry  # noqa: F401
-    import AINDY.memory.memory_persistence  # noqa: F401
-    import apps.bootstrap
-
-    apps.bootstrap.bootstrap_models()
+    import_runtime_model_registry()
+    bootstrap_app_models(required=True)
 
     engine = create_engine(os.environ["DATABASE_URL"])
     with engine.begin() as connection:

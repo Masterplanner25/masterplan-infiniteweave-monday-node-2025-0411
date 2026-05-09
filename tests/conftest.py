@@ -147,7 +147,9 @@ def clear_global_app_dependency_overrides():
     """Prevent override leakage across tests that import the global FastAPI app.
 
     Many tests use ``from AINDY.main import app`` directly instead of the shared
-    ``app`` fixture in ``tests/fixtures/client.py``. Those tests can leave
+    ``app`` fixture in ``tests/fixtures/client.py``. That fixture is the
+    app-profile fixture; runtime-only tests should use ``runtime_only_app``.
+    Tests that import the global app directly can leave
     ``app.dependency_overrides`` populated when they fail early or omit cleanup,
     which makes later authenticated tests resolve the wrong dependencies.
 

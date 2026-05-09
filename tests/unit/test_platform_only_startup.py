@@ -70,6 +70,7 @@ _REGISTRY_STATE_EMPTY = {
     "_degraded_domains": [],
     "_health_checks": {},
     "_active_plugin_profile": None,
+    "_active_plugin_profile_source": None,
     "_runtime_agent_defaults_loaded": False,
 }
 
@@ -101,7 +102,7 @@ def platform_only_runtime(monkeypatch):
         for name in _REGISTRY_STATE_EMPTY
     }
     try:
-        monkeypatch.setenv("AINDY_BOOT_PROFILE", "platform-only")
+        monkeypatch.setenv("AINDY_BOOT_MODE", "runtime-only")
         TOOL_REGISTRY.clear()
         _SUGGESTION_PROVIDERS.clear()
         for name, value in _REGISTRY_STATE_EMPTY.items():
@@ -109,7 +110,9 @@ def platform_only_runtime(monkeypatch):
         reset_runtime_state()
         yield
     finally:
+        monkeypatch.delenv("AINDY_BOOT_MODE", raising=False)
         monkeypatch.delenv("AINDY_BOOT_PROFILE", raising=False)
+        monkeypatch.delenv("AINDY_PLUGIN_PROFILE", raising=False)
         TOOL_REGISTRY.clear()
         TOOL_REGISTRY.update(tool_registry_snapshot)
         _SUGGESTION_PROVIDERS.clear()
@@ -177,7 +180,9 @@ def test_platform_only_lifespan_reaches_runtime_startup(platform_only_runtime, m
         asyncio.run(main.lifespan(main.app).__aenter__())
 
     runtime_state = get_api_runtime_state()
+    assert runtime_state["boot_mode"] == "runtime-only"
     assert runtime_state["boot_profile"] == "platform-only"
+    assert runtime_state["boot_profile_source"] == "AINDY_BOOT_MODE"
     assert runtime_state["app_plugins_loaded"] is False
     assert runtime_state["app_plugin_count"] == 0
 
@@ -260,7 +265,10 @@ def test_platform_only_app_owned_capabilities_fail_predictably(platform_only_run
 def test_runtime_only_deployment_contract_is_explicit():
     contract = runtime_only_deployment_contract()
 
+    assert contract["boot_mode"] == "runtime-only"
     assert contract["boot_profile"] == "platform-only"
+    assert contract["activation"]["preferred"] == "AINDY_BOOT_MODE=runtime-only"
+    assert contract["activation"]["entrypoint"] == "uvicorn AINDY.runtime_only:app"
     assert contract["health_and_readiness"] == {
         "liveness_route": "/health",
         "readiness_route": "/ready",
@@ -290,6 +298,7 @@ def test_startup_fails_when_default_profile_plugin_is_missing(platform_only_runt
     )
 
     with monkeypatch.context() as scoped:
+        scoped.delenv("AINDY_BOOT_MODE", raising=False)
         scoped.delenv("AINDY_BOOT_PROFILE", raising=False)
         scoped.delenv("AINDY_PLUGIN_PROFILE", raising=False)
         scoped.setattr(registry, "_default_manifest_path", lambda: manifest)

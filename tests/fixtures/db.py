@@ -15,6 +15,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 from pgvector.sqlalchemy import Vector
 
+from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+
 
 @compiles(PG_UUID, "sqlite")
 def _compile_uuid_sqlite(type_, compiler, **kw):
@@ -37,11 +39,8 @@ def _compile_vector_sqlite(type_, compiler, **kw):
 
 
 def _import_model_registry():
-    import AINDY.db.model_registry  # noqa: F401
-    import apps.bootstrap
-    import AINDY.memory.memory_persistence  # noqa: F401
-
-    apps.bootstrap.bootstrap_models()
+    import_runtime_model_registry()
+    bootstrap_app_models(required=False)
 
 
 @pytest.fixture(scope="session", autouse=True)

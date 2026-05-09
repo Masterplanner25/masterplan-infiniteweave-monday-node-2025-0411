@@ -5,6 +5,16 @@ export interface ApiVersionInfo {
   min_client_version: string;
   breaking_change_policy: string;
   changelog_url?: string | null;
+  runtime?: {
+    boot_mode: string;
+    boot_profile: string;
+    boot_profile_source: string;
+    app_plugins_loaded: boolean;
+    app_plugin_count: number;
+    ui_mode: string;
+    default_route: string;
+    platform_home: string;
+  };
 }
 
 export type VersionCompatibility =

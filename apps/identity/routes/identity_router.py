@@ -19,6 +19,7 @@ from apps.identity.services.identity_service import IdentityService
 from AINDY.core.system_event_service import (
     SystemEventEmissionError,
 )
+from AINDY.platform_layer.deployment_contract import runtime_ui_surface_state
 from AINDY.platform_layer.user_ids import require_user_id
 
 router = APIRouter(prefix="/identity", tags=["Identity Layer"])
@@ -69,6 +70,7 @@ async def boot_identity(
 
     def handler(ctx):
         result = boot_identity_context(user_id, db)
+        result["runtime"] = runtime_ui_surface_state()
 
         try:
             queue_system_event(

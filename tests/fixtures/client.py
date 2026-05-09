@@ -7,6 +7,12 @@ from collections import defaultdict
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.helpers.bootstrap import (
+    clear_boot_profile_env,
+    reset_app_bootstrap_state,
+    set_runtime_only_boot_mode,
+)
+
 
 def _patch_session_aliases(monkeypatch, session_factory, engine):
     import AINDY.db.database as db_database
@@ -101,6 +107,7 @@ _EMPTY_REGISTRY_STATE = {
     "_degraded_domains": [],
     "_health_checks": {},
     "_active_plugin_profile": None,
+    "_active_plugin_profile_source": None,
     "_runtime_agent_defaults_loaded": False,
 }
 
@@ -120,19 +127,21 @@ def _copy_registry_value(value):
     return value
 
 
-def _fresh_main_app():
+def _fresh_main_app(*, runtime_only: bool, require_apps: bool):
     from AINDY.agents.tool_registry import TOOL_REGISTRY
     from AINDY.platform_layer import registry
     from AINDY.platform_layer.deployment_contract import reset_runtime_state
-    import apps.bootstrap as apps_bootstrap
     import AINDY.main as main_module
     import AINDY.startup as startup_module
 
     TOOL_REGISTRY.clear()
     for name, value in _EMPTY_REGISTRY_STATE.items():
         setattr(registry, name, _copy_registry_value(value))
-    apps_bootstrap._BOOTSTRAPPED = False
-    apps_bootstrap._DEGRADED_DOMAINS = []
+    if runtime_only:
+        set_runtime_only_boot_mode()
+    else:
+        clear_boot_profile_env()
+        reset_app_bootstrap_state(required=require_apps)
     reset_runtime_state()
     registry.load_plugins()
 
@@ -142,10 +151,10 @@ def _fresh_main_app():
 
 
 @pytest.fixture
-def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
+def app_profile_app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
     from AINDY.db.database import get_db
 
-    fastapi_app = _fresh_main_app()
+    fastapi_app = _fresh_main_app(runtime_only=False, require_apps=True)
 
     session_factory = (
         db_session_factory
@@ -164,9 +173,47 @@ def app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
     fastapi_app.dependency_overrides[get_db] = _get_test_db
     yield fastapi_app
     fastapi_app.dependency_overrides.clear()
+    clear_boot_profile_env()
 
 
 @pytest.fixture
-def client(app):
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+def app(app_profile_app):
+    yield app_profile_app
+
+
+@pytest.fixture
+def runtime_only_app(db_session_factory, testing_session_factory, test_engine, monkeypatch):
+    from AINDY.db.database import get_db
+
+    fastapi_app = _fresh_main_app(runtime_only=True, require_apps=False)
+
+    session_factory = (
+        db_session_factory
+        if test_engine.dialect.name == "postgresql"
+        else testing_session_factory
+    )
+    _patch_session_aliases(monkeypatch, session_factory, test_engine)
+
+    def _get_test_db():
+        db = db_session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    fastapi_app.dependency_overrides[get_db] = _get_test_db
+    yield fastapi_app
+    fastapi_app.dependency_overrides.clear()
+    clear_boot_profile_env()
+
+
+@pytest.fixture
+def client(app_profile_app):
+    with TestClient(app_profile_app, raise_server_exceptions=False) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def runtime_only_client(runtime_only_app):
+    with TestClient(runtime_only_app, raise_server_exceptions=False) as test_client:
         yield test_client

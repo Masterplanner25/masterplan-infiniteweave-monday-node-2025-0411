@@ -12,9 +12,12 @@ from AINDY.platform_layer import registry
 def _reset_plugin_registry_state(monkeypatch):
     registry._loaded_plugins.clear()
     registry._active_plugin_profile = None
+    registry._active_plugin_profile_source = None
     yield
     registry._loaded_plugins.clear()
     registry._active_plugin_profile = None
+    registry._active_plugin_profile_source = None
+    monkeypatch.delenv("AINDY_BOOT_MODE", raising=False)
     monkeypatch.delenv("AINDY_BOOT_PROFILE", raising=False)
     monkeypatch.delenv("AINDY_PLUGIN_PROFILE", raising=False)
 
@@ -84,6 +87,76 @@ def test_load_plugins_can_select_platform_only_via_env(tmp_path, monkeypatch):
 
     assert loaded == []
     assert boot_order == []
+
+
+def test_load_plugins_can_select_runtime_only_via_boot_mode(tmp_path, monkeypatch):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["apps.bootstrap"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AINDY_BOOT_MODE", "runtime-only")
+
+    profile_name, plugins = registry.resolve_plugin_profile(manifest)
+    loaded = registry.load_plugins(manifest)
+    boot_order = registry.get_plugin_boot_order(manifest)
+
+    assert profile_name == "platform-only"
+    assert plugins == []
+    assert loaded == []
+    assert boot_order == []
+    assert registry.get_active_plugin_profile_source() == "AINDY_BOOT_MODE"
+
+
+def test_explicit_boot_profile_overrides_runtime_only_boot_mode(tmp_path, monkeypatch):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["apps.bootstrap"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AINDY_BOOT_MODE", "runtime-only")
+    monkeypatch.setenv("AINDY_BOOT_PROFILE", "default-apps")
+
+    profile_name, plugins = registry.resolve_plugin_profile(manifest)
+
+    assert profile_name == "default-apps"
+    assert plugins == ["apps.bootstrap"]
+
+
+def test_invalid_boot_mode_is_rejected(tmp_path, monkeypatch):
+    manifest = tmp_path / "aindy_plugins.json"
+    manifest.write_text(
+        """
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {"plugins": []},
+    "default-apps": {"plugins": ["apps.bootstrap"]}
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AINDY_BOOT_MODE", "surprise-mode")
+
+    with pytest.raises(ValueError, match="AINDY_BOOT_MODE"):
+        registry.resolve_plugin_profile(manifest)
 
 
 def test_default_profile_with_zero_plugins_fails_unless_explicitly_selected(tmp_path):

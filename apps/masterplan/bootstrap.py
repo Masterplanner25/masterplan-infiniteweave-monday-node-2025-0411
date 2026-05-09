@@ -7,8 +7,12 @@ from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_DEPENDS_ON: list[str] = ["automation", "identity", "tasks"]
-APP_DEPENDS_ON: list[str] = ["automation", "identity", "tasks"]
+# Masterplan's remaining cross-domain integrations are call-time only:
+# task and automation interactions route through owner syscalls, while
+# identity observation/prompt context stays behind deferred public helpers.
+# That means masterplan does not need hard startup ordering edges to other apps.
+BOOTSTRAP_DEPENDS_ON: list[str] = []
+APP_DEPENDS_ON: list[str] = ["identity"]
 
 
 def register() -> None:

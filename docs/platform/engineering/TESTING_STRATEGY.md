@@ -23,6 +23,10 @@ This section describes the currently validated test baseline. Older sprint-by-sp
   - `client`
   - `test_user`
   - `auth_headers`
+- Fixture profile split:
+  - `client` / `app` are app-profile fixtures and may load `apps.bootstrap`
+  - `runtime_only_client` / `runtime_only_app` are runtime-only fixtures and must not require `apps.bootstrap`
+  - shared DB setup imports runtime-owned models by default and bootstraps app models only when the `apps/` tree is present
 - Async heavy execution is off by default in tests and is enabled only per-test when the `202` queueing contract is under test.
 - Test env defaults are injected in `tests/conftest.py`, including:
   - `SECRET_KEY`

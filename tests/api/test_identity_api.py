@@ -229,6 +229,9 @@ def test_identity_boot_returns_full_scoped_state_and_emits_event(
     assert [flow["flow_name"] for flow in data["flows"]] == ["Identity Flow"]
     assert data["metrics"]["master_score"] == 88.0
     assert data["metrics"]["metadata"]["confidence"] == "high"
+    assert data["runtime"]["boot_mode"] in {"app-profile", "runtime-only"}
+    assert data["runtime"]["default_route"] in {"/dashboard", "/memory"}
+    assert data["runtime"]["platform_home"] == "/platform/agent"
 
     event = (
         db_session.query(SystemEvent)

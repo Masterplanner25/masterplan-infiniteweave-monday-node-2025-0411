@@ -206,7 +206,7 @@ const RunOutcomeFeedback = ({ runId }) => {
 
 };
 
-const PlanPreview = ({ run, steps, loading }) => {
+const PlanPreview = ({ run, steps, loading, runtimeOnly = false }) => {
   if (!run) return null;
   const planSteps = run.plan?.steps || [];
 
@@ -261,7 +261,7 @@ const PlanPreview = ({ run, steps, loading }) => {
           </div>
         }
 
-        {(run.status === "completed" || run.status === "failed") &&
+        {!runtimeOnly && (run.status === "completed" || run.status === "failed") &&
         <RunOutcomeFeedback runId={run.run_id} />
         }
       </div>
@@ -455,6 +455,7 @@ export default function AgentConsole() {
   const { isAdmin } = useAuth();
   if (!isAdmin) return <AdminAccessRequired />;
   const { system } = useSystem();
+  const runtimeOnly = system?.runtime?.boot_mode === "runtime-only";
   const [goal, setGoal] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [runs, setRuns] = useState(system?.runs || []);
@@ -605,7 +606,9 @@ export default function AgentConsole() {
       <div className="mb-6">
         <h2 className="text-xl font-black text-zinc-100 tracking-tight">Agent Console</h2>
         <p className="text-xs text-zinc-500 mt-1">
-          Type a goal. A.I.N.D.Y. generates a plan and executes it with your approval.
+          {runtimeOnly ?
+          "Runtime-only mode. The baseline agent stays available with memory tools and approval controls." :
+          "Type a goal. A.I.N.D.Y. generates a plan and executes it with your approval."}
         </p>
       </div>
 
@@ -773,7 +776,8 @@ export default function AgentConsole() {
             <PlanPreview
               run={selectedRun}
               steps={selectedSteps}
-              loading={stepsLoading} />
+              loading={stepsLoading}
+              runtimeOnly={runtimeOnly} />
                 </InlineErrorBoundary>
 
             }

@@ -32,8 +32,10 @@ Rules:
 
 - `default-apps` preserves the existing modular-monolith startup path.
 - `platform-only` is the explicit no-app boot profile.
+- `AINDY_BOOT_MODE=runtime-only` is the first-class runtime-only selector and resolves to `platform-only`.
 - `AINDY_BOOT_PROFILE` selects a named profile at runtime.
 - `AINDY_PLUGIN_PROFILE` is accepted as a backward-compatible alias.
+- Precedence is: explicit profile argument, `AINDY_BOOT_PROFILE`, `AINDY_PLUGIN_PROFILE`, `AINDY_BOOT_MODE`, then manifest `default_profile`.
 - Legacy manifests using `{"plugins": [...]}` are still supported.
 - Empty plugin lists are only accepted when the zero-plugin profile is explicitly selected.
 - If a non-empty selected profile references a missing or broken plugin module, startup fails immediately with the profile name and module name in the error.
@@ -45,6 +47,7 @@ Ownership boundary:
 
 Platform-only behavior:
 
+- Operators can boot this mode intentionally with `uvicorn AINDY.runtime_only:app` or `AINDY_BOOT_MODE=runtime-only`.
 - `create_app()` still mounts runtime-owned routes such as `/health`, `/ready`, `/platform/*`, and runtime primitives under `/apps/*`.
 - App-domain routers from `apps/*` are absent because no app plugins are loaded.
 - Runtime startup still initializes platform flow definitions and registry-owned surfaces.
@@ -63,7 +66,7 @@ authoritative contract.
 
 Failure semantics:
 
-- `platform-only` is an intentional no-app boot path. Use it when the runtime should start without loading app plugins.
+- `runtime-only` is the supported operator-facing boot mode and maps to the `platform-only` profile.
 - `default-apps` and any other non-empty profile are strict at the requested plugin-module boundary. Missing `apps.bootstrap`, import errors inside a requested plugin module, and bootstrap exceptions are startup failures.
 - Inside `apps.bootstrap`, only apps marked core abort the startup. Peripheral apps such as `agent` may degrade if their own bootstrap fails.
-- If an operator intended a no-app runtime but forgot to select `platform-only`, the startup error now tells them to choose an explicit zero-plugin profile instead of silently continuing.
+- If an operator intended a no-app runtime but forgot to select `runtime-only`, the startup error now tells them to choose an explicit zero-plugin path instead of silently continuing.

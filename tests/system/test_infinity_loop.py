@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from AINDY.services.auth_service import create_access_token
 
+pytestmark = pytest.mark.app_profile
+
 TEST_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 

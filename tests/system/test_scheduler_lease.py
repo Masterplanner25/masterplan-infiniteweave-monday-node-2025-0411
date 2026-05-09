@@ -13,6 +13,11 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
+from tests.helpers.bootstrap import reset_app_bootstrap_state
+
+
+pytestmark = pytest.mark.app_profile
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Group 1 — start_background_tasks return value
@@ -129,6 +134,7 @@ class TestRefreshLeaseHeartbeatJob:
     def test_delegates_to_task_services_heartbeat(self):
         import apps.bootstrap
         with patch("apps.tasks.services.task_service._heartbeat_lease_job") as mock_hb:
+            reset_app_bootstrap_state(required=True)
             apps.bootstrap.bootstrap()
             from AINDY.platform_layer.registry import get_scheduled_jobs
             job = next(job for job in get_scheduled_jobs() if job["id"] == "background_lease_heartbeat")
@@ -137,18 +143,15 @@ class TestRefreshLeaseHeartbeatJob:
 
     def test_does_not_raise_if_import_fails(self):
         import apps.bootstrap
-        import builtins
-        real_import = builtins.__import__
+        reset_app_bootstrap_state(required=True)
+        apps.bootstrap.bootstrap()
 
-        def patched_import(name, *args, **kwargs):
-            if name == "apps.tasks.services.task_service":
-                raise ImportError("simulated")
-            return real_import(name, *args, **kwargs)
+        from AINDY.platform_layer.registry import get_scheduled_jobs
+        import apps.tasks.services.task_service as task_services
 
-        with patch("builtins.__import__", side_effect=patched_import):
-            apps.bootstrap.bootstrap()
-            from AINDY.platform_layer.registry import get_scheduled_jobs
-            job = next(job for job in get_scheduled_jobs() if job["id"] == "background_lease_heartbeat")
+        job = next(job for job in get_scheduled_jobs() if job["id"] == "background_lease_heartbeat")
+
+        with patch.object(task_services, "_refresh_background_lease", side_effect=ImportError("simulated")):
             job["handler"]()
 
     def test_heartbeat_job_registered_in_system_jobs(self):
@@ -156,6 +159,7 @@ class TestRefreshLeaseHeartbeatJob:
         import apps.bootstrap
         from AINDY.platform_layer import scheduler_service
         mock_scheduler = MagicMock()
+        reset_app_bootstrap_state(required=True)
         apps.bootstrap.bootstrap()
         scheduler_service._register_system_jobs(mock_scheduler)
         job_ids = [call_args.kwargs.get("id") or call_args[1][1] if len(call_args[1]) > 1 else None

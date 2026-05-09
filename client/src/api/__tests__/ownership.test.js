@@ -49,11 +49,11 @@ describe("client API ownership boundaries", () => {
 
   it("routes platform UI APIs through the platform module", () => {
     platformApi.getDashboardOverview();
-    platformApi.getDashboardHealth();
+    platformApi.getHealthDetails();
     platformApi.getNarrative("drop-1");
 
     expect(authRequest).toHaveBeenNthCalledWith(1, "/dashboard/overview", { method: "GET" });
-    expect(authRequest).toHaveBeenNthCalledWith(2, "/dashboard/health", { method: "GET" });
+    expect(authRequest).toHaveBeenNthCalledWith(2, "/health/details", { method: "GET" });
     expect(authRequest).toHaveBeenNthCalledWith(3, "/narrative/drop-1", { method: "GET" });
   });
 

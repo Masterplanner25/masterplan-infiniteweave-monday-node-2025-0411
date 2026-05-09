@@ -108,9 +108,9 @@ Entry points:
 - `get_task_graph_context_via_syscall()`
 
 Key dependencies:
-- `apps.identity.services.identity_boot_service`
-- `apps.social.services.social_performance_service`
-- `apps.automation.models`
+- `apps.identity.public`
+- `sys.v1.social.get_performance_signals`
+- `sys.v1.automation.*`
 - `AINDY.memory.memory_scoring_service`
 - `AINDY.platform_layer.system_state_service`
 - `AINDY.kernel.syscall_dispatcher`
@@ -118,6 +118,11 @@ Key dependencies:
 Safe to modify in isolation:
 - Translation logic between analytics and external domains
 - Syscall payload/response shaping
+
+Boot-time note:
+- `apps.analytics.bootstrap` declares no cross-app `BOOTSTRAP_DEPENDS_ON`
+  edges. Analytics cross-domain reads are call-time only and must stay behind
+  deferred helpers, jobs, or owner syscalls rather than startup ordering.
 
 ## Execution Flow
 Main KPI and loop path:

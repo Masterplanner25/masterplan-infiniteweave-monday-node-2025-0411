@@ -4,8 +4,8 @@ import logging
 
 import pytest
 
-import apps.bootstrap as apps_bootstrap
 from AINDY.platform_layer import registry
+from tests.helpers.bootstrap import reset_app_bootstrap_state
 
 
 def _valid_agent_tool(fn):
@@ -320,6 +320,7 @@ def test_flow_registration_is_idempotent_for_same_callable():
 
 
 def test_startup_fails_fast_on_invalid_bootstrap(monkeypatch, caplog):
+    apps_bootstrap = pytest.importorskip("apps.bootstrap")
     caplog.set_level(logging.ERROR)
     monkeypatch.setattr(apps_bootstrap, "_BOOTSTRAPPED", False)
     monkeypatch.setattr(apps_bootstrap, "_DEGRADED_DOMAINS", [])
@@ -338,5 +339,4 @@ def test_startup_fails_fast_on_invalid_bootstrap(monkeypatch, caplog):
     assert "tasks.background.start" in str(exc_info.value)
     assert "tasks" in caplog.text
 
-    monkeypatch.setattr(apps_bootstrap, "_BOOTSTRAPPED", False)
-    monkeypatch.setattr(apps_bootstrap, "_DEGRADED_DOMAINS", [])
+    reset_app_bootstrap_state(required=True)

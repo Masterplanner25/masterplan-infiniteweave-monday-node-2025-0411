@@ -154,7 +154,10 @@ The runtime-owned agent layer now exposes a generic baseline on its own:
 generic planner context, runtime memory tools, default trigger evaluation, and
 empty suggestion/completion enrichment unless app plugins register providers.
 Analytics-aware suggestions, KPI-enriched planning, and Infinity post-run
-behavior remain optional plugin-owned extensions.
+behavior remain optional plugin-owned extensions. One current refactor target
+remains: domain-agnostic memory-context planning and duplicated KPI suggestion
+heuristics should be separated more cleanly from analytics-owned enrichment
+without moving analytics policy into the runtime core.
 Remaining deferred imports between apps
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 

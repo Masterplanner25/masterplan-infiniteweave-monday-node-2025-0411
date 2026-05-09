@@ -46,8 +46,8 @@ APP_BOOTSTRAP_MODULES: dict[str, str] = {
 
 BOOTSTRAP_DEPENDS_ON_FALLBACKS: dict[str, list[str]] = {
     "tasks": [],
-    "analytics": ["identity", "tasks"],
-    "masterplan": ["automation", "identity", "tasks"],
+    "analytics": [],
+    "masterplan": [],
     "automation": [],
     "arm": ["analytics"],
     "search": ["analytics"],

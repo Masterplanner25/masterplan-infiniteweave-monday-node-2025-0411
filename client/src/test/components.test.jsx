@@ -6,6 +6,7 @@ import { LoadingPanel } from "../components/shared/LoadingPanel";
 import AppShell from "../components/shared/AppShell";
 import Sidebar from "../components/shared/Sidebar";
 import { Toast } from "../components/shared/Toast";
+import { SystemProvider } from "../context/SystemContext";
 
 vi.mock("../context/AuthContext", async (importOriginal) => {
   const actual = await importOriginal();
@@ -416,13 +417,15 @@ describe("Sidebar", () => {
 describe("AppShell", () => {
   it("renders without error", () => {
     const { container } = render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<div>Dashboard content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
+      <SystemProvider>
+        <MemoryRouter initialEntries={["/dashboard"]}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/dashboard" element={<div>Dashboard content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </SystemProvider>,
     );
 
     expect(container.firstChild).not.toBeNull();
@@ -430,13 +433,15 @@ describe("AppShell", () => {
 
   it("renders the sidebar within the shell", () => {
     render(
-      <MemoryRouter initialEntries={["/dashboard"]}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<div>Dashboard content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>,
+      <SystemProvider>
+        <MemoryRouter initialEntries={["/dashboard"]}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/dashboard" element={<div>Dashboard content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </SystemProvider>,
     );
 
     expect(screen.getByRole("navigation")).toBeInTheDocument();
