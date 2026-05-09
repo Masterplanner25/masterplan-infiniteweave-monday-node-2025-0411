@@ -4,6 +4,7 @@ import inspect
 import os
 import uuid
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -13,16 +14,19 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-with-required-length-123456
 
 from AINDY.db.database import Base
 from AINDY.db.models.user import User
-from apps.tasks import public as tasks_public
-from apps.tasks.models import Task
+from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+
+
+pytestmark = pytest.mark.app_profile
+
+tasks_public = pytest.importorskip("apps.tasks.public")
+tasks_models = pytest.importorskip("apps.tasks.models")
+Task = tasks_models.Task
 
 
 def _build_session():
-    import AINDY.db.model_registry  # noqa: F401
-    import AINDY.memory.memory_persistence  # noqa: F401
-    import apps.bootstrap
-
-    apps.bootstrap.bootstrap_models()
+    import_runtime_model_registry()
+    bootstrap_app_models(required=True)
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)

@@ -1,76 +1,73 @@
 import React, { useEffect, useState } from "react";
-import { getDashboardHealth } from "../../api/platform.js";import { safeMap } from "../../utils/safe";
+
+import { getHealthDetails } from "../../api/platform.js";
 import { useAuth } from "../../context/AuthContext";
 import { AdminAccessRequired } from "../shared/AdminApiErrorBoundary";
 
 export default function HealthDashboard() {
   const { isAdmin } = useAuth();
-  if (!isAdmin) return <AdminAccessRequired />;
-  const [logs, setLogs] = useState([]);
+  const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchLogs = async () => {
+    const fetchHealth = async () => {
       try {
-        const json = await getDashboardHealth();
-        setLogs(json.logs || []);
-      } catch (err) {
-        setError("Failed to load health logs");
+        const payload = await getHealthDetails();
+        setHealth(payload);
+      } catch {
+        setError("Failed to load runtime health");
       } finally {
         setLoading(false);
       }
     };
-    fetchLogs();
+
+    fetchHealth();
   }, []);
 
+  if (!isAdmin) return <AdminAccessRequired />;
   if (loading) return <p>Loading health dashboard...</p>;
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
-  const uptime =
-  logs.filter((l) => l.status === "healthy").length / (logs.length || 1) * 100;
+  const platformChecks = Object.entries(health?.platform || {});
+  const degradedDomains = health?.degraded_domains || [];
 
   return (
     <div style={{ padding: "1.5rem" }}>
-      <h2 style={{ color: "#6cf" }}>🩺 A.I.N.D.Y. System Health</h2>
-      <p>Uptime: {uptime.toFixed(1)}%</p>
+      <h2 style={{ color: "#6cf" }}>A.I.N.D.Y. Runtime Health</h2>
+      <p>Status: {health?.status || "unknown"}</p>
+      <p>Build: {health?.version || "unknown"}</p>
+      <p>Degraded Domains: {degradedDomains.length ? degradedDomains.join(", ") : "none"}</p>
 
-      <table
-        style={{
-          width: "100%",
-          marginTop: "1rem",
-          borderCollapse: "collapse",
-          fontSize: "0.9rem"
-        }}>
-        
-        <thead>
-          <tr style={{ background: "#111", color: "#6cf" }}>
-            <th style={{ padding: "0.5rem", textAlign: "left" }}>Timestamp</th>
-            <th>Status</th>
-            <th>Avg Latency (ms)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {safeMap(logs, (log, i) =>
-          <tr key={i} style={{ borderBottom: "1px solid #333" }}>
-              <td>{new Date(log.timestamp).toLocaleString()}</td>
-              <td
+      <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem" }}>
+        {platformChecks.map(([name, status]) => (
+          <div
+            key={name}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "0.75rem 1rem",
+              border: "1px solid #333",
+              borderRadius: "0.75rem",
+              background: "#111",
+            }}
+          >
+            <span style={{ textTransform: "capitalize" }}>{name.replace(/_/g, " ")}</span>
+            <span
               style={{
                 color:
-                log.status === "healthy" ?
-                "#4caf50" :
-                log.status === "degraded" ?
-                "#ffb300" :
-                "#f44336"
-              }}>
-              
-                {log.status}
-              </td>
-              <td>{log.avg_latency_ms?.toFixed(2)}</td>
-            </tr>)
-          }
-        </tbody>
-      </table>
-    </div>);
-
+                  status === "ok"
+                    ? "#4caf50"
+                    : status === "degraded"
+                      ? "#ffb300"
+                      : "#f44336",
+              }}
+            >
+              {String(status)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

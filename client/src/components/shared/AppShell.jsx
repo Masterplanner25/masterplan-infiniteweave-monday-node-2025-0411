@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../../context/AuthContext";
+import { useSystem } from "../../context/SystemContext";
 
 const PLATFORM_BASE = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
 const platformUrl = (path) => `${PLATFORM_BASE}${path}`;
@@ -10,19 +11,21 @@ const NAV_GROUPS = [
   {
     title: "PLATFORM",
     adminOnly: true,
+    runtimeOnlySafe: true,
     links: [
       { to: "/agent", label: "Agent Console", external: true },
       { to: "/flows", label: "Flow Engine", external: true },
       { to: "/observability", label: "Observability", external: true },
       { to: "/health", label: "Health", external: true },
-      { to: "/executions", label: "Executions", external: true },
       { to: "/approvals", label: "Approvals", external: true },
       { to: "/registry", label: "Registry", external: true },
-      { to: "/trace", label: "Ripple Trace", external: true },
+      { to: "/executions", label: "Executions", external: true, runtimeOnlySafe: false },
+      { to: "/trace", label: "Ripple Trace", external: true, runtimeOnlySafe: false },
     ],
   },
   {
     title: "WORKSPACE",
+    runtimeOnlySafe: false,
     links: [
       { to: "/dashboard", label: "Dashboard" },
       { to: "/tasks", label: "Tasks" },
@@ -31,6 +34,7 @@ const NAV_GROUPS = [
   },
   {
     title: "ANALYTICS",
+    runtimeOnlySafe: false,
     links: [
       { to: "/analytics", label: "Analytics" },
       { to: "/kpi", label: "KPI Snapshot" },
@@ -38,6 +42,7 @@ const NAV_GROUPS = [
   },
   {
     title: "GROWTH",
+    runtimeOnlySafe: false,
     links: [
       { to: "/search/research", label: "Research" },
       { to: "/search/leadgen", label: "Lead Gen" },
@@ -47,6 +52,7 @@ const NAV_GROUPS = [
   },
   {
     title: "AI TOOLS",
+    runtimeOnlySafe: false,
     links: [
       { to: "/arm/analyze", label: "ARM Analyze" },
       { to: "/arm/config", label: "ARM Config" },
@@ -57,7 +63,8 @@ const NAV_GROUPS = [
     ],
   },
   {
-    title: "IDENTITY",
+    title: "RUNTIME",
+    runtimeOnlySafe: true,
     links: [
       { to: "/identity", label: "Identity" },
       { to: "/memory", label: "Memory" },
@@ -110,11 +117,21 @@ function ShellLink({ to, label, onNavigate, external = false }) {
 
 export default function AppShell() {
   const { isAdmin, logout, user } = useAuth();
+  const { system } = useSystem();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const runtimeOnly = system?.runtime?.boot_mode === "runtime-only";
 
   const visibleGroups = useMemo(
-    () => NAV_GROUPS.filter((group) => !group.adminOnly || isAdmin),
-    [isAdmin],
+    () =>
+      NAV_GROUPS
+        .filter((group) => !group.adminOnly || isAdmin)
+        .filter((group) => !runtimeOnly || group.runtimeOnlySafe !== false)
+        .map((group) => ({
+          ...group,
+          title: group.title === "RUNTIME" && !runtimeOnly ? "IDENTITY" : group.title,
+          links: group.links.filter((link) => !runtimeOnly || link.runtimeOnlySafe !== false),
+        })),
+    [isAdmin, runtimeOnly],
   );
 
   return (
@@ -136,8 +153,15 @@ export default function AppShell() {
                   A.I.N.D.Y.
                 </h1>
                 <p className="mt-2 text-sm text-zinc-500">
-                  Route the workspace, analytics, growth, and platform surfaces.
+                  {runtimeOnly
+                    ? "Runtime-only mode. Platform, memory, and identity surfaces are active."
+                    : "Route the workspace, analytics, growth, and platform surfaces."}
                 </p>
+                {runtimeOnly ? (
+                  <p className="mt-3 inline-flex rounded-full border border-[#00ffaa]/30 bg-[#00ffaa]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#00ffaa]">
+                    Runtime-Only
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -195,7 +219,9 @@ export default function AppShell() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-600">
                   Navigation Shell
                 </p>
-                <p className="text-sm text-zinc-300">Unified workspace routing</p>
+                <p className="text-sm text-zinc-300">
+                  {runtimeOnly ? "Intentional platform surface" : "Unified workspace routing"}
+                </p>
               </div>
             </div>
 

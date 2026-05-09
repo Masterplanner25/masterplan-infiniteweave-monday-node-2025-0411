@@ -8,7 +8,11 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_DEPENDS_ON: list[str] = ["identity", "tasks"]
+# Analytics reads identity, task, social, and masterplan state at call time
+# through public helpers, jobs, or owner syscalls. None of those contracts are
+# required during analytics.register(), so startup order does not need cross-app
+# edges here.
+BOOTSTRAP_DEPENDS_ON: list[str] = []
 APP_DEPENDS_ON: list[str] = ["arm", "identity"]
 
 

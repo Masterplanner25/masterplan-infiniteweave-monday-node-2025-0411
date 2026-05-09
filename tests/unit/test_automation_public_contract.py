@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import os
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -11,15 +12,17 @@ os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-with-required-length-1234567890")
 
 from AINDY.db.database import Base
-from apps.automation import public as automation_public
+from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+
+
+pytestmark = pytest.mark.app_profile
+
+automation_public = pytest.importorskip("apps.automation.public")
 
 
 def _build_session():
-    import AINDY.db.model_registry  # noqa: F401
-    import AINDY.memory.memory_persistence  # noqa: F401
-    import apps.bootstrap
-
-    apps.bootstrap.bootstrap_models()
+    import_runtime_model_registry()
+    bootstrap_app_models(required=True)
 
     engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)

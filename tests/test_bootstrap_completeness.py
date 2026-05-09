@@ -113,7 +113,7 @@ def test_automation_boot_order_has_no_cross_app_boot_edges(monkeypatch):
             "tasks": {"BOOTSTRAP_DEPENDS_ON": []},
             "identity": {"BOOTSTRAP_DEPENDS_ON": []},
             "agent": {"BOOTSTRAP_DEPENDS_ON": []},
-            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": []},
             "automation": {"BOOTSTRAP_DEPENDS_ON": []},
         },
     )
@@ -358,7 +358,7 @@ def test_social_bootstrap_failure_does_not_block_peripheral_analytics(monkeypatc
             "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "social": {"BOOTSTRAP_DEPENDS_ON": []},
-            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": []},
         },
     )
     monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "social", "analytics"])
@@ -405,7 +405,7 @@ def test_analytics_bootstrap_import_failure_is_degraded_and_health_reports_it(mo
             "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "agent": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
-            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"]},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": []},
         },
     )
     monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "agent", "analytics"])
@@ -489,7 +489,7 @@ def test_agent_bootstrap_failure_is_degraded_not_fatal(monkeypatch):
             "tasks": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "identity": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": True},
             "agent": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": False},
-            "analytics": {"BOOTSTRAP_DEPENDS_ON": ["identity", "tasks"], "IS_CORE_DOMAIN": False},
+            "analytics": {"BOOTSTRAP_DEPENDS_ON": [], "IS_CORE_DOMAIN": False},
         },
     )
     monkeypatch.setattr(bs, "get_resolved_boot_order", lambda: ["tasks", "identity", "agent", "analytics"])

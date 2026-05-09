@@ -18,6 +18,16 @@ const EMPTY_SYSTEM = {
   runs: [],
   metrics: null,
   flows: [],
+  runtime: {
+    boot_mode: "unknown",
+    boot_profile: "unknown",
+    boot_profile_source: "unknown",
+    app_plugins_loaded: false,
+    app_plugin_count: 0,
+    ui_mode: "app-profile",
+    default_route: "/dashboard",
+    platform_home: "/platform/agent",
+  },
   system_state: {
     memory_count: 0,
     active_runs: 0,
@@ -26,7 +36,7 @@ const EMPTY_SYSTEM = {
   },
 };
 
-export function SystemProvider({ children }) {
+export function SystemProvider({ children, skipBoot = false }) {
   const { token, logout } = useAuth();
   const [system, setSystem] = useState(EMPTY_SYSTEM);
   const [booting, setBooting] = useState(false);
@@ -58,6 +68,10 @@ export function SystemProvider({ children }) {
         runs: result?.runs || [],
         flows: result?.flows || [],
         metrics: result?.metrics || null,
+        runtime: {
+          ...EMPTY_SYSTEM.runtime,
+          ...(result?.runtime || {}),
+        },
         system_state: {
           ...EMPTY_SYSTEM.system_state,
           ...(result?.system_state || {}),
@@ -81,6 +95,16 @@ export function SystemProvider({ children }) {
   };
 
   useEffect(() => {
+    if (skipBoot) {
+      if (!token) {
+        clearSystem();
+        return;
+      }
+      setBooted(true);
+      setBootError("");
+      lastBootedTokenRef.current = token;
+      return;
+    }
     if (!token) {
       clearSystem();
       return;
@@ -89,7 +113,7 @@ export function SystemProvider({ children }) {
       return;
     }
     bootSystem(token).catch(() => {});
-  }, [token, booted]);
+  }, [token, booted, skipBoot]);
 
   const value = useMemo(
     () => ({

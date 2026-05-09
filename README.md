@@ -79,7 +79,7 @@ Reasonably supported today:
 - readiness checks that reflect required runtime expectations
 - dynamic registry restore and restart rehydration paths
 - degraded startup for explicitly peripheral domains after the app bootstrap plugin has loaded successfully
-- explicit no-app startup only through the `platform-only` boot profile
+- explicit runtime-only startup through `uvicorn AINDY.runtime_only:app` or `AINDY_BOOT_MODE=runtime-only`
 
 ### Transitional or constrained
 
@@ -94,7 +94,7 @@ Still transitional:
 For deployment guidance, use the deployment docs rather than inferring from old README text.
 
 Boot safety note:
-- `platform-only` is the intentional no-app runtime mode.
+- `runtime-only` is the supported no-app runtime mode and resolves to the `platform-only` boot profile.
 - The default app profile is strict: if `apps.bootstrap` or another requested plugin module is missing or broken, startup now fails instead of silently falling back to a partial runtime.
 - The exact supported no-app surface is defined in [docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md](docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md).
 
@@ -120,6 +120,13 @@ Backend:
 ```powershell
 alembic upgrade head
 uvicorn AINDY.main:app --reload
+```
+
+Runtime-only backend:
+
+```powershell
+alembic upgrade head
+uvicorn AINDY.runtime_only:app --reload
 ```
 
 Frontend:

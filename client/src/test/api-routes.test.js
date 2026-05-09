@@ -33,6 +33,7 @@ describe("API route registry", () => {
     expect(ROUTES.MASTERPLAN.PLAN_ANCHOR("plan-9")).toBe("/masterplans/plan-9/anchor");
     expect(ROUTES.RIPPLETRACE.CAUSAL_CHAIN("drop 1")).toBe("/rippletrace/causal/chain/drop%201");
     expect(ROUTES.PLATFORM.VERSION).toBe("/api/version");
+    expect(ROUTES.PLATFORM.HEALTH_DETAILS).toBe("/health/details");
   });
 
   it("imports every API module without error", async () => {

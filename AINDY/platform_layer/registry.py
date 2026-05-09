@@ -16,6 +16,11 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from AINDY.platform_layer.agent_plugin_contracts import CapabilityProviderBundle
+from AINDY.platform_layer.deployment_contract import (
+    BOOT_MODE_ENV_VAR,
+    get_requested_boot_mode,
+    resolve_profile_for_boot_mode,
+)
 from AINDY.platform_layer.registry_contracts import (
     validate_agent_event,
     validate_agent_planner_context,
@@ -98,6 +103,7 @@ _degraded_domains: list[str] = []
 _health_checks: dict[str, Callable[[], dict[str, Any]]] = {}
 _PLUGIN_PROFILE_ENV_VARS: tuple[str, ...] = ("AINDY_BOOT_PROFILE", "AINDY_PLUGIN_PROFILE")
 _active_plugin_profile: str | None = None
+_active_plugin_profile_source: str | None = None
 _runtime_agent_defaults_loaded = False
 
 
@@ -736,14 +742,17 @@ def _normalize_plugin_profile_plugins(plugins: Any, *, profile_name: str, path: 
     return normalized
 
 
-def _resolve_requested_plugin_profile(profile: str | None = None) -> str | None:
+def _resolve_requested_plugin_profile(profile: str | None = None) -> tuple[str | None, str | None]:
     if isinstance(profile, str) and profile.strip():
-        return profile.strip()
+        return profile.strip(), "argument"
     for env_name in _PLUGIN_PROFILE_ENV_VARS:
         value = os.getenv(env_name, "").strip()
         if value:
-            return value
-    return None
+            return value, env_name
+    boot_mode = get_requested_boot_mode()
+    if boot_mode:
+        return resolve_profile_for_boot_mode(boot_mode), BOOT_MODE_ENV_VAR
+    return None, None
 
 
 def _plugin_boot_failure(
@@ -757,7 +766,8 @@ def _plugin_boot_failure(
     return RuntimeError(
         f"Failed to boot plugin profile {profile_name!r} from {path}:{module_detail} {reason}. "
         "If you intend to start the runtime without app plugins, explicitly select "
-        "the zero-plugin profile (for example `AINDY_BOOT_PROFILE=platform-only`)."
+        f"the zero-plugin profile (for example `{BOOT_MODE_ENV_VAR}=runtime-only` "
+        "or `AINDY_BOOT_PROFILE=platform-only`)."
     )
 
 
@@ -765,19 +775,19 @@ def _resolve_plugin_profile_selection(
     manifest_path: str | Path | None = None,
     *,
     profile: str | None = None,
-) -> tuple[str, list[str], bool]:
+) -> tuple[str, list[str], bool, str]:
     path, data = _read_plugin_manifest(manifest_path)
     if data is None:
-        return "missing", [], False
+        return "missing", [], False, "missing-manifest"
 
-    requested_profile = _resolve_requested_plugin_profile(profile)
+    requested_profile, requested_profile_source = _resolve_requested_plugin_profile(profile)
     legacy_plugins = data.get("plugins")
     if isinstance(legacy_plugins, list):
         return "__legacy__", _normalize_plugin_profile_plugins(
             legacy_plugins,
             profile_name="__legacy__",
             path=path,
-        ), False
+        ), False, "legacy-manifest"
 
     profiles = data.get("profiles")
     if not isinstance(profiles, dict) or not profiles:
@@ -788,15 +798,19 @@ def _resolve_plugin_profile_selection(
     if requested_profile:
         selected_profile = requested_profile
         explicitly_selected = True
+        selection_source = requested_profile_source or "explicit"
     else:
         explicitly_selected = False
         default_profile = data.get("default_profile")
         if isinstance(default_profile, str) and default_profile.strip():
             selected_profile = default_profile.strip()
+            selection_source = "default_profile"
         elif "default-apps" in profiles:
             selected_profile = "default-apps"
+            selection_source = "implicit-default-apps"
         elif len(profiles) == 1:
             selected_profile = next(iter(profiles))
+            selection_source = "single-profile"
         else:
             raise ValueError(
                 f"Plugin manifest at {path} must declare 'default_profile' when multiple profiles exist"
@@ -817,7 +831,7 @@ def _resolve_plugin_profile_selection(
         profile_entry.get("plugins"),
         profile_name=selected_profile,
         path=path,
-    ), explicitly_selected
+    ), explicitly_selected, selection_source
 
 
 def resolve_plugin_profile(
@@ -825,7 +839,7 @@ def resolve_plugin_profile(
     *,
     profile: str | None = None,
 ) -> tuple[str, list[str]]:
-    selected_profile, plugins, _explicitly_selected = _resolve_plugin_profile_selection(
+    selected_profile, plugins, _explicitly_selected, _selection_source = _resolve_plugin_profile_selection(
         manifest_path,
         profile=profile,
     )
@@ -833,12 +847,23 @@ def resolve_plugin_profile(
 
 
 def get_active_plugin_profile(manifest_path: str | Path | None = None) -> str:
-    global _active_plugin_profile
+    global _active_plugin_profile, _active_plugin_profile_source
     if isinstance(_active_plugin_profile, str) and _active_plugin_profile.strip():
         return _active_plugin_profile
-    profile_name, _plugin_modules = resolve_plugin_profile(manifest_path)
+    profile_name, _plugin_modules, _explicitly_selected, selection_source = _resolve_plugin_profile_selection(
+        manifest_path
+    )
     _active_plugin_profile = profile_name
+    _active_plugin_profile_source = selection_source
     return profile_name
+
+
+def get_active_plugin_profile_source(manifest_path: str | Path | None = None) -> str:
+    global _active_plugin_profile_source
+    if isinstance(_active_plugin_profile_source, str) and _active_plugin_profile_source.strip():
+        return _active_plugin_profile_source
+    get_active_plugin_profile(manifest_path)
+    return _active_plugin_profile_source or "unknown"
 
 
 def get_plugin_boot_order(
@@ -847,7 +872,7 @@ def get_plugin_boot_order(
     profile: str | None = None,
 ) -> list[str]:
     path = Path(manifest_path) if manifest_path is not None else _default_manifest_path()
-    profile_name, plugin_modules, explicitly_selected = _resolve_plugin_profile_selection(
+    profile_name, plugin_modules, explicitly_selected, _selection_source = _resolve_plugin_profile_selection(
         manifest_path,
         profile=profile,
     )
@@ -910,12 +935,13 @@ def load_plugins(
         logger.info("No plugin manifest found at %s", path)
         return []
 
-    global _active_plugin_profile
-    active_profile, plugin_modules, explicitly_selected = _resolve_plugin_profile_selection(
+    global _active_plugin_profile, _active_plugin_profile_source
+    active_profile, plugin_modules, explicitly_selected, selection_source = _resolve_plugin_profile_selection(
         path,
         profile=profile,
     )
     _active_plugin_profile = active_profile
+    _active_plugin_profile_source = selection_source
     if not plugin_modules:
         if not explicitly_selected:
             raise _plugin_boot_failure(

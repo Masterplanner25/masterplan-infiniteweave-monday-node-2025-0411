@@ -357,3 +357,25 @@ def test_agent_tool_modules_do_not_route_through_agent_dispatch_syscall():
             f"{'/'.join(parts)} still routes through sys.v1.agent.dispatch_tool. "
             "Tools must call owner syscalls directly."
         )
+
+
+def test_analytics_bootstrap_has_no_cross_app_boot_edges():
+    """Analytics startup should not be blocked on identity/tasks boot order."""
+    source = _read("apps", "analytics", "bootstrap.py")
+    assert 'BOOTSTRAP_DEPENDS_ON: list[str] = []' in source, (
+        "apps/analytics/bootstrap.py still declares cross-app BOOTSTRAP_DEPENDS_ON edges. "
+        "Analytics cross-domain reads are call-time only and should not widen startup blast radius."
+    )
+
+
+def test_masterplan_bootstrap_keeps_only_identity_as_direct_app_dependency():
+    """Masterplan should not declare task/automation app dependencies after syscall migration."""
+    source = _read("apps", "masterplan", "bootstrap.py")
+    assert 'BOOTSTRAP_DEPENDS_ON: list[str] = []' in source, (
+        "apps/masterplan/bootstrap.py still declares hard cross-app boot edges. "
+        "Task and automation integrations should remain call-time syscalls."
+    )
+    assert 'APP_DEPENDS_ON: list[str] = ["identity"]' in source, (
+        "apps/masterplan/bootstrap.py APP_DEPENDS_ON drifted. "
+        "Only deferred identity public helpers should remain as direct app imports."
+    )

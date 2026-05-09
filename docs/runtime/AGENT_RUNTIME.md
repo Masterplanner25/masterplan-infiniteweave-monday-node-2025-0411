@@ -51,6 +51,11 @@ App-enriched behavior is optional:
 - post-run Infinity orchestration
 - additional app-owned tools such as task, ARM, search, and masterplan actions
 
+Current classification:
+- baseline runtime contract: generic planner context, runtime memory tools, default trigger evaluator, empty suggestions, no-op completion hook
+- optional plugin/app enrichment: KPI-aware planner context, suggestion providers, Infinity-style completion hooks, extra app-owned tools
+- ambiguous and should be refactored: domain-agnostic memory-context prompt enrichment is currently bundled into the app planner extension; KPI suggestion heuristics are duplicated across provider and syscall paths; post-run analytics enrichment currently mutates generic run results through a broad completion-hook slot
+
 ---
 
 ## 2. Execution Lifecycle
@@ -73,7 +78,7 @@ POST /agent/run  (create)
 │
 └─ post-execution
     ├─ memory capture (memory_capture_engine)
-    └─ infinity_orchestrator.execute() (score recalculation)
+    └─ optional plugin completion hook such as Infinity orchestration
 ```
 
 A run that is rejected at the trust gate writes a `REJECTED` AgentRun record
@@ -217,6 +222,12 @@ The agent runtime therefore uses explicit runtime-owned plugin contracts for:
 - trigger evaluators
 - agent completion hooks
 - tool suggestion providers
+
+Interpret these contracts narrowly:
+- planner context provider: runtime guarantees a generic default provider; KPI-aware or analytics-aware context remains plugin-owned
+- tool suggestion provider: runtime guarantees only an empty fallback; suggestion logic remains plugin-owned
+- agent completion hook: runtime guarantees only a no-op fallback; post-run score/orchestration behavior remains plugin-owned
+- run tool provider: runtime defaults expose only runtime memory tools; app tools remain optional plugin enrichments
 
 Agent lifecycle persistence is runtime-owned:
 - `AINDY/db/models/agent_run.py` defines `AgentRun`, `AgentStep`, and `AgentTrustSettings`

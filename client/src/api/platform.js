@@ -7,8 +7,8 @@ export function getDashboardOverview() {
   return authRequest(ROUTES.PLATFORM.DASHBOARD_OVERVIEW, { method: "GET" });
 }
 
-export function getDashboardHealth() {
-  return authRequest(ROUTES.PLATFORM.DASHBOARD_HEALTH, { method: "GET" });
+export function getHealthDetails() {
+  return authRequest(ROUTES.PLATFORM.HEALTH_DETAILS, { method: "GET" });
 }
 
 export function getInfluenceGraph() {

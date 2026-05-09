@@ -173,7 +173,7 @@ const OPERATOR = Object.freeze({
 
 const PLATFORM = Object.freeze({
   DASHBOARD_OVERVIEW: `${BASE}/dashboard/overview`,
-  DASHBOARD_HEALTH: `${BASE}/dashboard/health`,
+  HEALTH_DETAILS: `${BASE}/health/details`,
   INFLUENCE_GRAPH: `${BASE}/influence_graph`,
   CAUSAL_GRAPH: `${BASE}/causal_graph`,
   NARRATIVE: (dropPointId) => `${BASE}/narrative/${dropPointId}`,

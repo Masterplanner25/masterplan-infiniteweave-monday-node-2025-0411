@@ -4,13 +4,24 @@ import threading
 import uuid
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from AINDY.db.database import Base
 from AINDY.db.models.user import User
-from apps.freelance.models.freelance import FreelanceOrder, PaymentRecord, RefundRecord, WebhookEvent
-from apps.freelance.schemas.freelance import FreelanceOrderCreate
+from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+
+
+pytestmark = pytest.mark.app_profile
+
+freelance_models = pytest.importorskip("apps.freelance.models.freelance")
+freelance_schemas = pytest.importorskip("apps.freelance.schemas.freelance")
+FreelanceOrder = freelance_models.FreelanceOrder
+PaymentRecord = freelance_models.PaymentRecord
+RefundRecord = freelance_models.RefundRecord
+WebhookEvent = freelance_models.WebhookEvent
+FreelanceOrderCreate = freelance_schemas.FreelanceOrderCreate
 
 
 def _order_payload(*, delivery_type: str = "manual") -> dict:
@@ -26,11 +37,8 @@ def _order_payload(*, delivery_type: str = "manual") -> dict:
 
 
 def _build_session_factory(tmp_path):
-    import AINDY.db.model_registry  # noqa: F401
-    import AINDY.memory.memory_persistence  # noqa: F401
-    import apps.bootstrap
-
-    apps.bootstrap.bootstrap_models()
+    import_runtime_model_registry()
+    bootstrap_app_models(required=True)
     engine = create_engine(
         f"sqlite:///{tmp_path / 'freelance_idempotency.db'}",
         connect_args={"check_same_thread": False, "timeout": 30},

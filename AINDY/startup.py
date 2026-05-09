@@ -30,12 +30,15 @@ from AINDY.platform_layer.deployment_contract import (
     event_bus_required,
     publish_api_runtime_state,
     reset_runtime_state,
+    resolve_boot_mode_for_profile,
+    RUNTIME_ONLY_BOOT_MODE,
 )
 from AINDY.platform_layer.cache_backend import NoOpCacheBackend
 from AINDY.platform_layer.rate_limiter import limiter
 from AINDY.platform_layer.registry import (
     emit_event,
     get_active_plugin_profile,
+    get_active_plugin_profile_source,
     get_plugin_boot_order,
     get_legacy_root_routers,
     get_registered_apps,
@@ -126,9 +129,12 @@ _pool_was_near_exhaustion: bool = False
 
 def _publish_boot_runtime_state() -> None:
     active_profile = get_active_plugin_profile()
+    boot_mode = resolve_boot_mode_for_profile(active_profile)
     app_plugin_count = len(get_registered_apps())
     publish_api_runtime_state(
+        boot_mode=boot_mode,
         boot_profile=active_profile,
+        boot_profile_source=get_active_plugin_profile_source(),
         app_plugins_loaded=app_plugin_count > 0,
         app_plugin_count=app_plugin_count,
     )
@@ -137,17 +143,23 @@ def _publish_boot_runtime_state() -> None:
 def _initialize_runtime_bootstrap() -> None:
     try:
         active_profile = get_active_plugin_profile()
+        boot_mode = resolve_boot_mode_for_profile(active_profile)
         _resolved_boot_order = get_plugin_boot_order()
         if _resolved_boot_order:
             logger.info("Boot order resolved: %s", " -> ".join(_resolved_boot_order))
         load_plugins()
         validate_bootstrap_manifest(registry)
         _publish_boot_runtime_state()
-        if active_profile == "platform-only":
-            logger.info("Startup profile selected: platform-only (runtime boot without app plugins).")
+        if boot_mode == RUNTIME_ONLY_BOOT_MODE:
+            logger.info(
+                "Startup mode selected: %s -> profile %s (runtime boot without app plugins).",
+                boot_mode,
+                active_profile,
+            )
         else:
             logger.info(
-                "Startup profile selected: %s (%d registered app plugin%s).",
+                "Startup mode selected: %s -> profile %s (%d registered app plugin%s).",
+                boot_mode,
                 active_profile,
                 len(get_registered_apps()),
                 "" if len(get_registered_apps()) == 1 else "s",
@@ -1116,7 +1128,9 @@ async def lifespan(app: FastAPI):
         background_enabled=False,
         scheduler_role="disabled",
         event_bus_ready=False,
+        boot_mode=resolve_boot_mode_for_profile(get_active_plugin_profile()),
         boot_profile=get_active_plugin_profile(),
+        boot_profile_source=get_active_plugin_profile_source(),
         app_plugins_loaded=bool(get_registered_apps()),
         app_plugin_count=len(get_registered_apps()),
     )

@@ -22,6 +22,12 @@ These paths are stable infrastructure. Never add an app or platform prefix here.
 - `AINDY/routes/auth_router.py` (router prefix `/auth`) **[public — provides tokens]** ? `/auth/register`, `/auth/login`
 - `AINDY/routes/version_router.py` (router prefix `/api`) **[public]** ? `/api/version`
 
+`GET /api/version` is also the public runtime-surface summary for the frontend.
+In addition to version compatibility fields, it returns a `runtime` object with:
+`boot_mode`, `boot_profile`, `boot_profile_source`, `app_plugins_loaded`,
+`app_plugin_count`, `ui_mode`, `default_route`, and `platform_home`.
+The client uses that payload only as a representation of backend startup state.
+
 ### Platform layer (mounted at `/platform`)
 
 Stable runtime API for external integrations and tooling. Breaking changes require a version bump.
@@ -1327,6 +1333,16 @@ Response:
 ```json
 {
   "user_id": "uuid",
+  "runtime": {
+    "boot_mode": "app-profile|runtime-only",
+    "boot_profile": "default-apps|platform-only",
+    "boot_profile_source": "env-or-manifest-source",
+    "app_plugins_loaded": true,
+    "app_plugin_count": 0,
+    "ui_mode": "app-profile|runtime-only",
+    "default_route": "/dashboard|/memory",
+    "platform_home": "/platform/agent"
+  },
   "memory": [
     {
       "id": "uuid",
@@ -1363,6 +1379,8 @@ Response:
 Status Codes: 200, 401, 500.
 Notes:
 - This is the canonical post-auth hydration endpoint for the React app.
+- The `runtime` block is the authenticated shell contract for deciding whether
+  app-profile or runtime-only navigation should be shown.
 - Memory is user-scoped, recent, and deterministically ordered by `created_at DESC, id DESC`.
 - Returned memory rows are tagged with `context = "identity_boot"`.
 - Immediately after signup, boot should include the seeded memory node, one initialized run, and baseline metrics.

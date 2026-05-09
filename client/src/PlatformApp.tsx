@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import ErrorBoundary, { RouteErrorBoundary } from "./components/shared/ErrorBoundary";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { SystemProvider } from "./context/SystemContext";
+import { SystemProvider, useSystem } from "./context/SystemContext";
 
 const AgentConsole = lazy(() => import("./components/platform/AgentConsole"));
 const FlowEngineConsole = lazy(() => import("./components/platform/FlowEngineConsole"));
@@ -45,15 +45,21 @@ function platformRoute(name: string, element: ReactNode) {
   );
 }
 
+function PlatformHomeRedirect() {
+  const { system } = useSystem();
+  const runtimeOnly = system?.runtime?.boot_mode === "runtime-only";
+  return <Navigate to={runtimeOnly ? "/flows" : "/agent"} replace />;
+}
+
 export default function PlatformApp() {
   return (
     <AuthProvider>
-      <SystemProvider>
+      <SystemProvider skipBoot>
         <BrowserRouter basename="/platform">
           <PlatformGuard>
             <ErrorBoundary layer="platform">
               <Routes>
-                <Route path="/" element={<Navigate to="/agent" replace />} />
+                <Route path="/" element={<PlatformHomeRedirect />} />
                 <Route path="/agent" element={platformRoute("Agent Console", <AgentConsole />)} />
                 <Route path="/flows" element={platformRoute("Flow Engine", <FlowEngineConsole />)} />
                 <Route path="/observability" element={platformRoute("Observability", <ObservabilityDashboard />)} />

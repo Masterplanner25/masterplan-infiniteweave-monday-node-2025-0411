@@ -505,6 +505,7 @@ coupling sites.
 |---|---|---|---|
 | `analytics/infinity_orchestrator` | `identity`, `masterplan`, `tasks`, `social` | deferred | RESOLVED — converted to deferred imports (Prompt 11) |
 | `analytics/infinity_loop` | `tasks`, `masterplan`, `automation.models` | module-level + deferred | CASCADE for module-level |
+| `analytics/bootstrap.py` | `identity`, `tasks` boot ordering | stale bootstrap edge | RESOLVED — call-time only, no startup edge needed |
 | `analytics/routes` | `masterplan.services` | deferred in handler | ACCEPTED — handler-deferred, declared in APP_DEPENDS_ON |
 | `analytics/flows` | `automation.public.get_user_feedback` | syscall dispatch | RESOLVED — sys.v1.automation.list_feedback (Prompt 6) |
 | `analytics/flows` | `social.public.adapt_linkedin_metrics` | syscall dispatch | RESOLVED — sys.v1.social.adapt_linkedin (Prompt 6) |
@@ -514,6 +515,7 @@ coupling sites.
 | `masterplan/services/masterplan_execution_service.py` | `tasks`, `automation` | syscall dispatch | RESOLVED — task counts/list/delete and automation log reads now go through owner syscalls |
 | `masterplan/services/eta_service.py` | `tasks` | syscall dispatch | RESOLVED — ETA velocity/count reads now go through task syscalls |
 | `masterplan/services` | `identity.public` | deferred | ACCEPTED — prompt-context and identity observation remain app-level public contracts |
+| `masterplan/bootstrap.py` | `automation`, `tasks`, `identity` boot ordering | stale bootstrap edge | RESOLVED — only deferred identity public calls remain direct |
 | `automation/syscalls/syscall_handlers` | `task`, `leadgen`, `arm`, `genesis`, `analytics`, `authorship`, `rippletrace`, `goal`, `research` | syscall dispatch wrappers | boundary restored (Prompt 2) |
 | `automation/syscalls/syscall_handlers` | `automation.models` | deferred | acceptable |
 | `automation/syscalls/syscall_handlers` | `tasks.syscalls.register_task_syscall_handlers` | explicit re-registration call (removed) | RESOLVED (Prompt 12) |
@@ -529,6 +531,17 @@ kernel-owned, and automation's remaining agent-facing contract
 there is no longer an app-owned generic agent tool-dispatch syscall.
 That means automation should not force `apps/agent` to boot first merely to
 validate runtime helper behavior.
+
+Analytics/masterplan bootstrap note (2026-05-09): `apps.analytics.bootstrap`
+and `apps.masterplan.bootstrap` now follow the same rule for startup ordering.
+Analytics still has deferred direct imports to `apps.identity.public` and
+`apps.arm.public`, and masterplan still has deferred direct imports to
+`apps.identity.public`, so those `APP_DEPENDS_ON` declarations remain. But
+task, automation, social, and masterplan interactions used by analytics and
+masterplan already cross owner boundaries through syscalls, registry jobs, or
+deferred runtime lookups. Because those contracts are not needed during
+`register()`, both apps now declare `BOOTSTRAP_DEPENDS_ON = []` to avoid
+unnecessary startup blocking and failure fan-out.
 
 Agent runtime note: runtime-owned agent APIs should not fetch analytics or
 other app-domain state directly. Suggestion enrichment, KPI-aware planner
@@ -585,6 +598,8 @@ Status values: OPEN | IN_PROGRESS | RESOLVED | ACCEPTED (intentional, not to be 
 | _run_to_dict private import | `apps/automation/flows/automation_flows.py` | private API | RESOLVED | Prompt 3 |
 | masterplan execution direct public imports | `apps/masterplan/services/masterplan_execution_service.py` | deferred cross-domain public import | RESOLVED | Prompt 22 |
 | masterplan ETA direct task public imports | `apps/masterplan/services/eta_service.py` | deferred cross-domain public import | RESOLVED | Prompt 22 |
+| analytics bootstrap hard ordering | `apps/analytics/bootstrap.py` | stale bootstrap edge | RESOLVED | Prompt 24 |
+| masterplan bootstrap hard ordering | `apps/masterplan/bootstrap.py` | stale bootstrap edge | RESOLVED | Prompt 24 |
 
 ## 8. Coupling Governance Policy
 

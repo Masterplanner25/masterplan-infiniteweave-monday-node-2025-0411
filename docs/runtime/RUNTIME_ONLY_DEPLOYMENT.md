@@ -10,16 +10,27 @@ owner: "platform-team"
 This is the authoritative contract for running AINDY without loading any
 `apps/*` plugins.
 
-Use this mode only through the explicit boot profile:
+Use this mode through one of the supported first-class activation paths:
 
-- `AINDY_BOOT_PROFILE=platform-only`
+- `uvicorn AINDY.runtime_only:app`
+- `AINDY_BOOT_MODE=runtime-only`
 
 The runtime-only contract is intentionally narrower than the default monolith
 profile. It is supported, but it is not the same thing as `default-apps`.
 
+Configuration precedence is:
+
+1. explicit profile argument passed to registry/bootstrap helpers
+2. `AINDY_BOOT_PROFILE`
+3. `AINDY_PLUGIN_PROFILE`
+4. `AINDY_BOOT_MODE=runtime-only` -> resolves to `platform-only`
+5. manifest `default_profile`
+
 ## Supported Boot Behavior
 
+- The selected boot mode is `runtime-only`.
 - The selected boot profile is `platform-only`.
+- Startup state reports `boot_mode=runtime-only`.
 - `aindy_plugins.json` resolves that profile to an empty plugin list.
 - Startup remains strict for explicitly requested non-empty profiles.
 - No `apps/*` bootstrap module is loaded in runtime-only mode.
@@ -44,6 +55,23 @@ What does not mount:
 - app routers contributed by `apps/*` bootstrap registration such as
   `/apps/tasks/*` or `/apps/social/*`
 
+## Frontend Behavior
+
+Runtime-only mode is presented intentionally in the shipped client shell:
+
+- the authenticated app shell redirects its default entry route to `/memory`
+- app-profile navigation such as dashboard, tasks, analytics, growth, and ARM
+  pages is hidden
+- the remaining authenticated shell presents runtime-safe identity and memory
+  surfaces
+- admin users still retain the platform console entrypoints, but runtime-only
+  navigation omits pages that are still backed by app-domain APIs
+- the standalone `/platform` app no longer depends on `identity/boot` just to
+  render its operator shell
+
+This means runtime-only mode should appear as a deliberate platform surface,
+not as a partially broken monolith UI.
+
 ## Baseline Agent Capability
 
 The runtime agent layer stays available in platform-only mode with the generic
@@ -59,6 +87,15 @@ baseline only:
 
 This baseline is domain-agnostic by design. KPI enrichment, Infinity behavior,
 and app-owned tools are not part of the runtime-only contract.
+
+Agent enrichment boundary in runtime-only mode:
+
+- planner context baseline: generic runtime prompt with an empty context block
+- planner context enrichment: plugin-owned KPI or domain-memory guidance
+- suggestions baseline: empty list
+- suggestions enrichment: plugin-owned KPI-driven or persisted-loop suggestions
+- completion baseline: no-op completion hook
+- completion enrichment: plugin-owned post-run orchestration such as Infinity
 
 ## Memory And Tool Availability
 
@@ -81,7 +118,9 @@ silently proxying into an app layer.
 
 - `/health` is present in runtime-only mode.
 - `/ready` is present in runtime-only mode.
+- runtime state reports `boot_mode=runtime-only`
 - runtime state reports `boot_profile=platform-only`
+- runtime state reports `boot_profile_source=AINDY_BOOT_MODE` when booted through the first-class mode selector
 - runtime state reports `app_plugins_loaded=false`
 - runtime state reports `app_plugin_count=0`
 
@@ -105,7 +144,7 @@ These are outside the supported runtime-only contract:
 
 `platform-only` and `default-apps` are distinct supported modes:
 
-- `platform-only` is the clean runtime baseline with no app plugins.
+- `runtime-only` is the supported operator-facing mode and resolves to the `platform-only` profile.
 - `default-apps` is the modular-monolith profile that loads `apps.bootstrap`.
 
 Do not infer app behavior from runtime-only success, and do not describe
