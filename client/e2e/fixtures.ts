@@ -726,8 +726,21 @@ export async function setupApiMocks(page: Page, options: ApiMockOptions = {}) {
           return jsonResponse({ detail: "Plan not found" }, 404);
         }
 
+        if (path === "/health/details" && method === "GET") {
+          return jsonResponse({
+            status: "healthy",
+            version: "test-build",
+            degraded_domains: [],
+            platform: {
+              api: "ok",
+              scheduler: "ok",
+              memory: "ok",
+            },
+          });
+        }
+
         if (path === "/health" && method === "GET") {
-          return jsonResponse({ status: "ok" });
+          return jsonResponse({ status: "healthy" });
         }
 
         if (path === "/scores/me/recalculate" && method === "POST") {
