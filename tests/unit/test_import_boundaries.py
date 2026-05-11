@@ -18,6 +18,8 @@ import pytest
 ROOT = pathlib.Path(__file__).parent.parent.parent
 AINDY_ROOT = ROOT / "AINDY"
 
+pytestmark = pytest.mark.app_profile
+
 
 ALLOWED_AINDY_TO_APPS_IMPORTS: dict[str, dict[str, str]] = {}
 

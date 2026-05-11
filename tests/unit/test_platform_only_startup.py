@@ -16,6 +16,8 @@ from AINDY.platform_layer.deployment_contract import (
     runtime_only_deployment_contract,
 )
 
+pytestmark = pytest.mark.runtime_only
+
 
 class _StopStartup(Exception):
     pass
@@ -269,6 +271,10 @@ def test_runtime_only_deployment_contract_is_explicit():
     assert contract["boot_profile"] == "platform-only"
     assert contract["activation"]["preferred"] == "AINDY_BOOT_MODE=runtime-only"
     assert contract["activation"]["entrypoint"] == "uvicorn AINDY.runtime_only:app"
+    assert contract["activation"]["packaged_entrypoints"] == {
+        "console_script": "aindy-runtime",
+        "module": "python -m AINDY.runtime_only",
+    }
     assert contract["health_and_readiness"] == {
         "liveness_route": "/health",
         "readiness_route": "/ready",
@@ -301,7 +307,7 @@ def test_startup_fails_when_default_profile_plugin_is_missing(platform_only_runt
         scoped.delenv("AINDY_BOOT_MODE", raising=False)
         scoped.delenv("AINDY_BOOT_PROFILE", raising=False)
         scoped.delenv("AINDY_PLUGIN_PROFILE", raising=False)
-        scoped.setattr(registry, "_default_manifest_path", lambda: manifest)
+        scoped.setattr(registry, "_default_app_manifest_path", lambda: manifest)
 
         import AINDY.startup as startup
 

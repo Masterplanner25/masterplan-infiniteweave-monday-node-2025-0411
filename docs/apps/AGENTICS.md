@@ -1,5 +1,14 @@
 # AGENTICS
 
+Ownership note:
+
+- this document belongs to the future `aindy-apps-monolith` repo
+- it should not be treated as the runtime execution contract
+- the runtime contract lives in
+  [docs/runtime/AGENT_RUNTIME.md](../runtime/AGENT_RUNTIME.md)
+- the broader doc split map lives in
+  [docs/runtime/RUNTIME_DOCSET_BOUNDARY.md](../runtime/RUNTIME_DOCSET_BOUNDARY.md)
+
 This document covers the Agentics app-domain feature: gap analysis, completion
 roadmap (Phases A–E), Nodus integration plan, and relationship to other
 roadmaps.

@@ -1,6 +1,6 @@
 ---
 title: "Plugin Registry Pattern"
-last_verified: "2026-04-29"
+last_verified: "2026-05-09"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -11,6 +11,16 @@ This document describes the actual integration mechanism between the AINDY
 runtime and domain apps. It is the most important architectural pattern in
 the codebase and is referenced by every domain app, the startup sequence,
 the flow engine, the scheduler, and the agent runtime.
+
+Ownership note:
+
+- this document is currently shared because it explains the integration
+  contract between the future runtime repo and the future apps repo
+- manifest ownership and runtime-only boot behavior are defined more precisely
+  in [Boot Profiles](./BOOT_PROFILES.md) and
+  [Runtime-Only Deployment](../runtime/RUNTIME_ONLY_DEPLOYMENT.md)
+- the doc ownership map lives in
+  [Runtime Docset Boundary](../runtime/RUNTIME_DOCSET_BOUNDARY.md)
 
 ---
 
@@ -38,6 +48,48 @@ Hard rule:
 ---
 
 ## 2. The Three Components
+
+Current manifest ownership note:
+
+- `AINDY/runtime_plugins.json` is the runtime-owned manifest and is the source
+  of truth for runtime-only boot
+- repo-root `aindy_plugins.json` is the app-owned/monolith manifest and is the
+  source of truth for app-profile boot
+- `AINDY/platform_layer/registry.py` selects which manifest to use based on the
+  requested boot profile or boot mode
+- the older single-manifest example below is legacy shape history, not the
+  complete current ownership model
+
+Current runtime-owned manifest shape:
+
+```json
+{
+  "default_profile": "platform-only",
+  "profiles": {
+    "platform-only": {
+      "plugins": []
+    }
+  }
+}
+```
+
+Current app-owned manifest shape:
+
+```json
+{
+  "default_profile": "default-apps",
+  "profiles": {
+    "platform-only": {
+      "plugins": []
+    },
+    "default-apps": {
+      "plugins": [
+        "apps.bootstrap"
+      ]
+    }
+  }
+}
+```
 
 ```
 aindy_plugins.json          ← manifest: which Python modules to load
@@ -93,6 +145,12 @@ The registry holds:
 The single Python module named in `aindy_plugins.json`. Its `bootstrap()`
 function is called once at startup via `load_plugins()`. It is idempotent
 (guarded by `_BOOTSTRAPPED` flag).
+
+Ownership note:
+
+- `apps/bootstrap.py` is app-owned and belongs with the future
+  `aindy-apps-monolith` repo
+- the runtime only treats it as a manifest-selected plugin module name
 
 `bootstrap()` calls 18 internal `_register_*` functions, each responsible for
 one category of registration. All domain imports are deferred inside these
@@ -201,9 +259,9 @@ entirely self-declared by app bootstrap modules.
 ```
 main.py  lifespan()
 │
-├─ load_plugins()                      # reads aindy_plugins.json
-│   └─ importlib.import_module("apps.bootstrap")
-│       └─ apps.bootstrap.bootstrap()
+├─ load_plugins()                      # reads selected plugin manifest
+│   └─ importlib.import_module(<plugin module from manifest>)
+│       └─ plugin.bootstrap()
 │           ├─ _register_models()      # domain SQLAlchemy models → Base.metadata
 │           ├─ _register_routers()     # 24+ FastAPI routers → _routers dict
 │           ├─ _register_route_prefixes()

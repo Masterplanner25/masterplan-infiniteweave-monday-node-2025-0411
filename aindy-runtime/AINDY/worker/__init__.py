@@ -1,0 +1,92 @@
+# Worker package — distributed async job executor.
+# The traditional worker entrypoint (schema-ready check + background jobs)
+# is defined here so that `import worker` resolves to this package and still
+# exposes SessionLocal, _background_schema_ready, main, etc.
+
+import logging
+import signal
+import time
+
+from sqlalchemy import inspect
+from sqlalchemy.exc import SQLAlchemyError
+
+from AINDY.db.database import SessionLocal
+from AINDY.platform_layer import scheduler_service
+from AINDY.platform_layer.registry import emit_event, load_plugins
+
+logger = logging.getLogger(__name__)
+_RUNNING = True
+
+
+class _LifecycleServices:
+    def start_background_tasks(self, *, enable=True, log=None):
+        results = emit_event("system.startup", {"enable": enable, "log": log, "source": "worker"})
+        return enable and all(result is not False for result in results)
+
+    def stop_background_tasks(self, *, log=None):
+        emit_event("system.shutdown", {"log": log, "source": "worker"})
+        return None
+
+
+lifecycle_services = _LifecycleServices()
+# Compatibility alias: older callers still import task_services.
+task_services = lifecycle_services
+job_services = lifecycle_services
+
+
+def _stop(*_args):
+    global _RUNNING
+    _RUNNING = False
+
+
+def _background_schema_ready() -> bool:
+    db = SessionLocal()
+    try:
+        inspector = inspect(db.bind)
+        return inspector.has_table("background_task_leases")
+    except SQLAlchemyError as exc:
+        logger.warning("Worker schema readiness check failed: %s", exc)
+        return False
+    finally:
+        db.close()
+
+
+def _wait_for_background_schema(timeout_seconds: int = 60) -> bool:
+    deadline = time.time() + timeout_seconds
+    while _RUNNING and time.time() < deadline:
+        if _background_schema_ready():
+            return True
+        logger.info("Worker waiting for migrated schema: background_task_leases not ready yet")
+        time.sleep(2)
+    return _background_schema_ready()
+
+
+def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+    load_plugins()
+
+    if _wait_for_background_schema():
+        is_leader = lifecycle_services.start_background_tasks(enable=True, log=logger)
+        if is_leader:
+            scheduler_service.start()
+            logger.info("Worker started as scheduler leader")
+        else:
+            logger.info("Worker started without scheduler leadership")
+    else:
+        logger.warning("Worker started before schema was ready; scheduler disabled for this process")
+
+    try:
+        while _RUNNING:
+            time.sleep(1)
+    finally:
+        scheduler_service.stop()
+        lifecycle_services.stop_background_tasks(log=logger)
+
+
+if __name__ == "__main__":
+    main()

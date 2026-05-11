@@ -1,0 +1,8 @@
+{
+  "default_profile": "platform-only",
+  "profiles": {
+    "platform-only": {
+      "plugins": []
+    }
+  }
+}

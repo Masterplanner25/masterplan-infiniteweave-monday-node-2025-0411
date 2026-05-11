@@ -1,0 +1,227 @@
+import React, { useCallback, useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import { getAgentRuns } from "../../api/agent.js";
+import { useAuth } from "../../context/AuthContext";
+import { APPROVAL_EVENT } from "../../lib/platformEvents.js";
+
+const PLATFORM_BASE = import.meta.env.VITE_PLATFORM_BASE_URL ?? "/platform";
+const platformUrl = (path) => `${PLATFORM_BASE}${path}`;
+
+const SubNavItem = ({ to, children, active, badge, external = false }) => {
+  const className = `mb-1 flex items-center justify-between gap-3 rounded-lg px-10 py-2 text-xs font-medium transition-all duration-200 ${
+    active
+      ? "bg-[#00ffaa]/5 text-[#00ffaa]"
+      : "text-zinc-500 hover:bg-zinc-800/30 hover:text-zinc-200"
+  }`;
+
+  const content = (
+    <>
+      <span>{children}</span>
+      {badge ? (
+        <span className="rounded-full bg-[#00ffaa] px-2 py-0.5 text-[10px] font-bold text-black">
+          {badge}
+        </span>
+      ) : null}
+    </>
+  );
+
+  if (external) {
+    return (
+      <a href={platformUrl(to)} target="_self" className={className}>
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <Link to={to} className={className}>
+      {content}
+    </Link>
+  );
+};
+
+const NavSection = ({ title, icon, isOpen, toggle, children, isAnyChildActive }) => (
+  <div className="mb-2">
+    <button
+      onClick={toggle}
+      className={`w-full rounded-xl px-4 py-3 transition-all duration-200 ${
+        isAnyChildActive
+          ? "bg-zinc-900/50 text-white"
+          : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 text-sm font-semibold">
+          <span>{icon}</span>
+          <span>{title}</span>
+        </div>
+        <span className={`text-[10px] transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}>
+          ▼
+        </span>
+      </div>
+    </button>
+    {isOpen ? <div className="mt-1 flex animate-in flex-col slide-in-from-top-2 duration-200">{children}</div> : null}
+  </div>
+);
+
+export default function Sidebar() {
+  const location = useLocation();
+  const { isAdmin } = useAuth();
+  const [openSection, setOpenSection] = useState("System");
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
+
+  const toggleSection = (name) => {
+    setOpenSection((current) => (current === name ? null : name));
+  };
+
+  const loadPendingApprovals = useCallback(async () => {
+    if (!isAdmin) {
+      setPendingApprovals(0);
+      return;
+    }
+    try {
+      const runs = await getAgentRuns("pending_approval", 100);
+      setPendingApprovals(Array.isArray(runs) ? runs.length : 0);
+    } catch {
+      setPendingApprovals(0);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    loadPendingApprovals();
+    const interval = window.setInterval(loadPendingApprovals, 30000);
+    const onApprovalCountChange = () => loadPendingApprovals();
+    window.addEventListener(APPROVAL_EVENT, onApprovalCountChange);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener(APPROVAL_EVENT, onApprovalCountChange);
+    };
+  }, [loadPendingApprovals]);
+
+  return (
+    <aside className="flex h-screen w-72 flex-shrink-0 flex-col border-r border-zinc-800/50 bg-[#0c0c0e] p-4">
+      <div className="mb-10 mt-4 px-3">
+        <h3 className="text-2xl font-black italic tracking-tighter text-[#00ffaa]">
+          AINDY<span className="not-italic text-zinc-500">.OS</span>
+        </h3>
+      </div>
+
+      <nav className="custom-scrollbar flex-1 overflow-y-auto pr-2">
+        <Link
+          to="/dashboard"
+          className={`mb-2 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
+            location.pathname === "/dashboard"
+              ? "bg-[#00ffaa] text-black shadow-[0_0_20px_rgba(0,255,170,0.2)]"
+              : "text-zinc-400 hover:bg-zinc-800/50"
+          }`}
+        >
+          🏠 Dashboard
+        </Link>
+
+        <Link
+          to="/genesis"
+          className={`mb-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
+            isActive("/genesis")
+              ? "bg-white text-black"
+              : "text-zinc-400 hover:bg-zinc-800/50"
+          }`}
+        >
+          ✨ Genesis
+        </Link>
+
+        <NavSection
+          title="Social Layer"
+          icon="📡"
+          isOpen={openSection === "Social"}
+          toggle={() => toggleSection("Social")}
+          isAnyChildActive={isActive("/network") || isActive("/social")}
+        >
+          <SubNavItem to="/network/feed" active={isActive("/network/feed")}>Trust Feed</SubNavItem>
+          <SubNavItem to="/social/profile/me" active={isActive("/social/profile")}>My Identity</SubNavItem>
+          <SubNavItem to="/network" active={location.pathname === "/network"}>Infinite Network</SubNavItem>
+        </NavSection>
+
+        <NavSection
+          title="Intelligence"
+          icon="🔍"
+          isOpen={openSection === "Tools"}
+          toggle={() => toggleSection("Tools")}
+          isAnyChildActive={isActive("/research") || isActive("/seo") || isActive("/leadgen")}
+        >
+          <SubNavItem to="/research" active={isActive("/research")}>Research Engine</SubNavItem>
+          <SubNavItem to="/seo" active={isActive("/seo")}>SEO Tool</SubNavItem>
+          <SubNavItem to="/leadgen" active={isActive("/leadgen")}>LeadGen</SubNavItem>
+          <SubNavItem to="/analytics" active={isActive("/analytics")}>Analytics</SubNavItem>
+        </NavSection>
+
+        <NavSection
+          title="System"
+          icon="⚙️"
+          isOpen={openSection === "System"}
+          toggle={() => toggleSection("System")}
+          isAnyChildActive={
+            isActive("/masterplan") ||
+            isActive("/tasks") ||
+            location.pathname.startsWith("/platform") ||
+            isActive("/freelance")
+          }
+        >
+          <SubNavItem to="/masterplan" active={isActive("/masterplan")}>Master Plan</SubNavItem>
+          <SubNavItem to="/tasks" active={isActive("/tasks")}>Execution Engine</SubNavItem>
+          {isAdmin ? (
+            <>
+              <SubNavItem to="/agent" external active={location.pathname.startsWith("/platform")}>Agent Console</SubNavItem>
+              <SubNavItem to="/flows" external active={location.pathname.startsWith("/platform")}>Console</SubNavItem>
+              <SubNavItem to="/approvals" external active={location.pathname.startsWith("/platform")} badge={pendingApprovals || null}>
+                Approval Inbox
+              </SubNavItem>
+              <SubNavItem to="/observability" external active={location.pathname.startsWith("/platform")}>Observability</SubNavItem>
+              <SubNavItem to="/trace" external active={location.pathname.startsWith("/platform")}>Ripple Trace</SubNavItem>
+            </>
+          ) : null}
+          <SubNavItem to="/freelance" active={isActive("/freelance")}>Freelance Hub</SubNavItem>
+        </NavSection>
+
+        <NavSection
+          title="ARM Module"
+          icon="🧠"
+          isOpen={openSection === "ARM"}
+          toggle={() => toggleSection("ARM")}
+          isAnyChildActive={isActive("/arm")}
+        >
+          <SubNavItem to="/arm/analyze" active={isActive("/arm/analyze")}>Analyze</SubNavItem>
+          <SubNavItem to="/arm/generate" active={isActive("/arm/generate")}>Generate</SubNavItem>
+          <SubNavItem to="/arm/logs" active={isActive("/arm/logs")}>System Logs</SubNavItem>
+          <SubNavItem to="/arm/config" active={isActive("/arm/config")}>Config</SubNavItem>
+        </NavSection>
+
+        <NavSection
+          title="Memory"
+          icon="💾"
+          isOpen={openSection === "Memory"}
+          toggle={() => toggleSection("Memory")}
+          isAnyChildActive={isActive("/memory") || isActive("/identity") || (isAdmin && isActive("/agents"))}
+        >
+          <SubNavItem to="/memory" active={isActive("/memory")}>Memory Browser</SubNavItem>
+          <SubNavItem to="/identity" active={isActive("/identity")}>Identity Profile</SubNavItem>
+          {isAdmin ? <SubNavItem to="/agents" active={isActive("/agents")}>Agent Federation</SubNavItem> : null}
+        </NavSection>
+      </nav>
+
+      <div className="mt-auto border-t border-zinc-800/50 pt-4">
+        {isAdmin ? (
+          <a href={platformUrl("/health")} target="_self" className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
+            🟢 System Online
+          </a>
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-[#00ffaa]">
+            🟢 System Online
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}

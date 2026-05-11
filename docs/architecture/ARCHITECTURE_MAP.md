@@ -1,6 +1,6 @@
 ---
 title: "AINDY Architecture Map"
-last_verified: "2026-05-08"
+last_verified: "2026-05-10"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -9,6 +9,22 @@ owner: "platform-team"
 
 ## System Overview
 AINDY is a modular-monolith runtime and application platform. The codebase is split into a runtime/platform layer in `AINDY/` and domain modules in `apps/`. `AINDY/` owns execution, scheduling, memory, syscalls, observability, and shared infrastructure; `apps/` owns domain behavior such as tasks, analytics, masterplan, social, and freelance.
+
+The authoritative list of app-approved runtime imports now lives in
+[Runtime Public API Contract](../runtime/PUBLIC_API_CONTRACT.md).
+
+The authoritative runtime-vs-app database boundary now lives in
+[Database Ownership Contract](../runtime/DB_OWNERSHIP_CONTRACT.md).
+
+Documentation ownership note:
+
+- this document is currently shared because it maps both `AINDY/` and `apps/`
+- runtime-only operating behavior is defined in
+  [Runtime-Only Deployment](../runtime/RUNTIME_ONLY_DEPLOYMENT.md)
+- the repo-split doc ownership map lives in
+  [Runtime Docset Boundary](../runtime/RUNTIME_DOCSET_BOUNDARY.md)
+- the future apps repo shape is defined in
+  [Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md)
 
 ## Boundary Status
 
@@ -20,6 +36,31 @@ The repo is in a transitional architecture state. Use these terms precisely:
 - **Platform full operation**: many user-facing capabilities still require successfully registered apps because tools, flows, and some ORM models are still app-owned, even though some `/apps/*` HTTP surfaces are now runtime-owned.
 - **Current transitional coupling**: most runtime-to-app integration is indirect through bootstrap and registries, but a small number of direct `AINDY/` -> `apps.*` imports still exist and are treated as temporary exceptions.
 - **Target architecture**: runtime boot and shared infrastructure remain in `AINDY/`, while domain interaction happens through registries, syscalls, and public contracts rather than direct imports.
+
+## Documentation Split
+
+Use the following rule while this monolith still carries both doc sets:
+
+- runtime contracts, deployment behavior, public import surfaces, and syscall
+  ABI references belong under `docs/runtime/`
+- app feature docs and app-domain behavior belong under `docs/apps/`
+- mixed architecture inventories under `docs/architecture/` should state
+  explicitly when they are shared references rather than runtime-only docs
+
+## Target Repo Shape
+
+The intended split is two repos, not many repos:
+
+- `aindy-runtime`
+  owns `AINDY/`, runtime packaging, runtime-only entrypoints, runtime manifests,
+  runtime docs, and runtime CI
+- `aindy-apps-monolith`
+  owns `apps/`, `client/`, app manifests, app bootstrap, app-profile tests,
+  app docs, and app-facing deployment/config assets
+
+Do not interpret the runtime split as a mandate to split `apps/agent`,
+`apps/tasks`, `apps/analytics`, and the rest into separate packages or
+repositories.
 
 ## Layer 1: Runtime / Platform (`AINDY/`)
 
@@ -162,7 +203,7 @@ Remaining deferred imports between apps
 are declared in `APP_DEPENDS_ON` and validated by the V1-VAL-015 CI gate.
 
 ### Boot Order
-Startup order is resolved by `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks` and `identity`. Core domains abort the entire startup when their bootstrap fails; all other domains, including `agent`, degrade gracefully once the plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
+Startup order is resolved by the app-owned plugin module `apps/bootstrap.py` using dependency metadata declared in each app bootstrap file as `BOOTSTRAP_DEPENDS_ON`. Ordering is resolved by `AINDY/platform_layer/bootstrap_graph.py` using Kahn's algorithm. The current core domains are `tasks` and `identity`. Core domains abort the entire startup when their bootstrap fails; all other domains, including `agent`, degrade gracefully once the selected app plugin profile has loaded `apps/bootstrap.py` successfully. A missing requested plugin module, import-time crash, or plugin bootstrap exception is not treated as degraded mode; startup fails instead unless the operator explicitly selected a zero-plugin profile such as `platform-only`. Each core app self-declares by including `IS_CORE_DOMAIN: bool = True` in its `bootstrap.py`. The platform reads this at startup via `apps/bootstrap._get_core_domains_from_metadata()`. The constant `CORE_DOMAINS` no longer exists in `AINDY/config.py` — the domain names are not hardcoded anywhere in the platform layer.
 
 Representative dependency declarations in `apps/bootstrap.py`:
 - `analytics` depends on `identity` and `tasks`
@@ -188,6 +229,7 @@ Current verified exceptions are narrow:
 - agent lifecycle persistence is runtime-owned in `AINDY/db/models/agent_run.py` and `AINDY/db/models/agent_event.py`
 - the `/apps/agent/*` HTTP surface is runtime-owned in `AINDY/routes/agent_router.py`
 - `apps/agent/routes/agent_router.py` remains only as a transitional compatibility re-export to the runtime router
+- the repo-root `routes` compatibility package is retained only for runtime-owned aliases that resolve back into `AINDY.routes.*`; app-owned route aliases no longer belong there
 - agent tool registration, async jobs, and remaining app-specific runtime enrichment stay app-owned under `apps/agent/`
 - plugin registration happens through runtime-owned registries and contracts in `AINDY/platform_layer/`
 - platform flow registration is runtime-owned, while app flow registration is plugin-owned through app bootstrap
@@ -215,13 +257,20 @@ monolith, but they are declared in `APP_DEPENDS_ON`, validated by V1-VAL-015,
 and checked at startup for ordering drift by
 `_check_app_depends_on_ordering()`.
 
+Future extraction expectation:
+
+- app code moves together as one repo rooted around `apps/`
+- runtime code becomes an installed dependency rather than a sibling source tree
+- the concrete target layout is documented in
+  [Apps Monolith Repo Shape](../apps/APPS_MONOLITH_REPO_SHAPE.md)
+
 ### The Syscall Contract
 The syscall dispatcher enforces capability checks, payload validation, version parsing, tenant context, and standardized envelopes. Version compatibility rules are defined in `AINDY/kernel/syscall_versioning.py`; runtime dispatch is implemented in `AINDY/kernel/syscall_dispatcher.py`.
 
 ## Data Layer
 
 ### PostgreSQL (Primary)
-PostgreSQL is the primary persistence layer. System models live in `AINDY/db/models/`, while app-specific ORM models live under each app and are registered through `apps.bootstrap.bootstrap_models()` during startup and migration loading.
+PostgreSQL is the primary persistence layer. System models live in `AINDY/db/models/`, while app-specific ORM models live under each app and are registered through the app-owned plugin entrypoint `apps.bootstrap.bootstrap_models()` during startup and migration loading. Use [Database Ownership Contract](../runtime/DB_OWNERSHIP_CONTRACT.md) as the authoritative ownership map for runtime-owned vs app-owned tables and migration expectations.
 
 Key files:
 - `AINDY/db/models/`
@@ -238,7 +287,12 @@ Key files:
 - `apps/social/routes/social_router.py`
 
 ## Client Layer
-The frontend is a React/Vite client under `client/`. The main API client layer is `client/src/api/`. UI components are grouped into `client/src/components/app`, `client/src/components/platform`, and `client/src/components/shared`.
+The frontend is a React/Vite client under `client/`. It belongs with the
+future `aindy-apps-monolith` repo, even though it now understands
+runtime-only mode. Today it is still one apps-hosted SPA rather than a
+separately deployable runtime console product. The main API client layer is
+`client/src/api/`. UI components are grouped into `client/src/components/app`,
+`client/src/components/platform`, and `client/src/components/shared`.
 
 Key files and directories:
 - `client/src/api/`
@@ -247,6 +301,9 @@ Key files and directories:
 - `client/src/components/shared/`
 - `client/src/App.jsx`
 
+Use [Client Ownership](../apps/CLIENT_OWNERSHIP.md) as the authoritative
+repo-split decision for `client/`.
+
 ## System Diagrams
 
 ### Request Flow (HTTP -> Domain)
@@ -254,7 +311,7 @@ Key files and directories:
 HTTP request
   -> FastAPI app in AINDY/main.py
   -> middleware / execution contract / auth
-  -> route handler in AINDY/routes/* or apps/*/routes/* compatibility shims
+  -> route handler in AINDY/routes/* or apps/*/routes/*
   -> domain service
   -> syscall dispatcher if crossing domain boundaries
   -> PostgreSQL or MongoDB

@@ -306,7 +306,7 @@ def watcher_mock_db(app):
     the DI override.
     """
     import sys
-    mod = sys.modules.get("routes.watcher_router")
+    mod = sys.modules.get("AINDY.routes.watcher_router")
     if mod is None:
         from AINDY.db.database import get_db as _get_db
         target_get_db = _get_db

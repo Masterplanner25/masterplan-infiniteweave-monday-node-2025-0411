@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+.venv/
+build/
+dist/
+*.egg-info/
+client/node_modules/
+client/dist/
+client/logs/
+client/playwright-report/
+client/test-results/

@@ -5,7 +5,7 @@ import logging
 import pytest
 
 from AINDY.platform_layer import registry
-from tests.helpers.bootstrap import reset_app_bootstrap_state
+from tests.helpers.app_profile import reset_app_bootstrap_state
 
 
 def _valid_agent_tool(fn):
