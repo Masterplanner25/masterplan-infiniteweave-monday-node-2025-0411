@@ -1,0 +1,1217 @@
+"""
+Syscall Registry — A.I.N.D.Y. system call table.
+
+Maps sys.v{N}.{domain}.{action} names to handler functions, required
+capabilities, and ABI contracts.  Handlers are plain callables — no HTTP,
+no FastAPI dependencies.
+
+Registry structure
+------------------
+``SYSCALL_REGISTRY`` is a ``VersionedSyscallRegistry`` that supports both:
+
+Flat key access (backward compatible)::
+
+    entry = SYSCALL_REGISTRY["sys.v1.memory.read"]
+    SYSCALL_REGISTRY["sys.v2.memory.read"] = SyscallEntry(...)
+
+Versioned view::
+
+    view = SYSCALL_REGISTRY.versioned        # {"v1": {"memory.read": entry}, …}
+    v1   = SYSCALL_REGISTRY.get_version("v1")
+
+Handler contract
+----------------
+Every handler must accept (payload: dict, context: SyscallContext) -> dict.
+Handlers may raise — the dispatcher catches and wraps all exceptions.
+Handlers must open their own DB sessions (never receive one as an argument)
+so they remain safe across execution contexts and tests.
+
+ABI contract
+------------
+Each SyscallEntry carries:
+  input_schema  — lightweight schema validated before execution
+  output_schema — shape validated after execution (non-fatal)
+  stable        — False marks the syscall as experimental
+  deprecated    — True causes the dispatcher to emit a warning
+  replacement   — full syscall name callers should migrate to
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta, timezone
+from collections.abc import MutableMapping
+from dataclasses import dataclass, field
+from typing import Any, Callable, Iterator
+
+logger = logging.getLogger(__name__)
+
+
+# ── Execution context ─────────────────────────────────────────────────────────
+
+@dataclass
+class SyscallContext:
+    """Immutable execution context passed into every syscall handler.
+
+    Built by the dispatcher caller (e.g. NodusRuntimeAdapter) before
+    dispatching. Handlers must not mutate this object.
+
+    Attributes:
+        execution_unit_id: Correlates to the active ExecutionUnit / FlowRun.
+        user_id:           Authenticated caller; used for ownership enforcement.
+        capabilities:      Explicit set of granted syscall capabilities.
+        trace_id:          Propagated trace ID (equals execution_unit_id in
+                           standard PersistentFlowRunner runs).
+        memory_context:    Pre-loaded memory nodes available to the script.
+        metadata:          Arbitrary caller-supplied key/value pairs.
+    """
+    execution_unit_id: str
+    user_id: str
+    capabilities: list[str]
+    trace_id: str
+    memory_context: list = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+    @property
+    def db(self):
+        return self.metadata.get("_db")
+
+
+# ── Capability constants ──────────────────────────────────────────────────────
+
+# Default capability set granted to all Nodus script executions.
+DEFAULT_NODUS_CAPABILITIES: list[str] = [
+    "memory.read",
+    "memory.write",
+    "memory.search",
+    "event.emit",
+]
+
+
+# ── Registry entry ────────────────────────────────────────────────────────────
+
+class SyscallEntry:
+    """Binds a handler callable to its required capability and ABI contract.
+
+    All parameters after *description* are optional and default to safe values
+    so existing code that constructs ``SyscallEntry(handler, capability)``
+    continues to work without any changes.
+    """
+
+    __slots__ = (
+        "handler", "capability", "description",
+        "input_schema", "output_schema",
+        "stable", "deprecated", "deprecated_since", "replacement",
+    )
+
+    def __init__(
+        self,
+        handler: Callable[[dict, SyscallContext], dict],
+        capability: str,
+        description: str = "",
+        input_schema: dict | None = None,
+        output_schema: dict | None = None,
+        stable: bool = True,
+        deprecated: bool = False,
+        deprecated_since: str | None = None,
+        replacement: str | None = None,
+    ) -> None:
+        self.handler = handler
+        self.capability = capability
+        self.description = description
+        self.input_schema: dict = input_schema or {}
+        self.output_schema: dict = output_schema or {}
+        self.stable = stable
+        self.deprecated = deprecated
+        self.deprecated_since = deprecated_since
+        self.replacement = replacement
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"SyscallEntry(capability={self.capability!r}, "
+            f"handler={self.handler.__name__!r}, "
+            f"deprecated={self.deprecated!r})"
+        )
+
+
+# ── Versioned registry ────────────────────────────────────────────────────────
+
+class VersionedSyscallRegistry(MutableMapping):
+    """MutableMapping that supports BOTH flat and versioned access patterns.
+
+    **Flat access (backward compatible)**::
+
+        registry["sys.v1.memory.read"]       # → SyscallEntry
+        registry["sys.v1.memory.read"] = e   # write
+        del registry["sys.v1.memory.read"]   # delete
+        registry.get("sys.v1.memory.read")   # get-with-default
+        "sys.v1.memory.read" in registry     # containment
+        list(registry.keys())                # all registered full names
+
+    **Versioned access**::
+
+        registry.versioned                   # {"v1": {"memory.read": e}, …}
+        registry.get_version("v1")           # {"memory.read": entry, …}
+        registry.versions()                  # ["v1", "v2", …]
+
+    Write operations (``__setitem__``, ``__delitem__``, ``pop``) keep
+    both views in sync automatically.
+    """
+
+    def __init__(self) -> None:
+        self._flat: dict[str, SyscallEntry] = {}
+        self._versioned: dict[str, dict[str, SyscallEntry]] = {}
+
+    # ── dict-like interface ────────────────────────────────────────────────
+
+    @staticmethod
+    def _split(key: str) -> tuple[str | None, str | None]:
+        """Return (version, action) from 'sys.v1.memory.read', or (None, None)."""
+        if not key.startswith("sys."):
+            return None, None
+        rest = key[4:]
+        dot = rest.find(".")
+        if dot == -1:
+            return None, None
+        return rest[:dot], rest[dot + 1:]
+
+    def __getitem__(self, key: str) -> SyscallEntry:
+        return self._flat[key]
+
+    def __setitem__(self, key: str, value: SyscallEntry) -> None:
+        if key in self._flat:
+            existing = self._flat[key]
+            if existing.handler is not value.handler:
+                logger.warning(
+                    "[SyscallRegistry] Syscall '%s' is being re-registered with a different handler. Previous: %r  New: %r. Each syscall should have exactly one registration point.",
+                    key,
+                    getattr(existing.handler, "__qualname__", repr(existing.handler)),
+                    getattr(value.handler, "__qualname__", repr(value.handler)),
+                )
+        self._flat[key] = value
+        version, action = self._split(key)
+        if version and action:
+            if version not in self._versioned:
+                self._versioned[version] = {}
+            self._versioned[version][action] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self._flat[key]
+        version, action = self._split(key)
+        if version and action and version in self._versioned:
+            self._versioned[version].pop(action, None)
+            if not self._versioned[version]:
+                del self._versioned[version]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._flat)
+
+    def __len__(self) -> int:
+        return len(self._flat)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._flat
+
+    def pop(self, key: str, *args) -> SyscallEntry:  # type: ignore[override]
+        val = self._flat.pop(key, *args)
+        version, action = self._split(key)
+        if version and action and version in self._versioned:
+            self._versioned[version].pop(action, None)
+            if not self._versioned[version]:
+                del self._versioned[version]
+        return val
+
+    # ── Versioned views ────────────────────────────────────────────────────
+
+    @property
+    def versioned(self) -> dict[str, dict[str, SyscallEntry]]:
+        """Return a shallow copy of the versioned registry."""
+        return {v: dict(actions) for v, actions in self._versioned.items()}
+
+    def get_version(self, version: str) -> dict[str, SyscallEntry]:
+        """Return all entries registered under *version*."""
+        return dict(self._versioned.get(version, {}))
+
+    def versions(self) -> list[str]:
+        """Return a sorted list of registered version strings."""
+        return sorted(self._versioned.keys())
+
+
+# ── Handlers ──────────────────────────────────────────────────────────────────
+# Each handler:
+#   - Accepts (payload: dict, context: SyscallContext)
+#   - Returns a plain dict (becomes the "data" field in the response envelope)
+#   - Opens its own SessionLocal — never receives a DB session as an argument
+#   - May raise ValueError for bad payload; other exceptions = handler failure
+
+
+def _handle_memory_read(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.read — recall memory nodes for the calling user.
+
+    Payload keys (all optional):
+        path      (str)        — MAS path or wildcard expression (overrides tag/query if exact)
+        query     (str)        — semantic search string
+        tags      (list[str])  — tag filter
+        limit     (int)        — max results, default 5
+        node_type (str)        — filter by node_type
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    path: str | None = payload.get("path")
+    query: str | None = payload.get("query")
+    tags: list | None = payload.get("tags")
+    limit: int = int(payload.get("limit", 5))
+    node_type: str | None = payload.get("node_type")
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        if path:
+            nodes = dao.query_path(
+                path_expr=path,
+                query=query,
+                tags=tags,
+                user_id=context.user_id,
+                limit=limit,
+            )
+        else:
+            nodes = dao.recall(
+                query=query,
+                tags=tags,
+                limit=limit,
+                user_id=context.user_id,
+                node_type=node_type,
+            )
+        return {"nodes": nodes, "count": len(nodes)}
+    finally:
+        db.close()
+
+
+def _handle_memory_write(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.write — persist a new memory node for the calling user.
+
+    Payload keys:
+        content      (str)        — required; node text
+        tags         (list[str])  — optional; classification tags
+        node_type    (str)        — default "execution"
+        significance (float)      — relevance weight 0.0-1.0, default 0.5
+        path         (str)        — optional MAS path; auto-generated if omitted
+        namespace    (str)        — optional namespace segment
+        addr_type    (str)        — optional sub-category segment
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import path_from_write_payload
+
+    content: str = payload.get("content", "")
+    if not content:
+        raise ValueError("sys.v1.memory.write requires non-empty 'content'")
+
+    tags: list = payload.get("tags") or []
+    node_type: str = payload.get("node_type", "execution")
+    source: str = payload.get("source", "syscall")
+
+    full_path, namespace, addr_type = path_from_write_payload(
+        {**payload, "node_type": node_type},
+        tenant_id=str(context.user_id),
+    )
+    from AINDY.memory.memory_address_space import parent_path_of
+    parent_path = parent_path_of(full_path)
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        node = dao.save(
+            content=content,
+            tags=tags,
+            user_id=context.user_id,
+            node_type=node_type,
+            source=source,
+            source_agent="syscall_dispatcher",
+            extra={"execution_unit_id": context.execution_unit_id},
+            path=full_path,
+            namespace=namespace,
+            addr_type=addr_type,
+            parent_path=parent_path,
+        )
+        return {"node": node, "path": full_path}
+    finally:
+        db.close()
+
+
+def _handle_memory_search(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.search — semantic search over the user's memory nodes.
+
+    Payload keys:
+        query  (str) — required; search string
+        limit  (int) — max results, default 5
+        path   (str) — optional MAS path prefix to scope the search
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    query: str = payload.get("query", "")
+    if not query:
+        raise ValueError("sys.v1.memory.search requires non-empty 'query'")
+    limit: int = int(payload.get("limit", 5))
+    path: str | None = payload.get("path")
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        if path:
+            nodes = dao.query_path(
+                path_expr=path,
+                query=query,
+                user_id=context.user_id,
+                limit=limit,
+            )
+        else:
+            nodes = dao.recall(
+                query=query,
+                limit=limit,
+                user_id=context.user_id,
+            )
+        return {"nodes": nodes, "count": len(nodes)}
+    finally:
+        db.close()
+
+
+def _handle_memory_list(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.list — list nodes at a MAS path (one level or recursive).
+
+    Payload keys:
+        path      (str) — required; MAS prefix (use /* for one level, /** for recursive)
+        limit     (int) — max results, default 50
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    path: str = payload.get("path", "")
+    if not path:
+        raise ValueError("sys.v1.memory.list requires 'path'")
+    limit: int = int(payload.get("limit", 50))
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        nodes = dao.query_path(path_expr=path, user_id=context.user_id, limit=limit)
+        return {"nodes": nodes, "count": len(nodes), "path": path}
+    finally:
+        db.close()
+
+
+def _handle_memory_tree(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.tree — return a hierarchical tree of nodes under a path.
+
+    Payload keys:
+        path  (str) — required; MAS prefix
+        limit (int) — max nodes to fetch before building tree, default 200
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+    from AINDY.memory.memory_address_space import build_tree, wildcard_prefix, is_exact, normalize_path
+
+    path: str = payload.get("path", "")
+    if not path:
+        raise ValueError("sys.v1.memory.tree requires 'path'")
+    limit: int = int(payload.get("limit", 200))
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        if is_exact(path):
+            nodes = dao.walk_path(normalize_path(path), user_id=context.user_id, limit=limit)
+        else:
+            nodes = dao.walk_path(wildcard_prefix(path), user_id=context.user_id, limit=limit)
+        tree = build_tree(nodes)
+        return {"tree": tree, "node_count": len(nodes), "path": path}
+    finally:
+        db.close()
+
+
+def _handle_memory_trace(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.memory.trace — follow the causal chain from a node at a path.
+
+    Payload keys:
+        path   (str) — required; exact MAS path to start from
+        depth  (int) — max hops to follow, default 5
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    path: str = payload.get("path", "")
+    if not path:
+        raise ValueError("sys.v1.memory.trace requires 'path'")
+    depth: int = int(payload.get("depth", 5))
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        chain = dao.causal_trace(path=path, depth=depth, user_id=context.user_id)
+        return {"chain": chain, "depth": len(chain), "path": path}
+    finally:
+        db.close()
+
+
+def _handle_flow_run(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.flow.run — execute a registered flow by name.
+
+    Payload keys:
+        flow_name     (str)  — required; must exist in FLOW_REGISTRY
+        initial_state (dict) — optional; passed to PersistentFlowRunner.start()
+        workflow_type (str)  — optional; default "syscall"
+
+    Context metadata keys (internal use):
+        _db  — caller-provided SQLAlchemy Session. When present the handler
+               uses it directly and skips close() so the caller's transaction
+               boundary is preserved. When absent the handler opens and closes
+               its own session.
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.runtime.flow_engine import FLOW_REGISTRY, PersistentFlowRunner
+
+    flow_name: str = payload.get("flow_name", "")
+    if not flow_name:
+        raise ValueError("sys.v1.flow.run requires 'flow_name'")
+
+    flow = FLOW_REGISTRY.get(flow_name)
+    if flow is None:
+        raise ValueError(
+            f"sys.v1.flow.run: unknown flow '{flow_name}' — "
+            f"not registered. Available: {sorted(FLOW_REGISTRY.keys())}"
+        )
+
+    initial_state: dict = payload.get("initial_state") or {}
+    workflow_type: str = payload.get("workflow_type", flow_name)
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        runner = PersistentFlowRunner(
+            flow=flow,
+            db=db,
+            user_id=context.user_id,
+            workflow_type=workflow_type,
+        )
+        result = runner.start(initial_state, flow_name=flow_name)
+        return {"flow_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_event_emit(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.event.emit — emit a SystemEvent on the A.I.N.D.Y. event bus.
+
+    Payload keys:
+        event_type (str)  — required; e.g. "operation.completed"
+        payload    (dict) — optional; merged into the event payload
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.core.system_event_service import emit_system_event
+
+    event_type: str = payload.get("event_type", "")
+    if not event_type:
+        raise ValueError("sys.v1.event.emit requires 'event_type'")
+
+    event_payload: dict = payload.get("payload") or {}
+
+    db = SessionLocal()
+    try:
+        event_id = emit_system_event(
+            db=db,
+            event_type=event_type,
+            user_id=context.user_id,
+            trace_id=context.trace_id,
+            source="syscall_dispatcher",
+            payload={
+                **event_payload,
+                "execution_unit_id": context.execution_unit_id,
+            },
+        )
+        db.commit()
+        return {"event_id": str(event_id) if event_id else None}
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+# ── Example v2 handler ────────────────────────────────────────────────────────
+# Demonstrates ABI evolution: v2.memory.read adds structured ``filters``
+# without breaking the v1 interface.
+
+def _handle_memory_read_v2(payload: dict, context: SyscallContext) -> dict:
+    """sys.v2.memory.read — enhanced recall with structured field filters.
+
+    Extends v1 with:
+        filters (dict) — optional; key/value field filters applied after recall.
+            Supported keys: memory_type, node_type, min_impact (float).
+
+    All v1 payload keys remain valid.  If *filters* is absent the response is
+    identical to sys.v1.memory.read.
+    """
+    from AINDY.db.database import SessionLocal
+    from AINDY.db.dao.memory_node_dao import MemoryNodeDAO
+
+    path: str | None = payload.get("path")
+    query: str | None = payload.get("query")
+    tags: list | None = payload.get("tags")
+    limit: int = int(payload.get("limit", 5))
+    node_type: str | None = payload.get("node_type")
+    filters: dict = payload.get("filters") or {}
+
+    db = SessionLocal()
+    try:
+        dao = MemoryNodeDAO(db)
+        if path:
+            nodes = dao.query_path(path_expr=path, query=query, tags=tags,
+                                   user_id=context.user_id, limit=limit)
+        else:
+            nodes = dao.recall(query=query, tags=tags, limit=limit * 2,
+                               user_id=context.user_id, node_type=node_type)
+
+        # Apply structured filters (v2 extension)
+        if filters:
+            if "memory_type" in filters:
+                nodes = [n for n in nodes if n.get("memory_type") == filters["memory_type"]]
+            if "node_type" in filters:
+                nodes = [n for n in nodes if n.get("node_type") == filters["node_type"]]
+            if "min_impact" in filters:
+                min_imp = float(filters["min_impact"])
+                nodes = [n for n in nodes if (n.get("impact_score") or 0.0) >= min_imp]
+
+        return {"nodes": nodes[:limit], "count": min(len(nodes), limit), "version": "v2"}
+    finally:
+        db.close()
+
+
+# ── Execution entry-point handlers ───────────────────────────────────────────
+# These wrap the four top-level execution entry points so ALL code paths go
+# through the syscall layer. Internal proxies (run_flow, execute_intent, …)
+# call these handlers; direct callers use the public proxy functions instead.
+
+
+def _handle_flow_execute_intent(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.flow.execute_intent — top-level intent execution with strategy selection.
+
+    Payload keys:
+        intent_data (dict) — required; at minimum {"workflow_type": "..."}
+
+    Context metadata keys (internal use):
+        _db — caller-provided SQLAlchemy Session (transaction preserved).
+    """
+    from AINDY.db.database import SessionLocal
+
+    intent_data: dict = payload.get("intent_data") or {}
+    if not intent_data:
+        raise ValueError("sys.v1.flow.execute_intent requires non-empty 'intent_data'")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from AINDY.runtime.flow_engine import _execute_intent_direct
+        result = _execute_intent_direct(
+            intent_data=intent_data,
+            db=db,
+            user_id=context.user_id,
+        )
+        return {"intent_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_nodus_execute(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.nodus.execute — execute a Nodus script via flow-backed orchestration.
+
+    Payload keys:
+        script           (str)        — required; Nodus source code
+        input_payload    (dict)       — optional; script input variables
+        error_policy     (str)        — optional; "halt" (default) or "continue"
+        workflow_type    (str)        — optional; default "nodus_execute"
+        trace_id         (str)        — optional; correlation ID
+        node_max_retries (int)        — optional; per-node retry override
+
+    Context metadata keys (internal use):
+        _db                 — caller-provided SQLAlchemy Session.
+        _extra_initial_state — extra keys merged into initial flow state.
+    """
+    from AINDY.db.database import SessionLocal
+
+    script: str = payload.get("script", "")
+    if not script:
+        raise ValueError("sys.v1.nodus.execute requires 'script'")
+
+    input_payload: dict = payload.get("input_payload") or {}
+    error_policy: str = payload.get("error_policy", "halt")
+    workflow_type: str = payload.get("workflow_type", "nodus_execute")
+    trace_id: str | None = payload.get("trace_id")
+    node_max_retries = payload.get("node_max_retries")
+    extra_initial_state: dict | None = context.metadata.get("_extra_initial_state")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from AINDY.runtime.nodus_execution_service import _run_nodus_via_flow_direct
+        result = _run_nodus_via_flow_direct(
+            script=script,
+            input_payload=input_payload,
+            error_policy=error_policy,
+            db=db,
+            user_id=context.user_id,
+            workflow_type=workflow_type,
+            trace_id=trace_id,
+            extra_initial_state=extra_initial_state,
+            node_max_retries=node_max_retries,
+        )
+        return {"nodus_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_job_submit(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.job.submit — submit a named async job to the automation pipeline.
+
+    Payload keys:
+        task_name    (str)  — required; name registered in _JOB_REGISTRY
+        payload      (dict) — optional; forwarded to the job handler
+        source       (str)  — optional; label for the AutomationLog
+        max_attempts (int)  — optional; retry budget (default 1)
+    """
+    task_name: str = payload.get("task_name", "")
+    if not task_name:
+        raise ValueError("sys.v1.job.submit requires 'task_name'")
+
+    job_payload: dict = payload.get("payload") or {}
+    source: str = payload.get("source", "syscall")
+    max_attempts: int = int(payload.get("max_attempts", 1))
+    external_db = context.metadata.get("_db")
+
+    from AINDY.platform_layer.async_job_service import submit_async_job
+    log_id = submit_async_job(
+        task_name=task_name,
+        payload=job_payload,
+        user_id=context.user_id,
+        source=source,
+        max_attempts=max_attempts,
+        db=external_db,
+    )
+    return {"log_id": log_id, "task_name": task_name, "source": source}
+
+
+def _handle_agent_execute(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.execute — execute an approved AgentRun via the deterministic runtime.
+
+    Payload keys:
+        run_id (str) — required; ID of an AgentRun with status "approved"
+
+    Context metadata keys (internal use):
+        _db — caller-provided SQLAlchemy Session.
+    """
+    from AINDY.db.database import SessionLocal
+
+    run_id: str = payload.get("run_id", "")
+    if not run_id:
+        raise ValueError("sys.v1.agent.execute requires 'run_id'")
+
+    external_db = context.metadata.get("_db")
+    owns_session = external_db is None
+    db = external_db if external_db is not None else SessionLocal()
+    try:
+        from AINDY.agents.agent_runtime import execute_run
+        result = execute_run(run_id=run_id, user_id=context.user_id, db=db)
+        return {"run_result": result}
+    finally:
+        if owns_session:
+            db.close()
+
+
+def _handle_agent_count_runs(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.count_runs - count AgentRun rows for a user, optionally filtered by status."""
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from AINDY.db.models import AgentRun
+
+    db = context.db
+    if db is None:
+        return {"count": 0}
+
+    requested_user_id = payload.get("user_id")
+    query = db.query(AgentRun.id)
+    if requested_user_id is not None:
+        normalized_user_id = parse_user_id(requested_user_id)
+        if normalized_user_id is None:
+            return {"count": 0}
+        query = query.filter(AgentRun.user_id == normalized_user_id)
+
+    status_filter = payload.get("status")
+    if status_filter:
+        statuses = status_filter if isinstance(status_filter, list) else [status_filter]
+        query = query.filter(AgentRun.status.in_(statuses))
+
+    return {"count": query.count()}
+
+
+def _handle_agent_list_recent_durations(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.list_recent_durations - list recent AgentRun timing fields for duration calculations."""
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from AINDY.db.models import AgentRun
+
+    db = context.metadata.get("_db") or context.db
+    if db is None:
+        return {"durations": [], "count": 0}
+
+    window_hours = int(payload.get("window_hours", 1))
+    window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours)
+    query = db.query(AgentRun).filter(AgentRun.created_at >= window_start)
+
+    requested_user_id = payload.get("user_id")
+    if requested_user_id is not None:
+        normalized_user_id = parse_user_id(requested_user_id)
+        if normalized_user_id is None:
+            return {"durations": [], "count": 0}
+        query = query.filter(AgentRun.user_id == normalized_user_id)
+
+    rows = query.all()
+    durations = [
+        {
+            "started_at": (row.started_at or row.created_at).isoformat()
+            if (row.started_at or row.created_at)
+            else None,
+            "completed_at": (row.completed_at or row.started_at or row.created_at).isoformat()
+            if (row.completed_at or row.started_at or row.created_at)
+            else None,
+        }
+        for row in rows
+    ]
+    return {"durations": durations, "count": len(durations)}
+
+
+def _handle_agent_list_recent_runs(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.list_recent_runs - list recent AgentRun rows for a user as plain dicts."""
+    from AINDY.agents.agent_runtime import run_to_dict
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from AINDY.db.models import AgentRun
+
+    db = context.db
+    if db is None:
+        return {"runs": []}
+
+    normalized_user_id = parse_user_id(payload.get("user_id"))
+    if normalized_user_id is None:
+        return {"runs": []}
+
+    limit = int(payload.get("limit", 10))
+    rows = (
+        db.query(AgentRun)
+        .filter(AgentRun.user_id == normalized_user_id)
+        .order_by(AgentRun.created_at.desc(), AgentRun.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {"runs": [run_to_dict(row) for row in rows]}
+
+
+def _handle_agent_ensure_initial_run(payload: dict, context: SyscallContext) -> dict:
+    """sys.v1.agent.ensure_initial_run - find or create the initial signup AgentRun sentinel for a user."""
+    from AINDY.platform_layer.user_ids import parse_user_id
+    from AINDY.db.models import AgentRun
+
+    db = context.db
+    if db is None:
+        return {"run_id": None, "created": False}
+
+    normalized_user_id = parse_user_id(payload.get("user_id"))
+    if normalized_user_id is None:
+        return {"run_id": None, "created": False}
+
+    existing = (
+        db.query(AgentRun)
+        .filter(
+            AgentRun.user_id == normalized_user_id,
+            AgentRun.goal == "Initial agent context",
+        )
+        .first()
+    )
+    if existing:
+        return {"run_id": str(existing.id), "created": False}
+
+    run = AgentRun(
+        user_id=normalized_user_id,
+        goal="Initial agent context",
+        status="completed",
+        overall_risk="low",
+        steps_total=0,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    return {"run_id": str(run.id), "created": True}
+
+
+# ── Registry ──────────────────────────────────────────────────────────────────
+
+SYSCALL_REGISTRY: VersionedSyscallRegistry = VersionedSyscallRegistry()
+
+# ── v1 built-in syscalls ──────────────────────────────────────────────────────
+
+SYSCALL_REGISTRY["sys.v1.memory.read"] = SyscallEntry(
+    handler=_handle_memory_read,
+    capability="memory.read",
+    description="Recall memory nodes for the calling user.",
+    input_schema={
+        "properties": {
+            "query": {"type": "string"},
+            "tags": {"type": "list"},
+            "limit": {"type": "int"},
+            "node_type": {"type": "string"},
+            "path": {"type": "string"},
+        }
+    },
+    output_schema={
+        "required": ["nodes", "count"],
+        "properties": {"nodes": {"type": "list"}, "count": {"type": "int"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.memory.write"] = SyscallEntry(
+    handler=_handle_memory_write,
+    capability="memory.write",
+    description="Persist a new memory node.",
+    input_schema={
+        "required": ["content"],
+        "properties": {
+            "content": {"type": "string"},
+            "tags": {"type": "list"},
+            "node_type": {"type": "string"},
+            "path": {"type": "string"},
+        },
+    },
+    output_schema={
+        "required": ["node"],
+        "properties": {"node": {"type": "dict"}, "path": {"type": "string"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.memory.search"] = SyscallEntry(
+    handler=_handle_memory_search,
+    capability="memory.search",
+    description="Semantic search over user memory nodes.",
+    input_schema={
+        "required": ["query"],
+        "properties": {
+            "query": {"type": "string"},
+            "limit": {"type": "int"},
+            "path": {"type": "string"},
+        },
+    },
+    output_schema={
+        "required": ["nodes", "count"],
+        "properties": {"nodes": {"type": "list"}, "count": {"type": "int"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.memory.list"] = SyscallEntry(
+    handler=_handle_memory_list,
+    capability="memory.list",
+    description="List nodes at a MAS path prefix.",
+    input_schema={
+        "required": ["path"],
+        "properties": {"path": {"type": "string"}, "limit": {"type": "int"}},
+    },
+    output_schema={
+        "required": ["nodes", "count"],
+        "properties": {"nodes": {"type": "list"}, "count": {"type": "int"}},
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.memory.tree"] = SyscallEntry(
+    handler=_handle_memory_tree,
+    capability="memory.tree",
+    description="Return a hierarchical tree of nodes under a path.",
+    input_schema={
+        "required": ["path"],
+        "properties": {"path": {"type": "string"}, "limit": {"type": "int"}},
+    },
+    output_schema={
+        "required": ["tree", "node_count"],
+        "properties": {"tree": {"type": "dict"}, "node_count": {"type": "int"}},
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.memory.trace"] = SyscallEntry(
+    handler=_handle_memory_trace,
+    capability="memory.trace",
+    description="Follow the causal chain from a node at a path.",
+    input_schema={
+        "required": ["path"],
+        "properties": {"path": {"type": "string"}, "depth": {"type": "int"}},
+    },
+    output_schema={
+        "required": ["chain", "depth"],
+        "properties": {"chain": {"type": "list"}, "depth": {"type": "int"}},
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.flow.run"] = SyscallEntry(
+    handler=_handle_flow_run,
+    capability="flow.run",
+    description="Execute a registered flow by name.",
+    input_schema={
+        "required": ["flow_name"],
+        "properties": {
+            "flow_name": {"type": "string"},
+            "initial_state": {"type": "dict"},
+        },
+    },
+)
+SYSCALL_REGISTRY["sys.v1.event.emit"] = SyscallEntry(
+    handler=_handle_event_emit,
+    capability="event.emit",
+    description="Emit a SystemEvent on the A.I.N.D.Y. event bus.",
+    input_schema={
+        "required": ["event_type"],
+        "properties": {
+            "event_type": {"type": "string"},
+            "payload": {"type": "dict"},
+        },
+    },
+)
+
+# ── v2 syscalls ───────────────────────────────────────────────────────────────
+# v2 extends v1 capabilities without removing or changing existing fields.
+
+SYSCALL_REGISTRY["sys.v2.memory.read"] = SyscallEntry(
+    handler=_handle_memory_read_v2,
+    capability="memory.read",
+    description="Enhanced memory recall with structured field filters (v2).",
+    input_schema={
+        "properties": {
+            "query": {"type": "string"},
+            "tags": {"type": "list"},
+            "limit": {"type": "int"},
+            "node_type": {"type": "string"},
+            "path": {"type": "string"},
+            "filters": {"type": "dict"},   # v2 extension — optional
+        }
+    },
+    output_schema={
+        "required": ["nodes", "count"],
+        "properties": {
+            "nodes": {"type": "list"},
+            "count": {"type": "int"},
+            "version": {"type": "string"},
+        },
+    },
+    stable=False,
+)
+
+# ── v1 execution entry-point syscalls ─────────────────────────────────────────
+# These mirror the top-level execution entry points so ALL code paths — both
+# internal and external — route through the syscall layer.
+
+SYSCALL_REGISTRY["sys.v1.flow.execute_intent"] = SyscallEntry(
+    handler=_handle_flow_execute_intent,
+    capability="flow.execute",
+    description="Top-level intent execution with learned strategy selection.",
+    input_schema={
+        "required": ["intent_data"],
+        "properties": {
+            "intent_data": {"type": "dict"},
+        },
+    },
+    output_schema={
+        "required": ["intent_result"],
+        "properties": {"intent_result": {"type": "dict"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.nodus.execute"] = SyscallEntry(
+    handler=_handle_nodus_execute,
+    capability="nodus.execute",
+    description="Execute a Nodus script via flow-backed orchestration.",
+    input_schema={
+        "required": ["script"],
+        "properties": {
+            "script": {"type": "string"},
+            "input_payload": {"type": "dict"},
+            "error_policy": {"type": "string"},
+            "workflow_type": {"type": "string"},
+            "trace_id": {"type": "string"},
+            "node_max_retries": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["nodus_result"],
+        "properties": {"nodus_result": {"type": "dict"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.job.submit"] = SyscallEntry(
+    handler=_handle_job_submit,
+    capability="job.submit",
+    description="Submit a named async job to the automation pipeline.",
+    input_schema={
+        "required": ["task_name"],
+        "properties": {
+            "task_name": {"type": "string"},
+            "payload": {"type": "dict"},
+            "source": {"type": "string"},
+            "max_attempts": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["log_id"],
+        "properties": {
+            "log_id": {"type": "string"},
+            "task_name": {"type": "string"},
+            "source": {"type": "string"},
+        },
+    },
+)
+SYSCALL_REGISTRY["sys.v1.agent.execute"] = SyscallEntry(
+    handler=_handle_agent_execute,
+    capability="agent.execute",
+    description="Execute an approved AgentRun via the deterministic runtime.",
+    input_schema={
+        "required": ["run_id"],
+        "properties": {"run_id": {"type": "string"}},
+    },
+    output_schema={
+        "required": ["run_result"],
+        "properties": {"run_result": {"type": "dict"}},
+    },
+)
+SYSCALL_REGISTRY["sys.v1.agent.count_runs"] = SyscallEntry(
+    handler=_handle_agent_count_runs,
+    capability="agent.read",
+    description="Count AgentRun rows for a user, optionally filtered by status.",
+    input_schema={
+        "properties": {
+            "user_id": {"type": "string"},
+            "status": {"type": "list"},
+        },
+    },
+    output_schema={
+        "required": ["count"],
+        "properties": {"count": {"type": "int"}},
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.agent.list_recent_durations"] = SyscallEntry(
+    handler=_handle_agent_list_recent_durations,
+    capability="agent.read",
+    description="List recent AgentRun timing fields for duration calculations.",
+    input_schema={
+        "properties": {
+            "user_id": {"type": "string"},
+            "window_hours": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["durations", "count"],
+        "properties": {
+            "durations": {"type": "list"},
+            "count": {"type": "int"},
+        },
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.agent.list_recent_runs"] = SyscallEntry(
+    handler=_handle_agent_list_recent_runs,
+    capability="agent.read",
+    description="List recent AgentRun rows for a user as plain dicts.",
+    input_schema={
+        "properties": {
+            "user_id": {"type": "string"},
+            "limit": {"type": "int"},
+        },
+    },
+    output_schema={
+        "required": ["runs"],
+        "properties": {"runs": {"type": "list"}},
+    },
+    stable=False,
+)
+SYSCALL_REGISTRY["sys.v1.agent.ensure_initial_run"] = SyscallEntry(
+    handler=_handle_agent_ensure_initial_run,
+    capability="agent.write",
+    description="Find or create the initial signup AgentRun sentinel for a user.",
+    input_schema={
+        "properties": {
+            "user_id": {"type": "string"},
+        },
+    },
+    output_schema={
+        "required": ["run_id", "created"],
+        "properties": {
+            "run_id": {"type": "string"},
+            "created": {"type": "bool"},
+        },
+    },
+    stable=False,
+)
+
+
+def register_syscall(
+    name: str,
+    handler: Callable[[dict, SyscallContext], dict],
+    capability: str,
+    description: str = "",
+    input_schema: dict | None = None,
+    output_schema: dict | None = None,
+    stable: bool = True,
+    deprecated: bool = False,
+    deprecated_since: str | None = None,
+    replacement: str | None = None,
+) -> None:
+    """Register a syscall at runtime.
+
+    Idempotent — registering the same name twice overwrites the entry.
+    Not thread-safe for concurrent writes (startup-only use case).
+
+    Args:
+        name:             Fully-qualified name (must start with ``"sys."``).
+        handler:          Callable(payload, context) → dict.
+        capability:       Required capability string.
+        description:      Human-readable description.
+        input_schema:     Optional input validation schema.
+        output_schema:    Optional output validation schema.
+        stable:           False marks the syscall as experimental.
+        deprecated:       True causes the dispatcher to emit a warning.
+        deprecated_since: Version string when deprecation was introduced.
+        replacement:      Full name of the replacement syscall.
+
+    Raises:
+        ValueError: If name does not start with ``"sys."``.
+    """
+    if not name.startswith("sys."):
+        raise ValueError(
+            f"Syscall name must start with 'sys.', got: {name!r}"
+        )
+    SYSCALL_REGISTRY[name] = SyscallEntry(
+        handler=handler,
+        capability=capability,
+        description=description,
+        input_schema=input_schema,
+        output_schema=output_schema,
+        stable=stable,
+        deprecated=deprecated,
+        deprecated_since=deprecated_since,
+        replacement=replacement,
+    )
+    logger.debug(
+        "[syscall_registry] registered '%s' (capability=%s, deprecated=%s)",
+        name, capability, deprecated,
+    )
+
+
+def get_registered_syscalls() -> list[str]:
+    """Return the names of all currently registered syscalls."""
+    try:
+        return sorted(SYSCALL_REGISTRY.keys())
+    except Exception:
+        return []
+
+

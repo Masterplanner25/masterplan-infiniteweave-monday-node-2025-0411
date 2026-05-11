@@ -15,7 +15,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool, StaticPool
 from pgvector.sqlalchemy import Vector
 
-from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+from tests.helpers.app_profile import bootstrap_app_models
+from tests.helpers.runtime import import_runtime_model_registry
 
 
 @compiles(PG_UUID, "sqlite")

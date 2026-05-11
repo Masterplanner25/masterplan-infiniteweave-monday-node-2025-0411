@@ -10,6 +10,9 @@ from AINDY.agents.tool_registry import TOOL_REGISTRY, _SUGGESTION_PROVIDERS, sug
 from AINDY.platform_layer import registry
 from AINDY.platform_layer.deployment_contract import agent_runtime_enrichment_contract
 
+RUNTIME_ONLY = pytest.mark.runtime_only
+APP_PROFILE = pytest.mark.app_profile
+
 
 _REGISTRY_STATE_EMPTY = {
     "_agent_tools": {},
@@ -72,6 +75,7 @@ def isolated_agent_registry(monkeypatch):
             setattr(registry, name, value)
 
 
+@RUNTIME_ONLY
 def test_agent_runtime_enrichment_contract_is_explicit():
     contract = agent_runtime_enrichment_contract()
 
@@ -95,6 +99,7 @@ def test_agent_runtime_enrichment_contract_is_explicit():
     ]
 
 
+@RUNTIME_ONLY
 def test_runtime_defaults_keep_agent_enrichment_generic(isolated_agent_registry):
     from AINDY.platform_layer import runtime_agent_defaults
 
@@ -112,7 +117,7 @@ def test_runtime_defaults_keep_agent_enrichment_generic(isolated_agent_registry)
     assert completion_results == [None]
 
 
-@pytest.mark.app_profile
+@APP_PROFILE
 def test_plugin_registration_adds_kpi_planner_context_suggestions_and_completion_enrichment(
     isolated_agent_registry,
     monkeypatch,

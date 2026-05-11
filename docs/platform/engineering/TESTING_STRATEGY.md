@@ -1,6 +1,6 @@
 ---
 title: "Testing Strategy"
-last_verified: "2026-04-18"
+last_verified: "2026-05-10"
 api_version: "1.0"
 status: current
 owner: "platform-team"
@@ -23,10 +23,17 @@ This section describes the currently validated test baseline. Older sprint-by-sp
   - `client`
   - `test_user`
   - `auth_headers`
+- Shared helper split:
+  - `tests.helpers.runtime` is the recommended helper path for runtime-only tests
+  - `tests.helpers.app_profile` is the recommended helper path for tests that intentionally depend on local `apps/`
+  - `tests.helpers.bootstrap` remains only as a compatibility shim during the transition
 - Fixture profile split:
   - `client` / `app` are app-profile fixtures and may load `apps.bootstrap`
   - `runtime_only_client` / `runtime_only_app` are runtime-only fixtures and must not require `apps.bootstrap`
   - shared DB setup imports runtime-owned models by default and bootstraps app models only when the `apps/` tree is present
+- Marker split:
+  - `@pytest.mark.runtime_only` is reserved for tests that must pass with no `apps/` tree present
+  - `@pytest.mark.app_profile` is required for tests that import `apps.*`, require `apps.bootstrap`, or validate app-profile boot behavior
 - Async heavy execution is off by default in tests and is enabled only per-test when the `202` queueing contract is under test.
 - Test env defaults are injected in `tests/conftest.py`, including:
   - `SECRET_KEY`
@@ -37,7 +44,43 @@ This section describes the currently validated test baseline. Older sprint-by-sp
   - `tests/unit/`
   - `tests/integration/`
   - `tests/api/`
-  - `tests/system/`
+- `tests/system/`
+
+**Runtime/app subset commands**
+- Runtime-owned subset: `python -m pytest tests/unit/test_bootstrap_helpers.py tests/unit/test_runtime_only_test_fixtures.py tests/unit/test_platform_only_startup.py tests/unit/test_plugin_profiles.py -m "runtime_only and not app_profile" -q`
+- Representative app-profile subset: `python -m pytest tests/unit/test_plugin_profiles.py tests/unit/test_import_boundaries.py tests/unit/test_runtime_agent_api_ownership.py tests/test_bootstrap_completeness.py -m app_profile -q`
+- Full monolith behavior remains covered by the normal suite entrypoints; these marker-based commands exist to make runtime extraction and app-profile assumptions explicit.
+
+**Runtime CI subset**
+- The future standalone runtime repo should run a narrow contract suite only:
+  - startup and runtime-only boot: `test_bootstrap_helpers.py`, `test_runtime_only_test_fixtures.py`, `test_platform_only_startup.py`
+  - profile and manifest resolution: runtime-only-marked cases from `test_plugin_profiles.py`
+  - packaging/install shape: `test_runtime_packaging.py`
+  - runtime boundary checks: `test_runtime_boundary.py`
+  - runtime public contract stability: runtime-only-marked assertions in `test_runtime_public_api_contract.py`
+  - generic agent runtime baseline: runtime-only-marked assertions in `test_agent_runtime_enrichment_boundary.py`
+  - runtime version surface: `tests/api/test_version_api.py`
+- The monolith currently hosts this future runtime CI shape in `.github/workflows/runtime-ci.yml`.
+- Runtime CI must not require `apps.bootstrap`, app-profile fixtures, PostgreSQL, Redis, or MongoDB.
+- Runtime CI should install the package in editable mode and validate the published console entrypoints before running tests.
+- Runtime-only helper guidance:
+  - prefer `tests.helpers.runtime`
+  - runtime-only fixtures may call app-profile helpers only behind explicit optional behavior such as `required=False`
+
+**App CI subset**
+- App CI keeps tests that require `apps.bootstrap`, app-owned route shims, app enrichment, or app-to-runtime import validation.
+- Examples: `test_import_boundaries.py`, `test_runtime_agent_api_ownership.py`, app-profile cases in `test_plugin_profiles.py`, `test_bootstrap_completeness.py`, and app-profile enrichment checks in `test_agent_runtime_enrichment_boundary.py`.
+- The future `aindy-apps-monolith` repo should also own the shared app-profile
+  helpers and fixtures that assume installed runtime plus local `apps/`:
+  `tests/helpers/app_profile.py`, the transitional shim `tests/helpers/bootstrap.py`,
+  `tests/fixtures/client.py`, and the app-profile
+  fixture path built around `client` / `app`.
+- App-profile helper guidance:
+  - prefer `tests.helpers.app_profile`
+  - missing `apps.bootstrap` should produce an explicit skip only when the caller passes `required=True`
+  - do not use app-profile helpers implicitly from runtime-only fixtures
+- The future repo layout target is documented in
+  [Apps Monolith Repo Shape](../../apps/APPS_MONOLITH_REPO_SHAPE.md).
 
 **Current system-level invariant coverage**
 - `tests/system/test_invariants.py` validates:

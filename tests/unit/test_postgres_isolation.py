@@ -15,7 +15,8 @@ from AINDY.db.models.execution_unit import ExecutionUnit
 from AINDY.db.models.user import User
 from AINDY.kernel.syscall_dispatcher import SyscallContext, SyscallDispatcher, SyscallEntry
 from AINDY.db.models import AgentRun
-from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+from tests.helpers.app_profile import bootstrap_app_models
+from tests.helpers.runtime import import_runtime_model_registry
 
 
 pytestmark = [

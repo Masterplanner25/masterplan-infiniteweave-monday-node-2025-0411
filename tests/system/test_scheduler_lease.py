@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
-from tests.helpers.bootstrap import reset_app_bootstrap_state
+from tests.helpers.app_profile import reset_app_bootstrap_state
 
 
 pytestmark = pytest.mark.app_profile

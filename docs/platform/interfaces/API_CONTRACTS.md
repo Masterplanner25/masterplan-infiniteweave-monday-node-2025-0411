@@ -9,6 +9,31 @@ owner: "platform-team"
 
 This document formalizes the current FastAPI HTTP interface based strictly on implemented routes. It separates current behavior from policy requirements and does not introduce new endpoints.
 
+Ownership note:
+
+- this document is a shared monolith inventory today
+- the future runtime repo should carry only runtime-owned route contracts from
+  this inventory
+- the future apps repo should carry app-route inventories and app-domain API
+  contracts
+- the broader doc split map lives in
+  [Runtime Docset Boundary](../../runtime/RUNTIME_DOCSET_BOUNDARY.md)
+
+Import ownership note:
+
+- Runtime-owned route imports live under `AINDY.routes.*`.
+- The repo-root `routes` compatibility package is runtime-only and may alias
+  only `AINDY.routes.*` modules.
+- App-owned route shims belong under `apps/*/routes/*`, not under the runtime
+  compatibility layer.
+
+Repo-split reading rule:
+
+- runtime-owned routes under `AINDY.routes.*` should be treated as candidates
+  for the future runtime repo API inventory
+- app-owned routes under `apps/*/routes/*` should be treated as candidates for
+  the future apps repo API inventory even when their URLs live under `/apps/*`
+
 ## 1. Route Inventory
 
 Routers are registered in `AINDY/main.py` using three mount groups defined in `AINDY/routes/__init__.py`.
@@ -26,7 +51,16 @@ These paths are stable infrastructure. Never add an app or platform prefix here.
 In addition to version compatibility fields, it returns a `runtime` object with:
 `boot_mode`, `boot_profile`, `boot_profile_source`, `app_plugins_loaded`,
 `app_plugin_count`, `ui_mode`, `default_route`, and `platform_home`.
+It also returns a `compatibility` object that describes the runtime package
+name/version and the recommended apps-repo dependency range shape for the
+future repo split.
 The client uses that payload only as a representation of backend startup state.
+Repo-split compatibility policy is defined in
+[Repo Compatibility Policy](../../runtime/REPO_COMPATIBILITY_POLICY.md).
+The current React/Vite SPA that consumes this route remains app-owned under
+`client/`; runtime-only mode in that SPA should be understood as an
+apps-hosted UI adapting to runtime boot state, not as a separate runtime
+frontend product.
 
 ### Platform layer (mounted at `/platform`)
 

@@ -12,7 +12,8 @@ os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-with-required-length-1234567890")
 
 from AINDY.db.database import Base
-from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+from tests.helpers.app_profile import bootstrap_app_models
+from tests.helpers.runtime import import_runtime_model_registry
 
 
 pytestmark = pytest.mark.app_profile

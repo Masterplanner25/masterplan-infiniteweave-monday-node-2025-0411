@@ -2,12 +2,20 @@
 
 This document describes the current Alembic migration discipline as practiced in the repository. It does not invent rules that are not already observed; it records what is done.
 
+For the authoritative runtime-vs-app table ownership boundary, use
+[Database Ownership Contract](../runtime/DB_OWNERSHIP_CONTRACT.md).
+
+For repo version compatibility between the future runtime and apps repos, use
+[Repo Compatibility Policy](../runtime/REPO_COMPATIBILITY_POLICY.md).
+
 ## 1. Alembic Source of Truth
 
 - All schema migrations live in `alembic/versions/`.
 - `alembic/env.py` configures Alembic to read `DATABASE_URL` from the `AINDY/config.py` `Settings` object.
 - `alembic.ini` is the Alembic configuration file; `script_location = alembic`.
 - Alembic is the sole mechanism for schema changes in production. SQLAlchemy models alone do not alter the live database.
+- In the current monolith, `alembic/env.py` loads runtime-owned models through `AINDY.db.model_registry` and then loads app-owned models through `apps.bootstrap.bootstrap_models()`.
+- After the repo split, the expected steady state is still one migration authority per deployed database, owned by `aindy-apps-monolith`, even though runtime-owned models come from the installed `aindy-runtime` dependency.
 
 ### Verification Commands
 ```bash
@@ -19,6 +27,13 @@ alembic upgrade head     # apply all pending migrations
 ```
 
 ## 2. Model Changes
+
+Ownership rule before authoring a migration:
+
+- if the table is defined under `AINDY/db/models/`, it is runtime-owned
+- if the table is defined under `apps/`, it is app-owned
+- compatibility re-exports do not change ownership
+- avoid mixed runtime-plus-app migrations where practical; they make repo-split ownership harder to reason about
 
 ### Required Steps When Changing `AINDY/db/models/`
 

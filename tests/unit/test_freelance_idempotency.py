@@ -10,7 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from AINDY.db.database import Base
 from AINDY.db.models.user import User
-from tests.helpers.bootstrap import bootstrap_app_models, import_runtime_model_registry
+from tests.helpers.app_profile import bootstrap_app_models
+from tests.helpers.runtime import import_runtime_model_registry
 
 
 pytestmark = pytest.mark.app_profile

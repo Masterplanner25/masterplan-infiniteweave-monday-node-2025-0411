@@ -32,8 +32,7 @@ def router_mock_db(app):
     Importing from the router module guarantees we use the same object FastAPI uses.
     """
     import sys
-    # routes/__init__.py rebinds 'routes.masterplan_router' to the APIRouter object,
-    # so 'import routes.masterplan_router as mr' returns the router, not the module.
+    # The canonical masterplan router lives under apps.masterplan.routes.
     # We need the MODULE to access the captured get_db reference that FastAPI uses.
     mr_module = sys.modules.get("apps.masterplan.routes.masterplan_router")
     assert mr_module is not None, "apps.masterplan.routes.masterplan_router module not loaded"

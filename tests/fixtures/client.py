@@ -7,11 +7,8 @@ from collections import defaultdict
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.helpers.bootstrap import (
-    clear_boot_profile_env,
-    reset_app_bootstrap_state,
-    set_runtime_only_boot_mode,
-)
+from tests.helpers.app_profile import reset_app_bootstrap_state
+from tests.helpers.runtime import clear_boot_profile_env, set_runtime_only_boot_mode
 
 
 def _patch_session_aliases(monkeypatch, session_factory, engine):

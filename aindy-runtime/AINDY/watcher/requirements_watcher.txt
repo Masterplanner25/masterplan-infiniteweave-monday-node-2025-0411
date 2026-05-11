@@ -1,0 +1,21 @@
+# A.I.N.D.Y. Watcher — standalone process requirements
+# Install with: pip install -r requirements_watcher.txt
+
+# HTTP client for signal emission
+httpx>=0.27.0
+
+# Cross-platform process inspection (fallback window detection)
+psutil>=5.9.0
+
+# Environment variable loading
+python-dotenv>=1.0.0
+
+# --- Optional platform-specific dependencies ---
+# macOS only (window title detection):
+#   pyobjc-framework-AppKit>=10.0
+#   pyobjc-framework-Quartz>=10.0
+#
+# Linux only (window title detection — install via package manager):
+#   xdotool (apt install xdotool / pacman -S xdotool)
+#
+# Windows: uses ctypes (stdlib) — no additional install needed

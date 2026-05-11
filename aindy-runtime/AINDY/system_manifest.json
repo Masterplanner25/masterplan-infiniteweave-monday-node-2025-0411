@@ -1,0 +1,22 @@
+{
+  "system": {
+    "name": "AINDY Platform Runtime",
+    "version": "1.0.0",
+    "build_type": "stable",
+    "status": "stable"
+  },
+  "runtime": {
+    "framework": "FastAPI",
+    "database": "SQLAlchemy",
+    "capabilities": [
+      "execution",
+      "memory",
+      "events",
+      "scheduling",
+      "syscalls"
+    ]
+  },
+  "metadata": {
+    "version_reference": "version.json"
+  }
+}

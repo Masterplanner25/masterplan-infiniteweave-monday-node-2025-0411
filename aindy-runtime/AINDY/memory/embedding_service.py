@@ -1,0 +1,185 @@
+"""
+Embedding Service
+
+Generates vector embeddings via OpenAI text-embedding-ada-002.
+Uses C++ kernel for cosine similarity when available.
+Falls back to pure Python.
+"""
+import logging
+import os
+import sys
+import time
+from typing import Optional
+import threading
+
+from AINDY.config import settings
+from AINDY.kernel.circuit_breaker import CircuitOpenError
+from AINDY.platform_layer.external_call_service import perform_external_call
+from AINDY.platform_layer.metrics import (
+    embedding_generation_latency_seconds,
+    embedding_generation_retries_total,
+    embedding_generation_total,
+)
+from AINDY.platform_layer.openai_client import create_embedding
+from AINDY.platform_layer.openai_client import get_openai_client
+
+EMBEDDING_MODEL = "text-embedding-ada-002"
+EMBEDDING_DIMENSIONS = 1536
+_DEFAULT_PERFORM_EXTERNAL_CALL = perform_external_call
+logger = logging.getLogger(__name__)
+
+
+class EmbeddingFailedError(RuntimeError):
+    """
+    Raised by generate_embedding() when the OpenAI API call fails after all
+    retry attempts. Callers in the async-job path let this propagate so the
+    worker can leave the node deferred in a pending state for later retry.
+    Query-path callers
+    (generate_query_embedding) catch this and return a zero vector so that
+    similarity searches degrade gracefully rather than crashing.
+    """
+
+
+_client = None
+_client_lock = threading.Lock()
+
+
+def get_client():
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = get_openai_client()
+    return _client
+
+
+def generate_embedding(text: str) -> list:
+    """
+    Generate a 1536-dim embedding for *text*.
+
+    Returns a zero vector immediately when *text* is empty — that is an
+    intentional no-op, not a failure.
+
+    Raises EmbeddingFailedError when the OpenAI API call fails after all
+    retry attempts, so callers (e.g. process_embedding_job) receive the
+    actual error and can keep the memory node pending for background retry.
+    """
+    if not text or not text.strip():
+        return [0.0] * EMBEDDING_DIMENSIONS
+    if (
+        settings.is_testing
+        and perform_external_call is _DEFAULT_PERFORM_EXTERNAL_CALL
+        and _client is None
+    ):
+        return [0.0] * EMBEDDING_DIMENSIONS
+
+    text = text[:32000]
+    client = get_client()
+    last_exc: Exception | None = None
+    started_at = time.perf_counter()
+    max_attempts = max(1, int(settings.OPENAI_MAX_RETRIES or 1))
+    backoff_base = max(0.0, float(settings.OPENAI_RETRY_BACKOFF_BASE_SECONDS or 0.0))
+
+    for attempt in range(max_attempts):
+        try:
+            response = perform_external_call(
+                service_name="openai",
+                endpoint="embeddings.create",
+                model=EMBEDDING_MODEL,
+                method="openai.embeddings",
+                extra={"purpose": "embedding_generation"},
+                operation=lambda: create_embedding(
+                    client,
+                    input=text,
+                    model=EMBEDDING_MODEL,
+                    timeout=settings.OPENAI_EMBEDDING_TIMEOUT_SECONDS,
+                ),
+            )
+            embedding = response.data[0].embedding
+            assert len(embedding) == EMBEDDING_DIMENSIONS
+            if attempt:
+                embedding_generation_retries_total.inc(attempt)
+            embedding_generation_total.labels(outcome="success").inc()
+            embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
+            return embedding
+        except CircuitOpenError as e:
+            embedding_generation_total.labels(outcome="failure").inc()
+            embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
+            raise EmbeddingFailedError(
+                f"Embedding generation failed fast because the OpenAI circuit is open: {e}"
+            ) from e
+        except Exception as e:
+            last_exc = e
+            logger.warning(
+                "[EmbeddingService] embedding attempt %s/%s failed: %s",
+                attempt + 1,
+                max_attempts,
+                e,
+            )
+            if attempt < max_attempts - 1:
+                time.sleep(backoff_base * (2 ** attempt))
+
+    # All 3 attempts failed — raise a typed error so callers can mark the
+    # node as failed rather than silently storing a zero vector.
+    # All attempts failed: raise a typed error so callers can defer retry
+    # rather than silently storing a zero vector.
+    if max_attempts > 1:
+        embedding_generation_retries_total.inc(max_attempts - 1)
+    embedding_generation_total.labels(outcome="failure").inc()
+    embedding_generation_latency_seconds.observe(time.perf_counter() - started_at)
+    logger.error(
+        "[EmbeddingService] embedding generation failed after %s attempts: %s",
+        max_attempts,
+        last_exc,
+    )
+    raise EmbeddingFailedError(
+        f"Embedding generation failed after {max_attempts} attempts: {last_exc}"
+    ) from last_exc
+
+
+def generate_query_embedding(query: str) -> list:
+    """
+    Generate an embedding for a similarity query.
+
+    Degrades gracefully: returns a zero vector when the API is unavailable
+    so that search callers get empty results rather than a 500 error.
+    """
+    try:
+        return generate_embedding(query)
+    except EmbeddingFailedError as exc:
+        logging.warning(
+            "Query embedding failed — returning zero vector for graceful degradation: %s", exc
+        )
+        return [0.0] * EMBEDDING_DIMENSIONS
+
+
+def cosine_similarity_python(a: list, b: list) -> float:
+    """Pure Python cosine similarity fallback."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    mag_a = sum(x * x for x in a) ** 0.5
+    mag_b = sum(x * x for x in b) ** 0.5
+    if mag_a == 0 or mag_b == 0:
+        return 0.0
+    return dot / (mag_a * mag_b)
+
+
+def cosine_similarity(a: list, b: list) -> float:
+    """
+    Cosine similarity using C++ kernel if available.
+    Falls back to pure Python.
+    """
+    try:
+        _debug_path = os.path.join(
+            os.path.dirname(__file__),
+            "native", "memory_bridge_rs", "target", "debug"
+        )
+        _debug_path = os.path.abspath(_debug_path)
+        if _debug_path not in sys.path:
+            sys.path.insert(0, _debug_path)
+        import memory_bridge_rs as _mbr
+        return _mbr.semantic_similarity(a, b)
+    except (ImportError, AttributeError, Exception):
+        return cosine_similarity_python(a, b)
+

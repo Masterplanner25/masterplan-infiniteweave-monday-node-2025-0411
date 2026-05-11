@@ -282,7 +282,7 @@ class TestMemoryRoutePhase2:
         mock_db.filter.return_value = mock_db
         mock_db.all.return_value = []
 
-        with patch("routes.memory_router.get_db", return_value=mock_db):
+        with patch("AINDY.routes.memory_router.get_db", return_value=mock_db):
             response = client.post(
                 "/memory/recall",
                 json={},
