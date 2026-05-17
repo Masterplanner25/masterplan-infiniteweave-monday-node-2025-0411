@@ -1,8 +1,25 @@
 # Deployment Model
 
+Cutover status:
+
+- standalone runtime deployment is owned by `C:\dev\aindy-runtime`
+- app-profile deployment inputs such as `apps.bootstrap`, repo-root
+  `aindy_plugins.json`, `alembic/`, and `client/` are owned by
+  `C:\dev\aindy-apps-monolith`
+- this document remains useful for the old combined checkout and for migration
+  comparison, but it is no longer the primary operational source of truth once
+  the split repos are in use
+
 This document describes the deployment shapes that A.I.N.D.Y. supports today, based on the current runtime code and startup guards.
 
 This is an operator document. It does not describe aspirational architecture. If a topology is not listed here as supported, treat it as unsupported.
+
+Operator routing:
+
+- if you are deploying runtime-only, use the runtime repo's
+  `docs/runtime/RUNTIME_ONLY_DEPLOYMENT.md`
+- if you are deploying the app profile, use the apps repo's README,
+  `docs/apps/RUNTIME_DEPENDENCY.md`, and `docs/deployment/MIGRATION_POLICY.md`
 
 ## Supported deployment model
 

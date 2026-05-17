@@ -2,6 +2,29 @@
 
 A.I.N.D.Y. is a Python/FastAPI runtime and application platform for memory operations, flow execution, Nodus script execution, agent runs, scheduling, and domain application orchestration.
 
+## Archive Notice
+
+This repository is archived as historical reference.
+
+It is not the primary active development or deployment repo.
+
+Use these repos instead:
+
+- `C:\dev\aindy-runtime` for runtime code, runtime packaging, runtime-only boot,
+  runtime deployment docs, and runtime CI
+- `C:\dev\aindy-apps-monolith` for `apps/`, `client/`, `aindy_plugins.json`,
+  `alembic/`, app-profile docs, and app-profile tests
+
+For the full cutover note, use [ARCHIVE_STATUS.md](ARCHIVE_STATUS.md).
+
+Split-repo status:
+- `C:\dev\aindy-runtime` is now the runtime deployment and packaging source of truth
+- `C:\dev\aindy-apps-monolith` is now the app deployment source of truth for
+  `apps/`, `aindy_plugins.json`, `alembic/`, and `client/`
+- this combined repo remains a historical, migration, and comparison workspace;
+  it is no longer the primary operational source of truth for extracted-repo
+  deployment
+
 The repository is a modular monolith in transition:
 - one deployable backend/runtime
 - multiple domain apps under `apps/`
@@ -163,6 +186,13 @@ Use [docs/deployment/DEPLOYMENT_MODEL.md](docs/deployment/DEPLOYMENT_MODEL.md) a
 - Redis, PostgreSQL, and Mongo requirements
 - scheduler leadership behavior
 - degraded-mode expectations
+
+Cutover note:
+- for standalone runtime deployment, use the docs in `C:\dev\aindy-runtime`
+- for app-profile deployment, app manifests, client ownership, and Alembic
+  operations, use the docs in `C:\dev\aindy-apps-monolith`
+- use this combined repo's deployment docs only as monolith-era reference or
+  migration context
 
 ## Documentation
 

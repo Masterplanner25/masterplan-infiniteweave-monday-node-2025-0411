@@ -2,6 +2,16 @@
 
 Thank you for your interest in contributing to this project.
 
+Archive status:
+
+- this repository is preserved as historical reference
+- it is not the primary active development target after the repo split
+- new runtime/platform work belongs in `C:\dev\aindy-runtime`
+- new app/profile/client/Alembic work belongs in `C:\dev\aindy-apps-monolith`
+
+Use [ARCHIVE_STATUS.md](ARCHIVE_STATUS.md) before treating this repo as the
+current source of truth.
+
 This document defines the development workflow, coding expectations, and contribution process used in this repository.
 
 The goal is to maintain a consistent, reliable engineering environment while allowing contributors to improve the system safely.
