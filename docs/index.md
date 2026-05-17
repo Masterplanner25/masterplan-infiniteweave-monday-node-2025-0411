@@ -1,5 +1,19 @@
 # A.I.N.D.Y. Documentation
 
+## Archive Notice
+
+This documentation tree is retained as historical reference for the combined
+repo.
+
+Use the extracted repos for active operational guidance:
+
+- `C:\dev\aindy-runtime` for runtime-only deployment, runtime contracts,
+  runtime packaging, and runtime CI
+- `C:\dev\aindy-apps-monolith` for app-profile startup, app manifests,
+  `alembic/`, `client/`, and app-profile validation
+
+For the repo-level cutover note, use [../ARCHIVE_STATUS.md](../ARCHIVE_STATUS.md).
+
 **A.I.N.D.Y.** is a modular-monolith runtime and application platform.
 
 Current shape:

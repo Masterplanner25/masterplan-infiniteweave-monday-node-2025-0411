@@ -1,5 +1,16 @@
 # Development Guide
 
+Archive status:
+
+- this repository is archived as reference material
+- it is no longer the default local development target
+- use `C:\dev\aindy-runtime` for runtime development
+- use `C:\dev\aindy-apps-monolith` for app-profile, client, manifest, and
+  Alembic development
+
+Use [ARCHIVE_STATUS.md](ARCHIVE_STATUS.md) before following this guide for
+active work.
+
 This document describes how to set up a local development environment, run the system, and execute tests.
 
 It is intended for developers working on the project locally.

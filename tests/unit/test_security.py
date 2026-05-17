@@ -12,6 +12,11 @@ Research, Dashboard, Social route protection tests.
 """
 import pytest
 import os
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+AINDY_SOURCE_ROOT = REPO_ROOT / "AINDY"
 
 
 class TestAuthenticationMissing:
@@ -160,24 +165,20 @@ class TestHardcodedSecrets:
         Check that no OpenAI API keys are hardcoded in Python source files.
         Keys in .env are acceptable; keys in .py files are not.
         """
-        import glob
-
         pattern_prefix = "sk-proj-"
-        py_files = glob.glob(
-            "C:/dev/masterplan-infiniteweave-monday-node-2025-0411/AINDY/**/*.py",
-            recursive=True
-        )
+        py_files = AINDY_SOURCE_ROOT.rglob("*.py")
 
         found_in = []
         for filepath in py_files:
             # Skip test files and .env
-            if "tests/" in filepath.replace("\\", "/"):
+            normalized_path = filepath.as_posix()
+            if "tests/" in normalized_path:
                 continue
             try:
-                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                with filepath.open("r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
                 if pattern_prefix in content:
-                    found_in.append(filepath)
+                    found_in.append(str(filepath))
             except Exception:
                 pass
 
@@ -188,22 +189,18 @@ class TestHardcodedSecrets:
 
     def test_no_hardcoded_deepseek_keys_in_source(self):
         """Check for hardcoded DeepSeek API keys in Python source."""
-        import glob
-
-        py_files = glob.glob(
-            "C:/dev/masterplan-infiniteweave-monday-node-2025-0411/AINDY/**/*.py",
-            recursive=True
-        )
+        py_files = AINDY_SOURCE_ROOT.rglob("*.py")
 
         found_in = []
         import re
         pattern = re.compile(r'sk-[0-9a-f]{32,}')
 
         for filepath in py_files:
-            if "tests/" in filepath.replace("\\", "/"):
+            normalized_path = filepath.as_posix()
+            if "tests/" in normalized_path:
                 continue
             try:
-                with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                with filepath.open("r", encoding="utf-8", errors="ignore") as f:
                     content = f.read()
                 for line in content.split("\n"):
                     if "os.getenv" in line or "os.environ" in line:
