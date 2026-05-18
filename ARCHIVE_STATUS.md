@@ -26,6 +26,7 @@ Do not treat this repo as the operational source of truth for:
 - runtime packaging or release flow
 - app manifest ownership
 - Alembic ownership for the extracted apps repo
+- GitHub Actions ownership or release-gating decisions for the extracted repos
 
 Current operational routing:
 
@@ -35,3 +36,12 @@ Current operational routing:
    use `C:\dev\aindy-apps-monolith`
 3. Historical comparison only:
    use this archive
+
+CI note:
+
+- `.github/workflows/ci.yml` and `.github/workflows/runtime-ci.yml` in this
+  archive are historical combined-repo workflows
+- they are useful for comparison only
+- authoritative CI ownership now lives in:
+  - `C:\dev\aindy-runtime\docs\runtime\CI_OWNERSHIP.md`
+  - `C:\dev\aindy-apps-monolith\docs\apps\CI_OWNERSHIP.md`

@@ -8,6 +8,8 @@ Archive status:
 - it is not the primary active development target after the repo split
 - new runtime/platform work belongs in `C:\dev\aindy-runtime`
 - new app/profile/client/Alembic work belongs in `C:\dev\aindy-apps-monolith`
+- any legacy `develop`-targeting branch guidance below is monolith-era
+  historical context only and does not apply to the extracted repos
 
 Use [ARCHIVE_STATUS.md](ARCHIVE_STATUS.md) before treating this repo as the
 current source of truth.
@@ -52,6 +54,12 @@ Architecture and behavioral expectations are defined in the documentation inside
 ---
 
 # Branch Strategy
+
+Historical note:
+
+- the branch model in this section describes the old combined-repo workflow
+- it is preserved for archive context only
+- the extracted repos now use `main` as the active protected PR target
 
 This project uses a simple branching model.
 
